@@ -1334,13 +1334,14 @@ struct EmulationScreen: View {
       }
     }
     #endif
-    .sheet(isPresented: $showControllerSettings) {
+    .sheet(isPresented: $showControllerSettings, onDismiss: { TVEmulationBridge.resume() }) {
       NavigationStack {
         ControllerSetupView(system: .forRunningGame)
           .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { showControllerSettings = false } }
           }
       }
+      .claimsController()
     }
     .alert("Exit Game?", isPresented: $showExitConfirm) {
       Button("Save & Quit") {
@@ -1462,6 +1463,7 @@ struct EmulationScreen: View {
               Divider()
               Button {
                 hasTopBarInteraction = true
+                TVEmulationBridge.pause()
                 showControllerSettings = true
               } label: {
                 Label(L("Controller Settings…"), systemImage: "gearshape")
