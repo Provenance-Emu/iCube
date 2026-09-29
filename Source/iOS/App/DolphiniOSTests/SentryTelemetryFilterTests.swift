@@ -69,3 +69,16 @@ final class SentryBreadcrumbFilterTests: XCTestCase {
     }
   }
 }
+
+/// ICUBE-9P: the app is the unit-test host, so Sentry started inside test runs and filed XCTest's
+/// own main-thread waits as fatal app hangs. Test hosts must not start Sentry.
+final class SentryUnitTestHostTests: XCTestCase {
+  func testTestHostIsDetectedFromTheXCTestEnvironment() {
+    XCTAssertTrue(SentryTelemetryService.isUnitTestHost(environment: ["XCTestConfigurationFilePath": "/tmp/x.xctestconfiguration"]))
+    XCTAssertFalse(SentryTelemetryService.isUnitTestHost(environment: [:]))
+  }
+
+  func testThisTestRunIsATestHost() {
+    XCTAssertTrue(SentryTelemetryService.isUnitTestHost())
+  }
+}

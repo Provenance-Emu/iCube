@@ -104,9 +104,16 @@ enum SentryTelemetryService {
   /// Fraction of emulation sessions that upload FPS summaries in Release.
   static let releaseSessionSampleRate = 0.10
 
+  /// The app is also the unit-test host. Sentry started inside test runs filed XCTest's own
+  /// main-thread waits and teardowns as fatal app hangs (ICUBE-9P), so test hosts skip it.
+  static func isUnitTestHost(environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+    environment["XCTestConfigurationFilePath"] != nil
+  }
+
   static func configure() {
     guard !observersInstalled else { return }
     observersInstalled = true
+    guard !isUnitTestHost() else { return }
 
     let buildEnvironment = SentryBuildEnvironment.current
 
