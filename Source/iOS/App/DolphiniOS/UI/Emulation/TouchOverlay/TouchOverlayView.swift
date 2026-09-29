@@ -141,7 +141,7 @@ struct TouchOverlayView: View {
                              defaultCenter: TouchOverlayLayoutEngine.normalize(defaultCenter, in: bounds))
         }) : nil,
         // `.irArea` mode is ONLY ever entered for the Wii Remote pad kind's `wiiIRPad` group
-        // (`TouchOverlayIRAreaEditorSheet` forces `padKind: .wiiRemote`), so this is the sole
+        // (`TouchOverlayIRAreaEditorView` forces `padKind: .wiiRemote`), so this is the sole
         // group that ever gets `resizeAxes` — task item 1's independent width/height editor.
         resizeAxes: (editMode == .irArea && isIRPad) ? (scale: store.sizeScaleXY(for: layout.group, padKind: padKind, orientation: orientation),
                                                          onCommit: { newScaleXY in
