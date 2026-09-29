@@ -3,16 +3,12 @@
 
 import SwiftUI
 import UIKit
-import CoreHaptics
 import QuartzCore
 import PVWebServer
 import PVHelp
 #if os(iOS)
 import SafariServices
 import AudioToolbox
-#endif
-#if canImport(GameController)
-import GameController
 #endif
 #if os(iOS)
 #endif
