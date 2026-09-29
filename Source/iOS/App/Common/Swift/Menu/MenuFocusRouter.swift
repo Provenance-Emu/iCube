@@ -88,6 +88,7 @@ struct MenuFocusRouter {
     var current = focusedID
     var activated: String?
     var didGoBack = false
+    var adjust: (id: String, step: Int)?
 
     for (padID, input) in padInputs {
       let isNewPad = navByPad[padID] == nil
@@ -102,9 +103,10 @@ struct MenuFocusRouter {
       let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current)
       current = padResult.focusedID
       if activated == nil { activated = padResult.activatedID }
+      if adjust == nil { adjust = padResult.adjust }
       if padResult.didGoBack { didGoBack = true }
     }
-    return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack)
+    return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack, adjust: adjust)
   }
 
   /// Adopt the current physical input without emitting anything. `MenuScreen`
@@ -128,6 +130,7 @@ struct MenuFocusRouter {
     var current = focusedID
     var activated: String?
     var didGoBack = false
+    var adjust: (id: String, step: Int)?
     for event in events {
       switch event {
       case .move(let step):
@@ -142,9 +145,11 @@ struct MenuFocusRouter {
         if let current { activated = current }
       case .back:
         didGoBack = true
+      case .adjust(let step):
+        if let current { adjust = (current, step) }
       }
     }
-    return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack)
+    return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack, adjust: adjust)
   }
 
   /// Move within the flat focusable order, clamped — no wraparound (matches
@@ -183,9 +188,18 @@ struct MenuFocusRouter {
 }
 
 /// Result of one `MenuFocusRouter.update` tick.
-struct MenuFocusUpdate: Equatable {
+struct MenuFocusUpdate {
   var focusedID: String?
   /// Set exactly when an activate edge fired on a currently-focused item.
   var activatedID: String?
   var didGoBack = false
+  /// Set when a left/right edge fired on a currently-focused item.
+  var adjust: (id: String, step: Int)?
+}
+
+extension MenuFocusUpdate: Equatable {
+  static func == (lhs: MenuFocusUpdate, rhs: MenuFocusUpdate) -> Bool {
+    lhs.focusedID == rhs.focusedID && lhs.activatedID == rhs.activatedID && lhs.didGoBack == rhs.didGoBack
+      && lhs.adjust?.id == rhs.adjust?.id && lhs.adjust?.step == rhs.adjust?.step
+  }
 }

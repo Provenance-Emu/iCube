@@ -39,6 +39,9 @@ struct MenuControllerNav: Equatable {
     var leftShoulder = false
     /// R1 — jumps to the first focusable item of the next `MenuSection`.
     var rightShoulder = false
+    /// D-pad left/right: change the focused picker's value. One step per press, no repeat.
+    var left = false
+    var right = false
   }
 
   enum Event: Equatable {
@@ -48,6 +51,8 @@ struct MenuControllerNav: Equatable {
     case back
     /// -1 = previous section, +1 = next section.
     case jumpSection(Int)
+    /// -1 = previous option, +1 = next option, on the focused picker row.
+    case adjust(Int)
   }
 
   let config: Config
@@ -59,6 +64,8 @@ struct MenuControllerNav: Equatable {
   private var bLatched = false
   private var leftShoulderLatched = false
   private var rightShoulderLatched = false
+  private var leftLatched = false
+  private var rightLatched = false
   /// Set by `resync`: the current hold produces no repeats until released.
   private var suppressRepeatUntilRelease = false
 
@@ -120,6 +127,24 @@ struct MenuControllerNav: Equatable {
       rightShoulderLatched = false
     }
 
+    if input.left {
+      if !leftLatched {
+        leftLatched = true
+        events.append(.adjust(-1))
+      }
+    } else {
+      leftLatched = false
+    }
+
+    if input.right {
+      if !rightLatched {
+        rightLatched = true
+        events.append(.adjust(1))
+      }
+    } else {
+      rightLatched = false
+    }
+
     return events
   }
 
@@ -148,6 +173,8 @@ struct MenuControllerNav: Equatable {
     bLatched = input.b
     leftShoulderLatched = input.leftShoulder
     rightShoulderLatched = input.rightShoulder
+    leftLatched = input.left
+    rightLatched = input.right
   }
 
   private mutating func resolveDirection(_ input: Input) -> Int {

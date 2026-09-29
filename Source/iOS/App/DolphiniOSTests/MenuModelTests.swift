@@ -102,4 +102,13 @@ final class MenuModelTests: XCTestCase {
     readBack.wrappedValue = true
     XCTAssertTrue(stored, "the model's binding must be the same one passed in, not a copy")
   }
+
+  func test_pickerCycling_wrapsBothWays() {
+    let options: [(String, AnyHashable)] = [("A", AnyHashable(0)), ("B", AnyHashable(1)), ("C", AnyHashable(2))]
+    XCTAssertEqual(MenuItemRole.cycled(options: options, current: AnyHashable(0), step: 1), AnyHashable(1))
+    XCTAssertEqual(MenuItemRole.cycled(options: options, current: AnyHashable(2), step: 1), AnyHashable(0))
+    XCTAssertEqual(MenuItemRole.cycled(options: options, current: AnyHashable(0), step: -1), AnyHashable(2))
+    XCTAssertEqual(MenuItemRole.cycled(options: options, current: AnyHashable(9), step: 1), AnyHashable(0))
+    XCTAssertNil(MenuItemRole.cycled(options: [], current: AnyHashable(0), step: 1))
+  }
 }

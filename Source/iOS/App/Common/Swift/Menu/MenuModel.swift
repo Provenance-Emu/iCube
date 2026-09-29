@@ -91,6 +91,17 @@ enum MenuItemRole {
   case destructive(() -> Void)
 }
 
+extension MenuItemRole {
+  /// The option `step` places after `current`, wrapping both ways. An unknown `current` starts
+  /// from before the first option, so +1 lands on the first. `nil` when there are no options.
+  static func cycled(options: [(String, AnyHashable)], current: AnyHashable, step: Int) -> AnyHashable? {
+    guard !options.isEmpty else { return nil }
+    let index = options.firstIndex { $0.1 == current } ?? -1
+    let count = options.count
+    return options[((index + step) % count + count) % count].1
+  }
+}
+
 // MARK: - Lookup
 
 /// Pure model queries — no SwiftUI, no bridges — the surface the design

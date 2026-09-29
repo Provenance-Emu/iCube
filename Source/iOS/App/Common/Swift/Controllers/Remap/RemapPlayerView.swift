@@ -449,6 +449,7 @@ struct RemapPlayerView: View {
       case .activate: if let id = focusedID { activate(id) }
       case .back: dismiss()
       case .jumpSection: break // no sections on this screen; no shoulder input is wired into navInput(_:)
+      case .adjust: break // no pickers on this screen; no d-pad left/right is wired into navInput(_:)
       }
     }
   }

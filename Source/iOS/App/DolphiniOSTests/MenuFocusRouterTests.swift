@@ -278,4 +278,30 @@ final class MenuFocusRouterTests: XCTestCase {
     let pressed = router.update(padInputs: [(p1, .init()), (p2, .init(a: true))], at: 0.7, model: model, focusedID: "a", isActive: true)
     XCTAssertEqual(pressed.activatedID, "a", "once p2 is known, a genuine release-then-press activates normally")
   }
+
+  // MARK: Adjust (d-pad left/right)
+
+  func test_adjust_reportsFocusedItemAndDirection_oncePerPress() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = twoSectionModel()
+    var right = MenuControllerNav.Input()
+    right.right = true
+    let first = router.update(right, at: 0, model: model, focusedID: "b", isActive: true)
+    XCTAssertEqual(first.adjust?.id, "b")
+    XCTAssertEqual(first.adjust?.step, 1)
+    let held = router.update(right, at: 1, model: model, focusedID: "b", isActive: true)
+    XCTAssertNil(held.adjust, "a held right must not repeat")
+    _ = router.update(MenuControllerNav.Input(), at: 1.1, model: model, focusedID: "b", isActive: true)
+    var left = MenuControllerNav.Input()
+    left.left = true
+    let back = router.update(left, at: 1.2, model: model, focusedID: "b", isActive: true)
+    XCTAssertEqual(back.adjust?.step, -1)
+  }
+
+  func test_adjust_withNoFocus_reportsNothing() {
+    var router = MenuFocusRouter(config: cfg)
+    var right = MenuControllerNav.Input()
+    right.right = true
+    XCTAssertNil(router.update(right, at: 0, model: twoSectionModel(), focusedID: nil, isActive: true).adjust)
+  }
 }

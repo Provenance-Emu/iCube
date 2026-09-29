@@ -196,9 +196,9 @@ struct MenuScreen: View {
     case .toggle(let binding):
       binding.wrappedValue.toggle()
     case .picker(let options, let selection):
-      guard !options.isEmpty else { return }
-      let currentIndex = options.firstIndex { $0.1 == selection.wrappedValue } ?? -1
-      selection.wrappedValue = options[(currentIndex + 1) % options.count].1
+      if let next = MenuItemRole.cycled(options: options, current: selection.wrappedValue, step: 1) {
+        selection.wrappedValue = next
+      }
     case .navigation(let makeChild):
       pushedChild = PushedMenu(model: makeChild())
     case .destination, .custom:
@@ -328,7 +328,9 @@ struct MenuScreen: View {
       a: pad.buttonA.isPressed,
       b: pad.buttonB.isPressed,
       leftShoulder: pad.leftShoulder.isPressed,
-      rightShoulder: pad.rightShoulder.isPressed
+      rightShoulder: pad.rightShoulder.isPressed,
+      left: pad.dpad.left.isPressed,
+      right: pad.dpad.right.isPressed
     )
   }
 
@@ -363,6 +365,11 @@ struct MenuScreen: View {
     focusedID = result.focusedID ?? model.focusableIDs.first
     if let activatedID = result.activatedID, let item = model.item(id: activatedID) {
       performActivate(item)
+    }
+    if let adjust = result.adjust, let item = model.item(id: adjust.id), item.isEnabled,
+       case .picker(let options, let selection) = item.role,
+       let next = MenuItemRole.cycled(options: options, current: selection.wrappedValue, step: adjust.step) {
+      selection.wrappedValue = next
     }
     if result.didGoBack {
       onBack?()
