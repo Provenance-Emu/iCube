@@ -7,6 +7,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
 
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+    // Before anything logs: a JIT debugger's undrained stdio pipe must not block main (ICUBE-AC).
+    DebuggerStdio.makeStdioNonBlocking()
+
     // Start Sentry as early as possible so it captures crashes during app launch. Configuration
     // lives in SentryTelemetryService (emulation-gated tracing + hang tracking).
     SentryTelemetryService.configure()
