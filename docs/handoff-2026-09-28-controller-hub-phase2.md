@@ -21,7 +21,9 @@ Spec: docs/superpowers/specs/2026-09-28-controller-hub-design.md
   The DSU client lock is iOS-only. On iOS, a user who enabled the client under the old "receiver"
   display default sees it ON but locked until they pick Receiver.
 - Settings-only leftovers live behind the hub's "More Controller Settings" row.
-- Show/Hide On-Screen Controls appears only in a game. On-Screen Style lasts for the session.
+- Show/Hide On-Screen Controls and On-Screen Style appear only in a game. Choosing the Wii style binds
+  Wii Remote 1 to the touchscreen and turns on Connect Wiimotes for Controller Interface (persistent
+  config writes), as the old top-bar submenu did.
 
 ## Device checklist
 
@@ -32,13 +34,15 @@ iPhone 16 Pro Max, with an Xbox or DualSense pad and a Wii title with the touch 
    - Unbound ports are under "Show All Ports".
 2. With the pad, move to a player row and press A: RemapPlayerView is pushed. B returns to the hub.
    B again closes the hub. Back from any depth returns one level.
+   Known gap: on iOS, a pad's A can push More, DSU and Edit Layout, which have no pad Back yet; use
+   touch there (Phase 3).
 3. Nothing needs a scroll to open: Edit Layout…, a player row near the bottom, More, and
    Motion Source (DSU) → Add Server all push at once from a fresh, unscrolled hub.
 4. In game, hub → Show On-Screen Controls off. Disconnect and reconnect the pad. The overlay stays
    hidden, because the hub choice is not re-derived.
-5. Hub → On-Screen Style: Wii, then GameCube. The overlay follows each time. D-pad left/right on the
-   focused Style and Opacity rows changes them one step per press. This retires Phase 1 checklist
-   item 6.
+5. In a game, hub → On-Screen Style: Wii, then GameCube. The overlay follows each time. D-pad
+   left/right on the focused Style and Opacity rows changes them one step per press. This retires
+   Phase 1 checklist item 6.
 6. The top bar's controller menu has no On-Screen Style. It has Pointer, Recenter Pointer, Show/Hide
    and Controller Settings….
 7. A Connected Devices row shows battery % and "P1". Tapping it flashes and rumbles that pad.
@@ -53,8 +57,11 @@ Apple TV, with a Siri Remote and a pad, on a Wii title:
     - Focus reaches every row, down to the last Help line.
     - Menu at the hub root returns to the pause menu.
     - Menu on a pushed player screen pops only it.
+    - Menu on a pushed More, Motion Source (DSU) or Add Server screen pops only that screen, not back
+      to the pause menu.
 11. Settings → Controllers is the same hub. Menu pops back to Settings.
 12. Motion Source (DSU): "Enable DSU Client" is focusable and toggles. It is not greyed out.
+    With a DSU server saved, its Test button is reachable with the Siri Remote.
 13. Continuous Wii Remote Scanning toggles and shows its checkmark.
 
 ## Next
