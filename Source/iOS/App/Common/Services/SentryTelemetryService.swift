@@ -129,6 +129,10 @@ enum SentryTelemetryService {
           emulationActive: EmulationTelemetryGate.isEmulationActive) ? crumb : nil
       }
       options.enableCrashHandler = true
+      // Capture an unhandled C++ exception's stack where it is thrown rather than in
+      // std::terminate. ICUBE-G ("mutex lock failed: Invalid argument", thrown during exit()
+      // static destruction) arrived with no frames at all for the throwing thread.
+      options.experimental.enableUnhandledCPPExceptionsV2 = true
       options.enableSigtermReporting = true
       #if DEBUG
       options.debug = true

@@ -37,6 +37,7 @@ ICUBE-54 (`c0029c9284`), ICUBE-7R (`60b8b951d8`) — main thread waiting on the 
 ## Passive checks (no dedicated session needed)
 
 - **Sentry off in test hosts (ICUBE-9P)** — after the next on-device `iCubeTests` run, Sentry gets no new "Fatal App Hang" events from that device (environment `development`, XCTest frames).
+- **ICUBE-G stack** — the next "mutex lock failed: Invalid argument" event from a build with the C++ exception V2 handler should carry the throwing thread's frames (all sampled events so far had none). ICUBE-G fires during `exit()` static destruction at app termination; the Dolphin `Analytics` thread (alive in 7/10 events) and a `WorkQueueThread` (4/10) are the suspects. Fix the thread it names.
 - **Alpha dSYMs** — the next alpha crash or hang in Sentry shows iCube/PVlibDolphin function names instead of `?` (upload verified in run 170; symbolication itself not yet seen on a real event).
 
 ## Still open (not fixable from Sentry samples)
