@@ -268,4 +268,9 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     XCTAssertEqual(lines.map(\.id), ["pause", "pause-chord", "fast-forward", "start", "remote-pause", "remote-exit"])
     XCTAssertEqual(lines.last?.how, "Hold Back / Menu for \(Int(DOLMenuLongPressDuration)) s")
   }
+
+  /// Settings with no game running lists every GameCube port and Wii Remote, GameCube first.
+  func test_settingsWithoutAGame_listsBothSystems() {
+    XCTAssertEqual(ControllerSetupSystem.forSettings, .both, "the test host runs no game")
+  }
 }

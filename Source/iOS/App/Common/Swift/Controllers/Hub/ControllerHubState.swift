@@ -25,6 +25,12 @@ extension ControllerSetupSystem {
     let isWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : ControllerManager.shared.isWiiSystem
     return isWii ? .wiiAndGameCube : .gamecube
   }
+
+  /// Settings → Controllers: the running game's ports while one runs (Settings opened from the pause
+  /// menu, so it matches the pause menu's hub), otherwise every GameCube port and Wii Remote.
+  static var forSettings: ControllerSetupSystem {
+    TVEmulationBridge.isRunning() ? forRunningGame : .both
+  }
 }
 
 extension PlatformKind {

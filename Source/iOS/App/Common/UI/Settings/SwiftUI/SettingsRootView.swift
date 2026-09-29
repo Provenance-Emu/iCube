@@ -92,7 +92,8 @@ struct SettingsRootView<Background: View>: View {
 
   /// Set by the `DOLSettingsSelectControllers` deep link (posted after adding a DSU
   /// server via a `dolphinios://dsu/add` or legacy `dsu://` URL) so Settings opens
-  /// straight into Controllers instead of leaving the user to find it in the list.
+  /// straight into the DSU server list (`DSUSettingsView`) instead of leaving the
+  /// user to find it in the list.
   @State private var jumpToControllersRequested = false
   @State private var showGlobalResetAlert: Bool = false
 #if os(iOS)
@@ -368,10 +369,10 @@ struct SettingsRootView<Background: View>: View {
           Button(L("Reset All")) { showGlobalResetAlert = true }
         }
       }
-      // DSU-add deep link (dolphinios://dsu/add, legacy dsu://) jumps straight here
-      // instead of leaving the user to find Controllers in the flattened list.
+      // DSU-add deep link (dolphinios://dsu/add, legacy dsu://) opens the DSU server list, where the
+      // server it just added shows. That list used to be part of Settings → Controllers.
       .navigationDestination(isPresented: $jumpToControllersRequested) {
-        ControllersRootView()
+        DSUSettingsView()
       }
     }
     .alert(L("Reset All Settings"), isPresented: $showGlobalResetAlert) {
