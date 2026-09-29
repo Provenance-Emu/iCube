@@ -179,7 +179,7 @@ struct TouchOverlayView: View {
         }
         TouchOverlayIRPadView(mode: TCWiiTouchIRMode(rawValue: irMode) ?? .none, deviceId: deviceId,
                               excludedFrames: localExcluded, isEditing: inputSuppressed,
-                              dragGain: TouchOverlayIRGeometry.clampDragGain(UserDefaults.standard.double(forKey: MotionSettings.Key.irPointerGain)))
+                              dragGain: TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
       }
     } else {
       TouchOverlayButtonClusterView(controls: layout.controls, deviceId: deviceId, variant: variant,

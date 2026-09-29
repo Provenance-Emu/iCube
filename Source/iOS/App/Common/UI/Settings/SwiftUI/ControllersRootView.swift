@@ -136,7 +136,7 @@ struct ControllersRootView: View {
   /// (docs/superpowers/specs/2026-09-24-programmatic-touch-overlay-design.md §7) assuming one
   /// already existed. See `TouchOverlayIRGeometry.clampDragGain`/`.drag` for why this only
   /// affects Drag mode, never Follow (absolute) or gyro mode.
-  @State private var touchOverlayIRPointerGain: Double = UserDefaults.standard.double(forKey: MotionSettings.Key.irPointerGain)
+  @State private var touchOverlayIRPointerGain: Double = MotionSettings.irPointerGain()
 #endif
   @State private var touchIRMode: TouchIRMode = .drag
   // Raw SerialInterface::SIDevices values (SI_Device.h): 0 = SIDEVICE_NONE,
@@ -490,7 +490,7 @@ struct ControllersRootView: View {
     touchOpacity = DOLConfigBridge.mainTouchPadOpacity()
     touchOverlayProgrammatic = UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
     touchOverlayStyle = UserDefaults.standard.integer(forKey: "touch_overlay_style")
-    touchOverlayIRPointerGain = Double(TouchOverlayIRGeometry.clampDragGain(UserDefaults.standard.double(forKey: MotionSettings.Key.irPointerGain)))
+    touchOverlayIRPointerGain = Double(TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
 #endif
     touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
     // DSU

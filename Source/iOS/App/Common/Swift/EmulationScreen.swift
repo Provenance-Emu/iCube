@@ -1334,7 +1334,7 @@ struct EmulationScreen: View {
       }
     }
     #endif
-    .sheet(isPresented: $showControllerSettings, onDismiss: { TVEmulationBridge.resume() }) {
+    .sheet(isPresented: $showControllerSettings, onDismiss: TVEmulationBridge.resume) {
       NavigationStack {
         ControllerSetupView(system: .forRunningGame)
           .toolbar {
