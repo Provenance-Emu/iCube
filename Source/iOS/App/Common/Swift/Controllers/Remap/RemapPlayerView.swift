@@ -45,8 +45,8 @@ struct RemapPlayerView: View {
   @State private var wiiExtension = 0
   @State private var wiiSideways = false
 
-  // Control rows by group id.
-  @State private var rows: [Int: [RemapControlRow]] = [:]
+  // Control rows by group key (`RemapGroup.key`: owner + raw group id).
+  @State private var rows: [String: [RemapControlRow]] = [:]
 
   // Live capture.
   @State private var capture: CaptureSession?
@@ -60,6 +60,7 @@ struct RemapPlayerView: View {
 
   private struct CaptureSession {
     let rowID: String
+    let owner: RemapGroupOwner
     let groupId: Int
     let index: Int
     let inputNames: [String]
@@ -80,8 +81,11 @@ struct RemapPlayerView: View {
   private static let tickInterval: TimeInterval = 1.0 / 60.0
 
   private var system: RemapSystem { isGC ? .gamecube : .wii }
-  private var groups: [RemapGroup] { RemapGroup.groups(for: system) }
-  private var allRows: [RemapControlRow] { groups.flatMap { rows[$0.id] ?? [] } }
+  /// `attachment: wiiExtension` is what brings the selected extension's own
+  /// groups (Nunchuk stick, C/Z, Classic Controller, …) into the list — see
+  /// `RemapGroup.groups(for:attachment:)`. Ignored on the GameCube screen.
+  private var groups: [RemapGroup] { RemapGroup.groups(for: system, attachment: wiiExtension) }
+  private var allRows: [RemapControlRow] { groups.flatMap { rows[$0.key] ?? [] } }
   private var title: String {
     String(format: isGC ? L("Player %d") : L("Wii Remote %d"), portOneBased)
   }
@@ -122,9 +126,12 @@ struct RemapPlayerView: View {
     ScrollViewReader { proxy in
       List {
         headerSection
-        ForEach(groups) { group in
+        // `id: \.key`, not the implicit `Identifiable` id: once an extension's
+        // groups sit next to the Wii Remote's own, `group.id` alone collides
+        // (both number their groups from 0).
+        ForEach(groups, id: \.key) { group in
           Section(header: Text(group.title)) {
-            ForEach(rows[group.id] ?? []) { row in
+            ForEach(rows[group.key] ?? []) { row in
               controlRow(row)
             }
           }
@@ -362,7 +369,7 @@ struct RemapPlayerView: View {
     guard !names.isEmpty else { return }
     let baseline = TVControllerMappingBridge.inputStates(forQualifiedDevice: deviceQualifier).map { $0.floatValue }
     capture = CaptureSession(
-      rowID: row.id, groupId: row.groupId, index: row.index, inputNames: names,
+      rowID: row.id, owner: row.owner, groupId: row.groupId, index: row.index, inputNames: names,
       machine: RemapCaptureMachine(baseline: baseline, capturable: names.map(RemapExpression.isCapturable(inputName:)))
     )
   }
@@ -376,7 +383,7 @@ struct RemapPlayerView: View {
     }
     if case .captured(let inputIndex) = result, inputIndex < session.inputNames.count {
       write(expression: RemapExpression.expression(forInputName: session.inputNames[inputIndex]),
-            groupId: session.groupId, index: session.index)
+            owner: session.owner, groupId: session.groupId, index: session.index)
     }
     endCapture()
   }
@@ -398,17 +405,22 @@ struct RemapPlayerView: View {
     // gates the tap gesture, not the context menu / swipe action.
     if let capture, capture.rowID != row.id { return }
     if capture != nil { endCapture() }
-    write(expression: "", groupId: row.groupId, index: row.index)
+    write(expression: "", owner: row.owner, groupId: row.groupId, index: row.index)
   }
 
-  private func write(expression: String, groupId: Int, index: Int) {
-    if isGC {
+  private func write(expression: String, owner: RemapGroupOwner, groupId: Int, index: Int) {
+    switch owner {
+    case .gcPad:
       TVControllerMappingBridge.setPadControlExpressionForPort(portOneBased, group: groupId, index: index, expression: expression)
-    } else {
+    case .wiimote:
       TVControllerMappingBridge.setWiimoteControlExpressionFor(portOneBased, group: groupId, index: index, expression: expression)
+    case .nunchuk:
+      TVControllerMappingBridge.setWiimoteExtensionControlExpressionFor(portOneBased, kind: .nunchuk, group: groupId, index: index, expression: expression)
+    case .classic:
+      TVControllerMappingBridge.setWiimoteExtensionControlExpressionFor(portOneBased, kind: .classic, group: groupId, index: index, expression: expression)
     }
     profileEdited = true
-    reloadGroup(groupId)
+    reloadGroup(owner: owner, groupId: groupId)
   }
 
   // MARK: Ticker (capture poll + iOS controller nav)
@@ -623,6 +635,10 @@ struct RemapPlayerView: View {
   private func setExtension(_ value: Int) {
     wiiExtension = value
     WiimoteSlotOptions.setExtension(value, forWiimote: portOneBased)
+    // `groups` depends on `wiiExtension`, so switching extension changes which
+    // sections the list shows (e.g. Nunchuk Stick appearing) — reload so their
+    // rows are populated immediately instead of on the next unrelated reload.
+    reloadAll()
   }
 
   private func setSideways(_ enabled: Bool) {
@@ -635,11 +651,15 @@ struct RemapPlayerView: View {
   private func reloadAll() {
     reloadDevices()
     reloadQualifier()
-    for group in groups { reloadGroup(group.id) }
+    // Must happen BEFORE the `groups` loop below: `groups` reads `wiiExtension`
+    // to decide whether to include the Nunchuk/Classic sections, so refreshing
+    // it after the loop would reload the wrong (stale) set of groups on the
+    // very first load.
     if !isGC {
       wiiExtension = WiimoteSlotOptions.selectedExtension(forWiimote: portOneBased)
       wiiSideways = WiimoteSlotOptions.isSideways(forWiimote: portOneBased)
     }
+    for group in groups { reloadGroup(owner: group.owner, groupId: group.id) }
   }
 
   private func reloadDevices() {
@@ -663,18 +683,25 @@ struct RemapPlayerView: View {
       : TVControllerMappingBridge.defaultDevice(forWiimote: portOneBased) as String
   }
 
-  private func reloadGroup(_ groupId: Int) {
+  private func reloadGroup(owner: RemapGroupOwner, groupId: Int) {
     let names: [String]
     let expressions: [String]
-    if isGC {
+    switch owner {
+    case .gcPad:
       names = TVControllerMappingBridge.padControlNames(forGroup: portOneBased, group: groupId) as [String]
       expressions = TVControllerMappingBridge.padControlExpressions(forGroup: portOneBased, group: groupId) as [String]
-    } else {
+    case .wiimote:
       names = TVControllerMappingBridge.wiimoteControlNames(forGroup: portOneBased, group: groupId) as [String]
       expressions = TVControllerMappingBridge.wiimoteControlExpressions(forGroup: portOneBased, group: groupId) as [String]
+    case .nunchuk:
+      names = TVControllerMappingBridge.wiimoteExtensionControlNames(forIndex: portOneBased, kind: .nunchuk, group: groupId) as [String]
+      expressions = TVControllerMappingBridge.wiimoteExtensionControlExpressions(forIndex: portOneBased, kind: .nunchuk, group: groupId) as [String]
+    case .classic:
+      names = TVControllerMappingBridge.wiimoteExtensionControlNames(forIndex: portOneBased, kind: .classic, group: groupId) as [String]
+      expressions = TVControllerMappingBridge.wiimoteExtensionControlExpressions(forIndex: portOneBased, kind: .classic, group: groupId) as [String]
     }
-    rows[groupId] = names.enumerated().map { index, name in
-      RemapControlRow(groupId: groupId, index: index, name: name,
+    rows[RemapGroup.key(owner: owner, id: groupId)] = names.enumerated().map { index, name in
+      RemapControlRow(owner: owner, groupId: groupId, index: index, name: name,
                       expression: index < expressions.count ? expressions[index] : RemapExpression.unboundDisplay)
     }
   }

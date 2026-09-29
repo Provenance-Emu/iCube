@@ -19,6 +19,15 @@ NS_ASSUME_NONNULL_BEGIN
 
 extern NSString* const TVControllerDevicesChangedNotification;
 
+/// Which Wii Remote extension a `wiimoteExtensionControl*` call reaches.
+/// Raw values match `WiimoteEmu::ExtensionNumber`
+/// (`Core/HW/WiimoteEmu/ExtensionPort.h`), the same convention
+/// `selectedWiimoteAttachmentForIndex:` returns.
+typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
+  DOLWiimoteExtensionKindNunchuk = 1,
+  DOLWiimoteExtensionKindClassic = 2,
+} NS_SWIFT_NAME(WiimoteExtensionKind);
+
 @interface TVControllerMappingBridge : NSObject
 
 + (NSString*)qualifiedNameForController:(GCController*)controller NS_SWIFT_NAME(qualifiedName(for:));
@@ -91,6 +100,16 @@ extern NSString* const TVControllerDevicesChangedNotification;
 + (NSArray<NSString*>*)wiimoteControlNamesForGroup:(NSInteger)indexOneBased group:(NSInteger)groupId NS_SWIFT_NAME(wiimoteControlNames(forGroup:group:));
 + (NSArray<NSString*>*)wiimoteControlExpressionsForGroup:(NSInteger)indexOneBased group:(NSInteger)groupId NS_SWIFT_NAME(wiimoteControlExpressions(forGroup:group:));
 + (void)setWiimoteControlExpressionForIndex:(NSInteger)indexOneBased group:(NSInteger)groupId index:(NSInteger)controlIndex expression:(NSString*)expression NS_SWIFT_NAME(setWiimoteControlExpressionFor(_:group:index:expression:));
+
+/// Control group editing (Wiimote extension: Nunchuk / Classic Controller).
+/// `groupId` is `WiimoteEmu::NunchukGroup` (`Nunchuk.h`) or
+/// `WiimoteEmu::ClassicGroup` (`Classic.h`) depending on `kind`, going through
+/// `Wiimote::GetNunchukGroup` / `Wiimote::GetClassicGroup`
+/// (`Core/HW/Wiimote.h`) rather than `Wiimote::GetWiimoteGroup` — the Wii
+/// Remote's own groups don't reach the attached extension's controls.
++ (NSArray<NSString*>*)wiimoteExtensionControlNamesForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId NS_SWIFT_NAME(wiimoteExtensionControlNames(forIndex:kind:group:));
++ (NSArray<NSString*>*)wiimoteExtensionControlExpressionsForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId NS_SWIFT_NAME(wiimoteExtensionControlExpressions(forIndex:kind:group:));
++ (void)setWiimoteExtensionControlExpressionForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId index:(NSInteger)controlIndex expression:(NSString*)expression NS_SWIFT_NAME(setWiimoteExtensionControlExpressionFor(_:kind:group:index:expression:));
 
 @end
 

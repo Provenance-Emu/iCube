@@ -9,6 +9,8 @@
 #include "Core/HW/GCPad.h"
 #include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
+#include "Core/HW/WiimoteEmu/Extension/Nunchuk.h"
+#include "Core/HW/WiimoteEmu/Extension/Classic.h"
 #include "InputCommon/InputConfig.h"
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
@@ -581,6 +583,69 @@ static BOOL SaveControllerProfile(ControllerEmu::EmulatedController* controller,
   const int idx = (int)indexOneBased - 1;
   auto* controller = cfg->GetController(idx); if (!controller) return;
   auto* group = Wiimote::GetWiimoteGroup(idx, (WiimoteEmu::WiimoteGroup)groupId);
+  if (!group) return;
+  if (controlIndex < 0 || (size_t)controlIndex >= group->controls.size()) return;
+  auto& controlRef = group->controls[controlIndex]->control_ref;
+  controlRef->SetExpression([expression UTF8String]);
+  controller->UpdateSingleControlReference(g_controller_interface, controlRef.get());
+  Wiimote::GetConfig()->SaveConfig();
+}
+
+// Shared by the three wiimoteExtensionControl* methods below: resolves `kind`
+// + the raw group id to the right Dolphin accessor. Mirrors
+// `Wiimote::GetWiimoteGroup`'s signature shape but dispatches to
+// `Wiimote::GetNunchukGroup` / `Wiimote::GetClassicGroup` (Core/HW/Wiimote.h),
+// which reach the attached extension's own groups — `GetWiimoteGroup` cannot.
+static ControllerEmu::ControlGroup* GetWiimoteExtensionGroup(int idx, DOLWiimoteExtensionKind kind, NSInteger groupId)
+{
+  switch (kind)
+  {
+    case DOLWiimoteExtensionKindNunchuk:
+      return Wiimote::GetNunchukGroup(idx, (WiimoteEmu::NunchukGroup)groupId);
+    case DOLWiimoteExtensionKindClassic:
+      return Wiimote::GetClassicGroup(idx, (WiimoteEmu::ClassicGroup)groupId);
+  }
+  return nullptr;
+}
+
++ (NSArray<NSString*>*)wiimoteExtensionControlNamesForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId
+{
+  NSMutableArray<NSString*>* result = [NSMutableArray array];
+  auto* cfg = Wiimote::GetConfig(); if (!cfg) return result;
+  const int idx = (int)indexOneBased - 1;
+  auto* controller = cfg->GetController(idx); if (!controller) return result;
+  auto* group = GetWiimoteExtensionGroup(idx, kind, groupId);
+  if (!group) return result;
+  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  for (const auto& control : group->controls) {
+    NSString* name = CppToFoundationString(control->ui_name);
+    if (control->translate == ControllerEmu::Translatability::Translate) name = DOLCoreLocalizedString(name);
+    [result addObject:name];
+  }
+  return result;
+}
+
++ (NSArray<NSString*>*)wiimoteExtensionControlExpressionsForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId
+{
+  NSMutableArray<NSString*>* result = [NSMutableArray array];
+  auto* cfg = Wiimote::GetConfig(); if (!cfg) return result;
+  const int idx = (int)indexOneBased - 1;
+  auto* controller = cfg->GetController(idx); if (!controller) return result;
+  auto* group = GetWiimoteExtensionGroup(idx, kind, groupId);
+  if (!group) return result;
+  for (const auto& control : group->controls) {
+    const std::string expr = control->control_ref->GetExpression();
+    [result addObject:expr.empty() ? @"—" : [NSString stringWithUTF8String:expr.c_str()]];
+  }
+  return result;
+}
+
++ (void)setWiimoteExtensionControlExpressionForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId index:(NSInteger)controlIndex expression:(NSString*)expression
+{
+  auto* cfg = Wiimote::GetConfig(); if (!cfg) return;
+  const int idx = (int)indexOneBased - 1;
+  auto* controller = cfg->GetController(idx); if (!controller) return;
+  auto* group = GetWiimoteExtensionGroup(idx, kind, groupId);
   if (!group) return;
   if (controlIndex < 0 || (size_t)controlIndex >= group->controls.size()) return;
   auto& controlRef = group->controls[controlIndex]->control_ref;

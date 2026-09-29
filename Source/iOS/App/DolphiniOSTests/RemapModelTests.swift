@@ -25,7 +25,10 @@ final class RemapModelTests: XCTestCase {
   }
 
   func test_wiiGroupIds_matchWiimoteGroupEnum() {
-    let ids = Dictionary(uniqueKeysWithValues: RemapGroup.wii.map { ($0.title, $0.id) })
+    let groups = RemapGroup.groups(for: .wii, attachment: 0) // WiimoteEmu::ExtensionNumber::NONE
+    XCTAssertEqual(groups.count, 8)
+    XCTAssertTrue(groups.allSatisfy { $0.owner == .wiimote })
+    let ids = Dictionary(uniqueKeysWithValues: groups.map { ($0.title, $0.id) })
     XCTAssertEqual(ids["Buttons"], 0)
     XCTAssertEqual(ids["D-Pad"], 1)
     XCTAssertEqual(ids["Shake"], 2)
@@ -37,10 +40,65 @@ final class RemapModelTests: XCTestCase {
     XCTAssertNil(ids["Extension"], "Attachments is the header's Extension control, not a group")
   }
 
+  /// Pins the raw values to `WiimoteEmu::NunchukGroup` (Nunchuk.h):
+  /// `Buttons=0, Stick=1, Tilt=2, Swing=3, Shake=4, IMUAccelerometer=5` — the
+  /// motion group is never exposed, same as the Wii Remote's own IMU* groups.
+  func test_wiiGroups_withNunchukAttachment_includeNunchukGroups() {
+    let groups = RemapGroup.groups(for: .wii, attachment: 1) // WiimoteEmu::ExtensionNumber::NUNCHUK
+    XCTAssertEqual(groups.count, 8 + 5)
+    XCTAssertTrue(groups.prefix(8).allSatisfy { $0.owner == .wiimote })
+    let nunchuk = groups.filter { $0.owner == .nunchuk }
+    XCTAssertEqual(nunchuk.count, 5)
+    let ids = Dictionary(uniqueKeysWithValues: nunchuk.map { ($0.title, $0.id) })
+    XCTAssertEqual(ids["Nunchuk Buttons"], 0)
+    XCTAssertEqual(ids["Nunchuk Stick"], 1)
+    XCTAssertEqual(ids["Nunchuk Tilt"], 2)
+    XCTAssertEqual(ids["Nunchuk Swing"], 3)
+    XCTAssertEqual(ids["Nunchuk Shake"], 4)
+  }
+
+  /// Pins the raw values to `WiimoteEmu::ClassicGroup` (Classic.h):
+  /// `Buttons=0, Triggers=1, DPad=2, LeftStick=3, RightStick=4`.
+  func test_wiiGroups_withClassicAttachment_includeClassicGroups() {
+    let groups = RemapGroup.groups(for: .wii, attachment: 2) // WiimoteEmu::ExtensionNumber::CLASSIC
+    XCTAssertEqual(groups.count, 8 + 5)
+    let classic = groups.filter { $0.owner == .classic }
+    XCTAssertEqual(classic.count, 5)
+    let ids = Dictionary(uniqueKeysWithValues: classic.map { ($0.title, $0.id) })
+    XCTAssertEqual(ids["Classic Buttons"], 0)
+    XCTAssertEqual(ids["Classic Triggers"], 1)
+    XCTAssertEqual(ids["Classic D-Pad"], 2)
+    XCTAssertEqual(ids["Classic Left Stick"], 3)
+    XCTAssertEqual(ids["Classic Right Stick"], 4)
+  }
+
+  /// Guitar/Drums/etc. attachments have no groups defined yet; the screen must
+  /// fall back to the plain Wii Remote groups rather than assuming Nunchuk.
+  func test_wiiGroups_unsupportedAttachment_fallsBackToWiimoteOnly() {
+    let groups = RemapGroup.groups(for: .wii, attachment: 3) // WiimoteEmu::ExtensionNumber::GUITAR
+    XCTAssertEqual(groups.count, 8)
+    XCTAssertTrue(groups.allSatisfy { $0.owner == .wiimote })
+  }
+
+  func test_gamecubeGroups_areUnaffectedByAttachment() {
+    XCTAssertEqual(RemapGroup.groups(for: .gamecube, attachment: 1), RemapGroup.gamecube)
+    XCTAssertTrue(RemapGroup.gamecube.allSatisfy { $0.owner == .gcPad })
+  }
+
   func test_groupIds_areUniquePerSystem() {
     for system in [RemapSystem.gamecube, .wii] {
       let ids = RemapGroup.groups(for: system).map(\.id)
       XCTAssertEqual(Set(ids).count, ids.count)
+    }
+  }
+
+  /// Once an extension's groups sit next to the Wii Remote's own (both number
+  /// their groups from 0), the raw `id` alone is no longer a unique row/section
+  /// identity — `key` (owner + id) must be.
+  func test_groupKeys_areUniqueWhenExtensionGroupsAreShown() {
+    for attachment in [1, 2] {
+      let keys = RemapGroup.groups(for: .wii, attachment: attachment).map(\.key)
+      XCTAssertEqual(Set(keys).count, keys.count)
     }
   }
 
