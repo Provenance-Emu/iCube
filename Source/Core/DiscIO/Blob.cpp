@@ -24,6 +24,7 @@
 #include "DiscIO/FileBlob.h"
 #include "DiscIO/HttpBlobReader.h"
 #include "DiscIO/NFSBlob.h"
+#include "DiscIO/RemoteCacheSourceID.h"
 #include "DiscIO/SplitFileBlob.h"
 #include "DiscIO/TGCBlob.h"
 #include "DiscIO/WIABlob.h"
@@ -84,40 +85,10 @@ static std::string CheckForCachedFile(const std::string& http_url)
     }
   }
 
-    // Parse URL to extract host and port for consistent ID generation (matches Swift logic)
-  size_t protocol_end = lower_url.find("://");
-  if (protocol_end == std::string::npos)
+  // Consistent cache folder ID (matches WebDAVSource.generateConsistentId in Swift).
+  const std::string source_id = DiscIO::RemoteCacheSourceID(lower_url);
+  if (source_id.empty())
     return "";
-
-  size_t host_start = protocol_end + 3;
-  size_t path_start = lower_url.find('/', host_start);
-  if (path_start == std::string::npos)
-    path_start = lower_url.length();
-
-  std::string host_port_part = lower_url.substr(host_start, path_start - host_start);
-
-  // Extract host and port
-  std::string host;
-  int port = 80; // Default port
-  size_t port_pos = host_port_part.find(':');
-  if (port_pos != std::string::npos)
-  {
-    host = host_port_part.substr(0, port_pos);
-    port = std::stoi(host_port_part.substr(port_pos + 1));
-  }
-  else
-  {
-    host = host_port_part;
-    // Determine default port based on scheme
-    if (lower_url.find("https://") == 0)
-      port = 443;
-  }
-
-  // Generate consistent ID (matches Swift logic exactly)
-  std::string host_with_port = host + ":" + std::to_string(port);
-  std::string source_id = host_with_port;
-  std::replace(source_id.begin(), source_id.end(), '.', '_');
-  std::replace(source_id.begin(), source_id.end(), ':', '_');
 
   // Check for cached file using consistent source ID
   // ~/Library/Caches/RemoteCache/{sourceId}/{filename}
