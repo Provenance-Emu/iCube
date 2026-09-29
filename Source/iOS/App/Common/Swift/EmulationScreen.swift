@@ -1280,6 +1280,12 @@ struct EmulationScreen: View {
     .onReceive(NotificationCenter.default.publisher(for: .DOLPointerModeDidChange)) { _ in
       irModeRaw = PointerModeController.shared.mode.rawValue
     }
+    // The hub chose on-screen visibility or style: treat it as the top bar's own buttons do, so the
+    // assignmentsChanged observer stops re-deriving visibility. Posted before the change is applied.
+    .onReceive(NotificationCenter.default.publisher(for: .DOLOnScreenControlsChosen)) { _ in
+      userOverrideTouchControls = true
+      touchPadsRefreshToken = UUID()
+    }
     // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
     .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
       isPaused = TVEmulationBridge.isPaused()
@@ -1336,7 +1342,7 @@ struct EmulationScreen: View {
     #endif
     .sheet(isPresented: $showControllerSettings, onDismiss: TVEmulationBridge.resume) {
       NavigationStack {
-        ControllerSetupView(system: .forRunningGame)
+        ControllerHubView(system: .forRunningGame, onBack: { showControllerSettings = false })
           .toolbar {
             ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { showControllerSettings = false } }
           }
@@ -1427,38 +1433,6 @@ struct EmulationScreen: View {
                 touchPadsRefreshToken = UUID()
               } label: {
                 Label(controllerManager.overlayVisible ? "Hide On‑Screen Controller" : "Show On‑Screen Controller", systemImage: controllerManager.overlayVisible ? "eye.slash" : "eye")
-              }
-              Menu {
-                Button {
-                  hasTopBarInteraction = true
-                  userOverrideTouchControls = true
-                  controllerManager.overlayMode = .auto
-                  touchPadsRefreshToken = UUID()
-                } label: {
-                  Label("Auto", systemImage: controllerManager.overlayMode == .auto ? "checkmark" : "")
-                }
-                Button {
-                  hasTopBarInteraction = true
-                  userOverrideTouchControls = true
-                  controllerManager.overlayMode = .gamecube
-                  controllerManager.overlayVisible = true
-                  isTouchControlsActive = true
-                  touchPadsRefreshToken = UUID()
-                } label: {
-                  Label("GameCube", systemImage: controllerManager.overlayMode == .gamecube ? "checkmark" : "")
-                }
-                Button {
-                  hasTopBarInteraction = true
-                  userOverrideTouchControls = true
-                  controllerManager.overlayMode = .wii
-                  controllerManager.overlayVisible = true
-                  isTouchControlsActive = true
-                  touchPadsRefreshToken = UUID()
-                } label: {
-                  Label("Wii", systemImage: controllerManager.overlayMode == .wii ? "checkmark" : "")
-                }
-              } label: {
-                Label(L("On-Screen Style"), systemImage: "rectangle.3.group")
               }
               Divider()
               Button {

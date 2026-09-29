@@ -168,14 +168,12 @@ internal struct PauseMenuView: View {
           .onAppear { NSLog("[PAUSE] Cheats menu appeared") }
       #if os(tvOS)
       case .controllers:
+        // Menu at the hub's root returns to the pause menu (`onBack`, through MenuScreen's own
+        // `.onExitCommand`); Menu on a pushed player screen pops just that screen.
         NavigationStack {
-          ControllerSetupView(system: .forRunningGame)
-            .toolbar {
-              ToolbarItem(placement: .navigationBarLeading) { Button(L("Back")) { pane = .main } }
-            }
+          ControllerHubView(system: .forRunningGame, onBack: { pane = .main })
         }
-        .onExitCommand { pane = .main }
-        .onAppear { NSLog("[PAUSE] Controller setup menu appeared") }
+        .onAppear { NSLog("[PAUSE] Controllers hub appeared") }
       case .fastForwardSpeed:
         tvFastForwardSpeedMenu
           .onAppear { NSLog("[PAUSE] Fast forward speed menu appeared") }
@@ -271,8 +269,7 @@ internal struct PauseMenuView: View {
     }
     .sheet(isPresented: $showControllersSheet) {
       NavigationStack {
-        ControllerSetupView(system: .forRunningGame)
-          .navigationTitle(L("Controllers"))
+        ControllerHubView(system: .forRunningGame, onBack: { showControllersSheet = false })
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showControllersSheet = false } } }
       }
       .claimsController()
