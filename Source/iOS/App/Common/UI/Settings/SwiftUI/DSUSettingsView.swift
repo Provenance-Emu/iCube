@@ -213,7 +213,7 @@ struct DSUSettingsView: View {
   }
 
   private func refreshServers() {
-    dsuServers = DOLConfigBridge.dsuServersParsed() ?? []
+    dsuServers = DOLConfigBridge.dsuServersParsed()
   }
 
   private func serverTitle(_ idx: Int) -> String {

@@ -85,22 +85,24 @@ enum ControllerHubModelBuilder {
 
   private static func onScreenSection(state: ControllerHubState, actions: ControllerHubActions) -> MenuSection {
     var items: [MenuItem] = []
-    // Visibility is re-derived at every game start, so it only means something in a game.
+    // Visibility and style are re-derived at every game start, so they only mean something in a
+    // game. Style also has a side effect (choosing Wii binds Wii Remote 1 to the touchscreen), which
+    // should only fire from a running game, not from Settings.
     if state.isGameRunning {
       items.append(MenuItem(
         id: "osc-visible", title: L("Show On-Screen Controls"), icon: "hand.tap",
         role: .toggle(Binding(get: { state.overlayVisible }, set: { actions.setOverlayVisible($0) }))))
+      let styles: [(String, AnyHashable)] = [
+        (L("Auto"), AnyHashable(ControllerManager.OverlayMode.auto)),
+        (L("GameCube"), AnyHashable(ControllerManager.OverlayMode.gamecube)),
+        (L("Wii"), AnyHashable(ControllerManager.OverlayMode.wii)),
+      ]
+      items.append(MenuItem(
+        id: "osc-style", title: L("On-Screen Style"), icon: "rectangle.3.group",
+        role: .picker(options: styles, selection: Binding(
+          get: { AnyHashable(state.overlayMode) },
+          set: { if let mode = $0.base as? ControllerManager.OverlayMode { actions.setOverlayMode(mode) } }))))
     }
-    let styles: [(String, AnyHashable)] = [
-      (L("Auto"), AnyHashable(ControllerManager.OverlayMode.auto)),
-      (L("GameCube"), AnyHashable(ControllerManager.OverlayMode.gamecube)),
-      (L("Wii"), AnyHashable(ControllerManager.OverlayMode.wii)),
-    ]
-    items.append(MenuItem(
-      id: "osc-style", title: L("On-Screen Style"), icon: "rectangle.3.group",
-      role: .picker(options: styles, selection: Binding(
-        get: { AnyHashable(state.overlayMode) },
-        set: { if let mode = $0.base as? ControllerManager.OverlayMode { actions.setOverlayMode(mode) } }))))
     items.append(MenuItem(
       id: "osc-opacity", title: L("Opacity"), icon: "circle.lefthalf.filled",
       role: .picker(
@@ -145,6 +147,7 @@ enum ControllerHubModelBuilder {
 
   private static func dsuSummary(_ state: ControllerHubState) -> String {
     guard state.dsuClientEnabled else { return L("Off") }
+    if state.dsuServerCount == 1 { return L("On · 1 server") }
     return String(format: L("On · %d servers"), state.dsuServerCount)
   }
 

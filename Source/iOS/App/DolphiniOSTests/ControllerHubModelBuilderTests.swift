@@ -145,11 +145,13 @@ final class ControllerHubModelBuilderTests: XCTestCase {
 
   // MARK: On-Screen Controls (iOS)
 
-  func test_showHideRow_onlyWhileAGameRuns() {
-    XCTAssertTrue(ids(make(state(system: .gamecube, isGameRunning: true)), section: "on-screen").contains("osc-visible"))
+  func test_showHideAndStyleRows_onlyWhileAGameRuns() {
+    let running = ids(make(state(system: .gamecube, isGameRunning: true)), section: "on-screen")
+    XCTAssertTrue(running.contains("osc-visible"))
+    XCTAssertTrue(running.contains("osc-style"))
     XCTAssertEqual(
       ids(make(state(system: .gamecube, isGameRunning: false)), section: "on-screen"),
-      ["osc-style", "osc-opacity", "osc-edit-layout"])
+      ["osc-opacity", "osc-edit-layout"])
   }
 
   func test_showHideToggle_writesThroughTheAction() {
@@ -239,6 +241,13 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     let model = make(hub)
     XCTAssertEqual(model.item(id: "dsu")?.subtitle, "On · 2 servers")
     guard case .destination = model.item(id: "dsu")?.role else { return XCTFail("DSU must push") }
+  }
+
+  func test_dsuRow_summarisesOneServerAsSingular() {
+    var hub = state(system: .gamecube)
+    hub.dsuClientEnabled = true
+    hub.dsuServerCount = 1
+    XCTAssertEqual(make(hub).item(id: "dsu")?.subtitle, "On · 1 server")
   }
 
   // MARK: More and Help
