@@ -92,6 +92,18 @@ struct MenuScreen: View {
 
   @State private var pushedChild: PushedMenu?
 
+  /// A `.destination` row pushed by a controller's A (iOS) or a grid card tap. A list row's tap goes
+  /// through the row's own `NavigationLink` instead. Before this, A on such a row did nothing.
+  private struct PushedDestination: Identifiable, Hashable {
+    let id = UUID()
+    let view: AnyView
+
+    static func == (lhs: PushedDestination, rhs: PushedDestination) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+  }
+
+  @State private var pushedDestination: PushedDestination?
+
   #if os(iOS)
   /// Owns one `MenuControllerNav` per connected extended gamepad (D18 engine
   /// gap #3: "MenuScreen listens only to the first connected extended
@@ -125,6 +137,9 @@ struct MenuScreen: View {
     content
       .navigationDestination(item: $pushedChild) { child in
         MenuScreen(model: child.model, style: style, onBack: { pushedChild = nil })
+      }
+      .navigationDestination(item: $pushedDestination) { destination in
+        destination.view
       }
       #if os(iOS)
       .controllerScope(scopeID)
@@ -185,9 +200,9 @@ struct MenuScreen: View {
 
   /// Shared by every renderer: what happens when an item is activated,
   /// whether by a controller `.activate` edge or (on tvOS/for `.navigation`)
-  /// a direct tap. `.destination`/`.custom` are escape hatches — the embedded
-  /// `AnyView` owns its own gesture handling, so activation is a no-op here
-  /// (a `NavigationLink`'s own tap already does the pushing for `.destination`).
+  /// a direct tap. `.destination` pushes its view (a list row's tap goes through its `NavigationLink` instead, so
+  /// this path is the controller's A and grid cards). `.custom` owns its own gestures, so activation
+  /// is a no-op for it.
   private func performActivate(_ item: MenuItem) {
     guard item.isEnabled else { return }
     switch item.role {
@@ -201,7 +216,9 @@ struct MenuScreen: View {
       }
     case .navigation(let makeChild):
       pushedChild = PushedMenu(model: makeChild())
-    case .destination, .custom:
+    case .destination(let destinationView):
+      pushedDestination = PushedDestination(view: destinationView)
+    case .custom:
       break
     }
   }
