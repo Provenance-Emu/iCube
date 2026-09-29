@@ -65,6 +65,21 @@ static void ApplyConfiguredFastForwardSpeed() {
   }
 }
 
+// Save-state operations need a running core. Core::IsRunning covers a user pause too: pausing only
+// sets the CPU stepping flag. While the core is Starting or Stopping, State::LoadAs/SaveAs run their
+// work inline on the calling thread instead of the CPU thread (State's load check accepts Starting,
+// SaveAs checks nothing), and the subsystems' DoState assert they are on the CPU thread — DVDThread
+// "Condition: Core::IsCPUThread()", Sentry ICUBE-9Y, reached from the Load State menu while a game
+// boots. Answering "No" to that dialog crashes the app; "Yes" serializes a core that isn't running.
+static bool StateOperationAllowed(Core::System& system, const char* operation)
+{
+  if (Core::IsRunning(system))
+    return true;
+  NSLog(@"[SaveState] Ignoring %s: the core is not running (state %d)", operation,
+        static_cast<int>(Core::GetState(system)));
+  return false;
+}
+
 @implementation TVEmulationBridge
 
 + (void)runWithBootParameter:(EmulationBootParameter*)param {
@@ -78,7 +93,7 @@ static void ApplyConfiguredFastForwardSpeed() {
   // own "{GameID}.auto" file and never touches numbered save slots.
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"resume_where_left_off"]) {
     NSString* autoPath = [self autoStateFilePath];
-    if (autoPath.length > 0) {
+    if (autoPath.length > 0 && StateOperationAllowed(Core::System::GetInstance(), "auto-state save")) {
       State::SaveAs(Core::System::GetInstance(), std::string(autoPath.UTF8String));  // 2603: no wait flag
     }
   }
@@ -132,13 +147,17 @@ static void ApplyConfiguredFastForwardSpeed() {
 
 + (void)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait {
   (void)wait;  // 2603: State::Save lost its wait flag (always synchronous now)
+  if (!StateOperationAllowed(Core::System::GetInstance(), "slot save"))
+    return;
   State::Save(Core::System::GetInstance(), (int)slot);
 }
 
 + (void)loadStateFromSlot:(NSInteger)slot {
   int s = (int)slot;
   Core::QueueHostJob([s](Core::System& system) {
-    State::Load(system, s);
+    // Checked when the job runs, not when it is queued: the core may still be booting then.
+    if (StateOperationAllowed(system, "slot load"))
+      State::Load(system, s);
   });
 }
 
@@ -178,6 +197,8 @@ static void ApplyConfiguredFastForwardSpeed() {
   if (path.length == 0)
     return;
   (void)wait;  // 2603: SaveAs lost its wait flag
+  if (!StateOperationAllowed(Core::System::GetInstance(), "path save"))
+    return;
   State::SaveAs(Core::System::GetInstance(), std::string(path.UTF8String));
 }
 
@@ -186,7 +207,9 @@ static void ApplyConfiguredFastForwardSpeed() {
     return;
   std::string p(path.UTF8String);
   Core::QueueHostJob([p](Core::System& system) {
-    State::LoadAs(system, p);
+    // Checked when the job runs, not when it is queued: the core may still be booting then.
+    if (StateOperationAllowed(system, "path load"))
+      State::LoadAs(system, p);
   });
 }
 
