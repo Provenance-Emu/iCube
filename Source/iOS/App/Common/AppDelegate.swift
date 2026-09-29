@@ -10,6 +10,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // Before anything logs: a JIT debugger's undrained stdio pipe must not block main (ICUBE-AC).
     DebuggerStdio.makeStdioNonBlocking()
     MotionSettings.registerDefaults()
+    DSUSettings.registerDefaults()
 
     // Start Sentry as early as possible so it captures crashes during app launch. Configuration
     // lives in SentryTelemetryService (emulation-gated tracing + hang tracking).

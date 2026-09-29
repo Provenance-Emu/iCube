@@ -1699,8 +1699,7 @@ struct TVLibraryView: View {
 #if os(iOS)
       Divider()
       Button(action: {
-        let role = UserDefaults.standard.string(forKey: "dsu_role") ?? "sender"
-        if role == "receiver" {
+        if DSUSettings.role() == .receiver {
           NotificationCenter.default.post(
             name: NSNotification.Name("DOLShowSnackbar"),
             object: nil,

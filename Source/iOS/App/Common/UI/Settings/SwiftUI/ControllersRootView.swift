@@ -115,7 +115,7 @@ struct ControllersRootView: View {
   @State private var newDsuPort: String = "26760"
   @StateObject private var dsuBrowser = DSUDiscoveryBrowser()
   @State private var recentlyAdded: Set<String> = [] // address:port keys
-  @AppStorage("dsu_role") private var dsuRole: String = "receiver" // "receiver" or "sender"
+  @AppStorage(DSUSettings.Key.role) private var dsuRole: String = DSUSettings.Role.sender.rawValue
   @State private var pingingServerKey: String? = nil
 
   // Touchscreen
@@ -146,6 +146,17 @@ struct ControllersRootView: View {
   // Raw WiimoteSource values (Wiimote.h): 0 None, 1 Emulated, 2 Real.
   @State private var wiiSources: [Int] = [0, 0, 0, 0]
 
+  /// Sender mode shares this device's input instead of receiving it, so the client toggle is locked
+  /// while Sender is picked. iOS only: tvOS has no Role picker, so with "sender" registered as the
+  /// default a tvOS lock could never be lifted.
+  private var isDSUClientLocked: Bool {
+    #if os(iOS)
+    return dsuRole == DSUSettings.Role.sender.rawValue
+    #else
+    return false
+    #endif
+  }
+
   var body: some View {
     List {
       // Unified controller surface (Players + Connected + Global), shared with
@@ -169,11 +180,11 @@ struct ControllersRootView: View {
         #if !os(tvOS)
         settingsCaption(
           Picker(L("Role"), selection: $dsuRole) {
-            Text(L("Receiver")).tag("receiver")
-            Text(L("Sender")).tag("sender")
+            Text(L("Receiver")).tag(DSUSettings.Role.receiver.rawValue)
+            Text(L("Sender")).tag(DSUSettings.Role.sender.rawValue)
           }
           .onChange(of: dsuRole) { role in
-            if role == "sender" {
+            if role == DSUSettings.Role.sender.rawValue {
               dsuEnabled = false
               DOLConfigBridge.setDsuClientEnabled(false)
             }
@@ -183,7 +194,7 @@ struct ControllersRootView: View {
         settingsCaption(
           Toggle(L("Enable DSU Client"), isOn: $dsuEnabled)
             .onChange(of: dsuEnabled) { DOLConfigBridge.setDsuClientEnabled($0) }
-            .disabled(dsuRole == "sender"),
+            .disabled(isDSUClientLocked),
           L("Receives input from a Cemuhook DSU server on your network (e.g. a phone's gyro). Add servers below as IP:Port."))
         Toggle(L("Show DSU Debug HUD"), isOn: Binding(get: {
 #if DEBUG
