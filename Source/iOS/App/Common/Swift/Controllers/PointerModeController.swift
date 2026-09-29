@@ -32,31 +32,60 @@ enum PointerMode: Int, CaseIterable, Identifiable {
 /// The one place the pointer mode changes. It used to be set directly from nine call sites
 /// across the top bar, Settings, Advanced Motion, Motion Debug, the tvOS game properties and the
 /// DSU controller, each with its own labels, and only the top bar updated the live pad.
+///
+/// Main-actor isolated: the only observer of `.DOLPointerModeDidChange` (EmulationScreen) writes
+/// SwiftUI state, and `NotificationCenter` delivers on the posting thread.
+@MainActor
 final class PointerModeController {
   static let shared = PointerModeController(
     read: { Int(DOLConfigBridge.mainTouchPadIRMode()) },
     write: { DOLConfigBridge.setMainTouchPadIRMode($0) },
+    writeCurrentRun: { DOLConfigBridge.setCurrentRunMainTouchPadIRMode($0) },
     notificationCenter: .default)
 
   private let read: () -> Int
   private let write: (Int) -> Void
+  private let writeCurrentRun: (Int) -> Void
   private let notificationCenter: NotificationCenter
 
-  init(read: @escaping () -> Int, write: @escaping (Int) -> Void, notificationCenter: NotificationCenter) {
+  init(
+    read: @escaping () -> Int,
+    write: @escaping (Int) -> Void,
+    writeCurrentRun: @escaping (Int) -> Void,
+    notificationCenter: NotificationCenter
+  ) {
     self.read = read
     self.write = write
+    self.writeCurrentRun = writeCurrentRun
     self.notificationCenter = notificationCenter
   }
 
+  /// The active value. `DOLConfigBridge.mainTouchPadIRMode()` is `Config::Get`, so a per-game
+  /// CurrentRun override is what this reports while its title runs.
   var mode: PointerMode { PointerMode(rawValue: read()) ?? .touchFollow }
 
   func set(_ mode: PointerMode) {
     write(mode.rawValue)
-    notificationCenter.post(name: .DOLPointerModeDidChange, object: nil)
+    notifyChanged()
   }
 
   /// For call sites that hold the config's raw integer.
   func set(rawValue: Int) {
     set(PointerMode(rawValue: rawValue) ?? .touchFollow)
+  }
+
+  /// A per-game override (`GameProfiles`). Written to the CurrentRun layer so it ends with the
+  /// title instead of becoming the global setting.
+  func setCurrentRun(_ mode: PointerMode) {
+    writeCurrentRun(mode.rawValue)
+    notifyChanged()
+  }
+
+  func setCurrentRun(rawValue: Int) {
+    setCurrentRun(PointerMode(rawValue: rawValue) ?? .touchFollow)
+  }
+
+  private func notifyChanged() {
+    notificationCenter.post(name: .DOLPointerModeDidChange, object: nil)
   }
 }

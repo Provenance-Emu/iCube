@@ -230,7 +230,10 @@ final class GameProfiles {
     // Per-game Wii touch IR mode (the legacy `irMode` field applies when the new one is unset)
     let irOverride = profile.wiimoteTouchIRMode ?? profile.irMode
     if let mode = irOverride, mode >= 0, mode != DOLConfigBridge.mainTouchPadIRMode() {
-      DOLConfigBridge.setCurrentRunMainTouchPadIRMode(mode)
+      // Through PointerModeController so the live touch pad follows the per-game mode
+      // (`.DOLPointerModeDidChange`). Every caller runs on the main queue: EmulationScreen's
+      // `addObserver(queue: .main)` blocks and view actions.
+      MainActor.assumeIsolated { PointerModeController.shared.setCurrentRun(rawValue: mode) }
     }
     if let sens = profile.wiimoteIRSensitivity, sens != DOLConfigBridge.sysconfSensorBarSensitivity() {
       DOLConfigBridge.setCurrentRunSysconfSensorBarSensitivity(sens)
