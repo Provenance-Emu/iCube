@@ -18,13 +18,13 @@ struct MotionDebugView: View {
   @State private var show3DView = true
 
   // Enhanced Motion Controls - Use @AppStorage for automatic UI updates
-  @AppStorage("motion_enhanced_shake_detection") private var enhancedShakeEnabled: Bool = true
-  @AppStorage("motion_use_yaw_for_horizontal") private var useYawForHorizontal: Bool = false
-  @AppStorage("motion_invert_roll") private var invertRoll: Bool = false
-  @AppStorage("motion_invert_pitch") private var invertPitch: Bool = false
-  @AppStorage("motion_enable_full_6dof") private var fullMotionEnabled: Bool = true
-  @AppStorage("motion_wiimote_imu_enabled") private var wiimoteIMUEnabled: Bool = true
-  @AppStorage("motion_nunchuck_imu_enabled") private var nunchuckIMUEnabled: Bool = false
+  @AppStorage(MotionSettings.Key.enhancedShakeDetection) private var enhancedShakeEnabled: Bool = true
+  @AppStorage(MotionSettings.Key.useYawForHorizontal) private var useYawForHorizontal: Bool = false
+  @AppStorage(MotionSettings.Key.invertRoll) private var invertRoll: Bool = false
+  @AppStorage(MotionSettings.Key.invertPitch) private var invertPitch: Bool = false
+  @AppStorage(MotionSettings.Key.full6DOF) private var fullMotionEnabled: Bool = false
+  @AppStorage(MotionSettings.Key.wiimoteIMU) private var wiimoteIMUEnabled: Bool = false
+  @AppStorage(MotionSettings.Key.nunchukIMU) private var nunchuckIMUEnabled: Bool = false
 
   // Debug settings
   @AppStorage("motion_debug_shake_enabled") private var debugShakeEnabled: Bool = false

@@ -175,9 +175,9 @@ import Foundation
       )
 
       // Check if 6DOF motion mapping is enabled - if so, skip original IMU mappings to avoid conflicts
-      let full6DOFEnabled = UserDefaults.standard.bool(forKey: "motion_enable_full_6dof")
-      let wiimoteIMUEnabled = UserDefaults.standard.bool(forKey: "motion_wiimote_imu_enabled")
-      let nunchuckIMUEnabled = UserDefaults.standard.bool(forKey: "motion_nunchuck_imu_enabled")
+      let full6DOFEnabled = MotionSettings.full6DOF()
+      let wiimoteIMUEnabled = MotionSettings.wiimoteIMU()
+      let nunchuckIMUEnabled = MotionSettings.nunchukIMU()
       let isGyroIRMode = (DOLConfigBridge.mainTouchPadIRMode() == 0)
 
       // Only use original Wiimote accelerometer mapping if 6DOF is disabled OR Wiimote IMU is disabled
@@ -204,8 +204,8 @@ import Foundation
       let mapped = Self.mapGyroToWiimoteFrame(x: rr.x, y: rr.y, z: rr.z, orientation: self.orientation)
 
       // Check if 6DOF motion mapping is enabled - if so, skip original gyro mappings to avoid conflicts
-      let full6DOFEnabled = UserDefaults.standard.bool(forKey: "motion_enable_full_6dof")
-      let wiimoteIMUEnabled = UserDefaults.standard.bool(forKey: "motion_wiimote_imu_enabled")
+      let full6DOFEnabled = MotionSettings.full6DOF()
+      let wiimoteIMUEnabled = MotionSettings.wiimoteIMU()
       let isGyroIRMode = (DOLConfigBridge.mainTouchPadIRMode() == 0)
 
       // Only use original Wiimote gyro mapping if 6DOF is disabled OR Wiimote IMU is disabled
@@ -231,7 +231,7 @@ import Foundation
     // Shake statistics are always kept (they feed the debug view); the Wii Remote shake is only
     // fired when enhanced shake detection is on.
     let shake = updateShakeStatistics(motion: motion)
-    if shake.detected, UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") {
+    if shake.detected, MotionSettings.enhancedShakeDetection() {
       let currentTime = Date().timeIntervalSinceReferenceDate
       if (currentTime - lastShakeTime) > Self.shakeCooldown {
         triggerWiimoteShake()
@@ -251,7 +251,7 @@ import Foundation
     }
 
     // Full 6DOF motion mapping (when not using gyro IR)
-    let full6DOFEnabled = UserDefaults.standard.bool(forKey: "motion_enable_full_6dof")
+    let full6DOFEnabled = MotionSettings.full6DOF()
     if irMode != 0, full6DOFEnabled {
       // Debug logging to verify this is being called
 //      if UserDefaults.standard.bool(forKey: "input_debug") {
@@ -302,9 +302,9 @@ import Foundation
   /// Map device attitude to IR cursor movement
   private func handleIRCursorMapping(motion: CMDeviceMotion) {
     let attitude = PointerAttitude(roll: motion.attitude.roll, pitch: motion.attitude.pitch, yaw: motion.attitude.yaw)
-    let useYawForHorizontal = UserDefaults.standard.bool(forKey: "motion_use_yaw_for_horizontal")
-    let invertRoll = UserDefaults.standard.bool(forKey: "motion_invert_roll")
-    let invertPitch = UserDefaults.standard.bool(forKey: "motion_invert_pitch")
+    let useYawForHorizontal = MotionSettings.useYawForHorizontal()
+    let invertRoll = MotionSettings.invertRoll()
+    let invertPitch = MotionSettings.invertPitch()
     let debug = UserDefaults.standard.bool(forKey: "input_debug")
 
     if takeRecenterRequest() || pointerBaseline == nil {
@@ -335,8 +335,8 @@ import Foundation
 
   /// Map full 6DOF motion to Wiimote/Nunchuck IMU axes
   private func handle6DOFMotionMapping(motion: CMDeviceMotion) {
-    let wiimoteEnabled = UserDefaults.standard.bool(forKey: "motion_wiimote_imu_enabled")
-    let nunchuckEnabled = UserDefaults.standard.bool(forKey: "motion_nunchuck_imu_enabled")
+    let wiimoteEnabled = MotionSettings.wiimoteIMU()
+    let nunchuckEnabled = MotionSettings.nunchukIMU()
 
     guard wiimoteEnabled || nunchuckEnabled else { return }
 

@@ -1073,7 +1073,7 @@ struct EmulationScreen: View {
       isWiiSystem = inferIsWii(from: game)
       irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
       let useIMU = (irModeRaw == 0)
-      let wantsMotionForShake = UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") && isWiiSystem
+      let wantsMotionForShake = MotionSettings.enhancedShakeDetection() && isWiiSystem
       // The core's IMU pointer stays OFF while the on-screen pads own the pointer: the app
       // synthesizes IR itself (touch in drag/follow, device attitude in gyro mode) and shake
       // detection only needs the accelerometer. Enabling it here for gyro mode or shake made
@@ -1099,7 +1099,7 @@ struct EmulationScreen: View {
       obsMotionSettingsChanged = NotificationCenter.default.addObserver(forName: Notification.Name("DOLMotionSettingsChanged"), object: nil, queue: .main) { _ in
         restartMotionSystemForSettingsChange()
         // Ensure motion stays on for shake even if touch overlay is hidden but an external controller is connected
-        let wantsMotionForShake2 = UserDefaults.standard.bool(forKey: "motion_enhanced_shake_detection") && isWiiSystem
+        let wantsMotionForShake2 = MotionSettings.enhancedShakeDetection() && isWiiSystem
         if wantsMotionForShake2 {
           Task { @MainActor in
             TCDeviceMotion.shared.setMotionEnabled(true)

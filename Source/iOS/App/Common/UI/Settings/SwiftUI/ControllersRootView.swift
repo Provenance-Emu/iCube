@@ -136,7 +136,7 @@ struct ControllersRootView: View {
   /// (docs/superpowers/specs/2026-09-24-programmatic-touch-overlay-design.md §7) assuming one
   /// already existed. See `TouchOverlayIRGeometry.clampDragGain`/`.drag` for why this only
   /// affects Drag mode, never Follow (absolute) or gyro mode.
-  @State private var touchOverlayIRPointerGain: Double = UserDefaults.standard.double(forKey: "touch_overlay_ir_pointer_gain")
+  @State private var touchOverlayIRPointerGain: Double = UserDefaults.standard.double(forKey: MotionSettings.Key.irPointerGain)
 #endif
   @State private var touchIRMode: TouchIRMode = .drag
   // Raw SerialInterface::SIDevices values (SI_Device.h): 0 = SIDEVICE_NONE,
@@ -415,7 +415,7 @@ struct ControllersRootView: View {
               Spacer()
               Slider(value: $touchOverlayIRPointerGain, in: Double(TouchOverlayIRGeometry.dragGainRange.lowerBound)...Double(TouchOverlayIRGeometry.dragGainRange.upperBound))
                 .frame(width: 220)
-                .onChange(of: touchOverlayIRPointerGain) { UserDefaults.standard.set($0, forKey: "touch_overlay_ir_pointer_gain") }
+                .onChange(of: touchOverlayIRPointerGain) { UserDefaults.standard.set($0, forKey: MotionSettings.Key.irPointerGain) }
             },
             L("Scales how far the Wii Remote pointer moves per drag in Drag mode. Doesn't affect Follow or Gyro mode."))
         }
@@ -490,7 +490,7 @@ struct ControllersRootView: View {
     touchOpacity = DOLConfigBridge.mainTouchPadOpacity()
     touchOverlayProgrammatic = UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
     touchOverlayStyle = UserDefaults.standard.integer(forKey: "touch_overlay_style")
-    touchOverlayIRPointerGain = Double(TouchOverlayIRGeometry.clampDragGain(UserDefaults.standard.double(forKey: "touch_overlay_ir_pointer_gain")))
+    touchOverlayIRPointerGain = Double(TouchOverlayIRGeometry.clampDragGain(UserDefaults.standard.double(forKey: MotionSettings.Key.irPointerGain)))
 #endif
     touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
     // DSU

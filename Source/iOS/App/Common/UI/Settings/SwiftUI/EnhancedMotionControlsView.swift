@@ -20,13 +20,13 @@ import Foundation
 
 struct EnhancedMotionControlsView: View {
   // Use @AppStorage for automatic UI updates and better SwiftUI integration
-  @AppStorage("motion_use_yaw_for_horizontal") private var useYawForHorizontal: Bool = false
-  @AppStorage("motion_invert_roll") private var invertRoll: Bool = false
-  @AppStorage("motion_invert_pitch") private var invertPitch: Bool = false
-  @AppStorage("motion_enhanced_shake_detection") private var enhancedShakeEnabled: Bool = true
-  @AppStorage("motion_enable_full_6dof") private var fullMotionEnabled: Bool = true
-  @AppStorage("motion_wiimote_imu_enabled") private var wiimoteIMUEnabled: Bool = true
-  @AppStorage("motion_nunchuck_imu_enabled") private var nunchuckIMUEnabled: Bool = false
+  @AppStorage(MotionSettings.Key.useYawForHorizontal) private var useYawForHorizontal: Bool = false
+  @AppStorage(MotionSettings.Key.invertRoll) private var invertRoll: Bool = false
+  @AppStorage(MotionSettings.Key.invertPitch) private var invertPitch: Bool = false
+  @AppStorage(MotionSettings.Key.enhancedShakeDetection) private var enhancedShakeEnabled: Bool = true
+  @AppStorage(MotionSettings.Key.full6DOF) private var fullMotionEnabled: Bool = false
+  @AppStorage(MotionSettings.Key.wiimoteIMU) private var wiimoteIMUEnabled: Bool = false
+  @AppStorage(MotionSettings.Key.nunchukIMU) private var nunchuckIMUEnabled: Bool = false
 
   @State private var horizontalMotionMode: HorizontalMotionMode = .roll
   @State private var currentIRMode: TouchIRMode = .drag
