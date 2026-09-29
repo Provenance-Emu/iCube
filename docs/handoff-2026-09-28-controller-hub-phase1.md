@@ -16,8 +16,8 @@ Spec: docs/superpowers/specs/2026-09-28-controller-hub-design.md
 3. Pointer → Touch – Drag from the top bar, then from Settings → Controllers: the live pad follows both (no restart).
 4. Settings → Advanced Motion: shake detection shows ON; turn it off, boot a Wii game, it stays off.
 5. Customize Buttons…: rows read "A", "Left Stick ↑", "RB" (Xbox) / "✕", "R1" (DualSense), not `Button A`.
-6. With a pad, in any MenuScreen list with a picker: d-pad right/left changes it one step per press.
-7. Top bar no longer has "Motion Controls"; Release build has no Motion Debug anywhere.
+6. Deferred to Phase 3: d-pad left/right on MenuScreen pickers is unit-tested only; no production screen uses a .picker item until the player screen.
+7. Top bar has no "Motion Controls"; Motion Debug is reachable only from Settings → Debug (moves behind DEBUG in Phase 4).
 
 ## Next
 Phase 2 plan: the hub (ControllerHubViewModel + ControllerHubModelBuilder, wired into the pause menu,
