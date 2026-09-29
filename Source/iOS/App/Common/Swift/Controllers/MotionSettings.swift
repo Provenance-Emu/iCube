@@ -3,11 +3,12 @@
 
 import Foundation
 
-/// The motion and pointer settings, read by `TCDeviceMotion` and the settings screens. Before this
-/// existed each screen declared its own `@AppStorage` default and the runtime read `bool(forKey:)`
-/// (false when unset), so two screens showed "on" for features that were off. Defaults are
-/// registered on every launch (registered values are not persisted), and they match what the
-/// runtime did before registration, so no user sees a behaviour change.
+/// The single source of truth for the motion and pointer defaults, read by `TCDeviceMotion` and the
+/// settings screens. `MotionSettings.defaults` replaced the equivalent entries that used to live in
+/// `DefaultPreferences.plist` (commit 2691df551c): the values here are exactly what that plist
+/// shipped, so no user sees a behaviour change. Defaults are registered on every launch (registered
+/// values are not persisted); `DefaultPreferences.plist` must not define any of these keys, or its
+/// registration (which runs after this one) would silently win.
 enum MotionSettings {
   enum Key {
     static let useYawForHorizontal = "motion_use_yaw_for_horizontal"
@@ -26,8 +27,8 @@ enum MotionSettings {
     Key.invertPitch: false,
     // `setupEnhancedMotionControls()` used to force this on for every touchscreen Wii boot.
     Key.enhancedShakeDetection: true,
-    Key.full6DOF: false,
-    Key.wiimoteIMU: false,
+    Key.full6DOF: true,
+    Key.wiimoteIMU: true,
     Key.nunchukIMU: false,
     Key.irPointerGain: 1.0,
   ]

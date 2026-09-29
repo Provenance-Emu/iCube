@@ -8,17 +8,9 @@
 	<false/>
 	<key>last_version</key>
 	<string>0.0.0 (0)</string>
-	<key>motion_enable_full_6dof</key>
-	<true/>
-	<key>motion_wiimote_imu_enabled</key>
-	<true/>
-	<key>motion_enhanced_shake_detection</key>
-	<true/>
 	<key>touch_overlay_programmatic</key>
 	<false/>
 	<key>touch_overlay_style</key>
 	<integer>0</integer>
-	<key>touch_overlay_ir_pointer_gain</key>
-	<real>1.0</real>
 </dict>
 </plist>

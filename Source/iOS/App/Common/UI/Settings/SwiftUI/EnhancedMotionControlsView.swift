@@ -24,8 +24,8 @@ struct EnhancedMotionControlsView: View {
   @AppStorage(MotionSettings.Key.invertRoll) private var invertRoll: Bool = false
   @AppStorage(MotionSettings.Key.invertPitch) private var invertPitch: Bool = false
   @AppStorage(MotionSettings.Key.enhancedShakeDetection) private var enhancedShakeEnabled: Bool = true
-  @AppStorage(MotionSettings.Key.full6DOF) private var fullMotionEnabled: Bool = false
-  @AppStorage(MotionSettings.Key.wiimoteIMU) private var wiimoteIMUEnabled: Bool = false
+  @AppStorage(MotionSettings.Key.full6DOF) private var fullMotionEnabled: Bool = true
+  @AppStorage(MotionSettings.Key.wiimoteIMU) private var wiimoteIMUEnabled: Bool = true
   @AppStorage(MotionSettings.Key.nunchukIMU) private var nunchuckIMUEnabled: Bool = false
 
   @State private var horizontalMotionMode: HorizontalMotionMode = .roll

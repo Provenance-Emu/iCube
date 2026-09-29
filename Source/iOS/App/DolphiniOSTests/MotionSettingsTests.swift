@@ -18,14 +18,14 @@ final class MotionSettingsTests: XCTestCase {
     super.tearDown()
   }
 
-  func testRegisteredDefaultsMatchWhatTheRuntimeDidBeforeRegistration() {
+  func testRegisteredDefaultsAreTheShippedValues() {
     MotionSettings.registerDefaults(in: store)
     XCTAssertFalse(MotionSettings.useYawForHorizontal(in: store))
     XCTAssertFalse(MotionSettings.invertRoll(in: store))
     XCTAssertFalse(MotionSettings.invertPitch(in: store))
     XCTAssertTrue(MotionSettings.enhancedShakeDetection(in: store))
-    XCTAssertFalse(MotionSettings.full6DOF(in: store))
-    XCTAssertFalse(MotionSettings.wiimoteIMU(in: store))
+    XCTAssertTrue(MotionSettings.full6DOF(in: store))
+    XCTAssertTrue(MotionSettings.wiimoteIMU(in: store))
     XCTAssertFalse(MotionSettings.nunchukIMU(in: store))
     XCTAssertEqual(MotionSettings.irPointerGain(in: store), 1.0)
   }
@@ -34,6 +34,16 @@ final class MotionSettingsTests: XCTestCase {
     MotionSettings.registerDefaults(in: store)
     store.set(false, forKey: MotionSettings.Key.enhancedShakeDetection)
     XCTAssertFalse(MotionSettings.enhancedShakeDetection(in: store))
+  }
+
+  /// DefaultPreferences.plist is registered on every launch after MotionSettings, so a motion key
+  /// left in it would silently override MotionSettings.defaults.
+  func testBundledDefaultPreferencesDefineNoMotionSettingsKey() throws {
+    let url = try XCTUnwrap(Bundle.main.url(forResource: "DefaultPreferences", withExtension: "plist"))
+    let plist = try XCTUnwrap(NSDictionary(contentsOf: url) as? [String: Any])
+    for key in MotionSettings.defaults.keys {
+      XCTAssertNil(plist[key], "\(key) is registered by both DefaultPreferences.plist and MotionSettings")
+    }
   }
 
   func testKeyNamesAreTheExistingOnes() {
