@@ -8,6 +8,15 @@ import SwiftUI
 
 internal enum PlatformKind { case ios, tvos }
 
+extension ControllerSetupSystem {
+  /// The ports the running game accepts: Wii titles get Wii Remotes and GameCube ports,
+  /// GameCube titles the ports only. Read from the running core, not `ControllerManager.isWiiSystem`.
+  static var forRunningGame: ControllerSetupSystem {
+    let isWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : ControllerManager.shared.isWiiSystem
+    return isWii ? .wiiAndGameCube : .gamecube
+  }
+}
+
 internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
   let onClose: () -> Void
@@ -32,15 +41,6 @@ internal struct PauseMenuView: View {
   @State private var showShaders: Bool = false
   @State private var showSettingsSheet: Bool = false
   @State private var showControllersSheet: Bool = false
-  /// Wii titles get the Wii Remote rows first, then the GameCube ports many of them also
-  /// accept; GameCube titles get the ports only. Read from the running core, not from
-  /// `ControllerManager.isWiiSystem`, which nothing kept up to date (the menu was GameCube-only
-  /// for every game).
-  private static var controllerSetupSystem: ControllerSetupSystem {
-    let isWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : ControllerManager.shared.isWiiSystem
-    return isWii ? .wiiAndGameCube : .gamecube
-  }
-
   /// Recenter Pointer is offered for a running Wii title on iOS, where touch or the gyro drives it.
   private static var showsRecenterPointer: Bool {
     #if os(iOS)
@@ -178,7 +178,7 @@ internal struct PauseMenuView: View {
       #if os(tvOS)
       case .controllers:
         NavigationStack {
-          ControllerSetupView(system: Self.controllerSetupSystem)
+          ControllerSetupView(system: .forRunningGame)
             .toolbar {
               ToolbarItem(placement: .navigationBarLeading) { Button(L("Back")) { pane = .main } }
             }
@@ -280,7 +280,7 @@ internal struct PauseMenuView: View {
     }
     .sheet(isPresented: $showControllersSheet) {
       NavigationStack {
-        ControllerSetupView(system: Self.controllerSetupSystem)
+        ControllerSetupView(system: .forRunningGame)
           .navigationTitle(L("Controllers"))
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showControllersSheet = false } } }
       }

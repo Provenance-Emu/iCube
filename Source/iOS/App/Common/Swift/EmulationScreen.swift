@@ -284,7 +284,10 @@ struct EmulationScreen: View {
   @State private var showShaderSheet = false
   @State private var showShaderParams = false
   @State private var showFXSheet = false
+  #if DEBUG
   @State private var showMotionDebug = false
+  #endif
+  @State private var showControllerSettings = false
   // Auto-hide coordination
   @State var hasTopBarInteraction: Bool = false
   @State var autoHideScheduled: Bool = false
@@ -1324,9 +1327,19 @@ struct EmulationScreen: View {
         }
       }
     }
+    #if DEBUG
     .sheet(isPresented: $showMotionDebug) {
       NavigationStack {
         MotionDebugView()
+      }
+    }
+    #endif
+    .sheet(isPresented: $showControllerSettings) {
+      NavigationStack {
+        ControllerSetupView(system: .forRunningGame)
+          .toolbar {
+            ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { showControllerSettings = false } }
+          }
       }
     }
     .alert("Exit Game?", isPresented: $showExitConfirm) {
@@ -1383,6 +1396,28 @@ struct EmulationScreen: View {
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: 8) {
             Menu {
+              if isWiiSystem {
+                Menu {
+                  ForEach(PointerMode.allCases) { mode in
+                    Button {
+                      hasTopBarInteraction = true
+                      isTouchControlsActive = true
+                      userOverrideTouchControls = true
+                      PointerModeController.shared.set(mode)
+                    } label: {
+                      Label(mode.title, systemImage: irModeRaw == mode.rawValue ? "checkmark" : mode.systemImage)
+                    }
+                  }
+                } label: {
+                  Label(L("Pointer"), systemImage: "cursor.rays")
+                }
+                Button {
+                  hasTopBarInteraction = true
+                  TCDeviceMotion.requestPointerRecenter()
+                } label: {
+                  Label(L("Recenter Pointer"), systemImage: "scope")
+                }
+              }
               Button {
                 hasTopBarInteraction = true
                 userOverrideTouchControls = true
@@ -1392,34 +1427,44 @@ struct EmulationScreen: View {
               } label: {
                 Label(controllerManager.overlayVisible ? "Hide On‑Screen Controller" : "Show On‑Screen Controller", systemImage: controllerManager.overlayVisible ? "eye.slash" : "eye")
               }
+              Menu {
+                Button {
+                  hasTopBarInteraction = true
+                  userOverrideTouchControls = true
+                  controllerManager.overlayMode = .auto
+                  touchPadsRefreshToken = UUID()
+                } label: {
+                  Label("Auto", systemImage: controllerManager.overlayMode == .auto ? "checkmark" : "")
+                }
+                Button {
+                  hasTopBarInteraction = true
+                  userOverrideTouchControls = true
+                  controllerManager.overlayMode = .gamecube
+                  controllerManager.overlayVisible = true
+                  isTouchControlsActive = true
+                  touchPadsRefreshToken = UUID()
+                } label: {
+                  Label("GameCube", systemImage: controllerManager.overlayMode == .gamecube ? "checkmark" : "")
+                }
+                Button {
+                  hasTopBarInteraction = true
+                  userOverrideTouchControls = true
+                  controllerManager.overlayMode = .wii
+                  controllerManager.overlayVisible = true
+                  isTouchControlsActive = true
+                  touchPadsRefreshToken = UUID()
+                } label: {
+                  Label("Wii", systemImage: controllerManager.overlayMode == .wii ? "checkmark" : "")
+                }
+              } label: {
+                Label(L("On-Screen Style"), systemImage: "rectangle.3.group")
+              }
               Divider()
               Button {
                 hasTopBarInteraction = true
-                userOverrideTouchControls = true
-                controllerManager.overlayMode = .auto
-                touchPadsRefreshToken = UUID()
+                showControllerSettings = true
               } label: {
-                Label("Auto", systemImage: controllerManager.overlayMode == .auto ? "checkmark" : "")
-              }
-              Button {
-                hasTopBarInteraction = true
-                userOverrideTouchControls = true
-                controllerManager.overlayMode = .gamecube
-                controllerManager.overlayVisible = true
-                isTouchControlsActive = true
-                touchPadsRefreshToken = UUID()
-              } label: {
-                Label("GameCube", systemImage: controllerManager.overlayMode == .gamecube ? "checkmark" : "")
-              }
-              Button {
-                hasTopBarInteraction = true
-                userOverrideTouchControls = true
-                controllerManager.overlayMode = .wii
-                controllerManager.overlayVisible = true
-                isTouchControlsActive = true
-                touchPadsRefreshToken = UUID()
-              } label: {
-                Label("Wii", systemImage: controllerManager.overlayMode == .wii ? "checkmark" : "")
+                Label(L("Controller Settings…"), systemImage: "gearshape")
               }
             } label: {
               topBarIconLabel("gamecontroller")
@@ -1504,48 +1549,6 @@ struct EmulationScreen: View {
                 }
               } label: {
                 Label("Load State", systemImage: "square.and.arrow.up")
-              }
-              Menu {
-                let currentIR = DOLConfigBridge.mainTouchPadIRMode()
-                Button {
-                  hasTopBarInteraction = true
-                  PointerModeController.shared.set(.gyro)
-                  isTouchControlsActive = true
-                  userOverrideTouchControls = true
-                } label: {
-                  Label("Gyro", systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
-                }
-                Button {
-                  hasTopBarInteraction = true
-                  PointerModeController.shared.set(.touchFollow)
-                  isTouchControlsActive = true
-                  userOverrideTouchControls = true
-                } label: {
-                  Label("Follow", systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
-                }
-                Button {
-                  hasTopBarInteraction = true
-                  PointerModeController.shared.set(.touchDrag)
-                  isTouchControlsActive = true
-                  userOverrideTouchControls = true
-                } label: {
-                  Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
-                }
-                Divider()
-                Button {
-                  hasTopBarInteraction = true
-                  TCDeviceMotion.requestPointerRecenter()
-                } label: {
-                  Label("Recenter Pointer", systemImage: "scope")
-                }
-              } label: {
-                Label("Touch Cursor Mode", systemImage: "cursor.rays")
-              }
-              Button {
-                hasTopBarInteraction = true
-                showMotionDebug = true
-              } label: {
-                Label("Motion Controls", systemImage: "gyroscope")
               }
             } label: {
               topBarIconLabel("square.stack.3d.up")
