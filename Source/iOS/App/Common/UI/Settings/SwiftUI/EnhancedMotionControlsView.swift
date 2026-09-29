@@ -57,7 +57,7 @@ struct EnhancedMotionControlsView: View {
           Text(L("IR Control Method"))
         }
         .onChange(of: currentIRMode) { mode in
-          DOLConfigBridge.setMainTouchPadIRMode(mode.rawValue)
+          PointerModeController.shared.set(rawValue: mode.rawValue)
           notifyMotionSettingsChanged()
         }
 
@@ -120,7 +120,7 @@ struct EnhancedMotionControlsView: View {
           // Set improved defaults based on user feedback
           enhancedShakeEnabled = true
           currentIRMode = .gyro // Use gyro IR mode
-          DOLConfigBridge.setMainTouchPadIRMode(TouchIRMode.gyro.rawValue)
+          PointerModeController.shared.set(rawValue: TouchIRMode.gyro.rawValue)
           fullMotionEnabled = true
           useYawForHorizontal = false // Use roll by default
           wiimoteIMUEnabled = true

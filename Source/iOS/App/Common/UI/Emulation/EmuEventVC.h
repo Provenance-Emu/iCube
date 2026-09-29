@@ -16,6 +16,10 @@ FOUNDATION_EXPORT NSNotificationName const DOLRequestPauseMenuNotification;
 /// `TCDeviceMotion.recenterPointer`.
 FOUNDATION_EXPORT NSNotificationName const DOLRecenterPointerNotification;
 
+/// Posted by `PointerModeController` after the Wii pointer mode (`MAIN_TOUCH_PAD_IR_MODE`) changes,
+/// so the emulation screen can update the live touch IR pad in place.
+FOUNDATION_EXPORT NSNotificationName const DOLPointerModeDidChangeNotification;
+
 /// How long Menu must be held to exit to the library. A release before this is a
 /// short press and opens the pause menu instead. Exported so the GCController
 /// Menu handlers use the same threshold as the UIPress path.

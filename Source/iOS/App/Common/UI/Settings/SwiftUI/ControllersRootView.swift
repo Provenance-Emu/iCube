@@ -363,7 +363,7 @@ struct ControllersRootView: View {
         ) {
           Text("\(L("Touch IR Pointer")): \(touchIRMode.label)")
         }
-        .onChange(of: touchIRMode) { DOLConfigBridge.setMainTouchPadIRMode($0.rawValue) }
+        .onChange(of: touchIRMode) { PointerModeController.shared.set(rawValue: $0.rawValue) }
 
 #if os(iOS)
         settingsCaption(
@@ -650,7 +650,7 @@ struct TouchIRModePicker: View {
   var body: some View {
     List {
       ForEach(Array(TouchIRMode.allCases.enumerated()), id: \.offset) { _, value in
-        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; DOLConfigBridge.setMainTouchPadIRMode(value.rawValue) }
+        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; PointerModeController.shared.set(rawValue: value.rawValue) }
       }
     }
     .navigationTitle(L("Touch IR Pointer"))

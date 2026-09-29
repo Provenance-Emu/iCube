@@ -1274,6 +1274,9 @@ struct EmulationScreen: View {
       isTouchControlsActive = v
       touchPadsRefreshToken = UUID()
     }
+    .onReceive(NotificationCenter.default.publisher(for: .DOLPointerModeDidChange)) { _ in
+      irModeRaw = PointerModeController.shared.mode.rawValue
+    }
     // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
     .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
       isPaused = TVEmulationBridge.isPaused()
@@ -1506,28 +1509,25 @@ struct EmulationScreen: View {
                 let currentIR = DOLConfigBridge.mainTouchPadIRMode()
                 Button {
                   hasTopBarInteraction = true
-                  DOLConfigBridge.setMainTouchPadIRMode(0)
+                  PointerModeController.shared.set(.gyro)
                   isTouchControlsActive = true
                   userOverrideTouchControls = true
-                  irModeRaw = 0  // TouchPadsContainer updates the live pad in place
                 } label: {
                   Label("Gyro", systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
                 }
                 Button {
                   hasTopBarInteraction = true
-                  DOLConfigBridge.setMainTouchPadIRMode(1)
+                  PointerModeController.shared.set(.touchFollow)
                   isTouchControlsActive = true
                   userOverrideTouchControls = true
-                  irModeRaw = 1  // TouchPadsContainer updates the live pad in place
                 } label: {
                   Label("Follow", systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
                 }
                 Button {
                   hasTopBarInteraction = true
-                  DOLConfigBridge.setMainTouchPadIRMode(2)
+                  PointerModeController.shared.set(.touchDrag)
                   isTouchControlsActive = true
                   userOverrideTouchControls = true
-                  irModeRaw = 2  // TouchPadsContainer updates the live pad in place
                 } label: {
                   Label("Drag", systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
                 }

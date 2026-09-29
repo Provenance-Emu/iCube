@@ -105,7 +105,7 @@ struct MotionDebugView: View {
 
         Button("Cycle IR Mode") {
           currentIRMode = (currentIRMode + 1) % 3
-          DOLConfigBridge.setMainTouchPadIRMode(currentIRMode)
+          PointerModeController.shared.set(rawValue: currentIRMode)
           TCDeviceMotion.shared.setMotionEnabled(currentIRMode == 0 && isMotionEnabled)
         }
 

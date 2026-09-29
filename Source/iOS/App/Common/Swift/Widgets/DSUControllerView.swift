@@ -179,19 +179,19 @@ struct DSUControllerView: View {
           Menu {
             let currentIR = DOLConfigBridge.mainTouchPadIRMode()
             Button {
-              DOLConfigBridge.setMainTouchPadIRMode(0)
+              PointerModeController.shared.set(rawValue: 0)
               refreshIRLabel()
             } label: {
               Label(L("Gyro"), systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
             }
             Button {
-              DOLConfigBridge.setMainTouchPadIRMode(1)
+              PointerModeController.shared.set(rawValue: 1)
               refreshIRLabel()
             } label: {
               Label(L("Follow"), systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
             }
             Button {
-              DOLConfigBridge.setMainTouchPadIRMode(2)
+              PointerModeController.shared.set(rawValue: 2)
               refreshIRLabel()
             } label: {
               Label(L("Drag"), systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
@@ -344,7 +344,7 @@ struct DSUControllerView: View {
     let raw = DOLConfigBridge.mainTouchPadIRMode()
     // Cycle: gyro(0) -> follow(1) -> drag(2) -> gyro(0)
     let next = (raw + 1) % 3
-    DOLConfigBridge.setMainTouchPadIRMode(next)
+    PointerModeController.shared.set(rawValue: next)
     refreshIRLabel()
     // Haptic and toast for feedback
     #if os(iOS)
