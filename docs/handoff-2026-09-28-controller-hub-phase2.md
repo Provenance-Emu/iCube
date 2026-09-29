@@ -8,7 +8,7 @@ Spec: docs/superpowers/specs/2026-09-28-controller-hub-design.md
 - ab8c61345d fix(dsu): register the dsu_role default the runtime acts on
 - e2e4cf58bb feat(menu): a controller's A pushes a destination row
 - 3d188f3f4e feat(controllers): pure Controllers hub model builder
-- 036b79f853 refactor(settings): pushable DSU, More Controller Settings and edi...
+- 036b79f853 refactor(settings): pushable DSU, More Controller Settings and editors
 - 10f15d71af feat(controllers): ControllerHubViewModel and the hub view
 - 24d89a413a feat(controllers): the hub from the pause menu and the top bar
 - fee5e6edaa feat(settings): More Controller Settings takes the global rows
