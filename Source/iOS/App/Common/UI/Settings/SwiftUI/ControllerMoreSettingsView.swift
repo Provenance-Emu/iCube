@@ -13,16 +13,34 @@ struct ControllerMoreSettingsView: View {
   @State private var autoSelectOnScreenBySystem = true
   @State private var connectWiimotes = false
   @State private var touchIRMode: TouchIRMode = .drag
+  @AppStorage("virtual_mfi_connect") private var mfiConnect = false
+  /// Rumble destination, honored by the core rumble path (`Motor`): 0 device haptics, 1 controller,
+  /// 2 both. tvOS has no device to hold, so the option is hidden there.
+  @AppStorage("rumble_destination") private var rumbleDestination = 1
+  @State private var backgroundInput = false
+  @State private var wiimoteSpeaker = false
   #if os(iOS)
   @State private var touchOverlayProgrammatic = false
   /// Raw `TouchOverlayArt.Style` integer (`touch_overlay_style`).
   @State private var touchOverlayStyle = 0
   @State private var touchOverlayIRPointerGain = 1.0
+  /// Connected pads with a light bar, for the LED colour rows.
+  @State private var litControllers: [GCController] = []
   #endif
 
   var body: some View {
     List {
       Section(header: Text(L("General"))) {
+        Toggle(L("Connect MFi Controllers"), isOn: $mfiConnect)
+        Toggle(L("Background Input"), isOn: $backgroundInput)
+          .onChange(of: backgroundInput) { _, enabled in DOLConfigBridge.setMainBackgroundInput(enabled) }
+        #if os(iOS)
+        Picker(L("Rumble Output"), selection: $rumbleDestination) {
+          Text(L("Device Haptics")).tag(0)
+          Text(L("Controller")).tag(1)
+          Text(L("Both")).tag(2)
+        }
+        #endif
         settingsCaption(
           Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
             .onChange(of: autoSelectOnScreenBySystem) { _, newValue in
@@ -39,6 +57,8 @@ struct ControllerMoreSettingsView: View {
       }
 
       Section(header: Text(L("Wii Remotes"))) {
+        Toggle(L("Enable Speaker"), isOn: $wiimoteSpeaker)
+          .onChange(of: wiimoteSpeaker) { _, enabled in DOLConfigBridge.setWiimoteEnableSpeaker(enabled) }
         settingsCaption(
           Toggle(L("Connect Wiimotes for Controller Interface"), isOn: $connectWiimotes)
             .onChange(of: connectWiimotes) { _, newValue in
@@ -113,9 +133,25 @@ struct ControllerMoreSettingsView: View {
           Label(L("Analog Stick Settings"), systemImage: "l.joystick")
         }
       }
+
+      #if os(iOS)
+      if !litControllers.isEmpty {
+        Section(header: Text(L("Controller Lights"))) {
+          ForEach(Array(litControllers.enumerated()), id: \.offset) { _, controller in
+            if let light = controller.light {
+              ColorPicker(controller.vendorName ?? controller.productCategory, selection: ledBinding(for: light))
+            }
+          }
+        }
+      }
+      #endif
     }
     .navigationTitle(L("More Controller Settings"))
     .onAppear { syncFromConfig() }
+    #if os(iOS)
+    .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in reloadLitControllers() }
+    .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in reloadLitControllers() }
+    #endif
   }
 
   private func syncFromConfig() {
@@ -129,6 +165,11 @@ struct ControllerMoreSettingsView: View {
     touchOverlayProgrammatic = UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
     touchOverlayStyle = UserDefaults.standard.integer(forKey: "touch_overlay_style")
     touchOverlayIRPointerGain = Double(TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
+    #endif
+    backgroundInput = DOLConfigBridge.mainBackgroundInput()
+    wiimoteSpeaker = DOLConfigBridge.wiimoteEnableSpeaker()
+    #if os(iOS)
+    reloadLitControllers()
     #endif
   }
 
@@ -178,6 +219,21 @@ struct ControllerMoreSettingsView: View {
       message = L("No haptic feedback available")
     }
     NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": message])
+  }
+
+  private func reloadLitControllers() {
+    litControllers = GCController.controllers().filter { $0.light != nil }
+  }
+
+  /// Two-way bridge between SwiftUI's `Color` and a controller's `GCDeviceLight`.
+  private func ledBinding(for light: GCDeviceLight) -> Binding<Color> {
+    Binding(
+      get: { Color(red: Double(light.color.red), green: Double(light.color.green), blue: Double(light.color.blue)) },
+      set: { newColor in
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(newColor).getRed(&r, green: &g, blue: &b, alpha: &a)
+        light.color = GCColor(red: Float(r), green: Float(g), blue: Float(b))
+      })
   }
   #endif
 }
