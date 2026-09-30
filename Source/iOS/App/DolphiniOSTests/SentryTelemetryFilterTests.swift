@@ -21,13 +21,6 @@ final class SentryBuildEnvironmentTests: XCTestCase {
     XCTAssertTrue(SentryBuildEnvironment.trollStore.tracksWatchdogTerminations)
     XCTAssertTrue(SentryBuildEnvironment.sideload.tracksWatchdogTerminations)
   }
-
-  func testSigtermReportingOffOnlyForDevelopment() {
-    XCTAssertFalse(SentryBuildEnvironment.development.reportsSigterm)
-    XCTAssertTrue(SentryBuildEnvironment.appStore.reportsSigterm)
-    XCTAssertTrue(SentryBuildEnvironment.trollStore.reportsSigterm)
-    XCTAssertTrue(SentryBuildEnvironment.sideload.reportsSigterm)
-  }
 }
 
 final class SentryBreadcrumbFilterTests: XCTestCase {
