@@ -201,8 +201,8 @@ struct MenuScreen: View {
   /// Shared by every renderer: what happens when an item is activated,
   /// whether by a controller `.activate` edge or (on tvOS/for `.navigation`)
   /// a direct tap. `.destination` pushes its view (a list row's tap goes through its `NavigationLink` instead, so
-  /// this path is the controller's A and grid cards). `.custom` owns its own gestures, so activation
-  /// is a no-op for it.
+  /// this path is the controller's A and grid cards). `.custom` owns its own gestures; a controller's
+  /// A runs its `onCustomActivate`, if it has one.
   private func performActivate(_ item: MenuItem) {
     guard item.isEnabled else { return }
     switch item.role {
@@ -219,7 +219,7 @@ struct MenuScreen: View {
     case .destination(let destinationView):
       pushedDestination = PushedDestination(view: destinationView)
     case .custom:
-      break
+      item.onCustomActivate?()
     }
   }
 

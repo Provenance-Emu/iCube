@@ -111,4 +111,15 @@ final class MenuModelTests: XCTestCase {
     XCTAssertEqual(MenuItemRole.cycled(options: options, current: AnyHashable(9), step: 1), AnyHashable(0))
     XCTAssertNil(MenuItemRole.cycled(options: [], current: AnyHashable(0), step: 1))
   }
+
+  /// A `.custom` row's own gestures never reach `MenuScreen`; a pad's A on iOS runs the item's
+  /// `onCustomActivate` (MenuScreen.performActivate, device-checked). Nil by default, so existing
+  /// custom rows (save-state cards) are unchanged.
+  func test_customRow_carriesItsPadActivation() {
+    var ran = false
+    let item = MenuItem(id: "c", title: "C", role: .custom(AnyView(EmptyView())), onCustomActivate: { ran = true })
+    item.onCustomActivate?()
+    XCTAssertTrue(ran)
+    XCTAssertNil(MenuItem(id: "d", title: "D", role: .custom(AnyView(EmptyView()))).onCustomActivate)
+  }
 }

@@ -52,6 +52,10 @@ struct MenuItem: Identifiable {
   /// built, not a live read on every render.
   var badge: String?
   var isEnabled: Bool = true
+  /// `.custom` rows only: what a controller's A does on iOS. A `.custom` row carries its own touch
+  /// and tvOS gestures, so `MenuScreen` cannot activate it by itself; without this a pad could focus
+  /// the player screen's capture rows but never arm one.
+  var onCustomActivate: (() -> Void)?
 
   init(
     id: String,
@@ -61,7 +65,8 @@ struct MenuItem: Identifiable {
     tint: Color? = nil,
     role: MenuItemRole,
     badge: String? = nil,
-    isEnabled: Bool = true
+    isEnabled: Bool = true,
+    onCustomActivate: (() -> Void)? = nil
   ) {
     self.id = id
     self.title = title
@@ -71,6 +76,7 @@ struct MenuItem: Identifiable {
     self.role = role
     self.badge = badge
     self.isEnabled = isEnabled
+    self.onCustomActivate = onCustomActivate
   }
 }
 
@@ -85,8 +91,9 @@ enum MenuItemRole {
   /// stay untouched behind this (design doc §4's "Not modeled" section).
   case destination(AnyView)
   /// Opaque leaf with its own gesture handling (a save-state filmstrip card,
-  /// a shader thumbnail) — `MenuScreen` renders it and otherwise leaves it
-  /// alone; it does not intercept controller-activate for this role.
+  /// a shader thumbnail, a capture row) — `MenuScreen` renders it and
+  /// otherwise leaves it alone. A controller's A reaches it only through the
+  /// item's `onCustomActivate`.
   case custom(AnyView)
   case destructive(() -> Void)
 }
