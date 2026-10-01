@@ -5,18 +5,17 @@ final class ExtensionTelemetryTests: XCTestCase {
     private struct Boom: Error {}
 
     func testOnlyFailuresGetASignpostEvent() {
-        XCTAssertNil(ExtensionTelemetry.signpostName(for: .loaded))
-        XCTAssertNil(ExtensionTelemetry.signpostName(for: .neverWritten))
+        XCTAssertNil(ExtensionTelemetry.FailureEvent(.loaded))
+        XCTAssertNil(ExtensionTelemetry.FailureEvent(.neverWritten))
         let failures: [LibrarySnapshotLoadOutcome] = [.appGroupUnavailable, .decodeFailed, .newerSchema(2)]
-        let names = failures.compactMap { ExtensionTelemetry.signpostName(for: $0).map { "\($0)" } }
+        let names = failures.compactMap { ExtensionTelemetry.FailureEvent($0)?.nameString }
         XCTAssertEqual(names.count, failures.count)
         XCTAssertEqual(Set(names).count, names.count, "each failure reason has its own event name")
     }
 
     func testNewerSchemaVersionsShareOneEventName() {
         // MetricKit keeps a capped number of custom signposts; the version goes in the log line.
-        XCTAssertEqual(ExtensionTelemetry.signpostName(for: .newerSchema(2)).map { "\($0)" },
-                       ExtensionTelemetry.signpostName(for: .newerSchema(9)).map { "\($0)" })
+        XCTAssertEqual(ExtensionTelemetry.FailureEvent(.newerSchema(2)), ExtensionTelemetry.FailureEvent(.newerSchema(9)))
     }
 
     func testMeasureReturnsTheBodyValue() {

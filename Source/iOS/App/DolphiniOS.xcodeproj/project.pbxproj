@@ -194,6 +194,7 @@
 		C0C0BEEF0000000000000000 /* StikDebugLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0000000000000000 /* StikDebugLauncher.swift */; };
 		C0C0BEEF0001000000000000 /* PGOFlush.c in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0001000000000000 /* PGOFlush.c */; };
 		C0C0BEEF0003000000000000 /* EmulationPerfSessionRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0003000000000000 /* EmulationPerfSessionRecorder.swift */; };
+		C0C0BEEF0003000000000E10 /* ExtensionMetricsReporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0003000000000E10 /* ExtensionMetricsReporter.swift */; };
 		C0C0BEEF0004000000000000 /* SentryTelemetryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0004000000000000 /* SentryTelemetryService.swift */; };
 		C0C0BEEF0005000000000000 /* WebUploadImportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0005000000000000 /* WebUploadImportService.swift */; };
 		C0C0BEEF0006000000000000 /* DebugAPIRoutes.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0C0CAFE0006000000000000 /* DebugAPIRoutes.swift */; };
@@ -651,6 +652,7 @@
 		C0C0CAFE0001000000000000 /* PGOFlush.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = "PGOFlush.c"; path = "Common/PGOFlush.c"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0002000000000000 /* PGOFlush.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "PGOFlush.h"; path = "Common/PGOFlush.h"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0003000000000000 /* EmulationPerfSessionRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "EmulationPerfSessionRecorder.swift"; path = "Common/Services/EmulationPerfSessionRecorder.swift"; sourceTree = SOURCE_ROOT; };
+		C0C0CAFE0003000000000E10 /* ExtensionMetricsReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "ExtensionMetricsReporter.swift"; path = "Common/Services/ExtensionMetricsReporter.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0004000000000000 /* SentryTelemetryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "SentryTelemetryService.swift"; path = "Common/Services/SentryTelemetryService.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0005000000000000 /* WebUploadImportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "WebUploadImportService.swift"; path = "Common/Services/WebUploadImportService.swift"; sourceTree = SOURCE_ROOT; };
 		C0C0CAFE0006000000000000 /* DebugAPIRoutes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "DebugAPIRoutes.swift"; path = "Common/Swift/Debug/DebugAPIRoutes.swift"; sourceTree = SOURCE_ROOT; };
@@ -1868,6 +1870,7 @@
 				C0C0CAFE0001000000000000 /* PGOFlush.c */,
 				C0C0CAFE0002000000000000 /* PGOFlush.h */,
 				C0C0CAFE0003000000000000 /* EmulationPerfSessionRecorder.swift */,
+				C0C0CAFE0003000000000E10 /* ExtensionMetricsReporter.swift */,
 				C0C0CAFE0004000000000000 /* SentryTelemetryService.swift */,
 				C0C0CAFE0005000000000000 /* WebUploadImportService.swift */,
 				C0C0CAFE0006000000000000 /* DebugAPIRoutes.swift */,
@@ -2604,6 +2607,7 @@
 				C0C0CAFE0000000000000969 /* SyncConflictResolutionView.swift in Sources */,
 				C0C0CAFE000000000000096B /* SyncStatusIndicator.swift in Sources */,
 				C0C0BEEF0003000000000000 /* EmulationPerfSessionRecorder.swift in Sources */,
+				C0C0BEEF0003000000000E10 /* ExtensionMetricsReporter.swift in Sources */,
 				C0C0BEEF0004000000000000 /* SentryTelemetryService.swift in Sources */,
 				C0C0BEEF0005000000000000 /* WebUploadImportService.swift in Sources */,
 				C0C0BEEF0006000000000000 /* DebugAPIRoutes.swift in Sources */,
@@ -6473,7 +6477,7 @@
 			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 9.16.1;
+				minimumVersion = 9.29.2;
 			};
 		};
 		C0C0CAFE0000000000000601 /* XCRemoteSwiftPackageReference "PLzmaSDK" */ = {

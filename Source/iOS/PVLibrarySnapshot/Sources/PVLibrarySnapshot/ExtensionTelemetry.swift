@@ -28,7 +28,7 @@ public struct ExtensionTelemetry {
     }
 
     /// The one timed operation per extension.
-    public enum Interval {
+    public enum Interval: CaseIterable {
         case thumbnailLookup, previewBuild, topShelfBuild, widgetEntry
 
         var name: StaticString {
@@ -39,10 +39,41 @@ public struct ExtensionTelemetry {
             case .widgetEntry: return "WidgetEntry"
             }
         }
+
+        /// The name as MetricKit reports it back (`MXSignpostMetric.signpostName`).
+        public var nameString: String { "\(name)" }
+    }
+
+    /// Point events, counted per day by MetricKit. Shared by every extension.
+    public enum FailureEvent: CaseIterable {
+        case snapshotNoAppGroup, snapshotDecodeFailed, snapshotNewerSchema, coverUnreadable
+
+        /// nil for outcomes that aren't failures.
+        init?(_ outcome: LibrarySnapshotLoadOutcome) {
+            switch outcome {
+            case .loaded, .neverWritten: return nil
+            case .appGroupUnavailable: self = .snapshotNoAppGroup
+            case .decodeFailed: self = .snapshotDecodeFailed
+            case .newerSchema: self = .snapshotNewerSchema
+            }
+        }
+
+        var name: StaticString {
+            switch self {
+            case .snapshotNoAppGroup: return "SnapshotNoAppGroup"
+            case .snapshotDecodeFailed: return "SnapshotDecodeFailed"
+            case .snapshotNewerSchema: return "SnapshotNewerSchema"
+            case .coverUnreadable: return "CoverUnreadable"
+            }
+        }
+
+        public var nameString: String { "\(name)" }
     }
 
     static let subsystem = "com.joemattiello.iCube"
-    static let signpostCategory = "Extensions"
+    /// `MXSignpostMetric.signpostCategory` of everything recorded here; the app's
+    /// `ExtensionMetricsReport` filters on it.
+    public static let signpostCategory = "Extensions"
 
     public let surface: Surface
     private let logger: Logger
@@ -73,7 +104,7 @@ public struct ExtensionTelemetry {
 
     /// Records a snapshot load that came back empty for a reason other than "never written".
     public func record(_ outcome: LibrarySnapshotLoadOutcome) {
-        guard let name = Self.signpostName(for: outcome) else { return }
+        guard let event = FailureEvent(outcome) else { return }
         if case .newerSchema(let version) = outcome {
             logger.error("""
                 snapshot load failed: \(outcome.reason, privacy: .public) \
@@ -82,7 +113,7 @@ public struct ExtensionTelemetry {
         } else {
             logger.error("snapshot load failed: \(outcome.reason, privacy: .public)")
         }
-        signpost(.event, name, .exclusive)
+        signpost(.event, event.name, .exclusive)
     }
 
     /// The snapshot named a cover file that exists but couldn't be read.
@@ -94,16 +125,7 @@ public struct ExtensionTelemetry {
             cover unreadable: \(nsError.domain, privacy: .public) \(nsError.code, privacy: .public) \
             \(String(describing: error))
             """)
-        signpost(.event, "CoverUnreadable", .exclusive)
-    }
-
-    static func signpostName(for outcome: LibrarySnapshotLoadOutcome) -> StaticString? {
-        switch outcome {
-        case .loaded, .neverWritten: return nil
-        case .appGroupUnavailable: return "SnapshotNoAppGroup"
-        case .decodeFailed: return "SnapshotDecodeFailed"
-        case .newerSchema: return "SnapshotNewerSchema"
-        }
+        signpost(.event, FailureEvent.coverUnreadable.name, .exclusive)
     }
 
     private func signpost(_ type: OSSignpostType, _ name: StaticString, _ id: OSSignpostID) {

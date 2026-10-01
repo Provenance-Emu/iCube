@@ -47,13 +47,21 @@ Written at the end of a long session; start a fresh session from this file.
   Top Shelf (summary log moved .info → .notice so it persists), RecentGamesWidget. The widget ships
   nothing while `APP_EMBEDS_APPEX = false`.
 
-## Open (needs a decision; touches the watchdog session's Sentry/MetricKit area)
+## App-side reader (decided 2026-09-30: option a)
 
-Signposts reach at most the app's daily MXMetricPayload, and nothing reads it. Options: (a) an
-app-side `MXMetricManagerSubscriber` that pulls the "Extensions" signpost metrics (and
-`bundleIdentifier`) and forwards them, e.g. as Sentry events or measurements; (b) extensions bump
-counters in the App Group and the app uploads them (doesn't work for appGroupUnavailable). Not
-built unasked.
+- `ExtensionMetricsReport` (PVLibrarySnapshot): pure summary of one payload's "Extensions" signposts
+  (failure counts, interval count / approx mean / max from the histogram), `decision()` = always send
+  failures, sample timing-only payloads at 10 %, stable fingerprint per failure combination.
+  `ExtensionSignpostSample.init(MXSignpostMetric)` is the only MetricKit-typed code.
+- `App/Common/Services/ExtensionMetricsReporter.swift`: its own `MXMetricManagerSubscriber`, started
+  from AppDelegate after `SentryTelemetryService.configure()`. Independent of Sentry's
+  `enableMetricKit` (ICUBE-A6 session may change that). Sends `SentrySDK.capture(message:)`
+  "App extension failures" (warning) / "App extension timing" (info) with contexts `app_extensions`
+  and `metrickit_payload` (window, app version, pid, iOS 26 `bundle_id` — tells us whether extension
+  signposts are attributed to the app at all). Also listed in the fallback DolphiniOS.xcodeproj.
+- Verify: Xcode → Debug → Simulate MetricKit Payloads exercises the subscriber path (simulated payloads
+  carry Apple's sample signposts, not ours, so expect `.skip`); the real check is a Sentry event
+  after ~24 h of using Files previews on a device.
 
 ## Device check still owed
 
