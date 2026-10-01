@@ -13,8 +13,11 @@ struct ZipEntry: Equatable {
 enum ZipEntryScannerError: Error, Equatable {
   /// No end-of-central-directory record, or a central directory entry that does not parse.
   case notAZip
-  /// The central directory runs past the end of the data, or its entry count disagrees with its contents.
+  /// An entry or the end record runs past the end of the data.
   case truncated
+  /// The end record, central directory and entry count do not describe one consistent archive, which is how
+  /// a second, hidden directory is smuggled past a scanner that reads the archive differently than the extractor.
+  case inconsistentDirectory
   /// The archive uses zip64 (or spans disks), which this scanner does not read.
   case zip64Unsupported
   /// An entry that could write outside the extraction folder, or is a symbolic link. Carries the entry name.
@@ -23,12 +26,19 @@ enum ZipEntryScannerError: Error, Equatable {
 
 /// Reads a zip's central directory without extracting anything, so an archive can be checked for
 /// path-traversal ("zip slip") and symlink entries before an extractor that does not check them runs.
+///
+/// The bundled extractor (Zip's minizip, `unzOpenInternal` in `unzip.c`) takes the LAST end-record signature in
+/// the final 64 KiB (`unz64local_SearchCentralDir`, unzip.c:294-351) with no consistency check, and reads the
+/// first entry at `central_pos - size_central_dir` (`byte_before_the_zipfile`, unzip.c:541). The scanner locates
+/// the end record the same way and then refuses any archive where those two readings could differ: a comment that
+/// does not end at the end of the data, a gap between the directory and the end record, or a wrong entry count.
 enum ZipEntryScanner {
   private static let endRecordSignature: UInt32 = 0x0605_4B50
   private static let centralEntrySignature: UInt32 = 0x0201_4B50
   private static let endRecordSize = 22
   private static let centralEntryHeaderSize = 46
   private static let maxCommentLength = 0xFFFF
+  private static let signatureSize = 4
   private static let zip64Marker16: UInt16 = 0xFFFF
   private static let zip64Marker32: UInt32 = 0xFFFF_FFFF
   private static let unixModeShift: UInt32 = 16
@@ -69,15 +79,20 @@ enum ZipEntryScanner {
           data.le16(end + EndRecord.entriesOnDisk) == data.le16(end + EndRecord.totalEntries) else {
       throw ZipEntryScannerError.zip64Unsupported
     }
+    guard end + endRecordSize + Int(data.le16(end + endRecordSize - 2)) == data.count else {
+      throw ZipEntryScannerError.inconsistentDirectory
+    }
     let count = data.le16(end + EndRecord.totalEntries)
     let size = data.le32(end + EndRecord.centralDirectorySize)
     let offset = data.le32(end + EndRecord.centralDirectoryOffset)
-    if count == zip64Marker16 || size == zip64Marker32 || offset == zip64Marker32 { throw ZipEntryScannerError.zip64Unsupported }
-    guard Int(offset) + Int(size) <= end else { throw ZipEntryScannerError.truncated }
+    // minizip also switches to its zip64 reader when the directory size is 0xFFFF (unzip.c:473).
+    if count == zip64Marker16 || size == UInt32(zip64Marker16) || size == zip64Marker32 || offset == zip64Marker32 { throw ZipEntryScannerError.zip64Unsupported }
+    // No gap: minizip starts at `end - size`, so any slack between directory and end record is a second directory.
+    guard Int(offset) + Int(size) == end else { throw ZipEntryScannerError.inconsistentDirectory }
 
     var entries: [ZipEntry] = []
     var cursor = Int(offset)
-    let limit = Int(offset) + Int(size)
+    let limit = end
     while cursor < limit {
       guard cursor + centralEntryHeaderSize <= limit else { throw ZipEntryScannerError.truncated }
       guard data.le32(cursor) == centralEntrySignature else { throw ZipEntryScannerError.notAZip }
@@ -97,19 +112,19 @@ enum ZipEntryScanner {
       entries.append(entry)
       cursor += centralEntryHeaderSize + variableLength
     }
-    guard entries.count == Int(count) else { throw ZipEntryScannerError.truncated }
+    guard entries.count == Int(count) else { throw ZipEntryScannerError.inconsistentDirectory }
     return entries
   }
 
-  /// The end record is the last 22 bytes unless the archive carries a trailing comment, so look backwards for it.
+  /// The LAST end-record signature in the final 64 KiB (plus the record itself), as minizip finds it. Whether that
+  /// record is consistent with the rest of the archive is the caller's check, not part of choosing it.
   private static func endRecordOffset(in data: Data) throws -> Int {
-    guard data.count >= endRecordSize else { throw ZipEntryScannerError.notAZip }
     let lowest = max(0, data.count - endRecordSize - maxCommentLength)
-    var candidate = data.count - endRecordSize
+    var candidate = data.count - signatureSize
     while candidate >= lowest {
       if data.le32(candidate) == endRecordSignature {
-        let commentLength = Int(data.le16(candidate + endRecordSize - 2))
-        if candidate + endRecordSize + commentLength == data.count { return candidate }
+        guard candidate + endRecordSize <= data.count else { throw ZipEntryScannerError.truncated }
+        return candidate
       }
       candidate -= 1
     }

@@ -97,7 +97,7 @@ final class SkinLibrary: ObservableObject {
       // Zip does not reject entries like `../../x`, so vet the entry list before anything is written.
       _ = try ZipEntryScanner.scan(fileAt: zipCopy)
       try Zip.unzipFile(zipCopy, destination: extracted, overwrite: true, password: nil)
-    } catch ZipEntryScannerError.unsafeEntry {
+    } catch ZipEntryScannerError.unsafeEntry, ZipEntryScannerError.inconsistentDirectory {
       throw SkinImportError.unsafeArchive
     } catch {
       throw SkinImportError.unreadableArchive

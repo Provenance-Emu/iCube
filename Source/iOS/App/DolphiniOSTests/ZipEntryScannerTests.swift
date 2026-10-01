@@ -35,54 +35,70 @@ enum TestZipBuilder {
     var archive = Data()
     var central = Data()
     for entry in entries {
-      let crc = crc32(entry.contents)
-      let size = UInt32(entry.contents.count)
-      let offset = UInt32(archive.count)
-      archive.append(le32: 0x04034b50)
-      archive.append(le16: versionNeeded)
-      archive.append(le16: 0)
-      archive.append(le16: 0)
-      archive.append(le16: 0)
-      archive.append(le16: dosDate)
-      archive.append(le32: crc)
-      archive.append(le32: size)
-      archive.append(le32: size)
-      archive.append(le16: UInt16(entry.name.count))
-      archive.append(le16: 0)
-      archive.append(contentsOf: entry.name)
-      archive.append(entry.contents)
-
-      central.append(le32: 0x02014b50)
-      central.append(le16: versionMadeByUnix)
-      central.append(le16: versionNeeded)
-      central.append(le16: 0)
-      central.append(le16: 0)
-      central.append(le16: 0)
-      central.append(le16: dosDate)
-      central.append(le32: crc)
-      central.append(le32: entry.compressedSizeField ?? size)
-      central.append(le32: size)
-      central.append(le16: UInt16(entry.name.count))
-      central.append(le16: 0)
-      central.append(le16: 0)
-      central.append(le16: 0)
-      central.append(le16: 0)
-      central.append(le32: entry.externalAttributes)
-      central.append(le32: offset)
-      central.append(contentsOf: entry.name)
+      central.append(centralRecord(entry, localHeaderOffset: UInt32(archive.count)))
+      archive.append(localRecord(entry))
     }
     let centralOffset = UInt32(archive.count)
     archive.append(central)
-    archive.append(le32: 0x06054b50)
-    archive.append(le16: 0)
-    archive.append(le16: 0)
-    archive.append(le16: UInt16(entries.count))
-    archive.append(le16: UInt16(entries.count))
-    archive.append(le32: UInt32(central.count))
-    archive.append(le32: centralOffset)
-    archive.append(le16: UInt16(comment.count))
-    archive.append(contentsOf: comment)
+    archive.append(endRecord(entryCount: entries.count, centralDirectorySize: central.count, centralDirectoryOffset: centralOffset, comment: comment))
     return archive
+  }
+
+  static func localRecord(_ entry: Entry) -> Data {
+    var record = Data()
+    let size = UInt32(entry.contents.count)
+    record.append(le32: 0x04034b50)
+    record.append(le16: versionNeeded)
+    record.append(le16: 0)
+    record.append(le16: 0)
+    record.append(le16: 0)
+    record.append(le16: dosDate)
+    record.append(le32: crc32(entry.contents))
+    record.append(le32: size)
+    record.append(le32: size)
+    record.append(le16: UInt16(entry.name.count))
+    record.append(le16: 0)
+    record.append(contentsOf: entry.name)
+    record.append(entry.contents)
+    return record
+  }
+
+  static func centralRecord(_ entry: Entry, localHeaderOffset: UInt32) -> Data {
+    var record = Data()
+    let size = UInt32(entry.contents.count)
+    record.append(le32: 0x02014b50)
+    record.append(le16: versionMadeByUnix)
+    record.append(le16: versionNeeded)
+    record.append(le16: 0)
+    record.append(le16: 0)
+    record.append(le16: 0)
+    record.append(le16: dosDate)
+    record.append(le32: crc32(entry.contents))
+    record.append(le32: entry.compressedSizeField ?? size)
+    record.append(le32: size)
+    record.append(le16: UInt16(entry.name.count))
+    record.append(le16: 0)
+    record.append(le16: 0)
+    record.append(le16: 0)
+    record.append(le16: 0)
+    record.append(le32: entry.externalAttributes)
+    record.append(le32: localHeaderOffset)
+    record.append(contentsOf: entry.name)
+    return record
+  }
+
+  static func endRecord(entryCount: Int, centralDirectorySize: Int, centralDirectoryOffset: UInt32, comment: [UInt8] = []) -> Data {
+    var record = Data()
+    record.append(le32: 0x06054b50)
+    record.append(le16: 0)
+    record.append(le16: 0)
+    record.append(le16: UInt16(entryCount))
+    record.append(le16: UInt16(entryCount))
+    record.append(le32: UInt32(centralDirectorySize))
+    record.append(le32: centralDirectoryOffset)
+    record.append(le16: UInt16(comment.count))
+    record.append(contentsOf: comment)
+    return record
   }
 
   private static func crc32(_ data: Data) -> UInt32 {
@@ -122,7 +138,7 @@ final class ZipEntryScannerTests: XCTestCase {
   }
 
   func testParsesPastATrailingComment() throws {
-    let data = TestZipBuilder.build([.init(name: "a.txt")], comment: Array("a comment, PK\u{5}\u{6} and all".utf8))
+    let data = TestZipBuilder.build([.init(name: "a.txt")], comment: Array("a perfectly ordinary archive comment".utf8))
     XCTAssertEqual(try ZipEntryScanner.scan(data).map(\.name), ["a.txt"])
   }
 
@@ -173,12 +189,74 @@ final class ZipEntryScannerTests: XCTestCase {
       XCTAssertEqual($0 as? ZipEntryScannerError, .notAZip)
     }
     XCTAssertThrowsError(try ZipEntryScanner.scan(data.prefix(data.count - 10))) {
+      XCTAssertEqual($0 as? ZipEntryScannerError, .truncated, "the end-of-central-directory record is cut short")
+    }
+    XCTAssertThrowsError(try ZipEntryScanner.scan(data.prefix(data.count - 22))) {
       XCTAssertEqual($0 as? ZipEntryScannerError, .notAZip, "the end-of-central-directory record is gone")
     }
     var damaged = data
     damaged.replaceSubrange((data.count - 22 + 16)..<(data.count - 22 + 20), with: [0xFF, 0x00, 0x00, 0x00])
     XCTAssertThrowsError(try ZipEntryScanner.scan(damaged)) {
-      XCTAssertEqual($0 as? ZipEntryScannerError, .truncated, "the central directory offset points past the data")
+      XCTAssertEqual($0 as? ZipEntryScannerError, .inconsistentDirectory, "the central directory offset no longer meets the end record")
+    }
+  }
+
+  // MARK: - Differential cases: archives the bundled minizip would read differently than a naive scanner
+
+  private static let benign = TestZipBuilder.Entry(name: "info.json", contents: Data("{}".utf8))
+  private static let hostile = TestZipBuilder.Entry(name: "../../a.b", contents: Data("owned".utf8))
+
+  /// A real archive whose end-record COMMENT carries a hostile central directory and a second end record.
+  /// minizip opens the LAST end record (unzip.c:294-351), i.e. the one inside the comment.
+  private func archiveWithHiddenDirectory(trailing: [UInt8]) -> Data {
+    let local = TestZipBuilder.localRecord(Self.benign)
+    let benignDirectory = TestZipBuilder.centralRecord(Self.benign, localHeaderOffset: 0)
+    let hostileDirectory = TestZipBuilder.centralRecord(Self.hostile, localHeaderOffset: 0)
+    let hostileDirectoryOffset = local.count + benignDirectory.count + 22
+    let fakeEnd = TestZipBuilder.endRecord(entryCount: 1, centralDirectorySize: hostileDirectory.count, centralDirectoryOffset: UInt32(hostileDirectoryOffset))
+    var archive = local
+    archive.append(benignDirectory)
+    archive.append(TestZipBuilder.endRecord(entryCount: 1, centralDirectorySize: benignDirectory.count, centralDirectoryOffset: UInt32(local.count),
+                                            comment: Array(hostileDirectory) + Array(fakeEnd) + trailing))
+    return archive
+  }
+
+  func testRejectsFakeEndRecordInsideTheComment() {
+    XCTAssertThrowsError(try ZipEntryScanner.scan(archiveWithHiddenDirectory(trailing: [0x78, 0x78, 0x78]))) {
+      XCTAssertEqual($0 as? ZipEntryScannerError, .inconsistentDirectory, "the last end record's comment does not reach the end of the data")
+    }
+  }
+
+  func testScansTheDirectoryOfAFakeEndRecordThatReachesTheEnd() {
+    XCTAssertThrowsError(try ZipEntryScanner.scan(archiveWithHiddenDirectory(trailing: []))) {
+      guard case ZipEntryScannerError.unsafeEntry = $0 else { return XCTFail("expected unsafeEntry, got \($0)") }
+    }
+  }
+
+  func testRejectsGapBetweenDirectoryAndEndRecord() {
+    let local = TestZipBuilder.localRecord(Self.benign)
+    let benignDirectory = TestZipBuilder.centralRecord(Self.benign, localHeaderOffset: 0)
+    let hostileDirectory = TestZipBuilder.centralRecord(Self.hostile, localHeaderOffset: 0)
+    XCTAssertEqual(benignDirectory.count, hostileDirectory.count, "same size, so minizip's central_pos - size lands on the hostile one")
+    var archive = local
+    archive.append(benignDirectory)
+    archive.append(hostileDirectory)
+    archive.append(TestZipBuilder.endRecord(entryCount: 1, centralDirectorySize: benignDirectory.count, centralDirectoryOffset: UInt32(local.count)))
+    XCTAssertThrowsError(try ZipEntryScanner.scan(archive)) {
+      XCTAssertEqual($0 as? ZipEntryScannerError, .inconsistentDirectory)
+    }
+  }
+
+  func testRejectsEntryCountThatDisagreesWithTheDirectory() {
+    let local = TestZipBuilder.localRecord(Self.benign)
+    let directory = TestZipBuilder.centralRecord(Self.benign, localHeaderOffset: 0)
+    for claimed in [0, 2] {
+      var archive = local
+      archive.append(directory)
+      archive.append(TestZipBuilder.endRecord(entryCount: claimed, centralDirectorySize: directory.count, centralDirectoryOffset: UInt32(local.count)))
+      XCTAssertThrowsError(try ZipEntryScanner.scan(archive), "claimed \(claimed)") {
+        XCTAssertEqual($0 as? ZipEntryScannerError, .inconsistentDirectory)
+      }
     }
   }
 
