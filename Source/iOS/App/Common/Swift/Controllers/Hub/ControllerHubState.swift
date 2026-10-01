@@ -80,6 +80,10 @@ struct ConnectedPadState: Equatable {
   let isCharging: Bool
   /// "P1"…"P4", nil when the pad has no player index.
   let playerLabel: String?
+  /// The pad has a gyroscope (`GCController.motion?.hasRotationRate`). Only then does Dolphin's MFi
+  /// backend expose its `Gyro …` inputs (MFiController.mm:189-198), so only then can it drive the
+  /// Wii pointer. Defaulted so existing memberwise inits compile.
+  var hasGyro: Bool = false
 }
 
 /// Plain snapshot of everything the hub shows. No bridge reads happen after it is built;

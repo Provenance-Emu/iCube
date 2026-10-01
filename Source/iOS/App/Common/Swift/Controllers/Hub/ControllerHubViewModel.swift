@@ -56,7 +56,8 @@ struct LiveControllerHubReader: ControllerHubReading {
         name: controller.vendorName ?? controller.productCategory,
         batteryPercent: hasLevel ? battery.map { Int(($0.batteryLevel * 100).rounded()) } : nil,
         isCharging: battery?.batteryState == .charging,
-        playerLabel: controller.playerIndex == .indexUnset ? nil : "P\(controller.playerIndex.rawValue + 1)")
+        playerLabel: controller.playerIndex == .indexUnset ? nil : "P\(controller.playerIndex.rawValue + 1)",
+        hasGyro: controller.motion?.hasRotationRate == true)
     }
   }
 
