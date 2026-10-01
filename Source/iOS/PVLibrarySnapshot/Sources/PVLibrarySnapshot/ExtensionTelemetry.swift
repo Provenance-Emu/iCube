@@ -87,7 +87,13 @@ public struct ExtensionTelemetry {
 
     /// The snapshot named a cover file that exists but couldn't be read.
     public func recordCoverUnreadable(_ error: Error) {
-        logger.error("cover unreadable: \(String(describing: error))")
+        // Domain and code are public so a permissions failure and a missing file stay
+        // distinguishable off-device; the description may hold a path, so it stays private.
+        let nsError = error as NSError
+        logger.error("""
+            cover unreadable: \(nsError.domain, privacy: .public) \(nsError.code, privacy: .public) \
+            \(String(describing: error))
+            """)
         signpost(.event, "CoverUnreadable", .exclusive)
     }
 
