@@ -278,6 +278,18 @@ final class TCDeviceMotionMappingTests: XCTestCase {
     XCTAssertEqual(offsets.horizontal, 0.1 * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
   }
 
+  /// Gyro pointer sensitivity (decision 4) scales both axes on top of the fixed constants; 1 is
+  /// today's behaviour.
+  func testGyroPointerSensitivityScalesBothAxes() {
+    let start = TCDeviceMotion.PointerAttitude(roll: 0, pitch: 0, yaw: 0)
+    let moved = TCDeviceMotion.PointerAttitude(roll: 0.1, pitch: 0.1, yaw: 0)
+    let unscaled = TCDeviceMotion.gyroPointerOffsets(current: moved, baseline: start, useYawForHorizontal: false)
+    let scaled = TCDeviceMotion.gyroPointerOffsets(current: moved, baseline: start, useYawForHorizontal: false, gain: 1.5)
+    XCTAssertEqual(unscaled.horizontal, 0.1 * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
+    XCTAssertEqual(scaled.horizontal, 1.5 * unscaled.horizontal, accuracy: 0.0001)
+    XCTAssertEqual(scaled.vertical, 1.5 * unscaled.vertical, accuracy: 0.0001)
+  }
+
   // MARK: - Unknown orientation is a safe no-op
 
   func testUnknownOrientationFoldsIntoPortraitForAccelAndIsZeroForGyro() {

@@ -56,4 +56,33 @@ final class MotionSettingsTests: XCTestCase {
     XCTAssertEqual(MotionSettings.Key.nunchukIMU, "motion_nunchuck_imu_enabled")
     XCTAssertEqual(MotionSettings.Key.irPointerGain, "touch_overlay_ir_pointer_gain")
   }
+
+  /// Decision 4: a multiplier on TCDeviceMotion's constants, 1.0 by default so nothing changes.
+  func testGyroPointerSensitivityDefaultsToOne() {
+    XCTAssertEqual(MotionSettings.gyroPointerSensitivity(in: store), 1.0, "unregistered reads as 1")
+    MotionSettings.registerDefaults(in: store)
+    XCTAssertEqual(MotionSettings.gyroPointerSensitivity(in: store), 1.0)
+    store.set(-2.0, forKey: MotionSettings.Key.gyroPointerSensitivity)
+    XCTAssertEqual(MotionSettings.gyroPointerSensitivity(in: store), 1.0, "a broken value reads as 1")
+    XCTAssertEqual(MotionSettings.Key.gyroPointerSensitivity, "motion_gyro_pointer_sensitivity")
+  }
+
+  func testSettersWriteTheExistingKeys() {
+    MotionSettings.setInvertRoll(true, in: store)
+    MotionSettings.setInvertPitch(true, in: store)
+    MotionSettings.setEnhancedShakeDetection(false, in: store)
+    MotionSettings.setIRPointerGain(2.0, in: store)
+    MotionSettings.setGyroPointerSensitivity(1.5, in: store)
+    XCTAssertTrue(store.bool(forKey: "motion_invert_roll"))
+    XCTAssertTrue(store.bool(forKey: "motion_invert_pitch"))
+    XCTAssertEqual(store.object(forKey: "motion_enhanced_shake_detection") as? Bool, false)
+    XCTAssertEqual(store.double(forKey: "touch_overlay_ir_pointer_gain"), 2.0)
+    XCTAssertEqual(MotionSettings.gyroPointerSensitivity(in: store), 1.5)
+  }
+
+  /// The observers in EmulationScreen and the existing posters use the literal string; the declared
+  /// name must be the same string or the new posters would restart nothing.
+  func testMotionSettingsChangedIsTheStringTheObserversUse() {
+    XCTAssertEqual(Notification.Name.DOLMotionSettingsChanged.rawValue, "DOLMotionSettingsChanged")
+  }
 }

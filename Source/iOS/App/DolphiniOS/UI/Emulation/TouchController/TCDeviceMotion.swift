@@ -118,13 +118,18 @@ import Foundation
   static func gyroPointerOffsets(
     current: PointerAttitude,
     baseline: PointerAttitude,
-    useYawForHorizontal: Bool
+    useYawForHorizontal: Bool,
+    gain: Double = 1
   ) -> (horizontal: Double, vertical: Double) {
     let horizontalDelta = useYawForHorizontal
       ? wrappedAngle(current.yaw - baseline.yaw)
       : wrappedAngle(current.roll - baseline.roll)
     let verticalDelta = wrappedAngle(current.pitch - baseline.pitch)
-    return (horizontalDelta * gyroPointerHorizontalSensitivity, verticalDelta * gyroPointerVerticalSensitivity)
+    // `gain` is the user's gyro pointer sensitivity (`MotionSettings.gyroPointerSensitivity`, 1 by
+    // default) on top of the fixed per-axis constants.
+    return (
+      horizontalDelta * gyroPointerHorizontalSensitivity * gain,
+      verticalDelta * gyroPointerVerticalSensitivity * gain)
   }
 
   /// `angle` folded into (-pi, pi].
@@ -315,8 +320,10 @@ import Foundation
     }
     guard let baseline = pointerBaseline else { return }
 
+    // Read per sample, like the invert keys above, so a change applies without a restart.
     var (horizontalValue, verticalValue) = Self.gyroPointerOffsets(
-      current: attitude, baseline: baseline, useYawForHorizontal: useYawForHorizontal)
+      current: attitude, baseline: baseline, useYawForHorizontal: useYawForHorizontal,
+      gain: MotionSettings.gyroPointerSensitivity())
 
     if invertRoll { horizontalValue = -horizontalValue }
     if invertPitch { verticalValue = -verticalValue }

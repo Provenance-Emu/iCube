@@ -8,6 +8,7 @@ NSNotificationName const DOLRequestPauseMenuNotification = @"DOLRequestPauseMenu
 NSNotificationName const DOLRecenterPointerNotification = @"DOLRecenterPointer";
 NSNotificationName const DOLPointerModeDidChangeNotification = @"DOLPointerModeDidChange";
 NSNotificationName const DOLOnScreenControlsChosenNotification = @"DOLOnScreenControlsChosen";
+NSNotificationName const DOLMotionSettingsChangedNotification = @"DOLMotionSettingsChanged";
 const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 
 #if TARGET_OS_TV

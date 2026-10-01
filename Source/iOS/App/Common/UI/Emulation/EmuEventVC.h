@@ -26,6 +26,11 @@ FOUNDATION_EXPORT NSNotificationName const DOLPointerModeDidChangeNotification;
 /// `ControllerAssignmentsChanged` synchronously.
 FOUNDATION_EXPORT NSNotificationName const DOLOnScreenControlsChosenNotification;
 
+/// Posted after a motion setting changes that decides whether the motion system runs (shake
+/// detection), so the running emulation restarts it (`EmulationScreen`'s observer). Older posters
+/// still use the literal string; this declares the same name for new code.
+FOUNDATION_EXPORT NSNotificationName const DOLMotionSettingsChangedNotification;
+
 /// How long Menu must be held to exit to the library. A release before this is a
 /// short press and opens the pause menu instead. Exported so the GCController
 /// Menu handlers use the same threshold as the UIPress path.
