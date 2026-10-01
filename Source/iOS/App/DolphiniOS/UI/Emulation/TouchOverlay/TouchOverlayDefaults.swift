@@ -4,18 +4,20 @@
 #if os(iOS)
 import CoreGraphics
 import Foundation
+import UIKit
 
-/// The DEFAULT (un-customised) layout of every pad kind, extracted from the four xibs so an
-/// upgrader sees no visual jump ("migration from nothing", §2.3 of the design). Each xib is
-/// authored at one design size and pins its controls to the bottom and to a horizontal edge with
-/// Auto Layout; the numbers below are the control frames at that design size turned into
-/// edge insets, which is what those constraints produce on any screen. Both orientations share
-/// the same constraints today, so both orientations share these defaults.
+/// The DEFAULT (un-customised) layout of every pad kind for a given screen.
+///
+/// GameCube is computed from the canvas and safe area (`gameCube(canvas:safeArea:orientation:)`):
+/// the xib it used to copy was authored for a 768x1024 iPad in portrait with 46x30 buttons, so on
+/// phones its groups overlapped and its round buttons came out as 30 pt dots.
+///
+/// The Wii pads still come from their xibs, shifted inward by the safe area so nothing sits under
+/// the notch or the home indicator. Each xib pins its controls to the bottom and to a horizontal
+/// edge with Auto Layout; the numbers below are the control frames at that design size turned
+/// into edge insets, which is what those constraints produce on any screen.
 ///
 /// Source frames (x, y, w, h at the design size), kept here so the derivation is checkable:
-/// - TCGameCubePad.xib (768x1024): LeftStick (0,768,128,128), DPad (128,896,128,128),
-///   CStick (548,896,128,128), B (620,866,46,30), A (676,866,46,30), Y (676,836,46,30),
-///   X (722,851,46,30), L (0,821,46,30), START (86,821,46,30), Z (630,821,46,30), R (722,821,46,30).
 /// - TCWiiPad.xib (375x667): DPad (0,401,128,128), LeftStick (0,539,128,128), A (309,597,46,30),
 ///   B (309,527,46,30), One (248,572,46,30), Two (248,622,46,30), Minus (248,522,46,30),
 ///   Plus (187,552,46,30), HOME (187,477,46,30), C (187,597,46,30), Z (309,477,46,30).
@@ -27,22 +29,6 @@ import Foundation
 ///   A (311,471,43,43), B (269.5,508,43,43), LeftStick (16,543,128,128), RightStick (227,543,128,128),
 ///   Minus (137.5,639,26,26), HOME (171.5,636,32,32), Plus (211.5,639,26,26).
 enum TouchOverlayDefaults {
-  /// Design sizes of the xibs the insets were derived from (used by the tests to prove the
-  /// defaults reproduce the xib frames exactly).
-  static let gameCubeDesignSize = CGSize(width: 768, height: 1024)
-  static let wiiRemoteDesignSize = CGSize(width: 375, height: 667)
-  static let wiiRemoteSidewaysDesignSize = CGSize(width: 768, height: 1024)
-  static let wiiClassicDesignSize = CGSize(width: 375, height: 667)
-
-  static func designSize(for kind: TouchOverlayPadKind) -> CGSize {
-    switch kind {
-    case .gameCube: return gameCubeDesignSize
-    case .wiiRemote: return wiiRemoteDesignSize
-    case .wiiRemoteSideways: return wiiRemoteSidewaysDesignSize
-    case .wiiClassic: return wiiClassicDesignSize
-    }
-  }
-
   // Raw TCButtonType ids the xibs use (TCButtonType.swift). Named here once.
   private enum ID {
     static let gcA = 0, gcB = 1, gcStart = 2, gcX = 3, gcY = 4, gcZ = 5
@@ -81,54 +67,167 @@ enum TouchOverlayDefaults {
       controls: [TouchOverlayControl(id: id, kind: kind, frame: CGRect(origin: .zero, size: size))])
   }
 
-  /// Default groups for a pad kind. Orientation is accepted for future per-orientation tuning;
-  /// today both orientations share the xib constraints and therefore these values.
-  static func layout(for kind: TouchOverlayPadKind, orientation: TouchOverlayOrientation) -> [TouchOverlayGroupLayout] {
-    _ = orientation
+  private static func single(_ group: TouchOverlayGroup, _ inset: TouchOverlayPlacement.Inset,
+                             size: CGSize, kind: TouchOverlayControlKind, id: String) -> TouchOverlayGroupLayout {
+    single(group, inset.anchor, inset: CGPoint(x: inset.x, y: inset.y), size: size, kind: kind, id: id)
+  }
+
+  /// Default groups for a pad kind on a `canvas`-sized overlay whose system-owned edges are
+  /// `safeArea`. `canvas` is the overlay's full size, safe area included.
+  static func layout(for kind: TouchOverlayPadKind, orientation: TouchOverlayOrientation,
+                     canvas: CGSize, safeArea: UIEdgeInsets) -> [TouchOverlayGroupLayout] {
     switch kind {
-    case .gameCube: return gameCube
-    case .wiiRemote: return wiiRemote
-    case .wiiRemoteSideways: return wiiRemoteSideways
-    case .wiiClassic: return wiiClassic
+    case .gameCube: return gameCube(canvas: canvas, safeArea: safeArea, orientation: orientation)
+    case .wiiRemote: return shifted(wiiRemote, by: safeArea)
+    case .wiiRemoteSideways: return shifted(wiiRemoteSideways, by: safeArea)
+    case .wiiClassic: return shifted(wiiClassic, by: safeArea)
     }
   }
 
-  static func layout(for group: TouchOverlayGroup, kind: TouchOverlayPadKind,
-                     orientation: TouchOverlayOrientation) -> TouchOverlayGroupLayout? {
-    layout(for: kind, orientation: orientation).first { $0.group == group }
+  static func layout(for group: TouchOverlayGroup, kind: TouchOverlayPadKind, orientation: TouchOverlayOrientation,
+                     canvas: CGSize, safeArea: UIEdgeInsets) -> TouchOverlayGroupLayout? {
+    layout(for: kind, orientation: orientation, canvas: canvas, safeArea: safeArea).first { $0.group == group }
   }
 
-  // MARK: GameCube (768x1024)
+  /// Moves edge-anchored groups inward by the safe area: what the xibs' safe-area-relative
+  /// constraints did. `.fillInset` groups (the IR surface) cover the whole pad on purpose.
+  private static func shifted(_ layouts: [TouchOverlayGroupLayout], by safeArea: UIEdgeInsets) -> [TouchOverlayGroupLayout] {
+    layouts.map { layout in
+      let p = layout.placement
+      let dx: CGFloat
+      switch p.anchor {
+      case .bottomLeading: dx = safeArea.left
+      case .bottomTrailing: dx = safeArea.right
+      case .bottomCenter: dx = (safeArea.left - safeArea.right) / 2
+      case .fill, .fillInset: return layout
+      }
+      let placement = TouchOverlayPlacement(p.anchor, inset: CGPoint(x: p.inset.x + dx, y: p.inset.y + safeArea.bottom),
+                                            size: p.size, margin: p.margin)
+      return TouchOverlayGroupLayout(group: layout.group, placement: placement, controls: layout.controls)
+    }
+  }
 
-  private static let gameCube: [TouchOverlayGroupLayout] = [
-    // LeftStick (0,768,128,128): centre (64,832) -> 64 from the left, 192 up from the bottom.
-    single(.gcMainStick, .bottomLeading, inset: CGPoint(x: 64, y: 192), size: stick,
-           kind: .stick(baseId: ID.gcMainStick), id: "gc.mainStick"),
-    // DPad (128,896,128,128): centre (192,960).
-    single(.gcDpad, .bottomLeading, inset: CGPoint(x: 192, y: 64), size: stick,
-           kind: .dpad(baseId: ID.gcDpadUp), id: "gc.dpad"),
-    // CStick (548,896,128,128): centre (612,960) -> 156 from the right.
-    single(.gcCStick, .bottomTrailing, inset: CGPoint(x: 156, y: 64), size: stick,
-           kind: .stick(baseId: ID.gcCStick), id: "gc.cStick"),
-    // B (620,866) A (676,866) Y (676,836) X (722,851): union (620,836)-(768,896) = 148x60, centre (694,866).
-    TouchOverlayGroupLayout(
-      group: .gcFaceButtons,
-      placement: TouchOverlayPlacement(.bottomTrailing, inset: CGPoint(x: 74, y: 158), size: CGSize(width: 148, height: 60)),
-      controls: [
-        button("gc.b", ID.gcB, 0, 30), button("gc.a", ID.gcA, 56, 30),
-        button("gc.y", ID.gcY, 56, 0), button("gc.x", ID.gcX, 102, 15),
-      ]),
-    // L (0,821) + START (86,821): union (0,821)-(132,851) = 132x30, centre (66,836).
-    TouchOverlayGroupLayout(
-      group: .gcLeftShoulder,
-      placement: TouchOverlayPlacement(.bottomLeading, inset: CGPoint(x: 66, y: 188), size: CGSize(width: 132, height: 30)),
-      controls: [axisButton("gc.l", ID.gcTriggerL, 0, 0), button("gc.start", ID.gcStart, 86, 0)]),
-    // Z (630,821) + R (722,821): union (630,821)-(768,851) = 138x30, centre (699,836).
-    TouchOverlayGroupLayout(
-      group: .gcRightShoulder,
-      placement: TouchOverlayPlacement(.bottomTrailing, inset: CGPoint(x: 69, y: 188), size: CGSize(width: 138, height: 30)),
-      controls: [button("gc.z", ID.gcZ, 0, 0), axisButton("gc.r", ID.gcTriggerR, 92, 0)]),
-  ]
+  // MARK: GameCube (computed)
+
+  /// Sizes at scale 1 (a ~390 pt-wide phone), in points. Every control is at least 44 pt on its
+  /// short side, and round buttons get square frames so the art fills them.
+  private enum GC {
+    static let mainStick: CGFloat = 132
+    static let cStick: CGFloat = 100
+    static let dpad: CGFloat = 104
+    static let a: CGFloat = 72
+    static let b: CGFloat = 48
+    /// X wraps A's right side (tall), Y its top (wide).
+    static let kidneyLong: CGFloat = 64
+    static let kidneyShort: CGFloat = 44
+    static let shoulder = CGSize(width: 96, height: 44)
+    static let z = CGSize(width: 80, height: 44)
+    static let start = CGSize(width: 70, height: 44)
+    /// Space between neighbouring controls and groups.
+    static let gap: CGFloat = 8
+    /// Space between the face buttons inside their cluster.
+    static let faceGap: CGFloat = 6
+    /// Minimum distance from a screen edge, on top of the safe area.
+    static let edge: CGFloat = 8
+    /// Extra lift above the home indicator so the lowest controls don't fight the system swipe.
+    static let bottomGuard: CGFloat = 6
+    /// In landscape the D-pad and C-stick sit beside-and-below the main stick and face buttons
+    /// (the controller's own diagonal); portrait stacks them straight down to fit the width.
+    static let landscapeDiagonal: CGFloat = 70
+    /// Tall screens (iPad) keep the controls in a band at the bottom instead of spreading them up
+    /// the whole side.
+    static let maxBandHeight: CGFloat = 420
+    static let referenceShortSide: CGFloat = 390
+    static let maxScale: CGFloat = 1.35
+  }
+
+  private static func gameCube(canvas: CGSize, safeArea: UIEdgeInsets,
+                               orientation: TouchOverlayOrientation) -> [TouchOverlayGroupLayout] {
+    let w = canvas.width, h = canvas.height
+    let u = min(max(min(w, h) / GC.referenceShortSide, 1), GC.maxScale)
+    let gap = GC.gap * u
+    let stick = GC.mainStick * u, cStick = GC.cStick * u, dpad = GC.dpad * u
+    let shoulder = CGSize(width: GC.shoulder.width * u, height: GC.shoulder.height * u)
+    let zSize = CGSize(width: GC.z.width * u, height: GC.z.height * u)
+    let startSize = CGSize(width: GC.start.width * u, height: GC.start.height * u)
+    let face = gameCubeFaceButtons(scale: u)
+
+    let left = max(safeArea.left, GC.edge) + GC.edge
+    let right = w - max(safeArea.right, GC.edge) - GC.edge
+    let bottom = h - max(safeArea.bottom, GC.edge) - GC.bottomGuard
+    // Portrait: the game is drawn aspect-fit at the top, so the controls start under it.
+    let gameBottom = safeArea.top + (w - safeArea.left - safeArea.right) * 3 / 4
+    let regionTop = orientation == .portrait ? gameBottom + gap : max(safeArea.top, GC.edge) + GC.edge
+    let top = max(regionTop, bottom - GC.maxBandHeight * u)
+    let diagonal = orientation == .landscape ? GC.landscapeDiagonal * u : 0
+
+    // Left hand, bottom up: D-pad, main stick, L.
+    let dpadCenter = CGPoint(x: left + stick / 2 + diagonal, y: bottom - dpad / 2)
+    let stickCenter = CGPoint(x: left + stick / 2, y: bottom - dpad - gap - stick / 2)
+    let lCenter = CGPoint(x: left + shoulder.width / 2,
+                          y: max(top + shoulder.height / 2, stickCenter.y - stick / 2 - gap - shoulder.height / 2))
+
+    // Right hand, bottom up: C-stick, face buttons, R over Z.
+    let faceCenterX = right - face.size.width / 2
+    let cStickCenter = CGPoint(x: faceCenterX - diagonal, y: bottom - cStick / 2)
+    let faceCenter = CGPoint(x: faceCenterX, y: bottom - cStick - gap - face.size.height / 2)
+    let rzSize = CGSize(width: shoulder.width, height: shoulder.height + gap + zSize.height)
+    let rzCenter = CGPoint(x: right - rzSize.width / 2,
+                           y: max(top + rzSize.height / 2, faceCenter.y - face.size.height / 2 - gap - rzSize.height / 2))
+
+    let startCenter = CGPoint(x: w / 2, y: bottom - startSize.height / 2)
+
+    func leading(_ center: CGPoint) -> TouchOverlayPlacement.Inset { .init(anchor: .bottomLeading, x: center.x, y: h - center.y) }
+    func trailing(_ center: CGPoint) -> TouchOverlayPlacement.Inset { .init(anchor: .bottomTrailing, x: w - center.x, y: h - center.y) }
+
+    return [
+      single(.gcMainStick, leading(stickCenter), size: CGSize(width: stick, height: stick),
+             kind: .stick(baseId: ID.gcMainStick), id: "gc.mainStick"),
+      single(.gcDpad, leading(dpadCenter), size: CGSize(width: dpad, height: dpad),
+             kind: .dpad(baseId: ID.gcDpadUp), id: "gc.dpad"),
+      single(.gcCStick, trailing(cStickCenter), size: CGSize(width: cStick, height: cStick),
+             kind: .stick(baseId: ID.gcCStick), id: "gc.cStick"),
+      TouchOverlayGroupLayout(group: .gcFaceButtons, placement: trailing(faceCenter).placement(size: face.size),
+                              controls: face.controls),
+      TouchOverlayGroupLayout(group: .gcLeftShoulder, placement: leading(lCenter).placement(size: shoulder),
+                              controls: [axisButton("gc.l", ID.gcTriggerL, 0, 0, size: shoulder)]),
+      TouchOverlayGroupLayout(
+        group: .gcRightShoulder, placement: trailing(rzCenter).placement(size: rzSize),
+        controls: [axisButton("gc.r", ID.gcTriggerR, 0, 0, size: shoulder),
+                   button("gc.z", ID.gcZ, (shoulder.width - zSize.width) / 2, shoulder.height + gap, size: zSize)]),
+      TouchOverlayGroupLayout(group: .gcStart,
+                              placement: TouchOverlayPlacement(.bottomCenter, inset: CGPoint(x: startCenter.x - w / 2, y: h - startCenter.y),
+                                                               size: startSize),
+                              controls: [button("gc.start", ID.gcStart, 0, 0, size: startSize)]),
+    ]
+  }
+
+  /// The GameCube face buttons around a big A, as on the controller: B down-left, X wrapping the
+  /// right side, Y wrapping the top. Frames are placed edge to edge with `faceGap` between them,
+  /// so no two touch areas overlap.
+  private static func gameCubeFaceButtons(scale u: CGFloat) -> (size: CGSize, controls: [TouchOverlayControl]) {
+    let a = GC.a * u, b = GC.b * u, long = GC.kidneyLong * u, short = GC.kidneyShort * u, gap = GC.faceGap * u
+    // Offsets of each button's CENTRE from A's centre.
+    let bOffset = CGPoint(x: -(a / 2 + b / 2), y: a / 2 - b / 4)
+    let xOffset = CGPoint(x: a / 2 + gap + short / 2, y: -gap)
+    let yOffset = CGPoint(x: -gap / 2, y: -(a / 2 + gap + short / 2))
+    let minX = min(bOffset.x - b / 2, yOffset.x - long / 2)
+    let maxX = xOffset.x + short / 2
+    let minY = yOffset.y - short / 2
+    let maxY = max(bOffset.y + b / 2, a / 2, xOffset.y + long / 2)
+    let origin = CGPoint(x: -minX, y: -minY) // A's centre in cluster coordinates
+    func frame(_ offset: CGPoint, _ size: CGSize) -> CGRect {
+      CGRect(x: origin.x + offset.x - size.width / 2, y: origin.y + offset.y - size.height / 2,
+             width: size.width, height: size.height)
+    }
+    let controls = [
+      TouchOverlayControl(id: "gc.a", kind: .button(id: ID.gcA), frame: frame(.zero, CGSize(width: a, height: a))),
+      TouchOverlayControl(id: "gc.b", kind: .button(id: ID.gcB), frame: frame(bOffset, CGSize(width: b, height: b))),
+      TouchOverlayControl(id: "gc.x", kind: .button(id: ID.gcX), frame: frame(xOffset, CGSize(width: short, height: long))),
+      TouchOverlayControl(id: "gc.y", kind: .button(id: ID.gcY), frame: frame(yOffset, CGSize(width: long, height: short))),
+    ]
+    return (CGSize(width: maxX - minX, height: maxY - minY), controls)
+  }
 
   // MARK: Wii Remote + Nunchuk, upright (375x667)
 

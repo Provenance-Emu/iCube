@@ -1434,6 +1434,15 @@ struct EmulationScreen: View {
               } label: {
                 Label(controllerManager.overlayVisible ? "Hide On‑Screen Controller" : "Show On‑Screen Controller", systemImage: controllerManager.overlayVisible ? "eye.slash" : "eye")
               }
+              // Switches between the xib pads and the programmatic overlay in place, so the two can
+              // be compared mid-game. Rebuilding the pads container re-reads the flag.
+              Toggle(isOn: Binding(get: { TouchOverlayFlag.isProgrammatic }, set: { enabled in
+                hasTopBarInteraction = true
+                TouchOverlayFlag.isProgrammatic = enabled
+                touchPadsRefreshToken = UUID()
+              })) {
+                Label(L("New On‑Screen Controller (Beta)"), systemImage: "sparkles")
+              }
               Divider()
               Button {
                 hasTopBarInteraction = true

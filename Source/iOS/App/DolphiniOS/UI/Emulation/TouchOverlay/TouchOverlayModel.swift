@@ -12,6 +12,17 @@ import Foundation
 // `TCJoystick.joystickType`, `TCDirectionalPad.directionalPadType`), so the profiles in
 // Data/Sys/Profiles/{GCPad,Wiimote}/Touchscreen.ini keep matching.
 
+/// The "draw the on-screen controller with `TouchOverlayView` instead of the xib pads" switch,
+/// set from More Controller Settings and the in-game controller menu.
+enum TouchOverlayFlag {
+  static let programmaticKey = "touch_overlay_programmatic"
+
+  static var isProgrammatic: Bool {
+    get { UserDefaults.standard.bool(forKey: programmaticKey) }
+    set { UserDefaults.standard.set(newValue, forKey: programmaticKey) }
+  }
+}
+
 /// Which pad the overlay renders. Mirrors `makeWiiPadView()` in EmulationScreen+TouchAndMotion:
 /// a Classic Controller wins over sideways, sideways over the upright remote.
 enum TouchOverlayPadKind: String, CaseIterable, Codable, Sendable {
@@ -35,11 +46,11 @@ enum TouchOverlayOrientation: String, CaseIterable, Codable, Sendable {
 
 /// A movable control GROUP, the atomic unit the editor drags. Each pad kind instantiates the
 /// subset it needs (`TouchOverlayDefaults`). Groups follow the clusters the xibs actually draw,
-/// not the console's logical grouping: GameCube L and Start share the left shoulder strip, Z and
-/// R the right one; the sideways remote's A/1/2/+/- form one cluster.
+/// not the console's logical grouping: GameCube Z rides with R on the right shoulder, and Start
+/// is its own group; the sideways remote's A/1/2/+/- form one cluster.
 enum TouchOverlayGroup: String, CaseIterable, Codable, Sendable {
   // GameCube
-  case gcDpad, gcMainStick, gcCStick, gcFaceButtons, gcLeftShoulder, gcRightShoulder
+  case gcDpad, gcMainStick, gcCStick, gcFaceButtons, gcLeftShoulder, gcRightShoulder, gcStart
   // Wii Remote, upright
   case wiiDpad, wiiAB, wiiOneTwo, wiiMinusPlusHome, wiiIRPad
   // Wii Remote, sideways

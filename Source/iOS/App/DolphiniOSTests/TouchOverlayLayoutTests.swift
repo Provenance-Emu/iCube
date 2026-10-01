@@ -3,6 +3,7 @@
 
 #if os(iOS)
 import CoreGraphics
+import UIKit
 import XCTest
 
 @testable import iCube
@@ -75,34 +76,51 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertEqual(fillInset.box(in: bounds), bounds.insetBy(dx: 20, dy: 20))
   }
 
-  // MARK: Defaults reproduce the xib frames at their design size
+  // MARK: Wii defaults reproduce the xib frames at their design size (no safe area)
+  //
+  // GameCube is computed per screen instead; its invariants live in TouchOverlayDefaultLayoutTests.
+
+  /// Sizes the Wii xibs were authored at.
+  private static let wiiDesignSizes: [TouchOverlayPadKind: CGSize] = [
+    .wiiRemote: CGSize(width: 375, height: 667),
+    .wiiRemoteSideways: CGSize(width: 768, height: 1024),
+    .wiiClassic: CGSize(width: 375, height: 667),
+  ]
 
   private func designBounds(_ kind: TouchOverlayPadKind) -> CGRect {
-    CGRect(origin: .zero, size: TouchOverlayDefaults.designSize(for: kind))
+    CGRect(origin: .zero, size: Self.wiiDesignSizes[kind]!)
+  }
+
+  private func defaultLayout(_ group: TouchOverlayGroup, _ kind: TouchOverlayPadKind,
+                             safeArea: UIEdgeInsets = .zero) -> TouchOverlayGroupLayout? {
+    TouchOverlayDefaults.layout(for: group, kind: kind, orientation: .portrait,
+                                canvas: designBounds(kind).size, safeArea: safeArea)
   }
 
   private func box(_ group: TouchOverlayGroup, _ kind: TouchOverlayPadKind) -> CGRect {
-    let layout = TouchOverlayDefaults.layout(for: group, kind: kind, orientation: .portrait)
+    let layout = defaultLayout(group, kind)
     XCTAssertNotNil(layout, "\(kind) has no \(group)")
     return layout!.placement.box(in: designBounds(kind))
   }
 
   /// A control's absolute frame at the design size = group box origin + control frame.
   private func controlFrame(_ id: String, _ group: TouchOverlayGroup, _ kind: TouchOverlayPadKind) -> CGRect {
-    let layout = TouchOverlayDefaults.layout(for: group, kind: kind, orientation: .portrait)!
+    let layout = defaultLayout(group, kind)!
     let b = layout.placement.box(in: designBounds(kind))
     let c = layout.controls.first { $0.id == id }!
     return c.frame.offsetBy(dx: b.minX, dy: b.minY)
   }
 
-  func testGameCubeDefaultsMatchXib() {
-    XCTAssertEqual(box(.gcMainStick, .gameCube), CGRect(x: 0, y: 768, width: 128, height: 128))
-    XCTAssertEqual(box(.gcDpad, .gameCube), CGRect(x: 128, y: 896, width: 128, height: 128))
-    XCTAssertEqual(box(.gcCStick, .gameCube), CGRect(x: 548, y: 896, width: 128, height: 128))
-    XCTAssertEqual(controlFrame("gc.a", .gcFaceButtons, .gameCube), CGRect(x: 676, y: 866, width: 46, height: 30))
-    XCTAssertEqual(controlFrame("gc.x", .gcFaceButtons, .gameCube), CGRect(x: 722, y: 851, width: 46, height: 30))
-    XCTAssertEqual(controlFrame("gc.start", .gcLeftShoulder, .gameCube), CGRect(x: 86, y: 821, width: 46, height: 30))
-    XCTAssertEqual(controlFrame("gc.r", .gcRightShoulder, .gameCube), CGRect(x: 722, y: 821, width: 46, height: 30))
+  func testWiiDefaultsMoveInByTheSafeArea() {
+    let insets = UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)
+    let plain = defaultLayout(.wiiDpad, .wiiRemote)!.placement.box(in: designBounds(.wiiRemote))
+    let shifted = defaultLayout(.wiiDpad, .wiiRemote, safeArea: insets)!.placement.box(in: designBounds(.wiiRemote))
+    XCTAssertEqual(shifted, plain.offsetBy(dx: 62, dy: -21))
+    let ab = defaultLayout(.wiiAB, .wiiRemote)!.placement.box(in: designBounds(.wiiRemote))
+    let abShifted = defaultLayout(.wiiAB, .wiiRemote, safeArea: insets)!.placement.box(in: designBounds(.wiiRemote))
+    XCTAssertEqual(abShifted, ab.offsetBy(dx: -62, dy: -21))
+    XCTAssertEqual(defaultLayout(.wiiIRPad, .wiiRemote, safeArea: insets)!.placement.box(in: designBounds(.wiiRemote)),
+                   box(.wiiIRPad, .wiiRemote), "the IR surface keeps covering the pad")
   }
 
   func testWiiRemoteDefaultsMatchXib() {
@@ -141,7 +159,8 @@ final class TouchOverlayLayoutTests: XCTestCase {
   func testEveryPadKindHasUniqueGroupsAndControlIds() {
     for kind in TouchOverlayPadKind.allCases {
       for orientation in TouchOverlayOrientation.allCases {
-        let layouts = TouchOverlayDefaults.layout(for: kind, orientation: orientation)
+        let canvas = orientation == .portrait ? CGSize(width: 402, height: 874) : CGSize(width: 874, height: 402)
+        let layouts = TouchOverlayDefaults.layout(for: kind, orientation: orientation, canvas: canvas, safeArea: .zero)
         XCTAssertFalse(layouts.isEmpty, "\(kind) \(orientation)")
         let groups = layouts.map(\.group)
         XCTAssertEqual(Set(groups).count, groups.count, "\(kind): duplicate group")
@@ -201,18 +220,18 @@ final class TouchOverlayLayoutTests: XCTestCase {
   @MainActor
   func testResolvedBoxFallsBackToDefaultAndClampsStoredCenters() {
     let store = TouchOverlayLayoutStore(fileURL: nil)
-    let bounds = CGRect(x: 0, y: 0, width: 768, height: 1024)
-    let dpad = TouchOverlayDefaults.layout(for: .gcDpad, kind: .gameCube, orientation: .portrait)!
-    XCTAssertEqual(store.resolvedBox(for: dpad, padKind: .gameCube, orientation: .portrait, in: bounds),
-                   CGRect(x: 128, y: 896, width: 128, height: 128))
+    let bounds = designBounds(.wiiRemote)
+    let dpad = defaultLayout(.wiiDpad, .wiiRemote)!
+    XCTAssertEqual(store.resolvedBox(for: dpad, padKind: .wiiRemote, orientation: .portrait, in: bounds),
+                   CGRect(x: 0, y: 401, width: 128, height: 128))
 
-    store.setCenter(CGPoint(x: 760, y: 10), in: bounds, for: .gcDpad, padKind: .gameCube, orientation: .portrait)
-    let moved = store.resolvedBox(for: dpad, padKind: .gameCube, orientation: .portrait, in: bounds)
-    XCTAssertEqual(moved, CGRect(x: 640, y: 0, width: 128, height: 128), "stored centre is re-clamped on-screen")
+    store.setCenter(CGPoint(x: 370, y: 10), in: bounds, for: .wiiDpad, padKind: .wiiRemote, orientation: .portrait)
+    let moved = store.resolvedBox(for: dpad, padKind: .wiiRemote, orientation: .portrait, in: bounds)
+    XCTAssertEqual(moved, CGRect(x: 247, y: 0, width: 128, height: 128), "stored centre is re-clamped on-screen")
 
-    let smaller = CGRect(x: 0, y: 0, width: 384, height: 512)
-    let rescaled = store.resolvedBox(for: dpad, padKind: .gameCube, orientation: .portrait, in: smaller)
-    XCTAssertEqual(rescaled.maxX, 384, "normalized centre follows the new bounds and stays inside")
+    let smaller = CGRect(x: 0, y: 0, width: 187.5, height: 333.5)
+    let rescaled = store.resolvedBox(for: dpad, padKind: .wiiRemote, orientation: .portrait, in: smaller)
+    XCTAssertEqual(rescaled.maxX, 187.5, "normalized centre follows the new bounds and stays inside")
   }
 
   // MARK: Input conventions (§6.4)
@@ -298,11 +317,11 @@ final class TouchOverlayLayoutTests: XCTestCase {
   @MainActor
   func testResolvedBoxScalesSizeBeforeClamping() {
     let store = TouchOverlayLayoutStore(fileURL: nil)
-    let bounds = CGRect(x: 0, y: 0, width: 768, height: 1024)
-    let dpad = TouchOverlayDefaults.layout(for: .gcDpad, kind: .gameCube, orientation: .portrait)!
-    store.setSizeScale(2.0, for: .gcDpad, padKind: .gameCube, orientation: .portrait,
+    let bounds = designBounds(.wiiRemote)
+    let dpad = defaultLayout(.wiiDpad, .wiiRemote)!
+    store.setSizeScale(2.0, for: .wiiDpad, padKind: .wiiRemote, orientation: .portrait,
                        defaultCenter: TouchOverlayLayoutEngine.normalize(dpad.placement.center(in: bounds), in: bounds))
-    let box = store.resolvedBox(for: dpad, padKind: .gameCube, orientation: .portrait, in: bounds)
+    let box = store.resolvedBox(for: dpad, padKind: .wiiRemote, orientation: .portrait, in: bounds)
     XCTAssertEqual(box.width, dpad.size.width * 2, accuracy: 1e-9)
     XCTAssertEqual(box.height, dpad.size.height * 2, accuracy: 1e-9)
   }

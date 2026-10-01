@@ -163,6 +163,13 @@ struct TouchOverlayLayoutEditorView: View {
     }
     .navigationTitle(L("Edit Layout"))
     .navigationBarTitleDisplayMode(.inline)
+    #if DEBUG
+    .toolbar {
+      ToolbarItem(placement: .topBarTrailing) {
+        NavigationLink("Gallery") { TouchOverlayGalleryView() }
+      }
+    }
+    #endif
   }
 }
 

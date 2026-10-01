@@ -138,26 +138,43 @@ enum TouchOverlayArt {
   static func dpad(pressed: Set<TouchOverlayHitTester.DPadDirection>, variant: Variant) -> some View {
     let (top, bottom) = neutralBody(variant)
     let glow = rimGlow(variant)
-    ZStack {
-      Circle()
-        .fill(RadialGradient(colors: [top.opacity(0.9), bottom.opacity(0.95)], center: UnitPoint(x: 0.4, y: 0.34), startRadius: 2, endRadius: 90))
-      Circle().strokeBorder(glow.opacity(0.55), lineWidth: 2)
-      CrossShape()
-        .fill(LinearGradient(colors: [bottom, top], startPoint: .top, endPoint: .bottom))
-        .padding(18)
-      dpadArrow(rotation: 0, lit: pressed.contains(.up), variant: variant).offset(y: -34)
-      dpadArrow(rotation: 180, lit: pressed.contains(.down), variant: variant).offset(y: 34)
-      dpadArrow(rotation: -90, lit: pressed.contains(.left), variant: variant).offset(x: -34)
-      dpadArrow(rotation: 90, lit: pressed.contains(.right), variant: variant).offset(x: 34)
+    // Proportions of the original 128 pt art, so a smaller or larger D-pad keeps its arrows on
+    // the arms instead of drifting off them.
+    GeometryReader { geo in
+      let side = min(geo.size.width, geo.size.height)
+      let armOffset = side * DPadArt.armOffset
+      let arrow = side * DPadArt.arrowSize
+      ZStack {
+        Circle()
+          .fill(RadialGradient(colors: [top.opacity(0.9), bottom.opacity(0.95)], center: UnitPoint(x: 0.4, y: 0.34),
+                               startRadius: 2, endRadius: side * DPadArt.glowRadius))
+        Circle().strokeBorder(glow.opacity(0.55), lineWidth: 2)
+        CrossShape()
+          .fill(LinearGradient(colors: [bottom, top], startPoint: .top, endPoint: .bottom))
+          .padding(side * DPadArt.crossInset)
+        dpadArrow(rotation: 0, size: arrow, lit: pressed.contains(.up), variant: variant).offset(y: -armOffset)
+        dpadArrow(rotation: 180, size: arrow, lit: pressed.contains(.down), variant: variant).offset(y: armOffset)
+        dpadArrow(rotation: -90, size: arrow, lit: pressed.contains(.left), variant: variant).offset(x: -armOffset)
+        dpadArrow(rotation: 90, size: arrow, lit: pressed.contains(.right), variant: variant).offset(x: armOffset)
+      }
+      .frame(width: geo.size.width, height: geo.size.height)
     }
     .shadow(color: .black.opacity(0.4), radius: 3, x: 0, y: 2)
   }
 
+  /// Fractions of the D-pad's side, from the 128 pt original (arms at 34, arrows 20, cross inset 18).
+  private enum DPadArt {
+    static let armOffset: CGFloat = 34.0 / 128
+    static let arrowSize: CGFloat = 20.0 / 128
+    static let crossInset: CGFloat = 18.0 / 128
+    static let glowRadius: CGFloat = 90.0 / 128
+  }
+
   @ViewBuilder
-  private static func dpadArrow(rotation: Double, lit: Bool, variant: Variant) -> some View {
+  private static func dpadArrow(rotation: Double, size: CGFloat, lit: Bool, variant: Variant) -> some View {
     Triangle()
       .fill(lit ? rimGlow(variant) : Color.white.opacity(0.85))
-      .frame(width: 20, height: 20)
+      .frame(width: size, height: size)
       .shadow(color: .black.opacity(0.3), radius: 1, x: 0, y: 1)
       .rotationEffect(.degrees(rotation))
       .scaleEffect(lit ? 1.1 : 1.0)

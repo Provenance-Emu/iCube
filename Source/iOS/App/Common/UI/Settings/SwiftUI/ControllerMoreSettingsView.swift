@@ -80,7 +80,7 @@ struct ControllerMoreSettingsView: View {
         settingsCaption(
           Toggle(L("Programmatic touch overlay (beta)"), isOn: $touchOverlayProgrammatic)
             .onChange(of: touchOverlayProgrammatic) { _, newValue in
-              UserDefaults.standard.set(newValue, forKey: "touch_overlay_programmatic")
+              TouchOverlayFlag.isProgrammatic = newValue
             },
           L("Replaces the on-screen GameCube/Wii pads with the new SwiftUI-rendered, user-editable overlay. Long-press the overlay in-game to move or resize its controls."))
 
@@ -162,7 +162,7 @@ struct ControllerMoreSettingsView: View {
     connectWiimotes = DOLConfigBridge.connectWiimotesForControllerInterface()
     touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
     #if os(iOS)
-    touchOverlayProgrammatic = UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
+    touchOverlayProgrammatic = TouchOverlayFlag.isProgrammatic
     touchOverlayStyle = UserDefaults.standard.integer(forKey: "touch_overlay_style")
     touchOverlayIRPointerGain = Double(TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
     #endif

@@ -121,5 +121,16 @@ struct TouchOverlayPlacement: Equatable, Sendable {
   func box(in bounds: CGRect) -> CGRect {
     TouchOverlayLayoutEngine.box(center: center(in: bounds), size: resolvedSize(in: bounds))
   }
+
+  /// An anchor plus its centre's inset, before a size is attached.
+  struct Inset {
+    let anchor: TouchOverlayAnchor
+    let x: CGFloat
+    let y: CGFloat
+
+    func placement(size: CGSize) -> TouchOverlayPlacement {
+      TouchOverlayPlacement(anchor, inset: CGPoint(x: x, y: y), size: size)
+    }
+  }
 }
 #endif

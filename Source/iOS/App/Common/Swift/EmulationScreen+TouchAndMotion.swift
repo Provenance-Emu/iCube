@@ -154,7 +154,7 @@ extension EmulationScreen {
     /// container mounts a `UIHostingController`-hosted `TouchOverlayView` instead of the xib pad;
     /// every other path in this file (opacity, IR-mode passthrough, port resolution) is untouched.
     private static var useProgrammaticOverlay: Bool {
-      UserDefaults.standard.bool(forKey: "touch_overlay_programmatic")
+      TouchOverlayFlag.isProgrammatic
     }
 
     /// Holds the hosting controller across `updateUIView` calls so a live setting change (pad
