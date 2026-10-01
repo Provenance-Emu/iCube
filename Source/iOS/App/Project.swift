@@ -719,7 +719,11 @@ let project = Project(
         // Sentry crash/error reporting (added via the Sentry installer; replicated here so it
         // survives `tuist generate`, which regenerates the gitignored iCube.xcodeproj). Pinned to
         // the resolved major; Package.resolved had 8.58.3 (installer floor was 8.0.0).
-        .remote(url: "https://github.com/getsentry/sentry-cocoa", requirement: .upToNextMajor(from: "9.16.1")),
+        // Floor 9.29.2 (ICUBE-A6): 9.29.1's static binary drops the `isMetricKitEvent` category
+        // unless the app links with -ObjC, and SentryClient.prepareEvent calls it, so every
+        // MetricKit diagnostic crashed the app. CI resolves fresh (Package.resolved is
+        // gitignored), so the floor is what keeps 9.29.1 out.
+        .remote(url: "https://github.com/getsentry/sentry-cocoa", requirement: .upToNextMajor(from: "9.29.2")),
     ],
     settings: .settings(
         base: projectBase,
