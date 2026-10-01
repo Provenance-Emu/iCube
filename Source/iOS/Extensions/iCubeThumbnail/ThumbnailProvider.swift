@@ -8,9 +8,12 @@ import PVLibrarySnapshot
 /// 64 KiB of the file for the header and one mirrored JPEG from the App Group.
 /// Never returns an error for a readable file: unknown discs get a drawn placeholder.
 final class ThumbnailProvider: QLThumbnailProvider {
+    private let telemetry = ExtensionTelemetry(.thumbnail)
+
     override func provideThumbnail(for request: QLFileThumbnailRequest,
                                    _ handler: @escaping (QLThumbnailReply?, Error?) -> Void) {
-        let game = LibraryLookup.resolve(url: request.fileURL)
+        let (game, outcome) = telemetry.measure(.thumbnailLookup) { LibraryLookup.resolveWithOutcome(url: request.fileURL) }
+        telemetry.record(outcome)
 
         if let cover = game.coverURL {
             handler(QLThumbnailReply(imageFileURL: cover), nil)

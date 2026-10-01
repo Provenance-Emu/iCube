@@ -17,9 +17,20 @@ private let log = Logger(subsystem: "com.joemattiello.iCube", category: "topshel
 
 final class TopShelfContentProvider: TVTopShelfContentProvider {
     static let maxItemsPerRow = 12
+    private let telemetry = ExtensionTelemetry(.topShelf)
 
     override func loadTopShelfContent(completionHandler: @escaping (TVTopShelfContent?) -> Void) {
-        let snapshot = LibrarySnapshotStore().load()
+        let sections = telemetry.measure(.topShelfBuild) { buildSections() }
+        guard !sections.isEmpty else {
+            completionHandler(nil)   // tvOS falls back to the static Top Shelf brand image
+            return
+        }
+        completionHandler(TVTopShelfSectionedContent(sections: sections))
+    }
+
+    private func buildSections() -> [TVTopShelfItemCollection<TVTopShelfSectionedItem>] {
+        let (snapshot, outcome) = LibrarySnapshotStore().loadWithOutcome()
+        telemetry.record(outcome)
         var sections: [TVTopShelfItemCollection<TVTopShelfSectionedItem>] = []
 
         func addSection(_ title: String, _ prefix: String, _ games: [LibrarySnapshotGame]) {
@@ -55,16 +66,12 @@ final class TopShelfContentProvider: TVTopShelfContentProvider {
             addSection("Favorites", "favorite", snapshot.favorites)
             addSection("Recently Added", "added", snapshot.recentlyAdded)
         }
-        log.info("""
-            load: recent=\(snapshot.recentlyPlayed.count) favorites=\(snapshot.favorites.count) \
-            added=\(snapshot.recentlyAdded.count) sections=\(sections.count)
+        // .notice, not .info: .info isn't persisted, so it never reached a sysdiagnose.
+        log.notice("""
+            load: \(outcome.reason, privacy: .public) recent=\(snapshot.recentlyPlayed.count) \
+            favorites=\(snapshot.favorites.count) added=\(snapshot.recentlyAdded.count) sections=\(sections.count)
             """)
-
-        guard !sections.isEmpty else {
-            completionHandler(nil)   // tvOS falls back to the static Top Shelf brand image
-            return
-        }
-        completionHandler(TVTopShelfSectionedContent(sections: sections))
+        return sections
     }
 }
 #endif

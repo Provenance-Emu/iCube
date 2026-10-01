@@ -27,6 +27,7 @@ struct RecentGamesEntry: TimelineEntry {
 
 struct RecentGamesTimelineProvider: TimelineProvider {
     static let maxGames = 3
+    private let telemetry = ExtensionTelemetry(.widget)
 
     func placeholder(in context: Context) -> RecentGamesEntry {
         RecentGamesEntry(date: Date(), games: [])
@@ -44,8 +45,11 @@ struct RecentGamesTimelineProvider: TimelineProvider {
     }
 
     private func currentEntry() -> RecentGamesEntry {
-        let snapshot = LibrarySnapshotStore().load()
-        return RecentGamesEntry(date: Date(), games: Array(snapshot.recentlyPlayed.prefix(Self.maxGames)))
+        telemetry.measure(.widgetEntry) {
+            let (snapshot, outcome) = LibrarySnapshotStore().loadWithOutcome()
+            telemetry.record(outcome)
+            return RecentGamesEntry(date: Date(), games: Array(snapshot.recentlyPlayed.prefix(Self.maxGames)))
+        }
     }
 }
 

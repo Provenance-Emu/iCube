@@ -15,7 +15,53 @@ Written at the end of a long session; start a fresh session from this file.
   1790351911). Reported to the "Watchdog memory exhaustion in iCube" session, which owns
   `SentryTelemetryService`. Coordinate before touching it.
 
-## Questions to settle first (Apple docs, not memory)
+## Answers (researched 2026-09-30, second session)
+
+1. **Extensions can't subscribe.** Apple DTS (forums 652719, 709546): a MetricKit subscriber in an
+   extension is "not a supported workflow" and doesn't receive payloads, even simulated ones. The
+   host app's subscriber is the supported path. `MXMetaData.pid` (iOS 17) and
+   `MXMetaData.bundleIdentifier` (iOS 26) identify the process, but Apple doesn't say whether
+   QL / widget / Top Shelf payloads reach the app.
+2. **No MetricKit on tvOS** (framework lists iOS, iPadOS, Catalyst, macOS 12, visionOS). Sentry's
+   MetricKit integration is compiled out on tvOS too. Top Shelf = unified log only.
+3. **Custom signposts** (`mxSignpost` on a `makeLogHandle` log) land in `MXMetricPayload.signpostMetrics`.
+   The count is capped (no number given), and extension attribution is undocumented. iOS 27
+   deprecates `MXMetricManager` for `MetricManager` (AsyncSequence reports, StateReporting).
+4. **Sentry in extensions: not now.** Widgets ~30 MB, QL preview ~100 MB, Top Shelf maybe 10–16 MB
+   (none official). Sentry auto-disables hang tracking only for widget/intent/share-style
+   extensions, not QL or Top Shelf.
+5. **Nobody reads `signpostMetrics` today.** sentry-cocoa's `SentryMXManager` implements only
+   `didReceive(_: [MXDiagnosticPayload])` (cpuException, diskWriteException, hang). The app has no
+   subscriber of its own.
+
+## Done (2026-09-30)
+
+- `LibrarySnapshotStore.loadWithOutcome()` + `LibrarySnapshotLoadOutcome` (loaded / neverWritten /
+  appGroupUnavailable / decodeFailed / newerSchema(v)); `load()` unchanged. Commit 681fdd1b38.
+- `PVLibrarySnapshot/ExtensionTelemetry.swift`: one signpost interval per extension
+  (ThumbnailLookup, PreviewBuild, TopShelfBuild, WidgetEntry), events SnapshotNoAppGroup /
+  SnapshotDecodeFailed / SnapshotNewerSchema / CoverUnreadable, category "Extensions". Failures logged
+  at `.error`, timing at `.notice` (subsystem com.joemattiello.iCube, category = surface).
+  `mxSignpost` where MetricKit exists, `os_signpost` on tvOS. `LibraryLookup.resolveWithOutcome`.
+- Wired into Thumbnail, Preview (also records an unreadable cover instead of silently falling back),
+  Top Shelf (summary log moved .info → .notice so it persists), RecentGamesWidget. The widget ships
+  nothing while `APP_EMBEDS_APPEX = false`.
+
+## Open (needs a decision; touches the watchdog session's Sentry/MetricKit area)
+
+Signposts reach at most the app's daily MXMetricPayload, and nothing reads it. Options: (a) an
+app-side `MXMetricManagerSubscriber` that pulls the "Extensions" signpost metrics (and
+`bundleIdentifier`) and forwards them, e.g. as Sentry events or measurements; (b) extensions bump
+counters in the App Group and the app uploads them (doesn't work for appGroupUnavailable). Not
+built unasked.
+
+## Device check still owed
+
+`log stream --device --predicate 'subsystem == "com.joemattiello.iCube" AND category IN {"thumbnail","preview","topshelf","widget"}'`
+while browsing a disc image in Files (thumbnail + preview) and opening Top Shelf on tvOS. MetricKit
+attribution can't be verified in-session (24 h payload delay).
+
+## Original questions (kept for context)
 
 1. Does `MXMetricManager` deliver metric/diagnostic payloads to a subscriber running in an app
    extension process, or are extension metrics only rolled into the containing app's payloads?

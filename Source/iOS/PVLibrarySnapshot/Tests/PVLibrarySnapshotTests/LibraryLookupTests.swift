@@ -65,4 +65,17 @@ final class LibraryLookupTests: XCTestCase {
         XCTAssertNil(LibraryLookup.regionName(for: nil))
         XCTAssertNil(LibraryLookup.regionName(for: "Z"))
     }
+
+    func testResolveWithOutcomeReportsTheSnapshotLoad() {
+        let suite = "com.joemattiello.icube.tests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(Data("not json".utf8), forKey: LibrarySnapshotKeys.snapshot)
+        let url = URL(fileURLWithPath: "/x/.melee.rvz.icloud")   // placeholder: no header read
+        let r = LibraryLookup.resolveWithOutcome(url: url, store: LibrarySnapshotStore(defaults: defaults))
+        XCTAssertEqual(r.outcome, .decodeFailed)
+        XCTAssertEqual(r.game, LibraryLookup.resolve(url: url, snapshot: .empty, header: nil))
+        XCTAssertEqual(LibraryLookup.resolveWithOutcome(url: url, store: LibrarySnapshotStore(defaults: nil)).outcome,
+                       .appGroupUnavailable)
+    }
 }

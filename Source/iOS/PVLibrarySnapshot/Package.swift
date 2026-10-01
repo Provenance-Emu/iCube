@@ -8,8 +8,9 @@ let package = Package(
         .library(name: "PVLibrarySnapshot", targets: ["PVLibrarySnapshot"])
     ],
     targets: [
-        // Foundation only. Linked by the app AND by every extension, so it must never
-        // depend on the Dolphin core, UIKit, or anything with a Realm/SwiftData store.
+        // System frameworks only (Foundation, os, MetricKit where it exists). Linked by the app
+        // AND by every extension, so it must never depend on the Dolphin core, UIKit, or
+        // anything with a Realm/SwiftData store.
         .target(name: "PVLibrarySnapshot"),
         .testTarget(name: "PVLibrarySnapshotTests", dependencies: ["PVLibrarySnapshot"])
     ]

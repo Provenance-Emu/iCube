@@ -29,8 +29,15 @@ public enum LibraryLookup {
 
     /// Full pipeline: header read (skipped for iCloud placeholders), snapshot load, resolve.
     public static func resolve(url: URL, store: LibrarySnapshotStore = LibrarySnapshotStore()) -> ResolvedGame {
+        resolveWithOutcome(url: url, store: store).game
+    }
+
+    /// `resolve(url:store:)` plus how the snapshot load went, for the extensions' telemetry.
+    public static func resolveWithOutcome(url: URL, store: LibrarySnapshotStore = LibrarySnapshotStore())
+        -> (game: ResolvedGame, outcome: LibrarySnapshotLoadOutcome) {
         let header = url.lastPathComponent.hasSuffix(".icloud") ? nil : DiscHeaderReader.read(url: url)
-        return resolve(url: url, snapshot: store.load(), header: header)
+        let load = store.loadWithOutcome()
+        return (resolve(url: url, snapshot: load.snapshot, header: header), load.outcome)
     }
 
     /// Pure resolution, in priority order: header id → snapshot by id; no header →
