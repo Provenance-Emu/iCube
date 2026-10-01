@@ -106,6 +106,7 @@ struct MenuFocusRouter {
       if adjust == nil { adjust = padResult.adjust }
       if padResult.didGoBack { didGoBack = true }
     }
+    if let activated, adjust?.id == activated { adjust = nil }
     return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack, adjust: adjust)
   }
 
@@ -149,6 +150,10 @@ struct MenuFocusRouter {
         if let current { adjust = (current, step) }
       }
     }
+    // A and d-pad left/right on the same row in one tick: the activate already stepped a picker.
+    // The builders' bindings read the snapshot the model was built from, so applying both would
+    // write twice from the same stale value.
+    if let activated, adjust?.id == activated { adjust = nil }
     return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack, adjust: adjust)
   }
 

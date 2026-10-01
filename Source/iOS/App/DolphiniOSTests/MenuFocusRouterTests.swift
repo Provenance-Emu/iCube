@@ -304,4 +304,27 @@ final class MenuFocusRouterTests: XCTestCase {
     right.right = true
     XCTAssertNil(router.update(right, at: 0, model: twoSectionModel(), focusedID: nil, isActive: true).adjust)
   }
+
+  /// A and d-pad right in the same tick on a picker row: the activate already stepped it. The
+  /// builders' bindings read the model's snapshot, so applying the adjust too would write a second
+  /// time from the same stale value.
+  func test_adjust_isDroppedWhenTheSameTickActivatesThatRow() {
+    var router = MenuFocusRouter(config: cfg)
+    let result = router.update(.init(a: true, right: true), at: 0, model: twoSectionModel(), focusedID: "b", isActive: true)
+    XCTAssertEqual(result.activatedID, "b")
+    XCTAssertNil(result.adjust, "the activate already changed the row")
+  }
+
+  func test_multiPad_adjustIsDroppedWhenAnotherPadActivatesThatRow() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = twoSectionModel()
+    let p1 = AnyHashable("p1")
+    let p2 = AnyHashable("p2")
+    _ = router.update(padInputs: [(p1, .init()), (p2, .init())], at: 0, model: model, focusedID: "b", isActive: true)
+    let result = router.update(
+      padInputs: [(p1, .init(a: true)), (p2, .init(right: true))],
+      at: 0.1, model: model, focusedID: "b", isActive: true)
+    XCTAssertEqual(result.activatedID, "b")
+    XCTAssertNil(result.adjust)
+  }
 }
