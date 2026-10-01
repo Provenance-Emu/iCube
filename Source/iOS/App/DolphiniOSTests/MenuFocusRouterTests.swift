@@ -327,4 +327,16 @@ final class MenuFocusRouterTests: XCTestCase {
     XCTAssertEqual(result.activatedID, "b")
     XCTAssertNil(result.adjust)
   }
+
+  /// `padBackNavigation()` feeds the router an empty model: B must still report back, and nothing
+  /// else may happen.
+  func test_back_withAnEmptyModel_stillReportsBack() {
+    var router = MenuFocusRouter(config: cfg)
+    let p1 = AnyHashable("p1")
+    _ = router.update(padInputs: [(p1, .init())], at: 0, model: MenuModel(), focusedID: nil, isActive: true)
+    let result = router.update(padInputs: [(p1, .init(b: true))], at: 0.1, model: MenuModel(), focusedID: nil, isActive: true)
+    XCTAssertTrue(result.didGoBack)
+    XCTAssertNil(result.focusedID)
+    XCTAssertNil(result.activatedID)
+  }
 }

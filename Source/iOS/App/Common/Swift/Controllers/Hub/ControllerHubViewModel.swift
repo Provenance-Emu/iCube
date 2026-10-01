@@ -178,7 +178,7 @@ final class ControllerHubViewModel {
       },
       editLayoutDestination: {
         #if os(iOS)
-        AnyView(TouchOverlayLayoutEditorView())
+        AnyView(TouchOverlayLayoutEditorView().padBackNavigation())
         #else
         AnyView(EmptyView())
         #endif
@@ -190,8 +190,9 @@ final class ControllerHubViewModel {
         DOLConfigBridge.setWiimoteContinuousScanning(enabled)
         self?.reload()
       },
-      dsuDestination: { AnyView(DSUSettingsView()) },
-      moreSettingsDestination: { AnyView(ControllerMoreSettingsView()) })
+      // Plain lists, not menus: they get pad Back from the modifier (Phase 2 left them touch-only).
+      dsuDestination: { AnyView(DSUSettingsView().padBackNavigation()) },
+      moreSettingsDestination: { AnyView(ControllerMoreSettingsView().padBackNavigation()) })
   }
 
   /// Announces the choice BEFORE applying it: `overlayMode = .wii` posts `assignmentsChanged`
