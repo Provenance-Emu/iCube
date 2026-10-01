@@ -65,9 +65,31 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
     for context in URLContexts {
+      #if os(iOS)
+      if SkinLibrary.isSkinArchive(context.url) {
+        importSkin(from: context.url)
+        continue
+      }
+      #endif
       _ = ServiceManager.shared.open(url: context.url, options: [:])
     }
   }
+
+  #if os(iOS)
+  /// Installs a Delta / Manic skin the system handed us and reports the outcome in the snackbar.
+  private func importSkin(from url: URL) {
+    let scoped = url.startAccessingSecurityScopedResource()
+    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    let message: String
+    do {
+      let skin = try SkinLibrary.shared.importSkin(from: url)
+      message = String(format: L("Imported skin %@"), skin.name)
+    } catch {
+      message = String(format: L("Couldn't import skin: %@"), SkinImportError.describe(error))
+    }
+    NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": message])
+  }
+  #endif
 
   func sceneDidBecomeActive(_ scene: UIScene) {
     ServiceManager.shared.applicationDidBecomeActive()

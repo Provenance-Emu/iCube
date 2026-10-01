@@ -518,6 +518,8 @@ let iCubeTests = Target.target(
         // `.target(name: "iCube")` alone doesn't make a package the app links importable here —
         // AppIntentsTests needs `LibrarySnapshot`/`LibrarySnapshotGame` fixtures directly.
         .package(product: "PVLibrarySnapshot"),
+        // SkinLibraryTests zips the skin fixture with `Zip.zipFiles`.
+        .package(product: "Zip"),
     ],
     settings: .settings(
         base: [

@@ -165,7 +165,7 @@ struct SkinInfo: Decodable {
   }
 
   /// Removes `//` comments (whole-line or trailing) without touching `//` inside a string, such as a URL.
-  private static func stripComments(_ data: Data) throws -> Data {
+  static func stripComments(_ data: Data) throws -> Data {
     guard let text = String(data: data, encoding: .utf8) else {
       throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: [], debugDescription: "info.json is not UTF-8"))
     }
