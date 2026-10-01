@@ -37,13 +37,18 @@ protocol ControllerConfigWriting {
 
   // MARK: Mapping state
 
-  /// True when the slot already has at least one non-empty control mapping
-  /// (a real binding, not just an activated-but-unconfigured default).
+  /// True when at least one control of the slot's mapping resolves on the
+  /// device currently bound to the slot. Ask it after `setDefaultDevice`.
+  ///
   /// Disconnecting a device only clears its default-device binding — the
-  /// mapping itself is left alone — so this stays true across a reconnect.
-  /// `ControllerAssignmentService.assign` uses this to avoid clobbering a
-  /// user-picked profile every time `AssignmentEngine` re-places a pad.
-  func hasMapping(system: EmulatedSystem, port: Int) -> Bool
+  /// mapping itself is left alone — so a pad that comes back still binds its
+  /// own mapping and this is true. A mapping left by a different kind of
+  /// device (the Touchscreen profile under a physical pad, or the reverse)
+  /// binds nothing, and this is false.
+  /// `ControllerAssignmentService.assign` uses it to keep a user-picked
+  /// profile across a reconnect without leaving a pad on a mapping it cannot
+  /// drive.
+  func mappingBindsDevice(system: EmulatedSystem, port: Int) -> Bool
 
   // MARK: Profile
 

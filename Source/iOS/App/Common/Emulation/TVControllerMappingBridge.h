@@ -38,13 +38,26 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 /// control expression bound — i.e. it has a real mapping, not just an
 /// activated-but-unconfigured default. `reconcileAssignments` clears a
 /// disconnected device's default-device binding but never touches these
-/// expressions, so this stays true across a reconnect. Used by
-/// `ControllerAssignmentService.assign` to decide whether re-binding a device
-/// should reload the device-default profile or keep the existing mapping.
+/// expressions, so this stays true across a reconnect. It says nothing about
+/// whether the mapping works on the device now bound; `padMappingBindsDevice:`
+/// answers that.
 + (BOOL)padHasAnyBinding:(NSInteger)portOneBased NS_SWIFT_NAME(padHasAnyBinding(forGCPort:));
 
 /// Wiimote counterpart of `padHasAnyBinding:`.
 + (BOOL)wiimoteHasAnyBinding:(NSInteger)indexOneBased NS_SWIFT_NAME(wiimoteHasAnyBinding(forWiimote:));
+
+/// True when at least one control of the GC pad slot's mapping resolves to an
+/// input or output of the slot's current default device. A mapping loaded for
+/// another kind of device has expressions but binds nothing: the Touchscreen
+/// profile's `Button 0` / `Axis 11` do not exist on a physical pad, whose
+/// inputs are `Button A`, `Left Stick X-` and so on. Call it after
+/// `setDefaultDevice:forGCPort:`, which re-resolves the references.
+/// `ControllerAssignmentService.assign` uses it to decide whether binding a
+/// device keeps the existing mapping or loads the device-default profile.
++ (BOOL)padMappingBindsDevice:(NSInteger)portOneBased NS_SWIFT_NAME(padMappingBindsDevice(forGCPort:));
+
+/// Wiimote counterpart of `padMappingBindsDevice:`.
++ (BOOL)wiimoteMappingBindsDevice:(NSInteger)indexOneBased NS_SWIFT_NAME(wiimoteMappingBindsDevice(forWiimote:));
 
 /// Assign the iOS Touchscreen virtual device as the default device for a GC port.
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));

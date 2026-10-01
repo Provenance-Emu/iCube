@@ -46,12 +46,12 @@ final class BridgeControllerConfigWriter: ControllerConfigWriting {
 
   // MARK: Mapping state
 
-  func hasMapping(system: EmulatedSystem, port: Int) -> Bool {
+  func mappingBindsDevice(system: EmulatedSystem, port: Int) -> Bool {
     switch system {
     case .gamecube:
-      return TVControllerMappingBridge.padHasAnyBinding(forGCPort: port + 1)
+      return TVControllerMappingBridge.padMappingBindsDevice(forGCPort: port + 1)
     case .wii:
-      return TVControllerMappingBridge.wiimoteHasAnyBinding(forWiimote: port + 1)
+      return TVControllerMappingBridge.wiimoteMappingBindsDevice(forWiimote: port + 1)
     }
   }
 

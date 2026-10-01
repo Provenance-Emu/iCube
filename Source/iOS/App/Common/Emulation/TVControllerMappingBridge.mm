@@ -152,6 +152,38 @@ static BOOL ControllerHasAnyBoundControl(const ControllerEmu::EmulatedController
   return ControllerHasAnyBoundControl(cfg->GetController(idx));
 }
 
+// Takes the state lock, unlike `ControllerHasAnyBoundControl`: `BoundCount` walks the parsed
+// expression tree, which a hotplug `UpdateReferences` rewrites under that lock.
+static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController* controller)
+{
+  if (!controller)
+    return NO;
+  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  for (const auto& group : controller->groups)
+    for (const auto& control : group->controls)
+      if (control->control_ref && control->control_ref->BoundCount() > 0)
+        return YES;
+  return NO;
+}
+
++ (BOOL)padMappingBindsDevice:(NSInteger)portOneBased
+{
+  auto* cfg = Pad::GetConfig();
+  if (!cfg)
+    return NO;
+  const int port = static_cast<int>(portOneBased - 1);
+  return ControllerMappingBindsDevice(cfg->GetController(port));
+}
+
++ (BOOL)wiimoteMappingBindsDevice:(NSInteger)indexOneBased
+{
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg)
+    return NO;
+  const int idx = static_cast<int>(indexOneBased - 1);
+  return ControllerMappingBindsDevice(cfg->GetController(idx));
+}
+
 + (void)reconcileAssignments
 {
   auto* cfg = Pad::GetConfig();

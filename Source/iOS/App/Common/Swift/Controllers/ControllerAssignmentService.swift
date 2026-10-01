@@ -27,20 +27,27 @@ final class ControllerAssignmentService {
 
   /// Atomically assign a physical/DSU device qualifier to a player:
   /// (1) activate the port, (2) bind the device, (3) apply the device-default
-  /// profile — but only when the slot has no mapping yet, (4) save.
+  /// profile — but only when the slot's mapping binds nothing on that device,
+  /// (4) save.
   ///
   /// Step 3 is conditional so a user-picked profile survives a reconnect:
   /// `TVControllerMappingBridge.reconcileAssignments` clears a disconnected
   /// device's default-device binding but never touches its control mapping, so
-  /// when `AssignmentEngine` re-places the pad and calls this again, the slot
-  /// already has a non-empty mapping and keeps it. A slot is only ever given
-  /// the device-default profile the first time it is bound (or after it was
-  /// explicitly cleared) — a user who wants the defaults back can pick the
-  /// profile again from the Profiles screen.
+  /// when `AssignmentEngine` re-places the pad and calls this again, the
+  /// mapping still binds the pad's inputs and is kept.
+  ///
+  /// The test is "binds on this device", not "is non-empty": a slot the
+  /// Touchscreen held keeps the Touchscreen profile (`Button 0`, `Axis 11`),
+  /// none of which exist on a physical pad, so keeping it left the pad dead
+  /// until the user reset the profile. Step 2 must come first — binding the
+  /// device is what re-resolves the mapping against it. Every caller passes
+  /// the qualifier of a device the ControllerInterface currently enumerates
+  /// (`allQualifiedDevices`, `qualifiedName(for:)`), so "binds nothing" means
+  /// the mapping is for another kind of device, not that the device is late.
   func assign(qualifier: String, toPlayer port: Int, system: EmulatedSystem) {
     activate(system: system, port: port)
     writer.setDefaultDevice(qualifier, system: system, port: port)
-    if !writer.hasMapping(system: system, port: port),
+    if !writer.mappingBindsDevice(system: system, port: port),
        let profile = writer.defaultProfileName(forQualifier: qualifier) {
       writer.loadProfile(profile, system: system, port: port, restoreDevice: true)
     }
