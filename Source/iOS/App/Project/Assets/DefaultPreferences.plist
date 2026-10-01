@@ -9,7 +9,7 @@
 	<key>last_version</key>
 	<string>0.0.0 (0)</string>
 	<key>touch_overlay_programmatic</key>
-	<false/>
+	<true/>
 	<key>touch_overlay_style</key>
 	<integer>0</integer>
 </dict>

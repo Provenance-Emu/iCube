@@ -150,7 +150,7 @@ extension EmulationScreen {
     var irMode: Int = Int(DOLConfigBridge.mainTouchPadIRMode())
 
     /// Phase 2 of the programmatic touch overlay (docs/superpowers/specs/
-    /// 2026-09-24-programmatic-touch-overlay-design.md), gated off by default. When on, this
+    /// 2026-09-24-programmatic-touch-overlay-design.md), on by default since 2026-10-01. When on, this
     /// container mounts a `UIHostingController`-hosted `TouchOverlayView` instead of the xib pad;
     /// every other path in this file (opacity, IR-mode passthrough, port resolution) is untouched.
     private static var useProgrammaticOverlay: Bool {

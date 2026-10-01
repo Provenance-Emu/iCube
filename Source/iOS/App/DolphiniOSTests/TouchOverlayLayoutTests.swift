@@ -162,6 +162,17 @@ final class TouchOverlayLayoutTests: XCTestCase {
     }
   }
 
+  func testProgrammaticOverlayIsOnUnlessTurnedOff() {
+    let suite = "com.joemattiello.icube.tests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    XCTAssertTrue(TouchOverlayFlag.isProgrammatic(in: defaults), "never set: the new overlay is the default")
+    defaults.set(false, forKey: TouchOverlayFlag.programmaticKey)
+    XCTAssertFalse(TouchOverlayFlag.isProgrammatic(in: defaults), "an explicit opt-out sticks")
+    defaults.set(true, forKey: TouchOverlayFlag.programmaticKey)
+    XCTAssertTrue(TouchOverlayFlag.isProgrammatic(in: defaults))
+  }
+
   func testWiiPadKindSelectionMirrorsMakeWiiPadView() {
     XCTAssertEqual(TouchOverlayPadKind.wii(classicActive: true, sideways: true), .wiiClassic)
     XCTAssertEqual(TouchOverlayPadKind.wii(classicActive: false, sideways: true), .wiiRemoteSideways)

@@ -13,13 +13,20 @@ import Foundation
 // Data/Sys/Profiles/{GCPad,Wiimote}/Touchscreen.ini keep matching.
 
 /// The "draw the on-screen controller with `TouchOverlayView` instead of the xib pads" switch,
-/// set from More Controller Settings and the in-game controller menu.
+/// set from More Controller Settings and the in-game controller menu. On by default: only a
+/// player who explicitly turned it off gets the xib pads.
 enum TouchOverlayFlag {
   static let programmaticKey = "touch_overlay_programmatic"
 
   static var isProgrammatic: Bool {
-    get { UserDefaults.standard.bool(forKey: programmaticKey) }
+    get { isProgrammatic(in: .standard) }
     set { UserDefaults.standard.set(newValue, forKey: programmaticKey) }
+  }
+
+  /// `DefaultPreferences.plist` registers this key as true on every launch; the fallback covers a
+  /// process that never registered it.
+  static func isProgrammatic(in defaults: UserDefaults) -> Bool {
+    defaults.object(forKey: programmaticKey) as? Bool ?? true
   }
 }
 
