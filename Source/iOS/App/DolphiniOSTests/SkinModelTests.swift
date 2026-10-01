@@ -40,10 +40,62 @@ final class SkinModelTests: XCTestCase {
     let json = """
     // header
     {"name":"https://example.com/skin","identifier":"x","gameTypeIdentifier":"public.aoshuang.game.ngc", // trailing
-     "representations":{}}
+     "representations":{"iphone":{"standard":{"portrait":{"mappingSize":{"width":1,"height":1}}}}}}
     """
     let info = try SkinInfo.decode(Data(json.utf8))
     XCTAssertEqual(info.name, "https://example.com/skin")
+  }
+
+  // MARK: Lenient import: one defect never rejects the whole skin
+
+  private static let ngc = "public.aoshuang.game.ngc"
+
+  private func skinJSON(representations: String) -> Data {
+    Data(#"{"name":"N","identifier":"x","gameTypeIdentifier":"\#(Self.ngc)","representations":\#(representations)}"#.utf8)
+  }
+
+  private func portrait(of info: SkinInfo) -> SkinRepresentation? {
+    info.representation(device: .iphone, orientation: .portrait)
+  }
+
+  func testDirectionalItemMissingADirectionIsSkipped() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"items":[
+      {"inputs":{"up":"up","down":"down","left":"left"},"frame":{"x":0,"y":0,"width":1,"height":1}},
+      {"inputs":["a"],"frame":{"x":0,"y":0,"width":1,"height":1}}]}}}}
+    """)
+    let items = try XCTUnwrap(portrait(of: SkinInfo.decode(json))).items
+    XCTAssertEqual(items.map(\.inputs), [.buttons(["a"])])
+  }
+
+  func testItemWithBadFrameIsSkippedNextToGoodItem() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"items":[
+      {"inputs":["b"],"frame":"nope"},
+      {"inputs":["a"],"frame":[1,2,3,4]}]}}}}
+    """)
+    let items = try XCTUnwrap(portrait(of: SkinInfo.decode(json))).items
+    XCTAssertEqual(items.count, 1)
+    XCTAssertEqual(items.first?.inputs, .buttons(["a"]))
+    XCTAssertEqual(items.first?.frame, CGRect(x: 1, y: 2, width: 3, height: 4))
+  }
+
+  func testRepresentationMissingMappingSizeIsDroppedOthersLoad() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{
+      "portrait":{"items":[]},
+      "landscape":{"mappingSize":{"width":20,"height":10},"items":[]}}}}
+    """)
+    let info = try SkinInfo.decode(json)
+    XCTAssertNil(portrait(of: info))
+    XCTAssertEqual(info.representation(device: .iphone, orientation: .landscape)?.mappingSize, CGSize(width: 20, height: 10))
+  }
+
+  func testSkinWithOnlyABrokenRepresentationThrowsNoUsableRepresentation() {
+    let json = skinJSON(representations: #"{"iphone":{"standard":{"portrait":{"items":[]}}}}"#)
+    XCTAssertThrowsError(try SkinInfo.decode(json)) { error in
+      XCTAssertEqual(error as? SkinInfoError, .noUsableRepresentation)
+    }
   }
 
   func testRejectsUnsupportedGameType() {

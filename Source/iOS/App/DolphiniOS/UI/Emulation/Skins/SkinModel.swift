@@ -91,6 +91,11 @@ struct SkinRepresentation: Equatable {
   let extendedEdges: UIEdgeInsets
 }
 
+enum SkinInfoError: Error, Equatable {
+  /// The skin declares no representation this app can decode (all absent, unsupported or malformed).
+  case noUsableRepresentation
+}
+
 /// The parsed `info.json` of a Delta/Manic skin directory.
 struct SkinInfo: Decodable {
   private static let infoFileName = "info.json"
@@ -116,22 +121,25 @@ struct SkinInfo: Decodable {
     }
     self.gameType = gameType
 
-    // Buckets this app has no use for (iPad models, split view, external display, ...) are skipped.
+    // A skin from the wild is imported leniently: buckets this app has no use for (iPad models, split
+    // view, external display, ...) and representations that fail to decode are dropped one by one, so a
+    // single defect never rejects the skin. Only a skin left with nothing to show is an error.
     let devices = try container.nestedContainer(keyedBy: SkinDynamicKey.self, forKey: .representations)
     var parsed: [SkinDevice: [SkinDisplayType: [TouchOverlayOrientation: SkinRepresentation]]] = [:]
     for deviceKey in devices.allKeys {
-      guard let device = SkinDevice(rawValue: deviceKey.stringValue) else { continue }
-      let displays = try devices.nestedContainer(keyedBy: SkinDynamicKey.self, forKey: deviceKey)
+      guard let device = SkinDevice(rawValue: deviceKey.stringValue),
+            let displays = try? devices.nestedContainer(keyedBy: SkinDynamicKey.self, forKey: deviceKey) else { continue }
       for displayKey in displays.allKeys {
-        guard let display = SkinDisplayType(rawValue: displayKey.stringValue) else { continue }
-        let orientations = try displays.nestedContainer(keyedBy: SkinDynamicKey.self, forKey: displayKey)
+        guard let display = SkinDisplayType(rawValue: displayKey.stringValue),
+              let orientations = try? displays.nestedContainer(keyedBy: SkinDynamicKey.self, forKey: displayKey) else { continue }
         for orientationKey in orientations.allKeys {
-          guard let orientation = TouchOverlayOrientation(rawValue: orientationKey.stringValue) else { continue }
-          parsed[device, default: [:]][display, default: [:]][orientation] =
-            try orientations.decode(SkinRepresentation.self, forKey: orientationKey)
+          guard let orientation = TouchOverlayOrientation(rawValue: orientationKey.stringValue),
+                let representation = try? orientations.decode(SkinRepresentation.self, forKey: orientationKey) else { continue }
+          parsed[device, default: [:]][display, default: [:]][orientation] = representation
         }
       }
     }
+    guard !parsed.isEmpty else { throw SkinInfoError.noUsableRepresentation }
     representations = parsed
   }
 
@@ -195,9 +203,10 @@ extension SkinRepresentation: Decodable {
     extendedEdges = try container.decodeIfPresent(SkinEdges.self, forKey: .extendedEdges)?.resolved(over: .zero) ?? .zero
     translucent = try container.decodeIfPresent(Bool.self, forKey: .translucent) ?? false
     background = try container.decodeIfPresent(SkinAsset.self, forKey: .assets)
-    screens = try container.decodeIfPresent([SkinScreenRecord].self, forKey: .screens)?.compactMap(\.screen) ?? []
+    screens = try container.decodeIfPresent([SkinLossy<SkinScreenRecord>].self, forKey: .screens)?.compactMap { $0.value?.screen } ?? []
     let inherited = extendedEdges
-    items = try container.decodeIfPresent([SkinItemRecord].self, forKey: .items)?.map { $0.item(inheriting: inherited) } ?? []
+    items = try container.decodeIfPresent([SkinLossy<SkinItemRecord>].self, forKey: .items)?
+      .compactMap { $0.value?.item(inheriting: inherited) } ?? []
   }
 }
 
@@ -243,7 +252,17 @@ extension SkinItemInputs: Decodable {
   }
 }
 
-// MARK: - Geometry wire types
+// MARK: - Wire types
+
+/// Decodes to `nil` instead of throwing, so one malformed element (an item with a bad frame or a
+/// partial d-pad) is skipped without failing the array that holds it.
+private struct SkinLossy<Value: Decodable>: Decodable {
+  let value: Value?
+
+  init(from decoder: Decoder) throws {
+    value = try? Value(from: decoder)
+  }
+}
 
 private struct SkinDynamicKey: CodingKey {
   let stringValue: String
