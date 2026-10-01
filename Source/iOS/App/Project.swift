@@ -511,6 +511,8 @@ let iCubeTests = Target.target(
     deploymentTargets: .multiplatform(iOS: "17.0"),
     infoPlist: .default,
     sources: ["DolphiniOSTests/**/*.swift"],
+    // A folder reference (not a glob) keeps `Skins/<name>.deltaskin/` intact inside the test bundle.
+    resources: [.folderReference(path: "DolphiniOSTests/Fixtures/Skins")],
     dependencies: [
         .target(name: "iCube"),
         // `.target(name: "iCube")` alone doesn't make a package the app links importable here —

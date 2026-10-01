@@ -1,0 +1,67 @@
+{
+  // Hand-written test skin: no third-party art.
+  "name": "Test Cube",
+  "identifier": "com.joemattiello.icube.testcube",
+  "gameTypeIdentifier": "public.aoshuang.game.ngc",
+  "debug": false,
+  "representations": {
+    "iphone": {
+      "edgeToEdge": {
+        "portrait": {
+          "assets": { "resizable": "bg.png" },
+          "mappingSize": { "width": 390, "height": 844 },
+          "extendedEdges": { "top": 5, "bottom": 5, "left": 5, "right": 5 },
+          "translucent": true,
+          "screens": [
+            { "outputFrame": { "x": 0, "y": 60, "width": 390, "height": 292 } }
+          ],
+          "items": [
+            {
+              "inputs": ["a"],
+              "frame": { "x": 300, "y": 500, "width": 60, "height": 60 },
+              "extendedEdges": { "left": 20 },
+              "asset": { "normal": "btn-a.pdf" }
+            },
+            {
+              "inputs": ["x", "y"],
+              "frame": { "x": 250, "y": 440, "width": 60, "height": 60 }
+            },
+            {
+              "inputs": { "up": "up", "down": "down", "left": "left", "right": "right" },
+              "frame": { "x": 20, "y": 560, "width": 140, "height": 140 }
+            },
+            {
+              "inputs": {
+                "up": "rightThumbstickUp",
+                "down": "rightThumbstickDown",
+                "left": "rightThumbstickLeft",
+                "right": "rightThumbstickRight"
+              },
+              "frame": { "x": 220, "y": 600, "width": 140, "height": 140 },
+              "thumbstick": { "name": "stick.pdf", "width": 60, "height": 60 }
+            },
+            {
+              "inputs": ["menu"],
+              "frame": { "x": 165, "y": 760, "width": 60, "height": 30 }
+            }
+          ]
+        }
+      },
+      "standard": {
+        "landscape": {
+          "assets": { "resizable": "bg.png" },
+          "mappingSize": { "width": 844, "height": 390 },
+          "screens": [
+            { "outputFrame": { "x": 140, "y": 0, "width": 564, "height": 390 } }
+          ],
+          "items": [
+            {
+              "inputs": ["a"],
+              "frame": { "x": 700, "y": 150, "width": 60, "height": 60 }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
