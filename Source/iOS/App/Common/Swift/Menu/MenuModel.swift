@@ -56,6 +56,10 @@ struct MenuItem: Identifiable {
   /// and tvOS gestures, so `MenuScreen` cannot activate it by itself; without this a pad could focus
   /// the player screen's capture rows but never arm one.
   var onCustomActivate: (() -> Void)?
+  /// `.picker` rows only, tvOS only: ONE row showing the title and the current value, which d-pad
+  /// left/right steps through, instead of one row per option. For long value lists (the player
+  /// screen's numeric settings), which would otherwise explode into ~20 rows each.
+  var isCompactOnTV: Bool = false
 
   init(
     id: String,
@@ -66,7 +70,8 @@ struct MenuItem: Identifiable {
     role: MenuItemRole,
     badge: String? = nil,
     isEnabled: Bool = true,
-    onCustomActivate: (() -> Void)? = nil
+    onCustomActivate: (() -> Void)? = nil,
+    isCompactOnTV: Bool = false
   ) {
     self.id = id
     self.title = title
@@ -77,6 +82,7 @@ struct MenuItem: Identifiable {
     self.badge = badge
     self.isEnabled = isEnabled
     self.onCustomActivate = onCustomActivate
+    self.isCompactOnTV = isCompactOnTV
   }
 }
 
@@ -106,6 +112,11 @@ extension MenuItemRole {
     let index = options.firstIndex { $0.1 == current } ?? -1
     let count = options.count
     return options[((index + step) % count + count) % count].1
+  }
+
+  /// The title of the option `current` selects, or nil when no option matches.
+  static func selectedTitle(options: [(String, AnyHashable)], current: AnyHashable) -> String? {
+    options.first { $0.1 == current }?.0
   }
 }
 

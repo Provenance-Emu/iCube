@@ -418,7 +418,7 @@ struct MenuScreen: View {
   /// option's row, not an id no row ever binds `.focused(equals:)` to.
   private var defaultTVFocusID: String? {
     guard let firstID = model.focusableIDs.first, let item = model.item(id: firstID) else { return nil }
-    if case .picker(let options, _) = item.role, !options.isEmpty {
+    if case .picker(let options, _) = item.role, !options.isEmpty, !item.isCompactOnTV {
       return "\(item.id)#0"
     }
     return firstID
@@ -445,6 +445,8 @@ struct MenuScreen: View {
   @ViewBuilder
   private func tvRow(_ item: MenuItem) -> some View {
     switch item.role {
+    case .picker(let options, let selection) where item.isCompactOnTV:
+      tvCompactPicker(item, options: options, selection: selection)
     case .picker(let options, let selection):
       ForEach(Array(options.enumerated()), id: \.offset) { index, option in
         Button {
@@ -485,6 +487,45 @@ struct MenuScreen: View {
       Button { performActivate(item) } label: { rowLabel(item) }
         .disabled(!item.isEnabled)
         .focused($tvFocusedID, equals: item.id)
+    }
+  }
+
+  /// A `.picker` flagged `isCompactOnTV`: one focusable row, title then "‹ value ›". Built like
+  /// `TVIntStepper` / `TVFloatStepper` (a `.focusable` HStack with `.onMoveCommand`), not a
+  /// `Button`: left/right step through the options (wrapping, as the iOS d-pad adjust does), up/down
+  /// move focus like any row, and select does nothing.
+  private func tvCompactPicker(
+    _ item: MenuItem, options: [(String, AnyHashable)], selection: Binding<AnyHashable>
+  ) -> some View {
+    HStack {
+      rowLabel(item)
+      Image(systemName: "chevron.left")
+      Text(MenuItemRole.selectedTitle(options: options, current: selection.wrappedValue) ?? "")
+        .monospacedDigit()
+      Image(systemName: "chevron.right")
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(Rectangle())
+    .focusable(item.isEnabled)
+    .focused($tvFocusedID, equals: item.id)
+    .padding(8)
+    .overlay(
+      RoundedRectangle(cornerRadius: 10)
+        .stroke(tvFocusedID == item.id ? Color.accentColor : Color.clear, lineWidth: 4))
+    .opacity(item.isEnabled ? 1 : 0.5)
+    .onMoveCommand { direction in
+      guard item.isEnabled else { return }
+      switch direction {
+      case .left: stepPicker(selection, options: options, by: -1)
+      case .right: stepPicker(selection, options: options, by: 1)
+      default: break
+      }
+    }
+  }
+
+  private func stepPicker(_ selection: Binding<AnyHashable>, options: [(String, AnyHashable)], by step: Int) {
+    if let next = MenuItemRole.cycled(options: options, current: selection.wrappedValue, step: step) {
+      selection.wrappedValue = next
     }
   }
   #endif

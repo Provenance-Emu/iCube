@@ -122,4 +122,16 @@ final class MenuModelTests: XCTestCase {
     XCTAssertTrue(ran)
     XCTAssertNil(MenuItem(id: "d", title: "D", role: .custom(AnyView(EmptyView()))).onCustomActivate)
   }
+
+  /// The compact tvOS picker shows the selected option's title; an unknown selection shows nothing.
+  func test_selectedTitle() {
+    let options: [(String, AnyHashable)] = [("Low", AnyHashable(1)), ("High", AnyHashable(2))]
+    XCTAssertEqual(MenuItemRole.selectedTitle(options: options, current: AnyHashable(2)), "High")
+    XCTAssertNil(MenuItemRole.selectedTitle(options: options, current: AnyHashable(3)))
+  }
+
+  func test_compactOnTV_isOffByDefault() {
+    XCTAssertFalse(MenuItem(id: "p", title: "P", role: .action({})).isCompactOnTV)
+    XCTAssertTrue(MenuItem(id: "q", title: "Q", role: .action({}), isCompactOnTV: true).isCompactOnTV)
+  }
 }
