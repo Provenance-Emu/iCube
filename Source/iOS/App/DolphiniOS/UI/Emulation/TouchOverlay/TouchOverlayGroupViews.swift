@@ -113,6 +113,8 @@ struct TouchOverlayButtonClusterView: View {
 
   private func shape(for control: TouchOverlayControl) -> TouchOverlayArt.ButtonShape {
     let suffix = control.id.split(separator: ".").last.map(String.init) ?? ""
+    // Only the GameCube's X and Y are kidney-shaped; the Classic Controller's are round.
+    if control.id.hasPrefix("classic."), suffix == "x" || suffix == "y" { return .circle }
     switch suffix {
     case "a", "b", "one", "two", "c": return .circle
     case "x", "y": return .kidney

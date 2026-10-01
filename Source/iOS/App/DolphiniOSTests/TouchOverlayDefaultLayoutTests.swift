@@ -50,9 +50,13 @@ final class TouchOverlayDefaultLayoutTests: XCTestCase {
     }
   }
 
-  func testGameCubeGroupsDoNotOverlap() {
-    for c in cases([.gameCube]) {
-      let boxes = c.layouts.map { ($0.group, $0.placement.box(in: c.bounds)) }
+  /// Pad kinds whose defaults are computed per screen (the sideways remote is still xib-derived).
+  private static let computedKinds: [TouchOverlayPadKind] = [.gameCube, .wiiRemote, .wiiClassic]
+
+  func testComputedLayoutGroupsDoNotOverlap() {
+    for c in cases(Self.computedKinds) {
+      // The Wii IR surface covers the pad on purpose; controls drawn over it take touches first.
+      let boxes = c.layouts.filter { !Self.isIRSurface($0) }.map { ($0.group, $0.placement.box(in: c.bounds)) }
       for (i, a) in boxes.enumerated() {
         for b in boxes[(i + 1)...] {
           XCTAssertFalse(a.1.insetBy(dx: 0.5, dy: 0.5).intersects(b.1), "\(c.label): \(a.0) overlaps \(b.0)")
@@ -61,9 +65,9 @@ final class TouchOverlayDefaultLayoutTests: XCTestCase {
     }
   }
 
-  func testGameCubeControlsAreFingerSized() {
-    for c in cases([.gameCube]) {
-      for layout in c.layouts {
+  func testComputedLayoutControlsAreFingerSized() {
+    for c in cases(Self.computedKinds) {
+      for layout in c.layouts where !Self.isIRSurface(layout) {
         for control in layout.controls {
           XCTAssertGreaterThanOrEqual(min(control.frame.width, control.frame.height), 44, "\(c.label): \(control.id) is too small")
         }
@@ -73,17 +77,19 @@ final class TouchOverlayDefaultLayoutTests: XCTestCase {
 
   /// A circle drawn into a non-square frame shrinks to the short side and leaves dead space
   /// around it, which is what made the old face buttons look small and spread apart.
-  func testGameCubeRoundButtonsHaveSquareFrames() {
-    let roundIds: Set<String> = ["gc.a", "gc.b"]
-    for c in cases([.gameCube]) {
+  func testComputedLayoutRoundButtonsHaveSquareFrames() {
+    let roundIds: Set<String> = ["gc.a", "gc.b", "wii.a", "wii.b", "wii.one", "wii.two", "wii.minus", "wii.plus",
+                                 "wii.home", "nunchuk.c", "classic.a", "classic.b", "classic.x", "classic.y",
+                                 "classic.minus", "classic.plus", "classic.home"]
+    for c in cases(Self.computedKinds) {
       for control in c.layouts.flatMap(\.controls) where roundIds.contains(control.id) {
         XCTAssertEqual(control.frame.width, control.frame.height, accuracy: 0.01, "\(c.label): \(control.id)")
       }
     }
   }
 
-  func testGameCubeControlsInsideAGroupDoNotOverlap() {
-    for c in cases([.gameCube]) {
+  func testComputedLayoutControlsInsideAGroupDoNotOverlap() {
+    for c in cases(Self.computedKinds) {
       for layout in c.layouts {
         let frames = layout.controls.map(\.frame)
         for (i, a) in frames.enumerated() {
@@ -103,6 +109,19 @@ final class TouchOverlayDefaultLayoutTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(layout.placement.box(in: c.bounds).minY, gameBottom - 0.5, "\(c.label): \(layout.group)")
       }
     }
+  }
+
+  func testWiiRemoteHasEveryButton() {
+    let ids = Set(cases([.wiiRemote])[0].layouts.flatMap(\.controls).map(\.id))
+    XCTAssertEqual(ids, ["wii.dpad", "nunchuk.stick", "wii.a", "wii.b", "wii.one", "wii.two", "wii.minus", "wii.plus",
+                         "wii.home", "nunchuk.c", "nunchuk.z", "wii.ir"])
+  }
+
+  func testClassicHasEveryButton() {
+    let ids = Set(cases([.wiiClassic])[0].layouts.flatMap(\.controls).map(\.id))
+    XCTAssertEqual(ids, ["classic.dpad", "classic.leftStick", "classic.rightStick", "classic.a", "classic.b", "classic.x",
+                         "classic.y", "classic.l", "classic.r", "classic.zl", "classic.zr", "classic.minus",
+                         "classic.plus", "classic.home"])
   }
 
   func testGameCubeHasEveryButton() {

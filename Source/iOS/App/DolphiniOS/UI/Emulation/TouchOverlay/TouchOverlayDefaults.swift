@@ -78,9 +78,9 @@ enum TouchOverlayDefaults {
                      canvas: CGSize, safeArea: UIEdgeInsets) -> [TouchOverlayGroupLayout] {
     switch kind {
     case .gameCube: return gameCube(canvas: canvas, safeArea: safeArea, orientation: orientation)
-    case .wiiRemote: return shifted(wiiRemote, by: safeArea)
+    case .wiiRemote: return wiiRemote(canvas: canvas, safeArea: safeArea, orientation: orientation)
     case .wiiRemoteSideways: return shifted(wiiRemoteSideways, by: safeArea)
-    case .wiiClassic: return shifted(wiiClassic, by: safeArea)
+    case .wiiClassic: return wiiClassic(canvas: canvas, safeArea: safeArea, orientation: orientation)
     }
   }
 
@@ -107,10 +107,89 @@ enum TouchOverlayDefaults {
     }
   }
 
-  // MARK: GameCube (computed)
+  // MARK: Computed layouts (GameCube, Wii Remote + Nunchuk, Classic Controller)
 
-  /// Sizes at scale 1 (a ~390 pt-wide phone), in points. Every control is at least 44 pt on its
-  /// short side, and round buttons get square frames so the art fills them.
+  /// Spacing shared by the computed layouts, at scale 1 (a ~390 pt-wide phone), in points.
+  private enum Spacing {
+    /// Space between neighbouring controls and groups.
+    static let gap: CGFloat = 8
+    /// Minimum distance from a screen edge, on top of the safe area.
+    static let edge: CGFloat = 8
+    /// Extra lift above the home indicator so the lowest controls don't fight the system swipe.
+    static let bottomGuard: CGFloat = 6
+    /// In landscape the lower stick / D-pad sits beside-and-below the one above it (the
+    /// controllers' own diagonal); portrait stacks them straight down to fit the width.
+    static let landscapeDiagonal: CGFloat = 70
+    static let referenceShortSide: CGFloat = 390
+    static let maxScale: CGFloat = 1.35
+    /// Round "system" buttons (Wii −/HOME/+): the smallest comfortable touch target.
+    static let systemButton: CGFloat = 44
+  }
+
+  /// The usable edges of one screen and the scale the computed layouts draw at. Every control is
+  /// at least 44 pt on its short side, and round buttons get square frames so the art fills them.
+  private struct Screen {
+    let w: CGFloat
+    let h: CGFloat
+    let u: CGFloat
+    let gap: CGFloat
+    let left: CGFloat
+    let right: CGFloat
+    let bottom: CGFloat
+    /// Portrait: just under the game picture (drawn aspect-fit at the top). Landscape: the top edge.
+    let regionTop: CGFloat
+    let diagonal: CGFloat
+    let orientation: TouchOverlayOrientation
+
+    init(canvas: CGSize, safeArea: UIEdgeInsets, orientation: TouchOverlayOrientation) {
+      w = canvas.width
+      h = canvas.height
+      u = min(max(min(w, h) / Spacing.referenceShortSide, 1), Spacing.maxScale)
+      gap = Spacing.gap * u
+      left = max(safeArea.left, Spacing.edge) + Spacing.edge
+      right = w - max(safeArea.right, Spacing.edge) - Spacing.edge
+      bottom = h - max(safeArea.bottom, Spacing.edge) - Spacing.bottomGuard
+      let gameBottom = safeArea.top + (w - safeArea.left - safeArea.right) * 3 / 4
+      regionTop = orientation == .portrait ? gameBottom + gap : max(safeArea.top, Spacing.edge) + Spacing.edge
+      diagonal = orientation == .landscape ? Spacing.landscapeDiagonal * u : 0
+      self.orientation = orientation
+    }
+
+    func size(_ side: CGFloat) -> CGSize { CGSize(width: side * u, height: side * u) }
+    func size(_ size: CGSize) -> CGSize { CGSize(width: size.width * u, height: size.height * u) }
+
+    func leading(_ center: CGPoint) -> TouchOverlayPlacement.Inset { .init(anchor: .bottomLeading, x: center.x, y: h - center.y) }
+    func trailing(_ center: CGPoint) -> TouchOverlayPlacement.Inset { .init(anchor: .bottomTrailing, x: w - center.x, y: h - center.y) }
+    func centered(_ center: CGPoint) -> TouchOverlayPlacement.Inset { .init(anchor: .bottomCenter, x: center.x - w / 2, y: h - center.y) }
+  }
+
+  /// Controls laid out left to right, `gap` apart, vertically centred in a row as tall as the
+  /// tallest one. Returns the row's size and each control's frame inside it.
+  private static func row(_ sizes: [CGSize], gap: CGFloat) -> (size: CGSize, frames: [CGRect]) {
+    let height = sizes.map(\.height).max() ?? 0
+    var x: CGFloat = 0
+    var frames: [CGRect] = []
+    for size in sizes {
+      frames.append(CGRect(x: x, y: (height - size.height) / 2, width: size.width, height: size.height))
+      x += size.width + gap
+    }
+    return (CGSize(width: max(0, x - gap), height: height), frames)
+  }
+
+  /// The same, top to bottom, horizontally centred.
+  private static func column(_ sizes: [CGSize], gap: CGFloat) -> (size: CGSize, frames: [CGRect]) {
+    let r = row(sizes.map { CGSize(width: $0.height, height: $0.width) }, gap: gap)
+    return (CGSize(width: r.size.height, height: r.size.width),
+            r.frames.map { CGRect(x: $0.minY, y: $0.minX, width: $0.height, height: $0.width) })
+  }
+
+  private static func group(_ group: TouchOverlayGroup, _ inset: TouchOverlayPlacement.Inset,
+                            size: CGSize, controls: [TouchOverlayControl]) -> TouchOverlayGroupLayout {
+    TouchOverlayGroupLayout(group: group, placement: inset.placement(size: size), controls: controls)
+  }
+
+  // MARK: GameCube
+
   private enum GC {
     static let mainStick: CGFloat = 132
     static let cStick: CGFloat = 100
@@ -123,82 +202,53 @@ enum TouchOverlayDefaults {
     static let shoulder = CGSize(width: 96, height: 44)
     static let z = CGSize(width: 80, height: 44)
     static let start = CGSize(width: 70, height: 44)
-    /// Space between neighbouring controls and groups.
-    static let gap: CGFloat = 8
     /// Space between the face buttons inside their cluster.
     static let faceGap: CGFloat = 6
-    /// Minimum distance from a screen edge, on top of the safe area.
-    static let edge: CGFloat = 8
-    /// Extra lift above the home indicator so the lowest controls don't fight the system swipe.
-    static let bottomGuard: CGFloat = 6
-    /// In landscape the D-pad and C-stick sit beside-and-below the main stick and face buttons
-    /// (the controller's own diagonal); portrait stacks them straight down to fit the width.
-    static let landscapeDiagonal: CGFloat = 70
     /// Tall screens (iPad) keep the controls in a band at the bottom instead of spreading them up
     /// the whole side.
     static let maxBandHeight: CGFloat = 420
-    static let referenceShortSide: CGFloat = 390
-    static let maxScale: CGFloat = 1.35
   }
 
   private static func gameCube(canvas: CGSize, safeArea: UIEdgeInsets,
                                orientation: TouchOverlayOrientation) -> [TouchOverlayGroupLayout] {
-    let w = canvas.width, h = canvas.height
-    let u = min(max(min(w, h) / GC.referenceShortSide, 1), GC.maxScale)
-    let gap = GC.gap * u
-    let stick = GC.mainStick * u, cStick = GC.cStick * u, dpad = GC.dpad * u
-    let shoulder = CGSize(width: GC.shoulder.width * u, height: GC.shoulder.height * u)
-    let zSize = CGSize(width: GC.z.width * u, height: GC.z.height * u)
-    let startSize = CGSize(width: GC.start.width * u, height: GC.start.height * u)
-    let face = gameCubeFaceButtons(scale: u)
-
-    let left = max(safeArea.left, GC.edge) + GC.edge
-    let right = w - max(safeArea.right, GC.edge) - GC.edge
-    let bottom = h - max(safeArea.bottom, GC.edge) - GC.bottomGuard
-    // Portrait: the game is drawn aspect-fit at the top, so the controls start under it.
-    let gameBottom = safeArea.top + (w - safeArea.left - safeArea.right) * 3 / 4
-    let regionTop = orientation == .portrait ? gameBottom + gap : max(safeArea.top, GC.edge) + GC.edge
-    let top = max(regionTop, bottom - GC.maxBandHeight * u)
-    let diagonal = orientation == .landscape ? GC.landscapeDiagonal * u : 0
+    let s = Screen(canvas: canvas, safeArea: safeArea, orientation: orientation)
+    let gap = s.gap, left = s.left, right = s.right, bottom = s.bottom
+    let stick = GC.mainStick * s.u, cStick = GC.cStick * s.u, dpad = GC.dpad * s.u
+    let shoulder = s.size(GC.shoulder), zSize = s.size(GC.z), startSize = s.size(GC.start)
+    let face = gameCubeFaceButtons(scale: s.u)
+    let top = max(s.regionTop, bottom - GC.maxBandHeight * s.u)
 
     // Left hand, bottom up: D-pad, main stick, L.
-    let dpadCenter = CGPoint(x: left + stick / 2 + diagonal, y: bottom - dpad / 2)
+    let dpadCenter = CGPoint(x: left + stick / 2 + s.diagonal, y: bottom - dpad / 2)
     let stickCenter = CGPoint(x: left + stick / 2, y: bottom - dpad - gap - stick / 2)
     let lCenter = CGPoint(x: left + shoulder.width / 2,
                           y: max(top + shoulder.height / 2, stickCenter.y - stick / 2 - gap - shoulder.height / 2))
 
     // Right hand, bottom up: C-stick, face buttons, R over Z.
     let faceCenterX = right - face.size.width / 2
-    let cStickCenter = CGPoint(x: faceCenterX - diagonal, y: bottom - cStick / 2)
+    let cStickCenter = CGPoint(x: faceCenterX - s.diagonal, y: bottom - cStick / 2)
     let faceCenter = CGPoint(x: faceCenterX, y: bottom - cStick - gap - face.size.height / 2)
     let rzSize = CGSize(width: shoulder.width, height: shoulder.height + gap + zSize.height)
     let rzCenter = CGPoint(x: right - rzSize.width / 2,
                            y: max(top + rzSize.height / 2, faceCenter.y - face.size.height / 2 - gap - rzSize.height / 2))
 
-    let startCenter = CGPoint(x: w / 2, y: bottom - startSize.height / 2)
-
-    func leading(_ center: CGPoint) -> TouchOverlayPlacement.Inset { .init(anchor: .bottomLeading, x: center.x, y: h - center.y) }
-    func trailing(_ center: CGPoint) -> TouchOverlayPlacement.Inset { .init(anchor: .bottomTrailing, x: w - center.x, y: h - center.y) }
+    let startCenter = CGPoint(x: s.w / 2, y: bottom - startSize.height / 2)
 
     return [
-      single(.gcMainStick, leading(stickCenter), size: CGSize(width: stick, height: stick),
+      single(.gcMainStick, s.leading(stickCenter), size: CGSize(width: stick, height: stick),
              kind: .stick(baseId: ID.gcMainStick), id: "gc.mainStick"),
-      single(.gcDpad, leading(dpadCenter), size: CGSize(width: dpad, height: dpad),
+      single(.gcDpad, s.leading(dpadCenter), size: CGSize(width: dpad, height: dpad),
              kind: .dpad(baseId: ID.gcDpadUp), id: "gc.dpad"),
-      single(.gcCStick, trailing(cStickCenter), size: CGSize(width: cStick, height: cStick),
+      single(.gcCStick, s.trailing(cStickCenter), size: CGSize(width: cStick, height: cStick),
              kind: .stick(baseId: ID.gcCStick), id: "gc.cStick"),
-      TouchOverlayGroupLayout(group: .gcFaceButtons, placement: trailing(faceCenter).placement(size: face.size),
-                              controls: face.controls),
-      TouchOverlayGroupLayout(group: .gcLeftShoulder, placement: leading(lCenter).placement(size: shoulder),
-                              controls: [axisButton("gc.l", ID.gcTriggerL, 0, 0, size: shoulder)]),
-      TouchOverlayGroupLayout(
-        group: .gcRightShoulder, placement: trailing(rzCenter).placement(size: rzSize),
-        controls: [axisButton("gc.r", ID.gcTriggerR, 0, 0, size: shoulder),
-                   button("gc.z", ID.gcZ, (shoulder.width - zSize.width) / 2, shoulder.height + gap, size: zSize)]),
-      TouchOverlayGroupLayout(group: .gcStart,
-                              placement: TouchOverlayPlacement(.bottomCenter, inset: CGPoint(x: startCenter.x - w / 2, y: h - startCenter.y),
-                                                               size: startSize),
-                              controls: [button("gc.start", ID.gcStart, 0, 0, size: startSize)]),
+      group(.gcFaceButtons, s.trailing(faceCenter), size: face.size, controls: face.controls),
+      group(.gcLeftShoulder, s.leading(lCenter), size: shoulder,
+            controls: [axisButton("gc.l", ID.gcTriggerL, 0, 0, size: shoulder)]),
+      group(.gcRightShoulder, s.trailing(rzCenter), size: rzSize,
+            controls: [axisButton("gc.r", ID.gcTriggerR, 0, 0, size: shoulder),
+                       button("gc.z", ID.gcZ, (shoulder.width - zSize.width) / 2, shoulder.height + gap, size: zSize)]),
+      group(.gcStart, s.centered(startCenter), size: startSize,
+            controls: [button("gc.start", ID.gcStart, 0, 0, size: startSize)]),
     ]
   }
 
@@ -229,43 +279,70 @@ enum TouchOverlayDefaults {
     return (CGSize(width: maxX - minX, height: maxY - minY), controls)
   }
 
-  // MARK: Wii Remote + Nunchuk, upright (375x667)
+  // MARK: Wii Remote + Nunchuk, upright
 
-  private static let wiiRemote: [TouchOverlayGroupLayout] = [
-    // DPad (0,401,128,128): centre (64,465) -> 202 up from the bottom.
-    single(.wiiDpad, .bottomLeading, inset: CGPoint(x: 64, y: 202), size: stick,
-           kind: .dpad(baseId: ID.wiiDpadUp), id: "wii.dpad"),
-    // LeftStick (0,539,128,128): centre (64,603).
-    single(.nunchukStick, .bottomLeading, inset: CGPoint(x: 64, y: 64), size: stick,
-           kind: .stick(baseId: ID.nunchukStick), id: "nunchuk.stick"),
-    // B (309,527) above A (309,597): union (309,527)-(355,627) = 46x100, centre (332,577).
-    TouchOverlayGroupLayout(
-      group: .wiiAB,
-      placement: TouchOverlayPlacement(.bottomTrailing, inset: CGPoint(x: 43, y: 90), size: CGSize(width: 46, height: 100)),
-      controls: [button("wii.b", ID.wiiB, 0, 0), button("wii.a", ID.wiiA, 0, 70)]),
-    // One (248,572) above Two (248,622): union (248,572)-(294,652) = 46x80, centre (271,612).
-    TouchOverlayGroupLayout(
-      group: .wiiOneTwo,
-      placement: TouchOverlayPlacement(.bottomTrailing, inset: CGPoint(x: 104, y: 55), size: CGSize(width: 46, height: 80)),
-      controls: [button("wii.one", ID.wiiOne, 0, 0), button("wii.two", ID.wiiTwo, 0, 50)]),
-    // HOME (187,477), Minus (248,522), Plus (187,552): union (187,477)-(294,582) = 107x105, centre (240.5,529.5).
-    TouchOverlayGroupLayout(
-      group: .wiiMinusPlusHome,
-      placement: TouchOverlayPlacement(.bottomTrailing, inset: CGPoint(x: 134.5, y: 137.5), size: CGSize(width: 107, height: 105)),
-      controls: [button("wii.home", ID.wiiHome, 0, 0), button("wii.minus", ID.wiiMinus, 61, 45), button("wii.plus", ID.wiiPlus, 0, 75)]),
-    // C (187,597,46,30): centre (210,612).
-    single(.nunchukC, .bottomTrailing, inset: CGPoint(x: 165, y: 55), size: smallButton,
-           kind: .button(id: ID.nunchukC), id: "nunchuk.c"),
-    // Z (309,477,46,30): centre (332,492).
-    single(.nunchukZ, .bottomTrailing, inset: CGPoint(x: 43, y: 175), size: smallButton,
-           kind: .button(id: ID.nunchukZ), id: "nunchuk.z"),
-    // The drag/follow surface (phase 3): the whole pad inset by `irPadMargin`, movable/resizable
-    // like any other group (§2.4) instead of the phase-2 placeholder's literal full bounds.
-    TouchOverlayGroupLayout(
-      group: .wiiIRPad,
-      placement: TouchOverlayPlacement(.fillInset, margin: irPadMargin),
-      controls: [TouchOverlayControl(id: "wii.ir", kind: .irSurface, frame: .zero)]),
-  ]
+  private enum WiiRemote {
+    static let nunchukStick: CGFloat = 132
+    static let dpad: CGFloat = 104
+    static let a: CGFloat = 72
+    static let b: CGFloat = 56
+    /// 1, 2 and the Nunchuk's C.
+    static let small: CGFloat = 48
+    static let z = CGSize(width: 80, height: 44)
+  }
+
+  /// Left hand: the Nunchuk stick at rest, the D-pad above it, Z and C above that. Right hand: A
+  /// with B above it, 1 over 2 beside them, and −/HOME/+ in a row on top. The IR pointer surface
+  /// covers the rest of the pad, under everything.
+  private static func wiiRemote(canvas: CGSize, safeArea: UIEdgeInsets,
+                                orientation: TouchOverlayOrientation) -> [TouchOverlayGroupLayout] {
+    let s = Screen(canvas: canvas, safeArea: safeArea, orientation: orientation)
+    let gap = s.gap
+    let stick = WiiRemote.nunchukStick * s.u, dpad = WiiRemote.dpad * s.u
+    let zSize = s.size(WiiRemote.z), cSize = s.size(WiiRemote.small)
+
+    let stickCenter = CGPoint(x: s.left + stick / 2 + s.diagonal, y: s.bottom - stick / 2)
+    let dpadCenter = CGPoint(x: s.left + dpad / 2, y: s.bottom - stick - gap - dpad / 2)
+    let zcY = s.bottom - stick - gap - dpad - gap - zSize.height / 2
+    let zCenter = CGPoint(x: s.left + zSize.width / 2, y: zcY)
+    let cCenter = CGPoint(x: s.left + zSize.width + gap + cSize.width / 2, y: zcY)
+
+    let ab = column([s.size(WiiRemote.b), s.size(WiiRemote.a)], gap: gap)
+    let oneTwo = column([s.size(WiiRemote.small), s.size(WiiRemote.small)], gap: gap)
+    let system = row(Array(repeating: s.size(Spacing.systemButton), count: 3), gap: gap)
+    let abCenter = CGPoint(x: s.right - ab.size.width / 2, y: s.bottom - ab.size.height / 2)
+    let oneTwoCenter = CGPoint(x: s.right - ab.size.width - gap - oneTwo.size.width / 2, y: s.bottom - oneTwo.size.height / 2)
+    let systemCenter = CGPoint(x: s.right - system.size.width / 2,
+                               y: s.bottom - max(ab.size.height, oneTwo.size.height) - gap - system.size.height / 2)
+
+    return [
+      single(.nunchukStick, s.leading(stickCenter), size: CGSize(width: stick, height: stick),
+             kind: .stick(baseId: ID.nunchukStick), id: "nunchuk.stick"),
+      single(.wiiDpad, s.leading(dpadCenter), size: CGSize(width: dpad, height: dpad),
+             kind: .dpad(baseId: ID.wiiDpadUp), id: "wii.dpad"),
+      single(.nunchukZ, s.leading(zCenter), size: zSize, kind: .button(id: ID.nunchukZ), id: "nunchuk.z"),
+      single(.nunchukC, s.leading(cCenter), size: cSize, kind: .button(id: ID.nunchukC), id: "nunchuk.c"),
+      group(.wiiAB, s.trailing(abCenter), size: ab.size, controls: [
+        TouchOverlayControl(id: "wii.b", kind: .button(id: ID.wiiB), frame: ab.frames[0]),
+        TouchOverlayControl(id: "wii.a", kind: .button(id: ID.wiiA), frame: ab.frames[1]),
+      ]),
+      group(.wiiOneTwo, s.trailing(oneTwoCenter), size: oneTwo.size, controls: [
+        TouchOverlayControl(id: "wii.one", kind: .button(id: ID.wiiOne), frame: oneTwo.frames[0]),
+        TouchOverlayControl(id: "wii.two", kind: .button(id: ID.wiiTwo), frame: oneTwo.frames[1]),
+      ]),
+      group(.wiiMinusPlusHome, s.trailing(systemCenter), size: system.size, controls: [
+        TouchOverlayControl(id: "wii.minus", kind: .button(id: ID.wiiMinus), frame: system.frames[0]),
+        TouchOverlayControl(id: "wii.home", kind: .button(id: ID.wiiHome), frame: system.frames[1]),
+        TouchOverlayControl(id: "wii.plus", kind: .button(id: ID.wiiPlus), frame: system.frames[2]),
+      ]),
+      // The drag/follow surface (phase 3): the whole pad inset by `irPadMargin`, movable/resizable
+      // like any other group (§2.4) instead of the phase-2 placeholder's literal full bounds.
+      TouchOverlayGroupLayout(
+        group: .wiiIRPad,
+        placement: TouchOverlayPlacement(.fillInset, margin: irPadMargin),
+        controls: [TouchOverlayControl(id: "wii.ir", kind: .irSurface, frame: .zero)]),
+    ]
+  }
 
   // MARK: Wii Remote sideways (768x1024)
 
@@ -293,48 +370,87 @@ enum TouchOverlayDefaults {
            kind: .button(id: ID.wiiHome), id: "wii.home"),
   ]
 
-  // MARK: Wii Remote + Classic Controller (375x667)
+  // MARK: Wii Remote + Classic Controller
 
-  private static let wiiClassic: [TouchOverlayGroupLayout] = [
-    // ZL (16,302,77,77) above L (16,352,77,77): union (16,302)-(93,429) = 77x127, centre (54.5,365.5).
-    TouchOverlayGroupLayout(
-      group: .classicLeftShoulder,
-      placement: TouchOverlayPlacement(.bottomLeading, inset: CGPoint(x: 54.5, y: 301.5), size: CGSize(width: 77, height: 127)),
-      controls: [button("classic.zl", ID.classicZL, 0, 0, size: CGSize(width: 77, height: 77)),
-                 axisButton("classic.l", ID.classicTriggerL, 0, 50, size: CGSize(width: 77, height: 77))]),
-    // ZR (282,302) above R (282,352): centre (320.5,365.5).
-    TouchOverlayGroupLayout(
-      group: .classicRightShoulder,
-      placement: TouchOverlayPlacement(.bottomTrailing, inset: CGPoint(x: 54.5, y: 301.5), size: CGSize(width: 77, height: 127)),
-      controls: [button("classic.zr", ID.classicZR, 0, 0, size: CGSize(width: 77, height: 77)),
-                 axisButton("classic.r", ID.classicTriggerR, 0, 50, size: CGSize(width: 77, height: 77))]),
-    // DPad (22.5,435,115,115): centre (80,492.5).
-    single(.classicDpad, .bottomLeading, inset: CGPoint(x: 80, y: 174.5), size: CGSize(width: 115, height: 115),
-           kind: .dpad(baseId: ID.classicDpadUp), id: "classic.dpad"),
-    // X (269.5,434) Y (228,471) A (311,471) B (269.5,508), all 43x43: union (228,434)-(354,551) = 126x117, centre (291,492.5).
-    TouchOverlayGroupLayout(
-      group: .classicFaceButtons,
-      placement: TouchOverlayPlacement(.bottomTrailing, inset: CGPoint(x: 84, y: 174.5), size: CGSize(width: 126, height: 117)),
-      controls: [
-        button("classic.x", ID.classicX, 41.5, 0, size: CGSize(width: 43, height: 43)),
-        button("classic.y", ID.classicY, 0, 37, size: CGSize(width: 43, height: 43)),
-        button("classic.a", ID.classicA, 83, 37, size: CGSize(width: 43, height: 43)),
-        button("classic.b", ID.classicB, 41.5, 74, size: CGSize(width: 43, height: 43)),
+  private enum Classic {
+    static let stick: CGFloat = 124
+    static let dpad: CGFloat = 104
+    static let face: CGFloat = 48
+    /// Centre-to-centre distance from the middle of the diamond to each face button.
+    static let faceSpacing: CGFloat = 52
+    static let shoulder = CGSize(width: 64, height: 44)
+    static let shoulderGap: CGFloat = 6
+  }
+
+  /// Laid out like the controller: D-pad over the left stick (which sits inward in landscape), the
+  /// face-button diamond over the right stick, L/ZL and ZR/R side by side above them, and −/HOME/+
+  /// between the sticks in landscape or above everything in portrait. On a short portrait screen
+  /// (iPhone SE) the top row may sit over the bottom of the game picture.
+  private static func wiiClassic(canvas: CGSize, safeArea: UIEdgeInsets,
+                                 orientation: TouchOverlayOrientation) -> [TouchOverlayGroupLayout] {
+    let s = Screen(canvas: canvas, safeArea: safeArea, orientation: orientation)
+    let gap = s.gap
+    let stick = Classic.stick * s.u, dpad = Classic.dpad * s.u
+    let shoulder = s.size(Classic.shoulder)
+    let shoulders = row([shoulder, shoulder], gap: Classic.shoulderGap * s.u)
+    let system = row(Array(repeating: s.size(Spacing.systemButton), count: 3), gap: gap)
+    let diamond = classicFaceButtons(scale: s.u)
+
+    // Left: stick at rest, D-pad above, L | ZL above that.
+    let leftStickCenter = CGPoint(x: s.left + stick / 2 + s.diagonal, y: s.bottom - stick / 2)
+    let dpadCenter = CGPoint(x: s.left + dpad / 2, y: s.bottom - stick - gap - dpad / 2)
+    let leftShoulderTop = s.bottom - stick - gap - dpad - gap - shoulders.size.height
+    let leftShoulderCenter = CGPoint(x: s.left + shoulders.size.width / 2, y: leftShoulderTop + shoulders.size.height / 2)
+
+    // Right: stick at rest, face diamond above, ZR | R above that.
+    let rightStickCenter = CGPoint(x: s.right - stick / 2 - s.diagonal, y: s.bottom - stick / 2)
+    let diamondCenter = CGPoint(x: s.right - diamond.size.width / 2, y: s.bottom - stick - gap - diamond.size.height / 2)
+    let rightShoulderTop = s.bottom - stick - gap - diamond.size.height - gap - shoulders.size.height
+    let rightShoulderCenter = CGPoint(x: s.right - shoulders.size.width / 2, y: rightShoulderTop + shoulders.size.height / 2)
+
+    // Landscape has room between the sticks; portrait doesn't, so the row goes on top.
+    let systemCenter = orientation == .landscape
+      ? CGPoint(x: s.w / 2, y: s.bottom - system.size.height / 2)
+      : CGPoint(x: s.w / 2, y: min(leftShoulderTop, rightShoulderTop) - gap - system.size.height / 2)
+
+    return [
+      single(.classicLeftStick, s.leading(leftStickCenter), size: CGSize(width: stick, height: stick),
+             kind: .stick(baseId: ID.classicLeftStick), id: "classic.leftStick"),
+      single(.classicRightStick, s.trailing(rightStickCenter), size: CGSize(width: stick, height: stick),
+             kind: .stick(baseId: ID.classicRightStick), id: "classic.rightStick"),
+      single(.classicDpad, s.leading(dpadCenter), size: CGSize(width: dpad, height: dpad),
+             kind: .dpad(baseId: ID.classicDpadUp), id: "classic.dpad"),
+      group(.classicFaceButtons, s.trailing(diamondCenter), size: diamond.size, controls: diamond.controls),
+      group(.classicLeftShoulder, s.leading(leftShoulderCenter), size: shoulders.size, controls: [
+        axisButton("classic.l", ID.classicTriggerL, shoulders.frames[0].minX, 0, size: shoulder),
+        button("classic.zl", ID.classicZL, shoulders.frames[1].minX, 0, size: shoulder),
       ]),
-    // LeftStick (16,543,128,128): centre (80,607). RightStick (227,543,128,128): centre (291,607).
-    single(.classicLeftStick, .bottomLeading, inset: CGPoint(x: 80, y: 60), size: stick,
-           kind: .stick(baseId: ID.classicLeftStick), id: "classic.leftStick"),
-    single(.classicRightStick, .bottomTrailing, inset: CGPoint(x: 84, y: 60), size: stick,
-           kind: .stick(baseId: ID.classicRightStick), id: "classic.rightStick"),
-    // Minus (137.5,639,26) HOME (171.5,636,32) Plus (211.5,639,26): union (137.5,636)-(237.5,668) = 100x32, centre (187.5,652).
-    TouchOverlayGroupLayout(
-      group: .classicMinusPlusHome,
-      placement: TouchOverlayPlacement(.bottomCenter, inset: CGPoint(x: 0, y: 15), size: CGSize(width: 100, height: 32)),
-      controls: [
-        button("classic.minus", ID.classicMinus, 0, 3, size: CGSize(width: 26, height: 26)),
-        button("classic.home", ID.classicHome, 34, 0, size: CGSize(width: 32, height: 32)),
-        button("classic.plus", ID.classicPlus, 74, 3, size: CGSize(width: 26, height: 26)),
+      group(.classicRightShoulder, s.trailing(rightShoulderCenter), size: shoulders.size, controls: [
+        button("classic.zr", ID.classicZR, shoulders.frames[0].minX, 0, size: shoulder),
+        axisButton("classic.r", ID.classicTriggerR, shoulders.frames[1].minX, 0, size: shoulder),
       ]),
-  ]
+      group(.classicMinusPlusHome, s.centered(systemCenter), size: system.size, controls: [
+        TouchOverlayControl(id: "classic.minus", kind: .button(id: ID.classicMinus), frame: system.frames[0]),
+        TouchOverlayControl(id: "classic.home", kind: .button(id: ID.classicHome), frame: system.frames[1]),
+        TouchOverlayControl(id: "classic.plus", kind: .button(id: ID.classicPlus), frame: system.frames[2]),
+      ]),
+    ]
+  }
+
+  /// X top, Y left, A right, B bottom, as on the Classic Controller.
+  private static func classicFaceButtons(scale u: CGFloat) -> (size: CGSize, controls: [TouchOverlayControl]) {
+    let side = Classic.face * u, d = Classic.faceSpacing * u
+    let center = d + side / 2
+    func frame(_ dx: CGFloat, _ dy: CGFloat) -> CGRect {
+      CGRect(x: center + dx - side / 2, y: center + dy - side / 2, width: side, height: side)
+    }
+    let controls = [
+      TouchOverlayControl(id: "classic.x", kind: .button(id: ID.classicX), frame: frame(0, -d)),
+      TouchOverlayControl(id: "classic.y", kind: .button(id: ID.classicY), frame: frame(-d, 0)),
+      TouchOverlayControl(id: "classic.a", kind: .button(id: ID.classicA), frame: frame(d, 0)),
+      TouchOverlayControl(id: "classic.b", kind: .button(id: ID.classicB), frame: frame(0, d)),
+    ]
+    return (CGSize(width: center * 2, height: center * 2), controls)
+  }
 }
 #endif
