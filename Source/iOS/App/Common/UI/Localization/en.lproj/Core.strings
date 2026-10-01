@@ -4696,3 +4696,12 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Nunchuk Swing" = "Nunchuk Swing";
 "Nunchuk Tilt" = "Nunchuk Tilt";
 "On · 1 server" = "On · 1 server";
+"Imported skin %@" = "Imported skin %@";
+"Couldn't import skin: %@" = "Couldn't import skin: %@";
+"the file is not a skin archive" = "the file is not a skin archive";
+"the skin has no readable info.json" = "the skin has no readable info.json";
+"unsupported game type %@" = "unsupported game type %@";
+"the skin has no usable layout" = "the skin has no usable layout";
+"the skin's identifier is not valid" = "the skin's identifier is not valid";
+"the archive contains files that are not safe to unpack" = "the archive contains files that are not safe to unpack";
+"New On‑Screen Controller (Beta)" = "New On‑Screen Controller (Beta)";

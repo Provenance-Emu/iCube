@@ -118,6 +118,33 @@ final class SkinLibraryTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: scratch.appendingPathComponent("escape").path))
   }
 
+  func testZipSlipArchiveIsRefusedBeforeAnythingIsWritten() throws {
+    let library = SkinLibrary(rootURL: root)
+    // The unzip destination is two folders below the temporary directory, so this would land beside them.
+    let escapeName = "SkinLibraryTests-escape-\(UUID().uuidString).txt"
+    let escaped = FileManager.default.temporaryDirectory.appendingPathComponent(escapeName)
+    defer { try? FileManager.default.removeItem(at: escaped) }
+    let hostile = scratch.appendingPathComponent("hostile.deltaskin")
+    try TestZipBuilder.build([
+      .init(name: "../../\(escapeName)", contents: Data("owned".utf8)),
+      .init(name: "info.json", contents: Data("{}".utf8))
+    ]).write(to: hostile)
+    XCTAssertThrowsError(try library.importSkin(from: hostile)) {
+      XCTAssertEqual($0 as? SkinImportError, .unsafeArchive)
+    }
+    XCTAssertFalse(FileManager.default.fileExists(atPath: escaped.path))
+    XCTAssertTrue(library.skins.isEmpty)
+    XCTAssertEqual(installedFolderNames(), [])
+  }
+
+  func testReservedSelectionFileNameIsRefusedInAnyCase() throws {
+    let library = SkinLibrary(rootURL: root)
+    let archive = try makeArchive(identifier: "Selection.JSON")
+    XCTAssertThrowsError(try library.importSkin(from: archive)) {
+      XCTAssertEqual($0 as? SkinImportError, .invalidIdentifier)
+    }
+  }
+
   func testSelectionRoundTripsThroughFreshLibrary() throws {
     let library = SkinLibrary(rootURL: root)
     let skin = try library.importSkin(from: makeArchive())

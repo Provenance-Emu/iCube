@@ -25,6 +25,8 @@ enum SkinImportError: Error, Equatable {
   case noUsableLayout
   /// The skin's identifier cannot be used as a folder name.
   case invalidIdentifier
+  /// The archive holds an entry that would write outside the extraction folder, or a symbolic link.
+  case unsafeArchive
 
   /// A short sentence for the player; any other error falls back to its own description.
   static func describe(_ error: Error) -> String {
@@ -34,6 +36,7 @@ enum SkinImportError: Error, Equatable {
     case .unsupportedGameType(let identifier): return String(format: L("unsupported game type %@"), identifier)
     case .noUsableLayout: return L("the skin has no usable layout")
     case .invalidIdentifier: return L("the skin's identifier is not valid")
+    case .unsafeArchive: return L("the archive contains files that are not safe to unpack")
     case nil: return error.localizedDescription
     }
   }
@@ -91,7 +94,11 @@ final class SkinLibrary: ObservableObject {
       // Zip only opens `.zip` / `.cbz`, and skins arrive as `.deltaskin` / `.manicskin`, so unpack a renamed copy.
       let zipCopy = staging.appendingPathComponent(Self.stagingArchiveName)
       try fileManager.copyItem(at: archive, to: zipCopy)
+      // Zip does not reject entries like `../../x`, so vet the entry list before anything is written.
+      _ = try ZipEntryScanner.scan(fileAt: zipCopy)
       try Zip.unzipFile(zipCopy, destination: extracted, overwrite: true, password: nil)
+    } catch ZipEntryScannerError.unsafeEntry {
+      throw SkinImportError.unsafeArchive
     } catch {
       throw SkinImportError.unreadableArchive
     }
@@ -179,7 +186,7 @@ final class SkinLibrary: ObservableObject {
 
   /// An identifier becomes a folder name, so it must not be able to climb out of the library or hide.
   private static func isUsableFolderName(_ name: String) -> Bool {
-    !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && name != selectionFileName
+    !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && name.lowercased() != selectionFileName
   }
 
   private static func scan(_ root: URL) -> [InstalledSkin] {

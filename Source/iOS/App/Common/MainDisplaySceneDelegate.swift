@@ -40,8 +40,8 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       // Cold launch from a URL (Top Shelf tile, dolphinios:// link). Give the library
       // view time to mount its DOLLaunchGameByGameID observer, same delay as shortcuts.
       if let context = connectionOptions.urlContexts.first {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-          _ = ServiceManager.shared.open(url: context.url, options: [:])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+          self?.handleOpenedURL(context.url)
         }
       }
       #if !os(tvOS)
@@ -65,14 +65,19 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
     for context in URLContexts {
-      #if os(iOS)
-      if SkinLibrary.isSkinArchive(context.url) {
-        importSkin(from: context.url)
-        continue
-      }
-      #endif
-      _ = ServiceManager.shared.open(url: context.url, options: [:])
+      handleOpenedURL(context.url)
     }
+  }
+
+  /// One entry point for URLs opened warm (`openURLContexts`) and cold (`willConnectTo`).
+  private func handleOpenedURL(_ url: URL) {
+    #if os(iOS)
+    if SkinLibrary.isSkinArchive(url) {
+      importSkin(from: url)
+      return
+    }
+    #endif
+    _ = ServiceManager.shared.open(url: url, options: [:])
   }
 
   #if os(iOS)
