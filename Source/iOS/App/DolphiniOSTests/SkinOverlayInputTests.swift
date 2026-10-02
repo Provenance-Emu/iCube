@@ -235,5 +235,46 @@ final class SkinOverlayInputTests: XCTestCase {
     XCTAssertEqual(SkinOverlayInput.representation(info: both, isPad: false, orientation: .portrait)?.mappingSize, CGSize(width: 100, height: 200))
     XCTAssertNil(SkinOverlayInput.representation(info: both, isPad: false, orientation: .landscape))
   }
+
+  // MARK: Wii pointer surface
+
+  /// A 1:1 layout with a game screen at (0, 100) sized 400x300, so frames are also canvas coordinates.
+  private func pointerInput(_ items: [SkinItem], padKind: TouchOverlayPadKind, screen: CGRect? = CGRect(x: 0, y: 100, width: 400, height: 300)) -> SkinOverlayInput {
+    let rep = SkinRepresentation(mappingSize: Self.mappingSize, items: items, screens: screen.map { [SkinScreen(outputFrame: $0)] } ?? [],
+                                 background: nil, translucent: false, extendedEdges: .zero)
+    return SkinOverlayInput(layout: SkinLayout.make(rep, canvas: Self.mappingSize), padKind: padKind)
+  }
+
+  func testWiiRemoteSkinsGetAPointerSurfaceOverTheGameScreen() throws {
+    for kind in [TouchOverlayPadKind.wiiRemote, .wiiRemoteSideways] {
+      let surface = try XCTUnwrap(pointerInput([], padKind: kind).pointerSurface())
+      XCTAssertEqual(surface.frame, CGRect(x: 0, y: 100, width: 400, height: 300))
+      XCTAssertEqual(surface.excludedFrames, [])
+    }
+  }
+
+  func testPadsWithoutAPointerGetNoSurface() {
+    XCTAssertNil(pointerInput([], padKind: .gameCube).pointerSurface())
+    XCTAssertNil(pointerInput([], padKind: .wiiClassic).pointerSurface())
+  }
+
+  func testPointerSurfaceFallsBackToTheWholeSkinWithoutAGameScreen() throws {
+    let surface = try XCTUnwrap(pointerInput([], padKind: .wiiRemote, screen: nil).pointerSurface())
+    XCTAssertEqual(surface.frame, CGRect(origin: .zero, size: Self.mappingSize))
+  }
+
+  func testPointerSurfaceExcludesItemHitFramesInItsOwnCoordinates() throws {
+    let overlapping = item(.buttons(["a"]), CGRect(x: 100, y: 200, width: 40, height: 40), edges: UIEdgeInsets(top: 0, left: 10, bottom: 0, right: 10))
+    let stick = item(.directional(up: "leftThumbstickUp", down: "leftThumbstickDown", left: "leftThumbstickLeft", right: "leftThumbstickRight"),
+                     CGRect(x: 200, y: 250, width: 100, height: 100))
+    let menu = item(.buttons(["menu"]), CGRect(x: 0, y: 110, width: 30, height: 30))
+    let below = item(.buttons(["b"]), CGRect(x: 100, y: 600, width: 40, height: 40))
+    let unknown = item(.buttons(["nonsense"]), CGRect(x: 300, y: 110, width: 30, height: 30))
+    let surface = try XCTUnwrap(pointerInput([overlapping, stick, menu, below, unknown], padKind: .wiiRemote).pointerSurface())
+    XCTAssertEqual(surface.excludedFrames, [CGRect(x: 90, y: 100, width: 60, height: 40),
+                                            CGRect(x: 200, y: 150, width: 100, height: 100),
+                                            CGRect(x: 0, y: 10, width: 30, height: 30)],
+                   "buttons, sticks and app actions are cut out; items outside the area or with unknown inputs are not")
+  }
 }
 #endif

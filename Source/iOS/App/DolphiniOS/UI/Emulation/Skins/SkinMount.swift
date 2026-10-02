@@ -124,7 +124,7 @@ struct HostedOverlayRoot: View {
     case .programmatic:
       TouchOverlayView(padKind: padKind, deviceId: deviceId, irMode: irMode)
     case .skin(let skin):
-      SkinOverlayView(skin: skin, padKind: padKind, deviceId: deviceId, onAction: SkinActionNotification.post)
+      SkinOverlayView(skin: skin, padKind: padKind, deviceId: deviceId, irMode: irMode, onAction: SkinActionNotification.post)
     }
   }
 }

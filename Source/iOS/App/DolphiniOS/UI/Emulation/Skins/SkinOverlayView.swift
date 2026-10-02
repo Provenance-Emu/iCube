@@ -15,21 +15,24 @@ struct SkinOverlayView: View {
   let padKind: TouchOverlayPadKind
   /// The Touchscreen device id, never the player slot (the same rule as `TouchOverlayView`).
   let deviceId: Int
+  /// The Wii IR pointer mode (`TCWiiTouchIRMode` raw value); only a Wii Remote skin uses it.
+  let irMode: Int
   /// Set only by the DEBUG gallery: the device bucket being previewed. A preview ignores the live safe area.
   let previewDevice: SkinDevice?
   let onAction: (SkinAction) -> Void
 
-  init(skin: InstalledSkin, padKind: TouchOverlayPadKind, deviceId: Int, previewDevice: SkinDevice? = nil,
-       onAction: @escaping (SkinAction) -> Void) {
+  init(skin: InstalledSkin, padKind: TouchOverlayPadKind, deviceId: Int, irMode: Int = TCWiiTouchIRMode.none.rawValue,
+       previewDevice: SkinDevice? = nil, onAction: @escaping (SkinAction) -> Void) {
     self.skin = skin
     self.padKind = padKind
     self.deviceId = deviceId
+    self.irMode = irMode
     self.previewDevice = previewDevice
     self.onAction = onAction
   }
 
   var body: some View {
-    SkinOverlayContent(skin: skin, padKind: padKind, deviceId: deviceId, previewDevice: previewDevice, onAction: onAction)
+    SkinOverlayContent(skin: skin, padKind: padKind, deviceId: deviceId, irMode: irMode, previewDevice: previewDevice, onAction: onAction)
       .id(ContentIdentity(skinID: skin.id, directory: skin.directory, padKind: padKind))
   }
 }
@@ -44,17 +47,19 @@ private struct SkinOverlayContent: View {
   let skin: InstalledSkin
   let padKind: TouchOverlayPadKind
   let deviceId: Int
+  let irMode: Int
   let previewDevice: SkinDevice?
   let onAction: (SkinAction) -> Void
 
   @StateObject private var infoBox: SkinInfoBox
   @Environment(\.displayScale) private var displayScale
 
-  init(skin: InstalledSkin, padKind: TouchOverlayPadKind, deviceId: Int, previewDevice: SkinDevice?,
+  init(skin: InstalledSkin, padKind: TouchOverlayPadKind, deviceId: Int, irMode: Int, previewDevice: SkinDevice?,
        onAction: @escaping (SkinAction) -> Void) {
     self.skin = skin
     self.padKind = padKind
     self.deviceId = deviceId
+    self.irMode = irMode
     self.previewDevice = previewDevice
     self.onAction = onAction
     _infoBox = StateObject(wrappedValue: SkinInfoBox(directory: skin.directory))
@@ -82,12 +87,20 @@ private struct SkinOverlayContent: View {
                          controlOpacity: opacity, onAction: onAction)
             // A new layout (rotation, resize) starts with nothing pressed; the old layer releases what it held.
             .id(LayoutIdentity(canvas: canvas, orientation: orientation, skinID: skin.id, padKind: padKind))
+          // Only a real game has a pointer: a preview (the gallery, the picker's thumbnails) never mounts it, nor does a
+          // pointer mode of "none" (the gyro pointer drives the axes itself).
+          if previewDevice == nil, pointerMode != .none, let pointer = input.pointerSurface() {
+            SkinPointerLayer(surface: pointer, deviceId: deviceId, mode: pointerMode)
+              .id(LayoutIdentity(canvas: canvas, orientation: orientation, skinID: skin.id, padKind: padKind))
+          }
         }
         .frame(width: canvas.width, height: canvas.height, alignment: .topLeading)
         .offset(x: -insets.leading, y: -insets.top)
       }
     }
   }
+
+  private var pointerMode: TCWiiTouchIRMode { TCWiiTouchIRMode(rawValue: irMode) ?? .none }
 
   private var isPad: Bool {
     switch previewDevice {
@@ -213,6 +226,24 @@ private struct SkinTouchLayer: View {
     }
     // Like `TouchOverlayDPadView`: once per press, not on every direction or button change while held.
     if previous.isEmpty, !now.isEmpty { hapticGenerator.impactOccurred() }
+  }
+}
+
+/// The Wii Remote's touch pointer over a skin's game screen: the Swift-drawn overlay's own IR surface, with the skin's
+/// items cut out so a touch that starts on one reaches the item. It sits above the button surface (which covers the whole
+/// skin) and below the sticks.
+private struct SkinPointerLayer: View {
+  let surface: SkinOverlayInput.PointerSurface
+  let deviceId: Int
+  let mode: TCWiiTouchIRMode
+
+  var body: some View {
+    TouchOverlayIRPadView(mode: mode, deviceId: deviceId,
+                          excludedFrames: surface.excludedFrames, isEditing: false,
+                          dragGain: TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()),
+                          passesThroughExcludedFrames: true)
+      .frame(width: surface.frame.width, height: surface.frame.height)
+      .position(x: surface.frame.midX, y: surface.frame.midY)
   }
 }
 

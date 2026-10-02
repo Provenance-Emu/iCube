@@ -91,9 +91,13 @@ struct SkinOverlayInput {
 
   private let items: [LayoutItem]
   private let controls: [Control?]
+  private let padKind: TouchOverlayPadKind
+  private let pointerArea: CGRect
   let sticks: [Stick]
 
   init(layout: SkinLayout, padKind: TouchOverlayPadKind) {
+    self.padKind = padKind
+    pointerArea = layout.gameRect.flatMap { $0.isEmpty ? nil : $0 } ?? layout.skinRect
     items = layout.items
     controls = layout.items.map { Self.resolve($0.item, padKind: padKind) }
     sticks = zip(layout.items, controls).enumerated().compactMap { index, pair in
@@ -104,6 +108,28 @@ struct SkinOverlayInput {
       return Stick(itemIndex: index, baseId: baseId, drawFrame: entry.drawFrame, hitFrame: entry.hitFrame,
                    knobName: entry.item.thumbstick?.name, thumbSize: thumbSize)
     }
+  }
+
+  // MARK: Pointer
+
+  /// The Wii IR pointer's touch surface: where it sits on the skin, and the regions inside it that belong to skin items.
+  struct PointerSurface: Equatable {
+    /// In the skin's canvas coordinates.
+    let frame: CGRect
+    /// Item hit frames, in `frame`-local coordinates (the surface reports touches in its own space).
+    let excludedFrames: [CGRect]
+  }
+
+  /// A Wii Remote skin keeps the touch pointer: a surface over the skin's game screen (the whole skin when it declares
+  /// none), which hands touches that start on one of its items to the item. `nil` for pads that have no pointer, and
+  /// when there is no area to put it on.
+  func pointerSurface() -> PointerSurface? {
+    guard padKind == .wiiRemote || padKind == .wiiRemoteSideways, !pointerArea.isEmpty else { return nil }
+    let excluded = zip(items, controls).compactMap { entry, control -> CGRect? in
+      guard control != nil, entry.hitFrame.intersects(pointerArea) else { return nil }
+      return entry.hitFrame.offsetBy(dx: -pointerArea.minX, dy: -pointerArea.minY)
+    }
+    return PointerSurface(frame: pointerArea, excludedFrames: excluded)
   }
 
   // MARK: Representation
