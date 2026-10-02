@@ -3,6 +3,11 @@
 The decisions were signed off on 2026-09-30. The phase was executed and landed on the branch
 `feature/controller-hub-phase3` on 2026-10-01.
 
+The ledger and the smoke-test screenshots mentioned below (the subagent-driven development, "SDD",
+workspace `.superpowers/sdd/2026-09-30-controller-hub-phase3-player-screen/`) live in `.superpowers/`,
+which is git-ignored. They exist only in the worktree `.claude/worktrees/controller-hub-phase3/` and
+are lost when that worktree is removed. Copy anything you need out of it first.
+
 Plan: `docs/superpowers/plans/2026-09-30-controller-hub-phase3-player-screen.md`
 Spec: `docs/superpowers/specs/2026-09-28-controller-hub-design.md`
 Previous handoff: `docs/handoff-2026-09-30-controller-hub-phase3-start.md`
@@ -18,8 +23,8 @@ Previous handoff: `docs/handoff-2026-09-30-controller-hub-phase3-start.md`
 
 ## Landed
 
-The branch's commits, oldest first (`git log --oneline 9fed77680c..HEAD`). The task each one belongs
-to is in brackets.
+The branch's commits, oldest first (`git log --oneline 9fed77680c..HEAD`; that command now also
+lists the handoff commits, which this list leaves out). The task each one belongs to is in brackets.
 
 - `2164609ba2` docs(plan): controller hub phase 3 player screen [plan]
 - `e906669649` fix(menu): A and a d-pad adjust in one tick step a picker once [Task 1]
@@ -48,8 +53,9 @@ is a one-line change in `Controllers/Hub/ControllerHubViewModel.swift`. Task 13 
 1. First merge the dead-pad fix, which is not on this branch: branch `fix/touch-to-pad-mapping`,
    commit `5bbeee6c33` "fix(controllers): a pad taking a touchscreen port gets its own mapping".
    - `ControllerAssignmentService.assign` used to keep any non-empty mapping when it bound a
-     device. A port the Touchscreen held has the Touchscreen profile, which binds `Button 0` and
-     `Axis 6xx`, and none of those inputs exist on a physical pad, so the pad was bound and did
+     device. A port the Touchscreen held has the Touchscreen profile, which binds `Button 0`
+     and numbered axes such as `Axis 611` (the touchscreen device's inputs; written `Axis 6xx` below),
+     and none of those inputs exist on a physical pad, so the pad was bound and did
      nothing. `assign` now keeps a port's mapping only when at least one control binds on the
      device just bound.
    - It adds `TVControllerMappingBridge.padMappingBindsDevice(forGCPort:)` and
@@ -60,15 +66,21 @@ is a one-line change in `Controllers/Hub/ControllerHubViewModel.swift`. Task 13 
      `BridgeControllerConfigWriter.swift`. Phase 3 edits none of them.
    - Its tests (`ControllerAssignmentBridgeTests`, `ControllerAssignmentServiceTests`) pass, and
      the full suite and both Release gates passed on that branch.
+   - It was also checked in the iPhone 17 Pro Max simulator with the same Gamepad device (Debug
+     build of the fix branch, 2026-10-01): Touchscreen → Gamepad then showed A bound to A and the
+     d-pad to the d-pad (screenshot `smoke/fix-2-gamepad-after-fix.jpg` in the SDD workspace). That
+     is one manual-pick flow on GameCube Player 1 in a simulator. Auto-assign on connect, a mid-game
+     reconnect and Wii are covered only by unit tests, and nothing was run with a physical pad.
 2. Then this branch. Cherry-pick oldest first. None of its commits carries an attribution trailer;
    if one is ever found, strip it, and do not reword a commit to add a model trailer.
 3. Then one follow-up commit, which does not exist yet. `PlayerScreenViewModel.setDevice` decides
-   the remembered profile name from `io.hasAnyBinding(slot)`, asked before the bind ("the old
-   mapping is kept"). After the fix, a Touchscreen → pad switch loads the pad's default profile, so
+   the remembered profile name from `io.hasAnyBinding(slot)`, asked before the bind (a pad taking
+   over a port that already has a mapping keeps the old mapping and its name). After the fix, a Touchscreen → pad switch loads the pad's default profile, so
    the Load Profile row would still read "Touchscreen". The follow-up makes `LivePlayerScreenIO`
    ask the new bridge check after the bind, and updates the fake IO and the two name tests.
 
-The fix also reloads `IMUIR/Enabled = True` on a Touchscreen → pad switch for a Wii Remote, because
+The fix also reloads `IMUIR/Enabled = True` (the Enabled setting of the Wii Remote's motion-pointer
+group, which switches the core's motion-driven pointer on) on a Touchscreen → pad switch for a Wii Remote, because
 the pad's default profile is loaded. The explicit re-enable in `setDevice` stays.
 
 ## Decisions worth knowing (signed off 2026-09-30)
@@ -90,7 +102,11 @@ the pad's default profile is loaded. The explicit re-enable in `setDevice` stays
     only traced. In the iPhone 17 Pro Max simulator on this branch, Touchscreen → Gamepad left A
     bound to `Button 0` and the profile named "Touchscreen" (screenshot `smoke/s8s.jpg` in the SDD
     workspace `.superpowers/sdd/2026-09-30-controller-hub-phase3-player-screen/`). The fix is
-    `5bbeee6c33`. This branch does not contain it.
+    `5bbeee6c33`. This branch does not contain it. The fix itself was checked in the same simulator
+    with the same Gamepad device: Touchscreen → Gamepad then showed A bound to A and the d-pad to
+    the d-pad (`smoke/fix-2-gamepad-after-fix.jpg`). That covers one manual-pick flow on GameCube
+    Player 1; auto-assign on connect, a mid-game reconnect and Wii are covered only by unit tests,
+    and nothing was run with a physical pad.
 - Capture:
   - Rows are disabled, with a hint, on the Touchscreen, on No Device and on a disconnected MFi pad.
   - DSU-bound ports capture and never read "(Disconnected)".
@@ -146,10 +162,12 @@ Load Profile list, the raw-expression editor, and all of tvOS.
    - A GameCube title shows no Wii sections.
 2. With the pad:
    - The d-pad reaches every row, and the highlight scrolls with it.
-   - A on a Buttons row arms it; this is the `.custom` activation.
+   - A on a Buttons row arms it. Buttons rows are `.custom` menu rows, which own their own
+     gestures: a pad's A runs the row's `onCustomActivate` closure (here, arming the capture)
+     instead of the generic push or action.
    - B returns to the hub.
 3. Capture with the pad:
-   - Pressing B binds "B". The screen does not pop, neither on the press nor on the release.
+   - Pressing B binds B. The screen does not pop, neither on the press nor on the release.
    - Binding A: the row does not re-arm when A is released.
    - While armed, the d-pad does not move the highlight.
    - Leaving it idle 5 s puts the previous binding back.
@@ -157,7 +175,8 @@ Load Profile list, the raw-expression editor, and all of tvOS.
    - Long-press → Clear and swipe → Clear unbind a row.
    - On a row near the bottom of a freshly opened screen, scroll to it by hand: its menu appears at
      once.
-   - If either gesture misbehaves, apply the plan's fallback: delete both modifiers (the context
+   - If either gesture misbehaves, apply the fallback in `docs/superpowers/plans/2026-09-30-controller-hub-phase3-player-screen.md` (the Task 8
+     capture row, "Fallback if checklist items 4 or 23 fail"): delete both modifiers (the context
      menu and the swipe action) from `CaptureRowView` and keep only the editor's Clear.
 5. Turn the pad off while a row is armed:
    - The capture ends. Device reads "<name> (Disconnected)". The capture rows are disabled, with the
@@ -178,9 +197,25 @@ Load Profile list, the raw-expression editor, and all of tvOS.
    - Save Profile As… opens prefilled with the pad's name; A saves and B cancels.
    - An existing name asks "Replace Profile?". After Save closes, the follow-up appears with its own
      title and message, and neither blanks while it animates.
-   - "touchscreen" asks "Replace the Built-In Profile?". Confirm, then bind a fresh pad to a port
-     with no mapping: the saved Touchscreen profile is used instead of the built-in one. Delete the
-     file afterwards.
+   - Overwrite test: save under a throwaway name such as "Checklist Test", then save under it again
+     and answer "Replace Profile?". Use a throwaway name for this test, because the app has no way
+     to delete a user profile.
+   - Built-in test (only on a device you can reset, for the same reason: the saved file stays and
+     shadows the bundled profile for good, and the app offers no delete). Start from a port bound to
+     a pad, so that its mapping differs from the bundled Touchscreen profile. Save Profile As… with
+     the name "Touchscreen" (any letter case) and confirm "Replace the Built-In Profile?". A user
+     profile named like a built-in one is loaded instead of the bundled profile whenever a device
+     of that kind is first bound and on Reset to Default Profile
+     (`BridgeControllerConfigWriter.defaultProfileName(forQualifier:)` returns "Touchscreen" only
+     for the Touchscreen device; a pad gets "Physical Controller" and a DSU device gets "DSU").
+     So the visible check is on the Touchscreen: switch a port to the Touchscreen (Device →
+     Touchscreen), or press Reset to Default Profile on a port already on the Touchscreen and
+     confirm. Expected: the saved profile loads, so the port's rows show the pad bindings you
+     saved instead of the bundled on-screen touch bindings. To undo it, delete `Touchscreen.ini`
+     from the app's user profile directory for that controller type (GameCube pad or Wii Remote,
+     whichever port you saved from; I did not verify the exact container path) by removing it from
+     the app's container, for example with `devicectl` file tools. The Save, Reset or Load screens
+     cannot do it.
    - After a capture the subtitle reads "(edited)".
 10. Reset to Default Profile asks first. A confirms. B (or Cancel) leaves the mapping unchanged.
 11. Wii: Extension → Classic adds Classic rows under Face Buttons, D-Pad, Sticks, Triggers and System.
@@ -190,6 +225,9 @@ Load Profile list, the raw-expression editor, and all of tvOS.
       with Controller Motion" reads On.
     - Without that commit it fails: the pad's buttons, sticks and gyro do nothing until Reset to
       Default Profile, because the mapping still binds `Button 0` / `Axis 6xx`.
+    - The Load Profile row's subtitle reads the pad's default profile ("Physical Controller") only
+      once the follow-up commit from Merge order step 3 is in. With the fix but without the
+      follow-up it still reads "Touchscreen".
 13. A gyro pad on Wii Remote 1 survives a boot (Task 13):
     - Bind the DualSense to Wii Remote 1, with the Touchscreen on no Wii Remote, and turn
       "Aim with Controller Motion" On.
@@ -201,11 +239,14 @@ Load Profile list, the raw-expression editor, and all of tvOS.
       re-enables or re-disables the pointer once no Touchscreen slot exists; the player screen's
       re-enable owns it.
 14. Pointer & Motion on Wii Remote 1 (touchscreen), in a game:
-    - Follow / Drag / Gyro changes the live pointer.
+    - The Pointer row's options are "Touch – Follow", "Touch – Drag" and "Gyro"; each changes the
+      live pointer.
     - Gyro adds Sensitivity (×0.5–×3), which changes the pointer's speed at once (no restart), plus
       Invert X / Invert Y.
     - Recenter Pointer recenters.
-    - Drag, with the programmatic overlay on, adds its own Sensitivity.
+    - Drag, with the programmatic overlay on, adds its own Sensitivity. The overlay is the
+      "Programmatic touch overlay (beta)" toggle in Settings → Controllers → More Controller
+      Settings (user default `touch_overlay_programmatic`).
     - Shake to Wiggle off stops a device shake reaching the game.
 15. Gyro pads:
     - A DualSense on Wii Remote 2 shows only "Aim with Controller Motion". Off stops its gyro moving
@@ -217,7 +258,8 @@ Load Profile list, the raw-expression editor, and all of tvOS.
     - In Raw Bindings, typing "(" shows "Not saved: …" and disables Save.
     - A valid edit saves and pops.
     - Clear in the editor unbinds the control; this is the pad's path.
-17. Pad Back, the Phase 2 gap:
+17. Pad Back, the gap Phase 2 left (on iOS, a pad's A could push More, DSU and Edit Layout from
+    the hub, but those screens had no pad B to pop them):
     - A on More Controller Settings, Motion Source (DSU) and Edit Layout pushes each one, and B pops it.
     - On the screens pushed from inside More and DSU (Advanced Motion Settings, Analog Stick
       Settings, Add DSU Server, Edit IR Area, Touch IR Pointer), a pad's B must do nothing. In
@@ -237,14 +279,16 @@ Apple TV, with a Siri Remote and a pad, on a Wii title:
 20. Each Advanced numeric setting is ONE row. Left/right on the Siri Remote and on a pad's d-pad
     steps its value; select does nothing.
 21. Up/down leave a compact row normally; focus is never trapped. If item 20 or 21 fails, apply the
-    plan's fallback: drop `isCompactOnTV`, so the rows explode into one row per option.
+    fallback in `docs/superpowers/plans/2026-09-30-controller-hub-phase3-player-screen.md` (Task 9, the numeric and Sensitivity
+    items): drop `isCompactOnTV: true`, so the rows explode into one row per option.
 22. Capture:
     - Selecting a Buttons row then pressing a pad button binds it.
     - Menu (or B) while armed binds B and does not pop, neither on the press nor on the release.
     - Binding A does not re-arm the row.
     - Focus stays on the armed row.
 23. A long press of select on a capture row shows Clear, and Clear unbinds the row. (If this fails,
-    the plan's fallback is the same as for item 4.)
+    apply the same fallback as for item 4: delete the context menu and swipe modifiers from
+    `CaptureRowView`.)
 24. Save Profile As… shows a prefilled text field in the one alert (tvOS keyboard).
     - The Replace and Replace-built-in follow-ups appear after it closes, and can be answered with
       the remote.
