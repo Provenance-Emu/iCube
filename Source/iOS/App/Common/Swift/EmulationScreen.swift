@@ -1031,8 +1031,10 @@ struct EmulationScreen: View {
     // and the overlay rebuild on a cursor-mode change could leave it ON with the pads visible,
     // which reads as "changing Follow to Drag breaks the Wii controls".
     .onChange(of: isTouchControlsActive) { active in
-      guard isWiiSystem else { return }
-      let touchSlot = controllerManager.touchscreenSlot(system: .wii) ?? 0
+      // No touchscreen Wii Remote: the overlay drives no pointer, so there is nothing to keep from
+      // fighting. `?? 0` used to flip Wii Remote 1's IMU pointer here even when a gyro pad owns it
+      // (controller hub decision 12).
+      guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
       TVEmulationBridge.setWiiIMUPointEnabled(!active, forWiimote: touchSlot)
     }
     .modifier(SettingsNavigationFallback(showSettings: $showSettings))
@@ -1081,11 +1083,14 @@ struct EmulationScreen: View {
       // synthesizes IR itself (touch in drag/follow, device attitude in gyro mode) and shake
       // detection only needs the accelerometer. Enabling it here for gyro mode or shake made
       // the core fold the phone's real tilt into the IR transform on top of the app's pointer,
-      // which is the "touch pointer stopped working" report. The Wii pad's own onAppear /
-      // onDisappear (false / true) remains the single runtime owner of this flag.
-      // Target whichever Wii Remote the overlay is actually bound to, not always slot 0.
-      let imuTouchSlot = controllerManager.touchscreenSlot(system: .wii) ?? 0
-      TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: imuTouchSlot)
+      // which is the "touch pointer stopped working" report. The `isTouchControlsActive` onChange
+      // below is the runtime owner of this flag afterwards.
+      // Target whichever Wii Remote the overlay is actually bound to, and none when no Wii Remote is
+      // on the Touchscreen: `?? 0` used to switch a gyro pad's IMU pointer off on Wii Remote 1 at
+      // every Wii boot (controller hub decision 12).
+      if let imuTouchSlot = controllerManager.touchscreenSlot(system: .wii) {
+        TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: imuTouchSlot)
+      }
       let wantsMotion = (isTouchControlsActive && useIMU) || wantsMotionForShake
       TCDeviceMotion.shared.setMotionEnabled(wantsMotion)
       if wantsMotion {
