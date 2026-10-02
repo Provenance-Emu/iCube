@@ -98,7 +98,7 @@ enum ControllerHubModelBuilder {
         (L("Wii"), AnyHashable(ControllerManager.OverlayMode.wii)),
       ]
       items.append(MenuItem(
-        id: "osc-style", title: L("On-Screen Style"), icon: "rectangle.3.group",
+        id: "osc-style", title: L("Overlay Style"), icon: "rectangle.3.group",
         role: .picker(options: styles, selection: Binding(
           get: { AnyHashable(state.overlayMode) },
           set: { if let mode = $0.base as? ControllerManager.OverlayMode { actions.setOverlayMode(mode) } }))))

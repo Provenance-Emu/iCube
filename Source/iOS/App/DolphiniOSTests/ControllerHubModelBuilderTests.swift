@@ -167,6 +167,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     var written: ControllerManager.OverlayMode?
     let model = make(state(system: .gamecube), actions(setOverlayMode: { written = $0 }))
     guard case .picker(let options, let selection)? = model.item(id: "osc-style")?.role else { return XCTFail("not a picker") }
+    XCTAssertEqual(model.item(id: "osc-style")?.title, "Overlay Style")
     XCTAssertEqual(options.map { $0.0 }, ["Auto", "GameCube", "Wii"])
     XCTAssertEqual(selection.wrappedValue, AnyHashable(ControllerManager.OverlayMode.auto))
     selection.wrappedValue = AnyHashable(ControllerManager.OverlayMode.wii)

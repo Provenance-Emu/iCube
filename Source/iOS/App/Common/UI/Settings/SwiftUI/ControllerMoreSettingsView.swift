@@ -21,8 +21,6 @@ struct ControllerMoreSettingsView: View {
   @State private var wiimoteSpeaker = false
   #if os(iOS)
   @State private var touchOverlayProgrammatic = false
-  /// Raw `TouchOverlayArt.Style` integer (`touch_overlay_style`).
-  @State private var touchOverlayStyle = 0
   @State private var touchOverlayIRPointerGain = 1.0
   /// Connected pads with a light bar, for the LED colour rows.
   @State private var litControllers: [GCController] = []
@@ -83,18 +81,6 @@ struct ControllerMoreSettingsView: View {
               TouchOverlayFlag.isProgrammatic = newValue
             },
           L("Replaces the on-screen GameCube/Wii pads with the new SwiftUI-rendered, user-editable overlay. Long-press the overlay in-game to move or resize its controls."))
-
-        settingsCaption(
-          Picker(L("Overlay Style"), selection: $touchOverlayStyle) {
-            Text(L("Auto")).tag(0)
-            Text(L("GameCube")).tag(1)
-            Text(L("Wii")).tag(2)
-          }
-          .pickerStyle(.segmented)
-          .onChange(of: touchOverlayStyle) { _, newValue in
-            UserDefaults.standard.set(newValue, forKey: "touch_overlay_style")
-          },
-          L("Overrides whether the programmatic overlay's button art uses GameCube or Wii coloring, or matches the pad kind automatically."))
 
         Button(role: .destructive) {
           for kind in TouchOverlayPadKind.allCases { TouchOverlayLayoutStore.shared.reset(padKind: kind) }
@@ -163,7 +149,6 @@ struct ControllerMoreSettingsView: View {
     touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
     #if os(iOS)
     touchOverlayProgrammatic = TouchOverlayFlag.isProgrammatic
-    touchOverlayStyle = UserDefaults.standard.integer(forKey: "touch_overlay_style")
     touchOverlayIRPointerGain = Double(TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
     #endif
     backgroundInput = DOLConfigBridge.mainBackgroundInput()

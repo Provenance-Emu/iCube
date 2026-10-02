@@ -56,7 +56,7 @@ struct TouchOverlayView: View {
       let orientation = TouchOverlayOrientation(isPortrait: canvas.height >= canvas.width)
       let layouts = TouchOverlayDefaults.layout(for: padKind, orientation: orientation, canvas: canvas, safeArea: safeArea)
       let opacity = TouchOverlayInput.resolvedOpacity(isEditing: editMode != .none, configuredOpacity: DOLConfigBridge.mainTouchPadOpacity())
-      let variant = TouchOverlayArt.Style.current().resolvedVariant(padKind: padKind)
+      let variant = TouchOverlayArt.variant(for: padKind)
       // `revision` isn't read directly, but touching it here ties this body's re-evaluation to
       // every store mutation (position AND size-scale writes), matching phase 1's store contract.
       // NOTE: must stay a `let` declaration, not a bare `_ = ...` assignment — inside a
