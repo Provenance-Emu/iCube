@@ -150,9 +150,10 @@ extension EmulationScreen {
     var irMode: Int = Int(DOLConfigBridge.mainTouchPadIRMode())
 
     /// Phase 2 of the programmatic touch overlay (docs/superpowers/specs/
-    /// 2026-09-24-programmatic-touch-overlay-design.md), gated off by default. When on, this
+    /// 2026-09-24-programmatic-touch-overlay-design.md), on by default. When on, this
     /// container mounts a `UIHostingController`-hosted `TouchOverlayView` instead of the xib pad;
     /// every other path in this file (opacity, IR-mode passthrough, port resolution) is untouched.
+    /// A chosen skin also mounts the hosted overlay, whatever the flag says.
     private static var useProgrammaticOverlay: Bool {
       TouchOverlayFlag.isProgrammatic
     }
@@ -161,14 +162,67 @@ extension EmulationScreen {
     /// kind, opacity, IR mode) updates its `rootView` in place instead of tearing down and
     /// rebuilding the whole SwiftUI tree.
     final class Coordinator {
-      var hosting: UIHostingController<TouchOverlayView>?
+      var hosting: UIHostingController<HostedOverlayRoot>?
       /// The hosting view's teardown-safe wrapper (task item 2, DSU pass) — see
       /// `TouchOverlayHostContainer`'s doc comment for why the hosting view can't guarantee its
       /// own release-on-teardown via SwiftUI alone.
       var hostContainer: TouchOverlayHostContainer?
+      /// The skin the hosted overlay currently shows (`nil` for the Swift-drawn overlay), so a
+      /// rotation only reconciles when the skin to show actually changes.
+      var mountedSkinID: String?
+    }
+
+    /// The container's view. Skins are chosen per orientation, but SwiftUI does not call
+    /// `updateUIView` on rotation, so this reports when its own bounds change orientation.
+    final class HostView: UIView {
+      /// Fired (after layout) when the bounds flip between portrait and landscape.
+      var onOrientationChange: (() -> Void)?
+      private var laidOutOrientation: TouchOverlayOrientation?
+
+      /// The orientation of the bounds, once they have a size.
+      var boundsOrientation: TouchOverlayOrientation? {
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        return TouchOverlayOrientation(isPortrait: bounds.height >= bounds.width)
+      }
+
+      override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let orientation = boundsOrientation, orientation != laidOutOrientation else { return }
+        laidOutOrientation = orientation
+        DispatchQueue.main.async { [weak self] in self?.onOrientationChange?() }
+      }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// The overlay to show in `view` right now.
+    private struct OverlayPlan {
+      let padKind: TouchOverlayPadKind?
+      let choice: OverlayChoice
+      /// Whether the SwiftUI host (rather than the xib pads) draws it.
+      let hosted: Bool
+    }
+
+    private func overlayPlan(in view: UIView) -> OverlayPlan {
+      let kind = programmaticPadKind()
+      let choice: OverlayChoice
+      if let kind {
+        // A fresh view has no size yet; the first layout reconciles again if this guess was wrong.
+        let orientation = (view as? HostView)?.boundsOrientation ?? TouchOverlayOrientation(isPortrait: !UIDevice.current.orientation.isLandscape)
+        choice = SkinMount.overlayChoice(padKind: kind, orientation: orientation, library: .shared)
+      } else {
+        choice = .programmatic
+      }
+      return OverlayPlan(padKind: kind, choice: choice, hosted: SkinMount.usesHostedOverlay(flag: Self.useProgrammaticOverlay, choice: choice))
+    }
+
+    /// The pad the player's controller setup calls for, skin or not. `nil` when no pad shows.
+    /// Used by the screen to place the game picture.
+    func activeSkin(orientation: TouchOverlayOrientation) -> InstalledSkin? {
+      guard let kind = programmaticPadKind(),
+            case .skin(let skin) = SkinMount.overlayChoice(padKind: kind, orientation: orientation, library: .shared) else { return nil }
+      return skin
+    }
 
     /// Mirrors `makeWiiPadView()`'s selection exactly (slot -> classic/sideways), so the
     /// programmatic overlay picks the same variant the xib path would have shown. `nil` when
@@ -188,9 +242,9 @@ extension EmulationScreen {
     /// Mount or update the programmatic overlay in `container`. Returns without doing anything
     /// when neither pad should currently show, leaving `container` empty exactly like the legacy
     /// path does.
-    private func syncProgrammaticOverlay(in container: UIView, context: Context) {
-      guard let kind = programmaticPadKind() else {
-        teardownProgrammaticOverlay(context: context)
+    private func syncProgrammaticOverlay(in container: UIView, plan: OverlayPlan, coordinator: Coordinator) {
+      guard let kind = plan.padKind else {
+        teardownProgrammaticOverlay(coordinator: coordinator)
         return
       }
       let isWiiKind = kind != .gameCube
@@ -203,15 +257,17 @@ extension EmulationScreen {
       // Kept current on every sync (task item 2's DSU pass), not just at creation: the overlay can
       // switch device ids in place (e.g. a controller connects mid-session) without ever
       // disappearing, so a LATER teardown must clear whichever id was actually live.
-      context.coordinator.hostContainer?.deviceId = deviceId
-      if let hosting = context.coordinator.hosting, let hostContainer = context.coordinator.hostContainer {
-        hosting.rootView = TouchOverlayView(padKind: kind, deviceId: deviceId, irMode: irMode)
+      coordinator.hostContainer?.deviceId = deviceId
+      coordinator.mountedSkinID = plan.choice.skinID
+      let root = HostedOverlayRoot(padKind: kind, deviceId: deviceId, irMode: irMode, choice: plan.choice)
+      if let hosting = coordinator.hosting, let hostContainer = coordinator.hostContainer {
+        hosting.rootView = root
         if hostContainer.superview !== container {
           hostContainer.frame = container.bounds
           container.addSubview(hostContainer)
         }
       } else {
-        let hosting = UIHostingController(rootView: TouchOverlayView(padKind: kind, deviceId: deviceId, irMode: irMode))
+        let hosting = UIHostingController(rootView: root)
         hosting.view.backgroundColor = .clear
         hosting.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         let hostContainer = TouchOverlayHostContainer(frame: container.bounds)
@@ -221,8 +277,8 @@ extension EmulationScreen {
         hosting.view.frame = hostContainer.bounds
         hostContainer.addSubview(hosting.view)
         container.addSubview(hostContainer)
-        context.coordinator.hosting = hosting
-        context.coordinator.hostContainer = hostContainer
+        coordinator.hosting = hosting
+        coordinator.hostContainer = hostContainer
       }
       // TouchOverlayView applies the opacity setting per group itself; the container stays opaque.
       container.alpha = 1.0
@@ -231,19 +287,22 @@ extension EmulationScreen {
     /// Removes the hosting view via its teardown-safe wrapper (task item 2's DSU pass) and drops
     /// both coordinator references, so the NEXT sync (if any) creates a fresh hosting controller
     /// rather than reusing a torn-down one.
-    private func teardownProgrammaticOverlay(context: Context) {
-      context.coordinator.hostContainer?.removeFromSuperview()
-      context.coordinator.hostContainer = nil
-      context.coordinator.hosting = nil
+    private func teardownProgrammaticOverlay(coordinator: Coordinator) {
+      coordinator.hostContainer?.removeFromSuperview()
+      coordinator.hostContainer = nil
+      coordinator.hosting = nil
+      coordinator.mountedSkinID = nil
     }
 
     func makeUIView(context: Context) -> UIView {
-      let host = UIView()
+      let host = HostView()
       host.backgroundColor = .clear
       host.isUserInteractionEnabled = true
+      watchOrientation(of: host, coordinator: context.coordinator)
 
-      if Self.useProgrammaticOverlay {
-        syncProgrammaticOverlay(in: host, context: context)
+      let plan = overlayPlan(in: host)
+      if plan.hosted {
+        syncProgrammaticOverlay(in: host, plan: plan, coordinator: context.coordinator)
         return host
       }
 
@@ -269,22 +328,37 @@ extension EmulationScreen {
       return host
     }
 
+    /// Re-runs the mount decision when a rotation changes which skin (if any) the player picked.
+    /// Does nothing for the xib pads and the Swift-drawn overlay, which do not depend on orientation here.
+    private func watchOrientation(of host: HostView, coordinator: Coordinator) {
+      host.onOrientationChange = { [weak host] in
+        guard let host, overlayPlan(in: host).choice.skinID != coordinator.mountedSkinID else { return }
+        reconcile(host, coordinator: coordinator)
+      }
+    }
+
     func updateUIView(_ uiView: UIView, context: Context) {
-      // If the flag flipped (or the hosting view was torn down) since this container was last
-      // mounted, do a full rebuild instead of letting the legacy branch below mistake the
-      // programmatic overlay's UIHostingController view for a plain GC pad subview (or vice
-      // versa) — they're both just "a subview" to the legacy logic's `uiView.subviews.first`.
-      let mountedIsHosting = context.coordinator.hostContainer?.superview === uiView
-      if Self.useProgrammaticOverlay != mountedIsHosting {
+      if let host = uiView as? HostView { watchOrientation(of: host, coordinator: context.coordinator) }
+      reconcile(uiView, coordinator: context.coordinator)
+    }
+
+    private func reconcile(_ uiView: UIView, coordinator: Coordinator) {
+      let plan = overlayPlan(in: uiView)
+      // If the flag flipped, a skin was picked or dropped (or the hosting view was torn down) since
+      // this container was last mounted, do a full rebuild instead of letting the legacy branch below
+      // mistake the programmatic overlay's UIHostingController view for a plain GC pad subview (or
+      // vice versa) — they're both just "a subview" to the legacy logic's `uiView.subviews.first`.
+      let mountedIsHosting = coordinator.hostContainer?.superview === uiView
+      if plan.hosted != mountedIsHosting {
         // Going FROM the programmatic overlay TO the legacy path: tear down through the
         // wrapper (task item 2's DSU pass) so whatever the overlay was mid-holding gets released,
         // exactly like `TCView`'s own teardown does for the path this is switching TO.
-        if mountedIsHosting { teardownProgrammaticOverlay(context: context) }
+        if mountedIsHosting { teardownProgrammaticOverlay(coordinator: coordinator) }
         uiView.subviews.forEach { $0.removeFromSuperview() }
       }
 
-      if Self.useProgrammaticOverlay {
-        syncProgrammaticOverlay(in: uiView, context: context)
+      if plan.hosted {
+        syncProgrammaticOverlay(in: uiView, plan: plan, coordinator: coordinator)
         return
       }
 

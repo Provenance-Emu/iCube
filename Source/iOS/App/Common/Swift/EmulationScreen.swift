@@ -346,6 +346,57 @@ struct EmulationScreen: View {
   @State private var skyPickedURL: URL? = nil
   @State private var showSkyClearPicker = false
   @State private var skyLastLoadedSlot: Int = 0
+
+  private static let topRevealStripHeight: CGFloat = 80
+
+  /// The on-screen controller, built in one place so the game picture is placed for the same pad the player sees.
+  private var touchPadsContainer: TouchPadsContainer {
+    let isWiiToShow: Bool = {
+      switch controllerManager.overlayMode {
+      case .auto: return isWiiSystem
+      case .gamecube: return false
+      case .wii: return true
+      }
+    }()
+    return TouchPadsContainer(forceVisible: true, isWii: isWiiToShow, irMode: irModeRaw)
+  }
+
+  /// The skin's Menu, Quick Save and Quick Load items: the same things the top bar does.
+  private func handleSkinAction(_ action: SkinAction) {
+    switch action {
+    case .menu: showPauseMenu = true
+    case .quickSave: SaveStateService.saveSlot(selectedSlot)
+    case .quickLoad: TVEmulationBridge.loadState(fromSlot: selectedSlot)
+    case .control: break
+    }
+  }
+
+  /// The skin's game screen area on `canvas` (the full screen, safe areas included, exactly as `SkinOverlayView`
+  /// lays the skin out), when a skin is replacing the on-screen controller.
+  private func skinGameArea(canvas: CGSize) -> CGRect? {
+    guard isTouchControlsActive else { return nil }
+    let orientation = TouchOverlayOrientation(isPortrait: canvas.height >= canvas.width)
+    guard let skin = touchPadsContainer.activeSkin(orientation: orientation) else { return nil }
+    return SkinMount.gamePictureFrame(for: skin, canvas: canvas)
+  }
+
+  /// Where the active skin puts the game picture, in `proxy`'s coordinates. `nil` keeps the default placement.
+  private func skinGamePictureFrame(in proxy: GeometryProxy, gameAR: CGFloat) -> CGRect? {
+    let insets = proxy.safeAreaInsets
+    let canvas = CGSize(width: proxy.size.width + insets.leading + insets.trailing,
+                        height: proxy.size.height + insets.top + insets.bottom)
+    guard let area = skinGameArea(canvas: canvas) else { return nil }
+    return SkinMount.aspectFit(aspect: gameAR, in: area.offsetBy(dx: -insets.leading, dy: -insets.top))
+  }
+
+  /// The strip along the top that reveals the hidden top bar. It sits above the on-screen controller, so with a
+  /// skin it only spans the game picture's width: a skin keeps its L / R triggers in the top corners.
+  private func topRevealStrip(canvas: CGSize) -> CGRect {
+    let screen = CGRect(origin: .zero, size: canvas)
+    var span = screen
+    if let area = skinGameArea(canvas: canvas), !area.intersection(screen).isNull { span = area.intersection(screen) }
+    return CGRect(x: span.minX, y: 0, width: span.width, height: Self.topRevealStripHeight)
+  }
   #endif
 
   var body: some View {
@@ -715,7 +766,12 @@ struct EmulationScreen: View {
       GeometryReader { proxy in
         let isPortrait = proxy.size.height > proxy.size.width
         let gameAR = stableAR ?? (proxy.size.width / max(proxy.size.height, 1))
-        if isPortrait {
+        if let skinFrame = skinGamePictureFrame(in: proxy, gameAR: gameAR) {
+          EmulationSurfaceController(gamePath: game.filePath)
+            .frame(width: skinFrame.width, height: skinFrame.height)
+            .position(x: skinFrame.midX, y: skinFrame.midY)
+            .onTapGesture { toggleTopBar() }
+        } else if isPortrait {
           VStack(spacing: 0) {
             let topInset = proxy.safeAreaInsets.top
             if topInset > 0 {
@@ -781,14 +837,15 @@ struct EmulationScreen: View {
 
       // Top hit area: tap near status bar to reveal overlay (active only when hidden)
       if !showTopBar {
-        VStack(spacing: 0) {
+        GeometryReader { screen in
+          let strip = topRevealStrip(canvas: screen.size)
           Color.clear
-            .frame(height: 80)
+            .frame(width: strip.width, height: strip.height)
             .contentShape(Rectangle())
             .onTapGesture { toggleTopBar() }
-          Spacer()
+            .position(x: strip.midX, y: strip.midY)
         }
-        .ignoresSafeArea(edges: .top)
+        .ignoresSafeArea()
         .zIndex(1)
         .allowsHitTesting(true)
       }
@@ -1005,14 +1062,7 @@ struct EmulationScreen: View {
 
       // Legacy touch pads
       if isTouchControlsActive {
-        let isWiiToShow: Bool = {
-          switch controllerManager.overlayMode {
-          case .auto: return isWiiSystem
-          case .gamecube: return false
-          case .wii: return true
-          }
-        }()
-        TouchPadsContainer(forceVisible: true, isWii: isWiiToShow, irMode: irModeRaw)
+        touchPadsContainer
           .id(touchPadsRefreshToken)
           .ignoresSafeArea()
           .transition(.opacity)
@@ -1252,6 +1302,9 @@ struct EmulationScreen: View {
     .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
       // Ask the renderer to resize/reconfigure
       TVEmulationBridge.resizeSurfaceNow()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: SkinActionNotification.name)) { note in
+      if let action = SkinActionNotification.action(in: note) { handleSkinAction(action) }
     }
     .onReceive(controllerManager.controllerConnectedPublisher) { _ in
       touchPadsRefreshToken = UUID()
