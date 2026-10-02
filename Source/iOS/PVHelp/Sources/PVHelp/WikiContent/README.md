@@ -18,6 +18,10 @@ to a topic. The most-asked-about ones:
   to turn it on, and what to expect without it.
 * **Wi-Fi / Web Import** — get GameCube and Wii files onto your device
   without a cable.
+* **Dumping GameCube & Wii Discs** — make a disc image from a disc you own with
+  a Wii and CleanRip, then shrink it to RVZ.
+* **WiiWare, Virtual Console & Channels** — dump a title to a `.wad`, or import
+  a BootMii NAND backup.
 * **GameCube BIOS (IPL)** — what the GameCube BIOS is, whether you need it,
   and where it goes.
 * **Save State Compatibility** — why a save state can go stale across
