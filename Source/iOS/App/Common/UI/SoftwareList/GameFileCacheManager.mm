@@ -70,7 +70,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
   PurgeAppleDoubleSidecars(softwareFolder);
   DOLArchiveBatchImportResult* batch = [DOLZipImportHelper processOrphanedArchivesInFolder:softwareFolder];
-  if (batch.archivesProcessed > 0) {
+  if (batch.archivesProcessed > 0 || batch.failedArchives > 0) {
     NSLog(@"[ArchiveImport] Recovered %ld archive(s), imported %ld game(s), skipped %ld existing, %ld failed",
           (long)batch.archivesProcessed, (long)batch.gamesImported, (long)batch.gamesSkipped, (long)batch.failedArchives);
     NSString* snackbar = [DOLZipImportHelper snackbarTextForBatchImportResult:batch];
