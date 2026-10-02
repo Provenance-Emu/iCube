@@ -29,8 +29,8 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
   /// not just when the IR pad itself is the thing being edited, so a layout-editor drag over some
   /// OTHER group can't also nudge the pointer underneath it.
   let isEditing: Bool
-  /// Drag-mode pointer sensitivity (task item 1's "Pointer Sensitivity" setting,
-  /// `touch_overlay_ir_pointer_gain`, already clamped by `TouchOverlayIRGeometry.clampDragGain`).
+  /// Drag-mode pointer sensitivity (the player screen's Touch – Drag Sensitivity row (`touch_overlay_ir_pointer_gain`),
+  /// already clamped by `TouchOverlayIRGeometry.clampDragGain`).
   /// Follow mode ignores this (see `TouchOverlayIRGeometry.follow`'s doc comment).
   let dragGain: CGFloat
   /// When true, `excludedFrames` are not part of this surface at all for hit testing: a touch inside one reaches whatever
