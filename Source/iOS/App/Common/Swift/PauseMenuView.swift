@@ -61,11 +61,9 @@ internal struct PauseMenuView: View {
   // Quick actions: the two things people actually reach for mid-game without
   // wanting to leave the pause menu (mute to take a call, fast-forward past a
   // cutscene). Kept as plain toggles on the main pane rather than a settings
-  // trip. UserDefaults key remembers the pre-mute volume so unmute restores it
-  // instead of guessing a level.
+  // trip. Mute is shared with the in-game top bar via `QuickMute`.
   @State private var isMuted: Bool = false
   @State private var fastForwardEnabled: Bool = false
-  private static let volumeBeforeMuteKey = "icube_pause_menu_volume_before_mute"
   /// D14: drives the iOS speed picker, a `MenuScreen`-backed confirm overlay
   /// (`PauseMenuView.fastForwardConfirmModel`, D18). Declared unconditionally,
   /// like `showControllersSheet`/`showSettingsSheet` above, because
@@ -91,20 +89,9 @@ internal struct PauseMenuView: View {
     activeCheatCount > 0 ? String(format: L("%d active"), activeCheatCount) : L("Game enhancement codes")
   }
 
-  /// Mutes by zeroing the volume, remembering the prior level so unmute restores it
-  /// instead of guessing. Mirrors the pattern of other Config-backed toggles: read
-  /// through the bridge rather than trusting `@State` to stay in sync elsewhere.
+  /// Mutes / unmutes through the helper the top bar shares, so both always agree.
   private func toggleMute() {
-    let current = DOLConfigBridge.audioVolume()
-    if current > 0 {
-      UserDefaults.standard.set(current, forKey: Self.volumeBeforeMuteKey)
-      DOLConfigBridge.setAudioVolume(0)
-      isMuted = true
-    } else {
-      let stored = UserDefaults.standard.object(forKey: Self.volumeBeforeMuteKey) as? Int ?? 100
-      DOLConfigBridge.setAudioVolume(stored > 0 ? stored : 100)
-      isMuted = false
-    }
+    isMuted = QuickMute.toggle()
   }
 
   /// Currently configured fast-forward speed, read from the same UserDefaults key
@@ -194,7 +181,7 @@ internal struct PauseMenuView: View {
       // from this menu still gets a screenshot even though presenting is about to stop.
       SaveStateService.capturePausePreview()
       TVEmulationBridge.pause()
-      isMuted = DOLConfigBridge.audioVolume() <= 0
+      isMuted = QuickMute.isMuted
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
       refreshActiveCheatCount()
     }
