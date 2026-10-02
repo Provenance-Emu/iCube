@@ -3788,7 +3788,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Batches framebuffer copies to reduce overhead. Faster in most games; recommended on." = "Batches framebuffer copies to reduce overhead. Faster in most games; recommended on.";
 "Bench Token" = "Bench Token";
 "Benchmark base applied — relaunch the game." = "Benchmark base applied — relaunch the game.";
-"Bind a game controller to this player to capture buttons. Touchscreen controls are laid out by the on-screen overlay." = "Bind a game controller to this player to capture buttons. Touchscreen controls are laid out by the on-screen overlay.";
 "Bitcrusher" = "Bitcrusher";
 "Bits" = "Bits";
 "Block" = "Block";
@@ -3847,7 +3846,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Conflicts" = "Conflicts";
 "Connect MFi Controllers" = "Connect MFi Controllers";
 "Connect Wiimotes for Controller Interface" = "Connect Wiimotes for Controller Interface";
-"Connected Controllers" = "Connected Controllers";
 "Connected Receivers" = "Connected Receivers";
 "Connecting…" = "Connecting…";
 "Connects to RetroAchievements.org to unlock achievements and track progress across supported games." = "Connects to RetroAchievements.org to unlock achievements and track progress across supported games.";
@@ -3888,7 +3886,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Culls off-screen geometry on the CPU. Usually a net loss on the CPU-bound path; leave off unless GPU-limited." = "Culls off-screen geometry on the CPU. Usually a net loss on the CPU-bound path; leave off unless GPU-limited.";
 "Currently allowed without prompting: %1$@" = "Currently allowed without prompting: %1$@";
 "Custom RetroAchievements API server. Only change this for a custom/self-hosted server." = "Custom RetroAchievements API server. Only change this for a custom/self-hosted server.";
-"Customize Buttons…" = "Customize Buttons…";
 "DCBZ Hack" = "DCBZ Hack";
 "DSP Thread (speedup)" = "DSP Thread (speedup)";
 "DSU Controller" = "DSU Controller";
@@ -3959,7 +3956,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Emulation speed as a percentage of full speed." = "Emulation speed as a percentage of full speed.";
 "Enable 6DOF Motion Controls" = "Enable 6DOF Motion Controls";
 "Enable AVAudioEngine?" = "Enable AVAudioEngine?";
-"Enable Advanced Shake Detection" = "Enable Advanced Shake Detection";
 "Enable Audio Stretching" = "Enable Audio Stretching";
 "Enable Auto Internal Resolution" = "Enable Auto Internal Resolution";
 "Enable Cheats?" = "Enable Cheats?";
@@ -4015,8 +4011,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Files With Errors" = "Files With Errors";
 "Finder / WebDAV" = "Finder / WebDAV";
 "Flip vertically" = "Flip vertically";
-"Flips left/right pointer motion." = "Flips left/right pointer motion.";
-"Flips up/down pointer motion." = "Flips up/down pointer motion.";
 "Follow" = "Follow";
 "For CPU and interpreter performance options, see Performance Tuning in Settings or Config." = "For CPU and interpreter performance options, see Performance Tuning in Settings or Config.";
 "Force 24-bit Color" = "Force 24-bit Color";
@@ -4044,7 +4038,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Full Motion Mapping" = "Full Motion Mapping";
 "Full Screen Display" = "Full Screen Display";
 "Full screen (disable overscan compensation)" = "Full screen (disable overscan compensation)";
-"GC Profiles" = "GC Profiles";
 "GPU EFB Peek Resolve" = "GPU EFB Peek Resolve";
 "Game & system options" = "Game & system options";
 "Game List" = "Game List";
@@ -4081,13 +4074,9 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "How iCube delivers bounding-box values. Latched serves a 1-frame-stale snapshot with no CPU stall (faster). Force Sync blocks for exact same-frame values — try it if a game's bbox-driven effects (some 2D/UI culling) look wrong." = "How iCube delivers bounding-box values. Latched serves a 1-frame-stale snapshot with no CPU stall (faster). Force Sync blocks for exact same-frame values — try it if a game's bbox-driven effects (some 2D/UI culling) look wrong.";
 "How many seconds of gameplay each instant-replay clip captures." = "How many seconds of gameplay each instant-replay clip captures.";
 "How much detail the log captures (1 = errors only, 5 = everything)." = "How much detail the log captures (1 = errors only, 5 = everything).";
-"How the Wii Remote IR pointer is controlled. Gyro uses device motion for added precision and unlocks the motion options below." = "How the Wii Remote IR pointer is controlled. Gyro uses device motion for added precision and unlocks the motion options below.";
-"How the Wii Remote pointer is driven. Gyro uses device motion; Follow/Drag use touch gestures." = "How the Wii Remote pointer is driven. Gyro uses device motion; Follow/Drag use touch gestures.";
 "How the final image is resampled to the screen. Default matches the backend; Sharp Bilinear and Area Sampling can look cleaner when up/down-scaling." = "How the final image is resampled to the screen. Default matches the backend; Sharp Bilinear and Area Sampling can look cleaner when up/down-scaling.";
 "How vertex data is decoded on the CPU. NEON SIMD is the fast default on Apple Silicon; Software is the slow reference path; Compare runs both and asserts they match (debug only — slowest). Leave on NEON SIMD. Applies on next game launch." = "How vertex data is decoded on the CPU. NEON SIMD is the fast default on Apple Silicon; Software is the slow reference path; Compare runs both and asserts they match (debug only — slowest). Leave on NEON SIMD. Applies on next game launch.";
-"IR Control Method" = "IR Control Method";
 "IR Mode: %@" = "IR Mode: %@";
-"Identify" = "Identify";
 "Ignores small movements to reduce jitter." = "Ignores small movements to reduce jitter.";
 "Immediate XFB" = "Immediate XFB";
 "Import BootMii NAND Backup" = "Import BootMii NAND Backup";
@@ -4107,8 +4096,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Instant Replay is disabled" = "Instant Replay is disabled";
 "Interface & Sharing" = "Interface & Sharing";
 "Interlaced Field Decimation" = "Interlaced Field Decimation";
-"Invert Horizontal (Left/Right)" = "Invert Horizontal (Left/Right)";
-"Invert Vertical (Up/Down)" = "Invert Vertical (Up/Down)";
 "JIT Error" = "JIT Error";
 "JIT Setup Guide" = "JIT Setup Guide";
 "Keep Both" = "Keep Both";
@@ -4119,7 +4106,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Keep iCloud's Copy" = "Keep iCloud's Copy";
 "Keeps embedded-framebuffer copies on the GPU instead of system RAM. Faster; breaks a few effects. Recommended on." = "Keeps embedded-framebuffer copies on the GPU instead of system RAM. Faster; breaks a few effects. Recommended on.";
 "Keeps the external framebuffer on the GPU. Faster; can break games that read the final image." = "Keeps the external framebuffer on the GPU. Faster; can break games that read the final image.";
-"LED Color" = "LED Color";
 "Language the emulated GameCube reports to games. The GameCube supports English, German, French, Spanish, Italian, and Dutch only. Defaults to your device language where supported, otherwise English." = "Language the emulated GameCube reports to games. The GameCube supports English, German, French, Spanish, Italian, and Dutch only. Defaults to your device language where supported, otherwise English.";
 "Last Synced" = "Last Synced";
 "Latched" = "Latched";
@@ -4253,7 +4239,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Overlay Style" = "Overlay Style";
 "Override Region Mismatch" = "Override Region Mismatch";
 "Override VBI Frequency" = "Override VBI Frequency";
-"Overrides whether the programmatic overlay's button art uses GameCube or Wii coloring, or matches the pad kind automatically." = "Overrides whether the programmatic overlay's button art uses GameCube or Wii coloring, or matches the pad kind automatically.";
 "Pair" = "Pair";
 "Pair With This Device?" = "Pair With This Device?";
 "Paired" = "Paired";
@@ -4283,7 +4268,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Preset" = "Preset";
 "Press a button…" = "Press a button…";
 "Preview intermediate pass" = "Preview intermediate pass";
-"Profiles…" = "Profiles…";
 "Programmatic touch overlay (beta)" = "Programmatic touch overlay (beta)";
 "Progressive Scan" = "Progressive Scan";
 "Queues and defers EFB copies to reduce pipeline stalls.\n\nCan increase performance but reorders copies and may break effects that need immediate results (heat haze, mirrors).\n\niOS note: can reduce CPU-thread stalls on the bottleneck — a real potential win — but verify visuals per game.\n\nIf unsure, leave this unchecked." = "Queues and defers EFB copies to reduce pipeline stalls.\n\nCan increase performance but reorders copies and may break effects that need immediate results (heat haze, mirrors).\n\niOS note: can reduce CPU-thread stalls on the bottleneck — a real potential win — but verify visuals per game.\n\nIf unsure, leave this unchecked.";
@@ -4409,7 +4393,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Shader Threads" = "Shader Threads";
 "Shader Type" = "Shader Type";
 "Shaders" = "Shaders";
-"Shake Detection" = "Shake Detection";
 "Shape of the picture. Auto matches the game's native ratio; 4:3 and 16:9 force a fixed shape; Stretch fills the screen and may distort." = "Shape of the picture. Auto matches the game's native ratio; 4:3 and 16:9 force a fixed shape; Stretch fills the screen and may distort.";
 "Share" = "Share";
 "Share Again" = "Share Again";
@@ -4487,7 +4470,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "System Default" = "System Default";
 "System firmware is never uploaded" = "System firmware is never uploaded";
 "TXM JIT Region" = "TXM JIT Region";
-"Tap a control, then press the button or move the stick to bind it. Tap again to cancel; long-press to clear." = "Tap a control, then press the button or move the stick to bind it. Tap again to cancel; long-press to clear.";
 "Target" = "Target";
 "Target FPS" = "Target FPS";
 "Target: %@" = "Target: %@";
@@ -4531,7 +4513,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Tooltips" = "Tooltips";
 "Total" = "Total";
 "Touch Area" = "Touch Area";
-"Touch IR Pointer" = "Touch IR Pointer";
 "Touch IR pointer control mode" = "Touch IR pointer control mode";
 "Touchscreen" = "Touchscreen";
 "Tracks achievements without earning them — view progress without affecting your record." = "Tracks achievements without earning them — view progress without affecting your record.";
@@ -4558,7 +4539,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "User Folder" = "User Folder";
 "Uses a faster, less accurate texture-sampling path.\n\nCan help on some GPUs but may cause banding, seams, or vertical lines in FMVs.\n\niOS note: GPU-side; rarely changes the CPU-bound framerate. Disable if you see texture artifacts. Default ON.\n\nIf unsure, leave this enabled." = "Uses a faster, less accurate texture-sampling path.\n\nCan help on some GPUs but may cause banding, seams, or vertical lines in FMVs.\n\niOS note: GPU-side; rarely changes the CPU-bound framerate. Disable if you see texture artifacts. Default ON.\n\nIf unsure, leave this enabled.";
 "Uses a faster, less precise depth formula. Small speed win; can cause depth glitches in a few games. Recommended on." = "Uses a faster, less precise depth formula. Small speed win; can cause depth glitches in a few games. Recommended on.";
-"Uses a motion-pattern algorithm to detect shake gestures more reliably than Dolphin's basic detection." = "Uses a motion-pattern algorithm to detect shake gestures more reliably than Dolphin's basic detection.";
 "Uses faster, less precise texture sampling. Small speed win; rarely causes minor texture artifacts. Recommended on." = "Uses faster, less precise texture sampling. Small speed win; rarely causes minor texture artifacts. Recommended on.";
 "VI Skip Mode" = "VI Skip Mode";
 "Vertex Loader" = "Vertex Loader";
@@ -4582,13 +4562,11 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Wii Remote %d" = "Wii Remote %d";
 "Wii Remote (NIB)" = "Wii Remote (NIB)";
 "Wii Remote (Sideways)" = "Wii Remote (Sideways)";
-"Wii Remotes (Global)" = "Wii Remotes (Global)";
 "Wii Saves" = "Wii Saves";
 "Wii Sideways (NIB)" = "Wii Sideways (NIB)";
 "Wii save data" = "Wii save data";
 "Wii: Online System Update" = "Wii: Online System Update";
 "Wiimote Motion Controls" = "Wiimote Motion Controls";
-"Wiimote Profiles" = "Wiimote Profiles";
 "Wireframe" = "Wireframe";
 "Writes core log messages to the device console. For diagnostics; leave off for normal use." = "Writes core log messages to the device console. For diagnostics; leave off for normal use.";
 "Writes per-frame render times to a log file for offline analysis." = "Writes per-frame render times to a log file for offline analysis.";
@@ -4619,13 +4597,11 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "No Save States" = "No Save States";
 "No Shader" = "No Shader";
 "Pipeline" = "Pipeline";
-"Pointer Sensitivity" = "Pointer Sensitivity";
 "Remove Favorite" = "Remove Favorite";
 "Rename" = "Rename";
 "Rename Save" = "Rename Save";
 "Save Here (Slot %d)" = "Save Here (Slot %d)";
 "Save states for this game will appear here." = "Save states for this game will appear here.";
-"Scales how far the Wii Remote pointer moves per drag in Drag mode. Doesn't affect Follow or Gyro mode." = "Scales how far the Wii Remote pointer moves per drag in Drag mode. Doesn't affect Follow or Gyro mode.";
 "Shader" = "Shader";
 "Shader Debug Tools" = "Shader Debug Tools";
 "Shaders off" = "Shaders off";
@@ -4651,7 +4627,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "D-Pad ↓" = "D-Pad ↓";
 "Home" = "Home";
 "Left Stick Click" = "Left Stick Click";
-"On-Screen Style" = "On-Screen Style";
 "On-screen %@" = "On-screen %@";
 "Pointer" = "Pointer";
 "Recenter Pointer" = "Recenter Pointer";
