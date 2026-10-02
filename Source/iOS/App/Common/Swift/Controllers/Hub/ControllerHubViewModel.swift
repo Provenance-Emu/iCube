@@ -158,7 +158,7 @@ final class ControllerHubViewModel {
   var actions: ControllerHubActions {
     ControllerHubActions(
       playerDestination: { player in
-        AnyView(RemapPlayerView(isGC: player.kind == .gameCube, portOneBased: player.port))
+        AnyView(PlayerScreenView(slot: PlayerSlot(kind: player.kind, port: player.port)))
       },
       toggleShowAllPorts: { [weak self] in
         self?.state.showAllPorts.toggle()
