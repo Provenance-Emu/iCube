@@ -154,5 +154,48 @@ final class SkinMountTests: XCTestCase {
     let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
     XCTAssertEqual(SkinMount.aspectFit(aspect: 0, in: rect), rect)
   }
+
+  // MARK: Selection scan
+
+  func testHasSelectionIsPerOrientation() throws {
+    XCTAssertFalse(library.hasSelection(orientation: .portrait))
+    XCTAssertFalse(library.hasSelection(orientation: .landscape))
+    library.select(try skin("pocket"), for: .gameCube, orientation: .portrait)
+    XCTAssertTrue(library.hasSelection(orientation: .portrait))
+    XCTAssertFalse(library.hasSelection(orientation: .landscape))
+    library.select(nil, for: .gameCube, orientation: .portrait)
+    XCTAssertFalse(library.hasSelection(orientation: .portrait))
+  }
+
+  // MARK: Caches
+
+  func testLibraryChangeDropsTheParsedInfoOfAReimportedSkin() throws {
+    let pocket = try skin("pocket")
+    let canvas = CGSize(width: 200, height: 400)
+    // Re-imported with a different layout but the very same modification time (a deterministic zip).
+    let infoURL = pocket.directory.appendingPathComponent(Self.infoFileName)
+    let modified = Date(timeIntervalSince1970: 1_700_000_000)
+    try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: infoURL.path)
+    SkinMount.clearInfoCache()
+    XCTAssertNotNil(SkinMount.gamePictureFrame(for: pocket, canvas: canvas, isPad: false))
+    try Self.screenlessInfo.write(to: infoURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: infoURL.path)
+    XCTAssertNotNil(SkinMount.gamePictureFrame(for: pocket, canvas: canvas, isPad: false), "the stale parse is still served")
+
+    library.select(try skin("bare"), for: .gameCube, orientation: .landscape)
+    XCTAssertNil(SkinMount.gamePictureFrame(for: pocket, canvas: canvas, isPad: false))
+  }
+
+  func testLibraryChangeDropsDecodedAssetImages() throws {
+    let pocket = try skin("pocket")
+    let png = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { _ in }.pngData()!
+    try png.write(to: pocket.directory.appendingPathComponent("art.png"))
+    let size = CGSize(width: 4, height: 4)
+    let first = try XCTUnwrap(SkinAssetRenderer.image(named: "art.png", in: pocket.directory, size: size, scale: 1))
+    XCTAssertTrue(first === SkinAssetRenderer.image(named: "art.png", in: pocket.directory, size: size, scale: 1))
+
+    library.select(try skin("bare"), for: .gameCube, orientation: .landscape)
+    XCTAssertFalse(first === SkinAssetRenderer.image(named: "art.png", in: pocket.directory, size: size, scale: 1))
+  }
 }
 #endif

@@ -96,6 +96,11 @@ enum SkinMount {
     return CGRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2, width: size.width, height: size.height)
   }
 
+  /// Forgets every parsed `info.json`, so the next read comes from disk.
+  static func clearInfoCache() {
+    infoCache.removeAll()
+  }
+
   /// The skin's parsed `info.json`, re-read only when the file changes (imports replace a skin in place).
   /// `nil` when the file is gone or no longer parses.
   private static func info(for skin: InstalledSkin) -> SkinInfo? {

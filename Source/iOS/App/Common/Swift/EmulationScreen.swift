@@ -374,8 +374,9 @@ struct EmulationScreen: View {
   /// The skin's game screen area on `canvas` (the full screen, safe areas included, exactly as `SkinOverlayView`
   /// lays the skin out), when a skin is replacing the on-screen controller.
   private func skinGameArea(canvas: CGSize) -> CGRect? {
-    guard isTouchControlsActive else { return nil }
     let orientation = TouchOverlayOrientation(isPortrait: canvas.height >= canvas.width)
+    // Runs on every body pass; with no skin picked anywhere, skip the pad-kind lookup (controller scan) entirely.
+    guard isTouchControlsActive, SkinLibrary.shared.hasSelection(orientation: orientation) else { return nil }
     guard let skin = touchPadsContainer.activeSkin(orientation: orientation) else { return nil }
     return SkinMount.gamePictureFrame(for: skin, canvas: canvas)
   }

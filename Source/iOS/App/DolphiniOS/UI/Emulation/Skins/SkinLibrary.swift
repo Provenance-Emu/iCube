@@ -159,6 +159,12 @@ final class SkinLibrary: ObservableObject {
     return skins.first { $0.id == id }
   }
 
+  /// Whether any pad kind has a skin picked for `orientation`. A dictionary scan, cheap enough for a view body: it answers
+  /// "is a skin possibly in play" before anything costlier (such as asking which pad kind shows) is worth doing.
+  func hasSelection(orientation: TouchOverlayOrientation) -> Bool {
+    TouchOverlayPadKind.allCases.contains { selection[TouchOverlayLayoutStore.key($0, orientation)] != nil }
+  }
+
   /// Picks `skin` for a pad kind and orientation, or clears the pick with `nil`. Announces only a real change.
   /// A skin whose game type cannot serve the pad kind is ignored.
   func select(_ skin: InstalledSkin?, for padKind: TouchOverlayPadKind, orientation: TouchOverlayOrientation) {
@@ -179,7 +185,11 @@ final class SkinLibrary: ObservableObject {
 
   // MARK: - Helpers
 
+  /// A changed library may hold re-imported skins that kept their file names, and a deterministic zip even keeps their
+  /// modification times, so the caches keyed on those would serve the old skin.
   private func announceChange() {
+    SkinAssetRenderer.clearCache()
+    SkinMount.clearInfoCache()
     NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
   }
 
