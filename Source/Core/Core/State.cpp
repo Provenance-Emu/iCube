@@ -10,6 +10,7 @@
 #include <mutex>
 #include <shared_mutex>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -472,8 +473,25 @@ static void CompressAndDumpState(Core::System& system, const CompressAndDumpStat
   }
 }
 
+// iCube: Core::RunOnCPUThread runs its job inline on the caller when the core is not Running.
+// A save or load whose caller saw a running core can still land there if Core::Stop flips the
+// state in between (e.g. TVEmulationBridge.stop's auto-state save racing the host queue's stop),
+// and then DoState runs against a video backend that is shutting down: it blocks forever on the
+// GPU thread or dereferences a null FramebufferManager. Starting stays allowed: boot-time
+// state loads run inline before the CPU thread exists.
+static bool CanDoStateFromHere(Core::System& system, std::string_view operation)
+{
+  if (Core::IsCPUThread() || Core::IsRunningOrStarting(system))
+    return true;
+  WARN_LOG_FMT(CORE, "Skipping state {}: the core stopped before it could run", operation);
+  return false;
+}
+
 static void SaveAsFromCore(Core::System& system, std::string filename)
 {
+  if (!CanDoStateFromHere(system, "save"))
+    return;
+
   // Try with a buffer a bit larger than the previous state.
   // This will often avoid the "Measure" step.
   const auto buffer_size_estimate = static_cast<std::size_t>(s_last_state_size) * 110 / 100;
@@ -811,6 +829,9 @@ static void LoadFileStateData(const std::string& filename, Common::UniqueBuffer<
 
 static void LoadAsFromCore(Core::System& system, std::string filename)
 {
+  if (!CanDoStateFromHere(system, "load"))
+    return;
+
   // Ensure all data has reached the filesystem before trying to use it.
   s_compress_and_dump_thread.WaitForCompletion();
 
@@ -961,6 +982,9 @@ void UndoLoadState(Core::System& system)
     return;
 
   Core::RunOnCPUThread(system, [&system] {
+    if (!CanDoStateFromHere(system, "undo load"))
+      return;
+
     if (s_undo_load_buffer.empty())
     {
       PanicAlertFmtT("There is nothing to undo!");
