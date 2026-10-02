@@ -29,7 +29,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)registerMainDisplayView:(UIView*)view;
 
 // Savestates
-+ (void)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait;
+// Returns NO when nothing was saved because the core is not running (still booting or stopping).
++ (BOOL)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait;
+// YES while the core can take a save or load (running, including a user pause).
++ (BOOL)isStateOperationAllowed;
 + (void)loadStateFromSlot:(NSInteger)slot;
 
 // Save-state identity / paths.
