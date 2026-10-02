@@ -239,6 +239,15 @@ struct RemapCaptureMachine: Equatable {
     }
   }
 
+  /// Whether `inputIndex` is still pressed: risen at least `restEpsilon` above the rest value this
+  /// machine settled on (the same distance `waitingForRelease` treats as held). The player screen
+  /// asks this after a capture binds, to keep its re-arm guard up until the bound press is released.
+  /// A missing input, or a vanished device, reads as released.
+  func isHeld(_ inputIndex: Int, in values: [Float]) -> Bool {
+    guard inputIndex >= 0, inputIndex < restBaseline.count else { return false }
+    return value(values, inputIndex) - restBaseline[inputIndex] >= config.restEpsilon
+  }
+
   /// A device that vanished mid-capture reports an empty vector; missing
   /// entries read as released so the session times out instead of crashing.
   private func value(_ values: [Float], _ i: Int) -> Float {

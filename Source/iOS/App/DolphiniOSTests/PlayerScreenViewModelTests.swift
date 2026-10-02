@@ -237,6 +237,107 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertEqual(model.state.armedControlID, row.id)
   }
 
+  /// Binds input 0 (Button A) on `model`, leaving it HELD (`io.inputValues == [1, 0]`), as a player
+  /// who is still holding the button does. Returns the armed row.
+  @MainActor
+  private func bindAndKeepHolding(_ model: PlayerScreenViewModel, _ io: FakeIO) -> RemapControlRow {
+    let row = model.state.controls[0]
+    model.toggleCapture(row)
+    model.pollCapture()  // nothing was held at arm time: listening starts
+    io.inputValues = [1, 0]
+    for _ in 0 ..< RemapCaptureMachine.Config().holdPolls { model.pollCapture() }
+    XCTAssertNil(model.state.armedControlID, "bound")
+    return row
+  }
+
+  /// tvOS: a `Button` fires on release, so a player who holds A past `rearmDelay` releases after the
+  /// window closed. The row must stay settled until the bound input is released, not only until the
+  /// delay passes.
+  @MainActor
+  func test_capture_staysSettlingWhileTheBoundInputIsStillHeld_pastTheDelay() {
+    let (reader, io) = boundGameCube()
+    let clock = Clock()
+    let model = make(reader, io, clock: { clock.now })
+    model.reload()
+    let row = bindAndKeepHolding(model, io)
+    clock.now = PlayerScreenViewModel.rearmDelay + 5
+    XCTAssertTrue(model.isCaptureSettling, "still held: the delay passing is not enough")
+    model.toggleCapture(row)
+    XCTAssertNil(model.state.armedControlID, "the release of a long hold must not re-arm the row")
+    io.inputValues = [0, 0]
+    XCTAssertFalse(model.isCaptureSettling, "released and past the delay")
+    model.toggleCapture(row)
+    XCTAssertEqual(model.state.armedControlID, row.id)
+  }
+
+  /// iOS: a pad's A arms a row on its PRESS. After binding A and releasing it, the next A press must
+  /// arm a row even though the bound input reads held again: the release was sampled by a tick, not
+  /// only inferred when asked (an answer-time-only check would stall iOS for good).
+  @MainActor
+  func test_capture_aReleaseSeenByATick_letsTheSameInputArmTheNextRowOnItsPress() {
+    let (reader, io) = boundGameCube()
+    let clock = Clock()
+    let model = make(reader, io, clock: { clock.now })
+    model.reload()
+    let row = bindAndKeepHolding(model, io)
+    io.inputValues = [0, 0]
+    model.pollCapture()  // the settle tick sees the release
+    clock.now = PlayerScreenViewModel.rearmDelay + 1
+    io.inputValues = [1, 0]  // A pressed again, to arm a row
+    XCTAssertFalse(model.isCaptureSettling)
+    model.toggleCapture(row)
+    XCTAssertEqual(model.state.armedControlID, row.id)
+  }
+
+  /// Released after the delay passed, or before it: settling ends when BOTH are over.
+  @MainActor
+  func test_capture_settlingEndsAtTheLaterOfReleaseAndDelay() {
+    let (reader, io) = boundGameCube()
+    let clock = Clock()
+    let model = make(reader, io, clock: { clock.now })
+    model.reload()
+    let row = bindAndKeepHolding(model, io)
+    io.inputValues = [0, 0]
+    clock.now = PlayerScreenViewModel.rearmDelay / 2
+    XCTAssertTrue(model.isCaptureSettling, "a quick tap: released, but the delay has not passed")
+    model.toggleCapture(row)
+    XCTAssertNil(model.state.armedControlID)
+    clock.now = PlayerScreenViewModel.rearmDelay + 0.1
+    XCTAssertFalse(model.isCaptureSettling, "a quick tap: the delay passing ends it")
+    model.toggleCapture(row)
+    XCTAssertEqual(model.state.armedControlID, row.id)
+  }
+
+  /// A timeout captured no input, so only the plain delay applies, whatever is held.
+  @MainActor
+  func test_capture_timeoutSettlesForThePlainDelay() {
+    let (reader, io) = boundGameCube()
+    let clock = Clock()
+    let model = make(reader, io, clock: { clock.now })
+    model.reload()
+    let row = model.state.controls[0]
+    model.toggleCapture(row)
+    for _ in 0 ... RemapCaptureMachine.Config().timeoutPolls { model.pollCapture() }
+    XCTAssertNil(model.state.armedControlID, "timed out")
+    io.inputValues = [1, 0]  // something is held, but nothing was captured
+    clock.now = PlayerScreenViewModel.rearmDelay + 0.1
+    XCTAssertFalse(model.isCaptureSettling)
+  }
+
+  /// The remembered input is dropped on `stop()`: a pushed list covered the screen.
+  @MainActor
+  func test_capture_theHeldInputIsForgottenOnStop() {
+    let (reader, io) = boundGameCube()
+    let clock = Clock()
+    let model = make(reader, io, clock: { clock.now })
+    model.start()
+    _ = bindAndKeepHolding(model, io)
+    clock.now = PlayerScreenViewModel.rearmDelay + 1
+    XCTAssertTrue(model.isCaptureSettling)
+    model.stop()
+    XCTAssertFalse(model.isCaptureSettling, "a pushed list covered the screen: nothing is held against it")
+  }
+
   /// Spec edge case: "Capture times out. The row returns to its previous binding."
   @MainActor
   func test_capture_timeoutKeepsTheBinding() {
@@ -335,6 +436,62 @@ final class PlayerScreenViewModelTests: XCTestCase {
     model.clear(rows[1])
     XCTAssertEqual(io.writes, [])
     XCTAssertEqual(model.state.armedControlID, rows[0].id)
+  }
+
+  /// Clear is only reachable on a port that can capture: a Touchscreen port's overlay controls
+  /// cannot be rebound there, so unbinding one would strand the user.
+  @MainActor
+  func test_clear_onATouchscreenPort_writesNothing() {
+    let reader = FakeHubReader()
+    reader.gameCube[1] = "iOS/4/Touchscreen"
+    let io = FakeIO()
+    let model = make(reader, io)
+    model.reload()
+    XCTAssertFalse(model.state.canCapture)
+    model.clear(model.state.controls[0])
+    XCTAssertEqual(io.writes, [])
+  }
+
+  /// Clear on a disconnected pad's port, and on No Device, writes nothing either.
+  @MainActor
+  func test_clear_onNoDeviceOrADisconnectedPad_writesNothing() {
+    let reader = FakeHubReader()
+    let io = FakeIO()
+    let model = make(reader, io)
+    model.reload()
+    model.clear(model.state.controls[0])
+    reader.gameCube[1] = Self.xbox  // bound, but the pad is not connected
+    model.reload()
+    XCTAssertTrue(model.state.isDisconnected)
+    model.clear(model.state.controls[0])
+    XCTAssertEqual(io.writes, [])
+  }
+
+  @MainActor
+  func test_clear_onACapturingPort_unbindsTheRow() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+    model.clear(model.state.controls[0])
+    XCTAssertEqual(io.writes, ["expression:gcPad-0-0="])
+  }
+
+  /// The port changed device under an armed capture (not a disconnect): the capture cancels and
+  /// the binding is kept.
+  @MainActor
+  func test_reload_cancelsAnArmedCapture_whenTheBoundDeviceChanges() {
+    let (reader, io) = boundGameCube()
+    reader.pads.append(pad(Self.dualSense, "DualSense Wireless Controller"))
+    let model = make(reader, io)
+    model.reload()
+    model.toggleCapture(model.state.controls[0])
+    XCTAssertNotNil(model.state.armedControlID)
+    reader.gameCube[1] = Self.dualSense  // both pads stay connected: only the qualifier differs
+    model.reload()
+    XCTAssertNil(model.state.armedControlID)
+    io.inputValues = [1, 0]
+    for _ in 0 ..< 4 { model.pollCapture() }
+    XCTAssertEqual(io.writes, [])
   }
 
   @MainActor

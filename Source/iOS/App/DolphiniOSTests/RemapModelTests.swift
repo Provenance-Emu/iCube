@@ -149,6 +149,19 @@ final class RemapModelTests: XCTestCase {
     XCTAssertNil(m.poll([1, 0, 0]), "a finished machine reports nothing further")
   }
 
+  /// What the player screen asks after a capture binds: is that input still down? Measured against
+  /// the rest value the machine settled on, so an analog input resting above zero never reads held.
+  func test_isHeld_isTheRiseAboveTheRestBaseline() {
+    var m = machine(baseline: [0.12, 0])
+    XCTAssertNil(m.poll([0.12, 0]))  // listening, rest re-baselined to 0.12
+    XCTAssertFalse(m.isHeld(0, in: [0.12, 0]), "resting")
+    XCTAssertFalse(m.isHeld(0, in: [0.12 + cfg.restEpsilon - 0.01, 0]), "under the epsilon")
+    XCTAssertTrue(m.isHeld(0, in: [0.9, 0]), "pressed")
+    XCTAssertFalse(m.isHeld(1, in: [0.9, 0]), "another input")
+    XCTAssertFalse(m.isHeld(0, in: []), "a vanished device reads as released")
+    XCTAssertFalse(m.isHeld(5, in: [0.9, 0]), "an index the baseline does not have")
+  }
+
   func test_debounce_requiresConsecutivePolls() {
     var m = machine(baseline: [0, 0])
     XCTAssertNil(m.poll([0, 0]))

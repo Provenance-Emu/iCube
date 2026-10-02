@@ -87,10 +87,11 @@ final class PlayerScreenViewModel {
 
   /// ~60 Hz while a capture is armed, as `RemapPlayerView` polled.
   static let captureTickInterval: TimeInterval = 1.0 / 60
-  /// After a capture binds, activation and Back are ignored this long. A capture binds while the
-  /// button is still held (three polls), but a tvOS `Button` fires on release, and B / Menu still
-  /// arrive as an exit command. Without this, binding A re-arms the row on release and binding B
-  /// pops the screen.
+  /// After a capture binds, activation and Back are ignored at least this long, and until the bound
+  /// input is released (`isCaptureSettling`). A capture binds while the button is still held (three
+  /// polls), but a tvOS `Button` fires on release, and B / Menu still arrive as an exit command.
+  /// Without this, binding A re-arms the row on release and binding B pops the screen. The delay
+  /// alone is not enough: a player who holds the button longer than this releases after it closed.
   static let rearmDelay: TimeInterval = 0.5
 
   private let reader: any ControllerHubReading
@@ -106,6 +107,17 @@ final class PlayerScreenViewModel {
   @ObservationIgnored private var capture: Capture?
   @ObservationIgnored private var ticker: Timer?
   @ObservationIgnored private var captureEndedAt: TimeInterval?
+  /// The input the last capture bound, until it has been seen released. It keeps the ticker running
+  /// (`pollCapture` samples the release) and keeps `isCaptureSettling` true while it is down.
+  @ObservationIgnored private var boundInput: BoundInput?
+
+  /// What `isCaptureSettling` needs to ask "is it still down": the finished machine knows the rest
+  /// value it settled on, so an analog input resting above zero never reads held.
+  private struct BoundInput {
+    let qualifier: String
+    let index: Int
+    let machine: RemapCaptureMachine
+  }
 
   private struct Capture {
     let row: RemapControlRow
@@ -215,6 +227,7 @@ final class PlayerScreenViewModel {
 
   /// Also ends an armed capture: a pushed list or editor covers this screen.
   func stop() {
+    boundInput = nil
     endCapture()
     observers.forEach { notificationCenter.removeObserver($0) }
     observers.removeAll()
@@ -412,10 +425,15 @@ final class PlayerScreenViewModel {
 
   // MARK: Capture
 
-  /// True for `rearmDelay` after a capture bound or timed out: the press that was just bound may
-  /// still be on its way up. The host ignores Back while this is true.
+  /// True after a capture bound or timed out, until `rearmDelay` has passed AND the bound input is
+  /// released, whichever ends later: the press that was just bound may still be on its way up, and
+  /// a tvOS `Button` fires on that release however long the player held it. A timeout bound
+  /// nothing, so it settles for the plain delay. The host ignores Back while this is true.
   var isCaptureSettling: Bool {
-    captureEndedAt.map { clock() - $0 < Self.rearmDelay } ?? false
+    if let boundInput, boundInput.machine.isHeld(boundInput.index, in: io.inputStates(forQualifier: boundInput.qualifier)) {
+      return true
+    }
+    return captureEndedAt.map { clock() - $0 < Self.rearmDelay } ?? false
   }
 
   /// Arms `row`, or cancels when it is the armed row. While one row is armed the builder disables
@@ -429,6 +447,7 @@ final class PlayerScreenViewModel {
       return
     }
     guard !isCaptureSettling, state.canCapture else { return }
+    boundInput = nil
     let qualifier = state.player.deviceQualifier
     let names = io.inputNames(forQualifier: qualifier)
     guard !names.isEmpty else { return }
@@ -443,7 +462,10 @@ final class PlayerScreenViewModel {
   /// One capture tick. A captured input becomes the row's expression; a timeout leaves the binding
   /// as it was (spec edge case "Capture times out").
   func pollCapture() {
-    guard var session = capture else { return }
+    guard var session = capture else {
+      sampleBoundInputRelease()
+      return
+    }
     guard let result = session.machine.poll(io.inputStates(forQualifier: session.qualifier)) else {
       capture = session
       return
@@ -451,14 +473,34 @@ final class PlayerScreenViewModel {
     if case .captured(let index) = result, index < session.inputNames.count {
       io.setExpression(RemapExpression.expression(forInputName: session.inputNames[index]), for: session.row, port: slot.port)
       memory.markEdited(slot.playerID)
+      // The ticker keeps running (`endCapture` leaves it while this is set) to sample the release.
+      boundInput = BoundInput(qualifier: session.qualifier, index: index, machine: session.machine)
     }
     captureEndedAt = clock()
     endCapture()
     reload()
   }
 
+  /// A tick with no capture armed: forget the bound input once it has been released. Sampled, not
+  /// inferred when asked: on iOS a pad's A arms a row on its press, and a remembered input that
+  /// only cleared when somebody asked would still read held on the next press and refuse it.
+  private func sampleBoundInputRelease() {
+    guard let bound = boundInput else {
+      stopTicker()
+      return
+    }
+    if !bound.machine.isHeld(bound.index, in: io.inputStates(forQualifier: bound.qualifier)) {
+      boundInput = nil
+      stopTicker()
+    }
+  }
+
   /// Long-press or swipe Clear. Never races a capture armed on a different row.
   func clear(_ row: RemapControlRow) {
+    // A port that cannot capture (No Device, Touchscreen, a disconnected pad) cannot rebind either,
+    // so unbinding there would strand the control. `CaptureRowView` offers no Clear then; this is
+    // the other half.
+    guard state.canCapture else { return }
     if let capture, capture.row.id != row.id { return }
     endCapture()
     io.setExpression("", for: row, port: slot.port)
@@ -488,10 +530,15 @@ final class PlayerScreenViewModel {
     ticker = timer
   }
 
-  private func endCapture() {
+  private func stopTicker() {
     ticker?.invalidate()
     ticker = nil
+  }
+
+  /// Leaves the ticker running while a bound input is still being watched for its release.
+  private func endCapture() {
     capture = nil
     state.armedControlID = nil
+    if boundInput == nil { stopTicker() }
   }
 }
