@@ -66,7 +66,7 @@ struct ZipFileByteSource: ZipByteSource {
 enum ZipEntryScanner {
   /// The most central directory bytes the scanner reads. A ROM archive holds a handful of entries; a directory this
   /// large is not one, and reading it would be a memory problem of its own.
-  static let maxCentralDirectorySize: UInt64 = 64 << 20
+  static let maxCentralDirectorySize: UInt64 = 16 << 20
   /// minizip searches only this many bytes back from the end of the file (`max_back`, unzip.c:299, 317-327).
   static let endRecordSearchWindow = 0xFFFF
 

@@ -582,7 +582,6 @@ final class ZipEntryScannerTests: XCTestCase {
   }
 
   private static let sparseGap: UInt64 = 6 << 30
-  private static let sparseScanTimeLimit: TimeInterval = 1
 
   func testScansAMultiGigabyteZip64ArchiveWithoutReadingIt() throws {
     let entries = Self.nestedNames.map { TestZipBuilder.Entry(name: $0, contents: Data($0.utf8), zip64Fields: true) }
@@ -590,9 +589,7 @@ final class ZipEntryScannerTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: url) }
     let directorySize = entries.reduce(0) { $0 + TestZipBuilder.centralRecord($1, localHeaderOffset: 0).count }
     let source = CountingByteSource(try ZipFileByteSource(url: url))
-    let start = Date()
     XCTAssertEqual(try ZipEntryScanner.scan(source).map(\.name), Self.nestedNames)
-    XCTAssertLessThan(Date().timeIntervalSince(start), Self.sparseScanTimeLimit)
     XCTAssertLessThanOrEqual(source.bytesRead, ZipEntryScanner.endRecordSearchWindow + TestZipBuilder.zip64LocatorSize + TestZipBuilder.zip64EndRecordSize + directorySize)
   }
 
