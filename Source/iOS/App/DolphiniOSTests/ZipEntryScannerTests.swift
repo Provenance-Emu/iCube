@@ -612,9 +612,11 @@ final class ZipEntryScannerTests: XCTestCase {
 
   func testSafeRelativePathRuleOnStrings() {
     let unsafe = ["../x", "a/../../x", "a/..", "..", "..\\x", "a\\..\\x", "/abs", "\\abs", "C:/x", "c:\\x", "z:",
-                  "../\u{301}x", "../\u{200D}x", "a\u{600}/../\u{301}b", "..\\\u{301}x", "..\u{0}/x"]
+                  "../\u{301}x", "../\u{200D}x", "a\u{600}/../\u{301}b", "..\\\u{301}x", "..\u{0}/x",
+                  // Any NUL is unsafe: a caller that joins the whole string keeps the NUL as a path component.
+                  "a\u{0}/../x", "a\u{0}b", "\u{0}"]
     let safe = ["", "a.txt", "Game/disc.iso", "..hidden", "a/b..c", "a/./b", "cafe\u{301}/art.png", "e\u{301}/\u{200D}x/..hidden",
-                "1:x", "a\u{0}/../x"]
+                "1:x"]
     for name in unsafe { XCTAssertFalse(ZipEntryScanner.isSafeRelativePath(name), name.debugDescription) }
     for name in safe { XCTAssertTrue(ZipEntryScanner.isSafeRelativePath(name), name.debugDescription) }
   }

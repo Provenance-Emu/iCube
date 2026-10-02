@@ -248,11 +248,12 @@ enum ZipEntryScanner {
     throw ZipEntryScannerError.notAZip
   }
 
-  /// Whether extracting an entry with this name stays inside the destination folder. Checked on the UTF-8 bytes, cut at
-  /// the first NUL the way `String(cString:)` cuts them: `\` counts as `/`, and a leading `/`, a drive letter or any
-  /// `..` component is unsafe.
+  /// Whether a caller that joins this whole string onto the destination stays inside the destination folder. Checked on
+  /// the UTF-8 bytes: `\` counts as `/`, and a leading `/`, a drive letter or any `..` component is unsafe. A name with a
+  /// NUL is always unsafe: Foundation keeps the NUL as a literal path component, so cutting the name there (as a C
+  /// extractor would) would validate `a<NUL>/../../x` as `a` while the file system resolves it outside the folder.
   static func isSafeRelativePath(_ name: String) -> Bool {
-    isSafeRelativePath(bytes: name.utf8.prefix { $0 != nulByte })
+    !name.utf8.contains(nulByte) && isSafeRelativePath(bytes: name.utf8)
   }
 
   /// Checked on the raw bytes, never on Swift `String` / `Character` operations: those group a `/` with a following

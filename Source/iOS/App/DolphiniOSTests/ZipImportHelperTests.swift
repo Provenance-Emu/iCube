@@ -13,6 +13,8 @@ enum TestTarBuilder {
     var contents = Data()
   }
 
+  static let paxLocalHeaderType = UInt8(ascii: "x")
+  static let paxGlobalHeaderType = UInt8(ascii: "g")
   static let symlinkType = UInt8(ascii: "2")
   static let hardLinkType = UInt8(ascii: "1")
   static let directoryType = UInt8(ascii: "5")
@@ -30,6 +32,14 @@ enum TestTarBuilder {
     }
     archive.append(Data(count: 2 * blockSize))
     return archive
+  }
+
+  /// One PAX extended header record, `"<length> <key>=<value>\n"`, where the length counts the whole record including itself.
+  static func paxRecord(key: String, value: [UInt8]) -> Data {
+    let body = Array(" \(key)=".utf8) + value + [UInt8(ascii: "\n")]
+    var length = body.count
+    while String(length).utf8.count + body.count != length { length = String(length).utf8.count + body.count }
+    return Data(Array(String(length).utf8) + body)
   }
 
   private static func header(for entry: Entry) -> Data {
@@ -152,6 +162,23 @@ final class ZipImportHelperTests: XCTestCase {
     XCTAssertEqual(try Data(contentsOf: url), archive)
   }
 
+  func testRejectsASourceThatIsNotARegularFile() throws {
+    let folder = root.appendingPathComponent("in", isDirectory: true).appendingPathComponent("folder.zip", isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    XCTAssertThrowsError(try ZipImportHelper.extractArchive(at: folder, to: destination)) {
+      XCTAssertEqual($0 as? ZipImportHelper.ArchiveImportError, .notARegularFile)
+    }
+    XCTAssertEqual(stagingDirectories(), staleDirectoriesBefore)
+  }
+
+  func testExtractsASourceThatIsASymlinkToAnArchive() throws {
+    let real = try write(TestZipBuilder.build([.init(name: "disc.iso", contents: Data("disc".utf8))]), as: "real.zip")
+    let link = real.deletingLastPathComponent().appendingPathComponent("link.zip")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+    try ZipImportHelper.extractArchive(at: link, to: destination)
+    XCTAssertEqual(contents(of: "disc.iso"), "disc")
+  }
+
   // MARK: - Tar
 
   private func tar(_ entries: [TestTarBuilder.Entry]) -> Data {
@@ -181,6 +208,26 @@ final class ZipImportHelperTests: XCTestCase {
 
   func testRejectsATarHardLinkEntry() {
     assertRejectedAsUnsafe(tar([.init(name: "link.iso", type: TestTarBuilder.hardLinkType, linkName: "../escape.txt")]), as: "hostile.tar")
+  }
+
+  /// PAX path values are raw bytes, so unlike ustar and GNU names they can carry a NUL. Foundation keeps a NUL in a path
+  /// component, so `a<NUL>/../../escape.txt` must not be validated as just `a`.
+  private let nulParentPath = Array("a".utf8) + [0] + Array("/../../escape.txt".utf8)
+
+  func testExtractsATarEntryNamedByAPaxHeader() throws {
+    let pax = TestTarBuilder.paxRecord(key: "path", value: Array("Game/disc.iso".utf8))
+    try extract(tar([.init(name: "PaxHeader/x", type: TestTarBuilder.paxLocalHeaderType, contents: pax), .init(name: "short.iso", contents: Data("disc".utf8))]), as: "game.tar")
+    XCTAssertEqual(contents(of: "Game/disc.iso"), "disc")
+  }
+
+  func testRejectsATarPaxPathWithANulBeforeAParentComponent() {
+    let pax = TestTarBuilder.paxRecord(key: "path", value: nulParentPath)
+    assertRejectedAsUnsafe(tar([.init(name: "PaxHeader/x", type: TestTarBuilder.paxLocalHeaderType, contents: pax), .init(name: "ok.iso", contents: Data("ok".utf8))]), as: "hostile.tar")
+  }
+
+  func testRejectsAGlobalTarPaxPathWithANulBeforeAParentComponent() {
+    let pax = TestTarBuilder.paxRecord(key: "path", value: nulParentPath)
+    assertRejectedAsUnsafe(tar([.init(name: "PaxHeader/g", type: TestTarBuilder.paxGlobalHeaderType, contents: pax), .init(name: "ok.iso", contents: Data("ok".utf8))]), as: "hostile.tar")
   }
 
   func testStripsALeadingSlashFromATarEntryAsBefore() throws {

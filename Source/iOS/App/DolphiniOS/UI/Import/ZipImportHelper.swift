@@ -49,6 +49,11 @@ final class ArchiveBatchImportResult: NSObject {
 
 @objc(DOLZipImportHelper)
 final class ZipImportHelper: NSObject {
+  enum ArchiveImportError: Error {
+    /// The archive is a directory, a link or something else that is not one file the extractors can read.
+    case notARegularFile
+  }
+
   private enum ArchiveKind {
     case zip
     case sevenZip
@@ -284,6 +289,8 @@ final class ZipImportHelper: NSObject {
     try fm.createDirectory(at: copyDir, withIntermediateDirectories: true)
     let copyURL = copyDir.appendingPathComponent(sourceURL.lastPathComponent)
     try fm.copyItem(at: sourceURL.resolvingSymlinksInPath(), to: copyURL)
+    let copyKind = try copyURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+    guard copyKind.isRegularFile == true, copyKind.isSymbolicLink != true else { throw ArchiveImportError.notARegularFile }
     try fm.createDirectory(at: destination, withIntermediateDirectories: true)
     try extractArchive(kind: mapArchiveKind(sourceKind), sourceURL: copyURL, to: destination)
   }
@@ -353,10 +360,23 @@ final class ZipImportHelper: NSObject {
     guard items.count == (try decoder.count()) else { throw ZipEntryScannerError.inconsistentDirectory }
     var paths: [String] = []
     for index in 0..<items.count {
-      paths.append(try items.item(at: index).path().description)
+      let item = try items.item(at: index)
+      // An item PLzmaSDK could not read the path of is null, and asking it for its path dereferences it.
+      guard hasObject(item) else { throw ZipEntryScannerError.inconsistentDirectory }
+      paths.append(try item.path().description)
     }
     try validateItemPaths(paths)
     _ = try decoder.extract(to: Path(tempDir.path))
+  }
+
+  /// Whether `item` wraps a real archive item. `OpenCallback::initialItemAt` returns a null item when it cannot read an
+  /// item's path, and PLzmaSDK exposes no way to ask for that, so the item's `object` pointer is read by reflection. An
+  /// item whose pointer cannot be read counts as null, so a change in PLzmaSDK's layout rejects 7z archives instead of
+  /// letting a null item through; the 7z import test catches that.
+  private static func hasObject(_ item: Item) -> Bool {
+    let object = Mirror(reflecting: item).children.first { $0.label == "object" }?.value
+    let pointer = object.flatMap { Mirror(reflecting: $0).children.first { $0.label == "object" }?.value }
+    return (pointer as? UnsafeMutableRawPointer) != nil
   }
   #else
   private static func extractSevenZip(sourceURL: URL, to tempDir: URL) throws {
