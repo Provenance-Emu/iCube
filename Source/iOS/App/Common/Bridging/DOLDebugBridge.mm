@@ -11,12 +11,10 @@
 #include <deque>
 #include "Common/CommonPaths.h"
 #include "Common/Config/Config.h"
-#include "Common/FileUtil.h"
 #include "Common/Logging/LogManager.h"
 #include "Common/Version.h"
 #include "Core/Config/GraphicsSettings.h"
 #include "Core/Config/MainSettings.h"
-#include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
 #include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
@@ -134,21 +132,27 @@ class RingListener : public Common::Log::LogListener {
 
 + (nullable NSData*)screenshotPNGWithTimeout:(double)timeout {
   if (!Core::IsRunning(Core::System::GetInstance())) return nil;
-  const std::string name = "debugapi-" + std::to_string((long long)([[NSDate date] timeIntervalSince1970] * 1000));
-  // Core::SaveScreenShot must run on the host thread. The screenshot file it triggers is
-  // written asynchronously, so the poll loop below stays off the host queue -- it only reads
-  // the filesystem and never blocks the host thread.
-  //
-  // SConfig::GetInstance().GetGameID() is read here too, inside the same host-queue hop,
-  // rather than on the caller's (server) queue: SConfig is host-thread-confined the same
-  // way Core::SaveScreenShot is, and reading it from the server queue while the host thread
-  // concurrently mutates config during boot/shutdown is a data race.
-  __block std::string gameId;
+  // The PNG goes to a path of our own rather than <Screenshots>/<GameID>/. Building that path
+  // meant reading SConfig's game ID, which the CPU thread rewrites when a Wii title launches
+  // (ES.cpp, DVDThread.cpp), outside any CPU guard; the concatenation crashed on a bad string
+  // during a screenshot burst sent while NSMBW was booting (2026-10-01).
+  // FrameDumper::SaveScreenshot takes any filename.
+  const long long stamp = (long long)([[NSDate date] timeIntervalSince1970] * 1000);
+  const std::string path =
+      std::string(NSTemporaryDirectory().UTF8String) + "debugapi-" + std::to_string(stamp) + ".png";
+  // The request must be made under a CPUThreadGuard on the host thread, as Core::SaveScreenShot
+  // does. The file it triggers is written asynchronously, so the poll loop below stays off the
+  // host queue -- it only reads the filesystem and never blocks the host thread.
+  __block bool requested = false;
   __block bool wasPaused = false;
   DOLHostQueueRunSync(^{
     Core::System& sys = Core::System::GetInstance();
-    Core::SaveScreenShot(name);
-    gameId = SConfig::GetInstance().GetGameID();
+    {
+      const Core::CPUThreadGuard guard(sys);
+      if (!g_frame_dumper) return;
+      g_frame_dumper->SaveScreenshot(path);
+      requested = true;
+    }
     // The request is only serviced by FrameDumper on the next PRESENTED frame
     // (FrameDumper.cpp: m_screenshot_request.TestAndClear() inside the dump
     // thread). A paused core never presents, so the poll below would time out
@@ -159,6 +163,7 @@ class RingListener : public Common::Log::LogListener {
     wasPaused = Core::GetState(sys) == Core::State::Paused;
     if (wasPaused) Core::DoFrameStep(sys);
   });
+  if (!requested) return nil;
   if (wasPaused) {
     // Wait for the step to land (CPU back in stepping => GetState == Paused).
     NSDate* stepDeadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
@@ -186,23 +191,24 @@ class RingListener : public Common::Log::LogListener {
       }
     });
   }
-  // SaveScreenShot writes <Screenshots>/<GameID>/<name>.png asynchronously (Core::Core.cpp
-  // GenerateScreenshotFolderPath + SaveScreenShot(string_view)).
-  std::string path = File::GetUserPath(D_SCREENSHOTS_IDX) + gameId + DIR_SEP_CHR + name + ".png";
+  // The PNG is complete once it ends with the IEND chunk. A size that holds still for one poll
+  // is not enough: the encoder writes in 16 KiB blocks and can stall between them, which
+  // returned truncated 16384- and 32768-byte files while a game was booting.
+  static const uint8_t kPNGEnd[] = {'I', 'E', 'N', 'D', 0xAE, 0x42, 0x60, 0x82};
   NSString* ns = @(path.c_str());
+  NSFileManager* fm = [NSFileManager defaultManager];
   NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
-  unsigned long long lastSize = 0;
   while ([deadline timeIntervalSinceNow] > 0) {
-    NSDictionary* attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:ns error:nil];
-    unsigned long long size = [attrs fileSize];
-    if (size > 0 && size == lastSize) {
-      NSData* data = [NSData dataWithContentsOfFile:ns];
-      [[NSFileManager defaultManager] removeItemAtPath:ns error:nil];
+    NSData* data = [NSData dataWithContentsOfFile:ns];
+    const NSUInteger n = data.length;
+    if (n >= sizeof(kPNGEnd) &&
+        memcmp((const uint8_t*)data.bytes + n - sizeof(kPNGEnd), kPNGEnd, sizeof(kPNGEnd)) == 0) {
+      [fm removeItemAtPath:ns error:nil];
       return data;
     }
-    lastSize = size;
     [NSThread sleepForTimeInterval:0.05];
   }
+  [fm removeItemAtPath:ns error:nil];
   return nil;
 }
 
