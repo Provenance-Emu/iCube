@@ -44,9 +44,16 @@ lists the handoff commits, which this list leaves out). The task each one belong
 - `6cc57b8bb4` feat(controllers): the hub's player rows push the player screen [Task 14]
 - `e5d4393702` chore(l10n): catalogue the player screen strings [Task 15]
 
-The player screen's files are in `Source/iOS/App/Common/Swift/Controllers/Player/`. The hub change
-is a one-line change in `Controllers/Hub/ControllerHubViewModel.swift`. Task 13 changed
-`Source/iOS/App/Common/Swift/EmulationScreen.swift`.
+The player screen's files are in `Source/iOS/App/Common/Swift/Controllers/Player/`. The branch
+changes two of the hub's files, `Controllers/Hub/ControllerHubViewModel.swift` and
+`Controllers/Hub/ControllerHubState.swift`:
+- The hub's player rows now push `PlayerScreenView` instead of `RemapPlayerView`.
+- `.padBackNavigation()` is added to three destinations: Motion Source (DSU), More Controller
+  Settings and Edit Layout.
+- `LiveControllerHubReader.connectedPads()` fills the new `ConnectedPadState.hasGyro`, which is
+  declared in `ControllerHubState.swift` (default `false`, so existing memberwise inits compile).
+
+Task 13 changed `Source/iOS/App/Common/Swift/EmulationScreen.swift`.
 
 ## Merge order
 
@@ -77,7 +84,13 @@ is a one-line change in `Controllers/Hub/ControllerHubViewModel.swift`. Task 13 
    the remembered profile name from `io.hasAnyBinding(slot)`, asked before the bind (a pad taking
    over a port that already has a mapping keeps the old mapping and its name). After the fix, a Touchscreen → pad switch loads the pad's default profile, so
    the Load Profile row would still read "Touchscreen". The follow-up makes `LivePlayerScreenIO`
-   ask the new bridge check after the bind, and updates the fake IO and the two name tests.
+   ask the new bridge check after the bind, and updates the fake IO and the name tests.
+   - `FakeIO.hasAnyBinding` (in `PlayerScreenViewModelTests`) returns a constant and does not record
+     when it was asked, so nothing pins "asked before the bind". The follow-up must make the fake
+     answer differently after `setDevice`, and update
+     `test_setDevice_firstBindRemembersTheDefaultProfile`,
+     `test_setDevice_rebindKeepsTheRememberedName` and
+     `test_setDevice_touchscreenOnAWiiRemote_remembersTheTouchscreenProfile`.
 
 The fix also reloads `IMUIR/Enabled = True` (the Enabled setting of the Wii Remote's motion-pointer
 group, which switches the core's motion-driven pointer on) on a Touchscreen → pad switch for a Wii Remote, because
@@ -110,8 +123,11 @@ the pad's default profile is loaded. The explicit re-enable in `setDevice` stays
 - Capture:
   - Rows are disabled, with a hint, on the Touchscreen, on No Device and on a disconnected MFi pad.
   - DSU-bound ports capture and never read "(Disconnected)".
-  - For 0.5 s after a capture binds, the screen ignores activation and Back
-    (`PlayerScreenViewModel.rearmDelay`).
+  - After a capture binds, the screen ignores activation and Back for at least 0.5 s
+    (`PlayerScreenViewModel.rearmDelay`) and for as long as the bound input is still held, whichever
+    ends later (`isCaptureSettling`). A tvOS `Button` fires on release, so a long hold of A would
+    otherwise release after the window closed and re-arm the row. A timeout captured nothing, so it
+    settles for the plain delay.
 - Pointer & Motion:
   - Touchscreen port: Touch – Follow / Touch – Drag / Gyro. There is no "Off".
   - Gyro pad port: one "Aim with Controller Motion" toggle.
@@ -175,9 +191,14 @@ Load Profile list, the raw-expression editor, and all of tvOS.
    - Long-press → Clear and swipe → Clear unbind a row.
    - On a row near the bottom of a freshly opened screen, scroll to it by hand: its menu appears at
      once.
-   - If either gesture misbehaves, apply the fallback in `docs/superpowers/plans/2026-09-30-controller-hub-phase3-player-screen.md` (the Task 8
-     capture row, "Fallback if checklist items 4 or 23 fail"): delete both modifiers (the context
-     menu and the swipe action) from `CaptureRowView` and keep only the editor's Clear.
+   - If either gesture misbehaves, apply the fallback in the plan
+     (`docs/superpowers/plans/2026-09-30-controller-hub-phase3-player-screen.md`), section
+     "Decisions made while planning" → "Ruled — Clear stays on the capture row as `.contextMenu`
+     and, on iOS, `.swipeActions`…", bullet "Fallback if checklist items 4 or 23 fail": delete both
+     modifiers (the context menu and the swipe action) from `CaptureRowView` and keep only the
+     editor's Clear.
+   - On a Touchscreen or No Device port, on a disconnected pad, or while another row is armed, the
+     row offers neither gesture.
 5. Turn the pad off while a row is armed:
    - The capture ends. Device reads "<name> (Disconnected)". The capture rows are disabled, with the
      "Connect this controller to capture buttons." hint. The binding is kept.
@@ -211,7 +232,12 @@ Load Profile list, the raw-expression editor, and all of tvOS.
      So the visible check is on the Touchscreen: switch a port to the Touchscreen (Device →
      Touchscreen), or press Reset to Default Profile on a port already on the Touchscreen and
      confirm. Expected: the saved profile loads, so the port's rows show the pad bindings you
-     saved instead of the bundled on-screen touch bindings. To undo it, delete `Touchscreen.ini`
+     saved instead of the bundled on-screen touch bindings. On a GameCube port, prefer Reset to
+     Default Profile on a port already on the Touchscreen as the clean check: switching Device →
+     Touchscreen loads the saved "Touchscreen" profile, whose saved `Device =` line can flip the
+     port back to the pad it was saved from (`assignTouchscreenToGCPort` does not re-set the
+     device after `LoadConfig`, `Source/iOS/App/Common/Emulation/TVControllerMappingBridge.mm`
+     ~:228-246), so the port may not stay on the Touchscreen. To undo it, delete `Touchscreen.ini`
      from the app's user profile directory for that controller type (GameCube pad or Wii Remote,
      whichever port you saved from; I did not verify the exact container path) by removing it from
      the app's container, for example with `devicectl` file tools. The Save, Reset or Load screens
@@ -257,7 +283,7 @@ Load Profile list, the raw-expression editor, and all of tvOS.
       per press.
     - In Raw Bindings, typing "(" shows "Not saved: …" and disables Save.
     - A valid edit saves and pops.
-    - Clear in the editor unbinds the control; this is the pad's path.
+    - Clear, then Save, unbinds the control; this is the pad's path. (Clear only empties the field.)
 17. Pad Back, the gap Phase 2 left (on iOS, a pad's A could push More, DSU and Edit Layout from
     the hub, but those screens had no pad B to pop them):
     - A on More Controller Settings, Motion Source (DSU) and Edit Layout pushes each one, and B pops it.
@@ -279,12 +305,16 @@ Apple TV, with a Siri Remote and a pad, on a Wii title:
 20. Each Advanced numeric setting is ONE row. Left/right on the Siri Remote and on a pad's d-pad
     steps its value; select does nothing.
 21. Up/down leave a compact row normally; focus is never trapped. If item 20 or 21 fails, apply the
-    fallback in `docs/superpowers/plans/2026-09-30-controller-hub-phase3-player-screen.md` (Task 9, the numeric and Sensitivity
-    items): drop `isCompactOnTV: true`, so the rows explode into one row per option.
+    fallback in the plan (`docs/superpowers/plans/2026-09-30-controller-hub-phase3-player-screen.md`),
+    section "Decisions made while planning" → "Ruled — the tvOS compact picker is built like
+    `TVIntStepper` / `TVFloatStepper`, not as a `Button`", bullet "Fallback": drop
+    `isCompactOnTV: true` from the numeric and Sensitivity items, so the rows explode into one row
+    per option.
 22. Capture:
     - Selecting a Buttons row then pressing a pad button binds it.
     - Menu (or B) while armed binds B and does not pop, neither on the press nor on the release.
-    - Binding A does not re-arm the row.
+    - Binding A does not re-arm the row. Hold the button for a full second before releasing: the
+      row must not re-arm on the release either.
     - Focus stays on the armed row.
 23. A long press of select on a capture row shows Clear, and Clear unbinds the row. (If this fails,
     apply the same fallback as for item 4: delete the context menu and swipe modifiers from
@@ -310,6 +340,11 @@ Apple TV, with a Siri Remote and a pad, on a Wii title:
 - A pad disconnect hands GameCube port 1 back to the Touchscreen, which loads the Touchscreen
   profile over a custom pad mapping. With `5bbeee6c33` the pad comes back working, but on its
   default profile. Keeping the custom mapping needs a per-port stash, which is not designed.
+- Saving a profile named "Touchscreen" and then loading it on a GameCube port (Device → Touchscreen,
+  or any path through `assignTouchscreenToGCPort`) can flip the port back to the pad the profile was
+  saved from: the saved `Device =` line loads and `assignTouchscreenToGCPort` does not re-set the
+  device afterwards (`TVControllerMappingBridge.mm` ~:228-246, which this phase does not edit).
+  Checklist item 9's built-in test is where it shows up.
 - One alert serves every prompt. If a follow-up prompt ever fails to appear after the previous one
   closes (checklist items 9 and 24), the cause is SwiftUI re-presenting the same `.alert` too soon:
   - The plan keeps the one-main-actor-hop gap. The simulator smoke test saw the Replace follow-up
@@ -317,12 +352,10 @@ Apple TV, with a Siri Remote and a pad, on a Wii title:
   - The next step would be a longer gap, or presenting the follow-up from the alert's dismissal.
 - Deferred review minors are recorded in the SDD ledger,
   `.superpowers/sdd/2026-09-30-controller-hub-phase3-player-screen/progress.md`, on the lines that
-  start "minor (deferred)". The final review triages them. Three deserve a reader's attention:
+  start "minor (deferred)". The final review triages them. Two deserve a reader's attention:
   - The capture timer and the notification observers are torn down only through `stop()` and
     `endCapture()`. A view model released while a capture is armed leaves a timer firing that does
     nothing.
-  - A disabled capture row can still be cleared through its context menu or swipe action, because
-    `CaptureRowView` applies `.disabled` before those modifiers.
   - `ProfileNaming.suggestion` can return an empty or a built-in name at its source. The view model
     guards it.
 
