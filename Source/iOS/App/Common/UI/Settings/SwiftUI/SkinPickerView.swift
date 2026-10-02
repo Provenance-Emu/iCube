@@ -36,7 +36,7 @@ struct SkinPickerView: View {
     self.padKinds = padKinds
     self.library = library
     _padKind = State(initialValue: padKinds.first ?? .gameCube)
-    _orientation = State(initialValue: UIDevice.current.orientation.isLandscape ? .landscape : .portrait)
+    _orientation = State(initialValue: Self.currentOrientation())
   }
 
   var body: some View {
@@ -93,6 +93,14 @@ struct SkinPickerView: View {
     .onAppear { SkinMount.forgetDeadSelections(in: library) }
   }
 
+  /// The orientation the app's window is in. The device orientation reads unknown when the phone lies flat.
+  private static func currentOrientation() -> TouchOverlayOrientation {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+    guard let interfaceOrientation = scene?.interfaceOrientation, interfaceOrientation != .unknown else { return .portrait }
+    return TouchOverlayOrientation(isPortrait: interfaceOrientation.isPortrait)
+  }
+
   private func hasLayout(_ skin: InstalledSkin) -> Bool {
     SkinMount.supports(skin, orientation: orientation, isPad: UIDevice.current.userInterfaceIdiom == .pad)
   }
@@ -138,6 +146,11 @@ struct SkinPickerView: View {
     switch result {
     case .success(let urls):
       for url in urls {
+        // The importer also lets through whatever type the system resolves a skin's extension to, so vet the pick here.
+        guard SkinLibrary.isImportableArchive(url) else {
+          alertMessage = String(format: L("Couldn't import skin: %@"), SkinImportError.describe(SkinImportError.unreadableArchive))
+          continue
+        }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do {

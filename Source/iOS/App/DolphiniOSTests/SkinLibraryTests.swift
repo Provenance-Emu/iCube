@@ -3,6 +3,7 @@
 
 #if os(iOS)
 import Combine
+import UniformTypeIdentifiers
 import XCTest
 import Zip
 @testable import iCube
@@ -213,6 +214,43 @@ final class SkinLibraryTests: XCTestCase {
     XCTAssertEqual(announced, 1)
     try library.delete(skin)
     XCTAssertGreaterThanOrEqual(announced, 2, "deleting the active skin tells a running game to rebuild its pads")
+  }
+
+  func testRepickingTheSameSkinDoesNotAnnounceAgain() throws {
+    let library = SkinLibrary(rootURL: root)
+    let skin = try library.importSkin(from: makeArchive())
+    library.select(skin, for: .gameCube, orientation: .portrait)
+    var announced = 0
+    var published = 0
+    let sink = library.objectWillChange.sink { published += 1 }
+    let observer = NotificationCenter.default.addObserver(forName: SkinLibrary.didChangeNotification, object: library, queue: nil) { _ in announced += 1 }
+    defer {
+      sink.cancel()
+      NotificationCenter.default.removeObserver(observer)
+    }
+    library.select(skin, for: .gameCube, orientation: .portrait)
+    library.select(nil, for: .gameCube, orientation: .landscape)
+    XCTAssertEqual(announced, 0)
+    XCTAssertEqual(published, 0)
+    library.select(nil, for: .gameCube, orientation: .portrait)
+    XCTAssertEqual(announced, 1, "clearing a real pick still announces")
+  }
+
+  func testImporterAcceptsWhateverTypeTheExtensionsResolveTo() {
+    for ext in ["deltaskin", "manicskin"] {
+      let resolved = UTType(filenameExtension: ext)
+      XCTAssertNotNil(resolved)
+      XCTAssertTrue(resolved.map(SkinLibrary.archiveContentTypes.contains) ?? false, "\(ext) must be pickable even if another app owns its type")
+    }
+    XCTAssertTrue(SkinLibrary.archiveContentTypes.contains(.zip))
+  }
+
+  func testImportableArchivesAreSkinArchivesAndPlainZips() {
+    XCTAssertTrue(SkinLibrary.isImportableArchive(URL(fileURLWithPath: "/tmp/a.deltaskin")))
+    XCTAssertTrue(SkinLibrary.isImportableArchive(URL(fileURLWithPath: "/tmp/a.MANICSKIN")))
+    XCTAssertTrue(SkinLibrary.isImportableArchive(URL(fileURLWithPath: "/tmp/a.zip")))
+    XCTAssertFalse(SkinLibrary.isImportableArchive(URL(fileURLWithPath: "/tmp/a.png")))
+    XCTAssertFalse(SkinLibrary.isImportableArchive(URL(string: "https://example.com/a.zip")!))
   }
 }
 #endif

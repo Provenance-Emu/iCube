@@ -52,11 +52,15 @@ final class SkinLibrary: ObservableObject {
   /// File extensions of the archives the system hands to the app (Delta and Manic share the zip layout).
   static let archiveExtensions: Set<String> = ["deltaskin", "manicskin"]
 
-  /// The document types `Info.plist` exports for those archives, for the file importer.
+  private static let zipExtension = "zip"
+
+  /// The document types the file importer accepts: the types `Info.plist` exports, whatever type the system resolves
+  /// each extension to (another app, such as Delta, may declare `.deltaskin` itself, and the file would not conform to
+  /// ours), and plain zip archives. `isImportableArchive` vets the pick afterwards.
   static let archiveContentTypes: [UTType] = [
     UTType(exportedAs: "com.joemattiello.iCube.deltaskin"),
     UTType(exportedAs: "com.joemattiello.iCube.manicskin"),
-  ]
+  ] + archiveExtensions.sorted().compactMap { UTType(filenameExtension: $0) } + [.zip]
 
   /// Posted (object: the library) after the installed skins or a pick change, so a running game rebuilds its
   /// on-screen controller.
@@ -87,6 +91,11 @@ final class SkinLibrary: ObservableObject {
 
   static func isSkinArchive(_ url: URL) -> Bool {
     url.isFileURL && archiveExtensions.contains(url.pathExtension.lowercased())
+  }
+
+  /// A skin archive, or a bare zip (skins are zips; some people rename them).
+  static func isImportableArchive(_ url: URL) -> Bool {
+    isSkinArchive(url) || (url.isFileURL && url.pathExtension.lowercased() == zipExtension)
   }
 
   // MARK: - Import and delete
@@ -150,16 +159,20 @@ final class SkinLibrary: ObservableObject {
     return skins.first { $0.id == id }
   }
 
-  /// Picks `skin` for a pad kind and orientation, or clears the pick with `nil`.
+  /// Picks `skin` for a pad kind and orientation, or clears the pick with `nil`. Announces only a real change.
   /// A skin whose game type cannot serve the pad kind is ignored.
   func select(_ skin: InstalledSkin?, for padKind: TouchOverlayPadKind, orientation: TouchOverlayOrientation) {
     let key = TouchOverlayLayoutStore.key(padKind, orientation)
+    let picked: String?
     if let skin {
       guard skin.gameType.padKinds.contains(padKind) else { return }
-      selection[key] = skin.id
+      picked = skin.id
     } else {
-      selection[key] = nil
+      picked = nil
     }
+    // Re-picking what is already picked changes nothing, so a running game keeps its pads.
+    guard selection[key] != picked else { return }
+    selection[key] = picked
     saveSelection()
     announceChange()
   }
