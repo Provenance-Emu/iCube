@@ -21,8 +21,20 @@ enum EmulationToast {
 
 /// Capsule toast pinned under the top bar, driven by `DOLShowSnackbar`. Never intercepts touches.
 struct EmulationToastOverlay: View {
-  /// Clears the top bar (12 pt padding + 44 pt controls + 8 pt) so a message never covers it.
-  private static let topOffset: CGFloat = 76
+  /// Space between the bottom of the bar and the toast.
+  static let gapBelowBar: CGFloat = 12
+  /// Where the toast sits when the bar is hidden.
+  static let restingTopOffset: CGFloat = 24
+  private static let moveAnimation = Animation.easeOut(duration: 0.2)
+
+  /// The bar's measured height (0 until it has laid out) and whether it is up.
+  let barHeight: CGFloat
+  let barVisible: Bool
+
+  /// Clears the bar at whatever height it actually is (one row, two rows, any text size), so a message never covers it.
+  static func topOffset(barHeight: CGFloat, barVisible: Bool) -> CGFloat {
+    barVisible && barHeight > 0 ? barHeight + gapBelowBar : restingTopOffset
+  }
 
   @State private var text: String?
   @State private var dismissTask: Task<Void, Never>?
@@ -40,7 +52,8 @@ struct EmulationToastOverlay: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .padding(.top, Self.topOffset)
+    .padding(.top, Self.topOffset(barHeight: barHeight, barVisible: barVisible))
+    .animation(Self.moveAnimation, value: barHeight)
     .allowsHitTesting(false)
     .onReceive(NotificationCenter.default.publisher(for: .dolShowSnackbar)) { note in
       guard let message = note.userInfo?[EmulationToast.textKey] as? String else { return }
@@ -53,7 +66,7 @@ struct EmulationToastOverlay: View {
     withAnimation { text = message }
     AccessibilityNotification.Announcement(message).post()
     dismissTask = Task {
-      try? await Task.sleep(nanoseconds: UInt64(EmulationToast.displayDuration * 1_000_000_000))
+      try? await Task.sleep(nanoseconds: TopBarTiming.nanoseconds(EmulationToast.displayDuration))
       guard !Task.isCancelled else { return }
       withAnimation { text = nil }
     }

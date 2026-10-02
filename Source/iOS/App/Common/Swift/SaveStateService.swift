@@ -20,14 +20,15 @@ public enum SaveStateService {
   /// Save to a numbered slot and write/refresh its metadata sidecar.
   ///
   /// `wait` blocks until the state file has been written so the sidecar is
-  /// consistent with the file on disk. Returns false if the path could not be
-  /// resolved (no game running) — the state save itself is still attempted.
+  /// consistent with the file on disk. Returns false if the core refused the save
+  /// (not running), the path could not be resolved, or the sidecar could not be written.
   @discardableResult
   public static func saveSlot(_ slot: Int,
                               title: String? = nil,
                               gameTitle: String? = nil,
                               wait: Bool = true) -> Bool {
-    TVEmulationBridge.saveState(toSlot: slot, wait: wait)
+    // The core refuses while it is booting or stopping; writing a sidecar for a state that was never made would lie.
+    guard TVEmulationBridge.saveState(toSlot: slot, wait: wait) else { return false }
 
     guard let path = TVEmulationBridge.stateFilePath(forSlot: slot) else { return false }
     let stateURL = URL(fileURLWithPath: path)

@@ -4703,6 +4703,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "In use" = "In use";
 "More" = "More";
 "No save in Slot %d" = "No save in Slot %d";
+"Couldn't save to Slot %d" = "Couldn't save to Slot %d";
+"Game isn't ready to load yet" = "Game isn't ready to load yet";
 "Pause Menu" = "Pause Menu";
 "Performance" = "Performance";
 "Quick Load" = "Quick Load";
