@@ -643,16 +643,21 @@ final class ZipImportHelper: NSObject {
     var reservedNames = Set<String>()
 
     for fileURL in supportedFiles {
+      // A game whose name was already in the library before this import is already imported.
+      // This has to be checked before uniqueFlatDestinationURL, which never returns an existing
+      // path: it would rename the game to "Game (1).iso" and import a duplicate.
+      let flatName = fileURL.lastPathComponent
+      if !reservedNames.contains(flatName.lowercased()),
+         fm.fileExists(atPath: destinationURL.appendingPathComponent(flatName).path) {
+        skippedExisting += 1
+        reservedNames.insert(flatName.lowercased())
+        continue
+      }
+
       let target = uniqueFlatDestinationURL(for: fileURL,
                                             relativeTo: tempDir,
                                             in: destinationURL,
                                             reservedNames: &reservedNames)
-
-      if fm.fileExists(atPath: target.path) {
-        skippedExisting += 1
-        reservedNames.insert(target.lastPathComponent.lowercased())
-        continue
-      }
 
       do {
         try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
