@@ -81,10 +81,29 @@ static void TxmSigtrapHandler(int)
 //
 // We lead with the legacy 0x69 (see AllocateExecutableMemoryRegion_LuckTXM):
 // UTM-Dolphin.js handles 0x69 but HANGS on an unrecognized 0xf00d (it never
-// advances PC), whereas universal.js cleanly REJECTS 0x69 by writing the
-// sentinel 0xE0000069 into x0 without preparing the region. So 0x69-first works
-// with both scripts; on the 0xE0000069 rejection we migrate to 0xf00d.
-static constexpr u32 TXM_LEGACY_REJECTED = 0xE0000069u;
+// advances PC), whereas universal.js cleanly REJECTS 0x69: it prepares nothing
+// and overwrites x0. So 0x69-first works with both scripts; on the rejection we
+// migrate to 0xf00d.
+//
+// The rejection is "x0 no longer holds the address". It is NOT "x0 == 0xE0000069",
+// which is what universal.js says it returns and what this file tested for until
+// 2026-10-02. The script sends the gdb-remote packet `P0=E0000069`: four bytes, in
+// target byte order, for an eight-byte register. debugserver stores them as the
+// low bytes and fills the rest with 0xcc, so x0 comes back 0xcccccccc690000e0
+// (reproduced against debugserver on macOS arm64 with that exact packet; `p0`
+// then reads back e0000069cccccccc). The old test never matched, every rejected
+// probe was taken for a legacy success, and NOTHING was blessed: StikDebug's
+// idevice_log.txt for an iPhone 16 Pro Max / iOS 26.6.2 shows ten 0x69 probes,
+// each answered with P0=E0000069, and then EXC_BAD_ACCESS on the first fetch
+// from the region. "[LuckTXM] prepared 160 MiB via legacy in 10 granules" under
+// universal.js was that failure, not a success.
+//
+// A broker that does service 0x69 leaves x0 alone (legacy.js and icube.js never
+// write it; dolphin_jit_lldb.py writes the address back).
+static bool TxmLegacyRejected(u64 legacy_result, const void* addr)
+{
+  return legacy_result != reinterpret_cast<u64>(addr);
+}
 
 static u64 TxmLegacyPrepare(void* addr, size_t len)
 {
@@ -398,18 +417,23 @@ void AllocateExecutableMemoryRegion_LuckTXM()
       // both times, which is 64 MiB plus exactly one page. An identical fault offset across two
       // runs is what gives it away; a memory-pressure kill would not land on the same byte.
       //
+      // Read that diagnosis with care. Until 2026-10-02 a probe rejected by universal.js was
+      // mistaken for a legacy success (see TxmLegacyRejected), so under that script nothing was
+      // blessed at all. Which broker script those two runs used was not recorded.
+      //
       // So probe with the first granule to find out which protocol the broker speaks, then keep
       // asking, a granule at a time, until the whole region is covered.
       const size_t probe = std::min(size, TXM_PREPARE_GRANULE);
       const u64 legacy_result = TxmLegacyPrepare(rx_ptr, probe);
-      if (static_cast<u32>(legacy_result) == TXM_LEGACY_REJECTED)
+      if (TxmLegacyRejected(legacy_result, rx_ptr))
       {
         // universal.js rejected the legacy sentinel without preparing anything; migrate to the
         // universal command it understands, for the WHOLE region including the probed granule.
         TxmUniversalPrepareAll(rx_ptr, size);
         TxmUniversalDetach();
-        os_log(OS_LOG_DEFAULT, "[LuckTXM] prepared %zu MiB via universal after legacy reject",
-               size >> 20);
+        os_log(OS_LOG_DEFAULT,
+               "[LuckTXM] prepared %zu MiB via universal after legacy reject (x0=%{public}llx)",
+               size >> 20, static_cast<unsigned long long>(legacy_result));
       }
       else
       {

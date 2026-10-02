@@ -13,7 +13,7 @@ Protocol serviced (see MemoryUtil_iOS_LuckTXM.cpp):
   * universal brk #0xf00d, x16=1   x0 = region address, x1 = size   (universal.js)
   * universal brk #0xf00d, x16=0   detach request — acknowledged, we stay attached
                                    (DOL_BLESS_HONOR_DETACH=1 detaches for real)
-After blessing, x0 is left as the region address (a 0xE0000069 in x0 would tell
+After blessing, x0 is left as the region address (any other value in x0 tells
 the C++ side the legacy sentinel was rejected) and pc advances past the brk, so
 AllocateExecutableMemoryRegion_LuckTXM continues into vm_remap with the region
 authorized and IsTXMAvailable() reports true.

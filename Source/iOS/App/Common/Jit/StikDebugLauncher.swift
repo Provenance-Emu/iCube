@@ -76,8 +76,9 @@ enum StikDebugLauncher {
   /// dozen bytes and the script is one StikDebug already trusts.
   ///
   /// It is protocol-compatible with us. `MemoryUtil_iOS_LuckTXM.cpp` leads with `brk #0x69`,
-  /// which `universal.js` cleanly REJECTS by writing the sentinel `0xE0000069` into x0 without
-  /// preparing the region, and we then migrate to `brk #0xf00d` with x16 = 1 (CMD_PREPARE_REGION)
+  /// which `universal.js` cleanly REJECTS by overwriting x0 without preparing the region (x0
+  /// comes back as `0xcccccccc690000e0`, not the `0xE0000069` the script documents; see
+  /// `TxmLegacyRejected`), and we then migrate to `brk #0xf00d` with x16 = 1 (CMD_PREPARE_REGION)
   /// and x16 = 0 (CMD_DETACH), which is exactly what that script implements.
   static func makeEnableJITURL(bundleID: String) -> URL? {
     let allowed = CharacterSet(charactersIn:
