@@ -256,7 +256,7 @@ struct RemapControlRow: Identifiable, Equatable {
   let name: String
   let expression: String
 
-  /// Includes `owner` for the same reason `RemapGroup.key` does: a Wii
+  /// Includes `owner` because a Wii
   /// Remote's own group and its extension's can share `groupId`.
   var id: String { "\(owner)-\(groupId)-\(index)" }
 }

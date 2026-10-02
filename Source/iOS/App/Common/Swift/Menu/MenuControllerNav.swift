@@ -4,13 +4,12 @@
 import Foundation
 
 /// D18 (`docs/superpowers/specs/2026-09-24-data-driven-menus-design.md`) engine:
-/// iOS-only controller navigation for `MenuScreen`. This is the button-remap
-/// screen's `RemapControllerNav` moved here verbatim (behaviour unchanged,
-/// `RemapModel.swift` now aliases `RemapControllerNav` to this type) plus the
+/// iOS-only controller navigation for `MenuScreen`. This began as the old
+/// button-remap screen's controller navigation, plus the
 /// shoulder/section-jump addition the design doc's §2 asks for. Nothing here
 /// touches GameController, SwiftUI or `ControllerFocusCoordinator` — it is a
-/// pure state machine so `MenuFocusRouter`'s tests (and `RemapModelTests`,
-/// which still exercise it under the old name) never need a real controller.
+/// pure state machine so `MenuFocusRouter`'s tests (and `RemapModelTests`)
+/// never need a real controller.
 ///
 /// - Move is edge-triggered with hold-to-repeat: one step on the press edge,
 ///   nothing for `initialRepeatDelay`, then a step every `repeatInterval`.

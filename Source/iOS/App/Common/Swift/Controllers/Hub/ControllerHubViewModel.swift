@@ -35,7 +35,7 @@ struct LiveControllerHubReader: ControllerHubReading {
   nonisolated init() {} // swiftlint:disable:this unneeded_synthesized_initializer
 
   /// A port's stock default device is `iOS/0/Touchscreen` even while the port is off, so only an
-  /// active port reports its device (the rule `ControllerSetupSections.reloadQualifiers` used).
+  /// active port reports its device (the rule the old controller setup screen used).
   func boundQualifier(forGCPort port: Int) -> String {
     DOLConfigBridge.gcPortDevice(forPort: port) != 0 ? TVControllerMappingBridge.defaultDevice(forGCPort: port) as String : ""
   }

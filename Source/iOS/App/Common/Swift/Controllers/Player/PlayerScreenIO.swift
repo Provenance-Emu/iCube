@@ -171,7 +171,7 @@ struct LivePlayerScreenIO: PlayerScreenIO {
       ? TVControllerMappingBridge.loadProfile(name, forGCPort: slot.port, restoreDevice: true)
       : TVControllerMappingBridge.loadProfile(name, forWiimote: slot.port, restoreDevice: true)
     // autoAssign: false — loading a profile for THIS port must not re-decide every other port's
-    // device (the "profiles loading weird" bug, RemapPlayerView.swift:586-591).
+    // device (the "profiles loading weird" bug).
     ControllerManager.shared.reconcile(autoAssign: false)
     return loaded
   }

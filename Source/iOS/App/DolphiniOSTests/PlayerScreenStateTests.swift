@@ -39,7 +39,7 @@ final class PlayerScreenStateTests: XCTestCase {
   }
 
   /// DSU devices are not GCControllers, so they never appear in the pad list; they must still
-  /// capture (RemapPlayerView's `deviceIsPhysical`) and never read "Disconnected".
+  /// capture and never read "Disconnected".
   func test_dsuDevice_isNeverDisconnected_andCanCapture() {
     let state = screen(Self.dsu)
     XCTAssertFalse(state.isDisconnected)

@@ -139,6 +139,13 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     XCTAssertEqual(model.item(id: "gc-2")?.subtitle, "DualSense Wireless Controller (Disconnected) · GameCube Controller")
   }
 
+  /// A DSU device is never a GCController, so it is never in the pad list; the hub must name it,
+  /// not call it disconnected (the player screen's rule, decision 11).
+  func test_playerRow_boundToADSUDevice_namesIt() {
+    let model = make(state(system: .gamecube, bound: ["gc-2": "DSUClient/0/Pad C"]))
+    XCTAssertEqual(model.item(id: "gc-2")?.subtitle, "Pad C · GameCube Controller")
+  }
+
   func test_playerRow_pushesThePlayerScreen() {
     let model = make(state(system: .gamecube, bound: ["gc-1": Self.xbox]))
     guard case .destination = model.item(id: "gc-1")?.role else { return XCTFail("a player row must push") }

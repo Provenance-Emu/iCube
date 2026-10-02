@@ -115,7 +115,7 @@ struct MenuFocusRouter {
   /// screen appears — the button that *opened* this screen (e.g. A on a
   /// `.navigation` item in the parent) is still physically held on that
   /// first tick, and if focus already defaults to the first item (unlike
-  /// `RemapPlayerView`, which starts with no highlight), an `update` call
+  /// a screen that starts with no highlight), an `update` call
   /// there would immediately activate it a second time. `resync` lets the
   /// nav engine observe that the button is down without treating it as a
   /// new press, so only a release-then-press after the screen is genuinely

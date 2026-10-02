@@ -4,7 +4,7 @@
 import SwiftUI
 
 /// One player's controller screen (controller hub spec, "Player screen"), pushed from the hub's
-/// player rows in place of `RemapPlayerView`. It hosts `PlayerScreenModelBuilder`'s model in a
+/// player rows. It hosts `PlayerScreenModelBuilder`'s model in a
 /// `MenuScreen`, and everything below it pushes. Its only presentation is ONE alert, driven by the
 /// view model's prompt and attached here, outside the List. A controller answers it through
 /// `MenuScreen`'s `modal:`.

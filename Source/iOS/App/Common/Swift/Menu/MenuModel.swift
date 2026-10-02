@@ -129,8 +129,7 @@ extension MenuModel {
   var allItems: [MenuItem] { sections.flatMap(\.items) }
 
   /// Ids of items that can currently receive focus/activation, in on-screen
-  /// order — disabled items are skipped, matching `RemapPlayerView`'s
-  /// `.disabled` sections never appearing in `focusOrder`.
+  /// order — disabled items are skipped.
   var focusableIDs: [String] { allItems.filter(\.isEnabled).map(\.id) }
 
   func item(id: String) -> MenuItem? {

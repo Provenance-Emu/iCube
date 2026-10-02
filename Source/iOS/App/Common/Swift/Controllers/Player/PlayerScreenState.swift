@@ -127,8 +127,7 @@ struct PlayerScreenState: Equatable {
   /// Bound to an MFi pad that is not connected. The binding is kept and comes back with the pad.
   var isDisconnected: Bool { Self.isMissing(player.deviceQualifier, pads: pads) }
 
-  /// Capture listens to a real device: any non-touchscreen qualifier (MFi or DSU, as
-  /// `RemapPlayerView.deviceIsPhysical`), except an MFi pad that is not connected.
+  /// Capture listens to a real device: any non-touchscreen qualifier (MFi or DSU), except an MFi pad that is not connected.
   var canCapture: Bool {
     if case .pad = deviceChoice { return !isDisconnected }
     return false

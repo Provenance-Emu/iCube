@@ -48,13 +48,13 @@ struct MenuModal {
 /// navigation. See `docs/superpowers/specs/2026-09-24-data-driven-menus-design.md`.
 ///
 /// - iOS drives a `focusedID` from raw `GCController` **polling** through
-///   `MenuFocusRouter` — like `RemapPlayerView`, not a `valueChangedHandler`
+///   `MenuFocusRouter` — not a `valueChangedHandler`
 ///   install. That is a deliberate deviation from the design doc's §2 prose
 ///   (which describes a `valueChangedHandler`-based router): a handler is a
 ///   single process-wide slot, and `PauseMenuView.setupPauseControllerNav`
 ///   already owns it while the pause menu's main pane is up. Polling can
-///   never contend for that slot, which is the same reasoning
-///   `RemapPlayerView`'s doc comment gives for why IT polls. See the
+///   never contend for that slot, which is why it polls.
+///   See the
 ///   Implementation Status section of the design doc.
 /// - tvOS installs zero GameController code and uses only native focus
 ///   (`@FocusState`, `List`, `.defaultFocus`, `.onExitCommand`).
@@ -442,8 +442,8 @@ struct MenuScreen: View {
   /// One `MenuItem` -> one `List` row with exactly one control, per the
   /// design doc's §2 tvOS contract — except `.picker`, which explodes into
   /// one row per option (checkmark for the selection) because a `Picker`
-  /// embedded in a row has no usable tvOS presentation (the same reasoning
-  /// `ControllerSetupView.wiiOptionRows`/`tvOptionRow` already documents).
+  /// embedded in a row has no usable tvOS presentation (see the tvOS focus
+  /// notes in docs/superpowers/specs/2026-09-28-controller-hub-design.md).
   /// A `.picker` with `isCompactOnTV` is the other exception: ONE row that
   /// d-pad left/right steps through (`tvCompactPicker`), for long value lists.
   @ViewBuilder

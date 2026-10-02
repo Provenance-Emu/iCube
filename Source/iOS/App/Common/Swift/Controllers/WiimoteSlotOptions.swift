@@ -4,8 +4,8 @@
 import Foundation
 
 /// The per-Wii-Remote Extension / Sideways setters shared by
-/// `ControllerSetupSections` and `RemapPlayerView`, so a change made on either
-/// screen goes through exactly the same path. `DOLWiimoteBridge` itself posts
+/// the hub and the player screen, so a change made on either
+/// goes through exactly the same path. `DOLWiimoteBridge` itself posts
 /// `DOLWiiOverlayLayoutChangedNotification` after each write, so the touch
 /// overlay re-lays-out without any Swift-side re-post.
 enum WiimoteSlotOptions {

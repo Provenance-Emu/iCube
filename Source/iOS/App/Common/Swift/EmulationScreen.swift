@@ -1235,7 +1235,7 @@ struct EmulationScreen: View {
         TVEmulationBridge.setOverscanFullscreenEnabled(overscanFullscreen)
       }
       // (Removed) "IR mode 0 means unset -> force Follow": mode 0 is the user's Gyro choice
-      // (TouchIRMode.gyro) and the engine default is 2 (iOSSettings.cpp), so this bounced every
+      // (PointerMode.gyro) and the engine default is 2 (iOSSettings.cpp), so this bounced every
       // Gyro selection back to Follow on each appearance.
       // Initialize overlay signature for Wii type (extension + sideways)
       let touchSlot = controllerManager.touchscreenSlot(system: .wii) ?? 0

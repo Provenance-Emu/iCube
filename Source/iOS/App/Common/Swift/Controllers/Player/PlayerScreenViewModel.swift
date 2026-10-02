@@ -85,7 +85,7 @@ final class PlayerScreenViewModel {
   /// Save Profile As…'s text field.
   var saveName = ""
 
-  /// ~60 Hz while a capture is armed, as `RemapPlayerView` polled.
+  /// ~60 Hz while a capture is armed, as the old remap screen polled.
   static let captureTickInterval: TimeInterval = 1.0 / 60
   /// After a capture binds, activation and Back are ignored at least this long, and until the bound
   /// input is released (`isCaptureSettling`). A capture binds while the button is still held (three
@@ -392,7 +392,7 @@ final class PlayerScreenViewModel {
   }
 
   /// A follow-up prompt, a turn later: the alert that led here is still being dismissed, and
-  /// presenting on the same turn can silently fail (RemapPlayerView.swift:617-624).
+  /// presenting on the same turn can silently fail (seen in the old remap screen).
   private func present(_ next: PlayerPrompt) {
     Task { @MainActor [weak self] in self?.prompt = next }
   }
@@ -526,7 +526,7 @@ final class PlayerScreenViewModel {
   private func startTicker() {
     ticker?.invalidate()
     // `.common`, not `.default`: a `.default` timer starves while the List scrolls, which would
-    // freeze an armed capture mid-scroll (RemapPlayerView.swift:430-434).
+    // freeze an armed capture mid-scroll (seen in the old remap screen).
     let timer = Timer(timeInterval: Self.captureTickInterval, repeats: true) { [weak self] _ in
       MainActor.assumeIsolated { self?.pollCapture() }
     }

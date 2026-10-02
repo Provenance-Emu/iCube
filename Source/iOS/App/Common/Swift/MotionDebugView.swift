@@ -360,7 +360,7 @@ struct MotionDebugView: View {
 
   // MARK: - Helper Methods
 
-  /// Gyro IR mode (TouchIRMode 0) is the only mode in which device attitude drives the pointer.
+  /// Gyro IR mode (PointerMode.gyro, raw 0) is the only mode in which device attitude drives the pointer.
   private var gyroIRActive: Bool { currentIRMode == 0 }
 
   private func irModeLabel(_ mode: Int) -> String {

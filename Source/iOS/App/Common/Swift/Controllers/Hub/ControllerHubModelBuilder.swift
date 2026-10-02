@@ -63,9 +63,10 @@ enum ControllerHubModelBuilder {
     if qualifier.isEmpty { return L("No Device") }
     if DeviceFamily.from(qualifier: qualifier) == .touchscreen { return L("Touchscreen") }
     if let pad = pads.first(where: { $0.qualifier == qualifier }) { return pad.name }
-    // Bound, but the pad is not connected: the binding is kept and returns with the pad.
     let name = qualifier.split(separator: "/", maxSplits: 2).last.map(String.init) ?? qualifier
-    return String(format: L("%@ (Disconnected)"), name)
+    // Only a missing MFi pad is "Disconnected" (its binding returns with the pad); a DSU device is
+    // never in the pad list. The player screen uses the same rule.
+    return PlayerScreenState.isMissing(qualifier, pads: pads) ? String(format: L("%@ (Disconnected)"), name) : name
   }
 
   private static func emulatedController(for player: PlayerState) -> String {

@@ -237,7 +237,3 @@ struct GraphicsAdvancedView: View {
     manuallyUploadBuffers = DOLConfigBridge.gfxMtlManuallyUploadBuffers()
   }
 }
-
-// NOTE: The per-port Type→Configure flow (ControllersPortView / ControllersTypePicker)
-// was removed — ControllerSetupView's per-row Device picker now activates the port
-// (no separate Type step) and "Customize Buttons…" opens RemapPlayerView.

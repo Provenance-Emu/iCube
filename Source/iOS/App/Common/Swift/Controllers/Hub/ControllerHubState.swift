@@ -5,7 +5,7 @@ import SwiftUI
 
 /// Which ports a controller screen lists. Distinct from `EmulatedSystem` (which the assignment
 /// service switches on exhaustively) so `.both` can never leak into the service. Moved here from
-/// `ControllerSetupView.swift`, which Phase 4 deletes.
+/// the old controller setup screen (deleted in Phase 4).
 enum ControllerSetupSystem {
   case gamecube
   case wii
