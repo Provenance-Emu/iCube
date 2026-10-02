@@ -102,5 +102,69 @@ final class SkinModelTests: XCTestCase {
     let json = #"{"name":"N64","identifier":"x","gameTypeIdentifier":"com.rileytestut.delta.game.n64","representations":{}}"#
     XCTAssertThrowsError(try SkinInfo.decode(Data(json.utf8)))
   }
+
+  // MARK: Frame sanity
+
+  func testItemFramesOutOfRangeAreDroppedNextToGoodItem() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"items":[
+      {"inputs":["huge"],"frame":{"x":0,"y":0,"width":1e308,"height":1}},
+      {"inputs":["negative"],"frame":{"x":0,"y":0,"width":-5,"height":1}},
+      {"inputs":["hugeArray"],"frame":[0,0,1,1e308]},
+      {"inputs":["negativeArray"],"frame":[0,0,1,-1]},
+      {"inputs":["farOrigin"],"frame":{"x":-1e308,"y":0,"width":1,"height":1}},
+      {"inputs":["a"],"frame":[1,2,3,4]}]}}}}
+    """)
+    let items = try XCTUnwrap(portrait(of: SkinInfo.decode(json))).items
+    XCTAssertEqual(items.map(\.inputs), [.buttons(["a"])])
+  }
+
+  func testScreenFrameOutOfRangeIsDropped() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"items":[],"screens":[
+      {"outputFrame":{"x":0,"y":0,"width":1e308,"height":1}},
+      {"outputFrame":[0,0,10,10]}]}}}}
+    """)
+    let screens = try XCTUnwrap(portrait(of: SkinInfo.decode(json))).screens
+    XCTAssertEqual(screens.map(\.outputFrame), [CGRect(x: 0, y: 0, width: 10, height: 10)])
+  }
+
+  func testItemWithAbsurdEdgesIsDropped() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"items":[
+      {"inputs":["bad"],"frame":[0,0,1,1],"extendedEdges":{"left":1e308}},
+      {"inputs":["a"],"frame":[1,2,3,4],"extendedEdges":{"left":5}}]}}}}
+    """)
+    let items = try XCTUnwrap(portrait(of: SkinInfo.decode(json))).items
+    XCTAssertEqual(items.map(\.inputs), [.buttons(["a"])])
+  }
+
+  func testRepresentationWithBadMappingSizeIsDroppedOthersLoad() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{
+      "portrait":{"mappingSize":{"width":0,"height":20},"items":[]},
+      "landscape":{"mappingSize":{"width":1e308,"height":10},"items":[]}}},
+     "ipad":{"standard":{
+      "portrait":{"mappingSize":{"width":-10,"height":20},"items":[]},
+      "landscape":{"mappingSize":{"width":20,"height":10},"items":[]}}}}
+    """)
+    let info = try SkinInfo.decode(json)
+    XCTAssertNil(info.representation(device: .iphone, orientation: .portrait))
+    XCTAssertNil(info.representation(device: .iphone, orientation: .landscape))
+    XCTAssertNil(info.representation(device: .ipad, orientation: .portrait))
+    XCTAssertNotNil(info.representation(device: .ipad, orientation: .landscape))
+  }
+
+  func testFrameLimitsRejectNonFiniteAndAbsurdValues() {
+    XCTAssertTrue(SkinFrameLimits.isSane(CGRect(x: -10, y: 0, width: 390, height: 844)))
+    XCTAssertFalse(SkinFrameLimits.isSane(CGRect(x: CGFloat.nan, y: 0, width: 1, height: 1)))
+    XCTAssertFalse(SkinFrameLimits.isSane(CGRect(x: 0, y: 0, width: CGFloat.infinity, height: 1)))
+    XCTAssertFalse(SkinFrameLimits.isSane(CGRect(x: 0, y: 0, width: 1, height: -CGFloat.infinity)))
+    XCTAssertFalse(SkinFrameLimits.isSane(CGRect(x: 0, y: 1e308, width: 1, height: 1)))
+    XCTAssertFalse(SkinFrameLimits.isSane(CGSize(width: CGFloat.nan, height: 1)))
+    XCTAssertFalse(SkinFrameLimits.isSane(CGSize(width: 1, height: -1)))
+    XCTAssertFalse(SkinFrameLimits.isSane(CGFloat.nan))
+    XCTAssertFalse(SkinFrameLimits.isSane(SkinFrameLimits.maxMagnitude * 2))
+  }
 }
 #endif

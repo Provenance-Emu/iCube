@@ -200,6 +200,9 @@ extension SkinRepresentation: Decodable {
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     mappingSize = try container.decode(SkinSize.self, forKey: .mappingSize).value
+    guard mappingSize.width > 0, mappingSize.height > 0 else {
+      throw DecodingError.dataCorruptedError(forKey: .mappingSize, in: container, debugDescription: "mappingSize must be positive")
+    }
     extendedEdges = try container.decodeIfPresent(SkinEdges.self, forKey: .extendedEdges)?.resolved(over: .zero) ?? .zero
     translucent = try container.decodeIfPresent(Bool.self, forKey: .translucent) ?? false
     background = try container.decodeIfPresent(SkinAsset.self, forKey: .assets)
@@ -271,6 +274,36 @@ private struct SkinDynamicKey: CodingKey {
   init?(intValue: Int) { nil }
 }
 
+/// Bounds for the numbers a skin's `info.json` supplies. A skin comes from anywhere, and JSON still allows values
+/// like `1e308` that are finite but would overflow every layout calculation downstream.
+enum SkinFrameLimits {
+  /// Largest magnitude any coordinate, size or edge may have (mapping points; real skins use a few thousand).
+  static let maxMagnitude: CGFloat = 100_000
+
+  /// Whether `value` is a usable coordinate: finite and within `maxMagnitude` either way.
+  static func isSane(_ value: CGFloat) -> Bool {
+    value.isFinite && abs(value) <= maxMagnitude
+  }
+
+  /// A size whose sides are sane and not negative (a zero side is legal; layout skips it).
+  static func isSane(_ size: CGSize) -> Bool {
+    isSane(size.width) && isSane(size.height) && size.width >= 0 && size.height >= 0
+  }
+
+  /// A frame with a sane origin and a sane, non-negative size.
+  static func isSane(_ rect: CGRect) -> Bool {
+    isSane(rect.origin.x) && isSane(rect.origin.y) && isSane(rect.size)
+  }
+
+  fileprivate static func requireSane(_ value: CGFloat, at codingPath: [CodingKey]) throws {
+    guard isSane(value) else { throw invalid("Number out of range", at: codingPath) }
+  }
+
+  fileprivate static func invalid(_ message: String, at codingPath: [CodingKey]) -> DecodingError {
+    DecodingError.dataCorrupted(DecodingError.Context(codingPath: codingPath, debugDescription: message))
+  }
+}
+
 private struct SkinSize: Decodable {
   let value: CGSize
 
@@ -278,7 +311,9 @@ private struct SkinSize: Decodable {
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    value = CGSize(width: try container.decode(CGFloat.self, forKey: .width), height: try container.decode(CGFloat.self, forKey: .height))
+    let size = CGSize(width: try container.decode(CGFloat.self, forKey: .width), height: try container.decode(CGFloat.self, forKey: .height))
+    guard SkinFrameLimits.isSane(size) else { throw SkinFrameLimits.invalid("Size out of range", at: decoder.codingPath) }
+    value = size
   }
 }
 
@@ -290,17 +325,19 @@ private struct SkinRect: Decodable {
   private enum CodingKeys: String, CodingKey { case x, y, width, height }
 
   init(from decoder: Decoder) throws {
+    let rect: CGRect
     if let values = try? decoder.singleValueContainer().decode([CGFloat].self) {
       guard values.count == Self.componentCount else {
-        throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: decoder.codingPath,
-                                                                debugDescription: "Expected 4 values for a frame"))
+        throw SkinFrameLimits.invalid("Expected 4 values for a frame", at: decoder.codingPath)
       }
-      value = CGRect(x: values[0], y: values[1], width: values[2], height: values[3])
-      return
+      rect = CGRect(x: values[0], y: values[1], width: values[2], height: values[3])
+    } else {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      rect = CGRect(x: try container.decode(CGFloat.self, forKey: .x), y: try container.decode(CGFloat.self, forKey: .y),
+                    width: try container.decode(CGFloat.self, forKey: .width), height: try container.decode(CGFloat.self, forKey: .height))
     }
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    value = CGRect(x: try container.decode(CGFloat.self, forKey: .x), y: try container.decode(CGFloat.self, forKey: .y),
-                   width: try container.decode(CGFloat.self, forKey: .width), height: try container.decode(CGFloat.self, forKey: .height))
+    guard SkinFrameLimits.isSane(rect) else { throw SkinFrameLimits.invalid("Frame out of range", at: decoder.codingPath) }
+    value = rect
   }
 }
 
@@ -310,6 +347,22 @@ private struct SkinEdges: Decodable {
   let left: CGFloat?
   let bottom: CGFloat?
   let right: CGFloat?
+
+  private enum CodingKeys: String, CodingKey { case top, left, bottom, right }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    top = try Self.side(.top, in: container)
+    left = try Self.side(.left, in: container)
+    bottom = try Self.side(.bottom, in: container)
+    right = try Self.side(.right, in: container)
+  }
+
+  private static func side(_ key: CodingKeys, in container: KeyedDecodingContainer<CodingKeys>) throws -> CGFloat? {
+    guard let value = try container.decodeIfPresent(CGFloat.self, forKey: key) else { return nil }
+    try SkinFrameLimits.requireSane(value, at: container.codingPath + [key])
+    return value
+  }
 
   func resolved(over base: UIEdgeInsets) -> UIEdgeInsets {
     UIEdgeInsets(top: top ?? base.top, left: left ?? base.left, bottom: bottom ?? base.bottom, right: right ?? base.right)
