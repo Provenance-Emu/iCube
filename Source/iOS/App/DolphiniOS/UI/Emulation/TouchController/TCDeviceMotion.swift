@@ -4,6 +4,7 @@
 #if canImport(CoreMotion)
 import CoreMotion
 import Foundation
+import simd
 
 @objc public class TCDeviceMotion: NSObject {
   @MainActor
@@ -62,19 +63,16 @@ import Foundation
 
   // MARK: Gyro pointer baseline
 
-  /// Euler angles (radians) in CoreMotion's attitude convention.
-  struct PointerAttitude: Equatable {
-    var roll: Double, pitch: Double, yaw: Double
-  }
-
   /// Radians of tilt from the baseline to a full-width / full-height pointer swing (1 / gain).
   static let gyroPointerHorizontalSensitivity = 2.66
   static let gyroPointerVerticalSensitivity = 2.0
   /// How often (in gyro-pointer samples, 60 Hz) `input_debug` logs the pointer, about once a second.
   private static let gyroPointerLogInterval = 60
 
-  /// Attitude the gyro pointer treats as "center". Only touched on the serial motion queue.
-  private var pointerBaseline: PointerAttitude?
+  /// Attitude the gyro pointer treats as "center" (CoreMotion's quaternion, device to reference
+  /// frame), and the interface orientation it was taken in. Only touched on the serial motion queue.
+  private var pointerBaseline: simd_quatd?
+  private var pointerBaselineOrientation: UIInterfaceOrientation?
   /// IR mode seen on the previous device-motion sample (motion queue only), to catch a switch
   /// into gyro mode from any of the places that set it.
   private var lastIRMode: Int?
@@ -108,37 +106,66 @@ import Foundation
     return requested
   }
 
-  /// Pointer offsets for `current` relative to `baseline`, before inversion and clamping.
+  /// Pointer offsets for the turn from `baseline` to `current`, before inversion and clamping.
   ///
-  /// The pointer used to be driven by the ABSOLUTE attitude (referenced to magnetic north with Z
-  /// vertical), so "center" meant lying flat, facing north: a phone held at a normal tilt already
-  /// read past the clamp and pinned the pointer at the screen edge, and nothing could re-center it.
-  /// Differences of Euler angles are enough for the small swings a pointer needs; roll and yaw are
-  /// wrapped so a turn across +-pi stays small.
+  /// The turn is taken as a rotation vector in the baseline's device frame, then read along the
+  /// screen's axes for `orientation`: tipping about the screen's horizontal axis moves the pointer
+  /// up and down; turning about its vertical axis ("Yaw") or tilting about the axis out of the
+  /// screen ("Roll") moves it left and right.
+  ///
+  /// Differences of CoreMotion's Euler angles, used before, broke in the two ways a phone is
+  /// actually held: upright in portrait, pitch sits near 90 degrees, where roll and yaw degenerate
+  /// (the pointer could not reach the edges and its scale drifted); in landscape, the device's
+  /// axes are a quarter turn from the screen's, so tipping the phone moved the pointer sideways.
   static func gyroPointerOffsets(
-    current: PointerAttitude,
-    baseline: PointerAttitude,
+    current: simd_quatd,
+    baseline: simd_quatd,
+    orientation: UIInterfaceOrientation,
     useYawForHorizontal: Bool,
     gain: Double = 1
   ) -> (horizontal: Double, vertical: Double) {
-    let horizontalDelta = useYawForHorizontal
-      ? wrappedAngle(current.yaw - baseline.yaw)
-      : wrappedAngle(current.roll - baseline.roll)
-    let verticalDelta = wrappedAngle(current.pitch - baseline.pitch)
+    let turn = rotationVector(baseline.inverse * current)
+    let axes = screenAxes(for: orientation)
+    // Right-handed: a positive turn about the screen's up axis swings the phone's back to the
+    // left, and a positive turn about the axis out of the screen is counterclockwise, so both
+    // horizontal readings are negated. A positive turn about the screen's right axis tips the back
+    // up, which is pointer-up.
+    let horizontalAngle = useYawForHorizontal ? -simd_dot(turn, axes.up) : -simd_dot(turn, axes.out)
+    let verticalAngle = simd_dot(turn, axes.right)
     // `gain` is the user's gyro pointer sensitivity (`MotionSettings.gyroPointerSensitivity`, 1 by
     // default) on top of the fixed per-axis constants.
     return (
-      horizontalDelta * gyroPointerHorizontalSensitivity * gain,
-      verticalDelta * gyroPointerVerticalSensitivity * gain)
+      horizontalAngle * gyroPointerHorizontalSensitivity * gain,
+      verticalAngle * gyroPointerVerticalSensitivity * gain)
   }
 
-  /// `angle` folded into (-pi, pi].
-  private static func wrappedAngle(_ angle: Double) -> Double {
-    let twoPi = 2 * Double.pi
-    var wrapped = angle.truncatingRemainder(dividingBy: twoPi)
-    if wrapped > .pi { wrapped -= twoPi }
-    if wrapped <= -.pi { wrapped += twoPi }
-    return wrapped
+  /// Axis times angle (radians) of `rotation`, taking the shorter way round: `q` and `-q` are the
+  /// same attitude.
+  private static func rotationVector(_ rotation: simd_quatd) -> SIMD3<Double> {
+    let shortest = rotation.real < 0 ? simd_quatd(vector: -rotation.vector) : rotation
+    let sinHalf = simd_length(shortest.imag)
+    guard sinHalf > 1e-12 else { return .zero }
+    let angle = 2 * atan2(sinHalf, shortest.real)
+    return shortest.imag / sinHalf * angle
+  }
+
+  /// The screen's right, up and out-of-screen directions in device coordinates (+X the portrait
+  /// right edge, +Y the portrait top edge, +Z out of the screen). Unknown folds into portrait.
+  private static func screenAxes(for orientation: UIInterfaceOrientation)
+    -> (right: SIMD3<Double>, up: SIMD3<Double>, out: SIMD3<Double>)
+  {
+    let out = SIMD3<Double>(0, 0, 1)
+    switch orientation {
+    case .portraitUpsideDown:
+      return (SIMD3(-1, 0, 0), SIMD3(0, -1, 0), out)
+    case .landscapeLeft:
+      // Home side on the left: the device's top edge points right and its right edge down.
+      return (SIMD3(0, 1, 0), SIMD3(-1, 0, 0), out)
+    case .landscapeRight:
+      return (SIMD3(0, -1, 0), SIMD3(1, 0, 0), out)
+    default:
+      return (SIMD3(1, 0, 0), SIMD3(0, 1, 0), out)
+    }
   }
 
   /// Standard gravity, used to convert CoreMotion's g-relative acceleration into the
@@ -306,24 +333,30 @@ import Foundation
 
   /// Map device attitude to IR cursor movement
   private func handleIRCursorMapping(motion: CMDeviceMotion) {
-    let attitude = PointerAttitude(roll: motion.attitude.roll, pitch: motion.attitude.pitch, yaw: motion.attitude.yaw)
+    let q = motion.attitude.quaternion
+    let attitude = simd_quatd(ix: q.x, iy: q.y, iz: q.z, r: q.w)
+    // Written on the main actor by statusBarOrientationChanged; read once per sample.
+    let orientation = self.orientation
     let useYawForHorizontal = MotionSettings.useYawForHorizontal()
     let invertRoll = MotionSettings.invertRoll()
     let invertPitch = MotionSettings.invertPitch()
     let debug = UserDefaults.standard.bool(forKey: "input_debug")
 
-    if takeRecenterRequest() || pointerBaseline == nil {
+    // Rotating the UI turns the screen's axes against the device's, so recenter on whatever the
+    // player is holding now rather than reading the old turn along the new axes.
+    if takeRecenterRequest() || pointerBaseline == nil || orientation != pointerBaselineOrientation {
       pointerBaseline = attitude
+      pointerBaselineOrientation = orientation
       if debug {
-        NSLog("[MOTION] gyro pointer baseline roll=%.3f pitch=%.3f yaw=%.3f", attitude.roll, attitude.pitch, attitude.yaw)
+        NSLog("[MOTION] gyro pointer baseline orientation=%d", orientation.rawValue)
       }
     }
     guard let baseline = pointerBaseline else { return }
 
     // Read per sample, like the invert keys above, so a change applies without a restart.
     var (horizontalValue, verticalValue) = Self.gyroPointerOffsets(
-      current: attitude, baseline: baseline, useYawForHorizontal: useYawForHorizontal,
-      gain: MotionSettings.gyroPointerSensitivity())
+      current: attitude, baseline: baseline, orientation: orientation,
+      useYawForHorizontal: useYawForHorizontal, gain: MotionSettings.gyroPointerSensitivity())
 
     if invertRoll { horizontalValue = -horizontalValue }
     if invertPitch { verticalValue = -verticalValue }

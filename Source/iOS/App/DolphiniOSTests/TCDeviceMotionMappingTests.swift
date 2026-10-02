@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import UIKit
+import simd
 import XCTest
 
 @testable import iCube
@@ -238,54 +239,133 @@ final class TCDeviceMotionMappingTests: XCTestCase {
     XCTAssertEqual(stateLow.y, -1.0, accuracy: 0.0001)
   }
 
-  // MARK: - Gyro pointer is relative to a captured baseline
+  // MARK: - Gyro pointer: rotation since the baseline, in screen axes
 
-  private let base = TCDeviceMotion.PointerAttitude(roll: 0.4, pitch: 0.6, yaw: 1.2)
+  // Reference frame: X = the player's right, Y = away from the player, Z = up (CoreMotion's
+  // Z-vertical frames). A baseline maps device axes to that frame; its columns are where the
+  // device's X, Y and Z axes point. Every baseline here is the phone held UPRIGHT, screen facing
+  // the player, which is where the old Euler-angle mapping broke (pitch near 90 degrees in
+  // portrait; device axes turned a quarter turn in landscape).
+  private static let towardPlayer = SIMD3<Double>(0, -1, 0)
+  private static let worldRight = SIMD3<Double>(1, 0, 0)
+  private static let worldUp = SIMD3<Double>(0, 0, 1)
+
+  private static func attitude(x: SIMD3<Double>, y: SIMD3<Double>, z: SIMD3<Double>) -> simd_quatd {
+    simd_quatd(simd_double3x3(columns: (x, y, z)))
+  }
+
+  /// Portrait: the device's right edge points right, its top edge up, its screen at the player.
+  private static let uprightPortrait = attitude(x: worldRight, y: worldUp, z: towardPlayer)
+  /// Landscape-left (home side on the left): the device's top edge points right, its right edge down.
+  private static let uprightLandscapeLeft = attitude(x: -worldUp, y: worldRight, z: towardPlayer)
+  /// Landscape-right (home side on the right): the device's top edge points left, its right edge up.
+  private static let uprightLandscapeRight = attitude(x: worldUp, y: -worldRight, z: towardPlayer)
+
+  private static let uprightCases: [(UIInterfaceOrientation, simd_quatd)] = [
+    (.portrait, uprightPortrait), (.landscapeLeft, uprightLandscapeLeft), (.landscapeRight, uprightLandscapeRight),
+  ]
+
+  /// `baseline` turned by `angle` about a reference-frame `axis`, as the player moves the phone.
+  private func moved(_ baseline: simd_quatd, by angle: Double, about axis: SIMD3<Double>) -> simd_quatd {
+    simd_quatd(angle: angle, axis: axis) * baseline
+  }
+
+  private let swing = 0.2
 
   func testGyroPointerIsCenteredAtTheBaseline() {
-    let offsets = TCDeviceMotion.gyroPointerOffsets(current: base, baseline: base, useYawForHorizontal: false)
-    XCTAssertEqual(offsets.horizontal, 0, accuracy: 0.0001)
-    XCTAssertEqual(offsets.vertical, 0, accuracy: 0.0001)
+    for (orientation, baseline) in Self.uprightCases {
+      let offsets = TCDeviceMotion.gyroPointerOffsets(
+        current: baseline, baseline: baseline, orientation: orientation, useYawForHorizontal: false)
+      XCTAssertEqual(offsets.horizontal, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+      XCTAssertEqual(offsets.vertical, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+    }
   }
 
-  /// The old mapping used the absolute attitude: a phone held at a normal ~35 degree tilt read
-  /// pitch 0.6 and pinned the pointer at the top edge before the user moved at all.
+  /// "Yaw (Turn Left/Right)": turning the phone to the right about the vertical moves the pointer
+  /// right and nothing else, in every orientation.
+  func testTurningRightMovesThePointerRightInEveryOrientation() {
+    for (orientation, baseline) in Self.uprightCases {
+      let current = moved(baseline, by: -swing, about: Self.worldUp)
+      let offsets = TCDeviceMotion.gyroPointerOffsets(
+        current: current, baseline: baseline, orientation: orientation, useYawForHorizontal: true)
+      XCTAssertEqual(offsets.horizontal, swing * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001,
+                     "\(orientation.rawValue)")
+      XCTAssertEqual(offsets.vertical, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+    }
+  }
+
+  /// Tipping the phone's back upward (top edge toward the player) moves the pointer up and nothing
+  /// else, in every orientation.
+  func testTippingTheBackUpMovesThePointerUpInEveryOrientation() {
+    for (orientation, baseline) in Self.uprightCases {
+      let current = moved(baseline, by: swing, about: Self.worldRight)
+      let offsets = TCDeviceMotion.gyroPointerOffsets(
+        current: current, baseline: baseline, orientation: orientation, useYawForHorizontal: false)
+      XCTAssertEqual(offsets.vertical, swing * TCDeviceMotion.gyroPointerVerticalSensitivity, accuracy: 0.0001,
+                     "\(orientation.rawValue)")
+      XCTAssertEqual(offsets.horizontal, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+    }
+  }
+
+  /// "Roll (Tilt Left/Right)": tilting the phone clockwise like a steering wheel moves the pointer
+  /// right, in every orientation.
+  func testSteeringClockwiseMovesThePointerRightInEveryOrientation() {
+    for (orientation, baseline) in Self.uprightCases {
+      // Clockwise as the player sees it is a positive turn about the axis pointing away from them.
+      let current = moved(baseline, by: swing, about: -Self.towardPlayer)
+      let offsets = TCDeviceMotion.gyroPointerOffsets(
+        current: current, baseline: baseline, orientation: orientation, useYawForHorizontal: false)
+      XCTAssertEqual(offsets.horizontal, swing * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001,
+                     "\(orientation.rawValue)")
+      XCTAssertEqual(offsets.vertical, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+    }
+  }
+
+  /// Every edge is reachable: about 23 degrees of turn or 32 degrees of tip is past a full swing.
+  func testAModestSwingReachesTheScreenEdges() {
+    for (orientation, baseline) in Self.uprightCases {
+      let turned = TCDeviceMotion.gyroPointerOffsets(
+        current: moved(baseline, by: 0.4, about: Self.worldUp), baseline: baseline,
+        orientation: orientation, useYawForHorizontal: true)
+      XCTAssertLessThanOrEqual(turned.horizontal, -1, "\(orientation.rawValue)")
+      let tipped = TCDeviceMotion.gyroPointerOffsets(
+        current: moved(baseline, by: -0.55, about: Self.worldRight), baseline: baseline,
+        orientation: orientation, useYawForHorizontal: true)
+      XCTAssertLessThanOrEqual(tipped.vertical, -1, "\(orientation.rawValue)")
+    }
+  }
+
+  /// The pointer is relative: how the phone was held when it was centered does not matter.
   func testGyroPointerIgnoresHowTheDeviceIsHeld() {
-    let tilted = TCDeviceMotion.PointerAttitude(roll: 1.5, pitch: 0.6, yaw: -2.0)
-    let offsets = TCDeviceMotion.gyroPointerOffsets(current: tilted, baseline: tilted, useYawForHorizontal: true)
-    XCTAssertEqual(offsets.horizontal, 0, accuracy: 0.0001)
+    let lyingFlat = Self.attitude(x: Self.worldRight, y: -Self.towardPlayer, z: Self.worldUp)
+    let current = moved(lyingFlat, by: -swing, about: Self.worldUp)
+    let offsets = TCDeviceMotion.gyroPointerOffsets(
+      current: current, baseline: lyingFlat, orientation: .portrait, useYawForHorizontal: false)
+    // Flat on its back, a turn about the vertical is a turn about the screen's own axis: steering.
+    XCTAssertEqual(offsets.horizontal, swing * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
     XCTAssertEqual(offsets.vertical, 0, accuracy: 0.0001)
   }
 
-  func testGyroPointerScalesTheChangeSinceTheBaseline() {
-    let moved = TCDeviceMotion.PointerAttitude(roll: base.roll + 0.1, pitch: base.pitch - 0.2, yaw: base.yaw)
-    let offsets = TCDeviceMotion.gyroPointerOffsets(current: moved, baseline: base, useYawForHorizontal: false)
-    XCTAssertEqual(offsets.horizontal, 0.1 * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
-    XCTAssertEqual(offsets.vertical, -0.2 * TCDeviceMotion.gyroPointerVerticalSensitivity, accuracy: 0.0001)
-  }
-
-  func testGyroPointerUsesYawForHorizontalWhenAsked() {
-    let moved = TCDeviceMotion.PointerAttitude(roll: base.roll + 0.3, pitch: base.pitch, yaw: base.yaw + 0.1)
-    let offsets = TCDeviceMotion.gyroPointerOffsets(current: moved, baseline: base, useYawForHorizontal: true)
-    XCTAssertEqual(offsets.horizontal, 0.1 * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
-  }
-
-  /// Yaw and roll wrap at +-pi: a small turn across the seam must stay small, not become ~2*pi.
-  func testGyroPointerWrapsAcrossPi() {
-    let nearSeam = TCDeviceMotion.PointerAttitude(roll: 0, pitch: 0, yaw: .pi - 0.05)
-    let acrossSeam = TCDeviceMotion.PointerAttitude(roll: 0, pitch: 0, yaw: -.pi + 0.05)
-    let offsets = TCDeviceMotion.gyroPointerOffsets(current: acrossSeam, baseline: nearSeam, useYawForHorizontal: true)
-    XCTAssertEqual(offsets.horizontal, 0.1 * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
+  /// A quaternion and its negation are the same attitude; the pointer must not flip between them.
+  func testNegatedQuaternionIsTheSameAttitude() {
+    let current = moved(Self.uprightPortrait, by: -swing, about: Self.worldUp)
+    let plain = TCDeviceMotion.gyroPointerOffsets(
+      current: current, baseline: Self.uprightPortrait, orientation: .portrait, useYawForHorizontal: true)
+    let negated = TCDeviceMotion.gyroPointerOffsets(
+      current: simd_quatd(vector: -current.vector), baseline: Self.uprightPortrait,
+      orientation: .portrait, useYawForHorizontal: true)
+    XCTAssertEqual(negated.horizontal, plain.horizontal, accuracy: 0.0001)
+    XCTAssertEqual(negated.vertical, plain.vertical, accuracy: 0.0001)
   }
 
   /// Gyro pointer sensitivity (decision 4) scales both axes on top of the fixed constants; 1 is
   /// today's behaviour.
   func testGyroPointerSensitivityScalesBothAxes() {
-    let start = TCDeviceMotion.PointerAttitude(roll: 0, pitch: 0, yaw: 0)
-    let moved = TCDeviceMotion.PointerAttitude(roll: 0.1, pitch: 0.1, yaw: 0)
-    let unscaled = TCDeviceMotion.gyroPointerOffsets(current: moved, baseline: start, useYawForHorizontal: false)
-    let scaled = TCDeviceMotion.gyroPointerOffsets(current: moved, baseline: start, useYawForHorizontal: false, gain: 1.5)
-    XCTAssertEqual(unscaled.horizontal, 0.1 * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
+    let current = moved(moved(Self.uprightPortrait, by: -0.1, about: Self.worldUp), by: 0.1, about: Self.worldRight)
+    let unscaled = TCDeviceMotion.gyroPointerOffsets(
+      current: current, baseline: Self.uprightPortrait, orientation: .portrait, useYawForHorizontal: true)
+    let scaled = TCDeviceMotion.gyroPointerOffsets(
+      current: current, baseline: Self.uprightPortrait, orientation: .portrait, useYawForHorizontal: true, gain: 1.5)
     XCTAssertEqual(scaled.horizontal, 1.5 * unscaled.horizontal, accuracy: 0.0001)
     XCTAssertEqual(scaled.vertical, 1.5 * unscaled.vertical, accuracy: 0.0001)
   }
