@@ -5,6 +5,8 @@
 ## Guides
 
 * [JIT & Performance (iOS 26)](guide/jit.md)
+* [Dumping GameCube & Wii Discs](guide/dumping-discs.md)
+* [WiiWare, Virtual Console & Channels](guide/dumping-wiiware.md)
 
 ## Help
 
