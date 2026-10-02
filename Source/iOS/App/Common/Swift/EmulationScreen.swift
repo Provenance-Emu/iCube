@@ -771,7 +771,6 @@ struct EmulationScreen: View {
           EmulationSurfaceController(gamePath: game.filePath)
             .frame(width: skinFrame.width, height: skinFrame.height)
             .position(x: skinFrame.midX, y: skinFrame.midY)
-            .onTapGesture { toggleTopBar() }
         } else if isPortrait {
           VStack(spacing: 0) {
             let topInset = proxy.safeAreaInsets.top
