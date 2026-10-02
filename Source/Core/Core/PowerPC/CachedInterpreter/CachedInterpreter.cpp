@@ -4619,13 +4619,21 @@ s32 CachedInterpreter::ExecuteFusedPsqSeq(PowerPC::PowerPCState& ppc_state,
     ppc_state.npc = operands.current_pc + 4;
   }
 
+  // Every instruction of the run executes, unconditionally. These runs are only emitted in DoJit's
+  // memcheck-off / fp-exceptions-off branch, where the unfused form of each instruction is a plain
+  // Interpret record that checks nothing, so none of them can raise a DSI or program exception that
+  // would have to stop the run. This loop used to `break` on `ppc_state.Exceptions != 0`, which is
+  // also true while a decrementer or external interrupt is merely PENDING (raised asynchronously,
+  // and left set until the next block boundary or until the guest re-enables MSR.EE). A run that
+  // started in that window executed its first instruction and silently skipped the ps_mul / ps_madd
+  // behind it: a matrix-vector product with terms missing. That was the single-frame background
+  // dropouts in New Super Mario Bros. Wii and Paper Mario TTYD, and Kirby Air Ride's
+  // `vlAbs(&param->up)>Epsilon` camera assertion.
   for (u32 k = 0; k < operands.count; ++k)
   {
     const UGeckoInstruction inst = operands.inst[k];
     const auto func = Interpreter::GetInterpreterOp(inst);
     func(operands.interpreter, inst);
-    if (ppc_state.Exceptions != 0)
-      break;
   }
 
   return sizeof(AnyCallback) + sizeof(operands);
