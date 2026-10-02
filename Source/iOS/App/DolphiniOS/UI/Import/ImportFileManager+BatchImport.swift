@@ -120,14 +120,14 @@ private actor ArchiveImportService {
       let sourcePath = url.path
 
       if ImportableFileTypes.isArchiveFile(url) {
-        if let result = ZipImportHelper.processArchiveInPlace(atPath: sourcePath) {
-          if result.importedCount > 0 || result.skippedExistingCount > 0 {
-            outcome.extractedArchives += 1
-            outcome.importedGames += result.importedCount
-            outcome.skippedGames += result.skippedExistingCount
-          } else if let message = result.errorMessage {
-            outcome.errors.append("\(url.lastPathComponent): \(message)")
-          }
+        // Picked files live outside the app container: read-only, never extract beside or delete.
+        let result = ZipImportHelper.importPickedArchive(at: url, toFolder: softwareFolder)
+        if result.importedCount > 0 || result.skippedExistingCount > 0 {
+          outcome.extractedArchives += 1
+          outcome.importedGames += result.importedCount
+          outcome.skippedGames += result.skippedExistingCount
+        } else if let message = result.errorMessage {
+          outcome.errors.append("\(url.lastPathComponent): \(message)")
         }
         continue
       }

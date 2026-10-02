@@ -86,10 +86,11 @@ NSString* const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotif
   [DOLImportStaging removeStaleStagedImportsInFolder:softwareFolder];
 
   // Archive imports: extract on a background queue so the UI stays responsive.
-  // Security-scoped access must remain active for the duration of extraction.
+  // Security-scoped access must remain active for the duration of extraction. The picked
+  // archive is copied into a private temp dir first and is never modified.
   if ([DOLZipImportHelper isArchivePath:sourcePath]) {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-      DOLZipImportResult* result = [DOLZipImportHelper importArchiveAtPath:sourcePath toFolder:softwareFolder];
+      DOLZipImportResult* result = [DOLZipImportHelper importPickedArchiveAtURL:url toFolder:softwareFolder];
 
       dispatch_async(dispatch_get_main_queue(), ^{
         if (result.importedCount > 0 || result.skippedExistingCount > 0) {
