@@ -327,10 +327,12 @@ final class PlayerScreenViewModel {
 
   /// Prefilled so a pad user can save with A without typing; never a device-default name.
   func openSavePrompt() {
-    // `suggestion` returns "" for a pad whose name is only whitespace or slashes' worth of nothing;
-    // fall back to the title so Save As never opens on a name that cannot be saved.
+    // `suggestion` returns "" for a whitespace-only pad name, a built-in name once a padded name
+    // ("Touchscreen ") is trimmed, and the title unsanitized. Fall back to the sanitized title so
+    // Save As never opens on a name that cannot be saved or that would replace a built-in profile.
     let suggestion = ProfileNaming.suggestion(padName: state.boundPad?.name, playerTitle: slot.title)
-    saveName = suggestion.isEmpty ? slot.title : suggestion
+    let usable = !suggestion.isEmpty && !ProfileNaming.isBuiltIn(suggestion)
+    saveName = usable ? suggestion : ProfileNaming.sanitized(slot.title)
     prompt = .saveAs
   }
 

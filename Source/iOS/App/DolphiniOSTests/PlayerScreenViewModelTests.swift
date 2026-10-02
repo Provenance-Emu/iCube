@@ -538,6 +538,19 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertNil(model.prompt)
   }
 
+  /// A pad named like a built-in profile, padded with a space, trims to the built-in name: the
+  /// prompt must not prefill it.
+  @MainActor
+  func test_openSavePrompt_aPaddedBuiltInPadName_fallsBackToThePlayerTitle() {
+    let reader = FakeHubReader()
+    reader.gameCube[1] = Self.xbox
+    reader.pads = [pad(Self.xbox, "Touchscreen ")]
+    let model = make(reader, FakeIO())
+    model.reload()
+    model.openSavePrompt()
+    XCTAssertEqual(model.saveName, "Player 1")
+  }
+
   @MainActor
   func test_save_aNewName_writesTrimmed() {
     let (reader, io) = boundGameCube()
