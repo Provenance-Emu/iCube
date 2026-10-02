@@ -245,6 +245,27 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(ids(model, section: "advanced-expressions").count, gameCubeControls.count, "Rumble too: outputs are edited here")
   }
 
+  /// An expression-driven numeric setting is a read-only row: editing it here would silently
+  /// replace the expression, and the bridge does not refuse. This builder guard is the only one.
+  func test_advanced_anExpressionDrivenSetting_isReadOnly() {
+    let recorder = Recorder()
+    var screen = state(.gameCube)
+    screen.showsAdvanced = true
+    let scripted = NumericSettingState(
+      owner: .gcPad, groupId: 1, index: 1, name: "Virtual Notches", suffix: "°", isToggle: false, isInteger: false,
+      value: 0, minimum: 0, maximum: 45, defaultValue: 0, isExpression: true)
+    screen.advanced = [AdvancedGroupState(owner: .gcPad, groupId: 1, title: "Control Stick", settings: [scripted])]
+    let item = make(screen, recorder).item(id: scripted.id)
+    XCTAssertNotNil(item)
+    guard case .action = item?.role else { return XCTFail("an expression row must be a plain action, not a picker or toggle") }
+    run(item)  // activation
+    XCTAssertEqual(recorder.calls, [], "activating writes nothing")
+    // Adjustment (d-pad left/right, tvOS compact stepping) only exists on a picker or a toggle.
+    if case .picker = item?.role { XCTFail("adjustable") }
+    if case .toggle = item?.role { XCTFail("adjustable") }
+    XCTAssertEqual(recorder.calls, [])
+  }
+
   func test_advanced_settingPickerReportsTheValue() {
     let recorder = Recorder()
     var screen = state(.gameCube)

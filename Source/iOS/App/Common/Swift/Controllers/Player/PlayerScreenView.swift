@@ -31,7 +31,9 @@ struct PlayerScreenView: View {
       onBack: {
         // While a capture is armed, B / Menu must reach the capture (so `Button B` stays bindable);
         // the 5 s timeout or the armed row cancels it. Just after a capture binds B, the same press
-        // must not pop the screen either.
+        // must not pop the screen either. The `isCapturing` half is live only on tvOS: on iOS the
+        // capture's `modal` intercepts a pad's B before it reaches here, but tvOS has no modal (Menu
+        // arrives as an exit command), so this is the only guard there. Not dead code.
         if !viewModel.displayState.isCapturing && !viewModel.isCaptureSettling { dismiss() }
       },
       modal: modal)

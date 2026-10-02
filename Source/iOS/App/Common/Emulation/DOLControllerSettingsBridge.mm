@@ -165,6 +165,10 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
                           port:(NSInteger)portOneBased
                          group:(NSInteger)groupId
 {
+  // NaN or an infinity has no meaningful clamp or round (lround of either is undefined), and a
+  // Bool setting would read NaN as "on". Refuse before touching the setting.
+  if (!std::isfinite(value))
+    return;
   auto* group = GroupFor(owner, portOneBased, groupId);
   if (!group || settingIndex < 0 || static_cast<size_t>(settingIndex) >= group->numeric_settings.size())
     return;

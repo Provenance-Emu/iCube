@@ -415,7 +415,9 @@ struct MenuScreen: View {
   /// `.picker` item explodes into one row per option (`tvRow` below), each
   /// with its own composite `"\(item.id)#\(index)"` focus id, so if the
   /// first focusable item happens to be a picker this must target its first
-  /// option's row, not an id no row ever binds `.focused(equals:)` to.
+  /// option's row, not an id no row ever binds `.focused(equals:)` to. The
+  /// exception is a `.picker` with `isCompactOnTV`: it is ONE row bound to
+  /// the plain `item.id`, so that id is the target.
   private var defaultTVFocusID: String? {
     guard let firstID = model.focusableIDs.first, let item = model.item(id: firstID) else { return nil }
     if case .picker(let options, _) = item.role, !options.isEmpty, !item.isCompactOnTV {
@@ -442,6 +444,8 @@ struct MenuScreen: View {
   /// one row per option (checkmark for the selection) because a `Picker`
   /// embedded in a row has no usable tvOS presentation (the same reasoning
   /// `ControllerSetupView.wiiOptionRows`/`tvOptionRow` already documents).
+  /// A `.picker` with `isCompactOnTV` is the other exception: ONE row that
+  /// d-pad left/right steps through (`tvCompactPicker`), for long value lists.
   @ViewBuilder
   private func tvRow(_ item: MenuItem) -> some View {
     switch item.role {

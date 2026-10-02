@@ -1084,7 +1084,7 @@ struct EmulationScreen: View {
       // detection only needs the accelerometer. Enabling it here for gyro mode or shake made
       // the core fold the phone's real tilt into the IR transform on top of the app's pointer,
       // which is the "touch pointer stopped working" report. The `isTouchControlsActive` onChange
-      // below is the runtime owner of this flag afterwards.
+      // above (declared before this block) is the runtime owner of this flag afterwards.
       // Target whichever Wii Remote the overlay is actually bound to, and none when no Wii Remote is
       // on the Touchscreen: `?? 0` used to switch a gyro pad's IMU pointer off on Wii Remote 1 at
       // every Wii boot (controller hub decision 12).

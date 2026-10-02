@@ -328,6 +328,22 @@ final class MenuFocusRouterTests: XCTestCase {
     XCTAssertNil(result.adjust)
   }
 
+  /// The guard only drops an adjust on the SAME row that was activated. One pad presses A on "b"
+  /// while another moves down to "c" and steps it in the same tick: both apply.
+  func test_multiPad_adjustOnADifferentRowThanTheActivatedOne_stillApplies() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = twoSectionModel()
+    let p1 = AnyHashable("p1")
+    let p2 = AnyHashable("p2")
+    _ = router.update(padInputs: [(p1, .init()), (p2, .init())], at: 0, model: model, focusedID: "b", isActive: true)
+    let result = router.update(
+      padInputs: [(p1, .init(a: true)), (p2, .init(down: true, right: true))],
+      at: 0.1, model: model, focusedID: "b", isActive: true)
+    XCTAssertEqual(result.activatedID, "b")
+    XCTAssertEqual(result.adjust?.id, "c", "a different row: the guard must not drop it")
+    XCTAssertEqual(result.adjust?.step, 1)
+  }
+
   /// `padBackNavigation()` feeds the router an empty model: B must still report back, and nothing
   /// else may happen.
   func test_back_withAnEmptyModel_stillReportsBack() {
