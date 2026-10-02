@@ -292,7 +292,7 @@ final class PlayerScreenViewModel {
     reload()
     guard choice != state.deviceChoice else { return }
     endCapture()
-    let hadMapping = io.hasAnyBinding(slot)
+    let controlsBefore = state.controls
     var bindsGyroPad = false
     if case .pad(let qualifier) = choice {
       bindsGyroPad = state.pads.first { $0.qualifier == qualifier }?.hasGyro == true
@@ -302,11 +302,15 @@ final class PlayerScreenViewModel {
     // - Touchscreen: both kinds reload the "Touchscreen" profile. GameCube always does
     //   (TVControllerMappingBridge.mm:228-253); a Wii Remote's BindTouchscreen does whenever the bound
     //   device changes (EmulationCoordinator.mm:1581-1586), and it always changes here.
-    // - A pad: a first bind loads its default profile; a re-bind keeps the port's mapping
-    //   (ControllerAssignmentService.swift:39-47), so the remembered name stays.
+    // - A pad: the assignment loads the pad's default profile unless the port's mapping binds
+    //   something on that pad (ControllerAssignmentService.assign), and the bridge's answer to that
+    //   cannot be read after the fact (the profile is already loaded). What can: the port's control
+    //   rows (each carries its expression). Changed means the default was loaded; unchanged means
+    //   the mapping was kept and the remembered name stays.
     // - No Device unbinds the device only; the mapping and its name stay.
-    let qualifier = readPlayer().deviceQualifier
-    let reloadedDefault = choice == .touchscreen || (choice != .noDevice && !hadMapping)
+    reload()
+    let reloadedDefault = choice == .touchscreen || (choice != .noDevice && state.controls != controlsBefore)
+    let qualifier = state.player.deviceQualifier
     if reloadedDefault, !qualifier.isEmpty, let name = io.defaultProfileName(forQualifier: qualifier) {
       memory.remember(name, for: slot.playerID)
     }

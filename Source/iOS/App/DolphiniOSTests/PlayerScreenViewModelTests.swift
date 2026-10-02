@@ -34,7 +34,10 @@ private final class FakeIO: PlayerScreenIO {
   var writes: [String] = []
   var deviceInputs = ["Button A", "Button B"]
   var inputValues: [Float] = [0, 0]
-  var hasMapping = false
+  /// What `ControllerAssignmentService.assign` does to the port on a pad bind: true loads the pad's
+  /// default profile over the mapping (the old mapping bound nothing on the pad), false keeps it.
+  var assignmentReplacesMapping = false
+  private var expression = "`Button A`"
   var saveSucceeds = true
   var existingProfiles = ["Physical Controller", "Mine"]
   var parsable: Set<String> = ["`Button B`", ""]
@@ -43,7 +46,7 @@ private final class FakeIO: PlayerScreenIO {
 
   func controlRows(owner: RemapGroupOwner, group: Int, port: Int) -> [RemapControlRow] {
     groupReads.append("\(owner)-\(group)")
-    return [RemapControlRow(owner: owner, groupId: group, index: 0, name: "Control", expression: "`Button A`")]
+    return [RemapControlRow(owner: owner, groupId: group, index: 0, name: "Control", expression: expression)]
   }
 
   func numericSettings(owner: RemapGroupOwner, group: Int, port: Int) -> [NumericSettingState] { [] }
@@ -53,7 +56,6 @@ private final class FakeIO: PlayerScreenIO {
     qualifier.hasPrefix("iOS/") ? "Touchscreen" : "Physical Controller"
   }
 
-  func hasAnyBinding(_ slot: PlayerSlot) -> Bool { hasMapping }
   func isMotionPointerEnabled(wiimote: Int) -> Bool { true }
   func pointerMotion() -> PointerMotionState { .standard }
   func inputNames(forQualifier qualifier: String) -> [String] { deviceInputs }
@@ -67,6 +69,7 @@ private final class FakeIO: PlayerScreenIO {
 
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
     writes.append("device:\(choice)")
+    if assignmentReplacesMapping, case .pad = choice { expression = "`Button 0`" }
     onSetDevice?(choice)
   }
 
@@ -511,6 +514,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
     let reader = FakeHubReader()
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
     let io = FakeIO()
+    io.assignmentReplacesMapping = true
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.gameCube[1] = qualifier }
     }
@@ -521,13 +525,14 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertEqual(model.state.profileName, "Physical Controller")
   }
 
-  /// `ControllerAssignmentService.assign` keeps an existing mapping, so the name stays.
+  /// `ControllerAssignmentService.assign` keeps a mapping that binds on the device just bound, so
+  /// the name stays: the port's controls are the same after the assignment.
   @MainActor
   func test_setDevice_rebindKeepsTheRememberedName() {
     let reader = FakeHubReader()
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
     let io = FakeIO()
-    io.hasMapping = true
+    io.assignmentReplacesMapping = false
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.gameCube[1] = qualifier }
     }
@@ -539,6 +544,26 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertEqual(model.state.profileName, "Mine")
   }
 
+  /// The Touchscreen's mapping (`Button 0`, `Axis 11`) binds nothing on a physical pad, so the
+  /// assignment loads the pad's default profile over it and the remembered name must follow.
+  @MainActor
+  func test_setDevice_touchscreenToAPad_remembersThePadsDefaultProfile() {
+    let reader = FakeHubReader()
+    reader.gameCube[1] = "iOS/4/Touchscreen"
+    reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
+    let io = FakeIO()
+    io.assignmentReplacesMapping = true
+    io.onSetDevice = { choice in
+      if case .pad(let qualifier) = choice { reader.gameCube[1] = qualifier }
+    }
+    let memory = PlayerProfileMemory()
+    memory.remember("Touchscreen", for: "gc-1")
+    let model = make(reader, io, memory: memory)
+    model.reload()
+    model.setDevice(.pad(Self.xbox))
+    XCTAssertEqual(model.state.profileName, "Physical Controller")
+  }
+
   /// Both kinds reload the Touchscreen profile when they switch to the touchscreen, mapping or not
   /// (GameCube always; a Wii Remote's BindTouchscreen whenever the bound device changes).
   @MainActor
@@ -547,7 +572,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
     reader.wii[1] = Self.xbox
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
     let io = FakeIO()
-    io.hasMapping = true
+    io.assignmentReplacesMapping = false  // the touchscreen reloads its profile whatever the mapping
     io.onSetDevice = { choice in
       if choice == .touchscreen { reader.wii[1] = "iOS/4/Touchscreen" }
     }
@@ -567,7 +592,6 @@ final class PlayerScreenViewModelTests: XCTestCase {
     reader.wii[1] = "iOS/4/Touchscreen"
     reader.pads = [pad(Self.dualSense, "DualSense", gyro: true), pad(Self.xbox, "Xbox")]
     let io = FakeIO()
-    io.hasMapping = true
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.wii[1] = qualifier }
     }
@@ -597,7 +621,6 @@ final class PlayerScreenViewModelTests: XCTestCase {
     let reader = FakeHubReader()
     reader.wii[1] = "iOS/4/Touchscreen"
     let io = FakeIO()
-    io.hasMapping = true
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.wii[1] = qualifier }
     }
@@ -618,7 +641,6 @@ final class PlayerScreenViewModelTests: XCTestCase {
     let reader = FakeHubReader()
     reader.wii[1] = "iOS/4/Touchscreen"
     let io = FakeIO()
-    io.hasMapping = true
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.wii[1] = qualifier }
     }

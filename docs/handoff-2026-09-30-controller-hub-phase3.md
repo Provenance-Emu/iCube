@@ -80,17 +80,11 @@ Task 13 changed `Source/iOS/App/Common/Swift/EmulationScreen.swift`.
      reconnect and Wii are covered only by unit tests, and nothing was run with a physical pad.
 2. Then this branch. Cherry-pick oldest first. None of its commits carries an attribution trailer;
    if one is ever found, strip it, and do not reword a commit to add a model trailer.
-3. Then one follow-up commit, which does not exist yet. `PlayerScreenViewModel.setDevice` decides
-   the remembered profile name from `io.hasAnyBinding(slot)`, asked before the bind (a pad taking
-   over a port that already has a mapping keeps the old mapping and its name). After the fix, a Touchscreen → pad switch loads the pad's default profile, so
-   the Load Profile row would still read "Touchscreen". The follow-up makes `LivePlayerScreenIO`
-   ask the new bridge check after the bind, and updates the fake IO and the name tests.
-   - `FakeIO.hasAnyBinding` (in `PlayerScreenViewModelTests`) returns a constant and does not record
-     when it was asked, so nothing pins "asked before the bind". The follow-up must make the fake
-     answer differently after `setDevice`, and update
-     `test_setDevice_firstBindRemembersTheDefaultProfile`,
-     `test_setDevice_rebindKeepsTheRememberedName` and
-     `test_setDevice_touchscreenOnAWiiRemote_remembersTheTouchscreenProfile`.
+3. Done on this branch (the follow-up commit after the cherry-picks). `PlayerScreenViewModel.setDevice`
+   no longer asks `hasAnyBinding` before the bind: it compares the port's control rows before and
+   after the assignment, and remembers the pad's default profile name only when they changed (a
+   Touchscreen → pad switch). `hasAnyBinding` is gone from `PlayerScreenIO`, and `FakeIO` models
+   whether the assignment replaces the mapping.
 
 The fix also reloads `IMUIR/Enabled = True` (the Enabled setting of the Wii Remote's motion-pointer
 group, which switches the core's motion-driven pointer on) on a Touchscreen → pad switch for a Wii Remote, because
@@ -251,9 +245,6 @@ Load Profile list, the raw-expression editor, and all of tvOS.
       with Controller Motion" reads On.
     - Without that commit it fails: the pad's buttons, sticks and gyro do nothing until Reset to
       Default Profile, because the mapping still binds `Button 0` / `Axis 6xx`.
-    - The Load Profile row's subtitle reads the pad's default profile ("Physical Controller") only
-      once the follow-up commit from Merge order step 3 is in. With the fix but without the
-      follow-up it still reads "Touchscreen".
 13. A gyro pad on Wii Remote 1 survives a boot (Task 13):
     - Bind the DualSense to Wii Remote 1, with the Touchscreen on no Wii Remote, and turn
       "Aim with Controller Motion" On.

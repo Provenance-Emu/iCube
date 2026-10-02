@@ -14,8 +14,6 @@ protocol PlayerScreenIO {
   func profiles(for slot: PlayerSlot) -> [String]
   /// The profile a device gets when first bound ("Physical Controller", "Touchscreen", "DSU").
   func defaultProfileName(forQualifier qualifier: String) -> String?
-  /// The port already has a mapping, so binding a device keeps it (`ControllerAssignmentService`).
-  func hasAnyBinding(_ slot: PlayerSlot) -> Bool
   func isMotionPointerEnabled(wiimote: Int) -> Bool
   func pointerMotion() -> PointerMotionState
   func inputNames(forQualifier qualifier: String) -> [String]
@@ -103,12 +101,6 @@ struct LivePlayerScreenIO: PlayerScreenIO {
 
   func defaultProfileName(forQualifier qualifier: String) -> String? {
     BridgeControllerConfigWriter().defaultProfileName(forQualifier: qualifier)
-  }
-
-  func hasAnyBinding(_ slot: PlayerSlot) -> Bool {
-    slot.kind == .gameCube
-      ? TVControllerMappingBridge.padHasAnyBinding(forGCPort: slot.port)
-      : TVControllerMappingBridge.wiimoteHasAnyBinding(forWiimote: slot.port)
   }
 
   func isMotionPointerEnabled(wiimote: Int) -> Bool {
