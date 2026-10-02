@@ -112,23 +112,6 @@ struct ControllersRootView: View {
   }
 }
 
-enum TouchIRMode: Int, CaseIterable { case gyro = 0, follow = 1, drag = 2
-  var label: String { switch self { case .gyro: return L("Gyro"); case .follow: return L("Follow"); case .drag: return L("Drag") } }
-  static func from(raw: Int) -> TouchIRMode { TouchIRMode(rawValue: raw) ?? .drag }
-}
-
-struct TouchIRModePicker: View {
-  @Binding var selected: TouchIRMode
-  var body: some View {
-    List {
-      ForEach(Array(TouchIRMode.allCases.enumerated()), id: \.offset) { _, value in
-        SettingsSelectRow(label: value.label, checked: value == selected) { selected = value; PointerModeController.shared.set(rawValue: value.rawValue) }
-      }
-    }
-    .navigationTitle(L("Touch IR Pointer"))
-  }
-}
-
 #if os(iOS)
 /// The "Edit Layout…" preview (task item 3): the programmatic overlay already in `.layout` edit
 /// mode, with no live game/device context. `TouchOverlayView.init(initialEditMode:)` makes this

@@ -6,13 +6,11 @@ import GameController
 import SwiftUI
 import UIKit
 
-/// Controller settings outside the hub's four sections, pushed from its "More Controller Settings"
-/// row. Everything here was on Settings → Controllers before the hub. Controller hub Phase 4
-/// removes what the player screen replaces (the pointer-mode picker, Advanced Motion Settings).
+/// Controller settings outside the hub's sections, pushed from its "More Controller Settings" row.
+/// The pointer mode and its sensitivity live on the player screen (controller hub Phase 4).
 struct ControllerMoreSettingsView: View {
   @State private var autoSelectOnScreenBySystem = true
   @State private var connectWiimotes = false
-  @State private var touchIRMode: TouchIRMode = .drag
   @AppStorage("virtual_mfi_connect") private var mfiConnect = false
   /// Rumble destination, honored by the core rumble path (`Motor`): 0 device haptics, 1 controller,
   /// 2 both. tvOS has no device to hold, so the option is hidden there.
@@ -21,7 +19,6 @@ struct ControllerMoreSettingsView: View {
   @State private var wiimoteSpeaker = false
   #if os(iOS)
   @State private var touchOverlayProgrammatic = false
-  @State private var touchOverlayIRPointerGain = 1.0
   /// Connected pads with a light bar, for the LED colour rows.
   @State private var litControllers: [GCController] = []
   #endif
@@ -66,14 +63,6 @@ struct ControllerMoreSettingsView: View {
       }
 
       Section(header: Text(L("Alternate Input Sources"))) {
-        // TouchIRModePicker's rows set the mode through PointerModeController themselves.
-        settingsNavCaption(
-          destination: TouchIRModePicker(selected: $touchIRMode),
-          L("How the Wii Remote pointer is driven. Gyro uses device motion; Follow/Drag use touch gestures.")
-        ) {
-          Text("\(L("Touch IR Pointer")): \(touchIRMode.label)")
-        }
-
         #if os(iOS)
         settingsCaption(
           Toggle(L("Programmatic touch overlay (beta)"), isOn: $touchOverlayProgrammatic)
@@ -95,20 +84,6 @@ struct ControllerMoreSettingsView: View {
           } label: {
             Label(L("Edit IR Area…"), systemImage: "scope")
           }
-
-          settingsCaption(
-            HStack {
-              Text(L("Pointer Sensitivity"))
-              Spacer()
-              Slider(
-                value: $touchOverlayIRPointerGain,
-                in: Double(TouchOverlayIRGeometry.dragGainRange.lowerBound) ... Double(TouchOverlayIRGeometry.dragGainRange.upperBound))
-                .frame(width: 220)
-                .onChange(of: touchOverlayIRPointerGain) { _, gain in
-                  UserDefaults.standard.set(gain, forKey: MotionSettings.Key.irPointerGain)
-                }
-            },
-            L("Scales how far the Wii Remote pointer moves per drag in Drag mode. Doesn't affect Follow or Gyro mode."))
         }
         #endif
 
@@ -146,10 +121,8 @@ struct ControllerMoreSettingsView: View {
     }
     autoSelectOnScreenBySystem = UserDefaults.standard.bool(forKey: "auto_touchpad_by_system")
     connectWiimotes = DOLConfigBridge.connectWiimotesForControllerInterface()
-    touchIRMode = TouchIRMode.from(raw: DOLConfigBridge.mainTouchPadIRMode())
     #if os(iOS)
     touchOverlayProgrammatic = TouchOverlayFlag.isProgrammatic
-    touchOverlayIRPointerGain = Double(TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
     #endif
     backgroundInput = DOLConfigBridge.mainBackgroundInput()
     wiimoteSpeaker = DOLConfigBridge.wiimoteEnableSpeaker()

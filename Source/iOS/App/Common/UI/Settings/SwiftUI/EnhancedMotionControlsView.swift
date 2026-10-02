@@ -18,18 +18,16 @@ import GameController
 #endif
 import Foundation
 
+/// Motion options with no home on the player screen (controller hub decision 6): which gesture
+/// moves the gyro pointer sideways, and the full 6DOF motion mapping. The pointer mode, its
+/// invert switches and Shake to Wiggle are on the player screen.
 struct EnhancedMotionControlsView: View {
-  // Use @AppStorage for automatic UI updates and better SwiftUI integration
   @AppStorage(MotionSettings.Key.useYawForHorizontal) private var useYawForHorizontal: Bool = false
-  @AppStorage(MotionSettings.Key.invertRoll) private var invertRoll: Bool = false
-  @AppStorage(MotionSettings.Key.invertPitch) private var invertPitch: Bool = false
-  @AppStorage(MotionSettings.Key.enhancedShakeDetection) private var enhancedShakeEnabled: Bool = true
   @AppStorage(MotionSettings.Key.full6DOF) private var fullMotionEnabled: Bool = true
   @AppStorage(MotionSettings.Key.wiimoteIMU) private var wiimoteIMUEnabled: Bool = true
   @AppStorage(MotionSettings.Key.nunchukIMU) private var nunchuckIMUEnabled: Bool = false
 
   @State private var horizontalMotionMode: HorizontalMotionMode = .roll
-  @State private var currentIRMode: TouchIRMode = .drag
 
   enum HorizontalMotionMode: Int, CaseIterable {
     case roll = 0, yaw = 1
@@ -51,42 +49,14 @@ struct EnhancedMotionControlsView: View {
     List {
       Section(header: Text(L("Motion IR Cursor"))) {
         settingsNavCaption(
-          destination: TouchIRModePicker(selected: $currentIRMode),
-          L("How the Wii Remote IR pointer is controlled. Gyro uses device motion for added precision and unlocks the motion options below.")
+          destination: HorizontalMotionPicker(selected: $horizontalMotionMode),
+          L("Whether tilting (roll) or turning (yaw) the device moves the pointer left/right.")
         ) {
-          Text(L("IR Control Method"))
+          Text(L("Horizontal Movement"))
         }
-        .onChange(of: currentIRMode) { mode in
-          PointerModeController.shared.set(rawValue: mode.rawValue)
-          notifyMotionSettingsChanged()
+        .onChange(of: horizontalMotionMode) { _, mode in
+          useYawForHorizontal = (mode == .yaw)
         }
-
-        if currentIRMode == .gyro {
-          settingsNavCaption(
-            destination: HorizontalMotionPicker(selected: $horizontalMotionMode),
-            L("Whether tilting (roll) or turning (yaw) the device moves the pointer left/right.")
-          ) {
-            Text(L("Horizontal Movement"))
-          }
-          .onAppear { syncHorizontalMode() }
-          .onChange(of: horizontalMotionMode) { mode in
-            useYawForHorizontal = (mode == .yaw)
-          }
-
-          settingsCaption(
-            Toggle(L("Invert Horizontal (Left/Right)"), isOn: $invertRoll),
-            L("Flips left/right pointer motion."))
-
-          settingsCaption(
-            Toggle(L("Invert Vertical (Up/Down)"), isOn: $invertPitch),
-            L("Flips up/down pointer motion."))
-        }
-      }
-
-      Section(header: Text(L("Shake Detection"))) {
-        settingsCaption(
-          Toggle(L("Enable Advanced Shake Detection"), isOn: $enhancedShakeEnabled),
-          L("Uses a motion-pattern algorithm to detect shake gestures more reliably than Dolphin's basic detection."))
       }
 
       Section(header: Text(L("Full Motion Mapping"))) {
@@ -116,59 +86,39 @@ struct EnhancedMotionControlsView: View {
       }
 
       Section(header: Text(L("Quick Setup"))) {
-        Button(L("Apply Recommended Settings")) {
-          // Set improved defaults based on user feedback
-          enhancedShakeEnabled = true
-          currentIRMode = .gyro // Use gyro IR mode
-          PointerModeController.shared.set(rawValue: TouchIRMode.gyro.rawValue)
-          fullMotionEnabled = true
-          useYawForHorizontal = false // Use roll by default
-          wiimoteIMUEnabled = true
-          nunchuckIMUEnabled = false
-          invertRoll = false
-          invertPitch = false
-
-          // Update local state
-          horizontalMotionMode = .roll
-
-          // Show confirmation
-          #if os(iOS)
-          let generator = UINotificationFeedbackGenerator()
-          generator.notificationOccurred(.success)
-          #endif
-        }
+        Button(L("Apply Recommended Settings")) { applyRecommendedSettings() }
       }
     }
     .navigationTitle(L("Advanced Motion Settings"))
-    .onAppear {
-      syncHorizontalMode()
-      syncIRMode()
-    }
-    // CRITICAL: Notify running emulator when settings change
-    .onChange(of: useYawForHorizontal) { _ in notifyMotionSettingsChanged() }
-    .onChange(of: invertRoll) { _ in notifyMotionSettingsChanged() }
-    .onChange(of: invertPitch) { _ in notifyMotionSettingsChanged() }
-    .onChange(of: enhancedShakeEnabled) { _ in notifyMotionSettingsChanged() }
-    .onChange(of: fullMotionEnabled) { _ in notifyMotionSettingsChanged() }
-    .onChange(of: wiimoteIMUEnabled) { _ in notifyMotionSettingsChanged() }
-    .onChange(of: nunchuckIMUEnabled) { _ in notifyMotionSettingsChanged() }
+    .onAppear { horizontalMotionMode = useYawForHorizontal ? .yaw : .roll }
+    // A running game re-reads motion settings on this notification.
+    .onChange(of: useYawForHorizontal) { _, _ in notifyMotionSettingsChanged() }
+    .onChange(of: fullMotionEnabled) { _, _ in notifyMotionSettingsChanged() }
+    .onChange(of: wiimoteIMUEnabled) { _, _ in notifyMotionSettingsChanged() }
+    .onChange(of: nunchuckIMUEnabled) { _, _ in notifyMotionSettingsChanged() }
   }
 
-  private func syncHorizontalMode() {
-    horizontalMotionMode = useYawForHorizontal ? .yaw : .roll
+  /// The same values the old button set. The pointer mode goes through `PointerModeController`,
+  /// the one writer; the shake and invert keys are written through `MotionSettings` because this
+  /// screen no longer shows them.
+  private func applyRecommendedSettings() {
+    MotionSettings.setEnhancedShakeDetection(true)
+    MotionSettings.setInvertRoll(false)
+    MotionSettings.setInvertPitch(false)
+    PointerModeController.shared.set(.gyro)
+    fullMotionEnabled = true
+    useYawForHorizontal = false
+    wiimoteIMUEnabled = true
+    nunchuckIMUEnabled = false
+    horizontalMotionMode = .roll
+    notifyMotionSettingsChanged()
+    #if os(iOS)
+    UINotificationFeedbackGenerator().notificationOccurred(.success)
+    #endif
   }
 
-  private func syncIRMode() {
-    let irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
-    currentIRMode = TouchIRMode.from(raw: irModeRaw)
-  }
-
-  /// Notify running emulator that motion settings have changed
   private func notifyMotionSettingsChanged() {
-    NotificationCenter.default.post(
-      name: Notification.Name("DOLMotionSettingsChanged"),
-      object: nil
-    )
+    NotificationCenter.default.post(name: .DOLMotionSettingsChanged, object: nil)
   }
 }
 
