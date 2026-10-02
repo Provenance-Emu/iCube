@@ -1,0 +1,201 @@
+// Copyright 2026 DolphiniOS Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+#if os(iOS)
+import Combine
+import XCTest
+@testable import iCube
+
+@MainActor
+final class SkinMountTests: XCTestCase {
+  private static let infoFileName = "info.json"
+  /// A portrait-only GameCube skin: a 100x200 mapping with the game screen across its top half.
+  private static let portraitOnlyInfo = """
+  {"name":"Pocket","identifier":"pocket","gameTypeIdentifier":"public.aoshuang.game.ngc","representations":{
+    "iphone":{"edgeToEdge":{"portrait":{"mappingSize":{"width":100,"height":200},
+      "screens":[{"outputFrame":{"x":0,"y":0,"width":100,"height":100}}],"items":[]}}}}}
+  """
+  private static let screenlessInfo = """
+  {"name":"Bare","identifier":"bare","gameTypeIdentifier":"public.aoshuang.game.ngc","representations":{
+    "iphone":{"edgeToEdge":{"portrait":{"mappingSize":{"width":100,"height":200},"items":[]}}}}}
+  """
+
+  private var scratch: URL!
+  private var library: SkinLibrary!
+
+  override func setUpWithError() throws {
+    scratch = FileManager.default.temporaryDirectory.appendingPathComponent("SkinMountTests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+    try install(Self.portraitOnlyInfo, folder: "pocket")
+    try install(Self.screenlessInfo, folder: "bare")
+    library = SkinLibrary(rootURL: scratch)
+  }
+
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(at: scratch)
+  }
+
+  private func install(_ info: String, folder: String) throws {
+    let directory = scratch.appendingPathComponent(folder, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try info.write(to: directory.appendingPathComponent(Self.infoFileName), atomically: true, encoding: .utf8)
+  }
+
+  private func skin(_ id: String) throws -> InstalledSkin {
+    try XCTUnwrap(library.skins.first { $0.id == id })
+  }
+
+  // MARK: Overlay choice
+
+  func testNoSelectionIsProgrammatic() {
+    XCTAssertEqual(SkinMount.overlayChoice(padKind: .gameCube, orientation: .portrait, library: library, isPad: false), .programmatic)
+  }
+
+  func testSelectionForTheOtherOrientationOnlyIsProgrammatic() throws {
+    library.select(try skin("pocket"), for: .gameCube, orientation: .landscape)
+    XCTAssertEqual(SkinMount.overlayChoice(padKind: .gameCube, orientation: .portrait, library: library, isPad: false), .programmatic)
+  }
+
+  func testSelectedSkinIsChosenForItsOrientation() throws {
+    let pocket = try skin("pocket")
+    library.select(pocket, for: .gameCube, orientation: .portrait)
+    XCTAssertEqual(SkinMount.overlayChoice(padKind: .gameCube, orientation: .portrait, library: library, isPad: false), .skin(pocket))
+  }
+
+  func testSkinWhoseFilesWereDeletedFallsBackWithoutTouchingTheSelection() throws {
+    let pocket = try skin("pocket")
+    library.select(pocket, for: .gameCube, orientation: .portrait)
+    try FileManager.default.removeItem(at: pocket.directory)
+    var published = 0
+    let observer = library.objectWillChange.sink { published += 1 }
+    XCTAssertEqual(SkinMount.overlayChoice(padKind: .gameCube, orientation: .portrait, library: library, isPad: false), .programmatic)
+    XCTAssertEqual(published, 0, "choosing during a view update must not publish")
+    XCTAssertNotNil(library.selectedSkin(for: .gameCube, orientation: .portrait))
+    observer.cancel()
+  }
+
+  func testForgetDeadSelectionsClearsOnlyThePicksWhoseFilesAreGone() throws {
+    let pocket = try skin("pocket")
+    let bare = try skin("bare")
+    library.select(pocket, for: .gameCube, orientation: .portrait)
+    library.select(bare, for: .gameCube, orientation: .landscape)
+    try FileManager.default.removeItem(at: pocket.directory)
+    SkinMount.forgetDeadSelections(in: library)
+    XCTAssertNil(library.selectedSkin(for: .gameCube, orientation: .portrait), "the dead pick is forgotten")
+    XCTAssertEqual(library.selectedSkin(for: .gameCube, orientation: .landscape), bare)
+  }
+
+  func testSupportsReportsWhetherTheSkinHasALayoutForTheOrientation() throws {
+    let pocket = try skin("pocket")
+    XCTAssertTrue(SkinMount.supports(pocket, orientation: .portrait, isPad: false))
+    XCTAssertFalse(SkinMount.supports(pocket, orientation: .landscape, isPad: false))
+    XCTAssertTrue(SkinMount.supports(pocket, orientation: .portrait, isPad: true), "an iPad falls back to the iPhone layout")
+  }
+
+  func testSkinWithoutALayoutForTheOrientationFallsBackButKeepsTheSelection() throws {
+    let pocket = try skin("pocket")
+    library.select(pocket, for: .gameCube, orientation: .landscape)
+    XCTAssertEqual(SkinMount.overlayChoice(padKind: .gameCube, orientation: .landscape, library: library, isPad: false), .programmatic)
+    XCTAssertEqual(library.selectedSkin(for: .gameCube, orientation: .landscape), pocket)
+  }
+
+  // MARK: Hosted overlay
+
+  func testHostedOverlayWhenTheFlagIsOnOrASkinIsChosen() throws {
+    let pocket = try skin("pocket")
+    XCTAssertTrue(SkinMount.usesHostedOverlay(flag: true, choice: .programmatic))
+    XCTAssertTrue(SkinMount.usesHostedOverlay(flag: true, choice: .skin(pocket)))
+    XCTAssertTrue(SkinMount.usesHostedOverlay(flag: false, choice: .skin(pocket)))
+    XCTAssertFalse(SkinMount.usesHostedOverlay(flag: false, choice: .programmatic))
+  }
+
+  // MARK: Action notification
+
+  func testSkinActionsTravelThroughTheNotification() {
+    var received: [SkinAction] = []
+    let token = NotificationCenter.default.addObserver(forName: SkinActionNotification.name, object: nil, queue: nil) { note in
+      if let action = SkinActionNotification.action(in: note) { received.append(action) }
+    }
+    defer { NotificationCenter.default.removeObserver(token) }
+    SkinActionNotification.post(.menu)
+    SkinActionNotification.post(.quickSave)
+    XCTAssertEqual(received, [.menu, .quickSave])
+    XCTAssertNil(SkinActionNotification.action(in: Notification(name: SkinActionNotification.name)))
+  }
+
+  // MARK: Game picture
+
+  func testGamePictureFrameIsTheSkinsScreenAreaOnTheCanvas() throws {
+    // Scale 2 (200x400 canvas for a 100x200 mapping): the 100x100 screen becomes 200x200 at the top.
+    let frame = SkinMount.gamePictureFrame(for: try skin("pocket"), canvas: CGSize(width: 200, height: 400), isPad: false)
+    XCTAssertEqual(frame, CGRect(x: 0, y: 0, width: 200, height: 200))
+  }
+
+  func testGamePictureFrameFollowsTheLayoutsBottomAnchor() throws {
+    // A taller canvas leaves the skin bottom-anchored, so the screen sits below the top edge.
+    let frame = SkinMount.gamePictureFrame(for: try skin("pocket"), canvas: CGSize(width: 200, height: 500), isPad: false)
+    XCTAssertEqual(frame, CGRect(x: 0, y: 100, width: 200, height: 200))
+  }
+
+  func testNoGamePictureFrameWithoutAScreenOrALayout() throws {
+    XCTAssertNil(SkinMount.gamePictureFrame(for: try skin("bare"), canvas: CGSize(width: 200, height: 400), isPad: false))
+    XCTAssertNil(SkinMount.gamePictureFrame(for: try skin("pocket"), canvas: CGSize(width: 400, height: 200), isPad: false),
+                 "the portrait-only skin has no landscape layout")
+  }
+
+  func testAspectFitCentresInsideTheRect() {
+    let rect = CGRect(x: 10, y: 20, width: 200, height: 100)
+    XCTAssertEqual(SkinMount.aspectFit(aspect: 1, in: rect), CGRect(x: 60, y: 20, width: 100, height: 100), "pillarboxed")
+    XCTAssertEqual(SkinMount.aspectFit(aspect: 4, in: rect), CGRect(x: 10, y: 45, width: 200, height: 50), "letterboxed")
+    XCTAssertEqual(SkinMount.aspectFit(aspect: 2, in: rect), rect)
+  }
+
+  func testAspectFitWithoutAUsableAspectFillsTheRect() {
+    let rect = CGRect(x: 0, y: 0, width: 200, height: 100)
+    XCTAssertEqual(SkinMount.aspectFit(aspect: 0, in: rect), rect)
+  }
+
+  // MARK: Selection scan
+
+  func testHasSelectionIsPerOrientation() throws {
+    XCTAssertFalse(library.hasSelection(orientation: .portrait))
+    XCTAssertFalse(library.hasSelection(orientation: .landscape))
+    library.select(try skin("pocket"), for: .gameCube, orientation: .portrait)
+    XCTAssertTrue(library.hasSelection(orientation: .portrait))
+    XCTAssertFalse(library.hasSelection(orientation: .landscape))
+    library.select(nil, for: .gameCube, orientation: .portrait)
+    XCTAssertFalse(library.hasSelection(orientation: .portrait))
+  }
+
+  // MARK: Caches
+
+  func testLibraryChangeDropsTheParsedInfoOfAReimportedSkin() throws {
+    let pocket = try skin("pocket")
+    let canvas = CGSize(width: 200, height: 400)
+    // Re-imported with a different layout but the very same modification time (a deterministic zip).
+    let infoURL = pocket.directory.appendingPathComponent(Self.infoFileName)
+    let modified = Date(timeIntervalSince1970: 1_700_000_000)
+    try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: infoURL.path)
+    SkinMount.clearInfoCache()
+    XCTAssertNotNil(SkinMount.gamePictureFrame(for: pocket, canvas: canvas, isPad: false))
+    try Self.screenlessInfo.write(to: infoURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: infoURL.path)
+    XCTAssertNotNil(SkinMount.gamePictureFrame(for: pocket, canvas: canvas, isPad: false), "the stale parse is still served")
+
+    library.select(try skin("bare"), for: .gameCube, orientation: .landscape)
+    XCTAssertNil(SkinMount.gamePictureFrame(for: pocket, canvas: canvas, isPad: false))
+  }
+
+  func testLibraryChangeDropsDecodedAssetImages() throws {
+    let pocket = try skin("pocket")
+    let png = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { _ in }.pngData()!
+    try png.write(to: pocket.directory.appendingPathComponent("art.png"))
+    let size = CGSize(width: 4, height: 4)
+    let first = try XCTUnwrap(SkinAssetRenderer.image(named: "art.png", in: pocket.directory, size: size, scale: 1))
+    XCTAssertTrue(first === SkinAssetRenderer.image(named: "art.png", in: pocket.directory, size: size, scale: 1))
+
+    library.select(try skin("bare"), for: .gameCube, orientation: .landscape)
+    XCTAssertFalse(first === SkinAssetRenderer.image(named: "art.png", in: pocket.directory, size: size, scale: 1))
+  }
+}
+#endif

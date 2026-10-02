@@ -29,6 +29,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
       setOverlayMode: setOverlayMode,
       setOverlayOpacity: setOverlayOpacity,
       editLayoutDestination: { AnyView(EmptyView()) },
+      skinsDestination: { AnyView(EmptyView()) },
       identifyPad: identifyPad,
       setContinuousScanning: setContinuousScanning,
       dsuDestination: { AnyView(EmptyView()) },
@@ -151,7 +152,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     XCTAssertTrue(running.contains("osc-style"))
     XCTAssertEqual(
       ids(make(state(system: .gamecube, isGameRunning: false)), section: "on-screen"),
-      ["osc-opacity", "osc-edit-layout"])
+      ["osc-opacity", "osc-edit-layout", "osc-skins"])
   }
 
   func test_showHideToggle_writesThroughTheAction() {
@@ -193,6 +194,25 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     guard case .destination = make(state(system: .gamecube)).item(id: "osc-edit-layout")?.role else {
       return XCTFail("Edit Layout must push, not present")
     }
+  }
+
+  func test_skins_pushes_nextToEditLayout() {
+    let model = make(state(system: .gamecube))
+    guard case .destination = model.item(id: "osc-skins")?.role else {
+      return XCTFail("Skins must push, not present")
+    }
+    let ids = model.sections.first { $0.id == "on-screen" }?.items.map(\.id) ?? []
+    let editLayout = ids.firstIndex(of: "osc-edit-layout")
+    XCTAssertNotNil(editLayout)
+    XCTAssertEqual(ids.firstIndex(of: "osc-skins"), editLayout.map { $0 + 1 }, "Skins sits right after Edit Layout")
+  }
+
+  func test_skins_hiddenOnTvOS() {
+    XCTAssertNil(make(state(system: .gamecube), platform: .tvos).item(id: "osc-skins"))
+  }
+
+  func test_skins_listedWhenNoGameRuns() {
+    XCTAssertNotNil(make(state(system: .both, isGameRunning: false)).item(id: "osc-skins"))
   }
 
   // MARK: Connected Devices

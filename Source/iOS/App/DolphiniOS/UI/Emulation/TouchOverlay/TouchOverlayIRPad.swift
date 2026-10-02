@@ -33,6 +33,10 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
   /// `touch_overlay_ir_pointer_gain`, already clamped by `TouchOverlayIRGeometry.clampDragGain`).
   /// Follow mode ignores this (see `TouchOverlayIRGeometry.follow`'s doc comment).
   let dragGain: CGFloat
+  /// When true, `excludedFrames` are not part of this surface at all for hit testing: a touch inside one reaches whatever
+  /// is below (a skin's buttons, which this surface is laid over). The Swift-drawn overlay leaves it false because its
+  /// IR surface already sits below every other group.
+  var passesThroughExcludedFrames: Bool = false
 
   func makeUIView(context: Context) -> IRSurfaceView { IRSurfaceView() }
 
@@ -41,6 +45,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     uiView.deviceId = deviceId
     uiView.excludedFrames = excludedFrames
     uiView.dragGain = dragGain
+    uiView.passesThroughExcludedFrames = passesThroughExcludedFrames
     uiView.isEditingFlag = isEditing
   }
 
@@ -69,6 +74,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     var deviceId: Int = 0
     var excludedFrames: [CGRect] = []
     var dragGain: CGFloat = 1.0
+    var passesThroughExcludedFrames = false
     var isEditingFlag: Bool = false {
       didSet {
         guard isEditingFlag != oldValue else { return }
@@ -124,6 +130,11 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
       // run this late; it's a private cancel/reset timer plus a handful of `TCManagerInterface`
       // writes, nothing that re-enters `self` through ARC.
       forceReleaseAndCenter()
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+      guard super.point(inside: point, with: event) else { return false }
+      return !passesThroughExcludedFrames || TouchOverlayIRGeometry.touchStartAllowed(at: point, excluding: excludedFrames)
     }
 
     // MARK: Geometry (read live, never cached — see TouchOverlayIRGeometry's header comment)

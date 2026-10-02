@@ -30,7 +30,7 @@ import UIKit
 ///   Minus (137.5,639,26,26), HOME (171.5,636,32,32), Plus (211.5,639,26,26).
 enum TouchOverlayDefaults {
   // Raw TCButtonType ids the xibs use (TCButtonType.swift). Named here once.
-  private enum ID {
+  enum ButtonID {
     static let gcA = 0, gcB = 1, gcStart = 2, gcX = 3, gcY = 4, gcZ = 5
     static let gcDpadUp = 6, gcMainStick = 10, gcCStick = 15, gcTriggerL = 20, gcTriggerR = 21
     static let wiiA = 100, wiiB = 101, wiiMinus = 102, wiiPlus = 103, wiiHome = 104, wiiOne = 105, wiiTwo = 106
@@ -236,19 +236,19 @@ enum TouchOverlayDefaults {
 
     return [
       single(.gcMainStick, s.leading(stickCenter), size: CGSize(width: stick, height: stick),
-             kind: .stick(baseId: ID.gcMainStick), id: "gc.mainStick"),
+             kind: .stick(baseId: ButtonID.gcMainStick), id: "gc.mainStick"),
       single(.gcDpad, s.leading(dpadCenter), size: CGSize(width: dpad, height: dpad),
-             kind: .dpad(baseId: ID.gcDpadUp), id: "gc.dpad"),
+             kind: .dpad(baseId: ButtonID.gcDpadUp), id: "gc.dpad"),
       single(.gcCStick, s.trailing(cStickCenter), size: CGSize(width: cStick, height: cStick),
-             kind: .stick(baseId: ID.gcCStick), id: "gc.cStick"),
+             kind: .stick(baseId: ButtonID.gcCStick), id: "gc.cStick"),
       group(.gcFaceButtons, s.trailing(faceCenter), size: face.size, controls: face.controls),
       group(.gcLeftShoulder, s.leading(lCenter), size: shoulder,
-            controls: [axisButton("gc.l", ID.gcTriggerL, 0, 0, size: shoulder)]),
+            controls: [axisButton("gc.l", ButtonID.gcTriggerL, 0, 0, size: shoulder)]),
       group(.gcRightShoulder, s.trailing(rzCenter), size: rzSize,
-            controls: [axisButton("gc.r", ID.gcTriggerR, 0, 0, size: shoulder),
-                       button("gc.z", ID.gcZ, (shoulder.width - zSize.width) / 2, shoulder.height + gap, size: zSize)]),
+            controls: [axisButton("gc.r", ButtonID.gcTriggerR, 0, 0, size: shoulder),
+                       button("gc.z", ButtonID.gcZ, (shoulder.width - zSize.width) / 2, shoulder.height + gap, size: zSize)]),
       group(.gcStart, s.centered(startCenter), size: startSize,
-            controls: [button("gc.start", ID.gcStart, 0, 0, size: startSize)]),
+            controls: [button("gc.start", ButtonID.gcStart, 0, 0, size: startSize)]),
     ]
   }
 
@@ -271,10 +271,10 @@ enum TouchOverlayDefaults {
              width: size.width, height: size.height)
     }
     let controls = [
-      TouchOverlayControl(id: "gc.a", kind: .button(id: ID.gcA), frame: frame(.zero, CGSize(width: a, height: a))),
-      TouchOverlayControl(id: "gc.b", kind: .button(id: ID.gcB), frame: frame(bOffset, CGSize(width: b, height: b))),
-      TouchOverlayControl(id: "gc.x", kind: .button(id: ID.gcX), frame: frame(xOffset, CGSize(width: short, height: long))),
-      TouchOverlayControl(id: "gc.y", kind: .button(id: ID.gcY), frame: frame(yOffset, CGSize(width: long, height: short))),
+      TouchOverlayControl(id: "gc.a", kind: .button(id: ButtonID.gcA), frame: frame(.zero, CGSize(width: a, height: a))),
+      TouchOverlayControl(id: "gc.b", kind: .button(id: ButtonID.gcB), frame: frame(bOffset, CGSize(width: b, height: b))),
+      TouchOverlayControl(id: "gc.x", kind: .button(id: ButtonID.gcX), frame: frame(xOffset, CGSize(width: short, height: long))),
+      TouchOverlayControl(id: "gc.y", kind: .button(id: ButtonID.gcY), frame: frame(yOffset, CGSize(width: long, height: short))),
     ]
     return (CGSize(width: maxX - minX, height: maxY - minY), controls)
   }
@@ -317,23 +317,23 @@ enum TouchOverlayDefaults {
 
     return [
       single(.nunchukStick, s.leading(stickCenter), size: CGSize(width: stick, height: stick),
-             kind: .stick(baseId: ID.nunchukStick), id: "nunchuk.stick"),
+             kind: .stick(baseId: ButtonID.nunchukStick), id: "nunchuk.stick"),
       single(.wiiDpad, s.leading(dpadCenter), size: CGSize(width: dpad, height: dpad),
-             kind: .dpad(baseId: ID.wiiDpadUp), id: "wii.dpad"),
-      single(.nunchukZ, s.leading(zCenter), size: zSize, kind: .button(id: ID.nunchukZ), id: "nunchuk.z"),
-      single(.nunchukC, s.leading(cCenter), size: cSize, kind: .button(id: ID.nunchukC), id: "nunchuk.c"),
+             kind: .dpad(baseId: ButtonID.wiiDpadUp), id: "wii.dpad"),
+      single(.nunchukZ, s.leading(zCenter), size: zSize, kind: .button(id: ButtonID.nunchukZ), id: "nunchuk.z"),
+      single(.nunchukC, s.leading(cCenter), size: cSize, kind: .button(id: ButtonID.nunchukC), id: "nunchuk.c"),
       group(.wiiAB, s.trailing(abCenter), size: ab.size, controls: [
-        TouchOverlayControl(id: "wii.b", kind: .button(id: ID.wiiB), frame: ab.frames[0]),
-        TouchOverlayControl(id: "wii.a", kind: .button(id: ID.wiiA), frame: ab.frames[1]),
+        TouchOverlayControl(id: "wii.b", kind: .button(id: ButtonID.wiiB), frame: ab.frames[0]),
+        TouchOverlayControl(id: "wii.a", kind: .button(id: ButtonID.wiiA), frame: ab.frames[1]),
       ]),
       group(.wiiOneTwo, s.trailing(oneTwoCenter), size: oneTwo.size, controls: [
-        TouchOverlayControl(id: "wii.one", kind: .button(id: ID.wiiOne), frame: oneTwo.frames[0]),
-        TouchOverlayControl(id: "wii.two", kind: .button(id: ID.wiiTwo), frame: oneTwo.frames[1]),
+        TouchOverlayControl(id: "wii.one", kind: .button(id: ButtonID.wiiOne), frame: oneTwo.frames[0]),
+        TouchOverlayControl(id: "wii.two", kind: .button(id: ButtonID.wiiTwo), frame: oneTwo.frames[1]),
       ]),
       group(.wiiMinusPlusHome, s.trailing(systemCenter), size: system.size, controls: [
-        TouchOverlayControl(id: "wii.minus", kind: .button(id: ID.wiiMinus), frame: system.frames[0]),
-        TouchOverlayControl(id: "wii.home", kind: .button(id: ID.wiiHome), frame: system.frames[1]),
-        TouchOverlayControl(id: "wii.plus", kind: .button(id: ID.wiiPlus), frame: system.frames[2]),
+        TouchOverlayControl(id: "wii.minus", kind: .button(id: ButtonID.wiiMinus), frame: system.frames[0]),
+        TouchOverlayControl(id: "wii.home", kind: .button(id: ButtonID.wiiHome), frame: system.frames[1]),
+        TouchOverlayControl(id: "wii.plus", kind: .button(id: ButtonID.wiiPlus), frame: system.frames[2]),
       ]),
       // The drag/follow surface (phase 3): the whole pad inset by `irPadMargin`, movable/resizable
       // like any other group (§2.4) instead of the phase-2 placeholder's literal full bounds.
@@ -349,25 +349,25 @@ enum TouchOverlayDefaults {
   private static let wiiRemoteSideways: [TouchOverlayGroupLayout] = [
     // DPad (0,896,128,128): centre (64,960).
     single(.wiiDpad, .bottomLeading, inset: CGPoint(x: 64, y: 64), size: stick,
-           kind: .dpad(baseId: ID.wiiDpadUp), id: "wii.dpad"),
+           kind: .dpad(baseId: ButtonID.wiiDpadUp), id: "wii.dpad"),
     // B (25.5,779,77,77): centre (64,817.5).
     single(.sidewaysB, .bottomLeading, inset: CGPoint(x: 64, y: 206.5), size: CGSize(width: 77, height: 77),
-           kind: .button(id: ID.wiiB), id: "wii.b"),
+           kind: .button(id: ButtonID.wiiB), id: "wii.b"),
     // Minus (713.5,827,26) A (705,878,43) Plus (630.5,886.5,26) One (622,941,43) Two (705,941,43):
     // union (622,827)-(748,984) = 126x157, centre (685,905.5).
     TouchOverlayGroupLayout(
       group: .sidewaysFaceCluster,
       placement: TouchOverlayPlacement(.bottomTrailing, inset: CGPoint(x: 83, y: 118.5), size: CGSize(width: 126, height: 157)),
       controls: [
-        button("wii.minus", ID.wiiMinus, 91.5, 0, size: CGSize(width: 26, height: 26)),
-        button("wii.a", ID.wiiA, 83, 51, size: CGSize(width: 43, height: 43)),
-        button("wii.plus", ID.wiiPlus, 8.5, 59.5, size: CGSize(width: 26, height: 26)),
-        button("wii.one", ID.wiiOne, 0, 114, size: CGSize(width: 43, height: 43)),
-        button("wii.two", ID.wiiTwo, 83, 114, size: CGSize(width: 43, height: 43)),
+        button("wii.minus", ButtonID.wiiMinus, 91.5, 0, size: CGSize(width: 26, height: 26)),
+        button("wii.a", ButtonID.wiiA, 83, 51, size: CGSize(width: 43, height: 43)),
+        button("wii.plus", ButtonID.wiiPlus, 8.5, 59.5, size: CGSize(width: 26, height: 26)),
+        button("wii.one", ButtonID.wiiOne, 0, 114, size: CGSize(width: 43, height: 43)),
+        button("wii.two", ButtonID.wiiTwo, 83, 114, size: CGSize(width: 43, height: 43)),
       ]),
     // HOME (368,992,32,32): centre (384,1008) = horizontal centre, 16 up.
     single(.sidewaysHome, .bottomCenter, inset: CGPoint(x: 0, y: 16), size: CGSize(width: 32, height: 32),
-           kind: .button(id: ID.wiiHome), id: "wii.home"),
+           kind: .button(id: ButtonID.wiiHome), id: "wii.home"),
   ]
 
   // MARK: Wii Remote + Classic Controller
@@ -415,24 +415,24 @@ enum TouchOverlayDefaults {
 
     return [
       single(.classicLeftStick, s.leading(leftStickCenter), size: CGSize(width: stick, height: stick),
-             kind: .stick(baseId: ID.classicLeftStick), id: "classic.leftStick"),
+             kind: .stick(baseId: ButtonID.classicLeftStick), id: "classic.leftStick"),
       single(.classicRightStick, s.trailing(rightStickCenter), size: CGSize(width: stick, height: stick),
-             kind: .stick(baseId: ID.classicRightStick), id: "classic.rightStick"),
+             kind: .stick(baseId: ButtonID.classicRightStick), id: "classic.rightStick"),
       single(.classicDpad, s.leading(dpadCenter), size: CGSize(width: dpad, height: dpad),
-             kind: .dpad(baseId: ID.classicDpadUp), id: "classic.dpad"),
+             kind: .dpad(baseId: ButtonID.classicDpadUp), id: "classic.dpad"),
       group(.classicFaceButtons, s.trailing(diamondCenter), size: diamond.size, controls: diamond.controls),
       group(.classicLeftShoulder, s.leading(leftShoulderCenter), size: shoulders.size, controls: [
-        axisButton("classic.l", ID.classicTriggerL, shoulders.frames[0].minX, 0, size: shoulder),
-        button("classic.zl", ID.classicZL, shoulders.frames[1].minX, 0, size: shoulder),
+        axisButton("classic.l", ButtonID.classicTriggerL, shoulders.frames[0].minX, 0, size: shoulder),
+        button("classic.zl", ButtonID.classicZL, shoulders.frames[1].minX, 0, size: shoulder),
       ]),
       group(.classicRightShoulder, s.trailing(rightShoulderCenter), size: shoulders.size, controls: [
-        button("classic.zr", ID.classicZR, shoulders.frames[0].minX, 0, size: shoulder),
-        axisButton("classic.r", ID.classicTriggerR, shoulders.frames[1].minX, 0, size: shoulder),
+        button("classic.zr", ButtonID.classicZR, shoulders.frames[0].minX, 0, size: shoulder),
+        axisButton("classic.r", ButtonID.classicTriggerR, shoulders.frames[1].minX, 0, size: shoulder),
       ]),
       group(.classicMinusPlusHome, s.centered(systemCenter), size: system.size, controls: [
-        TouchOverlayControl(id: "classic.minus", kind: .button(id: ID.classicMinus), frame: system.frames[0]),
-        TouchOverlayControl(id: "classic.home", kind: .button(id: ID.classicHome), frame: system.frames[1]),
-        TouchOverlayControl(id: "classic.plus", kind: .button(id: ID.classicPlus), frame: system.frames[2]),
+        TouchOverlayControl(id: "classic.minus", kind: .button(id: ButtonID.classicMinus), frame: system.frames[0]),
+        TouchOverlayControl(id: "classic.home", kind: .button(id: ButtonID.classicHome), frame: system.frames[1]),
+        TouchOverlayControl(id: "classic.plus", kind: .button(id: ButtonID.classicPlus), frame: system.frames[2]),
       ]),
     ]
   }
@@ -445,10 +445,10 @@ enum TouchOverlayDefaults {
       CGRect(x: center + dx - side / 2, y: center + dy - side / 2, width: side, height: side)
     }
     let controls = [
-      TouchOverlayControl(id: "classic.x", kind: .button(id: ID.classicX), frame: frame(0, -d)),
-      TouchOverlayControl(id: "classic.y", kind: .button(id: ID.classicY), frame: frame(-d, 0)),
-      TouchOverlayControl(id: "classic.a", kind: .button(id: ID.classicA), frame: frame(d, 0)),
-      TouchOverlayControl(id: "classic.b", kind: .button(id: ID.classicB), frame: frame(0, d)),
+      TouchOverlayControl(id: "classic.x", kind: .button(id: ButtonID.classicX), frame: frame(0, -d)),
+      TouchOverlayControl(id: "classic.y", kind: .button(id: ButtonID.classicY), frame: frame(-d, 0)),
+      TouchOverlayControl(id: "classic.a", kind: .button(id: ButtonID.classicA), frame: frame(d, 0)),
+      TouchOverlayControl(id: "classic.b", kind: .button(id: ButtonID.classicB), frame: frame(0, d)),
     ]
     return (CGSize(width: center * 2, height: center * 2), controls)
   }

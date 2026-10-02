@@ -511,11 +511,15 @@ let iCubeTests = Target.target(
     deploymentTargets: .multiplatform(iOS: "17.0"),
     infoPlist: .default,
     sources: ["DolphiniOSTests/**/*.swift"],
+    // A folder reference (not a glob) keeps `Skins/<name>.deltaskin/` intact inside the test bundle.
+    resources: [.folderReference(path: "DolphiniOSTests/Fixtures/Skins")],
     dependencies: [
         .target(name: "iCube"),
         // `.target(name: "iCube")` alone doesn't make a package the app links importable here —
         // AppIntentsTests needs `LibrarySnapshot`/`LibrarySnapshotGame` fixtures directly.
         .package(product: "PVLibrarySnapshot"),
+        // SkinLibraryTests zips the skin fixture with `Zip.zipFiles`.
+        .package(product: "Zip"),
     ],
     settings: .settings(
         base: [

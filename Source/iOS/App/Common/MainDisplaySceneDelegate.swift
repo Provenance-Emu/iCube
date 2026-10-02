@@ -40,8 +40,8 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       // Cold launch from a URL (Top Shelf tile, dolphinios:// link). Give the library
       // view time to mount its DOLLaunchGameByGameID observer, same delay as shortcuts.
       if let context = connectionOptions.urlContexts.first {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-          _ = ServiceManager.shared.open(url: context.url, options: [:])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+          self?.handleOpenedURL(context.url)
         }
       }
       #if !os(tvOS)
@@ -65,9 +65,36 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
     for context in URLContexts {
-      _ = ServiceManager.shared.open(url: context.url, options: [:])
+      handleOpenedURL(context.url)
     }
   }
+
+  /// One entry point for URLs opened warm (`openURLContexts`) and cold (`willConnectTo`).
+  private func handleOpenedURL(_ url: URL) {
+    #if os(iOS)
+    if SkinLibrary.isSkinArchive(url) {
+      importSkin(from: url)
+      return
+    }
+    #endif
+    _ = ServiceManager.shared.open(url: url, options: [:])
+  }
+
+  #if os(iOS)
+  /// Installs a Delta / Manic skin the system handed us and reports the outcome in the snackbar.
+  private func importSkin(from url: URL) {
+    let scoped = url.startAccessingSecurityScopedResource()
+    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    let message: String
+    do {
+      let skin = try SkinLibrary.shared.importSkin(from: url)
+      message = String(format: L("Imported skin %@"), skin.name)
+    } catch {
+      message = String(format: L("Couldn't import skin: %@"), SkinImportError.describe(error))
+    }
+    NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": message])
+  }
+  #endif
 
   func sceneDidBecomeActive(_ scene: UIScene) {
     ServiceManager.shared.applicationDidBecomeActive()
