@@ -11,7 +11,8 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
   private let lock = NSLock()
   private var archivesProcessed = 0
   private var gamesImported = 0
-  private var rejectedArchives: [String] = []
+  /// Names of uploads that failed to import, and whether each was moved to Rejected Imports.
+  private var rejectedArchives: [(name: String, movedAside: Bool)] = []
 
   func application(_ application: UIApplication,
                    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
@@ -29,8 +30,7 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
   /// orphan rescan doesn't copy and reject it again, and is reported in the upload summary.
   func processUpload(atPath path: String, libraryFolder: String) {
     if ZipImportHelper.isArchivePath(path) {
-      let rejectedFolder = ZipImportHelper.rejectedImportsFolder(forLibraryFolder: libraryFolder)
-      guard let result = ZipImportHelper.processArchiveInPlace(atPath: path, rejectedFolder: rejectedFolder) else {
+      guard let result = ZipImportHelper.processArchiveInPlace(atPath: path, libraryFolder: libraryFolder) else {
         return
       }
       lock.lock()
@@ -38,7 +38,7 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
         archivesProcessed += 1
         gamesImported += result.importedCount
       } else if result.errorMessage != nil {
-        rejectedArchives.append((path as NSString).lastPathComponent)
+        rejectedArchives.append(((path as NSString).lastPathComponent, result.movedToRejectedImports))
       }
       lock.unlock()
       return
@@ -62,8 +62,15 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
     let extracted = archives > 0
       ? ZipImportHelper.snackbarText(importedCount: games, skippedCount: 0, archivesProcessed: archives)
       : nil
-    let rejectedText = ZipImportHelper.rejectedSnackbarText(count: rejected.count, name: rejected.first)
-    let lines = [extracted, rejectedText].compactMap { $0 }
+    let movedAside = rejected.filter { $0.movedAside }
+    let leftInPlace = rejected.filter { !$0.movedAside }
+    let rejectedText = ZipImportHelper.rejectedSnackbarText(count: movedAside.count,
+                                                            name: movedAside.first?.name,
+                                                            movedAside: true)
+    let failedText = ZipImportHelper.rejectedSnackbarText(count: leftInPlace.count,
+                                                          name: leftInPlace.first?.name,
+                                                          movedAside: false)
+    let lines = [extracted, rejectedText, failedText].compactMap { $0 }
     return lines.isEmpty ? nil : lines.joined(separator: "\n")
   }
 }

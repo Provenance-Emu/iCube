@@ -4753,3 +4753,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Couldn't import %@. It was moved to Rejected Imports." = "Couldn't import %@. It was moved to Rejected Imports.";
 "An archive couldn't be imported and was moved to Rejected Imports." = "An archive couldn't be imported and was moved to Rejected Imports.";
 "The archive could not be read." = "The archive could not be read.";
+"Couldn't import %@." = "Couldn't import %@.";
+"%d archives couldn't be imported." = "%d archives couldn't be imported.";
+"An archive couldn't be imported." = "An archive couldn't be imported.";

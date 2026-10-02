@@ -147,12 +147,57 @@ final class ArchiveImportSafetyTests: XCTestCase {
 
         let first = ZipImportHelper.processOrphanedArchives(inFolder: library.path)
         XCTAssertEqual(first.failedArchives, 1)
+        XCTAssertEqual(first.rejectedArchives, 1)
         XCTAssertNotNil(ZipImportHelper.snackbarText(for: first))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: rejected.appendingPathComponent("Broken.zip").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: rejected.appendingPathComponent("Folder/Broken.zip").path))
 
         let second = ZipImportHelper.processOrphanedArchives(inFolder: library.path)
         XCTAssertEqual(second.failedArchives, 0)
         XCTAssertNil(ZipImportHelper.snackbarText(for: second))
+    }
+
+    func testSameNamedRejectionsInDifferentFoldersDoNotOverwriteEachOther() throws {
+        let fm = FileManager.default
+        for folder in ["A", "B"] {
+            let dir = library.appendingPathComponent(folder, isDirectory: true)
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            try Data("junk \(folder)".utf8).write(to: dir.appendingPathComponent("Broken.zip"))
+        }
+
+        let batch = ZipImportHelper.processOrphanedArchives(inFolder: library.path)
+
+        XCTAssertEqual(batch.rejectedArchives, 2)
+        XCTAssertEqual(try Data(contentsOf: rejected.appendingPathComponent("A/Broken.zip")), Data("junk A".utf8))
+        XCTAssertEqual(try Data(contentsOf: rejected.appendingPathComponent("B/Broken.zip")), Data("junk B".utf8))
+    }
+
+    // MARK: - Rejected Imports unavailable
+
+    func testUploadThatCannotBeMovedAsideIsNotReportedAsMoved() throws {
+        // A regular file where the folder should be makes every move aside fail.
+        try Data().write(to: rejected)
+        let archive = library.appendingPathComponent("Broken.zip")
+        try Data("junk".utf8).write(to: archive)
+        let service = WebUploadImportService()
+
+        service.processUpload(atPath: archive.path, libraryFolder: library.path)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: archive.path))
+        let summary = try XCTUnwrap(service.consumeSummary(defaultUploadCount: 1))
+        XCTAssertTrue(summary.contains("Broken.zip"), summary)
+        XCTAssertFalse(summary.contains(ZipImportHelper.rejectedImportsFolderName), summary)
+    }
+
+    func testOrphanThatCannotBeMovedAsideIsCountedAsFailedNotRejected() throws {
+        try Data().write(to: rejected)
+        try Data("junk".utf8).write(to: library.appendingPathComponent("Broken.zip"))
+
+        let batch = ZipImportHelper.processOrphanedArchives(inFolder: library.path)
+
+        XCTAssertEqual(batch.failedArchives, 1)
+        XCTAssertEqual(batch.rejectedArchives, 0)
+        let text = try XCTUnwrap(ZipImportHelper.snackbarText(for: batch))
+        XCTAssertFalse(text.contains(ZipImportHelper.rejectedImportsFolderName), text)
     }
 
     // MARK: - Helpers

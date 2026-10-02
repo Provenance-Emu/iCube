@@ -21,6 +21,8 @@ final class ZipImportResult: NSObject {
   @objc let importedCount: Int
   @objc let skippedExistingCount: Int
   @objc let errorMessage: String?
+  /// True when the archive failed to import and was moved to Rejected Imports.
+  @objc fileprivate(set) var movedToRejectedImports = false
 
   init(importedCount: Int, skippedExistingCount: Int, errorMessage: String?) {
     self.importedCount = importedCount
@@ -37,12 +39,15 @@ final class ArchiveBatchImportResult: NSObject {
   @objc let gamesImported: Int
   @objc let gamesSkipped: Int
   @objc let failedArchives: Int
+  /// How many of `failedArchives` were moved to Rejected Imports; the rest are still in place.
+  @objc let rejectedArchives: Int
 
-  init(archivesProcessed: Int, gamesImported: Int, gamesSkipped: Int, failedArchives: Int) {
+  init(archivesProcessed: Int, gamesImported: Int, gamesSkipped: Int, failedArchives: Int, rejectedArchives: Int) {
     self.archivesProcessed = archivesProcessed
     self.gamesImported = gamesImported
     self.gamesSkipped = gamesSkipped
     self.failedArchives = failedArchives
+    self.rejectedArchives = rejectedArchives
     super.init()
   }
 }
@@ -111,15 +116,25 @@ final class ZipImportHelper: NSObject {
                      skippedCount: batch.gamesSkipped,
                      archivesProcessed: batch.archivesProcessed)
       : nil
-    let rejected = rejectedSnackbarText(count: batch.failedArchives, name: nil)
-    let lines = [extracted, rejected].compactMap { $0 }
+    let rejected = rejectedSnackbarText(count: batch.rejectedArchives, name: nil, movedAside: true)
+    let failed = rejectedSnackbarText(count: batch.failedArchives - batch.rejectedArchives, name: nil, movedAside: false)
+    let lines = [extracted, rejected, failed].compactMap { $0 }
     return lines.isEmpty ? nil : lines.joined(separator: "\n")
   }
 
-  /// Snackbar text for archives that failed to import and were moved to Rejected Imports.
-  /// `name` is used only when exactly one archive was rejected.
-  static func rejectedSnackbarText(count: Int, name: String?) -> String? {
+  /// Snackbar text for archives that failed to import. `movedAside` says whether they were
+  /// moved to Rejected Imports; `name` is used only when exactly one archive failed.
+  static func rejectedSnackbarText(count: Int, name: String?, movedAside: Bool) -> String? {
     guard count > 0 else { return nil }
+    guard movedAside else {
+      if count > 1 {
+        return String(format: L("%d archives couldn't be imported."), count)
+      }
+      if let name {
+        return String(format: L("Couldn't import %@."), name)
+      }
+      return L("An archive couldn't be imported.")
+    }
     if count > 1 {
       return String(format: L("%d archives couldn't be imported and were moved to Rejected Imports."), count)
     }
@@ -222,6 +237,8 @@ final class ZipImportHelper: NSObject {
   /// Where archives found in `libraryFolder` that fail to import are moved, so a rescan doesn't
   /// copy, extract and reject them again on every pass. It sits beside the library folder
   /// (outside the web-upload root and the orphan scan) and is visible in the Files app on iOS.
+  /// An archive keeps its path relative to the library folder, so `A/x.zip` and `B/x.zip` don't
+  /// collide while a re-upload to the same path replaces the earlier rejection.
   @objc(rejectedImportsFolderForLibraryFolder:)
   static func rejectedImportsFolder(forLibraryFolder libraryFolder: String) -> String {
     ((libraryFolder as NSString).deletingLastPathComponent as NSString)
@@ -242,7 +259,8 @@ final class ZipImportHelper: NSObject {
     let fm = FileManager.default
     let folderURL = URL(fileURLWithPath: folder, isDirectory: true)
     guard fm.fileExists(atPath: folder) else {
-      return ArchiveBatchImportResult(archivesProcessed: 0, gamesImported: 0, gamesSkipped: 0, failedArchives: 0)
+      return ArchiveBatchImportResult(archivesProcessed: 0, gamesImported: 0, gamesSkipped: 0,
+                                      failedArchives: 0, rejectedArchives: 0)
     }
 
     var archivePaths: [String] = []
@@ -260,34 +278,37 @@ final class ZipImportHelper: NSObject {
     var gamesImported = 0
     var gamesSkipped = 0
     var failedArchives = 0
-    let rejectedFolder = rejectedImportsFolder(forLibraryFolder: folder)
+    var rejectedArchives = 0
 
     for path in archivePaths {
-      guard let result = processArchiveInPlace(atPath: path, rejectedFolder: rejectedFolder) else { continue }
+      guard let result = processArchiveInPlace(atPath: path, libraryFolder: folder) else { continue }
       if result.importedCount > 0 || result.skippedExistingCount > 0 {
         archivesProcessed += 1
         gamesImported += result.importedCount
         gamesSkipped += result.skippedExistingCount
       } else if result.errorMessage != nil {
         failedArchives += 1
+        if result.movedToRejectedImports { rejectedArchives += 1 }
       }
     }
 
     return ArchiveBatchImportResult(archivesProcessed: archivesProcessed,
-                                  gamesImported: gamesImported,
-                                  gamesSkipped: gamesSkipped,
-                                  failedArchives: failedArchives)
+                                    gamesImported: gamesImported,
+                                    gamesSkipped: gamesSkipped,
+                                    failedArchives: failedArchives,
+                                    rejectedArchives: rejectedArchives)
   }
 
   /// Extracts an archive that already sits inside the app's library folder beside its
-  /// contents and removes the archive on success. On failure the archive is moved into
-  /// `rejectedFolder` so later rescans don't process it again.
+  /// contents and removes the archive on success. On failure the archive is moved under
+  /// `rejectedImportsFolder(forLibraryFolder: libraryFolder)` so later rescans don't process it
+  /// again; `movedToRejectedImports` on the result says whether that move succeeded.
   ///
   /// Only for archives inside the app container: never call this on a user-picked URL, which
   /// must go through `importPickedArchive(at:toFolder:)` instead.
-  @objc(processArchiveInPlaceAtPath:rejectedFolder:)
+  @objc(processArchiveInPlaceAtPath:libraryFolder:)
   @discardableResult
-  static func processArchiveInPlace(atPath path: String, rejectedFolder: String) -> ZipImportResult? {
+  static func processArchiveInPlace(atPath path: String, libraryFolder: String) -> ZipImportResult? {
     guard isArchivePath(path) else { return nil }
 
     let destinationFolder = (path as NSString).deletingLastPathComponent
@@ -300,26 +321,40 @@ final class ZipImportHelper: NSObject {
 
     if let message = result.errorMessage {
       NSLog("[ArchiveImport] Archive import failed for \(path): \(message)")
-      moveArchiveAside(atPath: path, to: rejectedFolder)
+      result.movedToRejectedImports = moveArchiveAside(atPath: path, libraryFolder: libraryFolder)
     }
     return result
   }
 
-  /// Moves a rejected archive out of the library folder. A same-named earlier rejection is
-  /// replaced, so re-uploading one bad archive doesn't pile up copies.
-  private static func moveArchiveAside(atPath path: String, to rejectedFolder: String) {
+  /// Moves a rejected archive out of the library folder, keeping its path relative to it. A
+  /// rejection already at that path is replaced, so re-uploading one bad archive doesn't pile up
+  /// copies. Returns false (and leaves the archive in place) if the move fails.
+  private static func moveArchiveAside(atPath path: String, libraryFolder: String) -> Bool {
     let fm = FileManager.default
-    guard fm.fileExists(atPath: path) else { return }
-    let target = (rejectedFolder as NSString).appendingPathComponent((path as NSString).lastPathComponent)
+    guard fm.fileExists(atPath: path) else { return false }
+    let rejectedRoot = URL(fileURLWithPath: rejectedImportsFolder(forLibraryFolder: libraryFolder), isDirectory: true)
+    let target = rejectedRoot.appendingPathComponent(relativePath(of: path, in: libraryFolder))
     do {
-      try fm.createDirectory(atPath: rejectedFolder, withIntermediateDirectories: true)
-      if fm.fileExists(atPath: target) {
-        try fm.removeItem(atPath: target)
+      try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+      if fm.fileExists(atPath: target.path) {
+        try fm.removeItem(at: target)
       }
-      try fm.moveItem(atPath: path, toPath: target)
+      try fm.moveItem(atPath: path, toPath: target.path)
+      return true
     } catch {
       NSLog("[ArchiveImport] Failed to move rejected archive \(path) aside: \(error.localizedDescription)")
+      return false
     }
+  }
+
+  /// `path` relative to `folder`, or just its file name when it isn't inside `folder`.
+  private static func relativePath(of path: String, in folder: String) -> String {
+    let resolvedPath = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+    let resolvedFolder = URL(fileURLWithPath: folder, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL.path
+    let prefix = resolvedFolder.hasSuffix("/") ? resolvedFolder : resolvedFolder + "/"
+    guard resolvedPath.hasPrefix(prefix) else { return (path as NSString).lastPathComponent }
+    let relative = String(resolvedPath.dropFirst(prefix.count))
+    return relative.isEmpty ? (path as NSString).lastPathComponent : relative
   }
 
   /// Moves the archive out of the library folder before deletion so a failed unlink
