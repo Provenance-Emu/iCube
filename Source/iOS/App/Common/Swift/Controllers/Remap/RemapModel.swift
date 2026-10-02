@@ -3,7 +3,7 @@
 
 import Foundation
 
-// Pure model for the button-remap screen (`RemapPlayerView`). Nothing in this
+// Pure model behind the player screen's capture rows. Nothing in this
 // file touches the bridges, GameController or SwiftUI, so all of it is unit
 // tested in `RemapModelTests`.
 
@@ -38,17 +38,6 @@ struct RemapGroup: Identifiable, Equatable {
   let owner: RemapGroupOwner
   let id: Int
   let title: String
-
-  /// Unique across every group shown together. `id` alone is not: a Wii
-  /// Remote's own groups and its extension's both number from 0. This is what
-  /// `RemapPlayerView` uses for row/section identity and its `rows` dictionary
-  /// key.
-  var key: String { Self.key(owner: owner, id: id) }
-
-  /// Same value as `key`, computable without an instance — `RemapPlayerView`
-  /// uses this to address `rows` from a bare `(owner, groupId)` pair (e.g.
-  /// after a write-back, where it never reconstructed the full `RemapGroup`).
-  static func key(owner: RemapGroupOwner, id: Int) -> String { "\(owner)-\(id)" }
 
   static let gamecube: [RemapGroup] = [
     RemapGroup(owner: .gcPad, id: 0, title: L("Buttons")),
@@ -254,12 +243,6 @@ struct RemapCaptureMachine: Equatable {
     i < values.count ? values[i] : 0
   }
 }
-
-/// D18 moved this engine into `MenuControllerNav`
-/// (`Common/Swift/Menu/MenuControllerNav.swift`), which `MenuScreen` now uses
-/// too; this alias keeps `RemapPlayerView` and `RemapModelTests` compiling
-/// unchanged (behaviour is identical — same file, same tests, new name).
-typealias RemapControllerNav = MenuControllerNav
 
 /// One mappable control as the screen shows it: the group it belongs to (and
 /// that group's owner, so the write-back goes through the right bridge call),

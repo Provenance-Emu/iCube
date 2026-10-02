@@ -92,16 +92,6 @@ final class RemapModelTests: XCTestCase {
     }
   }
 
-  /// Once an extension's groups sit next to the Wii Remote's own (both number
-  /// their groups from 0), the raw `id` alone is no longer a unique row/section
-  /// identity — `key` (owner + id) must be.
-  func test_groupKeys_areUniqueWhenExtensionGroupsAreShown() {
-    for attachment in [1, 2] {
-      let keys = RemapGroup.groups(for: .wii, attachment: attachment).map(\.key)
-      XCTAssertEqual(Set(keys).count, keys.count)
-    }
-  }
-
   // MARK: Expressions
 
   func test_expression_isBacktickQuotedInputName() {
@@ -217,13 +207,13 @@ final class RemapModelTests: XCTestCase {
 
   // MARK: Controller navigation
 
-  private var navCfg: RemapControllerNav.Config {
-    RemapControllerNav.Config(initialRepeatDelay: 0.4, repeatInterval: 0.08, stickEngage: 0.6, stickRelease: 0.3)
+  private var navCfg: MenuControllerNav.Config {
+    MenuControllerNav.Config(initialRepeatDelay: 0.4, repeatInterval: 0.08, stickEngage: 0.6, stickRelease: 0.3)
   }
 
   func test_dpad_movesOnceOnPress_thenRepeatsAfterInitialDelay() {
-    var nav = RemapControllerNav(config: navCfg)
-    let down = RemapControllerNav.Input(down: true)
+    var nav = MenuControllerNav(config: navCfg)
+    let down = MenuControllerNav.Input(down: true)
     XCTAssertEqual(nav.update(down, at: 0), [.move(1)])
     XCTAssertEqual(nav.update(down, at: 0.1), [])
     XCTAssertEqual(nav.update(down, at: 0.39), [])
@@ -235,7 +225,7 @@ final class RemapModelTests: XCTestCase {
   }
 
   func test_stick_hasHysteresis() {
-    var nav = RemapControllerNav(config: navCfg)
+    var nav = MenuControllerNav(config: navCfg)
     XCTAssertEqual(nav.update(.init(stickY: 0.5), at: 0), [], "below engage: nothing")
     XCTAssertEqual(nav.update(.init(stickY: 0.7), at: 0.01), [.move(-1)])
     XCTAssertEqual(nav.update(.init(stickY: 0.4), at: 0.02), [], "still engaged, no new edge")
@@ -245,7 +235,7 @@ final class RemapModelTests: XCTestCase {
   }
 
   func test_activate_firesOncePerPress() {
-    var nav = RemapControllerNav(config: navCfg)
+    var nav = MenuControllerNav(config: navCfg)
     XCTAssertEqual(nav.update(.init(a: true), at: 0), [.activate])
     XCTAssertEqual(nav.update(.init(a: true), at: 0.1), [])
     XCTAssertEqual(nav.update(.init(a: true), at: 5), [], "held forever never re-fires")
@@ -254,7 +244,7 @@ final class RemapModelTests: XCTestCase {
   }
 
   func test_back_firesOncePerPress() {
-    var nav = RemapControllerNav(config: navCfg)
+    var nav = MenuControllerNav(config: navCfg)
     XCTAssertEqual(nav.update(.init(b: true), at: 0), [.back])
     XCTAssertEqual(nav.update(.init(b: true), at: 0.1), [])
   }
@@ -262,8 +252,8 @@ final class RemapModelTests: XCTestCase {
   /// After a capture ends, the just-captured A / stick push is still held and
   /// must not activate or move.
   func test_resync_adoptsHeldStateWithoutEmitting() {
-    var nav = RemapControllerNav(config: navCfg)
-    let held = RemapControllerNav.Input(stickY: 1, a: true)
+    var nav = MenuControllerNav(config: navCfg)
+    let held = MenuControllerNav.Input(stickY: 1, a: true)
     nav.resync(held, at: 10)
     XCTAssertEqual(nav.update(held, at: 10.01), [])
     XCTAssertEqual(nav.update(held, at: 11), [], "no repeat for a hold adopted by resync")
