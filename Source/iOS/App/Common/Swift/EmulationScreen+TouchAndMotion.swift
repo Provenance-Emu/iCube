@@ -25,34 +25,12 @@ extension EmulationScreen {
 
   func toggleTopBar() {
     withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-      showTopBar.toggle()
-    }
-    if showTopBar { scheduleAutoHide() }
-  }
-
-  func hideTopBar(now: Bool = false) {
-    withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-      showTopBar = false
-    }
-    if now {
-      hideBarWorkItem?.cancel()
-      hideBarWorkItem = nil
-    }
-  }
-
-  func scheduleAutoHide() {
-    hideBarWorkItem?.cancel()
-    let token = UUID()
-    autoHideToken = token
-    let work = DispatchWorkItem {
-      if token == autoHideToken && !hasTopBarInteraction {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-          self.showTopBar = false
-        }
+      if topBar.isVisible {
+        topBar.hideNow()
+      } else {
+        topBar.show(now: Date())
       }
     }
-    hideBarWorkItem = work
-    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: work)
   }
 
   func scheduleARPoll() {
