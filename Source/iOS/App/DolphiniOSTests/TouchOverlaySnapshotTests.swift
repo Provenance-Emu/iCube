@@ -37,6 +37,29 @@ final class TouchOverlaySnapshotTests: XCTestCase {
     }
   }
 
+  /// The `TestCube` fixture skin on every preview device, with each item's hit (yellow) and draw (cyan)
+  /// frame outlined. The fixture ships no button art, so only its background and the geometry show.
+  func testRenderFixtureSkin() throws {
+    guard let dir = ProcessInfo.processInfo.environment[Self.outputDirKey], !dir.isEmpty else {
+      throw XCTSkip("set \(Self.outputDirKey) to render layout snapshots")
+    }
+    let outputDir = URL(fileURLWithPath: dir, isDirectory: true)
+    try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let directory = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "TestCube", withExtension: "deltaskin", subdirectory: "Skins"))
+    let info = try SkinInfo.load(directory: directory)
+    let skin = InstalledSkin(id: info.identifier, name: info.name, gameType: info.gameType, directory: directory)
+
+    for device in TouchOverlayPreviewDevice.all {
+      for orientation in TouchOverlayOrientation.allCases {
+        let image = render(TouchOverlayPreviewScreen(padKind: .gameCube, device: device, orientation: orientation, skin: skin),
+                           size: device.size(orientation), scene: scene)
+        let name = "skin-\(orientation.rawValue)-\(device.name.replacingOccurrences(of: " ", with: "_").replacingOccurrences(of: "\"", with: "in")).png"
+        try XCTUnwrap(image.pngData()).write(to: outputDir.appendingPathComponent(name))
+      }
+    }
+  }
+
   /// Hosts the view in its own window so UIKit-backed pieces (the touch surfaces) lay out the same
   /// way they do on screen, then snapshots the window.
   private func render<V: View>(_ view: V, size: CGSize, scene: UIWindowScene) -> UIImage {
