@@ -42,16 +42,32 @@ enum SkinMount {
   private static var infoCache: [URL: (modified: Date?, info: SkinInfo)] = [:]
 
   /// The skin the player picked for this pad kind and orientation, or `.programmatic` when there is none, its files are
-  /// gone (the dead pick is forgotten), or it has no layout for this device and orientation.
+  /// gone, or it has no layout for this device and orientation. Read-only: it runs while the game screen draws, where
+  /// publishing a library change would be a view-update violation (`forgetDeadSelections` clears dead picks).
   static func overlayChoice(padKind: TouchOverlayPadKind, orientation: TouchOverlayOrientation, library: SkinLibrary,
                             isPad: Bool = UIDevice.current.userInterfaceIdiom == .pad) -> OverlayChoice {
-    guard let skin = library.selectedSkin(for: padKind, orientation: orientation) else { return .programmatic }
-    guard let info = info(for: skin) else {
-      library.select(nil, for: padKind, orientation: orientation)
-      return .programmatic
-    }
-    guard SkinOverlayInput.representation(info: info, isPad: isPad, orientation: orientation) != nil else { return .programmatic }
+    guard let skin = library.selectedSkin(for: padKind, orientation: orientation),
+          info(for: skin) != nil,
+          supports(skin, orientation: orientation, isPad: isPad) else { return .programmatic }
     return .skin(skin)
+  }
+
+  /// Whether `skin` declares a layout this device can draw in `orientation`.
+  static func supports(_ skin: InstalledSkin, orientation: TouchOverlayOrientation,
+                       isPad: Bool = UIDevice.current.userInterfaceIdiom == .pad) -> Bool {
+    guard let info = info(for: skin) else { return false }
+    return SkinOverlayInput.representation(info: info, isPad: isPad, orientation: orientation) != nil
+  }
+
+  /// Forgets every pick whose skin files are gone or unreadable. Call it outside view updates (a screen appearing,
+  /// a library change): it publishes.
+  static func forgetDeadSelections(in library: SkinLibrary) {
+    for padKind in TouchOverlayPadKind.allCases {
+      for orientation in TouchOverlayOrientation.allCases {
+        guard let skin = library.selectedSkin(for: padKind, orientation: orientation), info(for: skin) == nil else { continue }
+        library.select(nil, for: padKind, orientation: orientation)
+      }
+    }
   }
 
   /// A skin replaces the xib pads too, so the SwiftUI host is needed whenever the flag is on or a skin is chosen.

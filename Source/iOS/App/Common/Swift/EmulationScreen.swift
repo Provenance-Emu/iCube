@@ -1175,6 +1175,8 @@ struct EmulationScreen: View {
       syncMotionPortToTouchscreen()
       #if os(iOS)
       ReplayKitManager.shared.startBufferingIfEnabled()
+      // A skin whose files vanished is forgotten here, not while the screen draws (that would publish mid-update).
+      SkinMount.forgetDeadSelections(in: .shared)
       if UserDefaults.standard.bool(forKey: "thermal_auto_enable") { ThermalManager.shared.start() }
       #endif
       // On iOS, do not hand controller button presses to the system while in-game
@@ -1302,6 +1304,10 @@ struct EmulationScreen: View {
     .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
       // Ask the renderer to resize/reconfigure
       TVEmulationBridge.resizeSurfaceNow()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: SkinLibrary.didChangeNotification)) { _ in
+      // A skin was picked, imported or deleted (possibly the one on screen): rebuild the pads and the game placement.
+      touchPadsRefreshToken = UUID()
     }
     .onReceive(NotificationCenter.default.publisher(for: SkinActionNotification.name)) { note in
       if let action = SkinActionNotification.action(in: note) { handleSkinAction(action) }

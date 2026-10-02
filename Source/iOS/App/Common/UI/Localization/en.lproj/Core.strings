@@ -4705,3 +4705,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "the skin's identifier is not valid" = "the skin's identifier is not valid";
 "the archive contains files that are not safe to unpack" = "the archive contains files that are not safe to unpack";
 "New On‑Screen Controller (Beta)" = "New On‑Screen Controller (Beta)";
+"Skins…" = "Skins…";
+"Skins" = "Skins";
+"Swift-drawn (default)" = "Swift-drawn (default)";
+"Import…" = "Import…";
+"Orientation" = "Orientation";
+"Portrait" = "Portrait";
+"Landscape" = "Landscape";
+"No layout for this orientation" = "No layout for this orientation";
+"Couldn't delete skin: %@" = "Couldn't delete skin: %@";
+"No skins imported for this controller yet. Use Import… to add a .deltaskin or .manicskin file." = "No skins imported for this controller yet. Use Import… to add a .deltaskin or .manicskin file.";

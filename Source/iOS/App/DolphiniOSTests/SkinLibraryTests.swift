@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+import Combine
 import XCTest
 import Zip
 @testable import iCube
@@ -194,6 +195,24 @@ final class SkinLibraryTests: XCTestCase {
     library.select(skin, for: .gameCube, orientation: .portrait)
     _ = try library.importSkin(from: makeArchive())
     XCTAssertEqual(library.selectedSkin(for: .gameCube, orientation: .portrait)?.id, skin.id)
+  }
+
+  func testSelectionChangesPublishAndAnnounceThemselves() throws {
+    let library = SkinLibrary(rootURL: root)
+    let skin = try library.importSkin(from: makeArchive())
+    var published = 0
+    var announced = 0
+    let sink = library.objectWillChange.sink { published += 1 }
+    let observer = NotificationCenter.default.addObserver(forName: SkinLibrary.didChangeNotification, object: library, queue: nil) { _ in announced += 1 }
+    defer {
+      sink.cancel()
+      NotificationCenter.default.removeObserver(observer)
+    }
+    library.select(skin, for: .gameCube, orientation: .portrait)
+    XCTAssertEqual(published, 1)
+    XCTAssertEqual(announced, 1)
+    try library.delete(skin)
+    XCTAssertGreaterThanOrEqual(announced, 2, "deleting the active skin tells a running game to rebuild its pads")
   }
 }
 #endif

@@ -3,6 +3,7 @@
 
 #if os(iOS)
 import Foundation
+import UniformTypeIdentifiers
 import Zip
 
 /// A skin that has been imported and unpacked into the library.
@@ -51,6 +52,16 @@ final class SkinLibrary: ObservableObject {
   /// File extensions of the archives the system hands to the app (Delta and Manic share the zip layout).
   static let archiveExtensions: Set<String> = ["deltaskin", "manicskin"]
 
+  /// The document types `Info.plist` exports for those archives, for the file importer.
+  static let archiveContentTypes: [UTType] = [
+    UTType(exportedAs: "com.joemattiello.iCube.deltaskin"),
+    UTType(exportedAs: "com.joemattiello.iCube.manicskin"),
+  ]
+
+  /// Posted (object: the library) after the installed skins or a pick change, so a running game rebuilds its
+  /// on-screen controller.
+  static let didChangeNotification = Notification.Name("DOLSkinLibraryDidChangeNotification")
+
   private static let rootFolderName = "Skins"
   private static let selectionFileName = "selection.json"
   private static let infoFileName = "info.json"
@@ -62,7 +73,7 @@ final class SkinLibrary: ObservableObject {
 
   private let rootURL: URL
   /// `"<padKind>.<orientation>"` (see `TouchOverlayLayoutStore.key`) to the chosen skin's identifier.
-  private var selection: [String: String] = [:]
+  @Published private var selection: [String: String] = [:]
 
   init(rootURL: URL) {
     self.rootURL = rootURL
@@ -117,6 +128,7 @@ final class SkinLibrary: ObservableObject {
 
     let installed = InstalledSkin(id: info.identifier, name: info.name, gameType: info.gameType, directory: destination)
     skins = Self.scan(rootURL)
+    announceChange()
     return installed
   }
 
@@ -128,6 +140,7 @@ final class SkinLibrary: ObservableObject {
       selection = cleaned
       saveSelection()
     }
+    announceChange()
   }
 
   // MARK: - Selection
@@ -148,9 +161,14 @@ final class SkinLibrary: ObservableObject {
       selection[key] = nil
     }
     saveSelection()
+    announceChange()
   }
 
   // MARK: - Helpers
+
+  private func announceChange() {
+    NotificationCenter.default.post(name: Self.didChangeNotification, object: self)
+  }
 
   /// The folder holding `info.json`: the archive root, or the single folder beside any `__MACOSX` litter.
   private static func skinFolder(in extracted: URL) throws -> URL {

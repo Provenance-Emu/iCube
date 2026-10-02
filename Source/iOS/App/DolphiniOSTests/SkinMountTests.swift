@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+import Combine
 import XCTest
 @testable import iCube
 
@@ -61,12 +62,34 @@ final class SkinMountTests: XCTestCase {
     XCTAssertEqual(SkinMount.overlayChoice(padKind: .gameCube, orientation: .portrait, library: library, isPad: false), .skin(pocket))
   }
 
-  func testSkinWhoseFilesWereDeletedFallsBackAndClearsTheSelection() throws {
+  func testSkinWhoseFilesWereDeletedFallsBackWithoutTouchingTheSelection() throws {
     let pocket = try skin("pocket")
     library.select(pocket, for: .gameCube, orientation: .portrait)
     try FileManager.default.removeItem(at: pocket.directory)
+    var published = 0
+    let observer = library.objectWillChange.sink { published += 1 }
     XCTAssertEqual(SkinMount.overlayChoice(padKind: .gameCube, orientation: .portrait, library: library, isPad: false), .programmatic)
+    XCTAssertEqual(published, 0, "choosing during a view update must not publish")
+    XCTAssertNotNil(library.selectedSkin(for: .gameCube, orientation: .portrait))
+    observer.cancel()
+  }
+
+  func testForgetDeadSelectionsClearsOnlyThePicksWhoseFilesAreGone() throws {
+    let pocket = try skin("pocket")
+    let bare = try skin("bare")
+    library.select(pocket, for: .gameCube, orientation: .portrait)
+    library.select(bare, for: .gameCube, orientation: .landscape)
+    try FileManager.default.removeItem(at: pocket.directory)
+    SkinMount.forgetDeadSelections(in: library)
     XCTAssertNil(library.selectedSkin(for: .gameCube, orientation: .portrait), "the dead pick is forgotten")
+    XCTAssertEqual(library.selectedSkin(for: .gameCube, orientation: .landscape), bare)
+  }
+
+  func testSupportsReportsWhetherTheSkinHasALayoutForTheOrientation() throws {
+    let pocket = try skin("pocket")
+    XCTAssertTrue(SkinMount.supports(pocket, orientation: .portrait, isPad: false))
+    XCTAssertFalse(SkinMount.supports(pocket, orientation: .landscape, isPad: false))
+    XCTAssertTrue(SkinMount.supports(pocket, orientation: .portrait, isPad: true), "an iPad falls back to the iPhone layout")
   }
 
   func testSkinWithoutALayoutForTheOrientationFallsBackButKeepsTheSelection() throws {

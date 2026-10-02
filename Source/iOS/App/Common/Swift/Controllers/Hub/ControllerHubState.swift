@@ -139,6 +139,7 @@ struct ControllerHubActions {
   /// 0…1.
   var setOverlayOpacity: (Float) -> Void
   var editLayoutDestination: () -> AnyView
+  var skinsDestination: () -> AnyView
   /// The pad's qualifier.
   var identifyPad: (String) -> Void
   var setContinuousScanning: (Bool) -> Void

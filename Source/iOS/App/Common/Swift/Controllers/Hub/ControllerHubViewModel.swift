@@ -183,6 +183,7 @@ final class ControllerHubViewModel {
         AnyView(EmptyView())
         #endif
       },
+      skinsDestination: { [system] in Self.skinsDestination(for: system) },
       identifyPad: { [weak self] qualifier in
         self?.identify(qualifier: qualifier)
       },
@@ -192,6 +193,14 @@ final class ControllerHubViewModel {
       },
       dsuDestination: { AnyView(DSUSettingsView()) },
       moreSettingsDestination: { AnyView(ControllerMoreSettingsView()) })
+  }
+
+  private static func skinsDestination(for system: ControllerSetupSystem) -> AnyView {
+    #if os(iOS)
+    AnyView(SkinPickerView(padKinds: system.skinPadKinds))
+    #else
+    AnyView(EmptyView())
+    #endif
   }
 
   /// Announces the choice BEFORE applying it: `overlayMode = .wii` posts `assignmentsChanged`
