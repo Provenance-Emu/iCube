@@ -367,8 +367,8 @@ struct EmulationScreen: View {
   private func handleSkinAction(_ action: SkinAction) {
     switch action {
     case .menu: showPauseMenu = true
-    case .quickSave: SaveStateService.saveSlot(selectedSlot)
-    case .quickLoad: TVEmulationBridge.loadState(fromSlot: selectedSlot)
+    case .quickSave: QuickSlot.save(slot: selectedSlot)
+    case .quickLoad: QuickSlot.load(slot: selectedSlot)
     case .control: break
     }
   }

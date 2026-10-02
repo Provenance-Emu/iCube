@@ -139,6 +139,14 @@ final class SkinLibraryTests: XCTestCase {
     XCTAssertEqual(installedFolderNames(), [])
   }
 
+  func testBackslashTraversalIdentifierIsRefused() throws {
+    let library = SkinLibrary(rootURL: root)
+    let archive = try makeArchive(identifier: "..\\\\escape") // JSON-escaped: decodes to ..\escape
+    XCTAssertThrowsError(try library.importSkin(from: archive)) {
+      XCTAssertEqual($0 as? SkinImportError, .invalidIdentifier)
+    }
+  }
+
   func testReservedSelectionFileNameIsRefusedInAnyCase() throws {
     let library = SkinLibrary(rootURL: root)
     let archive = try makeArchive(identifier: "Selection.JSON")

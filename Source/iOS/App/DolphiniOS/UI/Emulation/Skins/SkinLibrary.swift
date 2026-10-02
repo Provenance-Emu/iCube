@@ -228,6 +228,7 @@ final class SkinLibrary: ObservableObject {
   /// An identifier becomes a folder name, so it must not be able to climb out of the library or hide.
   private static func isUsableFolderName(_ name: String) -> Bool {
     !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && name.lowercased() != selectionFileName
+      && ZipEntryScanner.isSafeRelativePath(name)
   }
 
   private static func scan(_ root: URL) -> [InstalledSkin] {
