@@ -24,7 +24,7 @@ extension EmulationScreen {
   }
 
   func toggleTopBar() {
-    withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+    withAnimation(TopBarStyle.transition) {
       if topBar.isVisible {
         topBar.hideNow()
       } else {

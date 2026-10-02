@@ -271,6 +271,11 @@ struct EmulationScreen: View {
 
   /// Show/auto-hide state of the top bar; see `TopBarVisibility`.
   @State var topBar = TopBarVisibility()
+  /// The bar's measured height; the toast sits just under it.
+  @State private var topBarHeight: CGFloat = 0
+  /// True when opening controller settings is what paused the game, so closing them may resume it. A pause
+  /// the user made from the bar stays.
+  @State private var controllerSettingsOwnsPause = false
   var showTopBar: Bool { topBar.isVisible }
   @State private var fastForwardEnabled = false
   // iOS observer tokens to avoid leaks. Defect #10: these three used to be
@@ -800,12 +805,13 @@ struct EmulationScreen: View {
 
       if showTopBar {
         emulationTopBar
+          .onPreferenceChange(TopBarHeightKey.self) { topBarHeight = $0 }
           .transition(.move(edge: .top).combined(with: .opacity))
           .zIndex(2)
       }
 
       // In-game toast ("Saved to Slot 3", ...): the library's snackbar renders underneath this screen.
-      EmulationToastOverlay()
+      EmulationToastOverlay(barHeight: topBarHeight, barVisible: showTopBar)
         .zIndex(6)
 
       // Semi-transparent overlay with quick performance controls (iOS)
@@ -1286,6 +1292,7 @@ struct EmulationScreen: View {
     // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
     .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
       isPaused = TVEmulationBridge.isPaused()
+      if !isPaused { PauseOwnership.pausedFromBar = false }
       // Clear a stale disconnect banner if the game resumed via any other path.
       if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
         controllerManager.clearDisconnectPause()
@@ -1304,7 +1311,7 @@ struct EmulationScreen: View {
     .toolbar(.hidden, for: .navigationBar)
     .navigationBarBackButtonHidden(true)
     .statusBar(hidden: true)
-    .animation(.spring(response: 0.3, dampingFraction: 0.9), value: showTopBar)
+    .animation(TopBarStyle.transition, value: showTopBar)
     .modifier(TopBarChildPresentationHold(visibility: $topBar, isPresented: topBarChildPresented))
     .sheet(isPresented: $showShaderSheet) {
       NavigationStack {
@@ -1368,7 +1375,7 @@ struct EmulationScreen: View {
         #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
         GameActivityManager.update(isPaused: false, elapsedSeconds: elapsedSeconds)
         #endif
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) { topBar.hideNow() }
+        withAnimation(TopBarStyle.transition) { topBar.hideNow() }
       }
     } message: {
       Text("Do you want to stop the current game and return to the library?")
@@ -1399,6 +1406,7 @@ struct EmulationScreen: View {
       irModeRaw: irModeRaw,
       overscanApplicable: overscanApplicable,
       overscanFullscreen: overscanFullscreen,
+      childPresented: topBarChildPresented,
       open: openFromTopBar,
       onToggleOnScreenControls: toggleOnScreenControls,
       onSetPointerMode: { mode in
@@ -1429,7 +1437,7 @@ struct EmulationScreen: View {
     case .shaders: showShaderSheet = true
     case .shaderParameters: showShaderParams = true
     case .controllerSettings:
-      TVEmulationBridge.pause()
+      controllerSettingsOwnsPause = PauseOwnership.claim(isPaused: TVEmulationBridge.isPaused(), pause: TVEmulationBridge.pause)
       showControllerSettings = true
     case .pauseMenu: showPauseMenu = true
     case .skylanderImport: showSkyImporter = true
@@ -1437,9 +1445,11 @@ struct EmulationScreen: View {
     }
   }
 
-  /// The settings sheet paused the game on open; resume, and refresh the pause icon without waiting for the 1 s poll.
+  /// The settings sheet paused the game on open (unless it was already paused); resume only what it paused,
+  /// and refresh the pause icon without waiting for the 1 s poll.
   private func controllerSettingsDismissed() {
-    TVEmulationBridge.resume()
+    PauseOwnership.release(owned: controllerSettingsOwnsPause, resume: TVEmulationBridge.resume)
+    controllerSettingsOwnsPause = false
     isPaused = TVEmulationBridge.isPaused()
   }
 

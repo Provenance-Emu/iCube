@@ -9,9 +9,10 @@ import XCTest
 @testable import iCube
 
 /// Renders the in-game top bar at iPhone width, portrait and landscape, with the toggles off and on, to
-/// PNGs for eyeballing. Not an assertion test: it is skipped unless an output directory is given, e.g.
-///   make test DEST="platform=iOS Simulator,id=<udid>" \
-///     TEST_ARGS="-only-testing:iCubeTests/TopBarSnapshotTests TEST_RUNNER_TOP_BAR_SNAPSHOT_DIR=/tmp/shots"
+/// PNGs for eyeballing. Not an assertion test: it is skipped unless an output directory is given. Export
+/// the variable before running (passing it inside TEST_ARGS silently skips the test):
+///   export TEST_RUNNER_TOP_BAR_SNAPSHOT_DIR=/tmp/shots
+///   make test DEST="platform=iOS Simulator,id=<udid>" TEST_ARGS="-only-testing:iCubeTests/TopBarSnapshotTests"
 @MainActor
 final class TopBarSnapshotTests: XCTestCase {
   private static let outputDirKey = "TOP_BAR_SNAPSHOT_DIR"
@@ -20,13 +21,15 @@ final class TopBarSnapshotTests: XCTestCase {
 
   private struct Harness: View {
     let togglesOn: Bool
+    let compactHeight: Bool
     @State private var visibility = TopBarVisibility()
     @State private var slot = 3
     @State private var paused: Bool
     @State private var fastForward: Bool
 
-    init(togglesOn: Bool) {
+    init(togglesOn: Bool, compactHeight: Bool) {
       self.togglesOn = togglesOn
+      self.compactHeight = compactHeight
       _paused = State(initialValue: togglesOn)
       _fastForward = State(initialValue: togglesOn)
     }
@@ -39,9 +42,11 @@ final class TopBarSnapshotTests: XCTestCase {
           visibility: $visibility, selectedSlot: $slot, isPaused: $paused, fastForwardEnabled: $fastForward,
           isWii: true, onScreenControlsVisible: !togglesOn, irModeRaw: 1,
           overscanApplicable: false, overscanFullscreen: false,
+          readToggles: { TopBarToggles(isMuted: togglesOn, fastForwardEnabled: togglesOn) },
           open: { _ in }, onToggleOnScreenControls: {}, onSetPointerMode: { _ in },
           onSetProgrammaticOverlay: { _ in }, onSetOverscanFullscreen: { _ in })
       }
+      .environment(\.verticalSizeClass, compactHeight ? .compact : .regular)
     }
   }
 
@@ -55,7 +60,7 @@ final class TopBarSnapshotTests: XCTestCase {
 
     for (orientation, size) in [("portrait", Self.portrait), ("landscape", Self.landscape)] {
       for (state, on) in [("idle", false), ("toggled", true)] {
-        let image = render(Harness(togglesOn: on), size: size, scene: scene)
+        let image = render(Harness(togglesOn: on, compactHeight: size == Self.landscape), size: size, scene: scene)
         try XCTUnwrap(image.pngData()).write(to: outputDir.appendingPathComponent("top-bar-\(orientation)-\(state).png"))
       }
     }

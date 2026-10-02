@@ -64,6 +64,8 @@ internal struct PauseMenuView: View {
   // trip. Mute is shared with the in-game top bar via `QuickMute`.
   @State private var isMuted: Bool = false
   @State private var fastForwardEnabled: Bool = false
+  /// True when opening this menu is what paused the game (see `PauseOwnership`).
+  @State private var menuOwnsPause = false
   /// D14: drives the iOS speed picker, a `MenuScreen`-backed confirm overlay
   /// (`PauseMenuView.fastForwardConfirmModel`, D18). Declared unconditionally,
   /// like `showControllersSheet`/`showSettingsSheet` above, because
@@ -180,7 +182,11 @@ internal struct PauseMenuView: View {
       // Grab the last live frame for a save thumbnail BEFORE pausing, so a save made
       // from this menu still gets a screenshot even though presenting is about to stop.
       SaveStateService.capturePausePreview()
-      TVEmulationBridge.pause()
+      // onAppear runs again each time a child sheet closes: keep the first answer, otherwise the menu would
+      // see its own pause and claim a pause the user made earlier (from the top bar).
+      if !menuOwnsPause {
+        menuOwnsPause = PauseOwnership.claim(isPaused: TVEmulationBridge.isPaused(), pause: TVEmulationBridge.pause)
+      }
       isMuted = QuickMute.isMuted
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
       refreshActiveCheatCount()
@@ -196,7 +202,12 @@ internal struct PauseMenuView: View {
       // this menu is currently presented — i.e. this is a real teardown (Resume,
       // Exit, or the parent dismissing the whole menu), not a covering child.
       guard !isPauseMenuChildPresented else { return }
-      if TVEmulationBridge.isRunning() && TVEmulationBridge.isPaused() { TVEmulationBridge.resume() }
+      // Only resume a pause this menu made: a game the user paused from the top bar stays paused.
+      let ownedPause = menuOwnsPause
+      menuOwnsPause = false
+      if TVEmulationBridge.isRunning() && TVEmulationBridge.isPaused() {
+        PauseOwnership.release(owned: ownedPause, resume: TVEmulationBridge.resume)
+      }
     }
     #if os(tvOS)
     .focusSection()
