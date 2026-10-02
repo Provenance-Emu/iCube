@@ -120,11 +120,11 @@ struct DebugRootView: View {
       Section(header: Text(L("Diagnostics"))) {
         HStack { Text(L("Launch Times")); Spacer(); Text("\(launchTimes)").foregroundStyle(.secondary) }
         Button(L("Reset Launch Times")) { launchTimes = 0; UserDefaults.standard.set(0, forKey: "launch_times") }
-        #if canImport(CoreMotion)
+        #if DEBUG && canImport(CoreMotion)
         NavigationLink(destination: MotionDebugView()) {
           Label(L("Motion Debug"), systemImage: "sensor.tag.radiowaves.forward")
         }
-        #endif // canImport(CoreMotion)
+        #endif // DEBUG && canImport(CoreMotion)
         // Stall instrumentation is engine-agnostic (VideoCommon), so it lives in this
         // always-visible Diagnostics group rather than the CIR-gated one. Config-backed
         // (MAIN_STALL_METRICS), so bind read-through to the bridge — no @State — to avoid

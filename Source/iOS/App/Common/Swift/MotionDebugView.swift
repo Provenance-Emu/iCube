@@ -1,7 +1,7 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#if canImport(CoreMotion)
+#if DEBUG && canImport(CoreMotion)
 import CoreMotion
 import GameController
 import SwiftUI
@@ -941,7 +941,6 @@ private struct MotionValueRow: View {
   }
 }
 
-#if DEBUG
 struct MotionDebugView_Previews: PreviewProvider {
   static var previews: some View {
     NavigationView {
@@ -949,5 +948,4 @@ struct MotionDebugView_Previews: PreviewProvider {
     }
   }
 }
-#endif
-#endif // canImport(CoreMotion)
+#endif // DEBUG && canImport(CoreMotion)

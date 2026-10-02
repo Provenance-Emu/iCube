@@ -241,7 +241,6 @@ struct EmulationScreen: View {
   @State private var resumeObserver: NSObjectProtocol?
   #if os(tvOS)
   @State private var exitObserver: NSObjectProtocol?
-  @State private var showMotionDebug = false
   @State private var tvPauseObserver: NSObjectProtocol?
   // Defect #10: these two used to be registered anonymously in onAppear and never
   // removed, so re-entering a game N times left N copies of each handler running.
@@ -290,9 +289,6 @@ struct EmulationScreen: View {
   @State private var showShaderSheet = false
   @State private var showShaderParams = false
   @State private var showFXSheet = false
-  #if DEBUG
-  @State private var showMotionDebug = false
-  #endif
   @State private var showControllerSettings = false
   // AR stabilization
   @State var stableAR: CGFloat?
@@ -545,12 +541,6 @@ struct EmulationScreen: View {
         .interactiveDismissDisabled(true)
         .onExitCommand { showSettings = false }
     }
-    //    .sheet(isPresented: $showMotionDebug) {
-    //      NavigationStack {
-    //        MotionDebugView()
-    //      }
-    //      .environment(\.colorScheme, .dark)
-    //    }
     .fullScreenCover(isPresented: $showPauseMenu) {
       ZStack {
         PauseMenuView(
@@ -564,19 +554,6 @@ struct EmulationScreen: View {
         VStack {
           HStack {
             Spacer()
-            Button {
-              showMotionDebug = true
-            } label: {
-              Image(systemName: "gyroscope")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundColor(.white)
-                .padding(12)
-                .background(.white.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focusable(true)
-            .padding([.top, .trailing], 8)
             Button {
               refreshPerfOverlayState()
               showPerfOverlay = true
@@ -1402,13 +1379,6 @@ struct EmulationScreen: View {
         }
       }
     }
-    #if DEBUG
-    .sheet(isPresented: $showMotionDebug) {
-      NavigationStack {
-        MotionDebugView()
-      }
-    }
-    #endif
     .sheet(isPresented: $showControllerSettings, onDismiss: controllerSettingsDismissed) {
       NavigationStack {
         ControllerHubView(system: .forRunningGame, onBack: { showControllerSettings = false })
