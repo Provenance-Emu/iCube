@@ -44,7 +44,10 @@ enum ZipEntryScanner {
   private static let unixModeShift: UInt32 = 16
   private static let fileTypeMask: UInt32 = 0o170000
   private static let symlinkType: UInt32 = 0o120000
-  private static let parentComponent = ".."
+  private static let slashByte = UInt8(ascii: "/")
+  private static let backslashByte = UInt8(ascii: "\\")
+  private static let dotByte = UInt8(ascii: ".")
+  private static let colonByte = UInt8(ascii: ":")
 
   /// Entry field offsets within the end record and a central directory entry header.
   private enum EndRecord {
@@ -108,7 +111,7 @@ enum ZipEntryScanner {
       // Lossy decoding on purpose: a failable decode would turn a name with one bad byte into "" and skip the checks.
       // swiftlint:disable:next optional_data_string_conversion
       let entry = ZipEntry(name: String(decoding: rawName, as: UTF8.self), externalAttributes: data.le32(cursor + CentralEntry.externalAttributes))
-      try validate(entry)
+      try validate(entry, nameBytes: Array(rawName))
       entries.append(entry)
       cursor += centralEntryHeaderSize + variableLength
     }
@@ -131,14 +134,20 @@ enum ZipEntryScanner {
     throw ZipEntryScannerError.notAZip
   }
 
-  private static func validate(_ entry: ZipEntry) throws {
-    let path = entry.name.replacingOccurrences(of: "\\", with: "/")
-    let characters = Array(path)
-    let hasDriveLetter = characters.count >= 2 && characters[1] == ":" && characters[0].isASCII && characters[0].isLetter
+  /// Checked on the raw bytes, never on Swift `String` / `Character` operations: those group a `/` with a following
+  /// combining mark into one grapheme, so a `..` component would hide from them while the kernel still sees the `/`.
+  private static func validate(_ entry: ZipEntry, nameBytes: [UInt8]) throws {
+    let path = nameBytes.map { $0 == backslashByte ? slashByte : $0 }
+    let hasDriveLetter = path.count >= 2 && path[1] == colonByte && isASCIILetter(path[0])
     let isSymlink = (entry.externalAttributes >> unixModeShift) & fileTypeMask == symlinkType
-    if path.hasPrefix("/") || hasDriveLetter || isSymlink || path.split(separator: "/", omittingEmptySubsequences: false).contains(Substring(parentComponent)) {
+    let hasParentComponent = path.split(separator: slashByte, omittingEmptySubsequences: false).contains { $0.elementsEqual([dotByte, dotByte]) }
+    if path.first == slashByte || hasDriveLetter || isSymlink || hasParentComponent {
       throw ZipEntryScannerError.unsafeEntry(entry.name)
     }
+  }
+
+  private static func isASCIILetter(_ byte: UInt8) -> Bool {
+    (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte) || (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(byte)
   }
 }
 

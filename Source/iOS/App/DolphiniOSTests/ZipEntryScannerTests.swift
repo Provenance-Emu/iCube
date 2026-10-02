@@ -164,6 +164,20 @@ final class ZipEntryScannerTests: XCTestCase {
     assertUnsafe([.init(name: "c:\\abs.txt")])
   }
 
+  /// Swift's String splits on grapheme clusters, so `/` + a combining mark is ONE Character; the kernel still sees `/`.
+  func testRejectsParentComponentsThatFollowCombiningCharacters() {
+    assertUnsafe([.init(name: "../\u{301}x")])
+    assertUnsafe([.init(name: "../\u{200D}x")])
+    assertUnsafe([.init(name: "a\u{600}/../\u{301}b")])
+    assertUnsafe([.init(name: "..\\\u{301}x")])
+    assertUnsafe([.init(name: "x\u{600}/../y")])
+  }
+
+  func testAllowsCombiningMarksInBenignNames() throws {
+    let names = ["cafe\u{301}/art.png", "e\u{301}/\u{200D}x/..hidden"]
+    XCTAssertEqual(try ZipEntryScanner.scan(TestZipBuilder.build(names.map { .init(name: $0) })).map(\.name), names)
+  }
+
   func testRejectsParentHiddenBehindANulByte() {
     assertUnsafe([.init(rawName: Array("..".utf8) + [0] + Array("/x".utf8))])
   }
