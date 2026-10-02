@@ -145,11 +145,16 @@ static bool StateOperationAllowed(Core::System& system, const char* operation)
   return s == Core::State::Running || s == Core::State::Paused || s == Core::State::Starting;
 }
 
-+ (void)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait {
++ (BOOL)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait {
   (void)wait;  // 2603: State::Save lost its wait flag (always synchronous now)
   if (!StateOperationAllowed(Core::System::GetInstance(), "slot save"))
-    return;
+    return NO;
   State::Save(Core::System::GetInstance(), (int)slot);
+  return YES;
+}
+
++ (BOOL)isStateOperationAllowed {
+  return Core::IsRunning(Core::System::GetInstance());
 }
 
 + (void)loadStateFromSlot:(NSInteger)slot {

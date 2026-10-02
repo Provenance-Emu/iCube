@@ -113,6 +113,9 @@ enum ControllerHubModelBuilder {
     items.append(MenuItem(
       id: "osc-edit-layout", title: L("Edit Layout…"), icon: "rectangle.and.pencil.and.ellipsis",
       role: .destination(actions.editLayoutDestination())))
+    items.append(MenuItem(
+      id: "osc-skins", title: L("Skins…"), icon: "paintpalette",
+      role: .destination(actions.skinsDestination())))
     return MenuSection(id: "on-screen", header: L("On-Screen Controls"), items: items)
   }
 

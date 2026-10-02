@@ -96,6 +96,9 @@ struct TouchOverlayCluster<ID: Hashable>: View {
   /// pressure is continuous data) for a touch whose OWN hit region — not the cluster-wide union —
   /// is one of `pressureIds`.
   var onForce: ((ID, Float) -> Void)?
+  /// Fired with the locations (surface-local) of touches that just landed, once per touch-down and never
+  /// for a finger that moves in. For things that must act on a fresh touch only (skin menu/quick-save).
+  var onBegan: (([CGPoint]) -> Void)?
 
   @State private var liveTouches: [ObjectIdentifier: TouchOverlaySurface.Touch] = [:]
 
@@ -108,6 +111,7 @@ struct TouchOverlayCluster<ID: Hashable>: View {
         case .ended, .cancelled:
           for touch in touches { liveTouches.removeValue(forKey: touch.id) }
         }
+        if phase == .began { onBegan?(touches.map(\.location)) }
         recompute(in: geo.size)
       }
       .contentShape(Rectangle())

@@ -4,7 +4,7 @@ Design doc for plan items **C8** and **C9** in `docs/superpowers/plans/2026-09-2
 
 ## 0. Source-tree correction — read before the file lists below
 
-The plan item names `iFly/iFly/Sources/UI/Views/Skins/` as the port source. That tree is the Delta-skin *file-format* runtime (JSON `representations`, `mappingSize`, bundled PDF/PNG assets, `DeltaSkinTraits` lookup). iCube has no skin files and gains no skin-import feature here — nothing in that format concept transfers.
+The plan item names `iFly/iFly/Sources/UI/Views/Skins/` as the port source. That tree is the Delta-skin *file-format* runtime (JSON `representations`, `mappingSize`, bundled PDF/PNG assets, `DeltaSkinTraits` lookup). iCube has no skin files and gains no skin-import feature in this design — nothing in that format concept transfers. (Skin import was added afterwards; see [`2026-10-01-controller-skins.md`](../plans/2026-10-01-controller-skins.md).)
 
 The feature we actually want — programmatic (no asset file), draggable, per-orientation, reset-able, normalized persistence — already exists one directory over, backing iFly's Dreamcast/arcade overlay: `iFly/iFly/Sources/UI/Views/Controller/`. That is the real port target:
 
@@ -34,7 +34,7 @@ Everything below assumes the `Controller/` tree as the port source.
 - Settings for style, opacity (reuse existing), and a new Wii IR touch-pad area rectangle (C9).
 
 **Non-goals**
-- No Delta-skin file import/export.
+- No Delta-skin file *export*. (Import is no longer a non-goal: Delta/Manic skin import, drawing and per-pad-kind choice from the Controllers hub are specified in [`docs/superpowers/plans/2026-10-01-controller-skins.md`](../plans/2026-10-01-controller-skins.md).)
 - No per-control resize handles — groups move as a fixed-size unit (per-group *scale* is a plausible v2, not here).
 - No per-game layout override in v1 (extension point documented in §2.3).
 - No change to `TCDeviceMotion`'s gyro/accel pipeline — gyro-mode IR keeps working exactly as today; the new overlay only replaces the touch-driven follow/drag IR path.
