@@ -4697,3 +4697,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Nunchuk Tilt" = "Nunchuk Tilt";
 "On · 1 server" = "On · 1 server";
 "New On‑Screen Controller (Beta)" = "New On‑Screen Controller (Beta)";
+"This archive contains files that would be written outside the import folder, so it was not imported." = "This archive contains files that would be written outside the import folder, so it was not imported.";
+"This archive's layout isn't supported. Try creating the archive again with another tool." = "This archive's layout isn't supported. Try creating the archive again with another tool.";
