@@ -49,6 +49,11 @@ final class ArchiveBatchImportResult: NSObject {
 
 @objc(DOLZipImportHelper)
 final class ZipImportHelper: NSObject {
+  enum ArchiveImportError: Error {
+    /// The archive is a directory, a link or something else that is not one file the extractors can read.
+    case notARegularFile
+  }
+
   private enum ArchiveKind {
     case zip
     case sevenZip
@@ -112,6 +117,29 @@ final class ZipImportHelper: NSObject {
                         archivesProcessed: batch.archivesProcessed)
   }
 
+  /// Shown when an archive holds an entry that would be written outside the import folder, or a link.
+  static var unsafeArchiveMessage: String {
+    L("This archive contains files that would be written outside the import folder, so it was not imported.")
+  }
+
+  /// Shown when the archive's layout is one the importer cannot read safely, which is not the same as a corrupt archive.
+  static var unsupportedLayoutMessage: String {
+    L("This archive's layout isn't supported. Try creating the archive again with another tool.")
+  }
+
+  /// An unsafe archive and one the scanner cannot read are not corrupt archives, so they get messages of their own.
+  /// A truncated archive is the one scanner failure that does look like corruption.
+  private static func failureMessage(for error: Error) -> String {
+    switch error as? ZipEntryScannerError {
+    case .unsafeEntry:
+      return unsafeArchiveMessage
+    case .notAZip, .inconsistentDirectory, .multiDisk, .directoryTooLarge:
+      return unsupportedLayoutMessage
+    case .truncated, nil:
+      return "The archive could not be extracted. It may be corrupt or password-protected.\n\n\(error.localizedDescription)"
+    }
+  }
+
   /// Extract a supported archive and import contained disc images into `destinationFolder`.
   @objc(importArchiveAtPath:toFolder:)
   static func importArchive(atPath sourcePath: String, toFolder destinationFolder: String) -> ZipImportResult {
@@ -121,7 +149,7 @@ final class ZipImportHelper: NSObject {
   }
 
   private static func importArchiveImpl(atPath sourcePath: String, toFolder destinationFolder: String) -> ZipImportResult {
-    guard let sourceKind = ImportableFileTypes.archiveKind(for: URL(fileURLWithPath: sourcePath)) else {
+    guard ImportableFileTypes.archiveKind(for: URL(fileURLWithPath: sourcePath)) != nil else {
       return ZipImportResult(importedCount: 0,
                              skippedExistingCount: 0,
                              errorMessage: "Not a supported archive format.")
@@ -135,12 +163,9 @@ final class ZipImportHelper: NSObject {
     defer { try? fm.removeItem(at: tempDir) }
 
     do {
-      try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
-      try extractArchive(kind: mapArchiveKind(sourceKind), sourceURL: sourceURL, to: tempDir)
+      try extractArchive(at: sourceURL, to: tempDir)
     } catch {
-      return ZipImportResult(importedCount: 0,
-                             skippedExistingCount: 0,
-                             errorMessage: "The archive could not be extracted. It may be corrupt or password-protected.\n\n\(error.localizedDescription)")
+      return ZipImportResult(importedCount: 0, skippedExistingCount: 0, errorMessage: failureMessage(for: error))
     }
 
     return importSupportedFiles(from: tempDir, toFolder: destinationFolder)
@@ -249,6 +274,34 @@ final class ZipImportHelper: NSObject {
 
   // MARK: - Extraction
 
+  /// Extracts the archive at `sourceURL` into the new directory `destination`.
+  ///
+  /// The archive is first copied into a private directory of its own, and everything below reads that copy: `sourceURL`
+  /// is a Files-app, web-upload or `Software/` file that another writer can rewrite at any time.
+  static func extractArchive(at sourceURL: URL, to destination: URL) throws {
+    guard let sourceKind = ImportableFileTypes.archiveKind(for: sourceURL) else {
+      throw archiveUnavailableError("This archive format")
+    }
+    let fm = FileManager.default
+    let copyDir = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("dol_archive_source-\(UUID().uuidString)", isDirectory: true)
+    defer { try? fm.removeItem(at: copyDir) }
+    try fm.createDirectory(at: copyDir, withIntermediateDirectories: true)
+    let copyURL = copyDir.appendingPathComponent(sourceURL.lastPathComponent)
+    try fm.copyItem(at: sourceURL.resolvingSymlinksInPath(), to: copyURL)
+    let copyKind = try copyURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+    guard copyKind.isRegularFile == true, copyKind.isSymbolicLink != true else { throw ArchiveImportError.notARegularFile }
+    try fm.createDirectory(at: destination, withIntermediateDirectories: true)
+    try extractArchive(kind: mapArchiveKind(sourceKind), sourceURL: copyURL, to: destination)
+  }
+
+  /// Throws `unsafeEntry` for the first archive item path that could be written outside the extraction folder.
+  static func validateItemPaths(_ paths: [String]) throws {
+    if let unsafe = paths.first(where: { !ZipEntryScanner.isSafeRelativePath($0) }) {
+      throw ZipEntryScannerError.unsafeEntry(unsafe)
+    }
+  }
+
   private static func extractArchive(kind: ArchiveKind, sourceURL: URL, to tempDir: URL) throws {
     switch kind {
     case .zip:
@@ -272,6 +325,8 @@ final class ZipImportHelper: NSObject {
 
   private static func extractZipArchive(sourceURL: URL, to tempDir: URL) throws {
     #if canImport(Zip)
+    // The scan and the extraction read the same private copy, and `tempDir` is empty, so a rejected archive writes nothing.
+    _ = try ZipEntryScanner.scan(fileAt: sourceURL)
     try Zip.unzipFile(sourceURL, destination: tempDir, overwrite: true, password: nil, progress: nil)
     #else
     throw archiveUnavailableError("Zip")
@@ -287,11 +342,41 @@ final class ZipImportHelper: NSObject {
     try extractWithPLzma(sourceURL: sourceURL, to: tempDir, fileType: .xz)
   }
 
+  /// PLzmaSDK joins each item path onto the destination with `Path.append`, which only collapses separators and never
+  /// resolves `..` (`ExtractCallback::getExtractStream`, `normalize` in `plzma_path_utils.hpp`), so an item named
+  /// `../x` is written outside the destination. It creates plain files only, never links. The paths are checked from
+  /// `decoder.items()`, which reads them from the same `kpidPath` property as the extraction, before anything is written.
+  /// An xz stream holds one unnamed file, so its output name comes from the archive's own name, never from its contents.
   private static func extractWithPLzma(sourceURL: URL, to tempDir: URL, fileType: FileType) throws {
     let stream = try InStream(path: Path(sourceURL.path))
     let decoder = try Decoder(stream: stream, fileType: fileType, delegate: nil)
     _ = try decoder.open()
+    if fileType == .xz {
+      let outputName = sourceURL.deletingPathExtension().lastPathComponent
+      _ = try decoder.extract(to: Path(tempDir.appendingPathComponent(outputName).path))
+      return
+    }
+    let items = try decoder.items()
+    guard items.count == (try decoder.count()) else { throw ZipEntryScannerError.inconsistentDirectory }
+    var paths: [String] = []
+    for index in 0..<items.count {
+      let item = try items.item(at: index)
+      // An item PLzmaSDK could not read the path of is null, and asking it for its path dereferences it.
+      guard hasObject(item) else { throw ZipEntryScannerError.inconsistentDirectory }
+      paths.append(try item.path().description)
+    }
+    try validateItemPaths(paths)
     _ = try decoder.extract(to: Path(tempDir.path))
+  }
+
+  /// Whether `item` wraps a real archive item. `OpenCallback::initialItemAt` returns a null item when it cannot read an
+  /// item's path, and PLzmaSDK exposes no way to ask for that, so the item's `object` pointer is read by reflection. An
+  /// item whose pointer cannot be read counts as null, so a change in PLzmaSDK's layout rejects 7z archives instead of
+  /// letting a null item through; the 7z import test catches that.
+  private static func hasObject(_ item: Item) -> Bool {
+    let object = Mirror(reflecting: item).children.first { $0.label == "object" }?.value
+    let pointer = object.flatMap { Mirror(reflecting: $0).children.first { $0.label == "object" }?.value }
+    return (pointer as? UnsafeMutableRawPointer) != nil
   }
   #else
   private static func extractSevenZip(sourceURL: URL, to tempDir: URL) throws {
@@ -335,15 +420,27 @@ final class ZipImportHelper: NSObject {
     try writeTarEntries(try TarContainer.open(container: tarData), to: tempDir)
   }
 
+  /// Checks every entry before writing any, so a rejected archive leaves `tempDir` empty. Only regular files are written.
+  /// Symbolic and hard links are rejected outright: a ROM tarball has no use for them, and a link followed by an entry
+  /// beneath it would write through the link. Names are checked as they are joined onto `tempDir`, after the leading and
+  /// trailing slashes are trimmed (an absolute name lands inside `tempDir`); `""` and `"."` name `tempDir` itself.
   private static func writeTarEntries(_ entries: [TarEntry], to tempDir: URL) throws {
-    let fm = FileManager.default
+    var files: [(relative: String, payload: Data)] = []
     for entry in entries {
-      guard entry.info.type == .regular, let payload = entry.data else { continue }
+      if entry.info.type == .symbolicLink || entry.info.type == .hardLink {
+        throw ZipEntryScannerError.unsafeEntry(entry.info.name)
+      }
       let relative = entry.info.name.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-      guard !relative.isEmpty, !shouldSkipArchiveRelativePath(relative) else { continue }
-      let outURL = tempDir.appendingPathComponent(relative)
+      guard !relative.isEmpty, relative != "." else { continue }
+      try validateItemPaths([relative])
+      guard entry.info.type == .regular, let payload = entry.data, !shouldSkipArchiveRelativePath(relative) else { continue }
+      files.append((relative, payload))
+    }
+    let fm = FileManager.default
+    for file in files {
+      let outURL = tempDir.appendingPathComponent(file.relative)
       try fm.createDirectory(at: outURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try payload.write(to: outURL)
+      try file.payload.write(to: outURL)
     }
   }
   #else
