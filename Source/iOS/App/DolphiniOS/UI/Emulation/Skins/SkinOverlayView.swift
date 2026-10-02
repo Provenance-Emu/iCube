@@ -9,8 +9,7 @@ import UIKit
 /// through the same `TCManagerInterface` writes the Swift-drawn overlay makes. The geometry and the
 /// touch-to-write logic live in `SkinOverlayInput`; this view is glue.
 ///
-/// A skin is chosen per pad kind and orientation by the caller; give the view `.id(skin.id)` so
-/// switching skins reloads `info.json`.
+/// Swapping the skin or pad kind rebuilds the content, so a new skin never draws with the old `info.json`.
 struct SkinOverlayView: View {
   let skin: InstalledSkin
   let padKind: TouchOverlayPadKind
@@ -20,10 +19,38 @@ struct SkinOverlayView: View {
   let previewDevice: SkinDevice?
   let onAction: (SkinAction) -> Void
 
+  init(skin: InstalledSkin, padKind: TouchOverlayPadKind, deviceId: Int, previewDevice: SkinDevice? = nil,
+       onAction: @escaping (SkinAction) -> Void) {
+    self.skin = skin
+    self.padKind = padKind
+    self.deviceId = deviceId
+    self.previewDevice = previewDevice
+    self.onAction = onAction
+  }
+
+  var body: some View {
+    SkinOverlayContent(skin: skin, padKind: padKind, deviceId: deviceId, previewDevice: previewDevice, onAction: onAction)
+      .id(ContentIdentity(skinID: skin.id, directory: skin.directory, padKind: padKind))
+  }
+}
+
+private struct ContentIdentity: Hashable {
+  let skinID: String
+  let directory: URL
+  let padKind: TouchOverlayPadKind
+}
+
+private struct SkinOverlayContent: View {
+  let skin: InstalledSkin
+  let padKind: TouchOverlayPadKind
+  let deviceId: Int
+  let previewDevice: SkinDevice?
+  let onAction: (SkinAction) -> Void
+
   @StateObject private var infoBox: SkinInfoBox
   @Environment(\.displayScale) private var displayScale
 
-  init(skin: InstalledSkin, padKind: TouchOverlayPadKind, deviceId: Int, previewDevice: SkinDevice? = nil,
+  init(skin: InstalledSkin, padKind: TouchOverlayPadKind, deviceId: Int, previewDevice: SkinDevice?,
        onAction: @escaping (SkinAction) -> Void) {
     self.skin = skin
     self.padKind = padKind
@@ -54,7 +81,7 @@ struct SkinOverlayView: View {
           SkinTouchLayer(input: input, directory: skin.directory, deviceId: deviceId, displayScale: displayScale,
                          controlOpacity: opacity, onAction: onAction)
             // A new layout (rotation, resize) starts with nothing pressed; the old layer releases what it held.
-            .id(LayoutIdentity(canvas: canvas, orientation: orientation))
+            .id(LayoutIdentity(canvas: canvas, orientation: orientation, skinID: skin.id, padKind: padKind))
         }
         .frame(width: canvas.width, height: canvas.height, alignment: .topLeading)
         .offset(x: -insets.leading, y: -insets.top)
@@ -74,6 +101,8 @@ struct SkinOverlayView: View {
 private struct LayoutIdentity: Hashable {
   let canvas: CGSize
   let orientation: TouchOverlayOrientation
+  let skinID: String
+  let padKind: TouchOverlayPadKind
 }
 
 /// Holds a skin's parsed `info.json` for the life of the view, so layout passes do not re-read the file.
@@ -151,7 +180,14 @@ private struct SkinTouchLayer: View {
           // Transitions are applied together in `apply`, once per touch event, so an id shared by two
           // items is never released while the other still holds it.
         },
-        pressed: $pressed
+        pressed: $pressed,
+        onBegan: { locations in
+          // App actions (menu, quick save/load) fire on touch-down only; a finger sliding onto them does nothing.
+          for location in locations {
+            guard let item = input.actionItem(at: location) else { continue }
+            for action in input.actions(ofItem: item) { onAction(action) }
+          }
+        }
       )
       ForEach(input.sticks, id: \.itemIndex) { stick in
         SkinStickView(stick: stick, directory: directory, deviceId: deviceId,
@@ -175,8 +211,8 @@ private struct SkinTouchLayer: View {
       case .axis: TCManagerInterface.setAxisValueFor(write.id, controller: deviceId, value: write.axisValue)
       }
     }
-    if !now.subtracting(previous).isEmpty { hapticGenerator.impactOccurred() }
-    for action in input.actions(now: now, previous: previous) { onAction(action) }
+    // Like `TouchOverlayDPadView`: once per press, not on every direction or button change while held.
+    if previous.isEmpty, !now.isEmpty { hapticGenerator.impactOccurred() }
   }
 }
 

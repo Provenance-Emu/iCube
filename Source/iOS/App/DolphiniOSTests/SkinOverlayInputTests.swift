@@ -115,16 +115,52 @@ final class SkinOverlayInputTests: XCTestCase {
     XCTAssertTrue(writes.allSatisfy { !$0.pressed })
   }
 
-  // MARK: Actions
+  // MARK: Actions (touch-down only)
 
-  func testMenuFiresOnceOnTouchDownOnly() {
-    let sut = input([item(.buttons(["menu"]), CGRect(x: 100, y: 100, width: 40, height: 40)),
-                     item(.buttons(["quickSave"]), CGRect(x: 200, y: 100, width: 40, height: 40))])
-    XCTAssertEqual(sut.actions(now: [.item(0)], previous: []), [.menu])
-    XCTAssertEqual(sut.actions(now: [.item(0)], previous: [.item(0)]), [], "still held")
-    XCTAssertEqual(sut.actions(now: [], previous: [.item(0)]), [], "release fires nothing")
-    XCTAssertEqual(sut.actions(now: [.item(0), .item(1)], previous: [.item(0)]), [.quickSave])
-    XCTAssertEqual(sut.writes(now: [.item(0)], previous: []), [], "actions never write to the pad")
+  func testActionOnlyItemsAreNeverInTheSlideInHitSet() {
+    let sut = input([item(.buttons(["a"]), CGRect(x: 40, y: 100, width: 40, height: 40)),
+                     item(.buttons(["menu"]), CGRect(x: 200, y: 100, width: 40, height: 40)),
+                     item(.buttons(["quickSave"]), CGRect(x: 260, y: 100, width: 40, height: 40))])
+    // A finger that lands on the A button and slides right across menu and quickSave (what `moved` reports).
+    var covered: Set<SkinOverlayInput.Hit> = []
+    for x in stride(from: CGFloat(50), through: 290, by: 5) {
+      covered.formUnion(sut.hits(at: CGPoint(x: x, y: 120), previous: covered))
+    }
+    XCTAssertEqual(covered, [.item(0)], "sliding over menu / quickSave presses nothing")
+    XCTAssertEqual(sut.hits(at: CGPoint(x: 220, y: 120), previous: []), [])
+    XCTAssertEqual(sut.writes(now: covered, previous: []), buttonWrites([(ID.gcA, true)]))
+  }
+
+  func testActionItemIsFoundForTouchDownOnlyOnActionItems() {
+    let sut = input([item(.buttons(["a"]), CGRect(x: 40, y: 100, width: 40, height: 40)),
+                     item(.buttons(["menu"]), CGRect(x: 200, y: 100, width: 40, height: 40)),
+                     item(.buttons(["quickSave"]), CGRect(x: 260, y: 100, width: 40, height: 40)),
+                     item(.buttons(["quickLoad"]), CGRect(x: 320, y: 100, width: 40, height: 40))])
+    XCTAssertEqual(sut.actionItem(at: CGPoint(x: 220, y: 120)), 1)
+    XCTAssertEqual(sut.actions(ofItem: 1), [.menu])
+    XCTAssertEqual(sut.actions(ofItem: 2), [.quickSave])
+    XCTAssertEqual(sut.actions(ofItem: 3), [.quickLoad])
+    XCTAssertNil(sut.actionItem(at: CGPoint(x: 60, y: 120)), "a plain button is not an action item")
+    XCTAssertNil(sut.actionItem(at: CGPoint(x: 150, y: 120)), "empty space")
+    XCTAssertEqual(sut.actions(ofItem: 0), [])
+    XCTAssertEqual(sut.actions(ofItem: 99), [], "stale index")
+  }
+
+  func testActionItemLosesToTheButtonDrawnUnderTheFinger() {
+    let edges = UIEdgeInsets(top: 0, left: 40, bottom: 0, right: 40)
+    let sut = input([item(.buttons(["menu"]), CGRect(x: 100, y: 100, width: 40, height: 40), edges: edges),
+                     item(.buttons(["a"]), CGRect(x: 150, y: 100, width: 40, height: 40))])
+    XCTAssertNil(sut.actionItem(at: CGPoint(x: 160, y: 120)), "inside A's art, although menu's hit frame reaches it")
+    XCTAssertEqual(sut.hits(at: CGPoint(x: 160, y: 120), previous: []), [.item(1)])
+    XCTAssertEqual(sut.actionItem(at: CGPoint(x: 120, y: 120)), 0)
+  }
+
+  func testItemWithAButtonAndAnActionPressesOnSlideInButOnlyFiresOnTouchDown() {
+    let sut = input([item(.buttons(["a", "menu"]), CGRect(x: 100, y: 100, width: 40, height: 40))])
+    XCTAssertEqual(sut.hits(at: CGPoint(x: 120, y: 120), previous: []), [.item(0)])
+    XCTAssertEqual(sut.writes(now: [.item(0)], previous: []), buttonWrites([(ID.gcA, true)]))
+    XCTAssertEqual(sut.actionItem(at: CGPoint(x: 120, y: 120)), 0)
+    XCTAssertEqual(sut.actions(ofItem: 0), [.menu])
   }
 
   // MARK: Sticks

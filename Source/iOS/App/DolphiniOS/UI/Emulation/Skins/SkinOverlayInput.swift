@@ -157,7 +157,29 @@ struct SkinOverlayInput {
   /// The item (or d-pad directions) under a finger at `point`. `previous` carries the d-pad's
   /// direction hysteresis from the last pass. Where hit frames overlap, the item whose art is under
   /// the finger wins, then the one with the nearest centre. Sticks have their own surface.
+  /// Items that only trigger app actions (menu, quick save/load) never appear here: a finger sliding
+  /// onto them presses nothing. They are found by `actionItem(at:)`, for touch-down only.
   func hits(at point: CGPoint, previous: Set<Hit>) -> Set<Hit> {
+    guard let index = topItem(at: point) else { return [] }
+    switch controls[index] {
+    case .buttons(let kinds, _)?:
+      return kinds.isEmpty ? [] : [.item(index)]
+    case .dpad?:
+      let frame = items[index].drawFrame
+      let previousDirections = Set(previous.compactMap { hit -> Direction? in
+        if case .direction(let item, let direction) = hit, item == index { return direction }
+        return nil
+      })
+      let local = CGPoint(x: point.x - frame.minX, y: point.y - frame.minY)
+      let directions = TouchOverlayHitTester.dpadDirections(at: local, in: frame.size, previous: previousDirections)
+      return Set(directions.map { .direction(item: index, $0) })
+    case .stick?, nil:
+      return []
+    }
+  }
+
+  /// The item, among everything the button surface covers, that a finger at `point` is on.
+  private func topItem(at point: CGPoint) -> Int? {
     let candidates = items.indices.filter { index in
       switch controls[index] {
       case .buttons?, .dpad?: return items[index].hitFrame.contains(point)
@@ -170,17 +192,19 @@ struct SkinOverlayInput {
       return left < right
     }
     let regions = ordered.map { TouchOverlayHitTester.Region(id: String($0), frame: items[$0].hitFrame) }
-    guard let id = TouchOverlayHitTester.union(touches: [point], regions: regions).first, let index = Int(id) else { return [] }
+    return TouchOverlayHitTester.union(touches: [point], regions: regions).first.flatMap { Int($0) }
+  }
 
-    guard case .dpad? = controls[index] else { return [.item(index)] }
-    let frame = items[index].drawFrame
-    let previousDirections = Set(previous.compactMap { hit -> Direction? in
-      if case .direction(let item, let direction) = hit, item == index { return direction }
-      return nil
-    })
-    let local = CGPoint(x: point.x - frame.minX, y: point.y - frame.minY)
-    let directions = TouchOverlayHitTester.dpadDirections(at: local, in: frame.size, previous: previousDirections)
-    return Set(directions.map { .direction(item: index, $0) })
+  /// The item with app-level actions (menu, quick save/load) that a NEW touch at `point` lands on, or nil.
+  /// Call it for touch-down only: a finger that slides onto such an item must not fire it.
+  func actionItem(at point: CGPoint) -> Int? {
+    guard let index = topItem(at: point), case .buttons(_, let actions)? = controls[index], !actions.isEmpty else { return nil }
+    return index
+  }
+
+  func actions(ofItem index: Int) -> [SkinAction] {
+    guard case .buttons(_, let actions)? = control(at: index) else { return [] }
+    return actions
   }
 
   private func distance(from point: CGPoint, toCentreOf frame: CGRect) -> CGFloat {
@@ -235,18 +259,6 @@ struct SkinOverlayInput {
 
   func writes(now: Set<Hit>, previous: Set<Hit>) -> [Write] {
     Self.writes(from: keys(of: previous), to: keys(of: now))
-  }
-
-  /// The app-level actions (menu, quick save/load) of items that just became covered; each fires once per press.
-  func actions(now: Set<Hit>, previous: Set<Hit>) -> [SkinAction] {
-    let newItems = now.subtracting(previous).compactMap { hit -> Int? in
-      if case .item(let index) = hit { return index }
-      return nil
-    }
-    return newItems.sorted().flatMap { index -> [SkinAction] in
-      guard case .buttons(_, let actions)? = control(at: index) else { return [] }
-      return actions
-    }
   }
 }
 #endif
