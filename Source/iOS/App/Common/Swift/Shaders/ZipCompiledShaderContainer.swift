@@ -32,6 +32,31 @@ public enum ZipCompiledShaderContainer {
     return url
   }
 
+  /// Writes an archive with `writeArchive`, checks its entries and extracts it into a new directory, which it returns.
+  ///
+  /// The archive lives in a directory of its own that is removed afterwards, never in the directory it is extracted
+  /// into: an entry named like the archive would otherwise overwrite it while minizip is still reading it. A rejected
+  /// archive extracts nothing and surfaces as `.invalidArchive`.
+  private static func extractCheckedArchive(named name: String, writeArchive: (URL) throws -> Void) throws -> URL {
+    let archiveDir = try makeTempDirectory(prefix: "oe_shader_archive")
+    defer { try? FileManager.default.removeItem(at: archiveDir) }
+    let archive = archiveDir.appendingPathComponent(name)
+    try writeArchive(archive)
+    let dest = try makeTempDirectory(prefix: "oe_shader_decode")
+    do {
+      #if canImport(Zip)
+      _ = try ZipEntryScanner.scan(fileAt: archive)
+      try Zip.unzipFile(archive, destination: dest, overwrite: true, password: nil, progress: nil)
+      #else
+      try FileManager.default.unzipItem(at: archive, to: dest)
+      #endif
+    } catch {
+      try? FileManager.default.removeItem(at: dest)
+      throw Error.invalidArchive
+    }
+    return dest
+  }
+
   /// Encode a ``Compiled.Shader`` to a ZIP archive that may be distributed.
   public static func encode(shader: Compiled.Shader, to path: URL) throws {
     if FileManager.default.fileExists(atPath: path.path) {
@@ -81,39 +106,18 @@ public enum ZipCompiledShaderContainer {
       guard FileManager.default.fileExists(atPath: url.path) else {
         throw Error.pathNotExists
       }
-      let dest = try ZipCompiledShaderContainer.makeTempDirectory(prefix: "oe_shader_decode")
-      do {
-        #if canImport(Zip)
-        try Zip.unzipFile(url, destination: dest, overwrite: true, password: nil, progress: nil)
-        #else
-        // If it's a directory, treat it as an already-unpacked archive
-        var isDir: ObjCBool = false
-        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue {
-          try FileManager.default.unzipItem(at: url, to: dest)
-        } else {
-          throw Error.unsupported
-        }
-        #endif
-      } catch {
-        throw Error.invalidArchive
+      // Scan and extract a private copy: the file at `url` can be rewritten between the two.
+      let dest = try ZipCompiledShaderContainer.extractCheckedArchive(named: url.lastPathComponent) {
+        try FileManager.default.copyItem(at: url, to: $0)
       }
       try self.init(extractedDir: dest)
     }
 
     public convenience init(data: Data) throws {
-      let tempZipDir = try ZipCompiledShaderContainer.makeTempDirectory(prefix: "oe_shader_decode_data")
-      let tempZip = tempZipDir.appendingPathComponent("in.zip")
-      try data.write(to: tempZip)
-      do {
-        #if canImport(Zip)
-        try Zip.unzipFile(tempZip, destination: tempZipDir, overwrite: true, password: nil, progress: nil)
-        #else
-        try FileManager.default.unzipItem(at: tempZip, to: tempZipDir)
-        #endif
-      } catch {
-        throw Error.invalidArchive
+      let dest = try ZipCompiledShaderContainer.extractCheckedArchive(named: "in.zip") {
+        try data.write(to: $0)
       }
-      try self.init(extractedDir: tempZipDir)
+      try self.init(extractedDir: dest)
     }
 
     private init(extractedDir: URL) throws {
