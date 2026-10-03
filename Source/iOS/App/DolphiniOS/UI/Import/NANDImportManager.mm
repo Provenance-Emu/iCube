@@ -29,9 +29,10 @@
 
   [[self _topViewController] presentViewController:waitAlert animated:YES completion:^{
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-      // 2606: the progress callback now reports (step, current, total) and returns false to cancel.
+      // 2606: the progress callback reports (step, current, total) and returns TRUE to cancel
+      // (NANDImporter.h). Returning true here aborted the import on its first block.
       DiscIO::NANDImporter().ImportNANDBin(FoundationToCppString(url.path), [](DiscIO::NANDImporter::Step, int, int) {
-        return true;  // GUI progress unused; never cancel
+        return false;  // GUI progress unused; never cancel
       }, [] {
         PanicAlertFmtT("The decryption keys need to be appended to the NAND backup file.");
         return std::string("");
