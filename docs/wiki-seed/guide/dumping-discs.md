@@ -18,35 +18,36 @@ iCube does not provide, link to, or endorse any source of pre-dumped games. Dump
 3. When it asks whether to calculate checksums, choose **Yes**. You'll want them in the verify step below.
 4. Choose where to write the dump (SD card or USB), then choose **FAT (FAT32)** as the file system.
 5. If your Wii is online, choose **Yes** when it offers to download the `redump.org` database files. CleanRip uses them to check the dump against known-good discs.
-6. Insert the disc and press **A**.
+6. For a Wii disc, CleanRip shows its dump settings. Set **New device per chunk** to **No**. Its default, **Yes**, stops after every part file and asks for another card or drive. Leave **Chunk Size** at its default of 1 GB unless you have a reason to change it.
+7. Insert the disc and press **A**.
 
-A GameCube disc produces one file. A Wii disc produces several part files, because FAT32 can't hold a single file larger than 4 GiB. The part names and the folder they land in depend on your CleanRip version, so check the card.
+A GameCube disc produces one file. A Wii disc produces several part files, because FAT32 can't hold a single file larger than 4 GiB. With 1 GB chunks, a single-layer Wii disc makes five parts and a dual-layer disc makes eight. The part names and the folder they land in depend on your CleanRip version, so check the card.
 
 A disc that plays fine can still throw an unrecovered read error during a dump. Clean the disc, restart CleanRip, and try again.
 
 ## Join the part files
 
-Skip this for GameCube discs. For a Wii disc, join the parts into one `.iso` before importing. Order matters: the first part goes first. The names below are placeholders for whatever CleanRip wrote.
+Skip this for GameCube discs. For a Wii disc, join the parts into one `.iso` before importing. Include every part, in number order, starting with the first. The examples below join the five parts of a single-layer disc; a dual-layer disc has eight. The names are placeholders for whatever CleanRip wrote.
 
 On macOS or Linux:
 
 ```bash
-cat game.part0.iso game.part1.iso game.part2.iso > game.iso
+cat game.part0.iso game.part1.iso game.part2.iso game.part3.iso game.part4.iso > game.iso
 ```
 
 On Windows, in Command Prompt:
 
 ```
-copy /b game.part0.iso + game.part1.iso + game.part2.iso game.iso
+copy /b game.part0.iso + game.part1.iso + game.part2.iso + game.part3.iso + game.part4.iso game.iso
 ```
 
-A full single-layer Wii disc image is about 4.7 GB and a dual-layer one is about 8.5 GB. If your joined file is well short of that, a part is missing or out of order.
+A full single-layer Wii disc image is about 4.7 GB and a dual-layer one is about 8.5 GB. If your joined file is well short of that, a part is missing or was cut short. The size can't show that the parts went in the wrong order; the check below catches that.
 
 ## Shrink it to RVZ
 
 A raw `.iso` works, but a Wii disc is 4.7 GB or more. `.rvz` is Dolphin's compressed format, loads quickly, and converts back to a byte-exact `.iso` whenever you want one. See [Supported Formats](https://icube-emu.com/guide/formats/) for how it compares to the others.
 
-In Dolphin on your Mac or PC, right-click the game in the list and choose **Convert File…**. Pick format `RVZ`, block size 128 KiB, and compression `zstd` at level 5. Dolphin proposes that block size, method, and level by default. Higher levels only make the conversion slower.
+In Dolphin on your Mac or PC, right-click the game in the list and choose **Convert File…**. Pick format `RVZ`, block size 128 KiB, and compression `zstd` at level 5. Dolphin proposes that block size, method, and level by default. Higher levels make the file somewhat smaller but take longer to convert; level 5 is a good balance.
 
 From a terminal, `dolphin-tool` does the same job:
 
