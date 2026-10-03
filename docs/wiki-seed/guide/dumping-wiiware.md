@@ -32,7 +32,12 @@ BootMii writes two files to the root of the SD card: `nand.bin` (the console's s
 
 ### Append the keys before you import
 
-Dolphin on a computer asks for `keys.bin` separately. iCube can't, so the keys have to be at the end of the `nand.bin` file before you import it. Join them on your computer.
+Dolphin on a computer asks for `keys.bin` separately. iCube can't, so the keys have to be at the end of the `nand.bin` file before you import it.
+
+Check the size of `nand.bin` first:
+
+* **553,649,152 bytes:** the keys are already at the end, as newer BootMii versions write them. Import this file as it is and skip the join below.
+* **553,648,128 bytes:** a bare backup. Join `keys.bin` to it on your computer:
 
 On macOS or Linux:
 
@@ -46,11 +51,11 @@ On Windows, in Command Prompt:
 copy /b nand.bin + keys.bin nand_with_keys.bin
 ```
 
-A BootMii backup is 553,648,128 bytes. With the keys appended it is 553,649,152 bytes (the extra 1,024). iCube rejects any other size.
+The joined file is 553,649,152 bytes (the extra 1,024 are the keys). Don't append `keys.bin` to a file that already has them: iCube rejects any size other than these two.
 
 ### Import it
 
-1. Put `nand_with_keys.bin` somewhere the Files app can see it, such as iCloud Drive or **On My iPhone**. iCube opens it with the standard Files picker.
+1. Put the file with the keys (`nand_with_keys.bin`, or `nand.bin` if it already had them) somewhere the Files app can see it, such as iCloud Drive or **On My iPhone**. iCube opens it with the standard Files picker.
 2. In iCube's library, open the **Import** menu and choose **Import BootMii NAND Backup…**. This menu item is on iPhone and iPad only, not Apple TV.
 3. Pick the `.bin` file and wait for **Importing NAND backup** to finish.
 
