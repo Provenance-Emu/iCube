@@ -37,7 +37,7 @@ private final class FakeIO: PlayerScreenIO {
   /// What `ControllerAssignmentService.assign` does to the port on a pad bind: true loads the pad's
   /// default profile over the mapping (the old mapping bound nothing on the pad), false keeps it.
   var assignmentReplacesMapping = false
-  private var expression = "`Button A`"
+  private var boundExpression = "`Button A`"
   var saveSucceeds = true
   var existingProfiles = ["Physical Controller", "Mine"]
   /// Saved profiles the list hides for the bound device (a pad profile on a touchscreen slot).
@@ -48,7 +48,7 @@ private final class FakeIO: PlayerScreenIO {
 
   func controlRows(owner: RemapGroupOwner, group: Int, port: Int) -> [RemapControlRow] {
     groupReads.append("\(owner)-\(group)")
-    return [RemapControlRow(owner: owner, groupId: group, index: 0, name: "Control", expression: expression)]
+    return [RemapControlRow(owner: owner, groupId: group, index: 0, name: "Control", expression: boundExpression)]
   }
 
   func numericSettings(owner: RemapGroupOwner, group: Int, port: Int) -> [NumericSettingState] { [] }
@@ -95,7 +95,7 @@ private final class FakeIO: PlayerScreenIO {
 
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
     writes.append("device:\(choice)")
-    if assignmentReplacesMapping, case .pad = choice { expression = "`Button 0`" }
+    if assignmentReplacesMapping, case .pad = choice { boundExpression = "`Button 0`" }
     onSetDevice?(choice)
   }
 
