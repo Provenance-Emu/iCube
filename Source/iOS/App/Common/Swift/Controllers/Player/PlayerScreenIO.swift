@@ -137,7 +137,12 @@ struct LivePlayerScreenIO: PlayerScreenIO {
   }
 
   func pointerMotion() -> PointerMotionState {
-    PointerMotionState(
+    #if os(iOS)
+    let usesProgrammaticOverlay = TouchOverlayFlag.isProgrammatic
+    #else
+    let usesProgrammaticOverlay = false
+    #endif
+    return PointerMotionState(
       pointerMode: PointerModeController.shared.mode,
       invertX: MotionSettings.invertRoll(),
       invertY: MotionSettings.invertPitch(),
@@ -145,7 +150,7 @@ struct LivePlayerScreenIO: PlayerScreenIO {
       dragGain: PointerMotionState.snapped(MotionSettings.irPointerGain(), to: PointerMotionState.dragGainChoices),
       gyroSensitivity: PointerMotionState.snapped(
         MotionSettings.gyroPointerSensitivity(), to: PointerMotionState.gyroSensitivityChoices),
-      usesProgrammaticOverlay: UserDefaults.standard.bool(forKey: PointerMotionState.programmaticOverlayKey))
+      usesProgrammaticOverlay: usesProgrammaticOverlay)
   }
 
   func inputNames(forQualifier qualifier: String) -> [String] {

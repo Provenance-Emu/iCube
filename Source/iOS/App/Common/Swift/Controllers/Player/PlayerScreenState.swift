@@ -54,12 +54,10 @@ struct PointerMotionState: Equatable {
   var dragGain: Double
   /// `motion_gyro_pointer_sensitivity`, snapped to one of `gyroSensitivityChoices`.
   var gyroSensitivity: Double
-  /// The drag gain is read only by the programmatic overlay (`TouchOverlayView.swift:182`), which
-  /// is off by default.
+  /// The drag gain is read only by the programmatic overlay (`TouchOverlayIRPad`), which is on by
+  /// default on iOS (`TouchOverlayFlag`) and does not exist on tvOS.
   var usesProgrammaticOverlay: Bool
 
-  /// Registered as false by `DefaultPreferences.plist`; toggled in More Controller Settings.
-  static let programmaticOverlayKey = "touch_overlay_programmatic"
   /// Steps across `TouchOverlayIRGeometry.dragGainRange` (0.25...4).
   static let dragGainChoices: [Double] = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
   /// Multipliers on the gyro pointer's fixed constants; 1 is the behaviour before the setting.
