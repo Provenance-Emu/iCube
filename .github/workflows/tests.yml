@@ -205,8 +205,8 @@ jobs:
 
       # The job log loses lines under xcodebuild's output volume (a failing run named no failing
       # test), so read the result bundle and the tee'd raw log, both still on the runner: list
-      # every failed test with its message, any crash/restart lines, and every skip, in the log and
-      # the job summary. A skipped test passes silently; fail when a suite that needs the on-screen
+      # every failed test with its message, the raw log's crash/restart/failure lines (first 150),
+      # and every skip, in the log and the job summary. A skipped test passes silently; fail when a suite that needs the on-screen
       # Touchscreen devices skips: the test host is the app, whose launch (DolphinCoreService ->
       # UICommon::InitControllers) always adds iOS/0-7/Touchscreen, so a skip there means the host
       # stopped initializing input and those tests stopped testing.
@@ -219,8 +219,22 @@ jobs:
         run: |
           set -euo pipefail
           if [ -f "$LOG_FILE" ]; then
-            echo "--- crash, restart and failure lines from the raw xcodebuild log ---"
-            grep -nE "Restarting after unexpected exit|crashed|Fatal error|: error:|Test Case .* failed|Test case .* failed|failed \(" "$LOG_FILE" | head -150 || true
+            # Capped at the first 150 matches: the step summary has a size limit, and a crash
+            # loop can repeat the same lines thousands of times.
+            { grep -nE "Restarting after unexpected exit|crashed|Fatal error|: error:|Test Case .* failed|Test case .* failed|failed \(" "$LOG_FILE" || true; } \
+              | head -150 > "$RUNNER_TEMP/raw-log-failures.txt" || true
+            echo "--- crash, restart and failure lines from the raw xcodebuild log (first 150) ---"
+            cat "$RUNNER_TEMP/raw-log-failures.txt"
+            if [ -s "$RUNNER_TEMP/raw-log-failures.txt" ]; then
+              {
+                echo "### Crash, restart and failure lines from the raw log (first 150)"
+                echo
+                echo '```'
+                cat "$RUNNER_TEMP/raw-log-failures.txt"
+                echo '```'
+                echo
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
           if [ ! -d "$RESULT_BUNDLE" ]; then
             echo "::warning::No result bundle at $RESULT_BUNDLE; cannot report test results."
