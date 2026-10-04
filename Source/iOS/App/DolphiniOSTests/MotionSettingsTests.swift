@@ -30,6 +30,30 @@ final class MotionSettingsTests: XCTestCase {
     XCTAssertEqual(MotionSettings.irPointerGain(in: store), 1.0)
   }
 
+  func testRecommendedSetsMotionOnAndLeavesThePointerAlone() {
+    store.set(false, forKey: MotionSettings.Key.full6DOF)
+    store.set(false, forKey: MotionSettings.Key.wiimoteIMU)
+    store.set(true, forKey: MotionSettings.Key.nunchukIMU)
+    store.set(false, forKey: MotionSettings.Key.enhancedShakeDetection)
+    store.set(true, forKey: MotionSettings.Key.useYawForHorizontal)
+    store.set(true, forKey: MotionSettings.Key.invertRoll)
+    store.set(true, forKey: MotionSettings.Key.invertPitch)
+    MotionSettings.setIRPointerGain(2.5, in: store)
+    MotionSettings.setGyroPointerSensitivity(0.5, in: store)
+
+    MotionSettings.applyRecommended(in: store)
+
+    XCTAssertTrue(MotionSettings.full6DOF(in: store))
+    XCTAssertTrue(MotionSettings.wiimoteIMU(in: store))
+    XCTAssertFalse(MotionSettings.nunchukIMU(in: store))
+    XCTAssertTrue(MotionSettings.enhancedShakeDetection(in: store))
+    XCTAssertFalse(MotionSettings.useYawForHorizontal(in: store))
+    XCTAssertFalse(MotionSettings.invertRoll(in: store))
+    XCTAssertFalse(MotionSettings.invertPitch(in: store))
+    XCTAssertEqual(MotionSettings.irPointerGain(in: store), 2.5)
+    XCTAssertEqual(MotionSettings.gyroPointerSensitivity(in: store), 0.5)
+  }
+
   func testAUserValueBeatsTheRegisteredDefault() {
     MotionSettings.registerDefaults(in: store)
     store.set(false, forKey: MotionSettings.Key.enhancedShakeDetection)

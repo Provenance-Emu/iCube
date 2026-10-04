@@ -100,17 +100,10 @@ struct EnhancedMotionControlsView: View {
     .onChange(of: nunchuckIMUEnabled) { _, _ in notifyMotionSettingsChanged() }
   }
 
-  /// The shake and invert keys are written through `MotionSettings` because this screen no longer
-  /// shows them. The pointer mode is left alone: it used to switch to Gyro, which silently turned
-  /// off the 6DOF mapping this same button turns on, and the player screen owns the mode.
+  /// The pointer mode is left alone: it used to switch to Gyro, which silently turned off the 6DOF
+  /// mapping this same button turns on, and the player screen owns the mode.
   private func applyRecommendedSettings() {
-    MotionSettings.setEnhancedShakeDetection(true)
-    MotionSettings.setInvertRoll(false)
-    MotionSettings.setInvertPitch(false)
-    fullMotionEnabled = true
-    useYawForHorizontal = false
-    wiimoteIMUEnabled = true
-    nunchuckIMUEnabled = false
+    MotionSettings.applyRecommended()
     horizontalMotionMode = .roll
     notifyMotionSettingsChanged()
     #if os(iOS)
