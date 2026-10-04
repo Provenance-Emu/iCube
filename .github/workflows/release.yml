@@ -5,38 +5,36 @@ on:
     types:
       - published
 
+# Builds the same way build.yml does: the PVlibDolphin xcframework first, then the Xcode project
+# generated from Source/iOS/App/Project.swift by Tuist. This workflow used to archive the
+# hand-maintained DolphiniOS.xcodeproj with the upstream "DiOS" schemes and DolphiniOS.app, none
+# of which exist any more, on a self-hosted runner the repo does not have.
 jobs:
   build:
-    # runs-on: macos-12
-    runs-on: [self-hosted, macOS]
-    
+    runs-on: macos-26
+    permissions:
+      contents: write
+
+    env:
+      TUIST_VERSION: '4.200.0'
+      XCODE_VERSION: '26.3'
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      XCODE_COMMON_BUILD_ARGS: -workspace Source/iOS/App/iCube.xcworkspace -derivedDataPath "${{ github.workspace }}/build-Xcode" -sdk iphoneos -destination generic/platform=iOS DOL_BUILD_SOURCE="official" CURRENT_PROJECT_VERSION=${{ github.run_number }} CODE_SIGNING_ALLOWED="NO" CODE_SIGNING_REQUIRED="NO"
+
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
-      # - name: Set Xcode Version
-      #   run: sudo xcode-select -s /Applications/Xcode_14.2.app
+      # dpkg-deb for CreateDeb.sh; cmake and ninja are already on the runner.
+      - name: Install dpkg
+        run: brew install dpkg
 
-      # - name: Install Build Utilities
-      #   run: |
-      #     brew install cmake ninja bartycrouch dpkg
-      #     /usr/bin/python3 -m pip install polib
-      
-      # - name: Import Signing Certificate
-      #   run: |
-      #     echo ${{ secrets.DIOS_SIGNING_CERTIFICATE }} | base64 -d > "SigningCertificate.p12"
-      #     security create-keychain -p alpine build.keychain
-      #     security default-keychain -s build.keychain
-      #     security unlock-keychain -p alpine build.keychain
-      #     security set-keychain-settings -t 36000 build.keychain
-      #     security import "SigningCertificate.p12" -k build.keychain -P ${{ secrets.DIOS_SIGNING_CERTIFICATE_PASSWORD }} -A
-      #     security set-key-partition-list -S apple-tool:,apple: -s -k alpine build.keychain
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1.6.0
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
 
-      - name: Write GoogleServices-Info.plist
-        run: |
-          echo ${{ secrets.DIOS_GOOGLE_PLIST }} | base64 -d > "Source/iOS/App/Project/Assets/GoogleService-Info.plist"
-      
       - name: Set Schema for Normal
         if: "!github.event.release.prerelease"
         run: |
@@ -44,7 +42,7 @@ jobs:
           echo "XCODE_CONFIGURATION_JB=Release (Jailbroken)" >> $GITHUB_ENV
           echo "XCODE_CONFIGURATION_TS=Release (TrollStore)" >> $GITHUB_ENV
           echo "DEB_CONTROL_NAME=control-normal" >> $GITHUB_ENV
-      
+
       - name: Set Schema for Beta
         if: "github.event.release.prerelease"
         run: |
@@ -53,28 +51,69 @@ jobs:
           echo "XCODE_CONFIGURATION_TS=Release (Beta, TrollStore)" >> $GITHUB_ENV
           echo "DEB_CONTROL_NAME=control-beta" >> $GITHUB_ENV
 
-      - name: Build Application
-        env:
-          XCODE_COMMON_BUILD_ARGS: -project Source/iOS/App/DolphiniOS.xcodeproj -derivedDataPath "${{ github.workspace }}/build-Xcode" -sdk iphoneos -destination generic/platform=iOS DOL_PBID_ORGANIZATION_IDENTIFIER="me.oatmealdome" DOL_BUILD_SOURCE="official" CURRENT_PROJECT_VERSION=${{ github.run_number }} CODE_SIGNING_ALLOWED="NO" CODE_SIGNING_REQUIRED="NO"
+      # Shares build.yml's cache: a release of a commit develop already built restores its slices.
+      - name: Restore Dolphin xcframework cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build
+          key: dolphin-xcf-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            dolphin-xcf-${{ runner.os }}-
+
+      - name: Build PVlibDolphin xcframework
         run: |
+          set -euo pipefail
+          python3 BuildiOSXCFramework.py --platforms OS64 SIMULATORARM64 TVOS SIMULATOR_TVOS
+          ls -d build/xcframework/* 2>/dev/null || { echo "::error::BuildiOSXCFramework.py produced no xcframework output"; exit 1; }
+
+      # After the xcframework build: `tuist generate` resolves the binary target eagerly.
+      - name: Install Tuist
+        run: |
+          set -euo pipefail
+          curl -fsSL https://mise.run | sh
+          MISE="$HOME/.local/bin/mise"
+          "$MISE" use -g "tuist@${TUIST_VERSION}"
+          echo "$HOME/.local/share/mise/shims" >> "$GITHUB_PATH"
+          "$HOME/.local/share/mise/shims/tuist" version
+
+      - name: Generate Xcode project
+        working-directory: Source/iOS/App
+        run: |
+          set -euo pipefail
+          tuist install
+          tuist generate --no-open
+          ls -d iCube.xcworkspace iCube.xcodeproj
+
+      - name: Build Application
+        run: |
+          set -o pipefail
           rm -rf "${{ github.workspace }}/archives" || true
           mkdir "${{ github.workspace }}/archives"
-          xcodebuild archive -archivePath "${{ github.workspace }}/archives/NonJailbroken.xcarchive" -configuration "${{ env.XCODE_CONFIGURATION_NJB }}" -scheme "DiOS (NJB)" ${{ env.XCODE_COMMON_BUILD_ARGS }}
-          xcodebuild archive -archivePath "${{ github.workspace }}/archives/Jailbroken.xcarchive" -configuration "${{ env.XCODE_CONFIGURATION_JB }}" -scheme "DiOS (JB)" ${{ env.XCODE_COMMON_BUILD_ARGS }}
-          xcodebuild archive -archivePath "${{ github.workspace }}/archives/TrollStore.xcarchive" -configuration "${{ env.XCODE_CONFIGURATION_TS }}" -scheme "DiOS (JB)" ${{ env.XCODE_COMMON_BUILD_ARGS }}
-      
+          xcodebuild archive -archivePath "${{ github.workspace }}/archives/NonJailbroken.xcarchive" -configuration "${{ env.XCODE_CONFIGURATION_NJB }}" -scheme "iCube (NJB)" ${{ env.XCODE_COMMON_BUILD_ARGS }} 2>&1 | tee -a "${{ runner.temp }}/xcodebuild-icube.log"
+          xcodebuild archive -archivePath "${{ github.workspace }}/archives/Jailbroken.xcarchive" -configuration "${{ env.XCODE_CONFIGURATION_JB }}" -scheme "iCube (JB)" ${{ env.XCODE_COMMON_BUILD_ARGS }} 2>&1 | tee -a "${{ runner.temp }}/xcodebuild-icube.log"
+          xcodebuild archive -archivePath "${{ github.workspace }}/archives/TrollStore.xcarchive" -configuration "${{ env.XCODE_CONFIGURATION_TS }}" -scheme "iCube (JB)" ${{ env.XCODE_COMMON_BUILD_ARGS }} 2>&1 | tee -a "${{ runner.temp }}/xcodebuild-icube.log"
+
+      - name: Upload raw xcodebuild log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-icube-log
+          path: ${{ runner.temp }}/xcodebuild-icube.log
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Build IPA Files
         run: |
           mkdir "${{ github.workspace }}/products"
-          "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateIpa.sh" "${{ github.workspace }}/archives/NonJailbroken.xcarchive/Products/Applications/DolphiniOS.app" "OatmealDome Software" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Public.entitlements" "${{ github.workspace }}/products/Non-Jailbroken.ipa"
-          "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateIpa.sh" "${{ github.workspace }}/archives/TrollStore.xcarchive/Products/Applications/DolphiniOS.app" "OatmealDome Software" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/products/TrollStore.tipa"
-      
+          "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateIpa.sh" "${{ github.workspace }}/archives/NonJailbroken.xcarchive/Products/Applications/iCube.app" "-" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Public.entitlements" "${{ github.workspace }}/products/Non-Jailbroken.ipa"
+          "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateIpa.sh" "${{ github.workspace }}/archives/TrollStore.xcarchive/Products/Applications/iCube.app" "-" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/products/TrollStore.tipa"
+
       - name: Build DEB File
         run: |
-          "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateDeb.sh" "${{ github.workspace }}/archives/Jailbroken.xcarchive/Products/Applications/DolphiniOS.app" "OatmealDome Software" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/${{ env.DEB_CONTROL_NAME }}.in" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postinst.sh" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postrm.sh" "Applications" "${{ github.workspace }}/products/Jailbroken-Rootful.deb"
-          "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateDeb.sh" "${{ github.workspace }}/archives/Jailbroken.xcarchive/Products/Applications/DolphiniOS.app" "OatmealDome Software" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/${{ env.DEB_CONTROL_NAME }}-rootless.in" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postinst.sh" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postrm.sh" "var/jb/Applications" "${{ github.workspace }}/products/Jailbroken-Rootless.deb"
-      
-      - uses: softprops/action-gh-release@v1
+          "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateDeb.sh" "${{ github.workspace }}/archives/Jailbroken.xcarchive/Products/Applications/iCube.app" "-" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/${{ env.DEB_CONTROL_NAME }}.in" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postinst.sh" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postrm.sh" "Applications" "${{ github.workspace }}/products/Jailbroken-Rootful.deb"
+          "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateDeb.sh" "${{ github.workspace }}/archives/Jailbroken.xcarchive/Products/Applications/iCube.app" "-" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/${{ env.DEB_CONTROL_NAME }}-rootless.in" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postinst.sh" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postrm.sh" "var/jb/Applications" "${{ github.workspace }}/products/Jailbroken-Rootless.deb"
+
+      - uses: softprops/action-gh-release@v2
         with:
           files: |
             products/Non-Jailbroken.ipa
