@@ -84,8 +84,8 @@ and clang-format all green. None of it has been run on a device yet.
 1. **xcframework refresh** on a Mac: `python3 BuildiOSXCFramework.py --platforms OS64
    SIMULATORARM64 TVOS SIMULATOR_TVOS`, committed as `build: refresh the prebuilt core …`. Until
    then `BootCore`'s guard is not in the shipped core.
-2. **Delete the remote branch** `claude/jolly-planck-43gyz5` (the session's git proxy refuses branch
-   deletes); it is fully merged.
+2. ~~Delete the remote branch~~: `claude/jolly-planck-43gyz5` was restarted from `develop` for
+   the follow-up below; delete it once that PR merges.
 3. **Policy changes to confirm on device, revert if unwanted:** a Wii title no longer auto-binds a
    pad to a GC port (Wii games that read the GameCube ports need a manual assignment); Recommended
    Motion Settings no longer sets the pointer to Gyro (phase 4 checklist item 5 is stale).
@@ -139,27 +139,39 @@ Player screen
     "Pointer Up" / "On-screen A"; the expression editor lists inputs with live values; Reset to
     Default, Delete a Profile… (bundled ones disabled) and Clear All work and ask first.
 
+## Follow-up: the S items (done on `claude/jolly-planck-43gyz5` after the merge)
+
+- `TCWiiTouchIRMode.none` is `.gyro` (raw values unchanged).
+- **The 2× gain item was wrong, and the gyro writes were the broken ones.** `ControlExpression`
+  (`ExpressionParser.cpp`) clamps every bound input at 0 before `Cursor` / `IMUAccelerometer` /
+  `IMUGyroscope` take Up − Down. Writing the same value to both halves (the touch path) is exactly
+  1×. `TCDeviceMotion`'s single-sided writes (`irCursorWrites`, `imuAccelWrites`, `imuGyroWrites`)
+  lost every negative value: the gyro pointer could not reach the left or bottom half, and 6DOF
+  dropped one direction per axis. They now write both halves; the tests model the clamp. Follow's
+  oversensitivity, if real, has another cause.
+- One "Recommended Motion Settings" (`MotionSettings.applyRecommended`), used by Advanced Motion
+  Settings and `MotionDebugView`; the debug screen says Pointer Mode.
+- The DSU "Map IR (Gyro) to DSU Touch" switch is gone: nothing ever read its key.
+- Gone: `EmulationTopBar.onSetProgrammaticOverlay`, `DOLConfigBridge`'s speaker and
+  continuous-scanning accessors.
+- `PlayerProfileMemory` keys the session's names by port and device; a Device pick that keeps the
+  mapping carries the name over.
+- Lint blocks a pull request on findings in its changed lines; a push to `develop` stays advisory.
+
+Device checks for it: Pointer = Gyro reaches all four edges (checklist item 4); with 6DOF on, tilt
+and turn the phone both ways in a motion title (Wii Sports) and confirm both directions register;
+item 12's pad reassignment shows "Custom" or the pad's own name on Player 1, never the old device's.
+
 ## Known gaps and deferred work
 
-- `TCWiiTouchIRMode.none` still means Gyro (rename to `.gyro`: `TouchOverlayIRPad.swift` switches
-  on it, plus `TouchOverlayLayoutEditorView`). S.
-- `TouchOverlayIRPad.sendIR` writes the same value to both halves of each IR pair (2× gain), which
-  is why Follow feels oversensitive. S, behaviour change.
 - Layout positions are 0–1 fractions of the canvas; points-based edge anchoring would survive a
   device change but needs a JSON format migration. M.
-- Apply Recommended's remaining rework; `MotionDebugView` (DEBUG) still says "IR Mode"; DSU's "Map
-  IR (Gyro) to DSU Touch" label. S.
-- Unused after phase 5: `EmulationTopBar.onSetProgrammaticOverlay`, `DOLConfigBridge`'s speaker and
-  continuous-scanning methods. S.
 - The committed fallback `DolphiniOS.xcodeproj` (used by `release.yml`) still lists the deleted
   ObjC files and never listed the newer Swift ones. Regenerate or drop it. M.
-- Player screen's in-session profile name is keyed by port only; after an automatic reassignment
-  it can read stale until the next load. S.
 - `WiiPointerProfileTests` and the D1 bridge tests need an `iOS/7/Touchscreen` device on the test
   host; they skip otherwise. Check CI actually runs them (look for `XCTSkip` in the test log).
 - D5's "Reset to Default" reads the bundled profile; for a DSU device that is the new `DSU.ini`.
 - No overlay-mode persistence test (`ControllerManager` is a singleton with side effects).
-- Lint jobs: flip `continue-on-error` to false now that they are PR-scoped and green. S.
 - Phase 4 handoff's checklist item 5 (Apply Recommended → Gyro) is stale.
 
 ## Conventions this phase settled
