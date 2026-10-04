@@ -101,6 +101,25 @@ final class ControllerAssignmentBridgeTests: XCTestCase {
     XCTAssertEqual(try gcButtonA(), "`Button 1`", "a mapping that binds on the device must not be reloaded")
   }
 
+  /// Phase 3 checklist item 9: a profile saved as "Touchscreen" from a pad's port carries that pad's
+  /// `Device =` line and shadows the bundled Touchscreen profile. Binding the Touchscreen loads it,
+  /// and the port must still end up on the Touchscreen.
+  func test_aUserProfileNamedTouchscreen_doesNotMoveThePortOffTheTouchscreen() throws {
+    let touchscreen = "iOS/\(Self.port - 1)/Touchscreen"
+    try XCTSkipUnless((TVControllerMappingBridge.allQualifiedDevices() as [String]).contains(touchscreen),
+                      "the test host enumerates no \(touchscreen)")
+    try XCTSkipIf((TVControllerMappingBridge.userProfiles(forGCPort: Self.port) as [String]).contains("Touchscreen"),
+                  "the test host has its own Touchscreen profile")
+    TVControllerMappingBridge.setDefaultDevice(Self.padQualifier, forGCPort: Self.port)
+    XCTAssertTrue(TVControllerMappingBridge.saveProfile("Touchscreen", forGCPort: Self.port))
+    defer { _ = TVControllerMappingBridge.deleteProfile("Touchscreen", forGCPort: Self.port) }
+
+    service.assignTouchscreen(toPlayer: Self.port - 1, system: .gamecube)
+
+    XCTAssertEqual(TVControllerMappingBridge.defaultDevice(forGCPort: Self.port) as String, touchscreen,
+                   "the profile's Device line must not take the port off the Touchscreen")
+  }
+
   // MARK: Wii
 
   func test_padTakingATouchscreenWiimote_getsThePadProfile() throws {

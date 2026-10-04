@@ -379,8 +379,12 @@ static bool RepairTouchscreenIRPointer(int idx)
   ciface::Core::DeviceQualifier dq; dq.FromDevice(touchscreen_dev.get());
   auto* pad = cfg->GetController(port);
   if (!pad) return;
-  pad->SetDefaultDevice(dq);
+  // As the coordinator's BindTouchscreen: the on-screen profile is loaded only when the port
+  // changes device or has no mapping, so a touch mapping the user edited survives a re-bind (and
+  // the boot pass, which offers Pad 1 to the Touchscreen at every launch).
+  const bool rebinding = !(pad->GetDefaultDevice() == dq);
   bool loaded_profile = false;
+  if (rebinding || !ControllerHasAnyBoundControl(pad))
   {
     const std::string sysDir = pad->GetConfig()->GetSysProfileDirectoryPath();
     const std::string userDir = pad->GetConfig()->GetUserProfileDirectoryPath();
@@ -398,15 +402,17 @@ static bool RepairTouchscreenIRPointer(int idx)
       pad->LoadConfig(ini.GetOrCreateSection("Profile"));
       loaded_profile = true;
     }
+    if (!loaded_profile)
+      pad->LoadDefaults(g_controller_interface);
   }
 
-  if (!loaded_profile)
   {
-    // Fallback to defaults, then ensure Touchscreen stays the default device
-    pad->LoadDefaults(g_controller_interface);
+    // `LoadConfig` applies the profile's own `Device =` line, and a user profile saved as
+    // "Touchscreen" from a pad's port names that pad: the port followed it and the on-screen
+    // controls drove nothing. The port is the Touchscreen's whatever the profile says.
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
     pad->SetDefaultDevice(dq);
   }
-
   pad->UpdateReferences(g_controller_interface);
   Pad::GetConfig()->SaveConfig();
 }

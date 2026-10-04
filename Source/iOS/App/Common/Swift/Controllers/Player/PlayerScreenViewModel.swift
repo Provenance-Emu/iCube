@@ -320,9 +320,8 @@ final class PlayerScreenViewModel {
     }
     io.setDevice(choice, slot: slot)
     // Which profile the port holds now, as far as the app can know (Dolphin does not record it):
-    // - Touchscreen: both kinds reload the "Touchscreen" profile. GameCube always does
-    //   (TVControllerMappingBridge.mm:228-253); a Wii Remote's BindTouchscreen does whenever the bound
-    //   device changes (EmulationCoordinator.mm:1581-1586), and it always changes here.
+    // - Touchscreen: both kinds reload the "Touchscreen" profile whenever the bound device changes
+    //   (`assignTouchscreen(toGCPort:)`, the coordinator's BindTouchscreen), and it always changes here.
     // - A pad: the assignment loads the pad's default profile unless the port's mapping binds
     //   something on that pad (ControllerAssignmentService.assign), and the bridge's answer to that
     //   cannot be read after the fact (the profile is already loaded). What can: the port's control

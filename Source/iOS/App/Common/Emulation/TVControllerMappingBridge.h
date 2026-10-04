@@ -81,7 +81,9 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 + (BOOL)enforceTouchscreenPointerForWiimote:(NSInteger)indexOneBased
     NS_SWIFT_NAME(enforceTouchscreenPointer(forWiimote:));
 
-/// Assign the iOS Touchscreen virtual device as the default device for a GC port.
+/// Assign the iOS Touchscreen virtual device as the default device for a GC port. The Touchscreen
+/// profile is loaded when the port changes device or has no mapping; the port's device is the
+/// Touchscreen afterwards whatever that profile's `Device =` line names.
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
 
 /// Mechanical only: drops default-device bindings that point at devices the
