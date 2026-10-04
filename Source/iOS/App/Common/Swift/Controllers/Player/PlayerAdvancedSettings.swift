@@ -103,7 +103,7 @@ enum AdvancedSettingGroups {
     case .wii:
       var entries = [
         Entry(owner: .wiimote, groupId: 3, title: L("Pointer")),
-        Entry(owner: .wiimote, groupId: imuPointGroup, title: L("Motion Pointer")),
+        Entry(owner: .wiimote, groupId: imuPointGroup, title: L("Aim with Controller Motion")),
       ]
       switch attachment {
       case 1:

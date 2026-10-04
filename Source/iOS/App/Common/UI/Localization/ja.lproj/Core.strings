@@ -3774,7 +3774,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Applies exponential smoothing. 0 disables smoothing." = "Applies exponential smoothing. 0 disables smoothing.";
 "Applies your choice to every conflict above." = "Applies your choice to every conflict above.";
 "Apply Benchmark Base (adaptive OFF, 100% clocks)" = "Apply Benchmark Base (adaptive OFF, 100% clocks)";
-"Apply Recommended Settings" = "Apply Recommended Settings";
 "Apply shader over checkerboard" = "Apply shader over checkerboard";
 "Approval Required" = "Approval Required";
 "Ascending" = "Ascending";
@@ -3949,7 +3948,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Downloaded to cache" = "Downloaded to cache";
 "Downloading cheats" = "Downloading cheats";
 "Downsample" = "Downsample";
-"Drag" = "Drag";
 "Draws the timing stats as live graphs instead of numbers." = "Draws the timing stats as live graphs instead of numbers.";
 "Drop %1$ld files to import" = "Drop %1$ld files to import";
 "Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi. Open the address in a browser, or in Finder choose Go › Connect to Server and enter the same address as Guest." = "Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi. Open the address in a browser, or in Finder choose Go › Connect to Server and enter the same address as Guest.";
@@ -4023,7 +4021,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Files With Errors" = "Files With Errors";
 "Finder / WebDAV" = "Finder / WebDAV";
 "Flip vertically" = "Flip vertically";
-"Follow" = "Follow";
 "For CPU and interpreter performance options, see Performance Tuning in Settings or Config." = "For CPU and interpreter performance options, see Performance Tuning in Settings or Config.";
 "Force 24-bit Color" = "Force 24-bit Color";
 "Force BGRA8 formats" = "Force BGRA8 formats";
@@ -4088,7 +4085,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "How much detail the log captures (1 = errors only, 5 = everything)." = "How much detail the log captures (1 = errors only, 5 = everything).";
 "How the final image is resampled to the screen. Default matches the backend; Sharp Bilinear and Area Sampling can look cleaner when up/down-scaling." = "How the final image is resampled to the screen. Default matches the backend; Sharp Bilinear and Area Sampling can look cleaner when up/down-scaling.";
 "How vertex data is decoded on the CPU. NEON SIMD is the fast default on Apple Silicon; Software is the slow reference path; Compare runs both and asserts they match (debug only — slowest). Leave on NEON SIMD. Applies on next game launch." = "How vertex data is decoded on the CPU. NEON SIMD is the fast default on Apple Silicon; Software is the slow reference path; Compare runs both and asserts they match (debug only — slowest). Leave on NEON SIMD. Applies on next game launch.";
-"IR Mode: %@" = "IR Mode: %@";
 "Ignores small movements to reduce jitter." = "Ignores small movements to reduce jitter.";
 "Immediate XFB" = "Immediate XFB";
 "Import BootMii NAND Backup" = "Import BootMii NAND Backup";
@@ -4167,7 +4163,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Map IR (Gyro) to DSU Touch" = "Map IR (Gyro) to DSU Touch";
 "Maps device motion to Nunchuck's accelerometer. Used by fewer games, mainly for secondary motion controls when using Nunchuck + Wiimote." = "Maps device motion to Nunchuck's accelerometer. Used by fewer games, mainly for secondary motion controls when using Nunchuck + Wiimote.";
 "Maps device motion to Wiimote's built-in accelerometer and gyroscope. Required for most motion-controlled Wii games." = "Maps device motion to Wiimote's built-in accelerometer and gyroscope. Required for most motion-controlled Wii games.";
-"Maps device motion to all 6 axes (rotation + acceleration) for games like Wii Sports and Mario Kart. Active only when IR control isn't using gyro mode." = "Maps device motion to all 6 axes (rotation + acceleration) for games like Wii Sports and Mario Kart. Active only when IR control isn't using gyro mode.";
 "Master Effects Chain" = "Master Effects Chain";
 "Max Scale" = "Max Scale";
 "Maybe Later" = "Maybe Later";
@@ -4185,7 +4180,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Mitchell-Netravali" = "Mitchell-Netravali";
 "Motion" = "Motion";
 "Motion Debug" = "Motion Debug";
-"Motion IR Cursor" = "Motion IR Cursor";
 "Motion Settings" = "Motion Settings";
 "Moves the IR pointer as your finger hovers/drags without needing a tap. Helps aiming in some games." = "Moves the IR pointer as your finger hovers/drags without needing a tap. Helps aiming in some games.";
 "Multisample anti-aliasing smooths jagged polygon edges. Higher costs more GPU. The Metal backend clamps unsupported sample counts automatically." = "Multisample anti-aliasing smooths jagged polygon edges. Higher costs more GPU. The Metal backend clamps unsupported sample counts automatically.";
@@ -4525,7 +4519,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Tooltips" = "Tooltips";
 "Total" = "Total";
 "Touch Area" = "Touch Area";
-"Touch IR pointer control mode" = "Touch IR pointer control mode";
 "Touchscreen" = "Touchscreen";
 "Tracks achievements without earning them — view progress without affecting your record." = "Tracks achievements without earning them — view progress without affecting your record.";
 "Transferred. Starting where the other device left off." = "Transferred. Starting where the other device left off.";
@@ -4568,7 +4561,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "When approval is required, only allowed receivers will receive input. Version pings are still answered so clients can detect this server." = "When approval is required, only allowed receivers will receive input. Version pings are still answered so clients can detect this server.";
 "When the CPU fast-forwards through an idle loop, flush the GPU so it stays in sync. ON by default for correctness; turning it off skips the flush for a small CPU win but can cause graphical glitches in some games. A/B knob." = "When the CPU fast-forwards through an idle loop, flush the GPU so it stays in sync. ON by default for correctness; turning it off skips the flush for a small CPU win but can cause graphical glitches in some games. A/B knob.";
 "When you quit a game, your spot is auto-saved to a dedicated slot and reloaded the next time you launch that game. Never touches your numbered save slots." = "When you quit a game, your spot is auto-saved to a dedicated slot and reloaded the next time you launch that game. Never touches your numbered save slots.";
-"Whether tilting (roll) or turning (yaw) the device moves the pointer left/right." = "Whether tilting (roll) or turning (yaw) the device moves the pointer left/right.";
 "Wii + Classic Controller" = "Wii + Classic Controller";
 "Wii Classic (NIB)" = "Wii Classic (NIB)";
 "Wii Remote %d" = "Wii Remote %d";
@@ -4705,7 +4697,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Load Profile" = "Load Profile";
 "Load Profile…" = "Load Profile…";
 "Loads %@ for this player and replaces its current buttons." = "Loads %@ for this player and replaces its current buttons.";
-"Motion Pointer" = "Motion Pointer";
 "Not saved: %@" = "Not saved: %@";
 "Not saved: the expression does not parse." = "Not saved: the expression does not parse.";
 "Nunchuk %@" = "Nunchuk %@";
@@ -4723,7 +4714,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Reset to Default Profile?" = "Reset to Default Profile?";
 "Revert" = "Revert";
 "Rumble %@" = "Rumble %@";
-"Sensitivity" = "Sensitivity";
 "Set by an expression" = "Set by an expression";
 "Shake %@" = "Shake %@";
 "Shake to Wiggle" = "Shake to Wiggle";
@@ -4811,3 +4801,12 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Clear All Buttons" = "Clear All Buttons";
 "Clear All Buttons?" = "Clear All Buttons?";
 "Unbinds every control of this player, rumble included. Load a profile or reset to get them back." = "Unbinds every control of this player, rumble included. Load a profile or reset to get them back.";
+"Pointer: how the Wii pointer is aimed" = "Pointer: how the Wii pointer is aimed";
+"Pointer: %@" = "Pointer: %@";
+"Gyro Pointer" = "Gyro Pointer";
+"Whether tilting (roll) or turning (yaw) the device moves the pointer left/right while the Pointer is set to Gyro." = "Whether tilting (roll) or turning (yaw) the device moves the pointer left/right while the Pointer is set to Gyro.";
+"Maps device motion to all 6 axes (rotation + acceleration) for games like Wii Sports and Mario Kart. Inactive while the Pointer is set to Gyro, because the gyro then aims the pointer." = "Maps device motion to all 6 axes (rotation + acceleration) for games like Wii Sports and Mario Kart. Inactive while the Pointer is set to Gyro, because the gyro then aims the pointer.";
+"Recommended Motion Settings" = "Recommended Motion Settings";
+"Turns on 6DOF and Wiimote motion, Shake to Wiggle and roll for horizontal movement, and turns off invert and Nunchuck motion. The Pointer mode is not changed." = "Turns on 6DOF and Wiimote motion, Shake to Wiggle and roll for horizontal movement, and turns off invert and Nunchuck motion. The Pointer mode is not changed.";
+"Drag Sensitivity" = "Drag Sensitivity";
+"Gyro Sensitivity" = "Gyro Sensitivity";

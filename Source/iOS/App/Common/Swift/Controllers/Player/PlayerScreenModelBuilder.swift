@@ -203,13 +203,15 @@ enum PlayerScreenModelBuilder {
     ]
     if motion.pointerMode == .touchDrag, motion.usesProgrammaticOverlay {
       items.append(sensitivityItem(
-        choices: PointerMotionState.dragGainChoices, current: motion.dragGain, set: actions.setDragGain))
+        title: L("Drag Sensitivity"), choices: PointerMotionState.dragGainChoices, current: motion.dragGain,
+        set: actions.setDragGain))
     }
     if motion.pointerMode == .gyro {
       // Decision 4: a multiplier on the gyro pointer's constants. Decision 7: invert only here,
       // because only the gyro pointer reads the invert keys.
       items.append(sensitivityItem(
-        choices: PointerMotionState.gyroSensitivityChoices, current: motion.gyroSensitivity, set: actions.setGyroSensitivity))
+        title: L("Gyro Sensitivity"), choices: PointerMotionState.gyroSensitivityChoices,
+        current: motion.gyroSensitivity, set: actions.setGyroSensitivity))
       items.append(MenuItem(
         id: "pointer-invert-x", title: L("Invert X"), icon: "arrow.left.and.right",
         role: .toggle(Binding(get: { motion.invertX }, set: { actions.setInvertX($0) }))))
@@ -224,10 +226,13 @@ enum PlayerScreenModelBuilder {
     return MenuSection(id: "pointer", header: L("Pointer & Motion"), items: items)
   }
 
-  /// The mode's Sensitivity row: a stepped multiplier, one compact row on tvOS.
-  private static func sensitivityItem(choices: [Double], current: Double, set: @escaping (Double) -> Void) -> MenuItem {
+  /// The mode's sensitivity row (drag gain or gyro multiplier): a stepped multiplier, one compact
+  /// row on tvOS.
+  private static func sensitivityItem(
+    title: String, choices: [Double], current: Double, set: @escaping (Double) -> Void
+  ) -> MenuItem {
     MenuItem(
-      id: "pointer-sensitivity", title: L("Sensitivity"), icon: "dial.medium",
+      id: "pointer-sensitivity", title: title, icon: "dial.medium",
       role: .picker(
         options: choices.map { ("×" + NumericSettingSteps.label($0, suffix: ""), AnyHashable($0)) },
         selection: Binding(

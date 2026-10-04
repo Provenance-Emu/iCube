@@ -43,7 +43,7 @@ struct DSUControllerView: View {
   let onClose: () -> Void
   @State private var virtualController: GCVirtualController?
   @State private var showMotionSheet = false
-  @State private var irModeLabel: String = ""
+  @State private var pointerModeLabel: String = ""
   @State private var showLayoutSheet = false
   @AppStorage("dsu_controller_layout") private var layoutRaw: String = DSUControllerLayout.appleVirtual.rawValue
   @AppStorage("dsu_apple_left_is_dpad") private var appleLeftIsDPad: Bool = false
@@ -139,7 +139,7 @@ struct DSUControllerView: View {
         .allowsHitTesting(false)
       }
       .onAppear {
-        refreshIRLabel()
+        refreshPointerModeLabel()
         // App-level orientation lock: capture current orientation as desired
         if lockLayout {
           lockedLandscape = UIScreen.main.bounds.width > UIScreen.main.bounds.height
@@ -177,29 +177,19 @@ struct DSUControllerView: View {
       .toolbar {
         ToolbarItem(placement: .navigationBarLeading) {
           Menu {
-            let currentIR = DOLConfigBridge.mainTouchPadIRMode()
-            Button {
-              PointerModeController.shared.set(rawValue: 0)
-              refreshIRLabel()
-            } label: {
-              Label(L("Gyro"), systemImage: currentIR == 0 ? "checkmark" : "gyroscope")
-            }
-            Button {
-              PointerModeController.shared.set(rawValue: 1)
-              refreshIRLabel()
-            } label: {
-              Label(L("Follow"), systemImage: currentIR == 1 ? "checkmark" : "hand.point.up")
-            }
-            Button {
-              PointerModeController.shared.set(rawValue: 2)
-              refreshIRLabel()
-            } label: {
-              Label(L("Drag"), systemImage: currentIR == 2 ? "checkmark" : "hand.draw")
+            let current = PointerModeController.shared.mode
+            ForEach(PointerMode.allCases) { mode in
+              Button {
+                PointerModeController.shared.set(mode)
+                refreshPointerModeLabel()
+              } label: {
+                Label(mode.title, systemImage: current == mode ? "checkmark" : mode.systemImage)
+              }
             }
           } label: {
-            Label(irModeLabel, systemImage: "cursor.rays")
+            Label(pointerModeLabel, systemImage: "cursor.rays")
           }
-          .modifier(TooltipModifier(text: L("Touch IR pointer control mode"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
+          .modifier(TooltipModifier(text: L("Pointer: how the Wii pointer is aimed"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
         }
         ToolbarItem(placement: .navigationBarLeading) {
           Button(action: { showLayoutSheet = true }) {
@@ -335,27 +325,8 @@ struct DSUControllerView: View {
     virtualController = nil
   }
 
-  private func refreshIRLabel() {
-    let raw = DOLConfigBridge.mainTouchPadIRMode()
-    irModeLabel = (raw == 0) ? L("Gyro") : (raw == 1 ? L("Follow") : L("Drag"))
-  }
-
-  private func toggleIRMode() {
-    let raw = DOLConfigBridge.mainTouchPadIRMode()
-    // Cycle: gyro(0) -> follow(1) -> drag(2) -> gyro(0)
-    let next = (raw + 1) % 3
-    PointerModeController.shared.set(rawValue: next)
-    refreshIRLabel()
-    // Haptic and toast for feedback
-    #if os(iOS)
-    let gen = UINotificationFeedbackGenerator()
-    gen.notificationOccurred(.success)
-    #endif
-    NotificationCenter.default.post(
-      name: NSNotification.Name("DOLShowSnackbar"),
-      object: nil,
-      userInfo: ["text": String(format: L("IR Mode: %@"), irModeLabel)]
-    )
+  private func refreshPointerModeLabel() {
+    pointerModeLabel = String(format: L("Pointer: %@"), PointerModeController.shared.mode.title)
   }
 
   private func reconfigureVirtualControllerIfNeeded() {

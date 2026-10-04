@@ -86,14 +86,6 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                 }
                 Toggle("Widescreen Hack", isOn: Binding(get: { DOLConfigBridge.gfxWidescreenHack() }, set: { DOLConfigBridge.setGfxWidescreenHack($0) }))
               }
-              HStack(spacing: 12) {
-                Picker("IR Mode", selection: Binding(get: { DOLConfigBridge.mainTouchPadIRMode() }, set: { PointerModeController.shared.set(rawValue: $0) })) {
-                  Text("None").tag(0)
-                  Text("Absolute").tag(1)
-                  Text("Drag").tag(2)
-                }
-                .pickerStyle(.segmented)
-              }
               // Wii Controller Type
               HStack(spacing: 12) {
                 Picker("Wii Controller", selection: $wiiControllerType) {
