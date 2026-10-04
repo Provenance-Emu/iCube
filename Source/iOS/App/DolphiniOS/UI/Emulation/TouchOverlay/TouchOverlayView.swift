@@ -40,7 +40,7 @@ struct TouchOverlayView: View {
   ///   device context, so every group's input is suppressed from the first frame
   ///   (`TouchOverlayEditMode.inputSuppressed`), and no `TCManagerInterface` write can happen
   ///   regardless of the placeholder `deviceId` it passes. It also passes
-  ///   `irMode: .none` so the IR pad's `mode`/`isEditingFlag` transition on mount
+  ///   `irMode: .gyro` so the IR pad's `mode`/`isEditingFlag` transition on mount
   ///   can't send a stray "recenter" write either (see `TouchOverlayIRPadView`'s doc comment).
   /// - Parameter store: the gallery passes an empty in-memory store so it always shows defaults.
   init(padKind: TouchOverlayPadKind, deviceId: Int, irMode: Int, initialEditMode: TouchOverlayEditMode = .none,
@@ -212,7 +212,7 @@ struct TouchOverlayView: View {
         if inputSuppressed {
           TouchOverlayArt.irPad(variant: variant)
         }
-        TouchOverlayIRPadView(mode: TCWiiTouchIRMode(rawValue: irMode) ?? .none, deviceId: deviceId,
+        TouchOverlayIRPadView(mode: TCWiiTouchIRMode(rawValue: irMode) ?? .gyro, deviceId: deviceId,
                               excludedFrames: localExcluded, isEditing: inputSuppressed,
                               dragGain: TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
       }

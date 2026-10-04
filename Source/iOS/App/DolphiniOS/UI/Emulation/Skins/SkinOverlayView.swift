@@ -21,7 +21,7 @@ struct SkinOverlayView: View {
   let previewDevice: SkinDevice?
   let onAction: (SkinAction) -> Void
 
-  init(skin: InstalledSkin, padKind: TouchOverlayPadKind, deviceId: Int, irMode: Int = TCWiiTouchIRMode.none.rawValue,
+  init(skin: InstalledSkin, padKind: TouchOverlayPadKind, deviceId: Int, irMode: Int = TCWiiTouchIRMode.gyro.rawValue,
        previewDevice: SkinDevice? = nil, onAction: @escaping (SkinAction) -> Void) {
     self.skin = skin
     self.padKind = padKind
@@ -89,7 +89,7 @@ private struct SkinOverlayContent: View {
             .id(LayoutIdentity(canvas: canvas, orientation: orientation, skinID: skin.id, padKind: padKind))
           // Only a real game has a pointer: a preview (the gallery, the picker's thumbnails) never mounts it, nor does a
           // pointer mode of "none" (the gyro pointer drives the axes itself).
-          if previewDevice == nil, pointerMode != .none, let pointer = input.pointerSurface() {
+          if previewDevice == nil, pointerMode != .gyro, let pointer = input.pointerSurface() {
             SkinPointerLayer(surface: pointer, deviceId: deviceId, mode: pointerMode)
               .id(LayoutIdentity(canvas: canvas, orientation: orientation, skinID: skin.id, padKind: padKind))
           }
@@ -100,7 +100,7 @@ private struct SkinOverlayContent: View {
     }
   }
 
-  private var pointerMode: TCWiiTouchIRMode { TCWiiTouchIRMode(rawValue: irMode) ?? .none }
+  private var pointerMode: TCWiiTouchIRMode { TCWiiTouchIRMode(rawValue: irMode) ?? .gyro }
 
   private var isPad: Bool {
     switch previewDevice {

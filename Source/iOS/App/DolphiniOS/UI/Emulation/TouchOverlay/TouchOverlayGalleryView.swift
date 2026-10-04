@@ -87,7 +87,7 @@ struct TouchOverlayPreviewScreen: View {
         }
       }
     } else {
-      TouchOverlayView(padKind: padKind, deviceId: 0, irMode: TCWiiTouchIRMode.none.rawValue,
+      TouchOverlayView(padKind: padKind, deviceId: 0, irMode: TCWiiTouchIRMode.gyro.rawValue,
                        store: TouchOverlayLayoutStore(fileURL: nil), previewSafeArea: insets)
     }
   }

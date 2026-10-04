@@ -5,7 +5,7 @@ import Foundation
 import UIKit
 
 class TCWiiPad: TCView, UIGestureRecognizerDelegate {
-  var mode: TCWiiTouchIRMode = .none
+  var mode: TCWiiTouchIRMode = .gyro
 
   var gameCenterX: CGFloat = 0
   var gameCenterY: CGFloat = 0
@@ -183,7 +183,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
   }
 
   @objc func handleLongPress(gesture: UILongPressGestureRecognizer) {
-    if mode == .none {
+    if mode == .gyro {
       return
     }
 
@@ -247,7 +247,7 @@ class TCWiiPad: TCView, UIGestureRecognizerDelegate {
 
   private func sendIR(x: CGFloat, y: CGFloat) {
     #if os(iOS)
-    guard mode != .none else { return }
+    guard mode != .gyro else { return }
     // Writes the same value to both members of each antagonist IR pair (Up/Down,
     // Left/Right), which doubles the gain and, on Y, also flips its sign relative to
     // a single-sided write -- see `TCDeviceMotion.irCursorWrites` for the corrected,
