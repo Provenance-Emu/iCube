@@ -11,7 +11,6 @@ import UIKit
 struct ControllerMoreSettingsView: View {
   @State private var autoSelectOnScreenBySystem = true
   @State private var connectWiimotes = false
-  @AppStorage("virtual_mfi_connect") private var mfiConnect = false
   /// Rumble destination, honored by the core rumble path (`Motor`): 0 device haptics, 1 controller,
   /// 2 both. tvOS has no device to hold, so the option is hidden there.
   @AppStorage("rumble_destination") private var rumbleDestination = 1
@@ -28,7 +27,6 @@ struct ControllerMoreSettingsView: View {
   var body: some View {
     List {
       Section(header: Text(L("General"))) {
-        Toggle(L("Connect MFi Controllers"), isOn: $mfiConnect)
         Toggle(L("Background Input"), isOn: $backgroundInput)
           .onChange(of: backgroundInput) { _, enabled in DOLConfigBridge.setMainBackgroundInput(enabled) }
         #if os(iOS)

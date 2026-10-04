@@ -71,7 +71,6 @@ void Reset();
 #import "JitManager.h"
 #import "TVControllerMappingBridge.h"
 #import "LocalizationUtil.h"
-#import "VirtualMFiControllerManager.h"
 #import "iCube-Swift.h"
 #include "Core/Config/WiimoteSettings.h"
 #include "Core/System.h"  // 2606: PerformanceMetrics lives on Core::System
