@@ -586,15 +586,15 @@ import simd
   /// Touchscreen.mm (`AddInput(new Axis(...))`, ~lines 139-158) gives each half-axis a
   /// sign multiplier `m_neg`, and `Axis::GetState()` returns `storedValue * m_neg`.
   /// Left/Backward/Up default to `m_neg == +1.0`; Right/Forward/Down are constructed
-  /// with `m_neg == -1.0`. The core's `IMUAccelerometer::GetState()`
-  /// (InputCommon/ControllerEmu/ControlGroup/IMUAccelerometer.cpp) then combines them
-  /// as `x = Left - Right`, `y = Backward - Forward`, `z = Up - Down`.
+  /// with `m_neg == -1.0`. A bound input then goes through `ControlExpression`
+  /// (InputCommon/ControlReference/ExpressionParser.cpp), which clamps it at 0. The core's
+  /// `IMUAccelerometer::GetState()` combines the clamped halves as `x = Left - Right`,
+  /// `y = Backward - Forward`, `z = Up - Down`.
   ///
-  /// So writing the signed value to the `m_neg == +1` side and 0 to the `m_neg == -1`
-  /// side makes the combined axis equal exactly the signed value: e.g. for X,
-  /// `Left.GetState() - Right.GetState()` becomes `(x * 1) - (0 * -1) == x`. This avoids
-  /// both the old bug of writing the same value to both sides (which doubled it) and
-  /// the old bug of writing +v/-v to either side (which always canceled to 0).
+  /// So the same signed value goes to both sides of each pair: the clamp keeps it on the
+  /// side whose `m_neg` makes it positive and zeroes the other, and the difference is the
+  /// signed value, e.g. `max(0, x) - max(0, -x) == x`. Writing to one side only would lose
+  /// every negative value to the clamp.
   static func imuAccelWrites(
     x: Double, y: Double, z: Double,
     left: TCButtonType, right: TCButtonType,
@@ -602,9 +602,9 @@ import simd
     up: TCButtonType, down: TCButtonType
   ) -> [TCButtonType: Float] {
     [
-      left: Float(x), right: 0,
-      backward: Float(y), forward: 0,
-      up: Float(z), down: 0,
+      left: Float(x), right: Float(x),
+      backward: Float(y), forward: Float(y),
+      up: Float(z), down: Float(z),
     ]
   }
 
@@ -619,9 +619,9 @@ import simd
     yawLeft: TCButtonType, yawRight: TCButtonType
   ) -> [TCButtonType: Float] {
     [
-      pitchDown: Float(pitch), pitchUp: 0,
-      rollLeft: Float(roll), rollRight: 0,
-      yawLeft: Float(yaw), yawRight: 0,
+      pitchDown: Float(pitch), pitchUp: Float(pitch),
+      rollLeft: Float(roll), rollRight: Float(roll),
+      yawLeft: Float(yaw), yawRight: Float(yaw),
     ]
   }
 
@@ -652,40 +652,25 @@ import simd
     )
   }
 
-  /// Single-sided writes for the gyro-mode IR cursor, following the same convention as
-  /// `imuAccelWrites` / `imuGyroWrites` above but derived from a DIFFERENT core combine
-  /// order, so it is NOT a drop-in reuse of either helper.
+  /// The gyro-mode IR cursor's writes, by the same both-sides convention as `imuAccelWrites`.
   ///
   /// `ControllerEmu::Cursor::GetReshapableState()` (InputCommon/ControllerEmu/
-  /// ControlGroup/Cursor.cpp:67-68) computes `y = controls[0] - controls[1]` and
-  /// `x = controls[3] - controls[2]`, with `named_directions` ordering the controls
-  /// Up/Down/Left/Right -- i.e. `y = Up.GetState() - Down.GetState()` and
-  /// `x = Right.GetState() - Left.GetState()`. `Touchscreen.mm` (~line 74-77) wires
-  /// `WIIMOTE_IR_RIGHT` / `WIIMOTE_IR_DOWN` with the default `Axis` sign (`m_neg == +1`)
-  /// and `WIIMOTE_IR_UP` / `WIIMOTE_IR_LEFT` with an explicit `m_neg == -1` -- the
-  /// REVERSE of the accelerometer's Up/Left-default-positive convention the comment on
-  /// `imuAccelWrites` describes.
+  /// ControlGroup/Cursor.cpp:67-68) computes `y = Up - Down` and `x = Right - Left` on the
+  /// clamped halves. `Touchscreen.mm` (~line 74-77) wires `WIIMOTE_IR_RIGHT` /
+  /// `WIIMOTE_IR_DOWN` with `m_neg == +1` and `WIIMOTE_IR_UP` / `WIIMOTE_IR_LEFT` with
+  /// `m_neg == -1`.
   ///
-  /// For X, the minuend (Right) already has `m_neg == +1`, so writing `horizontal`
-  /// straight to Right and 0 to Left reproduces `state.x == horizontal` exactly: this
-  /// is the same sign the touch path (`TCWiiPad.sendIR`) already relies on (positive =
-  /// pointer moves right), just without the old code's 2x gain from writing to both
-  /// sides.
-  ///
-  /// For Y, the minuend (Up) has `m_neg == -1`, so reproducing `state.y == vertical`
-  /// (positive = pointer moves up, again the touch path's convention) needs the
-  /// NEGATED value on Up, 0 on Down:
-  /// `Up.GetState() - Down.GetState() == (-vertical * -1) - (0 * 1) == vertical`.
-  /// The old write-both-sides code missed this asymmetry entirely (it reused the same
-  /// value on Up and Down the way `wiimoteAccelWrites` uses the same magnitude on
-  /// opposite-signed pairs), which produced `state.y == -2 * vertical`: doubled AND
-  /// inverted relative to what tilting the phone up should do.
+  /// X: `horizontal` on Right and Left gives `max(0, h) - max(0, -h) == h` (positive =
+  /// right). Y: positive `vertical` means up, and Up's `m_neg == -1` makes `-vertical` on
+  /// Up and Down read `max(0, v) - max(0, -v) == v`. This is the touch path's convention
+  /// too (`TouchOverlayIRPadView.IRSurfaceView.sendIR` writes `[y, y, x, x]` with y positive = down).
+  /// The single-sided writes this replaced lost the left and bottom halves to the clamp.
   static func irCursorWrites(horizontal: Double, vertical: Double) -> [TCButtonType: Float] {
-    let clampedHorizontal = max(-1.0, min(1.0, horizontal))
-    let clampedVertical = max(-1.0, min(1.0, vertical))
+    let clampedHorizontal = Float(max(-1.0, min(1.0, horizontal)))
+    let clampedVertical = Float(max(-1.0, min(1.0, vertical)))
     return [
-      .wiiInfraredRight: Float(clampedHorizontal), .wiiInfraredLeft: 0,
-      .wiiInfraredUp: Float(-clampedVertical), .wiiInfraredDown: 0,
+      .wiiInfraredRight: clampedHorizontal, .wiiInfraredLeft: clampedHorizontal,
+      .wiiInfraredUp: -clampedVertical, .wiiInfraredDown: -clampedVertical,
     ]
   }
 }

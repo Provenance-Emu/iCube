@@ -272,8 +272,8 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     private func sendIR(_ xy: (x: CGFloat, y: CGFloat)) {
       guard mode != .gyro else { return }
       // Writes the SAME value to both members of each IR pair (112/113 = Up/Down, 114/115 =
-      // Left/Right) — `TCWiiPad.sendIR`'s convention, do not "fix" this to the stick's
-      // half-axis convention (design §6.4).
+      // Left/Right). The core clamps each half at 0 before taking Up - Down, so this is exactly
+      // 1x, not 2x (`TCDeviceMotion.irCursorWrites`); do not "fix" it to one side (design §6.4).
       let axisStartIdx = TCButtonType.wiiInfrared.rawValue
       for (offset, axis) in [xy.y, xy.y, xy.x, xy.x].enumerated() {
         TCManagerInterface.setAxisValueFor(axisStartIdx + offset + 1, controller: deviceId, value: Float(axis))
