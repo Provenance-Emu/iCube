@@ -172,7 +172,10 @@ static bool ICubeEmulationActive() {
 
 // Controllers
 + (BOOL)mainBackgroundInput { return Config::Get(Config::MAIN_INPUT_BACKGROUND_INPUT); }
-+ (void)setMainBackgroundInput:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_INPUT_BACKGROUND_INPUT, (bool)enabled); }
++ (void)setMainBackgroundInput:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_INPUT_BACKGROUND_INPUT, (bool)enabled);
+}
 + (BOOL)connectWiimotesForControllerInterface { return Config::Get(Config::MAIN_CONNECT_WIIMOTES_FOR_CONTROLLER_INTERFACE); }
 + (void)setConnectWiimotesForControllerInterface:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CONNECT_WIIMOTES_FOR_CONTROLLER_INTERFACE, (bool)enabled); }
 
