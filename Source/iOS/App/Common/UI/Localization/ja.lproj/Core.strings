@@ -3677,9 +3677,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Done" = "完了";
 "Platform: Auto" = "プラットフォーム: 自動";
 "Controller" = "コントローラー";
-"Controller: Auto" = "コントローラー: 自動";
-"Force GameCube Pad" = "ゲームキューブパッドを強制";
-"Force Wii Pad" = "Wiiパッドを強制";
 "Select All" = "すべて選択";
 "Deselect All" = "選択解除";
 "No Matching Games" = "一致するゲームがありません";
@@ -3708,7 +3705,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Delete Selected Games?" = "選択したゲームを削除しますか？";
 "selected games will be deleted. This cannot be undone." = "件のゲームが削除されます。この操作は元に戻せません。";
 "Platform assignment updated" = "プラットフォームの割り当てを更新しました";
-"Controller assignment updated" = "コントローラーの割り当てを更新しました";
 "Remote games cannot be deleted from the library." = "リモートのゲームはライブラリから削除できません。";
 "Delete failed: %1" = "削除に失敗しました: %1";
 "remote items could not be deleted." = "件のリモートアイテムは削除できませんでした。";
@@ -3794,10 +3790,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Authorized" = "Authorized";
 "Auto (fit window)" = "Auto (fit window)";
 "Auto Disc Change" = "Auto Disc Change";
-"Automatically pairs Wii Remotes when the controller interface is in use." = "Automatically pairs Wii Remotes when the controller interface is in use.";
-"Automatically shows the GameCube or Wii on-screen layout based on the game being played." = "Automatically shows the GameCube or Wii on-screen layout based on the game being played.";
 "Automatically swaps to the next disc for multi-disc games." = "Automatically swaps to the next disc for multi-disc games.";
-"Auto‑select On‑Screen Controller by System" = "Auto‑select On‑Screen Controller by System";
 "Auto‑start when opening" = "Auto‑start when opening";
 "Available" = "Available";
 "Avoids re-presenting identical frames, saving GPU work. Recommended on." = "Avoids re-presenting identical frames, saving GPU work. Recommended on.";
@@ -3866,8 +3859,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Computes lighting per pixel for smoother shading, at a GPU cost. Off matches original hardware." = "Computes lighting per pixel for smoother shading, at a GPU cost. Off matches original hardware.";
 "Config Settings" = "Config Settings";
 "Conflicts" = "Conflicts";
-"Connect MFi Controllers" = "Connect MFi Controllers";
-"Connect Wiimotes for Controller Interface" = "Connect Wiimotes for Controller Interface";
 "Connected Receivers" = "Connected Receivers";
 "Connecting…" = "Connecting…";
 "Connects to RetroAchievements.org to unlock achievements and track progress across supported games." = "Connects to RetroAchievements.org to unlock achievements and track progress across supported games.";
@@ -3991,7 +3982,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Enable ReplayKit Instant Replay" = "Enable ReplayKit Instant Replay";
 "Enable Shader" = "Enable Shader";
 "Enable Shader Cache" = "Enable Shader Cache";
-"Enable Speaker" = "Enable Speaker";
 "Enable Unofficial" = "Enable Unofficial";
 "Enable pre-copy (compat)" = "Enable pre-copy (compat)";
 "Enables 480p progressive output for games that support it, reducing flicker." = "Enables 480p progressive output for games that support it, reducing flicker.";
@@ -4662,7 +4652,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Battery %d%%" = "Battery %d%%";
 "Battery %d%% · Charging" = "Battery %d%% · Charging";
 "Connected Devices" = "Connected Devices";
-"Continuous Wii Remote Scanning" = "Continuous Wii Remote Scanning";
 "Controller Lights" = "Controller Lights";
 "Exit to Library" = "Exit to Library";
 "Fast-forward" = "Fast-forward";
