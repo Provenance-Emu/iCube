@@ -52,6 +52,9 @@ NS_SWIFT_NAME(NumericSettingInfo)
 @property (nonatomic, readonly) double defaultValue;
 /// The value is driven by an expression, not a plain number; the player screen shows it read-only.
 @property (nonatomic, readonly) BOOL isExpression;
+/// The core's explanation of the setting (`NumericSettingBase::GetUIDescription`), translated;
+/// empty when the core has none.
+@property(nonatomic, readonly, copy) NSString* explanation;
 @end
 
 /// The player screen's Advanced section: Dolphin's expression parser, used as a check that installs

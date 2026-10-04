@@ -39,6 +39,7 @@
 @property (nonatomic, readwrite) double maximum;
 @property (nonatomic, readwrite) double defaultValue;
 @property (nonatomic, readwrite) BOOL isExpression;
+@property(nonatomic, readwrite, copy) NSString* explanation;
 @end
 
 @implementation DOLNumericSettingInfo
@@ -120,6 +121,9 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
     info.name = DOLCoreLocalizedString(CToFoundationString(setting->GetUIName()));
     const char* suffix = setting->GetUISuffix();
     info.suffix = suffix ? DOLCoreLocalizedString(CToFoundationString(suffix)) : @"";
+    // English `_trans()` text, like the name: the Core table carries its translations.
+    const char* explanation = setting->GetUIDescription();
+    info.explanation = explanation ? DOLCoreLocalizedString(CToFoundationString(explanation)) : @"";
     info.isExpression = !setting->IsSimpleValue();
     switch (setting->GetType())
     {

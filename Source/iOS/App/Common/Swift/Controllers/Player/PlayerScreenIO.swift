@@ -92,7 +92,8 @@ struct LivePlayerScreenIO: PlayerScreenIO {
       NumericSettingState(
         owner: owner, groupId: group, index: info.index, name: info.name, suffix: info.suffix,
         isToggle: info.type == .bool, isInteger: info.type == .int, value: info.value, minimum: info.minimum,
-        maximum: info.maximum, defaultValue: info.defaultValue, isExpression: info.isExpression)
+        maximum: info.maximum, defaultValue: info.defaultValue, isExpression: info.isExpression,
+        explanation: info.explanation)
     }
   }
 

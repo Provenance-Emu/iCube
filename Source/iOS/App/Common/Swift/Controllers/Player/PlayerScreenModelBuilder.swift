@@ -236,21 +236,29 @@ enum PlayerScreenModelBuilder {
     return sections
   }
 
+  /// What a setting's row says under its name: the core's explanation, or that an expression drives
+  /// it. nil when the core has no explanation.
+  static func settingSubtitle(_ setting: NumericSettingState) -> String? {
+    if setting.isExpression { return L("Set by an expression") }
+    return setting.explanation.isEmpty ? nil : setting.explanation
+  }
+
   private static func settingItem(_ setting: NumericSettingState, actions: PlayerScreenActions) -> MenuItem {
+    let subtitle = settingSubtitle(setting)
     if setting.isExpression {
       // Enabled no-op so tvOS focus can reach it; editing an expression-driven value here would
       // silently replace the expression.
-      return MenuItem(id: setting.id, title: setting.name, subtitle: L("Set by an expression"), role: .action({}))
+      return MenuItem(id: setting.id, title: setting.name, subtitle: subtitle, role: .action({}))
     }
     if setting.isToggle {
       return MenuItem(
-        id: setting.id, title: setting.name,
+        id: setting.id, title: setting.name, subtitle: subtitle,
         role: .toggle(Binding(get: { setting.value != 0 }, set: { actions.setNumericSetting(setting, $0 ? 1 : 0) })))
     }
     let values = NumericSettingSteps.values(for: setting)
     let selected = NumericSettingSteps.nearest(to: setting.value, in: values)
     return MenuItem(
-      id: setting.id, title: setting.name,
+      id: setting.id, title: setting.name, subtitle: subtitle,
       role: .picker(
         options: values.map { (NumericSettingSteps.label($0, suffix: setting.suffix), AnyHashable($0)) },
         selection: Binding(

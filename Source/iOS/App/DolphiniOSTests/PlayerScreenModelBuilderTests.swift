@@ -278,6 +278,29 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(recorder.calls, ["setting:\(deadZone.id)=25.0"])
   }
 
+  /// The core's `GetUIDescription()` text is each setting's subtitle; a setting the core does not
+  /// explain has none, and an expression-driven one says so instead.
+  func test_advanced_settingsShowTheCoresExplanation() {
+    var screen = state(.wiiRemote)
+    screen.showsAdvanced = true
+    let pitch = NumericSettingState(
+      owner: .wiimote, groupId: 3, index: 1, name: "Total Pitch", suffix: "°", isToggle: false, isInteger: false,
+      value: 15, minimum: 0, maximum: 360, defaultValue: 15, isExpression: false,
+      explanation: "Total rotation about the pitch axis.")
+    let autoHide = NumericSettingState(
+      owner: .wiimote, groupId: 3, index: 4, name: "Auto-Hide", suffix: "", isToggle: true, isInteger: false,
+      value: 0, minimum: 0, maximum: 1, defaultValue: 0, isExpression: false)
+    let scripted = NumericSettingState(
+      owner: .wiimote, groupId: 3, index: 2, name: "Total Yaw", suffix: "°", isToggle: false, isInteger: false,
+      value: 0, minimum: 0, maximum: 360, defaultValue: 25, isExpression: true,
+      explanation: "Total rotation about the yaw axis.")
+    screen.advanced = [AdvancedGroupState(owner: .wiimote, groupId: 3, title: "Pointer", settings: [pitch, autoHide, scripted])]
+    let model = make(screen)
+    XCTAssertEqual(model.item(id: pitch.id)?.subtitle, "Total rotation about the pitch axis.")
+    XCTAssertNil(model.item(id: autoHide.id)?.subtitle)
+    XCTAssertEqual(model.item(id: scripted.id)?.subtitle, "Set by an expression")
+  }
+
   // MARK: Buttons and capture (decision 11)
 
   func test_rumbleIsNotACaptureRow() {

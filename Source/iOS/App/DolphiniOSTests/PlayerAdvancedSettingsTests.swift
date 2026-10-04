@@ -64,6 +64,16 @@ final class PlayerAdvancedSettingsTests: XCTestCase {
     XCTAssertEqual(keys(2), ["wiimote-3", "wiimote-12", "classic-3", "classic-4", "classic-1"])
   }
 
+  /// The explanation is optional in the memberwise init (most call sites predate it) and empty by
+  /// default, which the builder shows as no subtitle.
+  func test_explanation_defaultsToEmpty_andIsTheSubtitle() {
+    var deadZone = setting(min: 0, max: 50, value: 0, defaultValue: 0)
+    XCTAssertEqual(deadZone.explanation, "")
+    XCTAssertNil(PlayerScreenModelBuilder.settingSubtitle(deadZone))
+    deadZone.explanation = "Input strength to ignore and remap."
+    XCTAssertEqual(PlayerScreenModelBuilder.settingSubtitle(deadZone), "Input strength to ignore and remap.")
+  }
+
   /// `WiimoteEmu::WiimoteGroup`: …, IMUAccelerometer = 10, IMUGyroscope = 11, IMUPoint = 12.
   func test_imuPointIsGroupTwelve() {
     XCTAssertEqual(AdvancedSettingGroups.imuPointGroup, 12)

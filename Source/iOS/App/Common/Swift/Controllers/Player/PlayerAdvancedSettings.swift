@@ -21,6 +21,9 @@ struct NumericSettingState: Equatable {
   let defaultValue: Double
   /// Driven by an expression rather than a number: shown, not edited.
   let isExpression: Bool
+  /// The core's explanation (`NumericSettingBase::GetUIDescription`, translated), shown as the row's
+  /// subtitle; empty when the core has none. Last and defaulted, so a memberwise init may omit it.
+  var explanation = ""
 
   var id: String { "setting-\(owner)-\(groupId)-\(index)" }
 }
