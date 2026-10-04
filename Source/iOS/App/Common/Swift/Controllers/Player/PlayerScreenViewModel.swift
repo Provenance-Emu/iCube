@@ -270,9 +270,15 @@ final class PlayerScreenViewModel {
       toggleAdvanced: { [weak self] in self?.state.showsAdvanced.toggle() },
       setNumericSetting: { [weak self] setting, value in self?.setNumericSetting(setting, value: value) },
       expressionDestination: { [weak self] row in
-        AnyView(ExpressionEditorView(
+        // Built for every Raw Bindings row on every render: nothing here may read the bridges. The
+        // editor reads the inputs and their values only once it is on screen.
+        let qualifier = self?.state.player.deviceQualifier ?? ""
+        return AnyView(ExpressionEditorView(
           title: ControlCategory.title(for: row),
           original: row.editableExpression,
+          family: DeviceFamily.from(qualifier: qualifier),
+          loadInputs: { [weak self] in self?.editorInputs(forQualifier: qualifier) ?? [] },
+          readInputStates: { [weak self] in self?.io.inputStates(forQualifier: qualifier) ?? [] },
           check: { [weak self] in self?.io.check($0) ?? ExpressionCheck(status: .invalid, message: "") },
           save: { [weak self] in self?.saveExpression($0, for: row) ?? false }))
       })
@@ -510,6 +516,12 @@ final class PlayerScreenViewModel {
     io.setExpression("", for: row, port: slot.port)
     memory.markEdited(slot.playerID)
     reload()
+  }
+
+  /// The raw-expression editor's input list: the bound device's inputs, in the order its live values
+  /// come in. None without a device.
+  func editorInputs(forQualifier qualifier: String) -> [String] {
+    qualifier.isEmpty ? [] : io.inputNames(forQualifier: qualifier)
   }
 
   /// Advanced → Raw Bindings. Text that does not parse is never written (spec edge case); the

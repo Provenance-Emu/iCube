@@ -861,6 +861,16 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertTrue(model.state.profileEdited)
   }
 
+  /// The editor's input picker lists the bound device's inputs, and nothing without a device.
+  @MainActor
+  func test_editorInputs_areTheBoundDevicesInputs() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+    XCTAssertEqual(model.editorInputs(forQualifier: Self.xbox), ["Button A", "Button B"])
+    XCTAssertEqual(model.editorInputs(forQualifier: ""), [])
+  }
+
   @MainActor
   func test_pointerSettingsWriteThroughTheSeam() {
     let reader = FakeHubReader()
