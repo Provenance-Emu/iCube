@@ -120,9 +120,14 @@ final class BridgeControllerConfigWriter: ControllerConfigWriting {
   // MARK: Persistence
 
   func saveConfig(system: EmulatedSystem) {
-    // The mutating bridge calls above (setDefaultDevice / setGCPortDeviceForPort /
-    // assignTouchscreen / loadProfile) already persist via SaveConfig. This is an
-    // explicit flush to guarantee the assignment is durable regardless of path.
+    // Two files hold an assignment: the port's SIDevice / Wii Remote source live in Dolphin.ini
+    // (`setGCPortDeviceForPort` / `setWiimoteSourceFor` only change the in-memory Base layer), the
+    // device binding and the mapping in the system's input ini. Most mapping bridge calls save the
+    // latter themselves; writing both here makes the assignment durable whatever path made it.
     DOLConfigBridge.flushSettingsToDisk()
+    switch system {
+    case .gamecube: TVControllerMappingBridge.saveGCPadConfig()
+    case .wii: TVControllerMappingBridge.saveWiimoteConfig()
+    }
   }
 }

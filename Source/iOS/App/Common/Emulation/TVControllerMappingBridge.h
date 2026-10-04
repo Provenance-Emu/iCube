@@ -85,6 +85,10 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 /// Touchscreen afterwards whatever that profile's `Device =` line names.
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
 
+/// Writes the live GameCube pad / Wii Remote mappings to GCPadNew.ini / WiimoteNew.ini.
++ (void)saveGCPadConfig;
++ (void)saveWiimoteConfig;
+
 /// Enumerate all input devices' qualified names that are valid for mapping (iOS, MFi, DSU)
 + (NSArray<NSString*>*)allQualifiedDevices;
 

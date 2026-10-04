@@ -369,6 +369,18 @@ static bool RepairTouchscreenIRPointer(int idx)
   Pad::GetConfig()->SaveConfig();
 }
 
++ (void)saveGCPadConfig
+{
+  if (auto* config = Pad::GetConfig())
+    config->SaveConfig();
+}
+
++ (void)saveWiimoteConfig
+{
+  if (auto* config = Wiimote::GetConfig())
+    config->SaveConfig();
+}
+
 + (NSArray<NSString*>*)allQualifiedDevices
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];

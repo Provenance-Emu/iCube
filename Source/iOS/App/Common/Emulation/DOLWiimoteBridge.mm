@@ -50,7 +50,12 @@ NSString * const DOLWiiOverlayLayoutChangedNotification = @"DOLWiiOverlayLayoutC
   if (!attachments) return;
   int maxVal = (int)WiimoteEmu::ExtensionNumber::MAX - 1;
   int val = std::max(0, std::min((int)extRaw, maxVal));
-  attachments->GetSelectionSetting().SetValue(val);
+  {
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+    attachments->GetSelectionSetting().SetValue(val);
+  }
+  // Saved now, not whenever something else writes WiimoteNew.ini: it was lost on relaunch.
+  Wiimote::GetConfig()->SaveConfig();
   dispatch_async(dispatch_get_main_queue(), ^{ [[NSNotificationCenter defaultCenter] postNotificationName:DOLWiiOverlayLayoutChangedNotification object:nil]; });
 }
 
@@ -66,10 +71,12 @@ NSString * const DOLWiiOverlayLayoutChangedNotification = @"DOLWiiOverlayLayoutC
     if (setting->GetType() == ControllerEmu::SettingType::Bool && std::string(setting->GetININame()) == WiimoteEmu::Wiimote::SIDEWAYS_OPTION) {
       // Cast to bool numeric setting and set
       auto* boolSetting = static_cast<ControllerEmu::NumericSetting<bool>*>(setting.get());
+      const auto lock = ControllerEmu::EmulatedController::GetStateLock();
       boolSetting->SetValue((bool)enabled);
       break;
     }
   }
+  Wiimote::GetConfig()->SaveConfig();
   dispatch_async(dispatch_get_main_queue(), ^{ [[NSNotificationCenter defaultCenter] postNotificationName:DOLWiiOverlayLayoutChangedNotification object:nil]; });
 }
 @end

@@ -924,6 +924,41 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertNil(model.prompt)
   }
 
+  // MARK: Profile name across launches
+
+  /// The loaded profile's name outlives the session for the same port and device (it read "Custom"
+  /// after every relaunch); another device on the port has its own, and an edit drops it.
+  @MainActor
+  func test_profileName_isKeptAcrossLaunches_untilTheMappingIsEdited() throws {
+    let suite = "PlayerProfileMemoryTests"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defaults.removePersistentDomain(forName: suite)
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io, memory: PlayerProfileMemory(defaults: defaults))
+    model.reload()
+    model.loadProfile("Mine")
+
+    let relaunched = make(reader, io, memory: PlayerProfileMemory(defaults: defaults))
+    relaunched.reload()
+    XCTAssertEqual(relaunched.state.profileName, "Mine")
+    XCTAssertFalse(relaunched.state.profileEdited)
+
+    reader.gameCube[1] = Self.dualSense
+    let otherDevice = make(reader, io, memory: PlayerProfileMemory(defaults: defaults))
+    otherDevice.reload()
+    XCTAssertNil(otherDevice.state.profileName, "the name belongs to the device it was applied on")
+
+    reader.gameCube[1] = Self.xbox
+    relaunched.reload()
+    XCTAssertTrue(relaunched.saveExpression("`Button B`", for: relaunched.state.controls[0]))
+    XCTAssertEqual(relaunched.state.profileName, "Mine")
+    XCTAssertTrue(relaunched.state.profileEdited, "this session still says what the edit started from")
+    let afterEdit = make(reader, io, memory: PlayerProfileMemory(defaults: defaults))
+    afterEdit.reload()
+    XCTAssertNil(afterEdit.state.profileName, "an edited mapping is no longer that profile")
+  }
+
   // MARK: Delete a profile
 
   @MainActor

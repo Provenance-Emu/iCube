@@ -49,33 +49,72 @@ enum PlayerPrompt: Equatable {
   }
 }
 
-/// The profile last loaded, saved or applied on each port during this app session (decision 5).
-/// Dolphin does not record which profile a port's mapping came from (`loadProfile:` copies the ini
-/// into the live controller), so this is the only source of the name. Main thread only.
+/// The profile last loaded, saved or applied on each port (decision 5). Dolphin does not record
+/// which profile a port's mapping came from (`loadProfile:` copies the ini into the live
+/// controller), so this is the only source of the name. Main thread only.
+///
+/// With `defaults`, an unedited name is also kept across launches, keyed by port and the device the
+/// port holds (`player_profile_name.<player id>.<qualifier>`), and read back when the session has
+/// none for the port; it used to read "Custom" after every relaunch. Keyed by device because a
+/// pad's mapping follows the pad (the mapping stash) while the port's other devices bring their
+/// own. `qualifier` is always the port's device at the time: applying a profile replaces that
+/// device's stored name, editing the mapping or forgetting the name drops it.
 final class PlayerProfileMemory {
-  static let shared = PlayerProfileMemory()
+  static let shared = PlayerProfileMemory(defaults: .standard)
+  static let defaultsKeyPrefix = "player_profile_name."
 
   struct Entry: Equatable {
     var name: String
     var edited: Bool
   }
 
+  private let defaults: UserDefaults?
   private var entries: [String: Entry] = [:]
 
-  func entry(for playerID: String) -> Entry? { entries[playerID] }
+  /// Without `defaults` (tests), names last for the session only.
+  init(defaults: UserDefaults? = nil) {
+    self.defaults = defaults
+  }
 
-  func remember(_ name: String, for playerID: String) {
+  func entry(for playerID: String, qualifier: String = "") -> Entry? {
+    if let entry = entries[playerID] { return entry }
+    return storedName(for: playerID, qualifier: qualifier).map { Entry(name: $0, edited: false) }
+  }
+
+  func remember(_ name: String, for playerID: String, qualifier: String = "") {
     entries[playerID] = Entry(name: name, edited: false)
+    guard !qualifier.isEmpty else { return }
+    defaults?.set(name, forKey: Self.key(playerID, qualifier))
   }
 
   /// The mapping changed after the remembered profile was applied.
-  func markEdited(_ playerID: String) {
+  func markEdited(_ playerID: String, qualifier: String = "") {
+    if entries[playerID] == nil, let name = storedName(for: playerID, qualifier: qualifier) {
+      entries[playerID] = Entry(name: name, edited: false)
+    }
     entries[playerID]?.edited = true
+    dropStored(playerID, qualifier)
   }
 
   /// The remembered profile no longer exists: the port reads "Custom".
-  func forget(_ playerID: String) {
+  func forget(_ playerID: String, qualifier: String = "") {
     entries[playerID] = nil
+    dropStored(playerID, qualifier)
+  }
+
+  private static func key(_ playerID: String, _ qualifier: String) -> String {
+    defaultsKeyPrefix + playerID + "." + qualifier
+  }
+
+  /// The name kept across launches for the port and device, if any.
+  func storedName(for playerID: String, qualifier: String) -> String? {
+    guard !qualifier.isEmpty else { return nil }
+    return defaults?.string(forKey: Self.key(playerID, qualifier))
+  }
+
+  private func dropStored(_ playerID: String, _ qualifier: String) {
+    guard !qualifier.isEmpty else { return }
+    defaults?.removeObject(forKey: Self.key(playerID, qualifier))
   }
 }
 
@@ -184,7 +223,7 @@ final class PlayerScreenViewModel {
   private func makeSnapshot() -> PlayerScreenState {
     let player = readPlayer()
     let system: RemapSystem = slot.kind == .gameCube ? .gamecube : .wii
-    let remembered = memory.entry(for: slot.playerID)
+    let remembered = memory.entry(for: slot.playerID, qualifier: player.deviceQualifier)
     return PlayerScreenState(
       player: player,
       pads: reader.connectedPads(),
@@ -331,8 +370,13 @@ final class PlayerScreenViewModel {
     reload()
     let reloadedDefault = choice == .touchscreen || (choice != .noDevice && state.controls != controlsBefore)
     let qualifier = state.player.deviceQualifier
-    if reloadedDefault, !qualifier.isEmpty, let name = io.defaultProfileName(forQualifier: qualifier) {
-      memory.remember(name, for: slot.playerID)
+    if reloadedDefault, !qualifier.isEmpty {
+      // A pad that got its own mapping back (the assignment's mapping stash) keeps the name it
+      // had on this port; otherwise its default profile was loaded.
+      let restoredName = choice == .touchscreen ? nil : memory.storedName(for: slot.playerID, qualifier: qualifier)
+      if let name = restoredName ?? io.defaultProfileName(forQualifier: qualifier) {
+        memory.remember(name, for: slot.playerID, qualifier: qualifier)
+      }
     }
     // Decision 12: the app turns the IMU pointer off on every touchscreen-bound Wii Remote
     // (EmulationCoordinator.mm:1501-1525), and a re-bind keeps the mapping, so a gyro pad taking
@@ -356,10 +400,11 @@ final class PlayerScreenViewModel {
   @discardableResult
   func deleteProfile(_ name: String) -> Bool {
     guard io.deleteProfile(name, slot: slot) else { return false }
-    if let remembered = memory.entry(for: slot.playerID)?.name,
+    let qualifier = state.player.deviceQualifier
+    if let remembered = memory.entry(for: slot.playerID, qualifier: qualifier)?.name,
        remembered.caseInsensitiveCompare(name) == .orderedSame,
        !ProfileNaming.exists(remembered, in: io.allProfileNames(for: slot)) {
-      memory.forget(slot.playerID)
+      memory.forget(slot.playerID, qualifier: qualifier)
     }
     reload()
     return true
@@ -368,7 +413,7 @@ final class PlayerScreenViewModel {
   func loadProfile(_ name: String) {
     endCapture()
     if io.loadProfile(name, slot: slot) {
-      memory.remember(name, for: slot.playerID)
+      memory.remember(name, for: slot.playerID, qualifier: state.player.deviceQualifier)
     }
     reload()
   }
@@ -431,7 +476,7 @@ final class PlayerScreenViewModel {
     for row in state.controls where !row.editableExpression.isEmpty {
       io.setExpression("", for: row, port: slot.port)
     }
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
@@ -442,7 +487,7 @@ final class PlayerScreenViewModel {
 
   private func save(_ name: String) {
     if io.saveProfile(name, slot: slot) {
-      memory.remember(name, for: slot.playerID)
+      memory.remember(name, for: slot.playerID, qualifier: state.player.deviceQualifier)
       reload()
     } else {
       present(.saveFailed)
@@ -461,27 +506,27 @@ final class PlayerScreenViewModel {
     guard slot.kind == .wiiRemote, value != state.player.wiiExtension else { return }
     endCapture()
     io.setExtension(value, wiimote: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
   func setSideways(_ enabled: Bool) {
     guard slot.kind == .wiiRemote else { return }
     io.setSideways(enabled, wiimote: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
   func setMotionPointer(_ enabled: Bool) {
     guard slot.kind == .wiiRemote else { return }
     io.setMotionPointerEnabled(enabled, wiimote: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
   func setNumericSetting(_ setting: NumericSettingState, value: Double) {
     io.setNumericSetting(setting, value: value, port: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
@@ -534,7 +579,7 @@ final class PlayerScreenViewModel {
     }
     if case .captured(let index) = result, index < session.inputNames.count {
       io.setExpression(RemapExpression.expression(forInputName: session.inputNames[index]), for: session.row, port: slot.port)
-      memory.markEdited(slot.playerID)
+      memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
       // The ticker keeps running (`endCapture` leaves it while this is set) to sample the release.
       boundInput = BoundInput(qualifier: session.qualifier, index: index, machine: session.machine)
     }
@@ -566,7 +611,7 @@ final class PlayerScreenViewModel {
     if let capture, capture.row.id != row.id { return }
     endCapture()
     io.setExpression("", for: row, port: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
@@ -588,7 +633,7 @@ final class PlayerScreenViewModel {
     guard let expression = defaultExpression(for: row) else { return }
     endCapture()
     io.setExpression(expression, for: row, port: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
@@ -604,7 +649,7 @@ final class PlayerScreenViewModel {
   func saveExpression(_ text: String, for row: RemapControlRow) -> Bool {
     guard io.check(text).canSave else { return false }
     io.setExpression(text, for: row, port: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
     return true
   }

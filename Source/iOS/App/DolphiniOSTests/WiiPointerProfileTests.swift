@@ -161,7 +161,47 @@ final class WiiPointerProfileTests: XCTestCase {
     XCTAssertFalse((TVControllerMappingBridge.profiles(forGCPort: Self.port) as [String]).contains("SDL Gamepad"))
   }
 
+  // MARK: Wii Remote options
+
+  /// Extension and Sideways reach WiimoteNew.ini as they change; they used to live in memory only
+  /// and were gone after a relaunch.
+  func test_extensionAndSideways_areSavedToWiimoteNewIni() throws {
+    let index = Self.port - 1
+    let extensionBefore = DOLWiimoteBridge.selectedExtension(forWiimote: index)
+    let sidewaysBefore = DOLWiimoteBridge.isSideways(forWiimote: index)
+    defer {
+      DOLWiimoteBridge.setExtensionForWiimote(index, extension: extensionBefore)
+      DOLWiimoteBridge.setSidewaysForWiimote(index, enabled: sidewaysBefore)
+    }
+    let classic = extensionBefore != 2
+
+    DOLWiimoteBridge.setExtensionForWiimote(index, extension: classic ? 2 : 1)
+    DOLWiimoteBridge.setSidewaysForWiimote(index, enabled: !sidewaysBefore)
+
+    let saved = try wiimoteIniValues()
+    XCTAssertEqual(saved["Extension"], classic ? "Classic" : "Nunchuk")
+    // A value equal to the default (Sideways off) is not written at all.
+    XCTAssertEqual(saved["Options/Sideways Wiimote"] ?? "False", sidewaysBefore ? "False" : "True")
+  }
+
   // MARK: Helpers
+
+  /// The `[Wiimote<port>]` section of `Config/WiimoteNew.ini` as it is on disk.
+  private func wiimoteIniValues() throws -> [String: String] {
+    let url = try XCTUnwrap(DolphinPaths.userDirectoryURL()?.appendingPathComponent("Config/WiimoteNew.ini"))
+    let text = try String(contentsOf: url, encoding: .utf8)
+    var values: [String: String] = [:]
+    var inSection = false
+    for line in text.components(separatedBy: .newlines) {
+      let trimmed = line.trimmingCharacters(in: .whitespaces)
+      if trimmed.hasPrefix("[") {
+        inSection = trimmed == "[Wiimote\(Self.port)]"
+      } else if inSection, let separator = trimmed.range(of: " = ") {
+        values[String(trimmed[..<separator.lowerBound])] = String(trimmed[separator.upperBound...])
+      }
+    }
+    return values
+  }
 
   /// Binds Wii Remote 4 to its Touchscreen instance the way the player screen does.
   private func bindTouchscreen() throws {
