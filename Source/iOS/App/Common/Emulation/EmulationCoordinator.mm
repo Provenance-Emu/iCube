@@ -75,6 +75,8 @@ void Reset();
 #import "TVControllerMappingBridge.h"
 #import "iCube-Swift.h"
 
+#include "ProfileLoading.h"
+
 // Dump the perf-relevant settings as one readable key=value block, once at game START and once at
 // game EXIT. Goes to both NSLog (device console) and INFO_LOG_FMT(CORE, ...) (Dolphin log file) so
 // Joe can copy-paste it straight into a bug report. Values are formatted human-readably (true/false,
@@ -1542,7 +1544,7 @@ static std::string LoadTouchscreenProfile(ControllerEmu::EmulatedController* con
     Common::IniFile ini;
     if (File::Exists(path) && ini.Load(path))
     {
-      controller->LoadConfig(ini.GetOrCreateSection("Profile"));
+      LoadProfileKeepingExtension(controller, ini.GetOrCreateSection("Profile"));
       return path;
     }
   }

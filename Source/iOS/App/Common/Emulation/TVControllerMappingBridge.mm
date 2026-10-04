@@ -23,6 +23,8 @@
 #include "LocalizationUtil.h"
 #include <unordered_set>
 
+#include "ProfileLoading.h"
+
 NSString* const TVControllerDevicesChangedNotification = @"TVControllerDevicesChangedNotification";
 
 @implementation TVControllerMappingBridge
@@ -662,7 +664,7 @@ static const ControllerEmu::EmulatedController* WiimoteAt(NSInteger indexOneBase
   Common::IniFile ini;
   if (!ini.Load(loadPath)) return NO;
   const auto selectedDev = wm->GetDefaultDevice();
-  wm->LoadConfig(ini.GetOrCreateSection("Profile"));
+  LoadProfileKeepingExtension(wm, ini.GetOrCreateSection("Profile"));
   if (restore) wm->SetDefaultDevice(selectedDev);
   wm->UpdateReferences(g_controller_interface);
   DisableCoreIMUPointerIfTouchscreen(idx);
