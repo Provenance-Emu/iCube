@@ -21,7 +21,6 @@ private final class FakeHubReader: ControllerHubReading {
   func overlayVisible() -> Bool { false }
   func overlayMode() -> ControllerManager.OverlayMode { .auto }
   func overlayOpacity() -> Float { 1 }
-  func continuousScanning() -> Bool { false }
   func dsuClientEnabled() -> Bool { false }
   func dsuServerCount() -> Int { 0 }
 }

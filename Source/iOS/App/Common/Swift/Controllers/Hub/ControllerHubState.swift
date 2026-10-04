@@ -14,7 +14,6 @@ enum ControllerSetupSystem {
   case wiiAndGameCube
 
   var showsGameCube: Bool { self == .gamecube || self == .both || self == .wiiAndGameCube }
-  var showsWii: Bool { self == .wii || self == .both || self == .wiiAndGameCube }
   var wiiFirst: Bool { self == .wiiAndGameCube }
 }
 
@@ -99,7 +98,6 @@ struct ControllerHubState {
   var overlayMode: ControllerManager.OverlayMode
   /// One of `opacityChoices`.
   var overlayOpacityPercent: Int
-  var continuousScanning: Bool
   var dsuClientEnabled: Bool
   var dsuServerCount: Int
 
@@ -107,7 +105,7 @@ struct ControllerHubState {
     ControllerHubState(
       system: system, players: [], showAllPorts: false, pads: [], isGameRunning: false,
       overlayVisible: false, overlayMode: .auto, overlayOpacityPercent: 50,
-      continuousScanning: false, dsuClientEnabled: false, dsuServerCount: 0)
+      dsuClientEnabled: false, dsuServerCount: 0)
   }
 
   /// Ports in on-screen order: a running Wii title lists its Wii Remotes first.
@@ -147,7 +145,6 @@ struct ControllerHubActions {
   var skinsDestination: () -> AnyView
   /// The pad's qualifier.
   var identifyPad: (String) -> Void
-  var setContinuousScanning: (Bool) -> Void
   var dsuDestination: () -> AnyView
   var moreSettingsDestination: () -> AnyView
 }

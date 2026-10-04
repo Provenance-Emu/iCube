@@ -22,7 +22,6 @@ protocol ControllerHubReading {
   func overlayMode() -> ControllerManager.OverlayMode
   /// 0…1.
   func overlayOpacity() -> Float
-  func continuousScanning() -> Bool
   func dsuClientEnabled() -> Bool
   func dsuServerCount() -> Int
 }
@@ -65,7 +64,6 @@ struct LiveControllerHubReader: ControllerHubReading {
   func overlayVisible() -> Bool { ControllerManager.shared.overlayVisible }
   func overlayMode() -> ControllerManager.OverlayMode { ControllerManager.shared.overlayMode }
   func overlayOpacity() -> Float { DOLConfigBridge.mainTouchPadOpacity() }
-  func continuousScanning() -> Bool { DOLConfigBridge.wiimoteContinuousScanning() }
   func dsuClientEnabled() -> Bool { DOLConfigBridge.dsuClientEnabled() }
   func dsuServerCount() -> Int { DOLConfigBridge.dsuServersParsed().count }
 }
@@ -124,7 +122,6 @@ final class ControllerHubViewModel {
       overlayVisible: reader.overlayVisible(),
       overlayMode: reader.overlayMode(),
       overlayOpacityPercent: ControllerHubState.snappedOpacityPercent(reader.overlayOpacity()),
-      continuousScanning: reader.continuousScanning(),
       dsuClientEnabled: reader.dsuClientEnabled(),
       dsuServerCount: reader.dsuServerCount())
   }
@@ -185,10 +182,6 @@ final class ControllerHubViewModel {
       skinsDestination: { [system] in Self.skinsDestination(for: system) },
       identifyPad: { [weak self] qualifier in
         self?.identify(qualifier: qualifier)
-      },
-      setContinuousScanning: { [weak self] enabled in
-        DOLConfigBridge.setWiimoteContinuousScanning(enabled)
-        self?.reload()
       },
       // Plain lists, not menus: they get pad Back from the modifier (Phase 2 left them touch-only).
       dsuDestination: { AnyView(DSUSettingsView().padBackNavigation()) },

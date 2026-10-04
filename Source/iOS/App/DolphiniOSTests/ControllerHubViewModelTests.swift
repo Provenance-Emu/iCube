@@ -35,7 +35,6 @@ final class ControllerHubViewModelTests: XCTestCase {
     func overlayVisible() -> Bool { true }
     func overlayMode() -> ControllerManager.OverlayMode { .wii }
     func overlayOpacity() -> Float { 0.62 }
-    func continuousScanning() -> Bool { false }
     func dsuClientEnabled() -> Bool { true }
     func dsuServerCount() -> Int { 3 }
   }

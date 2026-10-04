@@ -131,11 +131,6 @@ enum ControllerHubModelBuilder {
     if items.isEmpty {
       items.append(MenuItem(id: "no-pads", title: L("No controllers connected"), role: .action({}), isEnabled: false))
     }
-    if state.system.showsWii {
-      items.append(MenuItem(
-        id: "wiimote-scan", title: L("Continuous Wii Remote Scanning"), icon: "antenna.radiowaves.left.and.right",
-        role: .toggle(Binding(get: { state.continuousScanning }, set: { actions.setContinuousScanning($0) }))))
-    }
     items.append(MenuItem(
       id: "dsu", title: L("Motion Source (DSU)"), subtitle: dsuSummary(state), icon: "dot.radiowaves.left.and.right",
       role: .destination(actions.dsuDestination())))

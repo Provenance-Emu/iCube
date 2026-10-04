@@ -9,12 +9,10 @@ import UIKit
 /// Controller settings outside the hub's sections, pushed from its "More Controller Settings" row.
 /// The pointer mode and its sensitivity live on the player screen (controller hub Phase 4).
 struct ControllerMoreSettingsView: View {
-  @State private var connectWiimotes = false
   /// Rumble destination, honored by the core rumble path (`Motor`): 0 device haptics, 1 controller,
   /// 2 both. tvOS has no device to hold, so the option is hidden there.
   @AppStorage("rumble_destination") private var rumbleDestination = 1
   @State private var backgroundInput = false
-  @State private var wiimoteSpeaker = false
   #if os(iOS)
   @State private var touchOverlayProgrammatic = false
   /// Edit IR Area…, full screen so it edits on the canvas the game uses (`TouchOverlayLayoutEditorView`).
@@ -42,17 +40,6 @@ struct ControllerMoreSettingsView: View {
           Label(L("Test Rumble"), systemImage: "waveform")
         }
         #endif
-      }
-
-      Section(header: Text(L("Wii Remotes"))) {
-        Toggle(L("Enable Speaker"), isOn: $wiimoteSpeaker)
-          .onChange(of: wiimoteSpeaker) { _, enabled in DOLConfigBridge.setWiimoteEnableSpeaker(enabled) }
-        settingsCaption(
-          Toggle(L("Connect Wiimotes for Controller Interface"), isOn: $connectWiimotes)
-            .onChange(of: connectWiimotes) { _, newValue in
-              DOLConfigBridge.setConnectWiimotesForControllerInterface(newValue)
-            },
-          L("Automatically pairs Wii Remotes when the controller interface is in use."))
       }
 
       Section(header: Text(L("Alternate Input Sources"))) {
@@ -117,12 +104,10 @@ struct ControllerMoreSettingsView: View {
   }
 
   private func syncFromConfig() {
-    connectWiimotes = DOLConfigBridge.connectWiimotesForControllerInterface()
     #if os(iOS)
     touchOverlayProgrammatic = TouchOverlayFlag.isProgrammatic
     #endif
     backgroundInput = DOLConfigBridge.mainBackgroundInput()
-    wiimoteSpeaker = DOLConfigBridge.wiimoteEnableSpeaker()
     #if os(iOS)
     reloadLitControllers()
     #endif

@@ -20,8 +20,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     setOverlayMode: @escaping (ControllerManager.OverlayMode) -> Void = { _ in },
     setOverlayOpacity: @escaping (Float) -> Void = { _ in },
     editLayout: @escaping () -> Void = {},
-    identifyPad: @escaping (String) -> Void = { _ in },
-    setContinuousScanning: @escaping (Bool) -> Void = { _ in }
+    identifyPad: @escaping (String) -> Void = { _ in }
   ) -> ControllerHubActions {
     ControllerHubActions(
       playerDestination: { _ in AnyView(EmptyView()) },
@@ -32,7 +31,6 @@ final class ControllerHubModelBuilderTests: XCTestCase {
       editLayout: editLayout,
       skinsDestination: { AnyView(EmptyView()) },
       identifyPad: identifyPad,
-      setContinuousScanning: setContinuousScanning,
       dsuDestination: { AnyView(EmptyView()) },
       moreSettingsDestination: { AnyView(EmptyView()) })
   }
@@ -252,18 +250,10 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     XCTAssertFalse(model.focusableIDs.contains("no-pads"))
   }
 
-  func test_continuousScanning_onlyWhenTheSystemHasWiiRemotes() {
-    XCTAssertFalse(ids(make(state(system: .gamecube)), section: "devices").contains("wiimote-scan"))
-    XCTAssertTrue(ids(make(state(system: .wiiAndGameCube)), section: "devices").contains("wiimote-scan"))
-    XCTAssertTrue(ids(make(state(system: .both), platform: .tvos), section: "devices").contains("wiimote-scan"))
-  }
-
-  func test_continuousScanning_writesThroughTheAction() {
-    var written: Bool?
-    let model = make(state(system: .wii), actions(setContinuousScanning: { written = $0 }))
-    guard case .toggle(let binding)? = model.item(id: "wiimote-scan")?.role else { return XCTFail("not a toggle") }
-    binding.wrappedValue = true
-    XCTAssertEqual(written, true)
+  /// Real Wii Remotes have no backend on iOS/tvOS, so the hub offers no scanning toggle.
+  func test_devices_offerNoWiiRemoteScanning() {
+    XCTAssertFalse(ids(make(state(system: .wiiAndGameCube)), section: "devices").contains("wiimote-scan"))
+    XCTAssertFalse(ids(make(state(system: .both), platform: .tvos), section: "devices").contains("wiimote-scan"))
   }
 
   func test_dsuRow_summarisesTheClient_andPushes() {
