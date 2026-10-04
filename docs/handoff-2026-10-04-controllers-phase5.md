@@ -162,12 +162,24 @@ Device checks for it: Pointer = Gyro reaches all four edges (checklist item 4); 
 and turn the phone both ways in a motion title (Wii Sports) and confirm both directions register;
 item 12's pad reassignment shows "Custom" or the pad's own name on Player 1, never the old device's.
 
+## Follow-up: the M items (same branch)
+
+- **Edge-anchored layout.** A moved control stores its nearest canvas edge (or centre line) on each
+  axis and its distance in points (`TouchOverlayAnchoredCenter`), in
+  `Profiles/touch_overlay_layout_v2.json`. A resize alone no longer pins a never-moved control. With
+  no v2 file the v1 `touch_overlay_layout.json` is read as fractions and re-anchored on the first
+  edit of that pad and orientation, so nothing moves; the v1 file is never rewritten.
+- **No committed Xcode project.** `DolphiniOS.xcodeproj` is deleted. `release.yml` now builds like
+  `build.yml` (macos-26, xcframework, `tuist generate`, `iCube (NJB)`/`(JB)`), with the Beta
+  configurations on a prerelease. It has never run in this form: check the first published release.
+
+Device checks: an existing custom layout looks unchanged after updating, and still after moving
+one control; a layout made on one iPhone keeps controls the same distance from the edges on a
+larger one (or after rotating to the other orientation and back); resizing a never-moved control
+leaves it on its default spot.
+
 ## Known gaps and deferred work
 
-- Layout positions are 0–1 fractions of the canvas; points-based edge anchoring would survive a
-  device change but needs a JSON format migration. M.
-- The committed fallback `DolphiniOS.xcodeproj` (used by `release.yml`) still lists the deleted
-  ObjC files and never listed the newer Swift ones. Regenerate or drop it. M.
 - `WiiPointerProfileTests` and the D1 bridge tests need an `iOS/7/Touchscreen` device on the test
   host; they skip otherwise. Check CI actually runs them (look for `XCTSkip` in the test log).
 - D5's "Reset to Default" reads the bundled profile; for a DSU device that is the new `DSU.ini`.
