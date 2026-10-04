@@ -14,15 +14,6 @@ final class ControllerManager: NSObject, ObservableObject {
   private var wiimoteSlotByController: [ObjectIdentifier: Int] = [:]
   @Published var isWiiSystem: Bool = false
 
-  final class PresetManager: NSObject {
-    func applyCurrentPreset() {
-      ControllerStyleManager.shared.refreshDetection()
-      ControllerStyleManager.shared.applyPresetDefaults()
-    }
-  }
-
-  let presets = PresetManager()
-
   /// Single source of truth for controller assignment: activates the port,
   /// binds the device, applies the default profile, and saves — atomically.
   /// reconcile()/change-notification stay in this manager's wrappers, not the service.
@@ -162,7 +153,7 @@ final class ControllerManager: NSObject, ObservableObject {
       if let c = note.object as? GCController {
         PauseGestureTracker.shared.noteControllerConnected()
         configureController(c)
-        self.presets.applyCurrentPreset()
+        ControllerStyleManager.shared.refreshDetection()
         // If a disconnect-pause is active, any connecting controller resumes the
         // game so the user is never stranded. If it is the SAME physical device,
         // restore it to its original slot; otherwise auto-assign to the first
@@ -219,7 +210,7 @@ final class ControllerManager: NSObject, ObservableObject {
       // keyed by ObjectIdentifier (the object address), so leaving them behind
       // both leaks and lets a future allocation inherit dead state.
       if let dropped = c { releaseControllerInputState(for: dropped) }
-      self.presets.applyCurrentPreset()
+      ControllerStyleManager.shared.refreshDetection()
       self.controllerDisconnectedSubject.send(c)
       self.reconcile()
       self.updateWiimoteEmulationForExternalControllers()

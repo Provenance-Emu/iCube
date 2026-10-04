@@ -1306,7 +1306,6 @@ struct TVLibraryView: View {
         }
         .onReceive(ControllerManager.shared.controllerConnectedPublisher) { _ in
           ControllerStyleManager.shared.refreshDetection()
-          ControllerStyleManager.shared.applyPresetDefaults()
           if !emulationRunning { setupControllerNavigation(columns: count) }
         }
         .onReceive(ControllerManager.shared.controllerDisconnectedPublisher) { _ in

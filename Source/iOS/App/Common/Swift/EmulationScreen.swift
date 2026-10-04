@@ -1324,7 +1324,6 @@ struct EmulationScreen: View {
     .onReceive(controllerManager.controllerConnectedPublisher) { _ in
       touchPadsRefreshToken = UUID()
       ControllerStyleManager.shared.refreshDetection()
-      ControllerStyleManager.shared.applyPresetDefaults()
     }
     .onReceive(controllerManager.controllerDisconnectedPublisher) { _ in
       touchPadsRefreshToken = UUID()
