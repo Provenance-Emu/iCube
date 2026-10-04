@@ -119,12 +119,13 @@ final class PlayerProfileMemory {
   /// the other system's ports (its profiles are separate files), are kept.
   func forgetProfile(named name: String, playerIDPrefix: String) {
     let matches = { (remembered: String) in remembered.caseInsensitiveCompare(name) == .orderedSame }
-    for (key, entry) in entries where key.hasPrefix(playerIDPrefix) && matches(entry.name) {
+    // Session and kept names share one key shape (`key(_:_:)`), prefix included.
+    let systemPrefix = Self.defaultsKeyPrefix + playerIDPrefix
+    for (key, entry) in entries where key.hasPrefix(systemPrefix) && matches(entry.name) {
       entries[key] = nil
     }
     guard let defaults else { return }
-    let storedPrefix = Self.defaultsKeyPrefix + playerIDPrefix
-    for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(storedPrefix) && (value as? String).map(matches) == true {
+    for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(systemPrefix) && (value as? String).map(matches) == true {
       defaults.removeObject(forKey: key)
     }
   }

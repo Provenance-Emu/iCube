@@ -203,19 +203,41 @@ jobs:
           rm -rf "$RESULT_BUNDLE"
           make test DEST="$DEST" TEST_ARGS="-resultBundlePath $RESULT_BUNDLE" 2>&1 | tee "$LOG_FILE"
 
-      # A skipped test passes silently. List every skip in the job summary, and fail when a suite
-      # that needs the on-screen Touchscreen devices skips: the test host is the app, whose launch
-      # (DolphinCoreService -> UICommon::InitControllers) always adds iOS/0-7/Touchscreen, so a
-      # skip there means the host stopped initializing input and those tests stopped testing.
-      - name: Report skipped tests
+      # The job log loses lines under xcodebuild's output volume (a failing run named no failing
+      # test), so read the result bundle and the tee'd raw log, both still on the runner: list
+      # every failed test with its message, the raw log's crash/restart/failure lines (first 150),
+      # and every skip, in the log and the job summary. A skipped test passes silently; fail when a suite that needs the on-screen
+      # Touchscreen devices skips: the test host is the app, whose launch (DolphinCoreService ->
+      # UICommon::InitControllers) always adds iOS/0-7/Touchscreen, so a skip there means the host
+      # stopped initializing input and those tests stopped testing.
+      - name: Report test results
         if: always() && (steps.run_tests.outcome == 'success' || steps.run_tests.outcome == 'failure')
         env:
           RESULT_BUNDLE: ${{ runner.temp }}/iCubeTests.xcresult
+          LOG_FILE: ${{ runner.temp }}/iCubeTests.log
           MUST_RUN_SUITES: WiiPointerProfileTests
         run: |
           set -euo pipefail
+          if [ -f "$LOG_FILE" ]; then
+            # Capped at the first 150 matches: the step summary has a size limit, and a crash
+            # loop can repeat the same lines thousands of times.
+            { grep -nE "Restarting after unexpected exit|crashed|Fatal error|: error:|Test Case .* failed|Test case .* failed|failed \(" "$LOG_FILE" || true; } \
+              | head -150 > "$RUNNER_TEMP/raw-log-failures.txt" || true
+            echo "--- crash, restart and failure lines from the raw xcodebuild log (first 150) ---"
+            cat "$RUNNER_TEMP/raw-log-failures.txt"
+            if [ -s "$RUNNER_TEMP/raw-log-failures.txt" ]; then
+              {
+                echo "### Crash, restart and failure lines from the raw log (first 150)"
+                echo
+                echo '```'
+                cat "$RUNNER_TEMP/raw-log-failures.txt"
+                echo '```'
+                echo
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
           if [ ! -d "$RESULT_BUNDLE" ]; then
-            echo "::warning::No result bundle at $RESULT_BUNDLE; cannot report skipped tests."
+            echo "::warning::No result bundle at $RESULT_BUNDLE; cannot report test results."
             exit 0
           fi
           xcrun xcresulttool get test-results tests --path "$RESULT_BUNDLE" > "$RUNNER_TEMP/test-results.json"
@@ -223,23 +245,37 @@ jobs:
           import json, os, sys
 
           must_run = set(filter(None, os.environ.get("MUST_RUN_SUITES", "").split(",")))
-          skipped = []
+          skipped, failed = [], []
+
+          def messages(node):
+              found = []
+              for child in node.get("children", []):
+                  if child.get("nodeType") in ("Failure Message", "Skip Message"):
+                      found.append(child.get("name", ""))
+                  found += messages(child)
+              return found
 
           def walk(node, suite):
               kind = node.get("nodeType")
               if kind == "Test Suite":
                   suite = node.get("name", suite)
-              if kind == "Test Case" and node.get("result") == "Skipped":
-                  reason = next((c.get("name", "") for c in node.get("children", [])
-                                 if c.get("nodeType") in ("Skip Message", "Failure Message")), "")
-                  skipped.append((suite, node.get("name", "?"), reason))
+              if kind == "Test Case":
+                  result = node.get("result")
+                  if result == "Skipped":
+                      skipped.append((suite, node.get("name", "?"), " ".join(messages(node))[:300]))
+                  elif result == "Failed":
+                      failed.append((suite, node.get("name", "?"), messages(node)))
               for child in node.get("children", []):
                   walk(child, suite)
 
           for root in json.load(open(sys.argv[1])).get("testNodes", []):
               walk(root, "")
 
-          lines = [f"### Skipped tests: {len(skipped)}", ""]
+          lines = [f"### Failed tests: {len(failed)}", ""]
+          for suite, name, msgs in failed:
+              lines.append(f"- `{suite}.{name}`")
+              lines += [f"  - {m[:500]}" for m in msgs[:5]]
+          lines += ["", f"### Skipped tests: {len(skipped)}", ""]
           lines += [f"- `{suite}.{name}` {reason}".rstrip() for suite, name, reason in skipped]
           print("\n".join(lines))
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
