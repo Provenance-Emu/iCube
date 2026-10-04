@@ -24,6 +24,7 @@ final class ControllerManager: NSObject, ObservableObject {
     defaults.register(defaults: [overlayModeDefaultsKey: OverlayMode.auto.rawValue])
     return OverlayMode(rawValue: defaults.integer(forKey: overlayModeDefaultsKey)) ?? .auto
   }
+
   // Map GCController -> Wiimote slot (1-based), for touchpad pads that drive the Wii pointer.
   private var wiimoteSlotByController: [ObjectIdentifier: Int] = [:]
   @Published var isWiiSystem: Bool = false

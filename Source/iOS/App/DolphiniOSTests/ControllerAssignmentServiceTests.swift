@@ -30,11 +30,13 @@ private final class FakeWriter: ControllerConfigWriting {
     calls.append("stash=\(q)@\(port)")
     stashes.insert(q)
   }
+
   func restoreStashedMapping(forQualifier q: String, system: EmulatedSystem, port: Int) -> Bool {
     guard stashes.remove(q) != nil else { return false }
     calls.append("restore=\(q)@\(port)")
     return true
   }
+
   func mappingBindsDevice(system: EmulatedSystem, port: Int) -> Bool {
     bindCheckedAfter.append(calls)
     return mappingBindsByPort[port] ?? false
