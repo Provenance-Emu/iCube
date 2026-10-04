@@ -58,7 +58,9 @@ enum PlayerPrompt: Equatable {
 /// none for the port; it used to read "Custom" after every relaunch. Keyed by device because a
 /// pad's mapping follows the pad (the mapping stash) while the port's other devices bring their
 /// own. `qualifier` is always the port's device at the time: applying a profile replaces that
-/// device's stored name, editing the mapping or forgetting the name drops it.
+/// device's stored name, editing the mapping or forgetting the name drops it. The session's names
+/// are keyed the same way, so a port whose device changes without the player screen (automatic
+/// assignment on a connect or disconnect) does not show the previous device's name.
 final class PlayerProfileMemory {
   static let shared = PlayerProfileMemory(defaults: .standard)
   static let defaultsKeyPrefix = "player_profile_name."
@@ -77,28 +79,38 @@ final class PlayerProfileMemory {
   }
 
   func entry(for playerID: String, qualifier: String = "") -> Entry? {
-    if let entry = entries[playerID] { return entry }
+    if let entry = entries[Self.key(playerID, qualifier)] { return entry }
     return storedName(for: playerID, qualifier: qualifier).map { Entry(name: $0, edited: false) }
   }
 
   func remember(_ name: String, for playerID: String, qualifier: String = "") {
-    entries[playerID] = Entry(name: name, edited: false)
-    guard !qualifier.isEmpty else { return }
-    defaults?.set(name, forKey: Self.key(playerID, qualifier))
+    adopt(Entry(name: name, edited: false), for: playerID, qualifier: qualifier)
+  }
+
+  /// The port's mapping moved to another device unchanged (a rebind that kept it, or No Device):
+  /// `entry`, edited or not, now describes the port on `qualifier`.
+  func adopt(_ entry: Entry, for playerID: String, qualifier: String) {
+    entries[Self.key(playerID, qualifier)] = entry
+    if entry.edited {
+      dropStored(playerID, qualifier)
+    } else if !qualifier.isEmpty {
+      defaults?.set(entry.name, forKey: Self.key(playerID, qualifier))
+    }
   }
 
   /// The mapping changed after the remembered profile was applied.
   func markEdited(_ playerID: String, qualifier: String = "") {
-    if entries[playerID] == nil, let name = storedName(for: playerID, qualifier: qualifier) {
-      entries[playerID] = Entry(name: name, edited: false)
+    let key = Self.key(playerID, qualifier)
+    if entries[key] == nil, let name = storedName(for: playerID, qualifier: qualifier) {
+      entries[key] = Entry(name: name, edited: false)
     }
-    entries[playerID]?.edited = true
+    entries[key]?.edited = true
     dropStored(playerID, qualifier)
   }
 
   /// The remembered profile no longer exists: the port reads "Custom".
   func forget(_ playerID: String, qualifier: String = "") {
-    entries[playerID] = nil
+    entries[Self.key(playerID, qualifier)] = nil
     dropStored(playerID, qualifier)
   }
 
@@ -354,6 +366,7 @@ final class PlayerScreenViewModel {
     guard choice != state.deviceChoice else { return }
     endCapture()
     let controlsBefore = state.controls
+    let nameBefore = memory.entry(for: slot.playerID, qualifier: state.player.deviceQualifier)
     var bindsGyroPad = false
     if case .pad(let qualifier) = choice {
       bindsGyroPad = state.pads.first { $0.qualifier == qualifier }?.hasGyro == true
@@ -378,6 +391,8 @@ final class PlayerScreenViewModel {
       if let name = restoredName ?? io.defaultProfileName(forQualifier: qualifier) {
         memory.remember(name, for: slot.playerID, qualifier: qualifier)
       }
+    } else if !reloadedDefault, let nameBefore {
+      memory.adopt(nameBefore, for: slot.playerID, qualifier: qualifier)
     }
     // Decision 12: the app turns the IMU pointer off on every touchscreen-bound Wii Remote
     // (EmulationCoordinator.mm:1501-1525), and a re-bind keeps the mapping, so a gyro pad taking
