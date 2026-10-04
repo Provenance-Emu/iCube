@@ -40,6 +40,8 @@ private final class FakeIO: PlayerScreenIO {
   private var expression = "`Button A`"
   var saveSucceeds = true
   var existingProfiles = ["Physical Controller", "Mine"]
+  /// Saved profiles the list hides for the bound device (a pad profile on a touchscreen slot).
+  var hiddenProfiles: [String] = []
   var parsable: Set<String> = ["`Button B`", ""]
   /// Lets a test make the reader follow a device change, as the real config does.
   var onSetDevice: ((PlayerDeviceChoice) -> Void)?
@@ -51,6 +53,7 @@ private final class FakeIO: PlayerScreenIO {
 
   func numericSettings(owner: RemapGroupOwner, group: Int, port: Int) -> [NumericSettingState] { [] }
   func profiles(for slot: PlayerSlot) -> [String] { existingProfiles }
+  func allProfileNames(for slot: PlayerSlot) -> [String] { existingProfiles + hiddenProfiles }
 
   func defaultProfileName(forQualifier qualifier: String) -> String? {
     qualifier.hasPrefix("iOS/") ? "Touchscreen" : "Physical Controller"
@@ -755,6 +758,22 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertEqual(model.prompt, .confirmOverwrite(name: "mine"))
     model.confirmPrompt()
     XCTAssertEqual(io.writes, ["save:mine"])
+  }
+
+  /// The list hides profiles that cannot work on the bound device, but saving over one still
+  /// replaces the file, so it still asks.
+  @MainActor
+  func test_save_aNameTheListHides_stillAsksBeforeReplacing() {
+    let (reader, io) = boundGameCube()
+    io.hiddenProfiles = ["Pad Setup"]
+    let model = make(reader, io)
+    model.reload()
+    model.openSavePrompt()
+    model.saveName = "pad setup"
+    model.confirmPrompt()
+    XCTAssertEqual(io.writes, [], "nothing written yet")
+    drainMainQueue()
+    XCTAssertEqual(model.prompt, .confirmOverwrite(name: "pad setup"))
   }
 
   /// Decision 10: a built-in name (any case) asks first, because the saved profile will be used

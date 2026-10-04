@@ -363,7 +363,7 @@ final class PlayerScreenViewModel {
       guard !name.isEmpty else { return }
       if ProfileNaming.isBuiltIn(name) {
         present(.confirmBuiltIn(name: name))
-      } else if ProfileNaming.exists(name, in: io.profiles(for: slot)) {
+      } else if ProfileNaming.exists(name, in: io.allProfileNames(for: slot)) {
         present(.confirmOverwrite(name: name))
       } else {
         save(name)

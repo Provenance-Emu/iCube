@@ -147,6 +147,8 @@ final class WiiPointerProfileTests: XCTestCase {
     XCTAssertFalse(names.contains("Physical Controller"), "\(names)")
     XCTAssertFalse(names.contains("Wii Remote with MotionPlus Pointing"), "\(names)")
     XCTAssertFalse(names.contains("SDL Gamepad"), "\(names)")
+    XCTAssertTrue((TVControllerMappingBridge.allProfiles(forWiimote: Self.port) as [String]).contains("Physical Controller"),
+                  "the unfiltered list (what a save collides with) still has every profile")
   }
 
   func test_profileListForAPhysicalSlot_hidesProfilesForMissingBackends() {

@@ -12,6 +12,9 @@ protocol PlayerScreenIO {
   func controlRows(owner: RemapGroupOwner, group: Int, port: Int) -> [RemapControlRow]
   func numericSettings(owner: RemapGroupOwner, group: Int, port: Int) -> [NumericSettingState]
   func profiles(for slot: PlayerSlot) -> [String]
+  /// Every saved profile name for the slot's controller type, including the ones `profiles(for:)`
+  /// hides because they cannot work on the bound device: what Save Profile As… would overwrite.
+  func allProfileNames(for slot: PlayerSlot) -> [String]
   /// The profile a device gets when first bound ("Physical Controller", "Touchscreen", "DSU").
   func defaultProfileName(forQualifier qualifier: String) -> String?
   func isMotionPointerEnabled(wiimote: Int) -> Bool
@@ -97,6 +100,12 @@ struct LivePlayerScreenIO: PlayerScreenIO {
     slot.kind == .gameCube
       ? TVControllerMappingBridge.profiles(forGCPort: slot.port) as [String]
       : TVControllerMappingBridge.profiles(forWiimote: slot.port) as [String]
+  }
+
+  func allProfileNames(for slot: PlayerSlot) -> [String] {
+    slot.kind == .gameCube
+      ? TVControllerMappingBridge.allProfiles(forGCPort: slot.port) as [String]
+      : TVControllerMappingBridge.allProfiles(forWiimote: slot.port) as [String]
   }
 
   func defaultProfileName(forQualifier qualifier: String) -> String? {

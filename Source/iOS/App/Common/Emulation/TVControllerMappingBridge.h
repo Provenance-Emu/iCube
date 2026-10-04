@@ -115,6 +115,12 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 /// accepts any name.
 + (NSArray<NSString*>*)profilesForGCPort:(NSInteger)portOneBased;
 + (NSArray<NSString*>*)profilesForWiimote:(NSInteger)indexOneBased;
+/// Every profile name on disk for the slot's controller type (user and bundled), unfiltered: what
+/// a save could collide with.
++ (NSArray<NSString*>*)allProfilesForGCPort:(NSInteger)portOneBased
+    NS_SWIFT_NAME(allProfiles(forGCPort:));
++ (NSArray<NSString*>*)allProfilesForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(allProfiles(forWiimote:));
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore;
 + (BOOL)loadProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased restoreDevice:(BOOL)restore;
 

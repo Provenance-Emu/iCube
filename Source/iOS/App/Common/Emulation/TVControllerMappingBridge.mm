@@ -548,15 +548,16 @@ static bool ProfileTargetsTouchscreen(const std::string& path)
 // because a user profile shadows a bundled one of the same name (`loadProfile:` loads it). On a
 // slot bound to the Touchscreen only `Touchscreen` and profiles written for an on-screen device
 // are offered: a physical-controller profile's inputs (`Button A`, ...) do not exist on it, and
-// loading one left the Wii pointer unbound and the core's motion pointer on.
+// loading one left the Wii pointer unbound and the core's motion pointer on. With `filter` false,
+// every name on disk (what a save would collide with).
 static NSArray<NSString*>*
-ProfilesForController(const ControllerEmu::EmulatedController* controller)
+ProfilesForController(const ControllerEmu::EmulatedController* controller, bool filter)
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
   if (!controller)
     return result;
   const InputConfig* config = controller->GetConfig();
-  const bool touchscreen_slot = IsTouchscreenDevice(controller->GetDefaultDevice());
+  const bool touchscreen_slot = filter && IsTouchscreenDevice(controller->GetDefaultDevice());
   std::unordered_set<std::string> seen;
   for (const std::string& dir :
        {config->GetUserProfileDirectoryPath(), config->GetSysProfileDirectoryPath()})
@@ -565,8 +566,11 @@ ProfilesForController(const ControllerEmu::EmulatedController* controller)
     {
       std::string basename;
       SplitPath(filename, nullptr, &basename, nullptr);
-      if (basename.empty() || !seen.insert(basename).second || IsUnsupportedProfile(basename))
+      if (basename.empty() || !seen.insert(basename).second ||
+          (filter && IsUnsupportedProfile(basename)))
+      {
         continue;
+      }
       if (touchscreen_slot && basename != kTouchscreenProfileName &&
           !ProfileTargetsTouchscreen(filename))
       {
@@ -578,22 +582,42 @@ ProfilesForController(const ControllerEmu::EmulatedController* controller)
   return result;
 }
 
-+ (NSArray<NSString*>*)profilesForGCPort:(NSInteger)portOneBased
+static const ControllerEmu::EmulatedController* PadAt(NSInteger portOneBased)
 {
   auto* cfg = Pad::GetConfig();
-  const int port = (int)portOneBased - 1;
+  const int port = static_cast<int>(portOneBased - 1);
   if (!cfg || port < 0 || port >= cfg->GetControllerCount())
-    return @[];
-  return ProfilesForController(cfg->GetController(port));
+    return nullptr;
+  return cfg->GetController(port);
+}
+
+static const ControllerEmu::EmulatedController* WiimoteAt(NSInteger indexOneBased)
+{
+  auto* cfg = Wiimote::GetConfig();
+  const int idx = static_cast<int>(indexOneBased - 1);
+  if (!cfg || idx < 0 || idx >= cfg->GetControllerCount())
+    return nullptr;
+  return cfg->GetController(idx);
+}
+
++ (NSArray<NSString*>*)profilesForGCPort:(NSInteger)portOneBased
+{
+  return ProfilesForController(PadAt(portOneBased), true);
 }
 
 + (NSArray<NSString*>*)profilesForWiimote:(NSInteger)indexOneBased
 {
-  auto* cfg = Wiimote::GetConfig();
-  const int idx = (int)indexOneBased - 1;
-  if (!cfg || idx < 0 || idx >= cfg->GetControllerCount())
-    return @[];
-  return ProfilesForController(cfg->GetController(idx));
+  return ProfilesForController(WiimoteAt(indexOneBased), true);
+}
+
++ (NSArray<NSString*>*)allProfilesForGCPort:(NSInteger)portOneBased
+{
+  return ProfilesForController(PadAt(portOneBased), false);
+}
+
++ (NSArray<NSString*>*)allProfilesForWiimote:(NSInteger)indexOneBased
+{
+  return ProfilesForController(WiimoteAt(indexOneBased), false);
 }
 
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore
