@@ -216,6 +216,10 @@ struct TouchOverlayView: View {
 
   // MARK: Edit chrome
 
+  /// Top centre, inside the safe area: clear of the top corners, where the shoulder buttons sit, and of
+  /// the bottom edge every default hangs from. It used to sit top right, which in landscape (no top
+  /// inset) was under the game screen's 80 pt reveal strip, so Done revealed the top bar instead. The
+  /// editor now covers that strip and the bar, and this keeps it clear of the controls too.
   private func editToolbar(safeArea: UIEdgeInsets) -> some View {
     VStack {
       HStack {
@@ -251,6 +255,7 @@ struct TouchOverlayView: View {
         .padding(10)
         .background(.ultraThinMaterial, in: Capsule())
         .padding()
+        Spacer()
       }
       Spacer()
     }

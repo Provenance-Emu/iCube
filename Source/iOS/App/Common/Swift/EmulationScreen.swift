@@ -818,8 +818,9 @@ struct EmulationScreen: View {
         .zIndex(5)
       }
 
-      // Top hit area: tap near status bar to reveal overlay (active only when hidden)
-      if !showTopBar {
+      // Top hit area: tap near status bar to reveal overlay (active only when hidden). Gone while the
+      // layout editor is up: it would swallow the touches that start in the top 80 pt.
+      if !showTopBar && !isEditingLayout {
         GeometryReader { screen in
           let strip = topRevealStrip(canvas: screen.size)
           Color.clear
@@ -841,7 +842,7 @@ struct EmulationScreen: View {
           .allowsHitTesting(true)
       }
 
-      if showTopBar {
+      if showTopBar && !isEditingLayout {
         emulationTopBar
           .onPreferenceChange(TopBarHeightKey.self) { topBarHeight = $0 }
           .transition(.move(edge: .top).combined(with: .opacity))
@@ -1498,6 +1499,7 @@ struct EmulationScreen: View {
       controllerSettingsOwnsPause = PauseOwnership.claim(isPaused: TVEmulationBridge.isPaused(), pause: TVEmulationBridge.pause)
       showControllerSettings = true
     case .pauseMenu: showPauseMenu = true
+    case .editLayout: beginLayoutEdit()
     case .skylanderImport: showSkyImporter = true
     case .skylanderClear: showSkyClearPicker = true
     }
@@ -1518,14 +1520,16 @@ struct EmulationScreen: View {
     touchPadsRefreshToken = UUID()
   }
 
-  /// Edit Layout… (the Controllers hub, wherever it is open, or a long-press on the overlay): closes
-  /// whatever covers the game and edits the pad on screen, on the canvas it is played on.
+  /// Edit Layout… (the top bar, the Controllers hub wherever it is open, or a long-press on the
+  /// overlay): closes whatever covers the game and edits the pad on screen, on the canvas it is played
+  /// on. Edit mode owns the screen: the top bar and its reveal strip stay hidden until Done.
   private func beginLayoutEdit() {
     let pads = touchPadsContainer
     layoutEditPadKind = pads.programmaticPadKind() ?? (pads.isWii ? .wiiRemote : .gameCube)
     showControllerSettings = false
     showPauseMenu = false
     showSettings = false
+    topBar.hideNow()
     isEditingLayout = true
   }
 

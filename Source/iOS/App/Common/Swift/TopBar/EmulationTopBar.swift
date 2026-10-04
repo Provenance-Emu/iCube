@@ -8,6 +8,8 @@ import SwiftUI
 enum TopBarDestination {
   case exitConfirm, perfOverlay, audioEffects, shaders, shaderParameters
   case controllerSettings, pauseMenu, skylanderImport, skylanderClear
+  /// The on-screen controls' layout editor, over the game.
+  case editLayout
 }
 
 /// The popovers the bar can show. Only one is up at a time.
@@ -392,6 +394,7 @@ struct EmulationTopBar: View {
         close { onSetProgrammaticOverlay(!TouchOverlayFlag.isProgrammatic) }
       }
       Divider()
+      PopoverRow(title: L("Edit Layout…"), systemImage: "rectangle.and.pencil.and.ellipsis") { closeThenOpen(.editLayout) }
       PopoverRow(title: L("Controller Settings…"), systemImage: "gearshape") { closeThenOpen(.controllerSettings) }
     }
   }
