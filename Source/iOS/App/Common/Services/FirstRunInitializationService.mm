@@ -15,6 +15,8 @@
 #import "InputCommon/ControllerEmu/ControllerEmu.h"
 #import "InputCommon/InputConfig.h"
 
+#include "ProfileLoading.h"
+
 @implementation FirstRunInitializationService
 
 - (void)importDefaultProfileForInputConfig:(InputConfig*)config {
@@ -25,7 +27,8 @@
   Common::IniFile iniFile;
   iniFile.Load(builtInPath);
 
-  controller->LoadConfig(iniFile.GetOrCreateSection("Profile"));
+  // Wii Remote 1 keeps the core's default extension (Nunchuk): the profile names none.
+  LoadProfileKeepingExtension(controller, iniFile.GetOrCreateSection("Profile"));
   controller->UpdateReferences(g_controller_interface);
 
   config->SaveConfig();
@@ -43,8 +46,12 @@
   [userDefaults setInteger:launchTimes + 1 forKey:@"launch_times"];
 
   if (launchTimes == 0) {
+#if !TARGET_OS_TV
+    // Player 1 and Wii Remote 1 start on the on-screen controls. tvOS has no touchscreen, so it
+    // keeps the core defaults and the first pad is auto-assigned instead.
     [self importDefaultProfileForInputConfig:Pad::GetConfig()];
     [self importDefaultProfileForInputConfig:Wiimote::GetConfig()];
+#endif
 
     if (Config::GetActiveLayerForConfig(Config::MAIN_GFX_BACKEND) == Config::LayerType::Base) {
       Config::SetBase(Config::MAIN_GFX_BACKEND, "Metal");
