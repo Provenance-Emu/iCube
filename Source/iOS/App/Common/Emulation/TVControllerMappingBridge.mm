@@ -220,18 +220,89 @@ static bool DisableCoreIMUPointerIfTouchscreen(int idx)
   return true;
 }
 
+// The pointer block of the bundled Data/Sys/Profiles/Wiimote/Touchscreen.ini, in the Cursor
+// group's control order (`named_directions`: Up, Down, Left, Right; axis ids in ButtonType.h).
+static constexpr int kIRDirectionCount = 4;
+static constexpr const char* kTouchscreenIRExpressions[kIRDirectionCount] = {
+    "`Axis 112`", "`Axis 113`", "`Axis 114`", "`Axis 115`"};
+
+// True when all four IR direction controls (`IR/Up`, `Down`, `Left`, `Right`) of the Wii Remote
+// have an expression and, when the slot's device is currently enumerated, each one binds an input
+// on it. A profile without `IR/` keys loads them as "" (ControlGroup::LoadConfig); the core's
+// LoadDefaults writes `Cursor Y-` and friends, which are not empty but name no input on iOS.
+static bool WiimoteHasIRPointerBinding(int idx)
+{
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg || idx < 0 || idx >= cfg->GetControllerCount())
+    return false;
+  const auto* wm = cfg->GetController(idx);
+  auto* ir = Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Point);
+  if (!wm || !ir || ir->controls.size() < static_cast<size_t>(kIRDirectionCount))
+    return false;
+  // Before the state lock: the device lookup takes the device list's own mutex, and a hotplug
+  // holds that one while it re-resolves references under the state lock.
+  const bool device_present = g_controller_interface.HasConnectedDevice(wm->GetDefaultDevice());
+  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  for (int i = 0; i < kIRDirectionCount; ++i)
+  {
+    const auto& ref = ir->controls[i]->control_ref;
+    if (!ref || ref->GetExpression().empty())
+      return false;
+    if (device_present && ref->BoundCount() == 0)
+      return false;
+  }
+  return true;
+}
+
+// Re-applies only the IR block of the bundled Touchscreen profile (`IR/Up..Right = Axis 112..115`,
+// `IR/Auto-Hide = False`) to a touchscreen slot whose pointer directions are unbound, leaving every
+// other binding as the user has it. Auto-Hide is reset too because a pointer that sat still while
+// unbound is hidden after 2.5 s (Cursor.cpp) and stays hidden until it moves. Does not save;
+// returns whether it changed anything.
+static bool RepairTouchscreenIRPointer(int idx)
+{
+  if (!WiimoteIsOnTouchscreen(idx) || WiimoteHasIRPointerBinding(idx))
+    return false;
+  auto* wm = Wiimote::GetConfig()->GetController(idx);
+  auto* ir = Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Point);
+  if (!wm || !ir || ir->controls.size() < static_cast<size_t>(kIRDirectionCount))
+    return false;
+  {
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+    for (int i = 0; i < kIRDirectionCount; ++i)
+      ir->SetControlExpression(i, kTouchscreenIRExpressions[i]);
+    for (auto& setting : ir->numeric_settings)
+    {
+      if (setting->GetType() == ControllerEmu::SettingType::Bool &&
+          std::string_view(setting->GetININame()) == "Auto-Hide")
+      {
+        static_cast<ControllerEmu::NumericSetting<bool>*>(setting.get())->SetValue(false);
+      }
+    }
+  }
+  wm->UpdateReferences(g_controller_interface);
+  NSLog(@"[iCube][Input] Wiimote%d: IR pointer rebound to the touchscreen", idx + 1);
+  return true;
+}
+
 + (BOOL)wiimoteUsesTouchscreen:(NSInteger)indexOneBased
 {
   return WiimoteIsOnTouchscreen(static_cast<int>(indexOneBased - 1)) ? YES : NO;
 }
 
++ (BOOL)wiimoteHasIRPointerBinding:(NSInteger)indexOneBased
+{
+  return WiimoteHasIRPointerBinding(static_cast<int>(indexOneBased - 1)) ? YES : NO;
+}
+
 + (BOOL)enforceTouchscreenPointerForWiimote:(NSInteger)indexOneBased
 {
   const int idx = static_cast<int>(indexOneBased - 1);
-  const bool changed = DisableCoreIMUPointerIfTouchscreen(idx);
-  if (changed)
+  const bool imu_changed = DisableCoreIMUPointerIfTouchscreen(idx);
+  const bool ir_changed = RepairTouchscreenIRPointer(idx);
+  if (imu_changed || ir_changed)
     Wiimote::GetConfig()->SaveConfig();
-  return changed ? YES : NO;
+  return (imu_changed || ir_changed) ? YES : NO;
 }
 
 + (void)reconcileAssignments
@@ -547,6 +618,7 @@ static bool DisableCoreIMUPointerIfTouchscreen(int idx)
   if (restore) wm->SetDefaultDevice(selectedDev);
   wm->UpdateReferences(g_controller_interface);
   DisableCoreIMUPointerIfTouchscreen(idx);
+  RepairTouchscreenIRPointer(idx);
   Wiimote::GetConfig()->SaveConfig();
   return YES;
 }

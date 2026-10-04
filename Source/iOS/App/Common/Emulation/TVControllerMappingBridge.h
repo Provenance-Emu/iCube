@@ -63,9 +63,19 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 + (BOOL)wiimoteUsesTouchscreen:(NSInteger)indexOneBased
     NS_SWIFT_NAME(wiimoteUsesTouchscreen(forWiimote:));
 
+/// True when the Wii Remote's four IR direction controls (`IR/Up`, `Down`, `Left`, `Right`) all
+/// have an expression and, when the slot's device is currently enumerated, each binds an input on
+/// it. A profile without `IR/` keys leaves them empty; the core's defaults (`Cursor Y-`, ...) name
+/// no input on iOS.
++ (BOOL)wiimoteHasIRPointerBinding:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(wiimoteHasIRPointerBinding(forWiimote:));
+
 /// Puts a touchscreen Wii Remote slot's pointer back into the shape the app drives: the core's
-/// motion pointer (`IMUIR/Enabled`) off, since the app writes IR itself. Saves when it changed
-/// anything and returns whether it did; a no-op for a slot not bound to the Touchscreen.
+/// motion pointer (`IMUIR/Enabled`) off, since the app writes IR itself, and, when
+/// `wiimoteHasIRPointerBinding:` fails, the IR block of the bundled Touchscreen profile
+/// (`IR/Up..Right = Axis 112..115`, `IR/Auto-Hide = False`) re-applied without touching any other
+/// binding. Saves when it changed anything and returns whether it did; a no-op for a slot not
+/// bound to the Touchscreen.
 /// `loadProfile:forWiimote:restoreDevice:` and the coordinator's touchscreen binding already
 /// apply it; call it after any other write that can replace a touchscreen slot's mapping.
 + (BOOL)enforceTouchscreenPointerForWiimote:(NSInteger)indexOneBased

@@ -1497,10 +1497,12 @@ static bool IsTouchscreenQualifier(const ciface::Core::DeviceQualifier& dq)
 // actual pitch/roll on top, the virtual sensor bar left the camera's view and the touch pointer
 // went dead ("touch controls not working"; turning the gyro toggle off does not help because the
 // core keeps the last integrated rotation). Disable it on every Wiimote bound to a Touchscreen
-// device so IR comes from the app alone, exactly as it did while the IMU feed was inert.
+// device so IR comes from the app alone, exactly as it did while the IMU feed was inert. The same
+// pass re-binds a touchscreen slot's IR directions when they are empty or dead (a profile without
+// `IR/` keys, the core defaults), which no reload here would otherwise notice.
 // The per-slot work (and the save) lives in TVControllerMappingBridge so a profile load from the
-// player screen applies the same rule.
-static void DisableCoreIMUPointerOnTouchscreenWiimotes()
+// player screen applies the same rules.
+static void EnforceTouchscreenPointerOnWiimotes()
 {
   auto* config = Wiimote::GetConfig();
   if (!config)
@@ -1558,6 +1560,9 @@ static std::string LoadTouchscreenProfile(ControllerEmu::EmulatedController* con
 // `EmulatedController::LoadConfig` applies the profile's own `Device =` line, and the bundled Wii
 // profile names instance 4, which is only right for Wii Remote 1; the requested instance is
 // therefore set AFTER the load.
+// "Has a mapping" is not "has a pointer": a Wii slot that kept a mapping with blank or dead IR rows
+// gets only its IR block repaired afterwards (TVControllerMappingBridge), not a full reload that
+// would discard the user's other bindings.
 static void BindTouchscreen(InputConfig* config, int index, const ciface::Core::DeviceQualifier& dq_touch)
 {
   auto* controller = config->GetController(index);
@@ -1574,7 +1579,8 @@ static void BindTouchscreen(InputConfig* config, int index, const ciface::Core::
   controller->UpdateReferences(g_controller_interface);
   config->SaveConfig();
   // The LoadDefaults fallback and a user Touchscreen.ini without `IMUIR/Enabled` both leave the
-  // core's motion pointer on, and a kept mapping may come from a physical-remote profile.
+  // core's motion pointer on, and a kept mapping may come from a physical-remote profile with no
+  // `IR/` keys; this turns the former off and re-binds the IR directions for the latter.
   if (config == Wiimote::GetConfig())
     [TVControllerMappingBridge enforceTouchscreenPointerForWiimote:index + 1];
   NSLog(@"[iCube][Input] %s %d -> %s (%s)", config->GetGUIName().c_str(), index + 1,
@@ -1662,7 +1668,7 @@ static void EnsurePad1DefaultsToTouchscreen()
         BindTouchscreen(Wiimote::GetConfig(), 0, dq_touch_wii);
     }
   }
-  DisableCoreIMUPointerOnTouchscreenWiimotes();
+  EnforceTouchscreenPointerOnWiimotes();
 }
 
 
@@ -1691,7 +1697,7 @@ static void EnsurePad1DefaultsToTouchscreen()
   if (!FindTouchscreenQualifier(kTouchscreenWiimoteIdBase + idx, &dq_touch))
     return;
   BindTouchscreen(Wiimote::GetConfig(), idx, dq_touch);
-  DisableCoreIMUPointerOnTouchscreenWiimotes();
+  EnforceTouchscreenPointerOnWiimotes();
 }
 
 // iCube: block (bounded) until the previous emulation session has fully shut down.
