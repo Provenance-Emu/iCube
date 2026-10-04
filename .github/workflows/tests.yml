@@ -187,6 +187,7 @@ jobs:
       # exactly where a pre-script failure like the ones above would surface).
       # `tee` keeps the raw log for the failure-artifact upload below.
       - name: Run iCubeTests
+        id: run_tests
         working-directory: Source/iOS/App
         # Step-level timeout so a wedged xcodebuild/simulator fails this step
         # (triggering the failure-artifact upload below) well before the
@@ -201,6 +202,54 @@ jobs:
           set -o pipefail
           rm -rf "$RESULT_BUNDLE"
           make test DEST="$DEST" TEST_ARGS="-resultBundlePath $RESULT_BUNDLE" 2>&1 | tee "$LOG_FILE"
+
+      # A skipped test passes silently. List every skip in the job summary, and fail when a suite
+      # that needs the on-screen Touchscreen devices skips: the test host is the app, whose launch
+      # (DolphinCoreService -> UICommon::InitControllers) always adds iOS/0-7/Touchscreen, so a
+      # skip there means the host stopped initializing input and those tests stopped testing.
+      - name: Report skipped tests
+        if: always() && (steps.run_tests.outcome == 'success' || steps.run_tests.outcome == 'failure')
+        env:
+          RESULT_BUNDLE: ${{ runner.temp }}/iCubeTests.xcresult
+          MUST_RUN_SUITES: WiiPointerProfileTests
+        run: |
+          set -euo pipefail
+          if [ ! -d "$RESULT_BUNDLE" ]; then
+            echo "::warning::No result bundle at $RESULT_BUNDLE; cannot report skipped tests."
+            exit 0
+          fi
+          xcrun xcresulttool get test-results tests --path "$RESULT_BUNDLE" > "$RUNNER_TEMP/test-results.json"
+          python3 - "$RUNNER_TEMP/test-results.json" <<'PY'
+          import json, os, sys
+
+          must_run = set(filter(None, os.environ.get("MUST_RUN_SUITES", "").split(",")))
+          skipped = []
+
+          def walk(node, suite):
+              kind = node.get("nodeType")
+              if kind == "Test Suite":
+                  suite = node.get("name", suite)
+              if kind == "Test Case" and node.get("result") == "Skipped":
+                  reason = next((c.get("name", "") for c in node.get("children", [])
+                                 if c.get("nodeType") in ("Skip Message", "Failure Message")), "")
+                  skipped.append((suite, node.get("name", "?"), reason))
+              for child in node.get("children", []):
+                  walk(child, suite)
+
+          for root in json.load(open(sys.argv[1])).get("testNodes", []):
+              walk(root, "")
+
+          lines = [f"### Skipped tests: {len(skipped)}", ""]
+          lines += [f"- `{suite}.{name}` {reason}".rstrip() for suite, name, reason in skipped]
+          print("\n".join(lines))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("\n".join(lines) + "\n")
+
+          bad = [f"{suite}.{name}" for suite, name, _ in skipped if suite in must_run]
+          if bad:
+              print("::error::Tests that must run on the simulator were skipped: " + ", ".join(bad))
+              sys.exit(1)
+          PY
 
       - name: Upload xcresult + raw log on failure
         if: failure()
