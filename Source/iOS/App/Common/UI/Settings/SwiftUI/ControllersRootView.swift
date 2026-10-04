@@ -98,17 +98,10 @@ struct AnalogStickSettingsView: View {
 /// Settings → Controllers is the Controllers hub, the same screen the pause menu and the top bar
 /// open (controller hub spec, Phase 2). What the hub does not cover is behind its "More Controller
 /// Settings" row (`ControllerMoreSettingsView`) and "Motion Source (DSU)" row (`DSUSettingsView`).
+/// Opening it writes nothing: unused ports are under "Show All Ports".
 struct ControllersRootView: View {
   var body: some View {
-    ControllerHubView(system: .forSettings, prepare: Self.ensureDefaultGCPlayer1)
-  }
-
-  /// If every GameCube port is off, turns Player 1 on as a GameCube Controller (raw
-  /// `SIDEVICE_GC_CONTROLLER` is 6; the SI_Device.h enum is not sequential), as this screen always
-  /// did on appear. Runs before the hub's first read, so the Player 1 row shows at once.
-  private static func ensureDefaultGCPlayer1() {
-    guard (1 ... 4).allSatisfy({ DOLConfigBridge.gcPortDevice(forPort: $0) == 0 }) else { return }
-    DOLConfigBridge.setGCPortDeviceForPort(1, device: 6)
+    ControllerHubView(system: .forSettings)
   }
 }
 
