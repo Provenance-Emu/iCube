@@ -14,8 +14,11 @@ import AudioToolbox
 #endif
 import Foundation
 
-// MARK: - Analog Stick Settings (dsu_* keys, applied in TCManagerInterface.setAxisValueFor:)
+// MARK: - On-Screen Stick Feel (dsu_* keys, applied in TCManagerInterface.setAxisValueFor:)
 
+/// Gain, deadzone and smoothing for the on-screen sticks and triggers. The keys keep their old
+/// `dsu_` names; physical controllers and motion are never scaled. More Controller Settings and
+/// the DSU controller both push this one screen.
 struct AnalogStickSettingsView: View {
   @State private var gain: Double = UserDefaults.standard.object(forKey: "dsu_gyro_gain") as? Double ?? 1.0
   @State private var deadzone: Double = UserDefaults.standard.object(forKey: "dsu_deadzone") as? Double ?? 0.05
@@ -86,7 +89,7 @@ struct AnalogStickSettingsView: View {
           L("Applies exponential smoothing to analog triggers. Sticks and motion are never smoothed. 0 disables smoothing."))
       }
     }
-    .navigationTitle(L("Analog Stick Settings"))
+    .navigationTitle(L("On-Screen Stick Feel"))
     .onChange(of: gain) { UserDefaults.standard.set($0, forKey: "dsu_gyro_gain") }
     .onChange(of: deadzone) { UserDefaults.standard.set($0, forKey: "dsu_deadzone") }
     .onChange(of: smoothing) { UserDefaults.standard.set($0, forKey: "dsu_smoothing") }

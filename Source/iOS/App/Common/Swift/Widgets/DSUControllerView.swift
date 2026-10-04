@@ -42,7 +42,7 @@ private enum OrientationHelper {
 struct DSUControllerView: View {
   let onClose: () -> Void
   @State private var virtualController: GCVirtualController?
-  @State private var showMotionSheet = false
+  @State private var showStickFeel = false
   @State private var pointerModeLabel: String = ""
   @State private var showLayoutSheet = false
   @AppStorage("dsu_controller_layout") private var layoutRaw: String = DSUControllerLayout.appleVirtual.rawValue
@@ -242,7 +242,7 @@ struct DSUControllerView: View {
           }
         }
         ToolbarItem(placement: .navigationBarTrailing) {
-          Button(action: { showMotionSheet = true }) {
+          Button(action: { showStickFeel = true }) {
             Label(L("Sticks"), systemImage: "l.joystick")
           }
           .modifier(TooltipModifier(text: L("Adjust analog stick gain, deadzone and smoothing"), showTooltips: showTooltips, activeTooltip: $activeTooltip, tooltipTimer: $tooltipTimer))
@@ -273,7 +273,7 @@ struct DSUControllerView: View {
         }
       }
       .navigationBarTitleDisplayMode(.inline)
-      .sheet(isPresented: $showMotionSheet) { MotionQuickSettingsView() }
+      .navigationDestination(isPresented: $showStickFeel) { AnalogStickSettingsView() }
       .sheet(isPresented: $showLayoutSheet) { LayoutPickerSheet(selectedRaw: $layoutRaw) }
       .onChange(of: layoutRaw) { _ in reconfigureVirtualControllerIfNeeded() }
       .onChange(of: restrictClient) { newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }
@@ -408,42 +408,6 @@ private struct AppleVirtualControllerPlaceholder: View {
         .font(.title2).foregroundColor(.white)
       Text(L("Inputs are being sent over DSU to the connected client."))
         .font(.footnote).foregroundColor(.white.opacity(0.7))
-    }
-  }
-}
-
-private struct MotionQuickSettingsView: View {
-  @State private var gain: Double = UserDefaults.standard.object(forKey: "dsu_gyro_gain") as? Double ?? 1.0
-  @State private var deadzone: Double = UserDefaults.standard.object(forKey: "dsu_deadzone") as? Double ?? 0.05
-  @State private var smoothing: Double = UserDefaults.standard.object(forKey: "dsu_smoothing") as? Double ?? 0.0
-  @Environment(\.dismiss) private var dismiss
-  var body: some View {
-    NavigationStack {
-      Form {
-        Section(header: Text(L("Analog Stick Gain"))) {
-          HStack {
-            Slider(value: $gain, in: 0.1 ... 3.0, step: 0.05)
-            Text(String(format: "%.2f", gain)).frame(width: 50).monospacedDigit()
-          }
-        }
-        Section(header: Text(L("Analog Stick Deadzone"))) {
-          HStack {
-            Slider(value: $deadzone, in: 0.0 ... 0.49, step: 0.01)
-            Text(String(format: "%.2f", deadzone)).frame(width: 50).monospacedDigit()
-          }
-        }
-        Section(header: Text(L("Analog Stick Smoothing"))) {
-          HStack {
-            Slider(value: $smoothing, in: 0.0 ... 0.9, step: 0.05)
-            Text(String(format: "%.2f", smoothing)).frame(width: 50).monospacedDigit()
-          }
-        }
-      }
-      .navigationTitle(L("Analog Stick Settings"))
-      .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Done")) { dismiss() } } }
-      .onChange(of: gain) { UserDefaults.standard.set($0, forKey: "dsu_gyro_gain") }
-      .onChange(of: deadzone) { UserDefaults.standard.set($0, forKey: "dsu_deadzone") }
-      .onChange(of: smoothing) { UserDefaults.standard.set($0, forKey: "dsu_smoothing") }
     }
   }
 }

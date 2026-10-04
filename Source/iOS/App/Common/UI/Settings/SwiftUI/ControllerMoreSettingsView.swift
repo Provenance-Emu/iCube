@@ -74,7 +74,7 @@ struct ControllerMoreSettingsView: View {
           Label(L("Advanced Motion Settings"), systemImage: "gyroscope")
         }
         NavigationLink(destination: AnalogStickSettingsView()) {
-          Label(L("Analog Stick Settings"), systemImage: "l.joystick")
+          Label(L("On-Screen Stick Feel"), systemImage: "l.joystick")
         }
       }
 
