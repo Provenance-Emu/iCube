@@ -297,7 +297,6 @@ struct EmulationScreen: View {
   @State private var touchPadsRefreshToken = UUID()
   @State private var irModeRaw: Int = 1
   @State private var desiredTouchControls: Bool = true
-  @StateObject var touchVM = TouchControlsViewModel()
   @State private var wiiOverlaySignature: Int = 0
   #endif
   // Used by both the iOS and tvOS bodies (Phase 3/4 disconnect-pause + pill),

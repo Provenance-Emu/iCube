@@ -57,17 +57,6 @@ final class ControllerManager: NSObject, ObservableObject {
     savePinnedSlots()
   }
 
-  // ObjC proxies for wrapped Swift properties
-  var overlayVisibleObjc: Bool {
-    get { overlayVisible }
-    set { overlayVisible = newValue }
-  }
-
-  var overlayModeRaw: Int {
-    get { overlayMode.rawValue }
-    set { overlayMode = OverlayMode(rawValue: newValue) ?? .auto }
-  }
-
   // MARK: Observing / Publishers
 
   private var observers: [NSObjectProtocol] = []
@@ -296,14 +285,6 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   // MARK: Overlays
-
-  func overlayIsWii(isWiiSystem: Bool) -> Bool {
-    switch overlayMode {
-    case .auto: return isWiiSystem
-    case .gamecube: return false
-    case .wii: return true
-    }
-  }
 
   func setSystem(isWii: Bool) { isWiiSystem = isWii }
 

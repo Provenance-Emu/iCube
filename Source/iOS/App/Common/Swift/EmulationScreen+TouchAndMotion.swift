@@ -6,23 +6,6 @@ import SwiftUI
 #if os(iOS)
 
 extension EmulationScreen {
-  /// ViewModel for on-screen controller visibility and mode
-  final class TouchControlsViewModel: ObservableObject {
-    enum Mode { case auto, gamecube, wii }
-    @Published var isVisible: Bool = true
-    @Published var mode: Mode = .auto
-  }
-
-  /// Resolve whether the overlay should show Wii or GC pads based on VM mode and current system
-  func overlayIsWii() -> Bool {
-    let currentIsWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : isWiiSystem
-    switch touchVM.mode {
-    case .auto: return currentIsWii
-    case .gamecube: return false
-    case .wii: return true
-    }
-  }
-
   func toggleTopBar() {
     withAnimation(TopBarStyle.transition) {
       if topBar.isVisible {
