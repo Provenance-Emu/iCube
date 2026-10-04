@@ -80,6 +80,8 @@ final class ControllerHubViewModel {
   private(set) var state: ControllerHubState
   /// Edit Layout… outside a game: `ControllerHubView` presents the full-screen editor.
   var isLayoutEditorPresented = false
+  /// Edit IR Area…: `ControllerHubView` presents the full-screen IR area editor.
+  var isIRAreaEditorPresented = false
 
   private let reader: any ControllerHubReading
   private let notificationCenter: NotificationCenter
@@ -178,6 +180,9 @@ final class ControllerHubViewModel {
       },
       editLayout: { [weak self] in
         self?.editLayout()
+      },
+      editIRArea: { [weak self] in
+        self?.isIRAreaEditorPresented = true
       },
       skinsDestination: { [system] in Self.skinsDestination(for: system) },
       identifyPad: { [weak self] qualifier in

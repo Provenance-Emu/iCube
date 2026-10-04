@@ -42,6 +42,11 @@ struct ControllerHubView: View {
         viewModel.isLayoutEditorPresented = false
       }
     }
+    .fullScreenCover(isPresented: $viewModel.isIRAreaEditorPresented) {
+      TouchOverlayLayoutEditorView(mode: .irArea, padKind: .wiiRemote, overGame: false) {
+        viewModel.isIRAreaEditorPresented = false
+      }
+    }
     #endif
   }
 }

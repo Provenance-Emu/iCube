@@ -20,6 +20,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     setOverlayMode: @escaping (ControllerManager.OverlayMode) -> Void = { _ in },
     setOverlayOpacity: @escaping (Float) -> Void = { _ in },
     editLayout: @escaping () -> Void = {},
+    editIRArea: @escaping () -> Void = {},
     identifyPad: @escaping (String) -> Void = { _ in }
   ) -> ControllerHubActions {
     ControllerHubActions(
@@ -29,6 +30,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
       setOverlayMode: setOverlayMode,
       setOverlayOpacity: setOverlayOpacity,
       editLayout: editLayout,
+      editIRArea: editIRArea,
       skinsDestination: { AnyView(EmptyView()) },
       identifyPad: identifyPad,
       dsuDestination: { AnyView(EmptyView()) },
@@ -216,6 +218,20 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     let editLayout = ids.firstIndex(of: "osc-edit-layout")
     XCTAssertNotNil(editLayout)
     XCTAssertEqual(ids.firstIndex(of: "osc-skins"), editLayout.map { $0 + 1 }, "Skins sits right after Edit Layout")
+  }
+
+  func test_editIRArea_runsAnAction_rightAfterEditLayout_whenTheSystemHasAPointer() {
+    var asked = 0
+    let model = make(state(system: .wiiAndGameCube), actions(editIRArea: { asked += 1 }))
+    XCTAssertEqual(
+      Array(ids(model, section: "on-screen").suffix(3)), ["osc-edit-layout", "osc-edit-ir-area", "osc-skins"])
+    run(model.item(id: "osc-edit-ir-area"))
+    XCTAssertEqual(asked, 1)
+    XCTAssertNotNil(make(state(system: .both, isGameRunning: false)).item(id: "osc-edit-ir-area"))
+  }
+
+  func test_editIRArea_hiddenInAGameCubeGame() {
+    XCTAssertNil(make(state(system: .gamecube)).item(id: "osc-edit-ir-area"))
   }
 
   func test_skins_hiddenOnTvOS() {

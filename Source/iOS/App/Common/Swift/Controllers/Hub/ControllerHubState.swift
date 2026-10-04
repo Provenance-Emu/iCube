@@ -142,6 +142,8 @@ struct ControllerHubActions {
   var setOverlayOpacity: (Float) -> Void
   /// Edit Layout…: edits on the game's own canvas while a game runs, else opens the full-screen editor.
   var editLayout: () -> Void
+  /// Edit IR Area…: where a touch moves the Wii pointer, edited full screen.
+  var editIRArea: () -> Void
   var skinsDestination: () -> AnyView
   /// The pad's qualifier.
   var identifyPad: (String) -> Void

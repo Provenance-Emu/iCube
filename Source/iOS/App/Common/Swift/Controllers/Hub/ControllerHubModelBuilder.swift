@@ -12,7 +12,8 @@ import SwiftUI
 ///
 /// Pure: state and actions in, `MenuModel` out, no bridge calls, mirroring `PauseMenuModelBuilder`
 /// and `CheatsMenuModelBuilder`. Rows that open something PUSH (`.destination`), except Edit
-/// Layout…, an action: its editor must cover the whole screen (see `ControllerHubViewModel`).
+/// Layout… and Edit IR Area…, actions: their editors must cover the whole screen (see
+/// `ControllerHubViewModel`).
 enum ControllerHubModelBuilder {
   static func make(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuModel {
     var sections = [playersSection(state: state, actions: actions)]
@@ -114,6 +115,11 @@ enum ControllerHubModelBuilder {
     items.append(MenuItem(
       id: "osc-edit-layout", title: L("Edit Layout…"), icon: "rectangle.and.pencil.and.ellipsis",
       role: .action(actions.editLayout)))
+    // The IR area is where a touch moves the Wii pointer; a GameCube game has no pointer.
+    if state.system != .gamecube {
+      items.append(MenuItem(
+        id: "osc-edit-ir-area", title: L("Edit IR Area…"), icon: "scope", role: .action(actions.editIRArea)))
+    }
     items.append(MenuItem(
       id: "osc-skins", title: L("Skins…"), icon: "paintpalette",
       role: .destination(actions.skinsDestination())))
