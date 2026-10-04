@@ -182,7 +182,7 @@ final class TCDeviceMotionMappingTests: XCTestCase {
   }
 
   // MARK: - Gyro-mode IR cursor: both-sides writes, four directions + clamp
-  //
+
   // ControllerEmu::Cursor::GetReshapableState() (Cursor.cpp:67-68) combines
   // y = Up.GetState() - Down.GetState(), x = Right.GetState() - Left.GetState().
   // Axis::GetState() multiplies by m_neg (Touchscreen.mm ~line 74-77):
