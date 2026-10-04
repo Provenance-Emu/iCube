@@ -22,6 +22,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/Config/Config.h"
 #include "Common/FileUtil.h"
+#include "Common/Logging/Log.h"
 
 #include "Core/AchievementManager.h"
 #include "Core/Boot/Boot.h"
@@ -48,6 +49,15 @@ namespace BootManager
 bool BootCore(Core::System& system, std::unique_ptr<BootParameters> boot,
               const WindowSystemInfo& wsi)
 {
+  // A previous session that is still stopping owns the config layers and the SYSCONF until its
+  // emu thread has finished RestoreConfig(). Booting now would mutate that state and then fail in
+  // Core::Init(), leaving SYSCONF stuck under guest control. Refuse before any side effect.
+  if (!Core::IsUninitialized(system))
+  {
+    ERROR_LOG_FMT(BOOT, "Refusing to boot: the previous emulation session has not shut down yet");
+    return false;
+  }
+
   if (!boot)
     return false;
 
@@ -187,9 +197,10 @@ bool BootCore(Core::System& system, std::unique_ptr<BootParameters> boot,
 
   const bool load_ipl = !system.IsWii() && !Config::Get(Config::MAIN_SKIP_IPL) &&
                         std::holds_alternative<BootParameters::Disc>(boot->parameters);
+  bool init_succeeded;
   if (load_ipl)
   {
-    return Core::Init(
+    init_succeeded = Core::Init(
         system,
         std::make_unique<BootParameters>(
             BootParameters::IPL{StartUp.m_region,
@@ -197,7 +208,18 @@ bool BootCore(Core::System& system, std::unique_ptr<BootParameters> boot,
             std::move(boot->boot_session_data)),
         wsi);
   }
-  return Core::Init(system, std::move(boot), wsi);
+  else
+  {
+    init_succeeded = Core::Init(system, std::move(boot), wsi);
+  }
+
+  // The emu thread never started, so its teardown will not call RestoreConfig(). Undo the config
+  // and SYSCONF changes made above here, otherwise SYSCONF stays controlled by the guest and every
+  // later boot trips the assert in TransferSYSCONFControlToGuest().
+  if (!init_succeeded)
+    RestoreConfig();
+
+  return init_succeeded;
 }
 
 void RestoreConfig()
