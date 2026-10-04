@@ -69,4 +69,17 @@ enum MotionSettings {
   static func setGyroPointerSensitivity(_ value: Double, in store: UserDefaults = .standard) {
     store.set(value, forKey: Key.gyroPointerSensitivity)
   }
+
+  /// "Recommended Motion Settings": 6DOF and Wii Remote motion on, Nunchuk motion off, Shake to
+  /// Wiggle on, roll for horizontal, invert off. The pointer mode and both sensitivities are left
+  /// alone. The caller posts `.DOLMotionSettingsChanged` so a running game picks it up.
+  static func applyRecommended(in store: UserDefaults = .standard) {
+    store.set(true, forKey: Key.full6DOF)
+    store.set(true, forKey: Key.wiimoteIMU)
+    store.set(false, forKey: Key.nunchukIMU)
+    store.set(true, forKey: Key.enhancedShakeDetection)
+    store.set(false, forKey: Key.useYawForHorizontal)
+    store.set(false, forKey: Key.invertRoll)
+    store.set(false, forKey: Key.invertPitch)
+  }
 }

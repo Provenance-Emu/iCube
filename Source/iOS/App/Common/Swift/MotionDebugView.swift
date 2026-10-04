@@ -93,17 +93,17 @@ struct MotionDebugView: View {
         }
       }
 
-      // MARK: - IR Mode Configuration
+      // MARK: - Pointer Mode
 
-      Section(header: Text("IR Pointer Configuration")) {
+      Section(header: Text("Pointer")) {
         HStack {
-          Text("Current IR Mode")
+          Text("Pointer Mode")
           Spacer()
           Text(irModeLabel(currentIRMode))
             .foregroundStyle(.secondary)
         }
 
-        Button("Cycle IR Mode") {
+        Button("Cycle Pointer Mode") {
           currentIRMode = (currentIRMode + 1) % 3
           PointerModeController.shared.set(rawValue: currentIRMode)
           TCDeviceMotion.shared.setMotionEnabled(currentIRMode == 0 && isMotionEnabled)
@@ -316,7 +316,7 @@ struct MotionDebugView: View {
           logCurrentMotionState()
         }
 
-        Button("Apply Recommended Settings") {
+        Button("Recommended Motion Settings") {
           applyRecommendedSettings()
         }
       }
@@ -382,7 +382,7 @@ struct MotionDebugView: View {
     // Check if touch controls are currently visible
     touchControlsVisible = ControllerManager.shared.overlayVisible
 
-    NSLog("[MOTION_DEBUG] Debug view setup complete - IR Mode: %d, Motion: %@, Core Motion Available: %@",
+    NSLog("[MOTION_DEBUG] Debug view setup complete - Pointer Mode: %d, Motion: %@, Core Motion Available: %@",
           currentIRMode, isMotionEnabled ? "ON" : "OFF",
           TCDeviceMotion.shared.isDeviceMotionAvailable ? "YES" : "NO")
   }
@@ -474,7 +474,7 @@ struct MotionDebugView: View {
   private func logCurrentMotionState() {
     NSLog("[MOTION_DEBUG] === Current Motion State ===")
     NSLog("[MOTION_DEBUG] Motion Enabled: %@", isMotionEnabled ? "YES" : "NO")
-    NSLog("[MOTION_DEBUG] IR Mode: %d (%@)", currentIRMode, irModeLabel(currentIRMode))
+    NSLog("[MOTION_DEBUG] Pointer Mode: %d (%@)", currentIRMode, irModeLabel(currentIRMode))
     NSLog("[MOTION_DEBUG] Touch Controls: %@", touchControlsVisible ? "VISIBLE" : "HIDDEN")
     NSLog("[MOTION_DEBUG] Controllers Connected: %d", GCController.controllers().count)
     NSLog("[MOTION_DEBUG] Current Gyro: (%.3f, %.3f, %.3f)",
@@ -504,15 +504,10 @@ struct MotionDebugView: View {
     }
   }
 
+  /// The same settings as Advanced Motion Settings' "Recommended Motion Settings".
   private func applyRecommendedSettings() {
-    // Set improved defaults based on user feedback
-    enhancedShakeEnabled = true
-    fullMotionEnabled = true
-    useYawForHorizontal = false // Use roll by default
-    wiimoteIMUEnabled = true
-    nunchuckIMUEnabled = false
-    invertRoll = false
-    invertPitch = false
+    MotionSettings.applyRecommended()
+    NotificationCenter.default.post(name: .DOLMotionSettingsChanged, object: nil)
     NSLog("[MOTION_DEBUG] Applied recommended enhanced motion controls settings")
   }
 }
