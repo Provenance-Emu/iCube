@@ -242,7 +242,9 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertTrue(model.item(id: deadZone.id)?.isCompactOnTV == true)
     XCTAssertEqual(optionTitles(model.item(id: deadZone.id)).count, 11)
     XCTAssertEqual(model.item(id: scripted.id)?.subtitle, "Set by an expression")
-    XCTAssertEqual(ids(model, section: "advanced-expressions").count, gameCubeControls.count, "Rumble too: outputs are edited here")
+    XCTAssertEqual(
+      ids(model, section: "advanced-expressions").filter { $0.hasPrefix("expression-") }.count, gameCubeControls.count,
+      "Rumble too: outputs are edited here")
   }
 
   /// An expression-driven numeric setting is a read-only row: editing it here would silently
@@ -306,7 +308,7 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
   func test_rumbleIsNotACaptureRow() {
     let model = make(boundGameCube)
     XCTAssertNil(model.item(id: "control-gcPad-5-0"))
-    XCTAssertEqual(ids(model, section: "buttons-face"), ["control-gcPad-0-0", "control-gcPad-0-1", "control-gcPad-0-2", "control-gcPad-0-3"])
+    XCTAssertEqual(ids(model, section: "buttons-face"), ["help-face", "control-gcPad-0-0", "control-gcPad-0-1", "control-gcPad-0-2", "control-gcPad-0-3"])
   }
 
   func test_captureRow_padActivateTogglesThatControl() {
@@ -337,24 +339,24 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     let model = make(state(.gameCube, device: Self.xbox, controls: gameCubeControls))
     XCTAssertEqual(model.item(id: "buttons-hint")?.title, "Connect this controller to capture buttons.")
     XCTAssertEqual(model.item(id: "control-gcPad-0-0")?.isEnabled, false)
-    XCTAssertEqual(model.item(id: "device")?.subtitle, "Xbox Wireless Controller (Disconnected)")
+    XCTAssertEqual(model.item(id: "device")?.badge, "Xbox Wireless Controller (Disconnected)")
   }
 
   func test_dsuPort_captures_andIsNotDisconnected() {
     let model = make(state(.gameCube, device: Self.dsu, controls: gameCubeControls))
     XCTAssertNil(model.item(id: "buttons-hint"))
     XCTAssertEqual(model.item(id: "control-gcPad-0-0")?.isEnabled, true)
-    XCTAssertEqual(model.item(id: "device")?.subtitle, "Pad C")
+    XCTAssertEqual(model.item(id: "device")?.badge, "Pad C")
   }
 
   // MARK: Profile and Wii rows
 
   func test_profileName_customThenEdited() {
     var screen = boundGameCube
-    XCTAssertEqual(make(screen).item(id: "profile-load")?.subtitle, "Custom")
+    XCTAssertEqual(make(screen).item(id: "profile-load")?.badge, "Custom")
     screen.profileName = "Physical Controller"
     screen.profileEdited = true
-    XCTAssertEqual(make(screen).item(id: "profile-load")?.subtitle, "Physical Controller (edited)")
+    XCTAssertEqual(make(screen).item(id: "profile-load")?.badge, "Physical Controller (edited)")
   }
 
   func test_saveAndReset_runTheirActions_resetNeedsADevice() {
@@ -371,5 +373,59 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(
       optionTitles(make(state(.wiiRemote), platform: .tvos).item(id: "wii-extension")),
       ["Extension: None", "Extension: Nunchuk", "Extension: Classic"])
+  }
+
+  // MARK: Help
+
+  /// Every Buttons category opens with its help line: a caption row that is never focused, so a pad
+  /// walks straight to the first capture row and a capture lock has nothing extra to disable.
+  func test_help_everyButtonsSectionOpensWithItsCaption() {
+    let model = make(boundGameCube)
+    for section in model.sections where section.id.hasPrefix("buttons-") {
+      let category = ControlCategory.allCases.first { "buttons-\($0.id)" == section.id }
+      XCTAssertNotNil(category, section.id)
+      guard let category, let first = section.items.first else { continue }
+      XCTAssertEqual(first.id, PlayerScreenModelBuilder.helpID(category))
+      XCTAssertEqual(first.title, PlayerScreenHelp.category(category, onTouchscreen: false))
+      XCTAssertFalse(first.isEnabled)
+      XCTAssertFalse(model.focusableIDs.contains(first.id))
+    }
+  }
+
+  func test_help_eachCategoryHasALine_motionSaysTheTouchscreenDrivesThePointer() {
+    for category in ControlCategory.allCases {
+      XCTAssertFalse(PlayerScreenHelp.category(category, onTouchscreen: false).isEmpty, "\(category)")
+    }
+    let shake = rows(.wiimote, 2, ["X", "Y", "Z"])
+    let touch = make(state(.wiiRemote, device: Self.touch, controls: shake))
+    XCTAssertEqual(touch.item(id: "help-motion")?.title, PlayerScreenHelp.category(.motion, onTouchscreen: true))
+    XCTAssertTrue(touch.item(id: "help-motion")?.title.contains("Pointer & Motion") == true)
+    let onAPad = make(state(.wiiRemote, device: Self.xbox, pads: [pad(Self.xbox, "Xbox")], controls: shake))
+    XCTAssertEqual(onAPad.item(id: "help-motion")?.title, PlayerScreenHelp.category(.motion, onTouchscreen: false))
+    for name in ["Shake", "Pointer", "Tilt", "Swing"] {
+      XCTAssertTrue(onAPad.item(id: "help-motion")?.title.contains(name) == true, name)
+    }
+  }
+
+  /// Rows that show a value keep it as the badge and say what they do in the subtitle.
+  func test_help_playerRowsHaveCaptions() {
+    let gameCube = make(boundGameCube)
+    XCTAssertEqual(gameCube.item(id: "device")?.subtitle, PlayerScreenHelp.device)
+    XCTAssertEqual(gameCube.item(id: "device")?.badge, "Xbox Wireless Controller")
+    XCTAssertEqual(gameCube.item(id: "profile-load")?.subtitle, PlayerScreenHelp.loadProfile)
+    XCTAssertEqual(gameCube.item(id: "profile-save")?.subtitle, PlayerScreenHelp.saveProfile)
+    XCTAssertEqual(gameCube.item(id: "profile-reset")?.subtitle, PlayerScreenHelp.resetProfile)
+    let wii = make(state(.wiiRemote))
+    XCTAssertEqual(wii.item(id: "wii-extension")?.subtitle, PlayerScreenHelp.extensionCaption)
+    XCTAssertEqual(wii.item(id: "wii-sideways")?.subtitle, PlayerScreenHelp.sideways)
+  }
+
+  func test_help_rawBindingsOpenWithACaption() {
+    var screen = boundGameCube
+    screen.showsAdvanced = true
+    let section = make(screen).sections.first { $0.id == "advanced-expressions" }
+    XCTAssertEqual(section?.items.first?.id, "help-expressions")
+    XCTAssertEqual(section?.items.first?.title, PlayerScreenHelp.rawBindings)
+    XCTAssertEqual(section?.items.first?.isEnabled, false)
   }
 }

@@ -4793,3 +4793,17 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Couldn't delete skin: %@" = "Couldn't delete skin: %@";
 "No skins imported for this controller yet. Use Import… to add a .deltaskin or .manicskin file." = "No skins imported for this controller yet. Use Import… to add a .deltaskin or .manicskin file.";
 "The previous game is still shutting down. Wait a moment, then try launching again." = "The previous game is still shutting down. Wait a moment, then try launching again.";
+"The main buttons. Select a row, then press the button that should do it." = "The main buttons. Select a row, then press the button that should do it.";
+"The four D-Pad directions." = "The four D-Pad directions.";
+"One row per stick direction. A stick direction moves the stick partway; a button pushes it all the way." = "One row per stick direction. A stick direction moves the stick partway; a button pushes it all the way.";
+"Shoulder buttons and triggers. An analog row follows how far an analog trigger is pressed." = "Shoulder buttons and triggers. An analog row follows how far an analog trigger is pressed.";
+"Start, +, − and Home: the buttons games use for menus." = "Start, +, − and Home: the buttons games use for menus.";
+"Shake, Pointer, Tilt and Swing move the Wii Remote through the air. On the Touchscreen the app drives the pointer: set it under Pointer & Motion." = "Shake, Pointer, Tilt and Swing move the Wii Remote through the air. On the Touchscreen the app drives the pointer: set it under Pointer & Motion.";
+"Shake, Pointer, Tilt and Swing move the Wii Remote through the air. Bind each direction to a stick or a button to act it out." = "Shake, Pointer, Tilt and Swing move the Wii Remote through the air. Bind each direction to a stick or a button to act it out.";
+"The controller that plays as this player." = "The controller that plays as this player.";
+"Replaces this player's buttons with a saved profile." = "Replaces this player's buttons with a saved profile.";
+"Keeps this player's buttons as a profile to load later, on any port." = "Keeps this player's buttons as a profile to load later, on any port.";
+"Loads the built-in profile for the bound controller." = "Loads the built-in profile for the bound controller.";
+"What is plugged into the Wii Remote: the Nunchuk adds a stick, C and Z." = "What is plugged into the Wii Remote: the Nunchuk adds a stick, C and Z.";
+"For games played with the Wii Remote held sideways. The D-Pad and motion turn with it." = "For games played with the Wii Remote held sideways. The D-Pad and motion turn with it.";
+"Each control's Dolphin expression. Select one to edit it, combine inputs, or bind an output such as Rumble." = "Each control's Dolphin expression. Select one to edit it, combine inputs, or bind an output such as Rumble.";
