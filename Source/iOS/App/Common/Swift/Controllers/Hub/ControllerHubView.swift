@@ -41,5 +41,13 @@ struct ControllerHubView: View {
       viewModel.start()
     }
     .onDisappear { viewModel.stop() }
+    #if os(iOS)
+    // Attached to the hub, not a row: nothing waits on a lazily built row (see above).
+    .fullScreenCover(isPresented: $viewModel.isLayoutEditorPresented) {
+      TouchOverlayLayoutEditorView(padKind: TouchOverlayLayoutEditorView.lastPadKind(), overGame: false) {
+        viewModel.isLayoutEditorPresented = false
+      }
+    }
+    #endif
   }
 }

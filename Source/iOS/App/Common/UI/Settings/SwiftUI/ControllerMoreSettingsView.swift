@@ -19,6 +19,8 @@ struct ControllerMoreSettingsView: View {
   @State private var wiimoteSpeaker = false
   #if os(iOS)
   @State private var touchOverlayProgrammatic = false
+  /// Edit IR Area…, full screen so it edits on the canvas the game uses (`TouchOverlayLayoutEditorView`).
+  @State private var showIRAreaEditor = false
   /// Connected pads with a light bar, for the LED colour rows.
   @State private var litControllers: [GCController] = []
   #endif
@@ -79,12 +81,15 @@ struct ControllerMoreSettingsView: View {
 
         // Gated on the beta flag: these only affect the programmatic overlay's live rendering.
         if touchOverlayProgrammatic {
-          NavigationLink {
-            TouchOverlayIRAreaEditorView()
+          Button {
+            showIRAreaEditor = true
           } label: {
             Label(L("Edit IR Area…"), systemImage: "scope")
           }
         }
+        #if DEBUG
+        NavigationLink("Gallery") { TouchOverlayGalleryView() }
+        #endif
         #endif
 
         NavigationLink(destination: EnhancedMotionControlsView()) {
@@ -110,6 +115,11 @@ struct ControllerMoreSettingsView: View {
     .navigationTitle(L("More Controller Settings"))
     .onAppear { syncFromConfig() }
     #if os(iOS)
+    .fullScreenCover(isPresented: $showIRAreaEditor) {
+      TouchOverlayLayoutEditorView(mode: .irArea, padKind: .wiiRemote, overGame: false) {
+        showIRAreaEditor = false
+      }
+    }
     .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in reloadLitControllers() }
     .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidDisconnect)) { _ in reloadLitControllers() }
     #endif

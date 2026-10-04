@@ -19,6 +19,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     setOverlayVisible: @escaping (Bool) -> Void = { _ in },
     setOverlayMode: @escaping (ControllerManager.OverlayMode) -> Void = { _ in },
     setOverlayOpacity: @escaping (Float) -> Void = { _ in },
+    editLayout: @escaping () -> Void = {},
     identifyPad: @escaping (String) -> Void = { _ in },
     setContinuousScanning: @escaping (Bool) -> Void = { _ in }
   ) -> ControllerHubActions {
@@ -28,7 +29,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
       setOverlayVisible: setOverlayVisible,
       setOverlayMode: setOverlayMode,
       setOverlayOpacity: setOverlayOpacity,
-      editLayoutDestination: { AnyView(EmptyView()) },
+      editLayout: editLayout,
       skinsDestination: { AnyView(EmptyView()) },
       identifyPad: identifyPad,
       setContinuousScanning: setContinuousScanning,
@@ -198,9 +199,13 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     XCTAssertEqual(ControllerHubState.snappedOpacityPercent(1.0), 100)
   }
 
-  func test_editLayout_pushes() {
-    guard case .destination = make(state(system: .gamecube)).item(id: "osc-edit-layout")?.role else {
-      return XCTFail("Edit Layout must push, not present")
+  /// The editor covers the whole screen (the game's own canvas), so the row runs an action instead of
+  /// pushing under the hub's navigation bar.
+  func test_editLayout_runsAnAction() {
+    for running in [true, false] {
+      var asked = 0
+      run(make(state(system: .gamecube, isGameRunning: running), actions(editLayout: { asked += 1 })).item(id: "osc-edit-layout"))
+      XCTAssertEqual(asked, 1, "game running: \(running)")
     }
   }
 

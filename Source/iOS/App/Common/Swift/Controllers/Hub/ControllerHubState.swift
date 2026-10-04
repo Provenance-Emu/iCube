@@ -142,7 +142,8 @@ struct ControllerHubActions {
   var setOverlayMode: (ControllerManager.OverlayMode) -> Void
   /// 0…1.
   var setOverlayOpacity: (Float) -> Void
-  var editLayoutDestination: () -> AnyView
+  /// Edit Layout…: edits on the game's own canvas while a game runs, else opens the full-screen editor.
+  var editLayout: () -> Void
   var skinsDestination: () -> AnyView
   /// The pad's qualifier.
   var identifyPad: (String) -> Void

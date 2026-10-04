@@ -222,10 +222,31 @@ final class TouchOverlayLayoutTests: XCTestCase {
     store.setCenter(CGPoint(x: 760, y: 10), in: bounds, for: .wiiDpad, padKind: .wiiRemoteSideways, orientation: .portrait)
     let moved = store.resolvedBox(for: dpad, padKind: .wiiRemoteSideways, orientation: .portrait, in: bounds)
     XCTAssertEqual(moved, CGRect(x: 640, y: 0, width: 128, height: 128), "stored centre is re-clamped on-screen")
+  }
 
-    let smaller = CGRect(x: 0, y: 0, width: 384, height: 512)
-    let rescaled = store.resolvedBox(for: dpad, padKind: .wiiRemoteSideways, orientation: .portrait, in: smaller)
-    XCTAssertEqual(rescaled.maxX, 384, "normalized centre follows the new bounds and stays inside")
+  /// The editor and the game lay the overlay out on one canvas (`TouchOverlayCanvas`, the whole screen),
+  /// so a group dropped in the editor comes back at the same point and size in play. The old editor
+  /// sat under a navigation bar and a picker, and its centres were remapped onto the bigger game canvas.
+  @MainActor
+  func testPositionsAreStableBetweenEditorAndGameplay() {
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    let screen = designBounds(.wiiRemoteSideways)
+    let insets = UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0)
+    let inSafeArea = CGSize(width: screen.width - insets.left - insets.right, height: screen.height - insets.top - insets.bottom)
+    let editor = TouchOverlayCanvas(hostSize: inSafeArea, hostInsets: insets).bounds
+    let gameplay = TouchOverlayCanvas(hostSize: inSafeArea, hostInsets: insets).bounds
+    XCTAssertEqual(editor, screen)
+    XCTAssertEqual(gameplay, editor)
+
+    let dpad = defaultLayout(.wiiDpad, .wiiRemoteSideways)!
+    store.setCenter(CGPoint(x: 300, y: 700), in: editor, for: .wiiDpad, padKind: .wiiRemoteSideways, orientation: .portrait)
+    store.setSizeScale(1.5, for: .wiiDpad, padKind: .wiiRemoteSideways, orientation: .portrait, defaultCenter: .zero)
+    let dropped = store.resolvedBox(for: dpad, padKind: .wiiRemoteSideways, orientation: .portrait, in: editor)
+    let played = store.resolvedBox(for: dpad, padKind: .wiiRemoteSideways, orientation: .portrait, in: gameplay)
+    XCTAssertEqual(played.midX, 300, accuracy: 1e-6)
+    XCTAssertEqual(played.midY, 700, accuracy: 1e-6)
+    XCTAssertEqual(played.width, 192, accuracy: 1e-6, "128 pt at 1.5x")
+    XCTAssertEqual(played, dropped)
   }
 
   // MARK: Input conventions (§6.4)

@@ -344,6 +344,10 @@ struct EmulationScreen: View {
   @State private var skyPickedURL: URL? = nil
   @State private var showSkyClearPicker = false
   @State private var skyLastLoadedSlot: Int = 0
+  /// The on-screen controls are being edited: `TouchOverlayLayoutEditorView` covers the game.
+  @State private var isEditingLayout = false
+  /// The pad being edited: the one on screen when editing began.
+  @State private var layoutEditPadKind: TouchOverlayPadKind = .gameCube
 
   private static let topRevealStripHeight: CGFloat = 80
 
@@ -1049,6 +1053,9 @@ struct EmulationScreen: View {
         touchPadsContainer
           .id(touchPadsRefreshToken)
           .ignoresSafeArea()
+          // Hidden, not removed, while the editor draws the same layout above it.
+          .opacity(isEditingLayout ? 0 : 1)
+          .allowsHitTesting(!isEditingLayout)
           .transition(.opacity)
           .onAppear {
             // Ensure touch input is always a valid IR source
@@ -1056,6 +1063,13 @@ struct EmulationScreen: View {
             syncMotionPortToTouchscreen()
             TCDeviceMotion.shared.statusBarOrientationChanged()
           }
+      }
+
+      // Edit Layout…: the editor lays out on the same canvas as the pads above (the whole screen), so
+      // nothing moves when play resumes, and sits above the top bar and its reveal strip.
+      if isEditingLayout {
+        TouchOverlayLayoutEditorView(padKind: layoutEditPadKind, overGame: true, onDone: endLayoutEdit)
+          .zIndex(7)
       }
     }
     // Single owner of the core's IMU pointer on the touchscreen Wii Remote: always OFF, whether the
@@ -1339,6 +1353,7 @@ struct EmulationScreen: View {
       userOverrideTouchControls = true
       touchPadsRefreshToken = UUID()
     }
+    .onReceive(NotificationCenter.default.publisher(for: .DOLEditTouchLayout)) { _ in beginLayoutEdit() }
     // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
     .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
       isPaused = TVEmulationBridge.isPaused()
@@ -1501,6 +1516,29 @@ struct EmulationScreen: View {
     controllerManager.overlayVisible.toggle()
     isTouchControlsActive = controllerManager.overlayVisible
     touchPadsRefreshToken = UUID()
+  }
+
+  /// Edit Layout… (the Controllers hub, wherever it is open, or a long-press on the overlay): closes
+  /// whatever covers the game and edits the pad on screen, on the canvas it is played on.
+  private func beginLayoutEdit() {
+    let pads = touchPadsContainer
+    layoutEditPadKind = pads.programmaticPadKind() ?? (pads.isWii ? .wiiRemote : .gameCube)
+    showControllerSettings = false
+    showPauseMenu = false
+    showSettings = false
+    isEditingLayout = true
+  }
+
+  /// Done. The menus closed for editing resume only a pause they made, and a pause menu closed with one
+  /// of its own sheets still up does not, so resume here unless the player paused from the bar or a
+  /// controller disconnected.
+  private func endLayoutEdit() {
+    isEditingLayout = false
+    if TVEmulationBridge.isRunning(), TVEmulationBridge.isPaused(), !PauseOwnership.pausedFromBar,
+       controllerManager.disconnectPause == nil {
+      TVEmulationBridge.resume()
+    }
+    isPaused = TVEmulationBridge.isPaused()
   }
   #endif
 

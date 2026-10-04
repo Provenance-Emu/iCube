@@ -205,8 +205,8 @@ extension EmulationScreen {
     /// Mirrors `makeWiiPadView()`'s selection exactly (slot -> classic/sideways), so the
     /// programmatic overlay picks the same variant the xib path would have shown. `nil` when
     /// neither a Wii nor a GameCube pad should be visible right now (e.g. an external controller
-    /// is connected and `forceVisible` is false).
-    private func programmaticPadKind() -> TouchOverlayPadKind? {
+    /// is connected and `forceVisible` is false). Also the pad the layout editor edits in a game.
+    func programmaticPadKind() -> TouchOverlayPadKind? {
       if shouldShowWiiPad() {
         let slot = ControllerManager.shared.touchscreenSlot(system: .wii) ?? 0
         return .wii(classicActive: DOLWiimoteBridge.isClassicActive(forWiimote: slot),

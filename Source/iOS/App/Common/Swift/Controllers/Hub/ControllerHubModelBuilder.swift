@@ -11,8 +11,8 @@ import SwiftUI
 /// - Help.
 ///
 /// Pure: state and actions in, `MenuModel` out, no bridge calls, mirroring `PauseMenuModelBuilder`
-/// and `CheatsMenuModelBuilder`. Rows that open something PUSH (`.destination`); nothing here
-/// presents.
+/// and `CheatsMenuModelBuilder`. Rows that open something PUSH (`.destination`), except Edit
+/// Layout…, an action: its editor must cover the whole screen (see `ControllerHubViewModel`).
 enum ControllerHubModelBuilder {
   static func make(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuModel {
     var sections = [playersSection(state: state, actions: actions)]
@@ -113,7 +113,7 @@ enum ControllerHubModelBuilder {
           set: { if let percent = $0.base as? Int { actions.setOverlayOpacity(Float(percent) / 100) } }))))
     items.append(MenuItem(
       id: "osc-edit-layout", title: L("Edit Layout…"), icon: "rectangle.and.pencil.and.ellipsis",
-      role: .destination(actions.editLayoutDestination())))
+      role: .action(actions.editLayout)))
     items.append(MenuItem(
       id: "osc-skins", title: L("Skins…"), icon: "paintpalette",
       role: .destination(actions.skinsDestination())))

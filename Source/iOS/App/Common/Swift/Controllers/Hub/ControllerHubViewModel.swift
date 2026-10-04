@@ -80,6 +80,8 @@ struct LiveControllerHubReader: ControllerHubReading {
 final class ControllerHubViewModel {
   let system: ControllerSetupSystem
   private(set) var state: ControllerHubState
+  /// Edit Layout… outside a game: `ControllerHubView` presents the full-screen editor.
+  var isLayoutEditorPresented = false
 
   private let reader: any ControllerHubReading
   private let notificationCenter: NotificationCenter
@@ -177,12 +179,8 @@ final class ControllerHubViewModel {
         DOLConfigBridge.setMainTouchPadOpacity(opacity)
         self?.reload()
       },
-      editLayoutDestination: {
-        #if os(iOS)
-        AnyView(TouchOverlayLayoutEditorView().padBackNavigation())
-        #else
-        AnyView(EmptyView())
-        #endif
+      editLayout: { [weak self] in
+        self?.editLayout()
       },
       skinsDestination: { [system] in Self.skinsDestination(for: system) },
       identifyPad: { [weak self] qualifier in
@@ -203,6 +201,18 @@ final class ControllerHubViewModel {
     #else
     AnyView(EmptyView())
     #endif
+  }
+
+  /// The controls must be edited on the canvas the game draws them on: positions are stored as
+  /// fractions of it, so a layout made on any other rectangle (the old editor, pushed under this
+  /// hub's navigation bar) moved when play resumed. In a game, the game screen closes this hub and
+  /// edits its live overlay; outside one, the hub presents a full-screen editor.
+  private func editLayout() {
+    if reader.isGameRunning() {
+      notificationCenter.post(name: .DOLEditTouchLayout, object: nil)
+    } else {
+      isLayoutEditorPresented = true
+    }
   }
 
   /// Announces the choice BEFORE applying it: `overlayMode = .wii` posts `assignmentsChanged`
