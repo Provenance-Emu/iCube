@@ -59,6 +59,17 @@ private final class FakeIO: PlayerScreenIO {
     qualifier.hasPrefix("iOS/") ? "Touchscreen" : "Physical Controller"
   }
 
+  /// What each profile gives the control rows (every row reads the same here); a missing profile
+  /// cannot be read.
+  var profileExpressions: [String: String] = ["Physical Controller": "`Button B`", "Touchscreen": "`Button 0`"]
+  /// Every `expression(inProfile:)` read, as "profile:row".
+  var profileReads: [String] = []
+
+  func expression(inProfile profile: String, for row: RemapControlRow, port: Int) -> String? {
+    profileReads.append("\(profile):\(row.id)")
+    return profileExpressions[profile]
+  }
+
   func isMotionPointerEnabled(wiimote: Int) -> Bool { true }
   func pointerMotion() -> PointerMotionState { .standard }
   func inputNames(forQualifier qualifier: String) -> [String] { deviceInputs }
@@ -859,6 +870,63 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertTrue(model.saveExpression("`Button B`", for: model.state.controls[0]))
     XCTAssertEqual(io.writes, ["expression:gcPad-0-0=`Button B`"])
     XCTAssertTrue(model.state.profileEdited)
+  }
+
+  // MARK: Reset one control to the default
+
+  /// Reads the bound device's default profile's expression for that one control and writes it.
+  @MainActor
+  func test_resetToDefault_writesTheDefaultProfilesExpression() {
+    let (reader, io) = boundGameCube()
+    let memory = PlayerProfileMemory()
+    memory.remember("Physical Controller", for: "gc-1")
+    let model = make(reader, io, memory: memory)
+    model.reload()
+    let row = model.state.controls[0]
+    XCTAssertEqual(model.defaultExpression(for: row), "`Button B`")
+    model.resetToDefault(row)
+    XCTAssertEqual(io.profileReads.last, "Physical Controller:\(row.id)")
+    XCTAssertEqual(io.writes, ["expression:\(row.id)=`Button B`"])
+    XCTAssertTrue(model.state.profileEdited)
+  }
+
+  /// A default profile that cannot be read (no bundled DSU profile yet) writes nothing.
+  @MainActor
+  func test_resetToDefault_anUnreadableProfileWritesNothing() {
+    let (reader, io) = boundGameCube()
+    io.profileExpressions = [:]
+    let model = make(reader, io)
+    model.reload()
+    model.resetToDefault(model.state.controls[0])
+    XCTAssertEqual(io.writes, [])
+  }
+
+  /// The same guards as Clear: not where capture is impossible, not while another row is armed.
+  @MainActor
+  func test_resetToDefault_followsClearsGuards() {
+    let reader = FakeHubReader()
+    reader.gameCube[1] = "iOS/0/Touchscreen"
+    let io = FakeIO()
+    let model = make(reader, io)
+    model.reload()
+    model.resetToDefault(model.state.controls[0])
+    XCTAssertEqual(io.writes, [], "the Touchscreen cannot capture, so it cannot reset a row either")
+
+    let (padReader, padIO) = boundGameCube()
+    let armed = make(padReader, padIO)
+    armed.reload()
+    armed.toggleCapture(armed.state.controls[0])
+    armed.resetToDefault(armed.state.controls[1])
+    XCTAssertEqual(padIO.writes, [])
+    armed.stop()
+  }
+
+  /// No device: no default profile, so nothing to read.
+  @MainActor
+  func test_defaultExpression_needsADevice() {
+    let model = make(FakeHubReader(), FakeIO())
+    model.reload()
+    XCTAssertNil(model.defaultExpression(for: model.state.controls[0]))
   }
 
   /// The editor's input picker lists the bound device's inputs, and nothing without a device.

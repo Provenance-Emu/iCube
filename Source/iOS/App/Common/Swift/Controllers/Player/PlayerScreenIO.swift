@@ -17,6 +17,9 @@ protocol PlayerScreenIO {
   func allProfileNames(for slot: PlayerSlot) -> [String]
   /// The profile a device gets when first bound ("Physical Controller", "Touchscreen", "DSU").
   func defaultProfileName(forQualifier qualifier: String) -> String?
+  /// The expression `profile` gives `row` ("" when it leaves it unbound), nil when the profile
+  /// cannot be read. Reads the file; changes nothing.
+  func expression(inProfile profile: String, for row: RemapControlRow, port: Int) -> String?
   func isMotionPointerEnabled(wiimote: Int) -> Bool
   func pointerMotion() -> PointerMotionState
   func inputNames(forQualifier qualifier: String) -> [String]
@@ -111,6 +114,11 @@ struct LivePlayerScreenIO: PlayerScreenIO {
 
   func defaultProfileName(forQualifier qualifier: String) -> String? {
     BridgeControllerConfigWriter().defaultProfileName(forQualifier: qualifier)
+  }
+
+  func expression(inProfile profile: String, for row: RemapControlRow, port: Int) -> String? {
+    DOLControllerSettingsBridge.expression(
+      inProfile: profile, owner: row.owner.controlGroupOwner, port: port, group: row.groupId, index: row.index)
   }
 
   func isMotionPointerEnabled(wiimote: Int) -> Bool {

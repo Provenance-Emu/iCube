@@ -24,24 +24,29 @@ struct ExpressionEditorView: View {
   /// The bound device's input names, read once when the editor first renders: the player screen
   /// builds this view for every Raw Bindings row on every render, so `init` must read nothing.
   let loadInputs: () -> [String]
+  /// The control's expression in the device's default profile (a file read), read once on appear;
+  /// nil when there is none.
+  let loadDefault: () -> String?
   let check: (String) -> ExpressionCheck
   /// Writes the text; false when it was refused.
   let save: (String) -> Bool
 
   @State private var text: String
   @State private var inputs: [String]?
+  @State private var defaultExpression: String?
   @State private var live: LiveInputValues
   @Environment(\.dismiss) private var dismiss
 
   init(
     title: String, original: String, family: DeviceFamily = .unknown, loadInputs: @escaping () -> [String] = { [] },
-    readInputStates: @escaping () -> [Float] = { [] }, check: @escaping (String) -> ExpressionCheck,
-    save: @escaping (String) -> Bool
+    loadDefault: @escaping () -> String? = { nil }, readInputStates: @escaping () -> [Float] = { [] },
+    check: @escaping (String) -> ExpressionCheck, save: @escaping (String) -> Bool
   ) {
     self.title = title
     self.original = original
     self.family = family
     self.loadInputs = loadInputs
+    self.loadDefault = loadDefault
     self.check = check
     self.save = save
     _text = State(initialValue: original)
@@ -55,13 +60,18 @@ struct ExpressionEditorView: View {
         onSave: { if save(text) { dismiss() } },
         onRevert: { text = original },
         onClear: { text = "" },
+        defaultExpression: defaultExpression,
+        onDefault: { if let defaultExpression { text = defaultExpression } },
         inputs: inputs ?? loadInputs(), family: family, live: live,
         onInsert: { text = ExpressionEditorModelBuilder.inserting($0, into: text) }),
       style: .list,
       onBack: { dismiss() })
       .navigationTitle(title)
       .onAppear {
-        if inputs == nil { inputs = loadInputs() }
+        if inputs == nil {
+          inputs = loadInputs()
+          defaultExpression = loadDefault()
+        }
         live.start()
       }
       .onDisappear { live.stop() }
@@ -73,12 +83,31 @@ enum ExpressionEditorModelBuilder {
   static func make(
     text: Binding<String>, original: String, check: ExpressionCheck,
     onSave: @escaping () -> Void, onRevert: @escaping () -> Void, onClear: @escaping () -> Void,
+    defaultExpression: String? = nil, onDefault: @escaping () -> Void = {},
     inputs: [String] = [], family: DeviceFamily = .unknown, live: LiveInputValues? = nil,
     onInsert: @escaping (String) -> Void = { _ in }
   ) -> MenuModel {
     // Only an edit is judged: a legacy expression that reports a syntax error can still work through
     // the parser's bareword fallback, and it must never be rejected or rewritten untouched.
     let isEdited = text.wrappedValue != original
+    var actionItems = [
+      MenuItem(
+        id: "expression-save", title: L("Save"), icon: "square.and.arrow.down", role: .action(onSave),
+        isEnabled: isEdited && check.canSave),
+      MenuItem(
+        id: "expression-revert", title: L("Revert"), icon: "arrow.uturn.backward", role: .action(onRevert),
+        isEnabled: isEdited),
+    ]
+    if let defaultExpression {
+      // Puts the default profile's text in the field; Save writes it, like any edit.
+      actionItems.append(MenuItem(
+        id: "expression-default", title: L("Reset to Default"),
+        subtitle: defaultExpression.isEmpty ? L("Unbound") : defaultExpression, icon: "arrow.counterclockwise",
+        role: .action(onDefault), isEnabled: text.wrappedValue != defaultExpression))
+    }
+    actionItems.append(MenuItem(
+      id: "expression-clear", title: L("Clear"), icon: "xmark.circle", role: .destructive(onClear),
+      isEnabled: !text.wrappedValue.isEmpty))
     var sections = [
       MenuSection(id: "expression", header: L("Expression"), items: [
         MenuItem(id: "expression-text", title: L("Expression"), role: .custom(AnyView(ExpressionTextField(text: text)))),
@@ -90,17 +119,7 @@ enum ExpressionEditorModelBuilder {
           icon: !isEdited || check.canSave ? "checkmark.circle" : "exclamationmark.triangle",
           tint: !isEdited || check.canSave ? nil : .orange, role: .action({})),
       ]),
-      MenuSection(id: "actions", items: [
-        MenuItem(
-          id: "expression-save", title: L("Save"), icon: "square.and.arrow.down", role: .action(onSave),
-          isEnabled: isEdited && check.canSave),
-        MenuItem(
-          id: "expression-revert", title: L("Revert"), icon: "arrow.uturn.backward", role: .action(onRevert),
-          isEnabled: isEdited),
-        MenuItem(
-          id: "expression-clear", title: L("Clear"), icon: "xmark.circle", role: .destructive(onClear),
-          isEnabled: !text.wrappedValue.isEmpty),
-      ]),
+      MenuSection(id: "actions", items: actionItems),
     ]
     if !inputs.isEmpty {
       // A caption, never focused, like the player screen's help rows.

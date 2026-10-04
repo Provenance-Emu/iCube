@@ -4790,3 +4790,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Nunchuk Accelerometer %@" = "Nunchuk Accelerometer %@";
 "Select an input to add it to the expression. A value near 1 means it is pressed." = "Select an input to add it to the expression. A value near 1 means it is pressed.";
 "Inputs" = "Inputs";
+"Reset to Default" = "Reset to Default";

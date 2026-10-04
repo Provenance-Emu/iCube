@@ -31,6 +31,7 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
       setSideways: { recorder.calls.append("sideways:\($0)") },
       toggleCapture: { recorder.calls.append("capture:\($0.id)") },
       clearBinding: { recorder.calls.append("clear:\($0.id)") },
+      resetBinding: { recorder.calls.append("reset:\($0.id)") },
       setPointerMode: { recorder.calls.append("pointer:\($0)") },
       recenterPointer: { recorder.calls.append("recenter") },
       setDragGain: { recorder.calls.append("gain:\($0)") },

@@ -151,6 +151,8 @@ struct PlayerScreenActions {
   /// Arms the row's capture, or cancels it when that row is the armed one.
   var toggleCapture: (RemapControlRow) -> Void
   var clearBinding: (RemapControlRow) -> Void
+  /// Puts one control back to the bound device's default profile's binding.
+  var resetBinding: (RemapControlRow) -> Void
   var setPointerMode: (PointerMode) -> Void
   var recenterPointer: () -> Void
   var setDragGain: (Double) -> Void

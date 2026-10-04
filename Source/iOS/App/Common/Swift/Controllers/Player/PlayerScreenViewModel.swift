@@ -259,6 +259,7 @@ final class PlayerScreenViewModel {
       setSideways: { [weak self] in self?.setSideways($0) },
       toggleCapture: { [weak self] in self?.toggleCapture($0) },
       clearBinding: { [weak self] in self?.clear($0) },
+      resetBinding: { [weak self] in self?.resetToDefault($0) },
       setPointerMode: { [weak self] mode in self?.write { $0.setPointerMode(mode) } },
       recenterPointer: { [weak self] in self?.io.recenterPointer() },
       setDragGain: { [weak self] gain in self?.write { $0.setDragGain(gain) } },
@@ -278,6 +279,7 @@ final class PlayerScreenViewModel {
           original: row.editableExpression,
           family: DeviceFamily.from(qualifier: qualifier),
           loadInputs: { [weak self] in self?.editorInputs(forQualifier: qualifier) ?? [] },
+          loadDefault: { [weak self] in self?.defaultExpression(for: row) },
           readInputStates: { [weak self] in self?.io.inputStates(forQualifier: qualifier) ?? [] },
           check: { [weak self] in self?.io.check($0) ?? ExpressionCheck(status: .invalid, message: "") },
           save: { [weak self] in self?.saveExpression($0, for: row) ?? false }))
@@ -514,6 +516,28 @@ final class PlayerScreenViewModel {
     if let capture, capture.row.id != row.id { return }
     endCapture()
     io.setExpression("", for: row, port: slot.port)
+    memory.markEdited(slot.playerID)
+    reload()
+  }
+
+  /// The expression the bound device's default profile ("Physical Controller", "Touchscreen", …)
+  /// gives `row`: what Reset to Default puts back. nil without a device, or when that profile cannot
+  /// be read (no bundled DSU profile ships yet).
+  func defaultExpression(for row: RemapControlRow) -> String? {
+    let qualifier = state.player.deviceQualifier
+    guard !qualifier.isEmpty, let profile = io.defaultProfileName(forQualifier: qualifier) else { return nil }
+    return io.expression(inProfile: profile, for: row, port: slot.port)
+  }
+
+  /// A capture row's Reset to Default: one control back to the default profile's binding. The same
+  /// guards as Clear: a port that cannot capture offers neither, and an armed capture on another row
+  /// is never raced.
+  func resetToDefault(_ row: RemapControlRow) {
+    guard state.canCapture else { return }
+    if let capture, capture.row.id != row.id { return }
+    guard let expression = defaultExpression(for: row) else { return }
+    endCapture()
+    io.setExpression(expression, for: row, port: slot.port)
     memory.markEdited(slot.playerID)
     reload()
   }

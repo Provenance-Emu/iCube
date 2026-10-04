@@ -111,6 +111,34 @@ final class PlayerScreenLeavesTests: XCTestCase {
     XCTAssertEqual(editor(text: "`Button A`", original: "`Button A`", check: valid).item(id: "expression-clear")?.isEnabled, true)
   }
 
+  // MARK: Expression editor: Reset to Default
+
+  private func editor(text: String, defaultExpression: String?, onDefault: @escaping () -> Void = {}) -> MenuModel {
+    ExpressionEditorModelBuilder.make(
+      text: .constant(text), original: "`Button A`", check: valid, onSave: {}, onRevert: {}, onClear: {},
+      defaultExpression: defaultExpression, onDefault: onDefault)
+  }
+
+  func test_default_offeredOnlyWhenKnown_offWhenAlreadyThere() {
+    XCTAssertNil(editor(text: "`Button A`", defaultExpression: nil).item(id: "expression-default"))
+    let model = editor(text: "`Button A`", defaultExpression: "`Button B`")
+    XCTAssertEqual(model.item(id: "expression-default")?.isEnabled, true)
+    XCTAssertEqual(model.item(id: "expression-default")?.subtitle, "`Button B`")
+    XCTAssertEqual(editor(text: "`Button B`", defaultExpression: "`Button B`").item(id: "expression-default")?.isEnabled, false)
+    XCTAssertEqual(editor(text: "`Button A`", defaultExpression: "").item(id: "expression-default")?.subtitle, "Unbound")
+  }
+
+  func test_default_runsItsAction_andSitsBetweenRevertAndClear() {
+    var ran = false
+    let model = editor(text: "`Button A`", defaultExpression: "`Button B`", onDefault: { ran = true })
+    XCTAssertEqual(
+      model.sections.first { $0.id == "actions" }?.items.map(\.id),
+      ["expression-save", "expression-revert", "expression-default", "expression-clear"])
+    guard let item = model.item(id: "expression-default"), case .action(let action) = item.role else { return XCTFail("not an action") }
+    action()
+    XCTAssertTrue(ran)
+  }
+
   // MARK: Expression editor: input picker
 
   func test_inputs_noDeviceNoSection() {

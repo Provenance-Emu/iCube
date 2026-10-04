@@ -145,7 +145,8 @@ enum PlayerScreenModelBuilder {
           id: captureRowID(row), title: title,
           role: .custom(AnyView(CaptureRowView(
             title: title, binding: BindingDisplay.text(for: row.expression, family: family), isArmed: isArmed,
-            isEnabled: isEnabled, onActivate: { actions.toggleCapture(row) }, onClear: { actions.clearBinding(row) }))),
+            isEnabled: isEnabled, onActivate: { actions.toggleCapture(row) }, onClear: { actions.clearBinding(row) },
+            onReset: { actions.resetBinding(row) }))),
           isEnabled: isEnabled,
           onCustomActivate: { actions.toggleCapture(row) })
       }
