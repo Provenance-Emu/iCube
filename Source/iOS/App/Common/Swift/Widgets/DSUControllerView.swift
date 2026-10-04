@@ -506,7 +506,7 @@ private final class TouchControllerHostViewController: UIViewController {
     // If Wii pad, set initial IR mode to match settings
     if let wii = loaded as? TCWiiPad {
       let mode = DOLConfigBridge.mainTouchPadIRMode()
-      wii.mode = TCWiiTouchIRMode(rawValue: mode) ?? .none
+      wii.mode = TCWiiTouchIRMode(rawValue: mode) ?? .gyro
     }
   }
 }

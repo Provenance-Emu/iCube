@@ -119,8 +119,8 @@ struct ControllersRootView: View {
 /// Presented full screen: by the game screen over the running game (Edit Layout… in a game, a
 /// long-press on the overlay), and by the Controllers hub and More Controller Settings outside one.
 /// `TouchOverlayView.init(initialEditMode:)` suppresses every group's input while editing, so the
-/// placeholder `deviceId: 0` is never written; `irMode: .none` because `TouchOverlayIRPadView`'s
-/// `mode`/`isEditingFlag` `didSet`s both call `forceReleaseAndCenter()` on mount, and `.none` makes
+/// placeholder `deviceId: 0` is never written; `irMode: .gyro` because `TouchOverlayIRPadView`'s
+/// `mode`/`isEditingFlag` `didSet`s both call `forceReleaseAndCenter()` on mount, and `.gyro` makes
 /// both no-ops.
 struct TouchOverlayLayoutEditorView: View {
   private let mode: TouchOverlayEditMode
@@ -145,7 +145,7 @@ struct TouchOverlayLayoutEditorView: View {
       // Over the game, a light scrim keeps the picture visible behind the controls being placed.
       Color.black.opacity(overGame ? 0.3 : 0.85)
         .ignoresSafeArea()
-      TouchOverlayView(padKind: padKind, deviceId: 0, irMode: TCWiiTouchIRMode.none.rawValue,
+      TouchOverlayView(padKind: padKind, deviceId: 0, irMode: TCWiiTouchIRMode.gyro.rawValue,
                        initialEditMode: mode, onDone: onDone,
                        toolbarAccessory: overGame || mode != .layout ? nil : AnyView(padPicker))
         .id(padKind)

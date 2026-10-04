@@ -16,7 +16,7 @@ import UIKit
 /// `[y, y, x, x]` convention as `TCWiiPad.sendIR` (design §6.4 — this is IR-specific and must not
 /// be "fixed" to the stick's half-axis convention).
 struct TouchOverlayIRPadView: UIViewRepresentable {
-  /// `.none` (gyro-mode setting, or IR fully disabled) keeps this surface inert and lets
+  /// `.gyro` keeps this surface inert and lets
   /// `TCDeviceMotion.handleIRCursorMapping` keep driving 112-115 unchanged (design §6.6 — never
   /// route gyro mode through this view).
   let mode: TCWiiTouchIRMode
@@ -63,11 +63,11 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
   }
 
   final class IRSurfaceView: UIView {
-    var mode: TCWiiTouchIRMode = .none {
+    var mode: TCWiiTouchIRMode = .gyro {
       didSet {
         guard mode != oldValue else { return }
         // `TCWiiPad.setTouchIRMode`: center between mode changes for predictable handoff. When
-        // the NEW mode is `.none`, `sendIR`'s own guard makes this a state reset with no write.
+        // the NEW mode is `.gyro`, `sendIR`'s own guard makes this a state reset with no write.
         forceReleaseAndCenter()
       }
     }
@@ -160,7 +160,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
       super.touchesBegan(touches, with: event)
       activeTouches.formUnion(touches)
       scheduleThreeFingerCheckIfNeeded()
-      guard mode != .none, primaryTouch == nil else { return }
+      guard mode != .gyro, primaryTouch == nil else { return }
       // Exclusion rule (design §6.5): a touch that started inside another group never begins an
       // IR gesture. In practice this surface sits below every other group in the ZStack so such a
       // touch is delivered elsewhere first; this is the belt-and-braces guard.
@@ -171,7 +171,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
       super.touchesMoved(touches, with: event)
-      guard mode != .none, let primary = primaryTouch, touches.contains(primary) else { return }
+      guard mode != .gyro, let primary = primaryTouch, touches.contains(primary) else { return }
       let point = primary.location(in: self)
       sendIR(computeXY(at: point))
     }
@@ -206,7 +206,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     /// the SAME last-known position via `UITouch.location(in:)` (still valid post-cancel), so both
     /// should send it and, in `.drag` mode, persist it as the next drag's starting point.
     private func finishPrimaryTouch(in touches: Set<UITouch>) {
-      guard mode != .none, let primary = primaryTouch, touches.contains(primary) else { return }
+      guard mode != .gyro, let primary = primaryTouch, touches.contains(primary) else { return }
       let point = primary.location(in: self)
       let (x, y) = computeXY(at: point)
       sendIR((x, y))
@@ -226,7 +226,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     private func computeXY(at point: CGPoint) -> (x: CGFloat, y: CGFloat) {
       let rect = currentGameRect()
       switch mode {
-      case .none:
+      case .gyro:
         return (0, 0)
       case .follow:
         return TouchOverlayIRGeometry.follow(point: point, in: rect)
@@ -257,8 +257,8 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     // MARK: Reset / center
 
     /// Releases any in-progress gesture and centers the pointer — used on a mode change, an
-    /// edit-mode transition, and the three-finger-hold gesture. `sendIR`'s own `mode != .none`
-    /// guard means this is a pure state reset (no write) when the current mode is `.none`.
+    /// edit-mode transition, and the three-finger-hold gesture. `sendIR`'s own `mode != .gyro`
+    /// guard means this is a pure state reset (no write) when the current mode is `.gyro`.
     func forceReleaseAndCenter() {
       threeFingerWorkItem?.cancel()
       threeFingerWorkItem = nil
@@ -270,7 +270,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     }
 
     private func sendIR(_ xy: (x: CGFloat, y: CGFloat)) {
-      guard mode != .none else { return }
+      guard mode != .gyro else { return }
       // Writes the SAME value to both members of each IR pair (112/113 = Up/Down, 114/115 =
       // Left/Right) — `TCWiiPad.sendIR`'s convention, do not "fix" this to the stick's
       // half-axis convention (design §6.4).
