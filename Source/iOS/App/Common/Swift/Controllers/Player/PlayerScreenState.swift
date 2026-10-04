@@ -32,7 +32,10 @@ struct DeviceOption: Equatable {
 
 extension PlayerSlot {
   /// Same value as `PlayerState.id`.
-  var playerID: String { (kind == .gameCube ? "gc-" : "wii-") + String(port) }
+  var playerID: String { playerIDPrefix + String(port) }
+
+  /// Every player ID of this slot's system starts with it ("gc-" or "wii-").
+  var playerIDPrefix: String { kind == .gameCube ? "gc-" : "wii-" }
   /// "Player 1" / "Wii Remote 1": the hub's row titles.
   var title: String { String(format: kind == .gameCube ? L("Player %d") : L("Wii Remote %d"), port) }
 }

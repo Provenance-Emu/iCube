@@ -1048,6 +1048,37 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertEqual(other.state.profileName, "Physical Controller")
   }
 
+  /// Deleting a profile forgets it on every port and device of the system, kept or in session;
+  /// another name and the Wii Remotes (their profiles are separate files) keep theirs.
+  @MainActor
+  func test_deleteProfile_forgetsTheNameOnEveryPortAndDevice() throws {
+    let suite = "PlayerProfileMemoryDeleteTests"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defaults.removePersistentDomain(forName: suite)
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let (reader, io) = boundGameCube()
+    let memory = PlayerProfileMemory(defaults: defaults)
+    memory.remember("Mine", for: "gc-1", qualifier: Self.xbox)
+    memory.remember("Mine", for: "gc-1", qualifier: Self.dualSense)
+    memory.remember("mine", for: "gc-2", qualifier: Self.xbox)
+    memory.remember("Other", for: "gc-3", qualifier: Self.xbox)
+    memory.remember("Mine", for: "wii-1", qualifier: Self.xbox)
+    let model = make(reader, io, memory: memory)
+    model.reload()
+
+    XCTAssertTrue(model.deleteProfile("Mine"))
+
+    XCTAssertNil(memory.entry(for: "gc-1", qualifier: Self.dualSense))
+    XCTAssertNil(memory.entry(for: "gc-2", qualifier: Self.xbox))
+    XCTAssertEqual(memory.entry(for: "gc-3", qualifier: Self.xbox)?.name, "Other")
+    XCTAssertEqual(memory.entry(for: "wii-1", qualifier: Self.xbox)?.name, "Mine")
+    let relaunched = PlayerProfileMemory(defaults: defaults)
+    XCTAssertNil(relaunched.entry(for: "gc-1", qualifier: Self.dualSense), "the kept name goes too")
+    XCTAssertNil(relaunched.entry(for: "gc-2", qualifier: Self.xbox))
+    XCTAssertEqual(relaunched.entry(for: "gc-3", qualifier: Self.xbox)?.name, "Other")
+    XCTAssertEqual(relaunched.entry(for: "wii-1", qualifier: Self.xbox)?.name, "Mine")
+  }
+
   // MARK: Reset one control to the default
 
   /// Reads the bound device's default profile's expression for that one control and writes it.
