@@ -307,54 +307,6 @@ static bool RepairTouchscreenIRPointer(int idx)
   return (imu_changed || ir_changed) ? YES : NO;
 }
 
-+ (void)reconcileAssignments
-{
-  auto* cfg = Pad::GetConfig();
-  if (!cfg)
-    return;
-
-  // Build set of qualified names for currently enumerated physical devices (MFi/DSU)
-  std::unordered_set<std::string> connected_qnames;
-  const auto devices = g_controller_interface.GetAllDevices();
-  for (const auto& dev : devices)
-  {
-    if (!dev || IsDisconnectedPlaceholder(dev))
-      continue;
-    const std::string src = dev->GetSource();
-    if (src == "MFi" || src == "DSUClient")
-      connected_qnames.insert(dev->GetQualifiedName());
-  }
-
-  // Clear phantom defaults
-  const int count = cfg->GetControllerCount();
-  bool did_mutate = false;
-  for (int i = 0; i < count; ++i)
-  {
-    auto* pad = cfg->GetController(i);
-    if (!pad) continue;
-    const auto dq = pad->GetDefaultDevice();
-    const auto q = dq.ToString();
-    if (!q.empty() && connected_qnames.find(q) == connected_qnames.end())
-    {
-      if (!(dq.source == "iOS" && dq.name == "Touchscreen"))
-      {
-        pad->SetDefaultDevice("");
-        pad->UpdateReferences(g_controller_interface);
-        did_mutate = true;
-      }
-    }
-  }
-
-  // NO POLICY HERE. Choosing which device owns which port is the Swift
-  // AssignmentEngine's job; this method only removes bindings that point at
-  // devices the ControllerInterface no longer enumerates, so the engine sees an
-  // accurate snapshot. The three competing auto-assign policies that used to
-  // live below this line (and in EmulationCoordinator) were the reason a single
-  // connect event could assign, re-decide and reassign the same controller.
-  if (did_mutate)
-    Pad::GetConfig()->SaveConfig();
-}
-
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased
 {
   if (portOneBased < 1 || portOneBased > 4)
@@ -767,6 +719,104 @@ static BOOL DeleteUserProfile(const ControllerEmu::EmulatedController* controlle
 + (BOOL)deleteProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased
 {
   return DeleteUserProfile(WiimoteAt(indexOneBased), name);
+}
+
+// ---- Mapping stash ----------------------------------------------------------------------------
+//
+// Mechanical only: which slot is stashed under which device, and when a stash comes back, is the
+// Swift ControllerAssignmentService's decision.
+
+// `<User>/Config/MappingStash/<GCPad|Wiimote>/`. Beside `Config/Profiles`, not inside it:
+// InputProfile's profile cycling searches the profile directory recursively.
+static std::string StashPath(const InputConfig* config, const std::string& qualifier)
+{
+  std::string name = qualifier;
+  for (char& c : name)
+  {
+    const bool keep = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                      c == ' ' || c == '-' || c == '_';
+    if (!keep)
+      c = '_';
+  }
+  return File::GetUserPath(D_CONFIG_IDX) + "MappingStash/" + config->GetProfileDirectoryName() +
+         "/" + name + ".ini";
+}
+
+static ControllerEmu::EmulatedController* ControllerAt(InputConfig* config, NSInteger oneBased)
+{
+  const int index = static_cast<int>(oneBased - 1);
+  if (!config || index < 0 || index >= config->GetControllerCount())
+    return nullptr;
+  return config->GetController(index);
+}
+
+static BOOL StashMapping(ControllerEmu::EmulatedController* controller, NSString* qualifier)
+{
+  if (!controller || qualifier.length == 0)
+    return NO;
+  const std::string q = FoundationToCppString(qualifier);
+  const std::string path = StashPath(controller->GetConfig(), q);
+  if (!File::CreateFullPath(path))
+    return NO;
+  Common::IniFile ini;
+  auto* section = ini.GetOrCreateSection("Profile");
+  controller->SaveConfig(section);
+  // The mapping is `qualifier`'s whatever the slot is bound to by now.
+  section->Set("Device", q);
+  return ini.Save(path) ? YES : NO;
+}
+
+static BOOL RestoreStashedMapping(ControllerEmu::EmulatedController* controller,
+                                  NSString* qualifier)
+{
+  if (!controller || qualifier.length == 0)
+    return NO;
+  const std::string q = FoundationToCppString(qualifier);
+  const std::string path = StashPath(controller->GetConfig(), q);
+  Common::IniFile ini;
+  if (!File::Exists(path) || !ini.Load(path))
+    return NO;
+  auto* section = ini.GetOrCreateSection("Profile");
+  // Two qualifiers can share a file name ('/' and '_' are both written '_'): only this one's.
+  std::string device;
+  if (!section->Get("Device", &device) || device != q)
+    return NO;
+  {
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+    const auto bound = controller->GetDefaultDevice();
+    LoadProfileKeepingExtension(controller, section);
+    controller->SetDefaultDevice(bound);
+  }
+  controller->UpdateReferences(g_controller_interface);
+  File::Delete(path, File::IfAbsentBehavior::NoConsoleWarning);
+  NSLog(@"[iCube][Input] %s: mapping restored for %s", controller->GetName().c_str(), q.c_str());
+  return YES;
+}
+
++ (BOOL)stashMappingForGCPort:(NSInteger)portOneBased qualifier:(NSString*)qualifier
+{
+  return StashMapping(ControllerAt(Pad::GetConfig(), portOneBased), qualifier);
+}
+
++ (BOOL)stashMappingForWiimote:(NSInteger)indexOneBased qualifier:(NSString*)qualifier
+{
+  return StashMapping(ControllerAt(Wiimote::GetConfig(), indexOneBased), qualifier);
+}
+
++ (BOOL)restoreStashedMappingForGCPort:(NSInteger)portOneBased qualifier:(NSString*)qualifier
+{
+  if (!RestoreStashedMapping(ControllerAt(Pad::GetConfig(), portOneBased), qualifier))
+    return NO;
+  Pad::GetConfig()->SaveConfig();
+  return YES;
+}
+
++ (BOOL)restoreStashedMappingForWiimote:(NSInteger)indexOneBased qualifier:(NSString*)qualifier
+{
+  if (!RestoreStashedMapping(ControllerAt(Wiimote::GetConfig(), indexOneBased), qualifier))
+    return NO;
+  Wiimote::GetConfig()->SaveConfig();
+  return YES;
 }
 
 + (NSArray<NSString*>*)padControlNamesForGroup:(NSInteger)portOneBased group:(NSInteger)groupId

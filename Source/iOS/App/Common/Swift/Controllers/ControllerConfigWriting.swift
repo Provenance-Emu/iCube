@@ -35,14 +35,17 @@ protocol ControllerConfigWriting {
   /// Clear the default device binding for a port.
   func clearDefaultDevice(system: EmulatedSystem, port: Int)
 
+  /// The device qualifier bound to a port ("" when none). A device that disconnects keeps its
+  /// binding, so this can name a device that is gone.
+  func defaultDevice(system: EmulatedSystem, port: Int) -> String
+
   // MARK: Mapping state
 
   /// True when at least one control of the slot's mapping resolves on the
   /// device currently bound to the slot. Ask it after `setDefaultDevice`.
   ///
-  /// Disconnecting a device only clears its default-device binding — the
-  /// mapping itself is left alone — so a pad that comes back still binds its
-  /// own mapping and this is true. A mapping left by a different kind of
+  /// Disconnecting a device leaves its binding and its mapping alone, so a
+  /// pad that comes back still binds its own mapping and this is true. A mapping left by a different kind of
   /// device (the Touchscreen profile under a physical pad, or the reverse)
   /// binds nothing, and this is false.
   /// `ControllerAssignmentService.assign` uses it to keep a user-picked
@@ -59,6 +62,16 @@ protocol ControllerConfigWriting {
 
   /// Load a named input profile for a port, optionally restoring the bound device.
   func loadProfile(_ name: String, system: EmulatedSystem, port: Int, restoreDevice: Bool)
+
+  // MARK: Mapping stash
+
+  /// Keep the port's live mapping as `qualifier`'s, for when that device is assigned again
+  /// (`TVControllerMappingBridge.stashMapping`; one per device and system, the last one wins).
+  func stashMapping(forQualifier qualifier: String, system: EmulatedSystem, port: Int)
+
+  /// Load `qualifier`'s stashed mapping into the port, keeping the bound device, and drop the
+  /// stash. False, changing nothing, when there is none.
+  func restoreStashedMapping(forQualifier qualifier: String, system: EmulatedSystem, port: Int) -> Bool
 
   // MARK: Touchscreen
 

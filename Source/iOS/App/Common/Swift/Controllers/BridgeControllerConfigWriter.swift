@@ -44,6 +44,15 @@ final class BridgeControllerConfigWriter: ControllerConfigWriting {
     }
   }
 
+  func defaultDevice(system: EmulatedSystem, port: Int) -> String {
+    switch system {
+    case .gamecube:
+      return TVControllerMappingBridge.defaultDevice(forGCPort: port + 1) as String
+    case .wii:
+      return TVControllerMappingBridge.defaultDevice(forWiimote: port + 1) as String
+    }
+  }
+
   // MARK: Mapping state
 
   func mappingBindsDevice(system: EmulatedSystem, port: Int) -> Bool {
@@ -73,6 +82,26 @@ final class BridgeControllerConfigWriter: ControllerConfigWriting {
       _ = TVControllerMappingBridge.loadProfile(name, forGCPort: port + 1, restoreDevice: restoreDevice)
     case .wii:
       _ = TVControllerMappingBridge.loadProfile(name, forWiimote: port + 1, restoreDevice: restoreDevice)
+    }
+  }
+
+  // MARK: Mapping stash
+
+  func stashMapping(forQualifier qualifier: String, system: EmulatedSystem, port: Int) {
+    switch system {
+    case .gamecube:
+      _ = TVControllerMappingBridge.stashMapping(forGCPort: port + 1, qualifier: qualifier)
+    case .wii:
+      _ = TVControllerMappingBridge.stashMapping(forWiimote: port + 1, qualifier: qualifier)
+    }
+  }
+
+  func restoreStashedMapping(forQualifier qualifier: String, system: EmulatedSystem, port: Int) -> Bool {
+    switch system {
+    case .gamecube:
+      return TVControllerMappingBridge.restoreStashedMapping(forGCPort: port + 1, qualifier: qualifier)
+    case .wii:
+      return TVControllerMappingBridge.restoreStashedMapping(forWiimote: port + 1, qualifier: qualifier)
     }
   }
 

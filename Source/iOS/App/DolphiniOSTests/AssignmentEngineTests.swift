@@ -38,10 +38,30 @@ final class AssignmentEngineTests: XCTestCase {
 
   // MARK: Touchscreen fallback
 
-  func test_noControllers_bindsTouchscreenToPad1() {
+  func test_noControllers_emptyPad1_bindsTouchscreenToPad1() {
     let decision = AssignmentEngine().decide(from: state(gc: ["", "", "", ""], connected: [touchscreen]))
     XCTAssertEqual(decision.assignments,
                    [ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .gamecube)])
+  }
+
+  /// The last pad drops: it keeps its binding, so Pad 1 still names it. The Touchscreen takes Pad 1
+  /// so the game stays playable; `ControllerAssignmentService.assignTouchscreen` stashes the pad's
+  /// mapping first (it used to be overwritten by the Touchscreen profile for good).
+  func test_lastPadDrops_touchscreenTakesPad1FromItsKeptBinding() {
+    let decision = AssignmentEngine().decide(from: state(gc: [padA, "", "", ""], connected: [touchscreen]))
+    XCTAssertEqual(decision.assignments,
+                   [ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .gamecube)])
+  }
+
+  /// tvOS enumerates no Touchscreen: nothing can take Pad 1, and its binding waits for the pad.
+  func test_lastPadDrops_noTouchscreen_pad1WaitsForThePad() {
+    XCTAssertEqual(AssignmentEngine().decide(from: state(gc: [padA, "", "", ""], connected: [])), .none)
+  }
+
+  /// A pad that comes back while its binding is still in place needs nothing: its mapping never left.
+  func test_padComingBackToItsKeptBinding_decidesNothing() {
+    XCTAssertEqual(
+      AssignmentEngine().decide(from: state(gc: [padA, "", "", ""], connected: [touchscreen, padA])), .none)
   }
 
   func test_touchscreenAlreadyOnPad1_decidesNothing() {
@@ -91,8 +111,11 @@ final class AssignmentEngineTests: XCTestCase {
   }
 
   func test_reconnectAfterDrop_returnsToTheSamePort() {
-    // Pad B drops: its binding is cleared by the mechanical C++ pass, Pad A
-    // stays on port 1. On reconnect B must land back on port 2, not port 1.
+    // Pad B drops and keeps its binding on port 2; Pad A stays on port 1. On
+    // reconnect B is already where it was: nothing moves.
+    XCTAssertEqual(
+      AssignmentEngine().decide(from: state(gc: [padA, padB, "", ""], connected: [padA, padB])), .none)
+    // Port 2 emptied in the meantime (No Device): B lands back on port 2, not port 1.
     let decision = AssignmentEngine().decide(
       from: state(gc: [padA, "", "", ""], connected: [padA, padB]))
     XCTAssertEqual(decision.assignments,
@@ -100,7 +123,8 @@ final class AssignmentEngineTests: XCTestCase {
   }
 
   func test_staleBinding_isReusedByANewController() {
-    // Port 1 still names a device that is no longer enumerated.
+    // Port 1 still names a device that is no longer enumerated. The service stashes that
+    // device's mapping before padB takes the port.
     let decision = AssignmentEngine().decide(
       from: state(gc: [padA, "", "", ""], connected: [padB]))
     XCTAssertEqual(decision.assignments,

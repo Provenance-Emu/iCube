@@ -36,9 +36,8 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 
 /// True when the GC pad slot's emulated controller has at least one non-empty
 /// control expression bound — i.e. it has a real mapping, not just an
-/// activated-but-unconfigured default. `reconcileAssignments` clears a
-/// disconnected device's default-device binding but never touches these
-/// expressions, so this stays true across a reconnect. It says nothing about
+/// activated-but-unconfigured default. A device that disconnects keeps its
+/// binding and these expressions, so this stays true across a reconnect. It says nothing about
 /// whether the mapping works on the device now bound; `padMappingBindsDevice:`
 /// answers that.
 + (BOOL)padHasAnyBinding:(NSInteger)portOneBased NS_SWIFT_NAME(padHasAnyBinding(forGCPort:));
@@ -85,11 +84,6 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 /// profile is loaded when the port changes device or has no mapping; the port's device is the
 /// Touchscreen afterwards whatever that profile's `Device =` line names.
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
-
-/// Mechanical only: drops default-device bindings that point at devices the
-/// ControllerInterface no longer enumerates, so the Swift AssignmentEngine sees
-/// an accurate snapshot. This never chooses a port and never assigns a device.
-+ (void)reconcileAssignments;
 
 /// Enumerate all input devices' qualified names that are valid for mapping (iOS, MFi, DSU)
 + (NSArray<NSString*>*)allQualifiedDevices;
@@ -146,6 +140,28 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
             forGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(deleteProfile(_:forGCPort:));
 + (BOOL)deleteProfile:(NSString*)name
            forWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(deleteProfile(_:forWiimote:));
+
+/// Mapping stash: the mapping a controller had on a slot, kept while the slot goes to another
+/// device (the Touchscreen when a pad disconnects, another pad, No Device), so the controller gets
+/// it back when it is assigned again. One profile-shaped file per controller type and device,
+/// `<User>/Config/MappingStash/<GCPad|Wiimote>/<qualifier>.ini` with every character but letters,
+/// digits, space, `-` and `_` written as `_`. Beside `Config/Profiles`, not inside it: no profile
+/// list or profile hotkey may offer a stash.
+/// Saves the slot's live mapping as `qualifier`'s stash, its `Device =` line set to `qualifier`.
++ (BOOL)stashMappingForGCPort:(NSInteger)portOneBased
+                    qualifier:(NSString*)qualifier
+    NS_SWIFT_NAME(stashMapping(forGCPort:qualifier:));
++ (BOOL)stashMappingForWiimote:(NSInteger)indexOneBased
+                     qualifier:(NSString*)qualifier
+    NS_SWIFT_NAME(stashMapping(forWiimote:qualifier:));
+/// Loads `qualifier`'s stash into the slot, keeping the slot's bound device, saves, and deletes
+/// the stash. NO, changing nothing, when there is none.
++ (BOOL)restoreStashedMappingForGCPort:(NSInteger)portOneBased
+                             qualifier:(NSString*)qualifier
+    NS_SWIFT_NAME(restoreStashedMapping(forGCPort:qualifier:));
++ (BOOL)restoreStashedMappingForWiimote:(NSInteger)indexOneBased
+                              qualifier:(NSString*)qualifier
+    NS_SWIFT_NAME(restoreStashedMapping(forWiimote:qualifier:));
 
 /// Device hotplug notifications
 + (void)beginPostingDevicesChangedNotifications;

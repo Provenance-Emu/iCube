@@ -149,8 +149,9 @@ final class ControllerManager: NSObject, ObservableObject {
         // free slot. Either way, clear the pause + dismiss the banner + resume.
         if let pending = self.disconnectPause {
           // Restoring the *original* slot is knowledge reconcile() does not
-          // have (the binding was already cleared), so it is written here and
+          // have (the Touchscreen may hold it by now), so it is written here and
           // the reconcile below leaves it alone because the device is now bound.
+          // The pad's mapping comes back with it (stashed when the slot changed hands).
           if TVControllerMappingBridge.qualifiedName(for: c) as String == pending.qualifier {
             self.assignmentService.assign(qualifier: pending.qualifier, toPlayer: pending.port, system: pending.isWii ? .wii : .gamecube)
           }
@@ -381,13 +382,15 @@ final class ControllerManager: NSObject, ObservableObject {
 
   /// The one place controller assignment is decided and applied.
   ///
-  /// Sequence: drop bindings to devices that have gone away (mechanical, in
-  /// C++), snapshot, let `AssignmentEngine` decide, apply every decision through
-  /// `ControllerAssignmentService`, then mirror the result onto `playerIndex`.
+  /// Sequence: snapshot, let `AssignmentEngine` decide, apply every decision through
+  /// `ControllerAssignmentService` (which re-affirms connected pads' slots as active), then
+  /// mirror the result onto `playerIndex`. A device that goes away keeps its binding and its
+  /// mapping, so it comes back to them; when the engine gives its slot to the Touchscreen or
+  /// another pad meanwhile, the service stashes its mapping first.
   /// The engine is idempotent, so calling this repeatedly is free and port
   /// assignments stay put across connect/disconnect cycles.
-  /// `autoAssign: false` is for explicit user actions: apply the drop-vanished-devices pass,
-  /// re-affirm activation and sync player indices, but make no new placement decisions. Running
+  /// `autoAssign: false` is for explicit user actions: re-affirm activation and sync player
+  /// indices, but make no new placement decisions. Running
   /// the engine after every explicit choice is what made a GameCube assignment also rewrite the
   /// Wii Remotes (and vice versa) and put a connected pad straight back onto a slot the user had
   /// just given to the touchscreen.
@@ -400,36 +403,7 @@ final class ControllerManager: NSObject, ObservableObject {
     isReconciling = true
     defer { isReconciling = false }
 
-    TVControllerMappingBridge.reconcileAssignments()
-
-    let state = ControllerStateStore.shared.snapshot()
-    if autoAssign {
-      for assignment in AssignmentEngine().decide(from: state, pinned: pinnedSlots).assignments {
-        if let qualifier = assignment.qualifier {
-          assignmentService.assign(qualifier: qualifier,
-                                   toPlayer: assignment.playerZeroBased,
-                                   system: assignment.system)
-        } else {
-          assignmentService.assignTouchscreen(toPlayer: assignment.playerZeroBased,
-                                              system: assignment.system)
-        }
-      }
-    }
-
-    // Re-affirm: a slot already bound to a CONNECTED physical controller must be active
-    // (SIDevice / Wiimote source Emulated) even if some other writer deactivated it since
-    // the binding was made. The engine only emits writes for NEW bindings, so without this
-    // pass a slot could stay bound-but-dead until the controller reconnected.
-    let connected = Set(state.connectedQualifiers)
-    func isPhysical(_ q: String) -> Bool { !q.isEmpty && !q.hasPrefix("iOS/") && connected.contains(q) }
-    for slot in state.portAssignments where isPhysical(slot.defaultDeviceQualifier) {
-      assignmentService.activate(port: slot.portOneBased - 1, system: .gamecube)
-    }
-    if state.isWiiSystem {
-      for slot in state.wiimoteAssignments where isPhysical(slot.defaultDeviceQualifier) {
-        assignmentService.activate(port: slot.portOneBased - 1, system: .wii)
-      }
-    }
+    assignmentService.reconcile(ControllerStateStore.shared.snapshot(), pinned: pinnedSlots, autoAssign: autoAssign)
 
     syncPlayerIndices()
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)

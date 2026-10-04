@@ -35,9 +35,10 @@ struct AssignmentDecision: Equatable {
 /// bridge fallback that bypassed the assignment service, and four scattered
 /// `playerIndex =` writes. A single connect event could assign, re-decide and
 /// reassign the same controller several times. The C++ side is now purely
-/// mechanical — it enumerates devices and drops bindings to devices that have
-/// gone away — and every *choice* is made here, from an immutable snapshot, and
-/// applied through `ControllerAssignmentService`.
+/// mechanical — it enumerates devices, binds, loads and saves — and every
+/// *choice* is made here, from an immutable snapshot, and applied through
+/// `ControllerAssignmentService`. A device that goes away keeps its binding (it
+/// reads as a free slot here), as Dolphin itself keeps it.
 ///
 /// This engine deliberately does NOT reshape Dolphin's `ciface`/`ControllerEmu`
 /// layer: Dolphin polls per frame through per-system INI profiles shared with
@@ -78,7 +79,12 @@ final class AssignmentEngine {
 
     // With nothing physical attached, Pad 1 falls back to the on-screen pad so
     // the game is still playable (unless the user pinned something else there).
-    if physical.isEmpty, let pad1 = gcSlots.first, !Self.isVirtual(pad1), !pinnedGC.contains(0) {
+    // A pad that disconnected keeps its binding, so Pad 1 may still name it: the
+    // service stashes that pad's mapping before the Touchscreen takes the port and
+    // gives it back when the pad returns. tvOS enumerates no Touchscreen, and
+    // there the binding simply waits for the pad.
+    if physical.isEmpty, state.connectedQualifiers.contains(where: Self.isVirtual),
+       let pad1 = gcSlots.first, !Self.isVirtual(pad1), !pinnedGC.contains(0) {
       out.append(ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .gamecube))
     }
 
@@ -102,14 +108,19 @@ final class AssignmentEngine {
     return AssignmentDecision(assignments: out)
   }
 
-  // MARK: Private
-
   /// Device qualifiers are `source/id/name`. The only virtual source the app
   /// binds is `iOS` (the on-screen Touchscreen); `MFi` and `DSUClient` are real
   /// hardware and are what auto-assign is for.
-  private static func isVirtual(_ qualifier: String) -> Bool {
+  static func isVirtual(_ qualifier: String) -> Bool {
     qualifier.hasPrefix("iOS/")
   }
+
+  /// A real controller's qualifier, connected or not: what a mapping stash is kept for.
+  static func isPhysical(_ qualifier: String) -> Bool {
+    !qualifier.isEmpty && !isVirtual(qualifier)
+  }
+
+  // MARK: Private
 
   private static func slots(from assignments: [ControllerStateStore.PortAssignment]) -> [String] {
     assignments.sorted { $0.portOneBased < $1.portOneBased }.map(\.defaultDeviceQualifier)
