@@ -1332,11 +1332,8 @@ struct EmulationScreen: View {
       fastForwardEnabled = enabled
     }
     .onReceive(controllerManager.$overlayMode) { _ in
+      // Choosing Wii binds Wii Remote 1 to the touchscreen in `overlayMode`'s didSet.
       touchPadsRefreshToken = UUID()
-      if controllerManager.overlayMode == .wii {
-        // Ensure Wiimote1 uses touchscreen and configure external controllers appropriately
-        controllerManager.ensureWiimote1EmulatedTouchscreen()
-      }
     }
     .onChange(of: isWiiSystem) { controllerManager.setSystem(isWii: $0) }
     .onReceive(controllerManager.$overlayVisible) { v in
