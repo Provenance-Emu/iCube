@@ -28,18 +28,18 @@ Then get it onto iCube like any other game, with **Wi-Fi / Web Import** (under H
 
 ## Back up the whole console with BootMii
 
-BootMii writes two files to the root of the SD card: `nand.bin` (the console's storage) and `keys.bin` (1,024 bytes of keys needed to decrypt it). The Wii Hacks Guide has the steps for making the backup: [BootMii Backup](https://wii.hacks.guide/bootmii) and [NAND backup](https://wii.hacks.guide/nand-backup).
+BootMii writes `nand.bin` (the console's storage) and `keys.bin` (1,024 bytes of keys needed to decrypt it) to the root of the SD card. Depending on how the backup was made, the keys may already be at the end of `nand.bin`. The Wii Hacks Guide has the steps for making the backup: [BootMii Backup](https://wii.hacks.guide/bootmii) and [NAND backup](https://wii.hacks.guide/nand-backup).
 
-### Append the keys before you import
+### Check the size, then append the keys only if they're missing
 
-Dolphin on a computer asks for `keys.bin` separately. iCube can't, so the keys have to be at the end of the `nand.bin` file before you import it.
+Dolphin on a computer asks for `keys.bin` separately. iCube can't, so it accepts exactly two file sizes for this import:
 
-Check the size of `nand.bin` first:
+* **553,649,152 bytes:** `nand.bin` already has the keys at the end. Import it as it is.
+* **553,648,128 bytes:** the keys are missing. Append `keys.bin` first. The result should be 553,649,152 bytes.
 
-* **553,649,152 bytes:** the keys are already at the end, as newer BootMii versions write them. Import this file as it is and skip the join below.
-* **553,648,128 bytes:** a bare backup. Join `keys.bin` to it on your computer:
+Check your file's size before you touch it (`ls -l` on macOS or Linux, `dir` on Windows, or Get Info in Finder). Don't append `keys.bin` to a 553,649,152-byte file. That makes it 553,650,176 bytes, and iCube rejects it.
 
-On macOS or Linux:
+To append the keys to a 553,648,128-byte file, on macOS or Linux:
 
 ```bash
 cat nand.bin keys.bin > nand_with_keys.bin
@@ -51,11 +51,9 @@ On Windows, in Command Prompt:
 copy /b nand.bin + keys.bin nand_with_keys.bin
 ```
 
-The joined file is 553,649,152 bytes (the extra 1,024 are the keys). Don't append `keys.bin` to a file that already has them: iCube rejects any size other than these two.
-
 ### Import it
 
-1. Put the file with the keys (`nand_with_keys.bin`, or `nand.bin` if it already had them) somewhere the Files app can see it, such as iCloud Drive or **On My iPhone**. iCube opens it with the standard Files picker.
+1. Put the 553,649,152-byte file (`nand.bin`, or `nand_with_keys.bin` if you appended the keys) somewhere the Files app can see it, such as iCloud Drive or **On My iPhone**. iCube opens it with the standard Files picker.
 2. In iCube's library, open the **Import** menu and choose **Import BootMii NAND Backup…**. This menu item is on iPhone and iPad only, not Apple TV.
 3. Pick the `.bin` file and wait for **Importing NAND backup** to finish.
 
@@ -63,8 +61,8 @@ The import writes the backup's files into iCube's emulated Wii NAND, which by de
 
 ### Import messages
 
-* **"The decryption keys need to be appended to the NAND backup file."** The file is a bare `nand.bin`. Append `keys.bin` as shown above and import again.
-* **"This file does not look like a BootMii NAND backup."** The file size is wrong. A truncated copy or the wrong `.bin` will do this. Check it against the two sizes above.
+* **"The decryption keys need to be appended to the NAND backup file."** The file is a bare 553,648,128-byte `nand.bin`. Append `keys.bin` as shown above and import again.
+* **"This file does not look like a BootMii NAND backup."** The file size is neither of the two above. Appending the keys to a file that already had them (553,650,176 bytes), a truncated copy, or the wrong `.bin` will all do this.
 * **"This file does not contain a valid Wii filesystem."** Usually the keys don't match the backup, or the backup itself is damaged. Make a fresh one.
 
 ## Playing a specific title
