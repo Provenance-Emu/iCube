@@ -25,9 +25,10 @@ jobs:
   swift:
     name: Swift (swiftlint + swiftformat)
     runs-on: macos-latest
-    # Advisory: .swiftformat / .swiftlint.yml exist, but the tree is not yet clean
-    # against them. Flip to false once the push-to-develop run is green.
-    continue-on-error: true
+    # Blocking on a pull request (only its changed lines count). Advisory on a push
+    # to develop: the tree as a whole is not yet clean against .swiftformat /
+    # .swiftlint.yml.
+    continue-on-error: ${{ github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
         # No submodules: lint doesn't need the Externals/ C++ tree.
@@ -125,10 +126,10 @@ jobs:
   clang-format:
     name: clang-format (iCube ObjC/ObjC++/C++)
     runs-on: macos-latest
-    # Advisory: the checked-in iCube ObjC/C++ tree is not yet clang-formatted
-    # (~12k violations vs Dolphin's Source/.clang-format). Until a one-time format
-    # pass lands, this job reports but does not block. Flip to false after that pass.
-    continue-on-error: true
+    # Blocking on a pull request (only its changed lines count). Advisory on a push
+    # to develop: the checked-in iCube ObjC/C++ tree is not yet clang-formatted
+    # (~12k violations vs Dolphin's Source/.clang-format).
+    continue-on-error: ${{ github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
 
