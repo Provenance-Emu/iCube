@@ -300,9 +300,8 @@ let iCube = Target.target(
         "DolphiniOS/Base.lproj/**",
         "DolphiniOS/en.lproj/**",
         "DolphiniOS/ja.lproj/**",
-        // The "Core" strings table (DOLCoreLocalizedString + the L(...) helper). The fallback
-        // DolphiniOS.xcodeproj bundles it; the Tuist project had dropped it, so no translation
-        // resolved at runtime and ja.lproj was inert.
+        // The "Core" strings table (DOLCoreLocalizedString + the L(...) helper). Without it no
+        // translation resolves at runtime and ja.lproj is inert.
         "Common/UI/Localization/en.lproj/**",
         "Common/UI/Localization/ja.lproj/**",
         "Project/Assets/DefaultPreferences.plist",

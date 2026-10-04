@@ -30,7 +30,7 @@ tuist generate
 
 Open `Source/iOS/App/iCube.xcworkspace` in Xcode.
 
-A committed fallback project also exists at `Source/iOS/App/DolphiniOS.xcodeproj` with the same schemes, but **Tuist is the source of truth** for project structure.
+There is no committed Xcode project: **Tuist is the source of truth** for project structure, and CI (`build.yml`, `tests.yml`, `testflight.yml`, `release.yml`) generates it the same way.
 
 ## Dolphin core (PVlibDolphin.xcframework)
 

@@ -162,8 +162,8 @@ jobs:
           path: build
           key: dolphin-xcf-${{ runner.os }}-${{ github.sha }}
 
-      # Generate the Xcode project from Project.swift instead of building the
-      # checked-in DolphiniOS.xcodeproj.
+      # Generate the Xcode project from Project.swift. The hand-maintained
+      # DolphiniOS.xcodeproj this replaced has been deleted.
       #
       # Those two had drifted badly: repairing the checked-in project by hand
       # took 131 stale file-reference removals, 20 missing-source additions and
@@ -181,9 +181,6 @@ jobs:
       # ORDER MATTERS: `tuist generate` resolves the .xcframework binary target
       # eagerly, so it must run AFTER the PVlibDolphin build above. Reversed, it
       # fails with "Couldn't find xcframework at .../PVlibDolphin.xcframework".
-      #
-      # The checked-in DolphiniOS.xcodeproj is deliberately left in place for now
-      # as a local-dev fallback; remove it once this path has proven itself.
       - name: Install Tuist
         run: |
           set -euo pipefail

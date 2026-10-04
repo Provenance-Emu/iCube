@@ -57,4 +57,4 @@ Prefer targeted checks over full core rebuilds:
 
 ## CI reference
 
-GitHub Actions workflow: `.github/workflows/build.yml` — builds `iCube (NJB)` / `iCube (JB)` schemes from `DolphiniOS.xcodeproj` (committed fallback project).
+GitHub Actions workflow: `.github/workflows/build.yml` — builds the PVlibDolphin xcframework, runs `tuist generate`, then archives the `iCube (NJB)` / `iCube (JB)` schemes from `iCube.xcworkspace`. `release.yml` does the same for a published release. There is no committed Xcode project.
