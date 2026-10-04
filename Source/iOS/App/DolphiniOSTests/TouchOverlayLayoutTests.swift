@@ -680,7 +680,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
     let bounds = CGRect(x: 0, y: 0, width: 500, height: 800)
     let baseSize = CGSize(width: 350, height: 750)
     store.setIRSizeScale(CGSize(width: 1.2, height: 0.7), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
-                        bounds: bounds, baseSize: baseSize)
+                         bounds: bounds, baseSize: baseSize)
     let scale = store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
     XCTAssertEqual(scale.width, 1.2, accuracy: 1e-6)
     XCTAssertEqual(scale.height, 0.7, accuracy: 1e-6)
@@ -700,7 +700,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
     let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
     let baseSize = CGSize(width: 342, height: 796) // `TouchOverlayDefaults.irPadMargin` (24) inset.
     store.setIRSizeScale(CGSize(width: 5.0, height: 5.0), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
-                        bounds: bounds, baseSize: baseSize)
+                         bounds: bounds, baseSize: baseSize)
     let scale = store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
     XCTAssertEqual(scale.width, bounds.width / baseSize.width, accuracy: 1e-6)
     XCTAssertEqual(scale.height, bounds.height / baseSize.height, accuracy: 1e-6)
@@ -717,7 +717,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
     let bounds = CGRect(x: 0, y: 0, width: 500, height: 800)
     let baseSize = CGSize(width: 350, height: 750)
     store.setIRSizeScale(CGSize(width: 1.3, height: 0.6), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
-                        bounds: bounds, baseSize: baseSize)
+                         bounds: bounds, baseSize: baseSize)
     store.setCenter(CGPoint(x: 100, y: 240), in: bounds, for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
     let scale = store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
     XCTAssertEqual(scale.width, 1.3, accuracy: 1e-6)
