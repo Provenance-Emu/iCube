@@ -4159,7 +4159,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Manage..." = "Manage...";
 "Manually Upload Buffers" = "Manually Upload Buffers";
 "Map 'source' semantics to expected binding" = "Map 'source' semantics to expected binding";
-"Map IR (Gyro) to DSU Touch" = "Map IR (Gyro) to DSU Touch";
 "Maps device motion to Nunchuck's accelerometer. Used by fewer games, mainly for secondary motion controls when using Nunchuck + Wiimote." = "Maps device motion to Nunchuck's accelerometer. Used by fewer games, mainly for secondary motion controls when using Nunchuck + Wiimote.";
 "Maps device motion to Wiimote's built-in accelerometer and gyroscope. Required for most motion-controlled Wii games." = "Maps device motion to Wiimote's built-in accelerometer and gyroscope. Required for most motion-controlled Wii games.";
 "Master Effects Chain" = "Master Effects Chain";
