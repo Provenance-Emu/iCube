@@ -9,7 +9,6 @@ import UIKit
 /// Controller settings outside the hub's sections, pushed from its "More Controller Settings" row.
 /// The pointer mode and its sensitivity live on the player screen (controller hub Phase 4).
 struct ControllerMoreSettingsView: View {
-  @State private var autoSelectOnScreenBySystem = true
   @State private var connectWiimotes = false
   /// Rumble destination, honored by the core rumble path (`Motor`): 0 device haptics, 1 controller,
   /// 2 both. tvOS has no device to hold, so the option is hidden there.
@@ -36,12 +35,6 @@ struct ControllerMoreSettingsView: View {
           Text(L("Both")).tag(2)
         }
         #endif
-        settingsCaption(
-          Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
-            .onChange(of: autoSelectOnScreenBySystem) { _, newValue in
-              UserDefaults.standard.set(newValue, forKey: "auto_touchpad_by_system")
-            },
-          L("Automatically shows the GameCube or Wii on-screen layout based on the game being played."))
         #if os(iOS)
         Button {
           Self.testRumble()
@@ -124,10 +117,6 @@ struct ControllerMoreSettingsView: View {
   }
 
   private func syncFromConfig() {
-    if UserDefaults.standard.object(forKey: "auto_touchpad_by_system") == nil {
-      UserDefaults.standard.set(true, forKey: "auto_touchpad_by_system")
-    }
-    autoSelectOnScreenBySystem = UserDefaults.standard.bool(forKey: "auto_touchpad_by_system")
     connectWiimotes = DOLConfigBridge.connectWiimotesForControllerInterface()
     #if os(iOS)
     touchOverlayProgrammatic = TouchOverlayFlag.isProgrammatic

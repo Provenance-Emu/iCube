@@ -5,8 +5,6 @@ struct GameProfile: Codable {
   var irMode: Int?
   var widescreenHack: Bool?
   var touchOpacity: Float?
-  /// Overrides
-  var touchControllerOverride: TouchControllerOverride?
   var wiimoteIRSensitivity: Int?
   var wiimoteTouchIRMode: Int?
   var shaderPreviewName: String?
@@ -24,12 +22,6 @@ struct GameProfile: Codable {
   /// already the per-game keyed-by-GameID record, and a second parallel store
   /// would be one more thing to keep in sync with profile deletion.
   var excludedFromNearbySharing: Bool?
-}
-
-enum TouchControllerOverride: String, Codable {
-  case systemAuto
-  case forceGameCube
-  case forceWii
 }
 
 final class GameProfiles {
@@ -115,16 +107,6 @@ final class GameProfiles {
     profiles.filter { $0.value.excludedFromNearbySharing == true }.keys.sorted()
   }
 
-  /// Applies a touch-controller override to multiple games, preserving other profile fields.
-  func batchSetControllerOverride(_ override: TouchControllerOverride, forGameIDs gameIDs: [String]) {
-    for gameID in gameIDs where !gameID.isEmpty {
-      var profile = profiles[gameID] ?? GameProfile()
-      profile.touchControllerOverride = override == .systemAuto ? nil : override
-      profiles[gameID] = profile
-    }
-    save()
-  }
-
   func clearProfile(for gameID: String) {
     // The Nearby Sharing exclusion survives a profile reset. Everything else
     // here is about how the game RUNS and resetting it is harmless; the
@@ -139,10 +121,6 @@ final class GameProfiles {
       profiles[gameID] = preserved
     }
     save()
-    // Also clear any per-game overrides and revert to sane defaults at runtime
-    // Touch overrides are in UserDefaults
-    UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
-    UserDefaults.standard.removeObject(forKey: "current_profile_ir_override")
     // Reset runtime-affecting settings to defaults that won’t surprise the user
     // Do not change global user prefs except those we might have overridden
     DOLConfigBridge.setGfxWidescreenHack(false)
@@ -168,7 +146,6 @@ final class GameProfiles {
       irMode: ir,
       widescreenHack: widescreen,
       touchOpacity: opacity,
-      touchControllerOverride: nil,
       wiimoteIRSensitivity: wiimoteSens,
       wiimoteTouchIRMode: ir,
       shaderPreviewName: preset?.split(separator: "/").last.map(String.init)
@@ -189,11 +166,7 @@ final class GameProfiles {
   func applyProfileIfAvailable(for item: TVGameItem) {
     if UserDefaults.standard.object(forKey: "profiles_enabled") as? Bool == false { return }
     let gameID = item.gameID
-    guard let profile = profile(for: gameID) else {
-      // Clear any previous override if no profile
-      UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
-      return
-    }
+    guard let profile = profile(for: gameID) else { return }
     // A title is already running (Properties sheet from the pause menu): apply live.
     if TVEmulationBridge.isRunning() {
       applyConfigOverrides(profile)
@@ -205,12 +178,6 @@ final class GameProfiles {
         UserDefaults.standard.set(preset, forKey: "shader_preset_path")
         NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
       }
-    }
-    // Touch controller visibility preference: stash in defaults for runtime UI
-    if let overridePref = profile.touchControllerOverride {
-      UserDefaults.standard.set(overridePref.rawValue, forKey: "current_profile_touch_override")
-    } else {
-      UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
     }
   }
 

@@ -1808,7 +1808,6 @@ struct TVLibraryView: View {
           onFavorite: { batchSetFavorite(true) },
           onUnfavorite: { batchSetFavorite(false) },
           onPlatformOverride: { batchSetPlatformOverride($0) },
-          onControllerOverride: { batchSetControllerOverride($0) },
           onSelectAll: { selectAllVisibleGames() },
           onDeselectAll: { selectedFilePaths.removeAll() },
           onProperties: {
@@ -2928,15 +2927,6 @@ struct TVLibraryView: View {
     LibraryPlatformOverrideStore.batchSetOverride(category, forFilePaths: Array(selectedFilePaths))
     platformOverridesVersion &+= 1
     showSnackbar(L("Platform assignment updated"))
-  }
-
-  private func batchSetControllerOverride(_ override: TouchControllerOverride) {
-    let gameIDs = model.games
-      .filter { selectedFilePaths.contains($0.filePath) }
-      .map(\.gameID)
-      .filter { !$0.isEmpty }
-    GameProfiles.shared.batchSetControllerOverride(override, forGameIDs: gameIDs)
-    showSnackbar(L("Controller assignment updated"))
   }
 
   /// The file removal runs in `LocalGameDeleter`, off the main thread (ICUBE-2F: a multi-GB image

@@ -510,7 +510,6 @@ struct LibrarySelectionActionBar: View {
   let onFavorite: () -> Void
   let onUnfavorite: () -> Void
   let onPlatformOverride: (LibraryPlatformCategory?) -> Void
-  let onControllerOverride: (TouchControllerOverride) -> Void
   let onSelectAll: () -> Void
   let onDeselectAll: () -> Void
   var onProperties: (() -> Void)?
@@ -537,7 +536,6 @@ struct LibrarySelectionActionBar: View {
             actionButton(L("Properties"), systemImage: "info.circle", action: onProperties)
           }
           platformMenu
-          controllerMenu
           actionButton(L("Select All"), systemImage: "checkmark.circle", action: onSelectAll)
           actionButton(L("Deselect All"), systemImage: "circle", action: onDeselectAll)
         }
@@ -576,16 +574,6 @@ struct LibrarySelectionActionBar: View {
       }
     } label: {
       actionLabel(L("Platform"), systemImage: "arrow.left.arrow.right")
-    }
-  }
-
-  private var controllerMenu: some View {
-    Menu {
-      Button(L("Controller: Auto")) { onControllerOverride(.systemAuto) }
-      Button(L("Force GameCube Pad")) { onControllerOverride(.forceGameCube) }
-      Button(L("Force Wii Pad")) { onControllerOverride(.forceWii) }
-    } label: {
-      actionLabel(L("Controller"), systemImage: "gamecontroller")
     }
   }
 

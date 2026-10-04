@@ -79,16 +79,6 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                     if let rec = GameProfiles.shared.profile(for: item.gameID) {
                       GameProfiles.shared.setProfile(rec, for: item.gameID)
                       GameProfiles.shared.applyProfileIfAvailable(for: item)
-                      if let override = rec.touchControllerOverride {
-                        UserDefaults.standard.set(override.rawValue, forKey: "current_profile_touch_override")
-                      } else {
-                        UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
-                      }
-                      if let irOverride = rec.wiimoteTouchIRMode {
-                        UserDefaults.standard.set(irOverride, forKey: "current_profile_ir_override")
-                      } else {
-                        UserDefaults.standard.removeObject(forKey: "current_profile_ir_override")
-                      }
                       profilesVersion &+= 1
                     }
                   }
@@ -127,37 +117,6 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                   NotificationCenter.default.post(name: ControllerManager.assignmentsChanged, object: nil)
                 }
               }
-              // Per-game IR Mode override (Wii Touch)
-              HStack(spacing: 12) {
-                Picker("Per-Game IR Mode", selection: Binding(get: {
-                  (UserDefaults.standard.object(forKey: "current_profile_ir_override") as? Int) ?? -1
-                }, set: { newVal in
-                  if newVal < 0 { UserDefaults.standard.removeObject(forKey: "current_profile_ir_override") }
-                  else { UserDefaults.standard.set(newVal, forKey: "current_profile_ir_override") }
-                  profilesVersion &+= 1
-                })) {
-                  Text("Use Global").tag(-1)
-                  Text("None").tag(0)
-                  Text("Absolute").tag(1)
-                  Text("Drag").tag(2)
-                }
-                .pickerStyle(.segmented)
-              }
-              // Per-game Touch Controller override
-              HStack(spacing: 12) {
-                Picker("On-Screen Controller", selection: Binding(get: {
-                  if let raw = UserDefaults.standard.string(forKey: "current_profile_touch_override"), let v = TouchControllerOverride(rawValue: raw) { return v }
-                  return .systemAuto
-                }, set: { newVal in
-                  if newVal == .systemAuto { UserDefaults.standard.removeObject(forKey: "current_profile_touch_override") }
-                  else { UserDefaults.standard.set(newVal.rawValue, forKey: "current_profile_touch_override") }
-                  profilesVersion &+= 1
-                })) {
-                  Text("Auto (by System)").tag(TouchControllerOverride.systemAuto)
-                  Text("Force GameCube").tag(TouchControllerOverride.forceGameCube)
-                  Text("Force Wii").tag(TouchControllerOverride.forceWii)
-                }
-              }
               // Per-game Wii IR Sensitivity
               VStack(alignment: .leading) {
                 HStack { Text("Wii IR Sensitivity")
@@ -179,13 +138,7 @@ struct TVSoftwarePropertiesView: View, Identifiable {
               Divider()
               HStack(spacing: 12) {
                 Button("Save Current as Profile") {
-                  var snap = GameProfiles.shared.buildProfileFromCurrentSettings()
-                  if let raw = UserDefaults.standard.string(forKey: "current_profile_touch_override"), let v = TouchControllerOverride(rawValue: raw) {
-                    snap.touchControllerOverride = v
-                  }
-                  if let ir = UserDefaults.standard.object(forKey: "current_profile_ir_override") as? Int {
-                    snap.wiimoteTouchIRMode = ir
-                  }
+                  let snap = GameProfiles.shared.buildProfileFromCurrentSettings()
                   GameProfiles.shared.setProfile(snap, for: item.gameID)
                   GameProfiles.shared.applyProfileIfAvailable(for: item)
                   profilesVersion &+= 1
@@ -193,8 +146,6 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                 .buttonStyle(.borderedProminent)
                 Button("Clear Profile") {
                   GameProfiles.shared.clearProfile(for: item.gameID)
-                  UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
-                  UserDefaults.standard.removeObject(forKey: "current_profile_ir_override")
                   // Force update for the toggles and pickers to reflect cleared state
                   DOLConfigBridge.setGfxWidescreenHack(false)
                   profilesVersion &+= 1
