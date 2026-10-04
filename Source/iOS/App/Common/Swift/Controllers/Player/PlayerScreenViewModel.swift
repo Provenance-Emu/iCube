@@ -114,6 +114,21 @@ final class PlayerProfileMemory {
     dropStored(playerID, qualifier)
   }
 
+  /// A profile was deleted: every port and device of one system (`playerIDPrefix`, "gc-" or
+  /// "wii-") that remembers it reads "Custom", this session and after a relaunch. Other names, and
+  /// the other system's ports (its profiles are separate files), are kept.
+  func forgetProfile(named name: String, playerIDPrefix: String) {
+    let matches = { (remembered: String) in remembered.caseInsensitiveCompare(name) == .orderedSame }
+    for (key, entry) in entries where key.hasPrefix(playerIDPrefix) && matches(entry.name) {
+      entries[key] = nil
+    }
+    guard let defaults else { return }
+    let storedPrefix = Self.defaultsKeyPrefix + playerIDPrefix
+    for (key, value) in defaults.dictionaryRepresentation() where key.hasPrefix(storedPrefix) && (value as? String).map(matches) == true {
+      defaults.removeObject(forKey: key)
+    }
+  }
+
   private static func key(_ playerID: String, _ qualifier: String) -> String {
     defaultsKeyPrefix + playerID + "." + qualifier
   }
@@ -410,17 +425,14 @@ final class PlayerScreenViewModel {
   /// The profiles Load Profile… may offer to delete: the user's own, never a bundled one.
   func deletableProfileNames() -> [String] { io.userProfileNames(for: slot) }
 
-  /// Deletes one of the user's profiles (Load Profile… asked first). The port keeps its mapping; if
-  /// the deleted profile was the one this port remembers and no profile of that name is left (a
-  /// bundled one it shadowed would be), the port reads "Custom".
+  /// Deletes one of the user's profiles (Load Profile… asked first). The port keeps its mapping.
+  /// Unless a profile of that name is left (a bundled one it shadowed), every port and device of
+  /// this system that remembers it reads "Custom".
   @discardableResult
   func deleteProfile(_ name: String) -> Bool {
     guard io.deleteProfile(name, slot: slot) else { return false }
-    let qualifier = state.player.deviceQualifier
-    if let remembered = memory.entry(for: slot.playerID, qualifier: qualifier)?.name,
-       remembered.caseInsensitiveCompare(name) == .orderedSame,
-       !ProfileNaming.exists(remembered, in: io.allProfileNames(for: slot)) {
-      memory.forget(slot.playerID, qualifier: qualifier)
+    if !ProfileNaming.exists(name, in: io.allProfileNames(for: slot)) {
+      memory.forgetProfile(named: name, playerIDPrefix: slot.playerIDPrefix)
     }
     reload()
     return true
