@@ -62,6 +62,7 @@ enum PlayerScreenHelp {
   static var loadProfile: String { L("Replaces this player's buttons with a saved profile.") }
   static var saveProfile: String { L("Keeps this player's buttons as a profile to load later, on any port.") }
   static var resetProfile: String { L("Loads the built-in profile for the bound controller.") }
+  static var clearAll: String { L("Unbinds every control, to capture each one from scratch.") }
   static var extensionCaption: String { L("What is plugged into the Wii Remote: the Nunchuk adds a stick, C and Z.") }
   static var sideways: String { L("For games played with the Wii Remote held sideways. The D-Pad and motion turn with it.") }
   static var rawBindings: String {

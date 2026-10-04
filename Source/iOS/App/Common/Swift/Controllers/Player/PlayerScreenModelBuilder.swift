@@ -103,6 +103,10 @@ enum PlayerScreenModelBuilder {
       MenuItem(
         id: "profile-reset", title: L("Reset to Default Profile"), subtitle: PlayerScreenHelp.resetProfile,
         icon: "arrow.counterclockwise", role: .action(actions.resetProfile), isEnabled: state.deviceChoice != .noDevice),
+      // Only where capture works, as a row's Clear: elsewhere nothing could be bound again.
+      MenuItem(
+        id: "profile-clear-all", title: L("Clear All Buttons"), subtitle: PlayerScreenHelp.clearAll, icon: "xmark.circle",
+        role: .destructive(actions.clearAll), isEnabled: state.canCapture),
     ])
   }
 

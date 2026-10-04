@@ -76,6 +76,9 @@ struct PlayerScreenView: View {
     case .confirmReset:
       Button(L("Reset"), role: .destructive) { viewModel.confirmPrompt() }
       Button(L("Cancel"), role: .cancel) { viewModel.cancelPrompt() }
+    case .confirmClearAll:
+      Button(L("Clear All"), role: .destructive) { viewModel.confirmPrompt() }
+      Button(L("Cancel"), role: .cancel) { viewModel.cancelPrompt() }
     case .saveFailed:
       Button(L("OK"), role: .cancel) { viewModel.cancelPrompt() }
     }

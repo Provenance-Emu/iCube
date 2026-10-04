@@ -146,6 +146,8 @@ struct PlayerScreenActions {
   var saveProfileAs: () -> Void
   /// Asks to reset (decision 10); the host's confirmation does the load.
   var resetProfile: () -> Void
+  /// Asks to unbind every control (the host's confirmation does it).
+  var clearAll: () -> Void
   var setExtension: (Int) -> Void
   var setSideways: (Bool) -> Void
   /// Arms the row's capture, or cancels it when that row is the armed one.

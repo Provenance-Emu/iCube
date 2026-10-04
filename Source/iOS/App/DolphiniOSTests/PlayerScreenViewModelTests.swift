@@ -835,7 +835,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
   func test_promptTexts() {
     let prompts: [PlayerPrompt] = [
       .saveAs, .confirmOverwrite(name: "Mine"), .confirmBuiltIn(name: "Touchscreen"),
-      .confirmReset(profile: "Physical Controller"), .saveFailed,
+      .confirmReset(profile: "Physical Controller"), .confirmClearAll, .saveFailed,
     ]
     for prompt in prompts {
       XCTAssertFalse(prompt.title.isEmpty, "\(prompt)")
@@ -882,6 +882,47 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertTrue(model.saveExpression("`Button B`", for: model.state.controls[0]))
     XCTAssertEqual(io.writes, ["expression:gcPad-0-0=`Button B`"])
     XCTAssertTrue(model.state.profileEdited)
+  }
+
+  // MARK: Clear all
+
+  /// Asks first through the one prompt; confirming unbinds every bound control of the port.
+  @MainActor
+  func test_clearAll_asksFirst_thenUnbindsEveryControl() {
+    let (reader, io) = boundGameCube()
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "gc-1")
+    let model = make(reader, io, memory: memory)
+    model.reload()
+    model.requestClearAll()
+    XCTAssertEqual(model.prompt, .confirmClearAll)
+    XCTAssertEqual(io.writes, [], "nothing until confirmed")
+    let rows = model.state.controls
+    model.confirmPrompt()
+    XCTAssertNil(model.prompt)
+    XCTAssertEqual(io.writes, rows.map { "expression:\($0.id)=" })
+    XCTAssertTrue(model.state.profileEdited)
+  }
+
+  @MainActor
+  func test_clearAll_cancelWritesNothing() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+    model.requestClearAll()
+    model.cancelPrompt()
+    XCTAssertEqual(io.writes, [])
+  }
+
+  /// Like a row's Clear: a port that cannot capture could not bind anything again.
+  @MainActor
+  func test_clearAll_notOfferedWhereCaptureIsImpossible() {
+    let reader = FakeHubReader()
+    reader.gameCube[1] = "iOS/0/Touchscreen"
+    let model = make(reader, FakeIO())
+    model.reload()
+    model.requestClearAll()
+    XCTAssertNil(model.prompt)
   }
 
   // MARK: Delete a profile

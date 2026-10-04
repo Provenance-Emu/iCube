@@ -14,6 +14,8 @@ enum PlayerPrompt: Equatable {
   /// The typed name is a device-default profile name (`ProfileNaming.builtInNames`).
   case confirmBuiltIn(name: String)
   case confirmReset(profile: String)
+  /// Clear All Buttons: unbinds every control of the port.
+  case confirmClearAll
   case saveFailed
 
   var title: String {
@@ -22,6 +24,7 @@ enum PlayerPrompt: Equatable {
     case .confirmOverwrite: return L("Replace Profile?")
     case .confirmBuiltIn: return L("Replace the Built-In Profile?")
     case .confirmReset: return L("Reset to Default Profile?")
+    case .confirmClearAll: return L("Clear All Buttons?")
     case .saveFailed: return L("Could Not Save Profile")
     }
   }
@@ -38,6 +41,8 @@ enum PlayerPrompt: Equatable {
         name)
     case .confirmReset(let profile):
       return String(format: L("Loads %@ for this player and replaces its current buttons."), profile)
+    case .confirmClearAll:
+      return L("Unbinds every control of this player, rumble included. Load a profile or reset to get them back.")
     case .saveFailed:
       return L("The profile file could not be written.")
     }
@@ -262,6 +267,7 @@ final class PlayerScreenViewModel {
       },
       saveProfileAs: { [weak self] in self?.openSavePrompt() },
       resetProfile: { [weak self] in self?.requestReset() },
+      clearAll: { [weak self] in self?.requestClearAll() },
       setExtension: { [weak self] in self?.setExtension($0) },
       setSideways: { [weak self] in self?.setSideways($0) },
       toggleCapture: { [weak self] in self?.toggleCapture($0) },
@@ -405,9 +411,29 @@ final class PlayerScreenViewModel {
       save(name)
     case .confirmReset(let profile):
       loadProfile(profile)
+    case .confirmClearAll:
+      clearAll()
     case .saveFailed:
       break
     }
+  }
+
+  /// Asks before unbinding every control. Only where capture works: a port that cannot capture
+  /// could not bind anything again, as with a single row's Clear.
+  func requestClearAll() {
+    guard state.canCapture else { return }
+    prompt = .confirmClearAll
+  }
+
+  /// Every control of the port (`state.controls`: buttons, sticks, motion, rumble), unbound.
+  private func clearAll() {
+    guard state.canCapture else { return }
+    endCapture()
+    for row in state.controls where !row.editableExpression.isEmpty {
+      io.setExpression("", for: row, port: slot.port)
+    }
+    memory.markEdited(slot.playerID)
+    reload()
   }
 
   /// A pad's B, or the alert's Cancel.

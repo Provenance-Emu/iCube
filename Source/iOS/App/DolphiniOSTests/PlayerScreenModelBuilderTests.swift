@@ -27,6 +27,7 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
       profileListDestination: { AnyView(EmptyView()) },
       saveProfileAs: { recorder.calls.append("save-as") },
       resetProfile: { recorder.calls.append("reset") },
+      clearAll: { recorder.calls.append("clear-all") },
       setExtension: { recorder.calls.append("extension:\($0)") },
       setSideways: { recorder.calls.append("sideways:\($0)") },
       toggleCapture: { recorder.calls.append("capture:\($0.id)") },
@@ -367,6 +368,20 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     run(model.item(id: "profile-reset"))
     XCTAssertEqual(recorder.calls, ["save-as", "reset"])
     XCTAssertEqual(make(state(.gameCube)).item(id: "profile-reset")?.isEnabled, false)
+  }
+
+  /// Clear All Buttons asks through the host (a destructive row), and only where capture works.
+  func test_clearAll_onlyWhereCaptureWorks() {
+    let recorder = Recorder()
+    let model = make(boundGameCube, recorder)
+    let item = model.item(id: "profile-clear-all")
+    XCTAssertEqual(item?.isEnabled, true)
+    XCTAssertEqual(item?.subtitle, PlayerScreenHelp.clearAll)
+    guard let item, case .destructive(let action) = item.role else { return XCTFail("not a destructive row") }
+    action()
+    XCTAssertEqual(recorder.calls, ["clear-all"])
+    XCTAssertEqual(make(state(.gameCube, device: "iOS/0/Touchscreen")).item(id: "profile-clear-all")?.isEnabled, false)
+    XCTAssertEqual(make(state(.gameCube)).item(id: "profile-clear-all")?.isEnabled, false)
   }
 
   func test_extensionOptions_sayExtensionOnTVOS() {

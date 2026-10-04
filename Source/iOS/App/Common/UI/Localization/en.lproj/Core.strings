@@ -4796,3 +4796,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Built-In" = "Built-In";
 "Delete a Profile…" = "Delete a Profile…";
 "Only profiles you saved can be deleted." = "Only profiles you saved can be deleted.";
+"Unbinds every control, to capture each one from scratch." = "Unbinds every control, to capture each one from scratch.";
+"Clear All Buttons" = "Clear All Buttons";
+"Clear All Buttons?" = "Clear All Buttons?";
+"Unbinds every control of this player, rumble included. Load a profile or reset to get them back." = "Unbinds every control of this player, rumble included. Load a profile or reset to get them back.";
