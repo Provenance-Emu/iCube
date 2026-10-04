@@ -92,8 +92,13 @@ private final class FakeIO: PlayerScreenIO {
       : ExpressionCheck(status: .invalid, message: "bad")
   }
 
+  /// Whether the port is pinned; picking Auto unpins it.
+  var pinned = false
+  func isPinned(_ slot: PlayerSlot) -> Bool { pinned }
+
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
     writes.append("device:\(choice)")
+    if choice == .automatic { pinned = false }
     if assignmentReplacesMapping, case .pad = choice { boundExpression = "`Button 0`" }
     onSetDevice?(choice)
   }
@@ -922,6 +927,24 @@ final class PlayerScreenViewModelTests: XCTestCase {
     model.reload()
     model.requestClearAll()
     XCTAssertNil(model.prompt)
+  }
+
+  // MARK: Pins
+
+  /// The snapshot says whether the port is pinned, and Auto from the Device list unpins it.
+  @MainActor
+  func test_auto_unpinsThePort() {
+    let (reader, io) = boundGameCube()
+    io.pinned = true
+    let model = make(reader, io)
+    model.reload()
+    XCTAssertTrue(model.state.isPinned)
+    XCTAssertEqual(PlayerScreenModelBuilder.deviceOptions(state: model.state, platform: .ios).first?.choice, .automatic)
+
+    model.setDevice(.automatic)
+
+    XCTAssertEqual(io.writes, ["device:automatic"])
+    XCTAssertFalse(model.state.isPinned)
   }
 
   // MARK: Profile name across launches

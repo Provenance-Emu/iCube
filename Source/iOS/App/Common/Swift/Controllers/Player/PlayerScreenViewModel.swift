@@ -240,7 +240,8 @@ final class PlayerScreenViewModel {
         AdvancedGroupState(
           owner: entry.owner, groupId: entry.groupId, title: entry.title,
           settings: io.numericSettings(owner: entry.owner, group: entry.groupId, port: slot.port))
-      })
+      },
+      isPinned: io.isPinned(slot))
   }
 
   /// The same reads, in the same shape, as `ControllerHubViewModel.reload()` makes for this port.

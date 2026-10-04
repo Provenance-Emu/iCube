@@ -153,6 +153,25 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(options.map(\.title), ["None", "Xbox Wireless Controller"])
   }
 
+  /// A port the user picked a device for is pinned: the Device row says so, and the list offers
+  /// Auto first to hand the port back to auto-assignment. An unpinned port has neither.
+  func test_pinnedPort_marksTheDeviceRow_andOffersAuto() {
+    var screen = boundGameCube
+    screen.isPinned = true
+    let item = make(screen).item(id: "device")
+    XCTAssertEqual(item?.subtitle, PlayerScreenHelp.devicePinned)
+    XCTAssertEqual(item?.icon, "pin.fill")
+    XCTAssertEqual(item?.badge, "Xbox Wireless Controller", "the device is still the row's value")
+    let options = PlayerScreenModelBuilder.deviceOptions(state: screen, platform: .ios)
+    XCTAssertEqual(options.first, DeviceOption(choice: .automatic, title: "Auto"))
+    XCTAssertEqual(options.dropFirst().map(\.choice), [.noDevice, .touchscreen, .pad(Self.xbox)])
+
+    XCTAssertFalse(PlayerScreenModelBuilder.deviceOptions(state: boundGameCube, platform: .ios).contains {
+      $0.choice == .automatic
+    })
+    XCTAssertEqual(make(boundGameCube).item(id: "device")?.icon, "gamecontroller")
+  }
+
   /// The bound device is always listed, so the list can mark it current.
   func test_deviceOptions_listTheBoundDeviceWhenItIsNotAConnectedPad() {
     let disconnected = PlayerScreenModelBuilder.deviceOptions(state: state(.gameCube, device: Self.xbox), platform: .ios)

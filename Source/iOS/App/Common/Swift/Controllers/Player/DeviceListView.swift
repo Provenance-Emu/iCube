@@ -42,6 +42,7 @@ struct DeviceListView: View {
 enum DeviceListModelBuilder {
   static func itemID(for choice: PlayerDeviceChoice) -> String {
     switch choice {
+    case .automatic: return "device-auto"
     case .noDevice: return "device-none"
     case .touchscreen: return "device-touchscreen"
     case .pad(let qualifier): return "device-\(qualifier)"
@@ -60,6 +61,7 @@ enum DeviceListModelBuilder {
 
   private static func icon(for choice: PlayerDeviceChoice) -> String {
     switch choice {
+    case .automatic: return "arrow.triangle.2.circlepath"
     case .noDevice: return "xmark.circle"
     case .touchscreen: return "hand.tap"
     case .pad: return "gamecontroller"

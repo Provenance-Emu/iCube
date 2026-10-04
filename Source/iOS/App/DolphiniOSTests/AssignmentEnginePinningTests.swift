@@ -48,6 +48,26 @@ final class AssignmentEnginePinningTests: XCTestCase {
     ], "Wii slot 2 is pinned, so the pad lands on Wii slot 3; the GameCube pin on port 3 does not block it")
   }
 
+  /// The Device list's Auto unpins the slot (`ControllerManager.unpinAndReassign`): the next
+  /// controller may take it again. A pad already playing on another slot stays where it is.
+  func test_unpinnedByAuto_theNextControllerTakesTheSlot() {
+    let padB = "MFi/1/Gamepad B"
+    let s = state(gc: [touchscreen, pad, "", ""], connected: [touchscreen, pad, padB])
+    let pinned = AssignmentEngine().decide(from: s, pinned: [PinnedSlot(system: .gamecube, playerZeroBased: 0)])
+    XCTAssertEqual(pinned.assignments, [ControllerAssignment(qualifier: padB, playerZeroBased: 2, system: .gamecube)])
+    XCTAssertEqual(AssignmentEngine().decide(from: s).assignments,
+                   [ControllerAssignment(qualifier: padB, playerZeroBased: 0, system: .gamecube)])
+  }
+
+  /// A pinned slot whose pad is switched off waits for that pad: no Touchscreen fallback, and the pad
+  /// is already bound there when it comes back (its binding is kept across a disconnect).
+  func test_aPinnedPlayer1_waitsForItsPad() {
+    let pin: Set<PinnedSlot> = [PinnedSlot(system: .gamecube, playerZeroBased: 0)]
+    XCTAssertEqual(AssignmentEngine().decide(from: state(gc: [pad, "", "", ""], connected: [touchscreen]), pinned: pin), .none)
+    XCTAssertEqual(
+      AssignmentEngine().decide(from: state(gc: [pad, "", "", ""], connected: [touchscreen, pad]), pinned: pin), .none)
+  }
+
   func test_aPinnedWiimote1_isSkippedEvenWhenTheTouchscreenDoesNotHoldIt() {
     let s = state(gc: ["", "", "", ""], wii: ["iOS/4/Touchscreen", "", "", ""], connected: [touchscreen, pad], isWii: true)
     let decision = AssignmentEngine().decide(from: s, pinned: [PinnedSlot(system: .wii, playerZeroBased: 0)])

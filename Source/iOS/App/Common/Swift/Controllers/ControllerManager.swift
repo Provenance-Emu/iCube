@@ -71,6 +71,19 @@ final class ControllerManager: NSObject, ObservableObject {
     savePinnedSlots()
   }
 
+  /// The user chose this slot's device; auto-assignment leaves it alone. Shown on the player
+  /// screen's Device row.
+  func isPinned(_ system: EmulatedSystem, player: Int) -> Bool {
+    pinnedSlots.contains(PinnedSlot(system: system, playerZeroBased: player))
+  }
+
+  /// The Device list's "Auto": forget the user's choice for this slot and let auto-assignment place
+  /// a connected controller there again. The slot's device stays until something takes it.
+  func unpinAndReassign(_ system: EmulatedSystem, player: Int) {
+    unpin(system, player: player)
+    reconcile()
+  }
+
   // MARK: Observing / Publishers
 
   private var observers: [NSObjectProtocol] = []
@@ -537,6 +550,10 @@ final class ControllerManager: NSObject, ObservableObject {
       if connected.contains(qualifier) {
         reserved.insert(slot)
         slotForQualifier[qualifier] = slot
+      } else if isPinned(.wii, player: slot - 1) {
+        // The user's choice (a touchscreen Wii Remote 2, a pad that is off): neither switched off
+        // nor handed to a touchpad pad.
+        reserved.insert(slot)
       } else if slot > 1 {
         DOLConfigBridge.setWiimoteSourceFor(slot, source: 0)
       }

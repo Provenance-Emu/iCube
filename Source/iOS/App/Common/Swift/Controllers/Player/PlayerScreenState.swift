@@ -9,6 +9,9 @@ enum PlayerDeviceChoice: Hashable {
   case touchscreen
   /// A pad's Dolphin qualifier (`MFi/0/Xbox Wireless Controller`, `DSUClient/0/Pad C`).
   case pad(String)
+  /// "Auto": forget the user's pin on the port, so a controller that connects can take it. Only
+  /// offered on a pinned port; never a port's current device.
+  case automatic
 
   init(qualifier: String) {
     if qualifier.isEmpty {
@@ -105,6 +108,9 @@ struct PlayerScreenState: Equatable {
   /// UI state, kept across reloads.
   var showsAdvanced: Bool
   var advanced: [AdvancedGroupState]
+  /// The user picked this port's device, so controllers that connect leave it alone
+  /// (`ControllerManager.isPinned`). The Device list then offers Auto.
+  var isPinned = false
 
   static func empty(_ player: PlayerState) -> PlayerScreenState {
     PlayerScreenState(

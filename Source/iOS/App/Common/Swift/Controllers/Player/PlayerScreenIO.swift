@@ -28,8 +28,11 @@ protocol PlayerScreenIO {
   func inputNames(forQualifier qualifier: String) -> [String]
   func inputStates(forQualifier qualifier: String) -> [Float]
   func check(_ expression: String) -> ExpressionCheck
+  /// The user picked the port's device, so auto-assignment leaves the port alone.
+  func isPinned(_ slot: PlayerSlot) -> Bool
 
   // Writes
+  /// `.automatic` unpins the port and lets auto-assignment run.
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot)
   func loadProfile(_ name: String, slot: PlayerSlot) -> Bool
   func saveProfile(_ name: String, slot: PlayerSlot) -> Bool
@@ -167,14 +170,20 @@ struct LivePlayerScreenIO: PlayerScreenIO {
     return ExpressionCheck(parseStatus: result.status, parserMessage: result.message)
   }
 
+  func isPinned(_ slot: PlayerSlot) -> Bool {
+    ControllerManager.shared.isPinned(slot.kind == .gameCube ? .gamecube : .wii, player: slot.port - 1)
+  }
+
   // MARK: Writes
 
   /// Through `ControllerManager`'s explicit-choice wrappers, each of which ends in
   /// `reconcile(autoAssign: false)` (ControllerManager.swift:484-542): changing this port never
-  /// re-assigns the others.
+  /// re-assigns the others. Auto is the exception: it hands the port back to auto-assignment.
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
     let manager = ControllerManager.shared
     switch choice {
+    case .automatic:
+      manager.unpinAndReassign(slot.kind == .gameCube ? .gamecube : .wii, player: slot.port - 1)
     case .noDevice:
       if slot.kind == .gameCube {
         manager.clearDefaultDevice(forGCPort: slot.port)

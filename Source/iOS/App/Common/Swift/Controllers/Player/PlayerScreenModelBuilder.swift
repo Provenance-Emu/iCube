@@ -50,7 +50,7 @@ enum PlayerScreenModelBuilder {
   /// What the Device row shows.
   static func deviceSummary(_ state: PlayerScreenState) -> String {
     switch state.deviceChoice {
-    case .noDevice:
+    case .noDevice, .automatic:
       return L("No Device")
     case .touchscreen:
       return L("Touchscreen")
@@ -62,10 +62,15 @@ enum PlayerScreenModelBuilder {
     }
   }
 
-  /// The Device list: None, Touchscreen (iOS), each connected pad, and the bound device when it is
-  /// none of those (a disconnected pad, a DSU device), so the list can mark it current.
+  /// The Device list: Auto on a pinned port, None, Touchscreen (iOS), each connected pad, and the
+  /// bound device when it is none of those (a disconnected pad, a DSU device), so the list can mark
+  /// it current.
   static func deviceOptions(state: PlayerScreenState, platform: PlatformKind) -> [DeviceOption] {
-    var options = [DeviceOption(choice: .noDevice, title: L("None"))]
+    var options: [DeviceOption] = []
+    if state.isPinned {
+      options.append(DeviceOption(choice: .automatic, title: L("Auto")))
+    }
+    options.append(DeviceOption(choice: .noDevice, title: L("None")))
     if platform == .ios {
       options.append(DeviceOption(choice: .touchscreen, title: L("Touchscreen")))
     }
@@ -83,9 +88,11 @@ enum PlayerScreenModelBuilder {
 
   private static func deviceSection(state: PlayerScreenState, actions: PlayerScreenActions) -> MenuSection {
     MenuSection(id: "device", items: [
-      // The bound device is the badge (the row's value); the subtitle says what the row is for.
+      // The bound device is the badge (the row's value); the subtitle says what the row is for, or
+      // that the user pinned the device (pins used to be invisible and permanent).
       MenuItem(
-        id: "device", title: L("Device"), subtitle: PlayerScreenHelp.device, icon: "gamecontroller",
+        id: "device", title: L("Device"), subtitle: state.isPinned ? PlayerScreenHelp.devicePinned : PlayerScreenHelp.device,
+        icon: state.isPinned ? "pin.fill" : "gamecontroller",
         role: .destination(actions.deviceListDestination()), badge: deviceSummary(state)),
     ])
   }
@@ -172,7 +179,7 @@ enum PlayerScreenModelBuilder {
   /// Why capture is impossible, or nil when it is possible (decision 11).
   private static func captureHint(_ state: PlayerScreenState) -> String? {
     switch state.deviceChoice {
-    case .noDevice: return L("Choose a device to bind its buttons.")
+    case .noDevice, .automatic: return L("Choose a device to bind its buttons.")
     case .touchscreen: return L("On-Screen Controls are laid out with Edit Layout.")
     case .pad: return state.isDisconnected ? L("Connect this controller to capture buttons.") : nil
     }
