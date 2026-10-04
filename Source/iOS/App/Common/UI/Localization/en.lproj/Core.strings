@@ -4785,3 +4785,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "What is plugged into the Wii Remote: the Nunchuk adds a stick, C and Z." = "What is plugged into the Wii Remote: the Nunchuk adds a stick, C and Z.";
 "For games played with the Wii Remote held sideways. The D-Pad and motion turn with it." = "For games played with the Wii Remote held sideways. The D-Pad and motion turn with it.";
 "Each control's Dolphin expression. Select one to edit it, combine inputs, or bind an output such as Rumble." = "Each control's Dolphin expression. Select one to edit it, combine inputs, or bind an output such as Rumble.";
+"Accelerometer %@" = "Accelerometer %@";
+"Gyroscope %@" = "Gyroscope %@";
+"Nunchuk Accelerometer %@" = "Nunchuk Accelerometer %@";

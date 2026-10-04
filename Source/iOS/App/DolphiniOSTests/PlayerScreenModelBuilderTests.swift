@@ -420,6 +420,22 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(wii.item(id: "wii-sideways")?.subtitle, PlayerScreenHelp.sideways)
   }
 
+  /// Raw Bindings rows read like the capture rows; the editor they push keeps the raw expression.
+  func test_rawBindings_showReadableNames() {
+    var onAPad = boundGameCube
+    onAPad.showsAdvanced = true
+    XCTAssertEqual(make(onAPad).item(id: "expression-gcPad-0-0")?.subtitle, "A")
+    var touch = state(
+      .wiiRemote, device: Self.touch,
+      controls: [RemapControlRow(owner: .wiimote, groupId: 3, index: 0, name: "Up", expression: "`Axis 112`")])
+    touch.showsAdvanced = true
+    XCTAssertEqual(make(touch).item(id: "expression-wiimote-3-0")?.subtitle, "Pointer Up")
+    var custom = boundGameCube
+    custom.showsAdvanced = true
+    custom.controls = [RemapControlRow(owner: .gcPad, groupId: 0, index: 0, name: "A", expression: "`Button A` | `Button B`")]
+    XCTAssertEqual(make(custom).item(id: "expression-gcPad-0-0")?.subtitle, "`Button A` | `Button B`")
+  }
+
   func test_help_rawBindingsOpenWithACaption() {
     var screen = boundGameCube
     screen.showsAdvanced = true

@@ -246,9 +246,12 @@ enum PlayerScreenModelBuilder {
         items: group.settings.map { settingItem($0, actions: actions) }))
     }
     if !state.controls.isEmpty {
+      // Readable names, as the capture rows show them; the editor a row pushes holds the raw text.
+      let family = DeviceFamily.from(qualifier: state.player.deviceQualifier)
       let expressionRows: [MenuItem] = state.controls.map { row in
         MenuItem(
-          id: expressionRowID(row), title: ControlCategory.title(for: row), subtitle: row.expression,
+          id: expressionRowID(row), title: ControlCategory.title(for: row),
+          subtitle: BindingDisplay.text(for: row.expression, family: family),
           role: .destination(actions.expressionDestination(row)))
       }
       let help = helpCaption(id: "help-expressions", PlayerScreenHelp.rawBindings)
