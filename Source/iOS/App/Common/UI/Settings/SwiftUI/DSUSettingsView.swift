@@ -30,7 +30,7 @@ struct DSUSettingsView: View {
     List {
       Section(
         header: HStack {
-          Text("DSU Client")
+          Text(L("DSU Client"))
           if !dsuBrowser.servers.isEmpty {
             Text(String(format: L("%d found"), dsuBrowser.servers.count))
               .font(.caption)
