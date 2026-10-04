@@ -156,12 +156,19 @@ jobs:
           if [ -n "${LINT_BASE_SHA:-}" ]; then
             # Only the lines the PR adds or changes: the iOS ObjC tree is written in a
             # different style from Source/.clang-format, so a whole changed file is
-            # never clean. git-clang-format exits 1 and prints the diff when the
-            # changed lines need formatting, 0 with "no modified files to format"
-            # otherwise.
-            git clang-format --diff --extensions mm,m,cpp,cc,h,hpp \
-              "$LINT_BASE_SHA" HEAD -- Source/iOS
-            exit 0
+            # never clean. git-clang-format prints a patch when the changed lines need
+            # formatting; its exit code varies by version, so the patch decides.
+            out=$(git clang-format --diff --extensions mm,m,cpp,cc,h,hpp \
+              "$LINT_BASE_SHA" HEAD -- Source/iOS || true)
+            case "$out" in
+              ""|"no modified files to format"|"clang-format did not modify any files")
+                echo "${out:-clean}"
+                exit 0
+                ;;
+            esac
+            echo "$out"
+            echo "::error::changed lines need clang-format; the patch is above"
+            exit 1
           fi
           files=$(git ls-files \
             'Source/iOS/*.mm' 'Source/iOS/*.m' 'Source/iOS/*.cpp' \
