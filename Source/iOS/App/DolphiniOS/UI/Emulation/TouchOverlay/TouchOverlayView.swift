@@ -20,6 +20,10 @@ struct TouchOverlayView: View {
   /// `TouchPadsContainer.irMode`). Only meaningful for the Wii Remote pad kind's `wiiIRPad` group.
   let irMode: Int
 
+  /// The space the editor's drags are measured in (`PositionedTouchGroup`): the whole overlay, which
+  /// does not move while a group does.
+  static let coordinateSpace = NamedCoordinateSpace.named("TouchOverlayView")
+
   @ObservedObject private var store: TouchOverlayLayoutStore
   @State private var editMode: TouchOverlayEditMode
   /// Set only by the DEBUG layout gallery: the safe area of the device being simulated. Live
@@ -108,6 +112,9 @@ struct TouchOverlayView: View {
             NotificationCenter.default.post(name: .DOLEditTouchLayout, object: nil)
           }
 
+        if editMode != .none {
+          safeAreaGuide(bounds: bounds, safeArea: safeArea)
+        }
         ForEach(backgroundLayouts, id: \.group) { layout in
           groupView(layout: layout, bounds: bounds, orientation: orientation, opacity: opacity,
                     variant: variant, excludedFrames: otherBoxes)
@@ -120,6 +127,7 @@ struct TouchOverlayView: View {
           editToolbar(safeArea: safeArea)
         }
       }
+      .coordinateSpace(Self.coordinateSpace)
       // Pin the full-size canvas to the screen's corner explicitly rather than relying on how
       // `.ignoresSafeArea()` positions an explicitly sized frame.
       .frame(width: canvas.width, height: canvas.height)
@@ -215,6 +223,18 @@ struct TouchOverlayView: View {
   }
 
   // MARK: Edit chrome
+
+  /// The safe area's edges, drawn faintly while editing. Every editor clamps groups to the whole
+  /// canvas (the defaults stay inside the safe area on their own), so this shows where the rounded
+  /// corners and the sensor housing begin, and that a group stopping past it is at the screen edge.
+  private func safeAreaGuide(bounds: CGRect, safeArea: UIEdgeInsets) -> some View {
+    let safe = bounds.inset(by: safeArea)
+    return Rectangle()
+      .stroke(Color.white.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+      .frame(width: safe.width, height: safe.height)
+      .position(x: safe.midX, y: safe.midY)
+      .allowsHitTesting(false)
+  }
 
   /// Top centre, inside the safe area: clear of the top corners, where the shoulder buttons sit, and of
   /// the bottom edge every default hangs from. It used to sit top right, which in landscape (no top

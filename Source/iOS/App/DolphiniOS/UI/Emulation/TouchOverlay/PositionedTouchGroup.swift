@@ -7,9 +7,11 @@ import SwiftUI
 /// One draggable control group in the layout editor, ported near-verbatim from iFly's
 /// `PositionedControlGroup` (design §0/§4). In normal play it renders `content` at `box` with
 /// input fully live; in edit mode the content's own input is suppressed and a dashed handle
-/// captures a drag — the group follows the finger and commits on release via
-/// `TouchOverlayLayoutEngine.resolve` (free placement, clamped on-screen only; no grid-snap or
-/// overlap rejection, matching phase 1's engine).
+/// captures a drag — the group follows the finger, held on-screen by
+/// `TouchOverlayLayoutEngine.resolve` while it moves, and commits that same point on release (free
+/// placement, clamped on-screen only; no grid-snap or overlap rejection, matching phase 1's engine).
+/// Every drag is measured in `TouchOverlayView.coordinateSpace`, which stays put while the group
+/// moves; in the group's own (`.local`) space the translation shifted as `.position` moved the view.
 struct PositionedTouchGroup<Content: View>: View {
   let group: TouchOverlayGroup
   let box: CGRect
@@ -101,14 +103,23 @@ struct PositionedTouchGroup<Content: View>: View {
   }
 
   private var moveGesture: some Gesture {
-    DragGesture(minimumDistance: 0)
-      .onChanged { value in dragOffset = value.translation }
+    DragGesture(minimumDistance: 0, coordinateSpace: TouchOverlayView.coordinateSpace)
+      .onChanged { value in
+        // Clamped like the commit, so the group stops at the edge while the finger is still down
+        // instead of following it off-screen and snapping back on release.
+        let resolved = resolvedCenter(value.translation)
+        dragOffset = CGSize(width: resolved.x - box.midX, height: resolved.y - box.midY)
+      }
       .onEnded { value in
-        let proposed = CGPoint(x: box.midX + value.translation.width, y: box.midY + value.translation.height)
-        let resolved = TouchOverlayLayoutEngine.resolve(proposed: proposed, size: box.size, bounds: bounds)
-        onCommit(resolved)
+        onCommit(resolvedCenter(value.translation))
         dragOffset = .zero
       }
+  }
+
+  /// Where a drag by `translation` puts the group's centre, kept on the canvas.
+  private func resolvedCenter(_ translation: CGSize) -> CGPoint {
+    let proposed = CGPoint(x: box.midX + translation.width, y: box.midY + translation.height)
+    return TouchOverlayLayoutEngine.resolve(proposed: proposed, size: box.size, bounds: bounds)
   }
 
   /// A small corner grip: dragging away from the box grows it, toward it shrinks it. The delta is
@@ -123,7 +134,7 @@ struct PositionedTouchGroup<Content: View>: View {
       .background(Circle().fill(Color.orange.opacity(0.9)))
       .offset(x: 10, y: 10)
       .gesture(
-        DragGesture(minimumDistance: 0)
+        DragGesture(minimumDistance: 0, coordinateSpace: TouchOverlayView.coordinateSpace)
           .onChanged { value in
             let base = max(box.width, box.height, 1)
             let delta = (value.translation.width + value.translation.height) / base
@@ -153,7 +164,7 @@ struct PositionedTouchGroup<Content: View>: View {
       .background(Circle().fill(Color.orange.opacity(0.9)))
       .offset(x: 10, y: 10)
       .gesture(
-        DragGesture(minimumDistance: 0)
+        DragGesture(minimumDistance: 0, coordinateSpace: TouchOverlayView.coordinateSpace)
           .onChanged { value in
             liveScaleFactorX = max(0.3, 1 + value.translation.width / max(box.width, 1))
             liveScaleFactorY = max(0.3, 1 + value.translation.height / max(box.height, 1))
