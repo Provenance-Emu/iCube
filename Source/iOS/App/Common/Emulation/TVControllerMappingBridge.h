@@ -36,9 +36,8 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 
 /// True when the GC pad slot's emulated controller has at least one non-empty
 /// control expression bound — i.e. it has a real mapping, not just an
-/// activated-but-unconfigured default. `reconcileAssignments` clears a
-/// disconnected device's default-device binding but never touches these
-/// expressions, so this stays true across a reconnect. It says nothing about
+/// activated-but-unconfigured default. A device that disconnects keeps its
+/// binding and these expressions, so this stays true across a reconnect. It says nothing about
 /// whether the mapping works on the device now bound; `padMappingBindsDevice:`
 /// answers that.
 + (BOOL)padHasAnyBinding:(NSInteger)portOneBased NS_SWIFT_NAME(padHasAnyBinding(forGCPort:));
@@ -59,13 +58,36 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 /// Wiimote counterpart of `padMappingBindsDevice:`.
 + (BOOL)wiimoteMappingBindsDevice:(NSInteger)indexOneBased NS_SWIFT_NAME(wiimoteMappingBindsDevice(forWiimote:));
 
-/// Assign the iOS Touchscreen virtual device as the default device for a GC port.
+/// True when the Wii Remote slot's default device is an on-screen `iOS/<id>/Touchscreen`.
++ (BOOL)wiimoteUsesTouchscreen:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(wiimoteUsesTouchscreen(forWiimote:));
+
+/// True when the Wii Remote's four IR direction controls (`IR/Up`, `Down`, `Left`, `Right`) all
+/// have an expression and, when the slot's device is currently enumerated, each binds an input on
+/// it. A profile without `IR/` keys leaves them empty; the core's defaults (`Cursor Y-`, ...) name
+/// no input on iOS.
++ (BOOL)wiimoteHasIRPointerBinding:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(wiimoteHasIRPointerBinding(forWiimote:));
+
+/// Puts a touchscreen Wii Remote slot's pointer back into the shape the app drives: the core's
+/// motion pointer (`IMUIR/Enabled`) off, since the app writes IR itself, and, when
+/// `wiimoteHasIRPointerBinding:` fails, the IR block of the bundled Touchscreen profile
+/// (`IR/Up..Right = Axis 112..115`, `IR/Auto-Hide = False`) re-applied without touching any other
+/// binding. Saves when it changed anything and returns whether it did; a no-op for a slot not
+/// bound to the Touchscreen.
+/// `loadProfile:forWiimote:restoreDevice:` and the coordinator's touchscreen binding already
+/// apply it; call it after any other write that can replace a touchscreen slot's mapping.
++ (BOOL)enforceTouchscreenPointerForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(enforceTouchscreenPointer(forWiimote:));
+
+/// Assign the iOS Touchscreen virtual device as the default device for a GC port. The Touchscreen
+/// profile is loaded when the port changes device or has no mapping; the port's device is the
+/// Touchscreen afterwards whatever that profile's `Device =` line names.
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
 
-/// Mechanical only: drops default-device bindings that point at devices the
-/// ControllerInterface no longer enumerates, so the Swift AssignmentEngine sees
-/// an accurate snapshot. This never chooses a port and never assigns a device.
-+ (void)reconcileAssignments;
+/// Writes the live GameCube pad / Wii Remote mappings to GCPadNew.ini / WiimoteNew.ini.
++ (void)saveGCPadConfig;
++ (void)saveWiimoteConfig;
 
 /// Enumerate all input devices' qualified names that are valid for mapping (iOS, MFi, DSU)
 + (NSArray<NSString*>*)allQualifiedDevices;
@@ -86,9 +108,19 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 + (NSInteger)selectedWiimoteAttachmentForIndex:(NSInteger)indexOneBased;
 + (void)setSelectedWiimoteAttachment:(NSInteger)attachmentIndex forWiimote:(NSInteger)indexOneBased;
 
-/// Profiles (enumeration and loading)
+/// Profiles (enumeration and loading). The lists name the profiles that can work on the slot's
+/// current device: never the bundled `Wii Remote with MotionPlus Pointing` / `SDL Gamepad` (no
+/// Bluetooth or SDL backend on iOS/tvOS), and on a slot bound to the Touchscreen only
+/// `Touchscreen` plus profiles whose `Device =` line is an `iOS/<id>/Touchscreen`. Loading still
+/// accepts any name.
 + (NSArray<NSString*>*)profilesForGCPort:(NSInteger)portOneBased;
 + (NSArray<NSString*>*)profilesForWiimote:(NSInteger)indexOneBased;
+/// Every profile name on disk for the slot's controller type (user and bundled), unfiltered: what
+/// a save could collide with.
++ (NSArray<NSString*>*)allProfilesForGCPort:(NSInteger)portOneBased
+    NS_SWIFT_NAME(allProfiles(forGCPort:));
++ (NSArray<NSString*>*)allProfilesForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(allProfiles(forWiimote:));
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore;
 + (BOOL)loadProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased restoreDevice:(BOOL)restore;
 
@@ -98,6 +130,42 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 /// NO when the controller does not exist or the file could not be written.
 + (BOOL)saveProfile:(NSString*)name forGCPort:(NSInteger)portOneBased;
 + (BOOL)saveProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased;
+
+/// Profiles (deleting). The names in the user profile directory only (what Save Profile As…
+/// wrote), unfiltered: the profiles `deleteProfile:` can remove.
++ (NSArray<NSString*>*)userProfilesForGCPort:(NSInteger)portOneBased
+    NS_SWIFT_NAME(userProfiles(forGCPort:));
++ (NSArray<NSString*>*)userProfilesForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(userProfiles(forWiimote:));
+/// Deletes `<user profile dir>/<name>.ini`. Never touches the sys directory, so a bundled profile
+/// is never deleted (one the user's file shadowed is listed again). NO when there is no such user
+/// profile or it could not be deleted. The live mapping is not changed.
++ (BOOL)deleteProfile:(NSString*)name
+            forGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(deleteProfile(_:forGCPort:));
++ (BOOL)deleteProfile:(NSString*)name
+           forWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(deleteProfile(_:forWiimote:));
+
+/// Mapping stash: the mapping a controller had on a slot, kept while the slot goes to another
+/// device (the Touchscreen when a pad disconnects, another pad, No Device), so the controller gets
+/// it back when it is assigned again. One profile-shaped file per controller type and device,
+/// `<User>/Config/MappingStash/<GCPad|Wiimote>/<qualifier>.ini` with every character but letters,
+/// digits, space, `-` and `_` written as `_`. Beside `Config/Profiles`, not inside it: no profile
+/// list or profile hotkey may offer a stash.
+/// Saves the slot's live mapping as `qualifier`'s stash, its `Device =` line set to `qualifier`.
++ (BOOL)stashMappingForGCPort:(NSInteger)portOneBased
+                    qualifier:(NSString*)qualifier
+    NS_SWIFT_NAME(stashMapping(forGCPort:qualifier:));
++ (BOOL)stashMappingForWiimote:(NSInteger)indexOneBased
+                     qualifier:(NSString*)qualifier
+    NS_SWIFT_NAME(stashMapping(forWiimote:qualifier:));
+/// Loads `qualifier`'s stash into the slot, keeping the slot's bound device, saves, and deletes
+/// the stash. NO, changing nothing, when there is none.
++ (BOOL)restoreStashedMappingForGCPort:(NSInteger)portOneBased
+                             qualifier:(NSString*)qualifier
+    NS_SWIFT_NAME(restoreStashedMapping(forGCPort:qualifier:));
++ (BOOL)restoreStashedMappingForWiimote:(NSInteger)indexOneBased
+                              qualifier:(NSString*)qualifier
+    NS_SWIFT_NAME(restoreStashedMapping(forWiimote:qualifier:));
 
 /// Device hotplug notifications
 + (void)beginPostingDevicesChangedNotifications;

@@ -43,7 +43,56 @@ final class BindingDisplayTests: XCTestCase {
     XCTAssertEqual(BindingDisplay.text(for: "`Paddle 1`", family: .xbox), "Paddle 1")
   }
 
-  func testTouchscreenInputsKeepTheirName() {
-    XCTAssertEqual(BindingDisplay.text(for: "`Button 3`", family: .touchscreen), "On-screen Button 3")
+  /// GameCube ids 0…21 (ButtonType.h): the on-screen pad's buttons, sticks and triggers.
+  func testTouchscreenGameCubeIDsReadAsTheOnScreenControl() {
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 0`", family: .touchscreen), "On-screen A")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 2`", family: .touchscreen), "On-screen Start")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 3`", family: .touchscreen), "On-screen X")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 9`", family: .touchscreen), "On-screen D-Pad →")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 11`", family: .touchscreen), "On-screen Control Stick ↑")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 18`", family: .touchscreen), "On-screen C-Stick ←")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 21`", family: .touchscreen), "On-screen R")
+  }
+
+  /// Wii Remote, Nunchuk and Classic ids, as the bundled Touchscreen profile binds them.
+  func testTouchscreenWiiIDsReadAsTheOnScreenControl() {
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 100`", family: .touchscreen), "On-screen A")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 102`", family: .touchscreen), "On-screen −")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 104`", family: .touchscreen), "On-screen Home")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 106`", family: .touchscreen), "On-screen 2")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 108`", family: .touchscreen), "On-screen D-Pad ↓")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 201`", family: .touchscreen), "On-screen Nunchuk Z")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 205`", family: .touchscreen), "On-screen Nunchuk Stick ←")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 307`", family: .touchscreen), "On-screen Classic ZL")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 322`", family: .touchscreen), "On-screen Classic Right Stick →")
+  }
+
+  /// What the app drives from touch or the device's motion reads by what it moves.
+  func testTouchscreenPointerAndMotionIDs() {
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 112`", family: .touchscreen), "Pointer Up")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 113`", family: .touchscreen), "Pointer Down")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 114`", family: .touchscreen), "Pointer Left")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 115`", family: .touchscreen), "Pointer Right")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 118`", family: .touchscreen), "Pointer Hide")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 124`", family: .touchscreen), "Swing Forward")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 129`", family: .touchscreen), "Tilt Left")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 133`", family: .touchscreen), "Shake Y")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 213`", family: .touchscreen), "Nunchuk Swing Backward")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 625`", family: .touchscreen), "Accelerometer Left")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 630`", family: .touchscreen), "Accelerometer Down")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 631`", family: .touchscreen), "Gyroscope Pitch Up")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 636`", family: .touchscreen), "Gyroscope Yaw Right")
+    XCTAssertEqual(BindingDisplay.text(for: "`Axis 904`", family: .touchscreen), "Nunchuk Accelerometer Up")
+    XCTAssertEqual(BindingDisplay.text(for: "`Rumble 700`", family: .touchscreen), "Rumble")
+  }
+
+  /// An id with no name here (the guitar's frets) keeps its number; a pad's input is never read as
+  /// a touchscreen id.
+  func testTouchscreenUnknownIDsKeepTheirNumber() {
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 402`", family: .touchscreen), "On-screen Button 402")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 10`", family: .touchscreen), "On-screen Button 10")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 100`", family: .xbox), "Button 100")
+    XCTAssertNil(BindingDisplay.touchscreenName("Button A"))
+    XCTAssertNil(BindingDisplay.touchscreenName("Cursor Y-"))
   }
 }

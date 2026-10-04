@@ -23,6 +23,8 @@
 #include "LocalizationUtil.h"
 #include <unordered_set>
 
+#include "ProfileLoading.h"
+
 NSString* const TVControllerDevicesChangedNotification = @"TVControllerDevicesChangedNotification";
 
 @implementation TVControllerMappingBridge
@@ -184,52 +186,125 @@ static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController
   return ControllerMappingBindsDevice(cfg->GetController(idx));
 }
 
-+ (void)reconcileAssignments
+// The iOS backend's on-screen device, `iOS/<id>/Touchscreen` (ids 0-3 GameCube pads, 4-7 Wii
+// Remotes; iOS.mm PopulateDevices).
+static bool IsTouchscreenDevice(const ciface::Core::DeviceQualifier& dq)
 {
-  auto* cfg = Pad::GetConfig();
-  if (!cfg)
-    return;
+  return dq.source == "iOS" && dq.name == "Touchscreen";
+}
 
-  // Build set of qualified names for currently enumerated physical devices (MFi/DSU)
-  std::unordered_set<std::string> connected_qnames;
-  const auto devices = g_controller_interface.GetAllDevices();
-  for (const auto& dev : devices)
+// `idx` is zero-based. False for an out-of-range index (`GetController` is `vector::at`).
+static bool WiimoteIsOnTouchscreen(int idx)
+{
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg || idx < 0 || idx >= cfg->GetControllerCount())
+    return false;
+  const auto* wm = cfg->GetController(idx);
+  return wm && IsTouchscreenDevice(wm->GetDefaultDevice());
+}
+
+// The core's motion pointer (`IMUIR/Enabled`) aims the IR camera from the IMU axes, which the app
+// fills with the phone's own motion whenever the overlay is up. On a touchscreen slot the app
+// writes IR itself, so with it on, holding the phone upright points the remote at the ceiling and
+// the pointer vanishes. The physical-remote profiles (`Physical Controller`, `Wii Remote with
+// MotionPlus Pointing`) and the core's `LoadDefaults` all turn it on, so every load onto a
+// touchscreen slot must end here. Does not save; returns whether it changed anything.
+static bool DisableCoreIMUPointerIfTouchscreen(int idx)
+{
+  if (!WiimoteIsOnTouchscreen(idx))
+    return false;
+  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  auto* group = Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::IMUPoint);
+  if (!group || (group->enabled.IsSimpleValue() && !group->enabled.GetValue()))
+    return false;
+  group->enabled.SetValue(false);
+  NSLog(@"[iCube][Input] Wiimote%d: core IMU pointer disabled (touchscreen drives IR)", idx + 1);
+  return true;
+}
+
+// The pointer block of the bundled Data/Sys/Profiles/Wiimote/Touchscreen.ini, in the Cursor
+// group's control order (`named_directions`: Up, Down, Left, Right; axis ids in ButtonType.h).
+static constexpr int kIRDirectionCount = 4;
+static constexpr const char* kTouchscreenIRExpressions[kIRDirectionCount] = {
+    "`Axis 112`", "`Axis 113`", "`Axis 114`", "`Axis 115`"};
+
+// True when all four IR direction controls (`IR/Up`, `Down`, `Left`, `Right`) of the Wii Remote
+// have an expression and, when the slot's device is currently enumerated, each one binds an input
+// on it. A profile without `IR/` keys loads them as "" (ControlGroup::LoadConfig); the core's
+// LoadDefaults writes `Cursor Y-` and friends, which are not empty but name no input on iOS.
+static bool WiimoteHasIRPointerBinding(int idx)
+{
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg || idx < 0 || idx >= cfg->GetControllerCount())
+    return false;
+  const auto* wm = cfg->GetController(idx);
+  auto* ir = Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Point);
+  if (!wm || !ir || ir->controls.size() < static_cast<size_t>(kIRDirectionCount))
+    return false;
+  // Before the state lock: the device lookup takes the device list's own mutex, and a hotplug
+  // holds that one while it re-resolves references under the state lock.
+  const bool device_present = g_controller_interface.HasConnectedDevice(wm->GetDefaultDevice());
+  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  for (int i = 0; i < kIRDirectionCount; ++i)
   {
-    if (!dev || IsDisconnectedPlaceholder(dev))
-      continue;
-    const std::string src = dev->GetSource();
-    if (src == "MFi" || src == "DSUClient")
-      connected_qnames.insert(dev->GetQualifiedName());
+    const auto& ref = ir->controls[i]->control_ref;
+    if (!ref || ref->GetExpression().empty())
+      return false;
+    if (device_present && ref->BoundCount() == 0)
+      return false;
   }
+  return true;
+}
 
-  // Clear phantom defaults
-  const int count = cfg->GetControllerCount();
-  bool did_mutate = false;
-  for (int i = 0; i < count; ++i)
+// Re-applies only the IR block of the bundled Touchscreen profile (`IR/Up..Right = Axis 112..115`,
+// `IR/Auto-Hide = False`) to a touchscreen slot whose pointer directions are unbound, leaving every
+// other binding as the user has it. Auto-Hide is reset too because a pointer that sat still while
+// unbound is hidden after 2.5 s (Cursor.cpp) and stays hidden until it moves. Does not save;
+// returns whether it changed anything.
+static bool RepairTouchscreenIRPointer(int idx)
+{
+  if (!WiimoteIsOnTouchscreen(idx) || WiimoteHasIRPointerBinding(idx))
+    return false;
+  auto* wm = Wiimote::GetConfig()->GetController(idx);
+  auto* ir = Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Point);
+  if (!wm || !ir || ir->controls.size() < static_cast<size_t>(kIRDirectionCount))
+    return false;
   {
-    auto* pad = cfg->GetController(i);
-    if (!pad) continue;
-    const auto dq = pad->GetDefaultDevice();
-    const auto q = dq.ToString();
-    if (!q.empty() && connected_qnames.find(q) == connected_qnames.end())
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+    for (int i = 0; i < kIRDirectionCount; ++i)
+      ir->SetControlExpression(i, kTouchscreenIRExpressions[i]);
+    for (auto& setting : ir->numeric_settings)
     {
-      if (!(dq.source == "iOS" && dq.name == "Touchscreen"))
+      if (setting->GetType() == ControllerEmu::SettingType::Bool &&
+          std::string_view(setting->GetININame()) == "Auto-Hide")
       {
-        pad->SetDefaultDevice("");
-        pad->UpdateReferences(g_controller_interface);
-        did_mutate = true;
+        static_cast<ControllerEmu::NumericSetting<bool>*>(setting.get())->SetValue(false);
       }
     }
   }
+  wm->UpdateReferences(g_controller_interface);
+  NSLog(@"[iCube][Input] Wiimote%d: IR pointer rebound to the touchscreen", idx + 1);
+  return true;
+}
 
-  // NO POLICY HERE. Choosing which device owns which port is the Swift
-  // AssignmentEngine's job; this method only removes bindings that point at
-  // devices the ControllerInterface no longer enumerates, so the engine sees an
-  // accurate snapshot. The three competing auto-assign policies that used to
-  // live below this line (and in EmulationCoordinator) were the reason a single
-  // connect event could assign, re-decide and reassign the same controller.
-  if (did_mutate)
-    Pad::GetConfig()->SaveConfig();
++ (BOOL)wiimoteUsesTouchscreen:(NSInteger)indexOneBased
+{
+  return WiimoteIsOnTouchscreen(static_cast<int>(indexOneBased - 1)) ? YES : NO;
+}
+
++ (BOOL)wiimoteHasIRPointerBinding:(NSInteger)indexOneBased
+{
+  return WiimoteHasIRPointerBinding(static_cast<int>(indexOneBased - 1)) ? YES : NO;
+}
+
++ (BOOL)enforceTouchscreenPointerForWiimote:(NSInteger)indexOneBased
+{
+  const int idx = static_cast<int>(indexOneBased - 1);
+  const bool imu_changed = DisableCoreIMUPointerIfTouchscreen(idx);
+  const bool ir_changed = RepairTouchscreenIRPointer(idx);
+  if (imu_changed || ir_changed)
+    Wiimote::GetConfig()->SaveConfig();
+  return (imu_changed || ir_changed) ? YES : NO;
 }
 
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased
@@ -256,8 +331,12 @@ static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController
   ciface::Core::DeviceQualifier dq; dq.FromDevice(touchscreen_dev.get());
   auto* pad = cfg->GetController(port);
   if (!pad) return;
-  pad->SetDefaultDevice(dq);
+  // As the coordinator's BindTouchscreen: the on-screen profile is loaded only when the port
+  // changes device or has no mapping, so a touch mapping the user edited survives a re-bind (and
+  // the boot pass, which offers Pad 1 to the Touchscreen at every launch).
+  const bool rebinding = !(pad->GetDefaultDevice() == dq);
   bool loaded_profile = false;
+  if (rebinding || !ControllerHasAnyBoundControl(pad))
   {
     const std::string sysDir = pad->GetConfig()->GetSysProfileDirectoryPath();
     const std::string userDir = pad->GetConfig()->GetUserProfileDirectoryPath();
@@ -275,17 +354,31 @@ static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController
       pad->LoadConfig(ini.GetOrCreateSection("Profile"));
       loaded_profile = true;
     }
+    if (!loaded_profile)
+      pad->LoadDefaults(g_controller_interface);
   }
 
-  if (!loaded_profile)
   {
-    // Fallback to defaults, then ensure Touchscreen stays the default device
-    pad->LoadDefaults(g_controller_interface);
+    // `LoadConfig` applies the profile's own `Device =` line, and a user profile saved as
+    // "Touchscreen" from a pad's port names that pad: the port followed it and the on-screen
+    // controls drove nothing. The port is the Touchscreen's whatever the profile says.
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
     pad->SetDefaultDevice(dq);
   }
-
   pad->UpdateReferences(g_controller_interface);
   Pad::GetConfig()->SaveConfig();
+}
+
++ (void)saveGCPadConfig
+{
+  if (auto* config = Pad::GetConfig())
+    config->SaveConfig();
+}
+
++ (void)saveWiimoteConfig
+{
+  if (auto* config = Wiimote::GetConfig())
+    config->SaveConfig();
 }
 
 + (NSArray<NSString*>*)allQualifiedDevices
@@ -398,54 +491,102 @@ static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController
   attachments->SetSelectedAttachment((u32)attachmentIndex);
 }
 
-+ (NSArray<NSString*>*)profilesForGCPort:(NSInteger)portOneBased
+// Bundled profiles for hardware no iOS/tvOS backend reaches: SDL and hidapi (real Wii Remotes)
+// are not built for IOS (root CMakeLists.txt), so `Bluetooth/0/Wii Remote` and the SDL gamepad
+// never exist and every control of these profiles is dead.
+static bool IsUnsupportedProfile(const std::string& name)
+{
+  return name == "Wii Remote with MotionPlus Pointing" || name == "SDL Gamepad";
+}
+
+// True when the profile's `Device =` line names an on-screen `iOS/<id>/Touchscreen`.
+static bool ProfileTargetsTouchscreen(const std::string& path)
+{
+  Common::IniFile ini;
+  if (!ini.Load(path))
+    return false;
+  const auto* section = ini.GetSection("Profile");
+  std::string device;
+  if (!section || !section->Get("Device", &device))
+    return false;
+  ciface::Core::DeviceQualifier dq;
+  dq.FromString(device);
+  return IsTouchscreenDevice(dq);
+}
+
+// The profile names the player screen offers for a slot. The user directory is searched first
+// because a user profile shadows a bundled one of the same name (`loadProfile:` loads it), and
+// each filter looks at the file that would actually load: the unsupported names are dropped
+// only for the bundled copies (a user may save anything under those names), and on a slot bound
+// to the Touchscreen only profiles whose `Device =` line is an on-screen device are offered,
+// the bundled `Touchscreen` included: a physical-controller profile's inputs (`Button A`, ...)
+// do not exist on it, and loading one left the Wii pointer unbound and the core's motion pointer
+// on. With `filter` false, every name on disk (what a save would collide with).
+static NSArray<NSString*>*
+ProfilesForController(const ControllerEmu::EmulatedController* controller, bool filter)
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
-  auto* cfg = Pad::GetConfig();
-  if (!cfg) return result;
-  const int port = (int)portOneBased - 1;
-  auto* pad = cfg->GetController(port);
-  if (!pad) return result;
-  std::unordered_set<std::string> names;
-  for (const auto& filename : Common::DoFileSearch({pad->GetConfig()->GetUserProfileDirectoryPath()}, {".ini"}))
+  if (!controller)
+    return result;
+  const InputConfig* config = controller->GetConfig();
+  const bool touchscreen_slot = filter && IsTouchscreenDevice(controller->GetDefaultDevice());
+  std::unordered_set<std::string> seen;
+  const std::string sys_dir = config->GetSysProfileDirectoryPath();
+  for (const std::string& dir : {config->GetUserProfileDirectoryPath(), sys_dir})
   {
-    std::string basename;
-    SplitPath(filename, nullptr, &basename, nullptr);
-    if (!basename.empty()) names.insert(basename);
+    const bool bundled = dir == sys_dir;
+    for (const auto& filename : Common::DoFileSearch(dir, ".ini"))
+    {
+      std::string basename;
+      SplitPath(filename, nullptr, &basename, nullptr);
+      if (basename.empty() || !seen.insert(basename).second)
+        continue;
+      if (filter && bundled && IsUnsupportedProfile(basename))
+        continue;
+      if (touchscreen_slot && !ProfileTargetsTouchscreen(filename))
+        continue;
+      [result addObject:CppToFoundationString(basename)];
+    }
   }
-  for (const auto& filename : Common::DoFileSearch({pad->GetConfig()->GetSysProfileDirectoryPath()}, {".ini"}))
-  {
-    std::string basename;
-    SplitPath(filename, nullptr, &basename, nullptr);
-    if (!basename.empty()) names.insert(basename);
-  }
-  for (const auto& n : names) { [result addObject:[NSString stringWithUTF8String:n.c_str()]]; }
   return result;
+}
+
+static const ControllerEmu::EmulatedController* PadAt(NSInteger portOneBased)
+{
+  auto* cfg = Pad::GetConfig();
+  const int port = static_cast<int>(portOneBased - 1);
+  if (!cfg || port < 0 || port >= cfg->GetControllerCount())
+    return nullptr;
+  return cfg->GetController(port);
+}
+
+static const ControllerEmu::EmulatedController* WiimoteAt(NSInteger indexOneBased)
+{
+  auto* cfg = Wiimote::GetConfig();
+  const int idx = static_cast<int>(indexOneBased - 1);
+  if (!cfg || idx < 0 || idx >= cfg->GetControllerCount())
+    return nullptr;
+  return cfg->GetController(idx);
+}
+
++ (NSArray<NSString*>*)profilesForGCPort:(NSInteger)portOneBased
+{
+  return ProfilesForController(PadAt(portOneBased), true);
 }
 
 + (NSArray<NSString*>*)profilesForWiimote:(NSInteger)indexOneBased
 {
-  NSMutableArray<NSString*>* result = [NSMutableArray array];
-  auto* cfg = Wiimote::GetConfig();
-  if (!cfg) return result;
-  const int idx = (int)indexOneBased - 1;
-  auto* wm = cfg->GetController(idx);
-  if (!wm) return result;
-  std::unordered_set<std::string> names;
-  for (const auto& filename : Common::DoFileSearch({wm->GetConfig()->GetUserProfileDirectoryPath()}, {".ini"}))
-  {
-    std::string basename;
-    SplitPath(filename, nullptr, &basename, nullptr);
-    if (!basename.empty()) names.insert(basename);
-  }
-  for (const auto& filename : Common::DoFileSearch({wm->GetConfig()->GetSysProfileDirectoryPath()}, {".ini"}))
-  {
-    std::string basename;
-    SplitPath(filename, nullptr, &basename, nullptr);
-    if (!basename.empty()) names.insert(basename);
-  }
-  for (const auto& n : names) { [result addObject:[NSString stringWithUTF8String:n.c_str()]]; }
-  return result;
+  return ProfilesForController(WiimoteAt(indexOneBased), true);
+}
+
++ (NSArray<NSString*>*)allProfilesForGCPort:(NSInteger)portOneBased
+{
+  return ProfilesForController(PadAt(portOneBased), false);
+}
+
++ (NSArray<NSString*>*)allProfilesForWiimote:(NSInteger)indexOneBased
+{
+  return ProfilesForController(WiimoteAt(indexOneBased), false);
 }
 
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore
@@ -493,9 +634,11 @@ static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController
   Common::IniFile ini;
   if (!ini.Load(loadPath)) return NO;
   const auto selectedDev = wm->GetDefaultDevice();
-  wm->LoadConfig(ini.GetOrCreateSection("Profile"));
+  LoadProfileKeepingExtension(wm, ini.GetOrCreateSection("Profile"));
   if (restore) wm->SetDefaultDevice(selectedDev);
   wm->UpdateReferences(g_controller_interface);
+  DisableCoreIMUPointerIfTouchscreen(idx);
+  RepairTouchscreenIRPointer(idx);
   Wiimote::GetConfig()->SaveConfig();
   return YES;
 }
@@ -529,6 +672,163 @@ static BOOL SaveControllerProfile(ControllerEmu::EmulatedController* controller,
   auto* cfg = Wiimote::GetConfig();
   if (!cfg) return NO;
   return SaveControllerProfile(cfg->GetController((int)indexOneBased - 1), name);
+}
+
+// The profile names in the controller type's user directory: the ones a delete can remove.
+static NSArray<NSString*>* UserProfileNames(const ControllerEmu::EmulatedController* controller)
+{
+  NSMutableArray<NSString*>* result = [NSMutableArray array];
+  if (!controller)
+    return result;
+  const std::string dir = controller->GetConfig()->GetUserProfileDirectoryPath();
+  if (dir.empty())
+    return result;
+  for (const auto& filename : Common::DoFileSearch(dir, ".ini"))
+  {
+    std::string basename;
+    SplitPath(filename, nullptr, &basename, nullptr);
+    if (!basename.empty())
+      [result addObject:CppToFoundationString(basename)];
+  }
+  return result;
+}
+
+// Deletes `<user profile dir>/<name>.ini` and nothing else: the sys (bundled) directory is never
+// looked at, and a name that would leave the user directory is refused.
+static BOOL DeleteUserProfile(const ControllerEmu::EmulatedController* controller, NSString* name)
+{
+  if (!controller || name.length == 0)
+    return NO;
+  const std::string n = FoundationToCppString(name);
+  if (n.find('/') != std::string::npos)
+    return NO;
+  std::string userDir = controller->GetConfig()->GetUserProfileDirectoryPath();
+  if (userDir.empty())
+    return NO;
+  if (userDir.back() != '/')
+    userDir += '/';
+  const std::string path = userDir + n + ".ini";
+  if (!File::Exists(path))
+    return NO;
+  return File::Delete(path, File::IfAbsentBehavior::NoConsoleWarning) ? YES : NO;
+}
+
++ (NSArray<NSString*>*)userProfilesForGCPort:(NSInteger)portOneBased
+{
+  return UserProfileNames(PadAt(portOneBased));
+}
+
++ (NSArray<NSString*>*)userProfilesForWiimote:(NSInteger)indexOneBased
+{
+  return UserProfileNames(WiimoteAt(indexOneBased));
+}
+
++ (BOOL)deleteProfile:(NSString*)name forGCPort:(NSInteger)portOneBased
+{
+  return DeleteUserProfile(PadAt(portOneBased), name);
+}
+
++ (BOOL)deleteProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased
+{
+  return DeleteUserProfile(WiimoteAt(indexOneBased), name);
+}
+
+// ---- Mapping stash ----------------------------------------------------------------------------
+//
+// Mechanical only: which slot is stashed under which device, and when a stash comes back, is the
+// Swift ControllerAssignmentService's decision.
+
+// `<User>/Config/MappingStash/<GCPad|Wiimote>/`. Beside `Config/Profiles`, not inside it:
+// InputProfile's profile cycling searches the profile directory recursively.
+static std::string StashPath(const InputConfig* config, const std::string& qualifier)
+{
+  std::string name = qualifier;
+  for (char& c : name)
+  {
+    const bool keep = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                      c == ' ' || c == '-' || c == '_';
+    if (!keep)
+      c = '_';
+  }
+  return File::GetUserPath(D_CONFIG_IDX) + "MappingStash/" + config->GetProfileDirectoryName() +
+         "/" + name + ".ini";
+}
+
+static ControllerEmu::EmulatedController* ControllerAt(InputConfig* config, NSInteger oneBased)
+{
+  const int index = static_cast<int>(oneBased - 1);
+  if (!config || index < 0 || index >= config->GetControllerCount())
+    return nullptr;
+  return config->GetController(index);
+}
+
+static BOOL StashMapping(ControllerEmu::EmulatedController* controller, NSString* qualifier)
+{
+  if (!controller || qualifier.length == 0)
+    return NO;
+  const std::string q = FoundationToCppString(qualifier);
+  const std::string path = StashPath(controller->GetConfig(), q);
+  if (!File::CreateFullPath(path))
+    return NO;
+  Common::IniFile ini;
+  auto* section = ini.GetOrCreateSection("Profile");
+  controller->SaveConfig(section);
+  // The mapping is `qualifier`'s whatever the slot is bound to by now.
+  section->Set("Device", q);
+  return ini.Save(path) ? YES : NO;
+}
+
+static BOOL RestoreStashedMapping(ControllerEmu::EmulatedController* controller,
+                                  NSString* qualifier)
+{
+  if (!controller || qualifier.length == 0)
+    return NO;
+  const std::string q = FoundationToCppString(qualifier);
+  const std::string path = StashPath(controller->GetConfig(), q);
+  Common::IniFile ini;
+  if (!File::Exists(path) || !ini.Load(path))
+    return NO;
+  auto* section = ini.GetOrCreateSection("Profile");
+  // Two qualifiers can share a file name ('/' and '_' are both written '_'): only this one's.
+  std::string device;
+  if (!section->Get("Device", &device) || device != q)
+    return NO;
+  {
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+    const auto bound = controller->GetDefaultDevice();
+    LoadProfileKeepingExtension(controller, section);
+    controller->SetDefaultDevice(bound);
+  }
+  controller->UpdateReferences(g_controller_interface);
+  File::Delete(path, File::IfAbsentBehavior::NoConsoleWarning);
+  NSLog(@"[iCube][Input] %s: mapping restored for %s", controller->GetName().c_str(), q.c_str());
+  return YES;
+}
+
++ (BOOL)stashMappingForGCPort:(NSInteger)portOneBased qualifier:(NSString*)qualifier
+{
+  return StashMapping(ControllerAt(Pad::GetConfig(), portOneBased), qualifier);
+}
+
++ (BOOL)stashMappingForWiimote:(NSInteger)indexOneBased qualifier:(NSString*)qualifier
+{
+  return StashMapping(ControllerAt(Wiimote::GetConfig(), indexOneBased), qualifier);
+}
+
++ (BOOL)restoreStashedMappingForGCPort:(NSInteger)portOneBased qualifier:(NSString*)qualifier
+{
+  if (!RestoreStashedMapping(ControllerAt(Pad::GetConfig(), portOneBased), qualifier))
+    return NO;
+  Pad::GetConfig()->SaveConfig();
+  return YES;
+}
+
++ (BOOL)restoreStashedMappingForWiimote:(NSInteger)indexOneBased qualifier:(NSString*)qualifier
+{
+  if (!RestoreStashedMapping(ControllerAt(Wiimote::GetConfig(), indexOneBased), qualifier))
+    return NO;
+  Wiimote::GetConfig()->SaveConfig();
+  return YES;
 }
 
 + (NSArray<NSString*>*)padControlNamesForGroup:(NSInteger)portOneBased group:(NSInteger)groupId

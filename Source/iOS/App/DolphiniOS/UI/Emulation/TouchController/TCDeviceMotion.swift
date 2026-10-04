@@ -23,7 +23,24 @@ import simd
     return queue
   }()
 
-  public private(set) var orientation: UIInterfaceOrientation = .portrait
+  /// The interface orientation the pointer and IMU mappings read their axes from. Written on the
+  /// main thread by `statusBarOrientationChanged()`, read on `operationQueue` by the CoreMotion
+  /// handlers, so it is behind a lock.
+  public private(set) var orientation: UIInterfaceOrientation {
+    get {
+      orientationLock.lock()
+      defer { orientationLock.unlock() }
+      return storedOrientation
+    }
+    set {
+      orientationLock.lock()
+      storedOrientation = newValue
+      orientationLock.unlock()
+    }
+  }
+
+  private let orientationLock = NSLock()
+  private var storedOrientation: UIInterfaceOrientation = .portrait
   public private(set) var motionEnabled = false
   private var port = 0
 
@@ -104,6 +121,18 @@ import simd
     let requested = recenterRequested
     recenterRequested = false
     return requested
+  }
+
+  /// Whether the gyro pointer takes the current attitude as its new center: on a recenter request,
+  /// when there is no baseline yet (`baselineOrientation == nil`), and when the interface orientation
+  /// changed since the baseline was taken. `orientation` is kept current by
+  /// `statusBarOrientationChanged()`, which the emulation screen calls on every rotation.
+  static func needsPointerRebaseline(
+    recenterRequested: Bool,
+    baselineOrientation: UIInterfaceOrientation?,
+    orientation: UIInterfaceOrientation
+  ) -> Bool {
+    recenterRequested || baselineOrientation != orientation
   }
 
   /// Pointer offsets for the turn from `baseline` to `current`, before inversion and clamping.
@@ -335,7 +364,8 @@ import simd
   private func handleIRCursorMapping(motion: CMDeviceMotion) {
     let q = motion.attitude.quaternion
     let attitude = simd_quatd(ix: q.x, iy: q.y, iz: q.z, r: q.w)
-    // Written on the main actor by statusBarOrientationChanged; read once per sample.
+    // Written on the main thread by statusBarOrientationChanged, behind its lock; read once per
+    // sample.
     let orientation = self.orientation
     let useYawForHorizontal = MotionSettings.useYawForHorizontal()
     let invertRoll = MotionSettings.invertRoll()
@@ -344,7 +374,10 @@ import simd
 
     // Rotating the UI turns the screen's axes against the device's, so recenter on whatever the
     // player is holding now rather than reading the old turn along the new axes.
-    if takeRecenterRequest() || pointerBaseline == nil || orientation != pointerBaselineOrientation {
+    // `pointerBaselineOrientation` is set together with `pointerBaseline`, so nil means no baseline.
+    if Self.needsPointerRebaseline(
+      recenterRequested: takeRecenterRequest(), baselineOrientation: pointerBaselineOrientation,
+      orientation: orientation) {
       pointerBaseline = attitude
       pointerBaselineOrientation = orientation
       if debug {
@@ -455,11 +488,12 @@ import simd
   // UIApplicationDidChangeStatusBarOrientationNotification is deprecated...
   @MainActor
   @objc func statusBarOrientationChanged() {
-    if #available(iOS 13.0, *) {
-      if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-        orientation = scene.interfaceOrientation
-        return
-      }
+    // The game's scene, not whichever scene the set lists first: with an external display
+    // connected that can be the (landscape) external window while the phone is portrait.
+    if let scene = MainSceneCoordinator.shared().mainScene
+      ?? UIApplication.shared.connectedScenes.first as? UIWindowScene {
+      orientation = scene.interfaceOrientation
+      return
     }
     orientation = UIApplication.shared.statusBarOrientation
   }

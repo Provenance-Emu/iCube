@@ -14,6 +14,8 @@ enum PlayerPrompt: Equatable {
   /// The typed name is a device-default profile name (`ProfileNaming.builtInNames`).
   case confirmBuiltIn(name: String)
   case confirmReset(profile: String)
+  /// Clear All Buttons: unbinds every control of the port.
+  case confirmClearAll
   case saveFailed
 
   var title: String {
@@ -22,6 +24,7 @@ enum PlayerPrompt: Equatable {
     case .confirmOverwrite: return L("Replace Profile?")
     case .confirmBuiltIn: return L("Replace the Built-In Profile?")
     case .confirmReset: return L("Reset to Default Profile?")
+    case .confirmClearAll: return L("Clear All Buttons?")
     case .saveFailed: return L("Could Not Save Profile")
     }
   }
@@ -38,34 +41,80 @@ enum PlayerPrompt: Equatable {
         name)
     case .confirmReset(let profile):
       return String(format: L("Loads %@ for this player and replaces its current buttons."), profile)
+    case .confirmClearAll:
+      return L("Unbinds every control of this player, rumble included. Load a profile or reset to get them back.")
     case .saveFailed:
       return L("The profile file could not be written.")
     }
   }
 }
 
-/// The profile last loaded, saved or applied on each port during this app session (decision 5).
-/// Dolphin does not record which profile a port's mapping came from (`loadProfile:` copies the ini
-/// into the live controller), so this is the only source of the name. Main thread only.
+/// The profile last loaded, saved or applied on each port (decision 5). Dolphin does not record
+/// which profile a port's mapping came from (`loadProfile:` copies the ini into the live
+/// controller), so this is the only source of the name. Main thread only.
+///
+/// With `defaults`, an unedited name is also kept across launches, keyed by port and the device the
+/// port holds (`player_profile_name.<player id>.<qualifier>`), and read back when the session has
+/// none for the port; it used to read "Custom" after every relaunch. Keyed by device because a
+/// pad's mapping follows the pad (the mapping stash) while the port's other devices bring their
+/// own. `qualifier` is always the port's device at the time: applying a profile replaces that
+/// device's stored name, editing the mapping or forgetting the name drops it.
 final class PlayerProfileMemory {
-  static let shared = PlayerProfileMemory()
+  static let shared = PlayerProfileMemory(defaults: .standard)
+  static let defaultsKeyPrefix = "player_profile_name."
 
   struct Entry: Equatable {
     var name: String
     var edited: Bool
   }
 
+  private let defaults: UserDefaults?
   private var entries: [String: Entry] = [:]
 
-  func entry(for playerID: String) -> Entry? { entries[playerID] }
+  /// Without `defaults` (tests), names last for the session only.
+  init(defaults: UserDefaults? = nil) {
+    self.defaults = defaults
+  }
 
-  func remember(_ name: String, for playerID: String) {
+  func entry(for playerID: String, qualifier: String = "") -> Entry? {
+    if let entry = entries[playerID] { return entry }
+    return storedName(for: playerID, qualifier: qualifier).map { Entry(name: $0, edited: false) }
+  }
+
+  func remember(_ name: String, for playerID: String, qualifier: String = "") {
     entries[playerID] = Entry(name: name, edited: false)
+    guard !qualifier.isEmpty else { return }
+    defaults?.set(name, forKey: Self.key(playerID, qualifier))
   }
 
   /// The mapping changed after the remembered profile was applied.
-  func markEdited(_ playerID: String) {
+  func markEdited(_ playerID: String, qualifier: String = "") {
+    if entries[playerID] == nil, let name = storedName(for: playerID, qualifier: qualifier) {
+      entries[playerID] = Entry(name: name, edited: false)
+    }
     entries[playerID]?.edited = true
+    dropStored(playerID, qualifier)
+  }
+
+  /// The remembered profile no longer exists: the port reads "Custom".
+  func forget(_ playerID: String, qualifier: String = "") {
+    entries[playerID] = nil
+    dropStored(playerID, qualifier)
+  }
+
+  private static func key(_ playerID: String, _ qualifier: String) -> String {
+    defaultsKeyPrefix + playerID + "." + qualifier
+  }
+
+  /// The name kept across launches for the port and device, if any.
+  func storedName(for playerID: String, qualifier: String) -> String? {
+    guard !qualifier.isEmpty else { return nil }
+    return defaults?.string(forKey: Self.key(playerID, qualifier))
+  }
+
+  private func dropStored(_ playerID: String, _ qualifier: String) {
+    guard !qualifier.isEmpty else { return }
+    defaults?.removeObject(forKey: Self.key(playerID, qualifier))
   }
 }
 
@@ -174,7 +223,7 @@ final class PlayerScreenViewModel {
   private func makeSnapshot() -> PlayerScreenState {
     let player = readPlayer()
     let system: RemapSystem = slot.kind == .gameCube ? .gamecube : .wii
-    let remembered = memory.entry(for: slot.playerID)
+    let remembered = memory.entry(for: slot.playerID, qualifier: player.deviceQualifier)
     return PlayerScreenState(
       player: player,
       pads: reader.connectedPads(),
@@ -191,7 +240,8 @@ final class PlayerScreenViewModel {
         AdvancedGroupState(
           owner: entry.owner, groupId: entry.groupId, title: entry.title,
           settings: io.numericSettings(owner: entry.owner, group: entry.groupId, port: slot.port))
-      })
+      },
+      isPinned: io.isPinned(slot))
   }
 
   /// The same reads, in the same shape, as `ControllerHubViewModel.reload()` makes for this port.
@@ -251,14 +301,18 @@ final class PlayerScreenViewModel {
         AnyView(ProfileListView(
           current: self?.state.profileName,
           loadNames: { [weak self] in self?.profileNames() ?? [] },
-          onPick: { [weak self] in self?.loadProfile($0) }))
+          onPick: { [weak self] in self?.loadProfile($0) },
+          loadDeletable: { [weak self] in self?.deletableProfileNames() ?? [] },
+          onDelete: { [weak self] in self?.deleteProfile($0) ?? false }))
       },
       saveProfileAs: { [weak self] in self?.openSavePrompt() },
       resetProfile: { [weak self] in self?.requestReset() },
+      clearAll: { [weak self] in self?.requestClearAll() },
       setExtension: { [weak self] in self?.setExtension($0) },
       setSideways: { [weak self] in self?.setSideways($0) },
       toggleCapture: { [weak self] in self?.toggleCapture($0) },
       clearBinding: { [weak self] in self?.clear($0) },
+      resetBinding: { [weak self] in self?.resetToDefault($0) },
       setPointerMode: { [weak self] mode in self?.write { $0.setPointerMode(mode) } },
       recenterPointer: { [weak self] in self?.io.recenterPointer() },
       setDragGain: { [weak self] gain in self?.write { $0.setDragGain(gain) } },
@@ -270,9 +324,16 @@ final class PlayerScreenViewModel {
       toggleAdvanced: { [weak self] in self?.state.showsAdvanced.toggle() },
       setNumericSetting: { [weak self] setting, value in self?.setNumericSetting(setting, value: value) },
       expressionDestination: { [weak self] row in
-        AnyView(ExpressionEditorView(
+        // Built for every Raw Bindings row on every render: nothing here may read the bridges. The
+        // editor reads the inputs and their values only once it is on screen.
+        let qualifier = self?.state.player.deviceQualifier ?? ""
+        return AnyView(ExpressionEditorView(
           title: ControlCategory.title(for: row),
           original: row.editableExpression,
+          family: DeviceFamily.from(qualifier: qualifier),
+          loadInputs: { [weak self] in self?.editorInputs(forQualifier: qualifier) ?? [] },
+          loadDefault: { [weak self] in self?.defaultExpression(for: row) },
+          readInputStates: { [weak self] in self?.io.inputStates(forQualifier: qualifier) ?? [] },
           check: { [weak self] in self?.io.check($0) ?? ExpressionCheck(status: .invalid, message: "") },
           save: { [weak self] in self?.saveExpression($0, for: row) ?? false }))
       })
@@ -299,9 +360,8 @@ final class PlayerScreenViewModel {
     }
     io.setDevice(choice, slot: slot)
     // Which profile the port holds now, as far as the app can know (Dolphin does not record it):
-    // - Touchscreen: both kinds reload the "Touchscreen" profile. GameCube always does
-    //   (TVControllerMappingBridge.mm:228-253); a Wii Remote's BindTouchscreen does whenever the bound
-    //   device changes (EmulationCoordinator.mm:1581-1586), and it always changes here.
+    // - Touchscreen: both kinds reload the "Touchscreen" profile whenever the bound device changes
+    //   (`assignTouchscreen(toGCPort:)`, the coordinator's BindTouchscreen), and it always changes here.
     // - A pad: the assignment loads the pad's default profile unless the port's mapping binds
     //   something on that pad (ControllerAssignmentService.assign), and the bridge's answer to that
     //   cannot be read after the fact (the profile is already loaded). What can: the port's control
@@ -311,8 +371,13 @@ final class PlayerScreenViewModel {
     reload()
     let reloadedDefault = choice == .touchscreen || (choice != .noDevice && state.controls != controlsBefore)
     let qualifier = state.player.deviceQualifier
-    if reloadedDefault, !qualifier.isEmpty, let name = io.defaultProfileName(forQualifier: qualifier) {
-      memory.remember(name, for: slot.playerID)
+    if reloadedDefault, !qualifier.isEmpty {
+      // A pad that got its own mapping back (the assignment's mapping stash) keeps the name it
+      // had on this port; otherwise its default profile was loaded.
+      let restoredName = choice == .touchscreen ? nil : memory.storedName(for: slot.playerID, qualifier: qualifier)
+      if let name = restoredName ?? io.defaultProfileName(forQualifier: qualifier) {
+        memory.remember(name, for: slot.playerID, qualifier: qualifier)
+      }
     }
     // Decision 12: the app turns the IMU pointer off on every touchscreen-bound Wii Remote
     // (EmulationCoordinator.mm:1501-1525), and a re-bind keeps the mapping, so a gyro pad taking
@@ -327,10 +392,29 @@ final class PlayerScreenViewModel {
 
   func profileNames() -> [String] { io.profiles(for: slot) }
 
+  /// The profiles Load Profile… may offer to delete: the user's own, never a bundled one.
+  func deletableProfileNames() -> [String] { io.userProfileNames(for: slot) }
+
+  /// Deletes one of the user's profiles (Load Profile… asked first). The port keeps its mapping; if
+  /// the deleted profile was the one this port remembers and no profile of that name is left (a
+  /// bundled one it shadowed would be), the port reads "Custom".
+  @discardableResult
+  func deleteProfile(_ name: String) -> Bool {
+    guard io.deleteProfile(name, slot: slot) else { return false }
+    let qualifier = state.player.deviceQualifier
+    if let remembered = memory.entry(for: slot.playerID, qualifier: qualifier)?.name,
+       remembered.caseInsensitiveCompare(name) == .orderedSame,
+       !ProfileNaming.exists(remembered, in: io.allProfileNames(for: slot)) {
+      memory.forget(slot.playerID, qualifier: qualifier)
+    }
+    reload()
+    return true
+  }
+
   func loadProfile(_ name: String) {
     endCapture()
     if io.loadProfile(name, slot: slot) {
-      memory.remember(name, for: slot.playerID)
+      memory.remember(name, for: slot.playerID, qualifier: state.player.deviceQualifier)
     }
     reload()
   }
@@ -363,7 +447,7 @@ final class PlayerScreenViewModel {
       guard !name.isEmpty else { return }
       if ProfileNaming.isBuiltIn(name) {
         present(.confirmBuiltIn(name: name))
-      } else if ProfileNaming.exists(name, in: io.profiles(for: slot)) {
+      } else if ProfileNaming.exists(name, in: io.allProfileNames(for: slot)) {
         present(.confirmOverwrite(name: name))
       } else {
         save(name)
@@ -372,9 +456,29 @@ final class PlayerScreenViewModel {
       save(name)
     case .confirmReset(let profile):
       loadProfile(profile)
+    case .confirmClearAll:
+      clearAll()
     case .saveFailed:
       break
     }
+  }
+
+  /// Asks before unbinding every control. Only where capture works: a port that cannot capture
+  /// could not bind anything again, as with a single row's Clear.
+  func requestClearAll() {
+    guard state.canCapture else { return }
+    prompt = .confirmClearAll
+  }
+
+  /// Every control of the port (`state.controls`: buttons, sticks, motion, rumble), unbound.
+  private func clearAll() {
+    guard state.canCapture else { return }
+    endCapture()
+    for row in state.controls where !row.editableExpression.isEmpty {
+      io.setExpression("", for: row, port: slot.port)
+    }
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
+    reload()
   }
 
   /// A pad's B, or the alert's Cancel.
@@ -384,7 +488,7 @@ final class PlayerScreenViewModel {
 
   private func save(_ name: String) {
     if io.saveProfile(name, slot: slot) {
-      memory.remember(name, for: slot.playerID)
+      memory.remember(name, for: slot.playerID, qualifier: state.player.deviceQualifier)
       reload()
     } else {
       present(.saveFailed)
@@ -403,27 +507,27 @@ final class PlayerScreenViewModel {
     guard slot.kind == .wiiRemote, value != state.player.wiiExtension else { return }
     endCapture()
     io.setExtension(value, wiimote: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
   func setSideways(_ enabled: Bool) {
     guard slot.kind == .wiiRemote else { return }
     io.setSideways(enabled, wiimote: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
   func setMotionPointer(_ enabled: Bool) {
     guard slot.kind == .wiiRemote else { return }
     io.setMotionPointerEnabled(enabled, wiimote: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
   func setNumericSetting(_ setting: NumericSettingState, value: Double) {
     io.setNumericSetting(setting, value: value, port: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
   }
 
@@ -476,7 +580,7 @@ final class PlayerScreenViewModel {
     }
     if case .captured(let index) = result, index < session.inputNames.count {
       io.setExpression(RemapExpression.expression(forInputName: session.inputNames[index]), for: session.row, port: slot.port)
-      memory.markEdited(slot.playerID)
+      memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
       // The ticker keeps running (`endCapture` leaves it while this is set) to sample the release.
       boundInput = BoundInput(qualifier: session.qualifier, index: index, machine: session.machine)
     }
@@ -508,8 +612,36 @@ final class PlayerScreenViewModel {
     if let capture, capture.row.id != row.id { return }
     endCapture()
     io.setExpression("", for: row, port: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
+  }
+
+  /// The expression the bound device's default profile ("Physical Controller", "Touchscreen", …)
+  /// gives `row`: what Reset to Default puts back. nil without a device, or when that profile cannot
+  /// be read (no bundled DSU profile ships yet).
+  func defaultExpression(for row: RemapControlRow) -> String? {
+    let qualifier = state.player.deviceQualifier
+    guard !qualifier.isEmpty, let profile = io.defaultProfileName(forQualifier: qualifier) else { return nil }
+    return io.expression(inProfile: profile, for: row, port: slot.port)
+  }
+
+  /// A capture row's Reset to Default: one control back to the default profile's binding. The same
+  /// guards as Clear: a port that cannot capture offers neither, and an armed capture on another row
+  /// is never raced.
+  func resetToDefault(_ row: RemapControlRow) {
+    guard state.canCapture else { return }
+    if let capture, capture.row.id != row.id { return }
+    guard let expression = defaultExpression(for: row) else { return }
+    endCapture()
+    io.setExpression(expression, for: row, port: slot.port)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
+    reload()
+  }
+
+  /// The raw-expression editor's input list: the bound device's inputs, in the order its live values
+  /// come in. None without a device.
+  func editorInputs(forQualifier qualifier: String) -> [String] {
+    qualifier.isEmpty ? [] : io.inputNames(forQualifier: qualifier)
   }
 
   /// Advanced → Raw Bindings. Text that does not parse is never written (spec edge case); the
@@ -518,7 +650,7 @@ final class PlayerScreenViewModel {
   func saveExpression(_ text: String, for row: RemapControlRow) -> Bool {
     guard io.check(text).canSave else { return false }
     io.setExpression(text, for: row, port: slot.port)
-    memory.markEdited(slot.playerID)
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
     reload()
     return true
   }

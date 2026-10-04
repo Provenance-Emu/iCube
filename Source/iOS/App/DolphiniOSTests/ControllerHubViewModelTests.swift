@@ -17,6 +17,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     var extensions: [Int: Int] = [:]
     var sideways: Set<Int> = []
     var pads: [ConnectedPadState] = []
+    var gameRunning = true
     /// Counts snapshots: `reload()` asks for the pads exactly once.
     var padReads = 0
     var onPadRead: (() -> Void)?
@@ -30,11 +31,10 @@ final class ControllerHubViewModelTests: XCTestCase {
       onPadRead?()
       return pads
     }
-    func isGameRunning() -> Bool { true }
+    func isGameRunning() -> Bool { gameRunning }
     func overlayVisible() -> Bool { true }
     func overlayMode() -> ControllerManager.OverlayMode { .wii }
     func overlayOpacity() -> Float { 0.62 }
-    func continuousScanning() -> Bool { false }
     func dsuClientEnabled() -> Bool { true }
     func dsuServerCount() -> Int { 3 }
   }
@@ -67,6 +67,29 @@ final class ControllerHubViewModelTests: XCTestCase {
     XCTAssertEqual(model.state.overlayOpacityPercent, 50, "0.62 snaps to 50 %")
     XCTAssertTrue(model.state.dsuClientEnabled)
     XCTAssertEqual(model.state.dsuServerCount, 3)
+  }
+
+  @MainActor
+  func test_editLayout_inAGame_handsOffToTheGameScreen() {
+    let center = NotificationCenter()
+    let model = ControllerHubViewModel(system: .gamecube, reader: FakeReader(), notificationCenter: center)
+    let posted = expectation(forNotification: .DOLEditTouchLayout, object: nil, notificationCenter: center)
+    model.actions.editLayout()
+    wait(for: [posted], timeout: 1)
+    XCTAssertFalse(model.isLayoutEditorPresented, "the game screen edits its own overlay")
+  }
+
+  @MainActor
+  func test_editLayout_outsideAGame_presentsTheEditor() {
+    let reader = FakeReader()
+    reader.gameRunning = false
+    let center = NotificationCenter()
+    let model = ControllerHubViewModel(system: .both, reader: reader, notificationCenter: center)
+    let posted = expectation(forNotification: .DOLEditTouchLayout, object: nil, notificationCenter: center)
+    posted.isInverted = true
+    model.actions.editLayout()
+    wait(for: [posted], timeout: 0.3)
+    XCTAssertTrue(model.isLayoutEditorPresented)
   }
 
   @MainActor

@@ -6,23 +6,6 @@ import SwiftUI
 #if os(iOS)
 
 extension EmulationScreen {
-  /// ViewModel for on-screen controller visibility and mode
-  final class TouchControlsViewModel: ObservableObject {
-    enum Mode { case auto, gamecube, wii }
-    @Published var isVisible: Bool = true
-    @Published var mode: Mode = .auto
-  }
-
-  /// Resolve whether the overlay should show Wii or GC pads based on VM mode and current system
-  func overlayIsWii() -> Bool {
-    let currentIsWii = TVEmulationBridge.isRunning() ? TVEmulationBridge.isCurrentSystemWii() : isWiiSystem
-    switch touchVM.mode {
-    case .auto: return currentIsWii
-    case .gamecube: return false
-    case .wii: return true
-    }
-  }
-
   func toggleTopBar() {
     withAnimation(TopBarStyle.transition) {
       if topBar.isVisible {
@@ -205,8 +188,8 @@ extension EmulationScreen {
     /// Mirrors `makeWiiPadView()`'s selection exactly (slot -> classic/sideways), so the
     /// programmatic overlay picks the same variant the xib path would have shown. `nil` when
     /// neither a Wii nor a GameCube pad should be visible right now (e.g. an external controller
-    /// is connected and `forceVisible` is false).
-    private func programmaticPadKind() -> TouchOverlayPadKind? {
+    /// is connected and `forceVisible` is false). Also the pad the layout editor edits in a game.
+    func programmaticPadKind() -> TouchOverlayPadKind? {
       if shouldShowWiiPad() {
         let slot = ControllerManager.shared.touchscreenSlot(system: .wii) ?? 0
         return .wii(classicActive: DOLWiimoteBridge.isClassicActive(forWiimote: slot),
@@ -310,6 +293,9 @@ extension EmulationScreen {
     /// Does nothing for the xib pads and the Swift-drawn overlay, which do not depend on orientation here.
     private func watchOrientation(of host: HostView, coordinator: Coordinator) {
       host.onOrientationChange = { [weak host] in
+        // After layout, so the scene already reports the new interface orientation: the gyro
+        // pointer reads its axes from it and re-centres when it changes.
+        TCDeviceMotion.shared.statusBarOrientationChanged()
         guard let host, overlayPlan(in: host).choice.skinID != coordinator.mountedSkinID else { return }
         reconcile(host, coordinator: coordinator)
       }

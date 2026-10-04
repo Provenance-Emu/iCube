@@ -370,6 +370,90 @@ final class TCDeviceMotionMappingTests: XCTestCase {
     XCTAssertEqual(scaled.vertical, 1.5 * unscaled.vertical, accuracy: 0.0001)
   }
 
+  // MARK: - Gyro pointer: flat <-> upright swings and re-baselining
+
+  /// The same hold as `upright`, laid flat on its back: the top edge tipped away from the player.
+  private func flat(from upright: simd_quatd) -> simd_quatd {
+    moved(upright, by: -.pi / 2, about: Self.worldRight)
+  }
+
+  /// Centered while flat, then lifted upright: a quarter turn of tip, far past a full swing, so the
+  /// pointer pins at the top edge (it does not vanish or flip) in every orientation.
+  func testLiftingFromFlatToUprightPinsThePointerAtTheTop() {
+    for (orientation, upright) in Self.uprightCases {
+      let offsets = TCDeviceMotion.gyroPointerOffsets(
+        current: upright, baseline: flat(from: upright), orientation: orientation, useYawForHorizontal: false)
+      XCTAssertEqual(offsets.vertical, .pi / 2 * TCDeviceMotion.gyroPointerVerticalSensitivity, accuracy: 0.0001,
+                     "\(orientation.rawValue)")
+      XCTAssertEqual(offsets.horizontal, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+      let state = coreCursorState(TCDeviceMotion.irCursorWrites(horizontal: offsets.horizontal, vertical: offsets.vertical))
+      XCTAssertEqual(state.y, 1, accuracy: 0.0001, "\(orientation.rawValue)")
+      XCTAssertEqual(state.x, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+    }
+  }
+
+  /// Centered upright, then laid flat: the mirror image, pinned at the bottom edge.
+  func testLayingFromUprightToFlatPinsThePointerAtTheBottom() {
+    for (orientation, upright) in Self.uprightCases {
+      let offsets = TCDeviceMotion.gyroPointerOffsets(
+        current: flat(from: upright), baseline: upright, orientation: orientation, useYawForHorizontal: false)
+      XCTAssertEqual(offsets.vertical, -.pi / 2 * TCDeviceMotion.gyroPointerVerticalSensitivity, accuracy: 0.0001,
+                     "\(orientation.rawValue)")
+      XCTAssertEqual(offsets.horizontal, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+      let state = coreCursorState(TCDeviceMotion.irCursorWrites(horizontal: offsets.horizontal, vertical: offsets.vertical))
+      XCTAssertEqual(state.y, -1, accuracy: 0.0001, "\(orientation.rawValue)")
+    }
+  }
+
+  /// A re-baseline taken while upright makes upright the center again, and small tips around it
+  /// move the pointer normally instead of staying pinned.
+  func testRebaselineWhileUprightRecentresThePointer() {
+    for (orientation, upright) in Self.uprightCases {
+      XCTAssertTrue(TCDeviceMotion.needsPointerRebaseline(
+        recenterRequested: true, baselineOrientation: orientation, orientation: orientation))
+      let centered = TCDeviceMotion.gyroPointerOffsets(
+        current: upright, baseline: upright, orientation: orientation, useYawForHorizontal: false)
+      XCTAssertEqual(centered.vertical, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+      XCTAssertEqual(centered.horizontal, 0, accuracy: 0.0001, "\(orientation.rawValue)")
+      let tipped = TCDeviceMotion.gyroPointerOffsets(
+        current: moved(upright, by: swing, about: Self.worldRight), baseline: upright, orientation: orientation,
+        useYawForHorizontal: false)
+      XCTAssertEqual(tipped.vertical, swing * TCDeviceMotion.gyroPointerVerticalSensitivity, accuracy: 0.0001,
+                     "\(orientation.rawValue)")
+    }
+  }
+
+  /// The pointer re-centres on the first sample, on a recenter request, and whenever the interface
+  /// orientation differs from the one the baseline was taken in (a quarter turn or the 180-degree
+  /// landscape flip); otherwise it keeps its baseline.
+  func testPointerRebaselinesWhenTheInterfaceOrientationChanges() {
+    XCTAssertTrue(TCDeviceMotion.needsPointerRebaseline(
+      recenterRequested: false, baselineOrientation: nil, orientation: .portrait))
+    XCTAssertFalse(TCDeviceMotion.needsPointerRebaseline(
+      recenterRequested: false, baselineOrientation: .portrait, orientation: .portrait))
+    XCTAssertTrue(TCDeviceMotion.needsPointerRebaseline(
+      recenterRequested: false, baselineOrientation: .portrait, orientation: .landscapeLeft))
+    XCTAssertTrue(TCDeviceMotion.needsPointerRebaseline(
+      recenterRequested: false, baselineOrientation: .landscapeLeft, orientation: .landscapeRight))
+    XCTAssertTrue(TCDeviceMotion.needsPointerRebaseline(
+      recenterRequested: false, baselineOrientation: .portrait, orientation: .portraitUpsideDown))
+  }
+
+  /// Why the re-baseline on rotation matters: a turn read along the old orientation's axes is a
+  /// different gesture. Tipping the back up in landscape, read with portrait axes, is a turn to the
+  /// left with no vertical movement at all.
+  func testATipReadAlongStaleAxesMovesThePointerSideways() {
+    let tipped = moved(Self.uprightLandscapeLeft, by: swing, about: Self.worldRight)
+    let stale = TCDeviceMotion.gyroPointerOffsets(
+      current: tipped, baseline: Self.uprightLandscapeLeft, orientation: .portrait, useYawForHorizontal: true)
+    XCTAssertEqual(stale.vertical, 0, accuracy: 0.0001)
+    XCTAssertEqual(stale.horizontal, -swing * TCDeviceMotion.gyroPointerHorizontalSensitivity, accuracy: 0.0001)
+    let current = TCDeviceMotion.gyroPointerOffsets(
+      current: tipped, baseline: Self.uprightLandscapeLeft, orientation: .landscapeLeft, useYawForHorizontal: true)
+    XCTAssertEqual(current.vertical, swing * TCDeviceMotion.gyroPointerVerticalSensitivity, accuracy: 0.0001)
+    XCTAssertEqual(current.horizontal, 0, accuracy: 0.0001)
+  }
+
   // MARK: - Unknown orientation is a safe no-op
 
   func testUnknownOrientationFoldsIntoPortraitForAccelAndIsZeroForGyro() {

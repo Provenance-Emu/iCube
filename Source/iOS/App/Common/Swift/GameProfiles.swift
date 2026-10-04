@@ -5,8 +5,6 @@ struct GameProfile: Codable {
   var irMode: Int?
   var widescreenHack: Bool?
   var touchOpacity: Float?
-  /// Overrides
-  var touchControllerOverride: TouchControllerOverride?
   var wiimoteIRSensitivity: Int?
   var wiimoteTouchIRMode: Int?
   var shaderPreviewName: String?
@@ -24,12 +22,6 @@ struct GameProfile: Codable {
   /// already the per-game keyed-by-GameID record, and a second parallel store
   /// would be one more thing to keep in sync with profile deletion.
   var excludedFromNearbySharing: Bool?
-}
-
-enum TouchControllerOverride: String, Codable {
-  case systemAuto
-  case forceGameCube
-  case forceWii
 }
 
 final class GameProfiles {
@@ -115,16 +107,6 @@ final class GameProfiles {
     profiles.filter { $0.value.excludedFromNearbySharing == true }.keys.sorted()
   }
 
-  /// Applies a touch-controller override to multiple games, preserving other profile fields.
-  func batchSetControllerOverride(_ override: TouchControllerOverride, forGameIDs gameIDs: [String]) {
-    for gameID in gameIDs where !gameID.isEmpty {
-      var profile = profiles[gameID] ?? GameProfile()
-      profile.touchControllerOverride = override == .systemAuto ? nil : override
-      profiles[gameID] = profile
-    }
-    save()
-  }
-
   func clearProfile(for gameID: String) {
     // The Nearby Sharing exclusion survives a profile reset. Everything else
     // here is about how the game RUNS and resetting it is harmless; the
@@ -139,10 +121,6 @@ final class GameProfiles {
       profiles[gameID] = preserved
     }
     save()
-    // Also clear any per-game overrides and revert to sane defaults at runtime
-    // Touch overrides are in UserDefaults
-    UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
-    UserDefaults.standard.removeObject(forKey: "current_profile_ir_override")
     // Reset runtime-affecting settings to defaults that won’t surprise the user
     // Do not change global user prefs except those we might have overridden
     DOLConfigBridge.setGfxWidescreenHack(false)
@@ -168,7 +146,6 @@ final class GameProfiles {
       irMode: ir,
       widescreenHack: widescreen,
       touchOpacity: opacity,
-      touchControllerOverride: nil,
       wiimoteIRSensitivity: wiimoteSens,
       wiimoteTouchIRMode: ir,
       shaderPreviewName: preset?.split(separator: "/").last.map(String.init)
@@ -189,11 +166,7 @@ final class GameProfiles {
   func applyProfileIfAvailable(for item: TVGameItem) {
     if UserDefaults.standard.object(forKey: "profiles_enabled") as? Bool == false { return }
     let gameID = item.gameID
-    guard let profile = profile(for: gameID) else {
-      // Clear any previous override if no profile
-      UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
-      return
-    }
+    guard let profile = profile(for: gameID) else { return }
     // A title is already running (Properties sheet from the pause menu): apply live.
     if TVEmulationBridge.isRunning() {
       applyConfigOverrides(profile)
@@ -205,12 +178,6 @@ final class GameProfiles {
         UserDefaults.standard.set(preset, forKey: "shader_preset_path")
         NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
       }
-    }
-    // Touch controller visibility preference: stash in defaults for runtime UI
-    if let overridePref = profile.touchControllerOverride {
-      UserDefaults.standard.set(overridePref.rawValue, forKey: "current_profile_touch_override")
-    } else {
-      UserDefaults.standard.removeObject(forKey: "current_profile_touch_override")
     }
   }
 
@@ -248,22 +215,31 @@ final class GameProfiles {
     var rows: [(String, String, String)] = []
     // widescreen
     let wsNow = DOLConfigBridge.gfxWidescreenHack()
-    if let ws = profile.widescreenHack, ws != wsNow { rows.append(("Widescreen", ws ? "On" : "Off", wsNow ? "On" : "Off")) }
-    // touch IR mode
+    if let ws = profile.widescreenHack, ws != wsNow { rows.append((L("Widescreen Hack"), ws ? L("On") : L("Off"), wsNow ? L("On") : L("Off"))) }
+    // pointer mode
     let irNow = DOLConfigBridge.mainTouchPadIRMode()
-    if let ir = profile.wiimoteTouchIRMode ?? profile.irMode, ir != irNow { rows.append(("Touch IR Mode", String(ir), String(irNow))) }
-    // IR sensitivity
+    if let ir = profile.wiimoteTouchIRMode ?? profile.irMode, ir != irNow {
+      rows.append((L("Pointer"), Self.pointerModeTitle(ir), Self.pointerModeTitle(irNow)))
+    }
+    // sensor bar sensitivity
     let sensNow = DOLConfigBridge.sysconfSensorBarSensitivity()
-    if let s = profile.wiimoteIRSensitivity, s != sensNow { rows.append(("IR Sensitivity", String(s), String(sensNow))) }
+    if let s = profile.wiimoteIRSensitivity, s != sensNow { rows.append((L("Sensor Bar Sensitivity"), String(s), String(sensNow))) }
     // opacity
     #if os(iOS)
     let opNow = DOLConfigBridge.mainTouchPadOpacity()
-    if let op = profile.touchOpacity, fabsf(op - opNow) > 0.001 { rows.append(("Touch Opacity", String(format: "%.2f", op), String(format: "%.2f", opNow))) }
+    if let op = profile.touchOpacity, fabsf(op - opNow) > 0.001 {
+      rows.append((L("On-Screen Controls Opacity"), String(format: "%.2f", op), String(format: "%.2f", opNow)))
+    }
     #endif
     // shader
     let presetNow = UserDefaults.standard.string(forKey: "shader_preset_path") ?? "-"
-    if let pr = profile.shaderPresetPath, pr != presetNow { rows.append(("Shader Preset", (pr as NSString).lastPathComponent, (presetNow as NSString).lastPathComponent)) }
+    if let pr = profile.shaderPresetPath, pr != presetNow { rows.append((L("Shader Preset"), (pr as NSString).lastPathComponent, (presetNow as NSString).lastPathComponent)) }
     return rows
+  }
+
+  /// `PointerMode`'s title for a raw `MAIN_TOUCH_PAD_IR_MODE` value; an unknown value shows as the number.
+  private static func pointerModeTitle(_ raw: Int) -> String {
+    PointerMode(rawValue: raw)?.title ?? String(raw)
   }
 
   // Stub for curated recommendations; currently unused.

@@ -27,10 +27,12 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
       profileListDestination: { AnyView(EmptyView()) },
       saveProfileAs: { recorder.calls.append("save-as") },
       resetProfile: { recorder.calls.append("reset") },
+      clearAll: { recorder.calls.append("clear-all") },
       setExtension: { recorder.calls.append("extension:\($0)") },
       setSideways: { recorder.calls.append("sideways:\($0)") },
       toggleCapture: { recorder.calls.append("capture:\($0.id)") },
       clearBinding: { recorder.calls.append("clear:\($0.id)") },
+      resetBinding: { recorder.calls.append("reset:\($0.id)") },
       setPointerMode: { recorder.calls.append("pointer:\($0)") },
       recenterPointer: { recorder.calls.append("recenter") },
       setDragGain: { recorder.calls.append("gain:\($0)") },
@@ -151,6 +153,25 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(options.map(\.title), ["None", "Xbox Wireless Controller"])
   }
 
+  /// A port the user picked a device for is pinned: the Device row says so, and the list offers
+  /// Auto first to hand the port back to auto-assignment. An unpinned port has neither.
+  func test_pinnedPort_marksTheDeviceRow_andOffersAuto() {
+    var screen = boundGameCube
+    screen.isPinned = true
+    let item = make(screen).item(id: "device")
+    XCTAssertEqual(item?.subtitle, PlayerScreenHelp.devicePinned)
+    XCTAssertEqual(item?.icon, "pin.fill")
+    XCTAssertEqual(item?.badge, "Xbox Wireless Controller", "the device is still the row's value")
+    let options = PlayerScreenModelBuilder.deviceOptions(state: screen, platform: .ios)
+    XCTAssertEqual(options.first, DeviceOption(choice: .automatic, title: "Auto"))
+    XCTAssertEqual(options.dropFirst().map(\.choice), [.noDevice, .touchscreen, .pad(Self.xbox)])
+
+    XCTAssertFalse(PlayerScreenModelBuilder.deviceOptions(state: boundGameCube, platform: .ios).contains {
+      $0.choice == .automatic
+    })
+    XCTAssertEqual(make(boundGameCube).item(id: "device")?.icon, "gamecontroller")
+  }
+
   /// The bound device is always listed, so the list can mark it current.
   func test_deviceOptions_listTheBoundDeviceWhenItIsNotAConnectedPad() {
     let disconnected = PlayerScreenModelBuilder.deviceOptions(state: state(.gameCube, device: Self.xbox), platform: .ios)
@@ -209,6 +230,14 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(recorder.calls, ["gain:2.0"])
   }
 
+  /// While the running title has its own pointer mode, a pick lasts for this game only; the row says so.
+  func test_pointer_saysThisGameOnly_whileTheGameHasItsOwnMode() {
+    var screen = state(.wiiRemote, device: Self.touch)
+    XCTAssertNil(make(screen).item(id: "pointer-mode")?.subtitle)
+    screen.pointerMotion.pointerIsThisGameOnly = true
+    XCTAssertEqual(make(screen).item(id: "pointer-mode")?.subtitle, "This game only")
+  }
+
   func test_pointerModes_inTheSpecsOrder() {
     XCTAssertEqual(
       optionTitles(make(state(.wiiRemote, device: Self.touch)).item(id: "pointer-mode")),
@@ -242,7 +271,9 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertTrue(model.item(id: deadZone.id)?.isCompactOnTV == true)
     XCTAssertEqual(optionTitles(model.item(id: deadZone.id)).count, 11)
     XCTAssertEqual(model.item(id: scripted.id)?.subtitle, "Set by an expression")
-    XCTAssertEqual(ids(model, section: "advanced-expressions").count, gameCubeControls.count, "Rumble too: outputs are edited here")
+    XCTAssertEqual(
+      ids(model, section: "advanced-expressions").filter { $0.hasPrefix("expression-") }.count, gameCubeControls.count,
+      "Rumble too: outputs are edited here")
   }
 
   /// An expression-driven numeric setting is a read-only row: editing it here would silently
@@ -278,12 +309,35 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(recorder.calls, ["setting:\(deadZone.id)=25.0"])
   }
 
+  /// The core's `GetUIDescription()` text is each setting's subtitle; a setting the core does not
+  /// explain has none, and an expression-driven one says so instead.
+  func test_advanced_settingsShowTheCoresExplanation() {
+    var screen = state(.wiiRemote)
+    screen.showsAdvanced = true
+    let pitch = NumericSettingState(
+      owner: .wiimote, groupId: 3, index: 1, name: "Total Pitch", suffix: "°", isToggle: false, isInteger: false,
+      value: 15, minimum: 0, maximum: 360, defaultValue: 15, isExpression: false,
+      explanation: "Total rotation about the pitch axis.")
+    let autoHide = NumericSettingState(
+      owner: .wiimote, groupId: 3, index: 4, name: "Auto-Hide", suffix: "", isToggle: true, isInteger: false,
+      value: 0, minimum: 0, maximum: 1, defaultValue: 0, isExpression: false)
+    let scripted = NumericSettingState(
+      owner: .wiimote, groupId: 3, index: 2, name: "Total Yaw", suffix: "°", isToggle: false, isInteger: false,
+      value: 0, minimum: 0, maximum: 360, defaultValue: 25, isExpression: true,
+      explanation: "Total rotation about the yaw axis.")
+    screen.advanced = [AdvancedGroupState(owner: .wiimote, groupId: 3, title: "Pointer", settings: [pitch, autoHide, scripted])]
+    let model = make(screen)
+    XCTAssertEqual(model.item(id: pitch.id)?.subtitle, "Total rotation about the pitch axis.")
+    XCTAssertNil(model.item(id: autoHide.id)?.subtitle)
+    XCTAssertEqual(model.item(id: scripted.id)?.subtitle, "Set by an expression")
+  }
+
   // MARK: Buttons and capture (decision 11)
 
   func test_rumbleIsNotACaptureRow() {
     let model = make(boundGameCube)
     XCTAssertNil(model.item(id: "control-gcPad-5-0"))
-    XCTAssertEqual(ids(model, section: "buttons-face"), ["control-gcPad-0-0", "control-gcPad-0-1", "control-gcPad-0-2", "control-gcPad-0-3"])
+    XCTAssertEqual(ids(model, section: "buttons-face"), ["help-face", "control-gcPad-0-0", "control-gcPad-0-1", "control-gcPad-0-2", "control-gcPad-0-3"])
   }
 
   func test_captureRow_padActivateTogglesThatControl() {
@@ -300,7 +354,7 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
 
   func test_touchscreen_disablesCapture_withAHint() {
     let model = make(state(.gameCube, device: "iOS/0/Touchscreen", controls: gameCubeControls))
-    XCTAssertEqual(model.item(id: "buttons-hint")?.title, "Touchscreen controls are laid out by the on-screen overlay.")
+    XCTAssertEqual(model.item(id: "buttons-hint")?.title, "On-Screen Controls are laid out with Edit Layout.")
     XCTAssertEqual(model.item(id: "control-gcPad-0-0")?.isEnabled, false)
   }
 
@@ -314,24 +368,24 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     let model = make(state(.gameCube, device: Self.xbox, controls: gameCubeControls))
     XCTAssertEqual(model.item(id: "buttons-hint")?.title, "Connect this controller to capture buttons.")
     XCTAssertEqual(model.item(id: "control-gcPad-0-0")?.isEnabled, false)
-    XCTAssertEqual(model.item(id: "device")?.subtitle, "Xbox Wireless Controller (Disconnected)")
+    XCTAssertEqual(model.item(id: "device")?.badge, "Xbox Wireless Controller (Disconnected)")
   }
 
   func test_dsuPort_captures_andIsNotDisconnected() {
     let model = make(state(.gameCube, device: Self.dsu, controls: gameCubeControls))
     XCTAssertNil(model.item(id: "buttons-hint"))
     XCTAssertEqual(model.item(id: "control-gcPad-0-0")?.isEnabled, true)
-    XCTAssertEqual(model.item(id: "device")?.subtitle, "Pad C")
+    XCTAssertEqual(model.item(id: "device")?.badge, "Pad C")
   }
 
   // MARK: Profile and Wii rows
 
   func test_profileName_customThenEdited() {
     var screen = boundGameCube
-    XCTAssertEqual(make(screen).item(id: "profile-load")?.subtitle, "Custom")
+    XCTAssertEqual(make(screen).item(id: "profile-load")?.badge, "Custom")
     screen.profileName = "Physical Controller"
     screen.profileEdited = true
-    XCTAssertEqual(make(screen).item(id: "profile-load")?.subtitle, "Physical Controller (edited)")
+    XCTAssertEqual(make(screen).item(id: "profile-load")?.badge, "Physical Controller (edited)")
   }
 
   func test_saveAndReset_runTheirActions_resetNeedsADevice() {
@@ -343,10 +397,94 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(make(state(.gameCube)).item(id: "profile-reset")?.isEnabled, false)
   }
 
+  /// Clear All Buttons asks through the host (a destructive row), and only where capture works.
+  func test_clearAll_onlyWhereCaptureWorks() {
+    let recorder = Recorder()
+    let model = make(boundGameCube, recorder)
+    let item = model.item(id: "profile-clear-all")
+    XCTAssertEqual(item?.isEnabled, true)
+    XCTAssertEqual(item?.subtitle, PlayerScreenHelp.clearAll)
+    guard let item, case .destructive(let action) = item.role else { return XCTFail("not a destructive row") }
+    action()
+    XCTAssertEqual(recorder.calls, ["clear-all"])
+    XCTAssertEqual(make(state(.gameCube, device: "iOS/0/Touchscreen")).item(id: "profile-clear-all")?.isEnabled, false)
+    XCTAssertEqual(make(state(.gameCube)).item(id: "profile-clear-all")?.isEnabled, false)
+  }
+
   func test_extensionOptions_sayExtensionOnTVOS() {
     XCTAssertEqual(optionTitles(make(state(.wiiRemote)).item(id: "wii-extension")), ["None", "Nunchuk", "Classic"])
     XCTAssertEqual(
       optionTitles(make(state(.wiiRemote), platform: .tvos).item(id: "wii-extension")),
       ["Extension: None", "Extension: Nunchuk", "Extension: Classic"])
+  }
+
+  // MARK: Help
+
+  /// Every Buttons category opens with its help line: a caption row that is never focused, so a pad
+  /// walks straight to the first capture row and a capture lock has nothing extra to disable.
+  func test_help_everyButtonsSectionOpensWithItsCaption() {
+    let model = make(boundGameCube)
+    for section in model.sections where section.id.hasPrefix("buttons-") {
+      let category = ControlCategory.allCases.first { "buttons-\($0.id)" == section.id }
+      XCTAssertNotNil(category, section.id)
+      guard let category, let first = section.items.first else { continue }
+      XCTAssertEqual(first.id, PlayerScreenModelBuilder.helpID(category))
+      XCTAssertEqual(first.title, PlayerScreenHelp.category(category, onTouchscreen: false))
+      XCTAssertFalse(first.isEnabled)
+      XCTAssertFalse(model.focusableIDs.contains(first.id))
+    }
+  }
+
+  func test_help_eachCategoryHasALine_motionSaysTheTouchscreenDrivesThePointer() {
+    for category in ControlCategory.allCases {
+      XCTAssertFalse(PlayerScreenHelp.category(category, onTouchscreen: false).isEmpty, "\(category)")
+    }
+    let shake = rows(.wiimote, 2, ["X", "Y", "Z"])
+    let touch = make(state(.wiiRemote, device: Self.touch, controls: shake))
+    XCTAssertEqual(touch.item(id: "help-motion")?.title, PlayerScreenHelp.category(.motion, onTouchscreen: true))
+    XCTAssertTrue(touch.item(id: "help-motion")?.title.contains("Pointer & Motion") == true)
+    let onAPad = make(state(.wiiRemote, device: Self.xbox, pads: [pad(Self.xbox, "Xbox")], controls: shake))
+    XCTAssertEqual(onAPad.item(id: "help-motion")?.title, PlayerScreenHelp.category(.motion, onTouchscreen: false))
+    for name in ["Shake", "Pointer", "Tilt", "Swing"] {
+      XCTAssertTrue(onAPad.item(id: "help-motion")?.title.contains(name) == true, name)
+    }
+  }
+
+  /// Rows that show a value keep it as the badge and say what they do in the subtitle.
+  func test_help_playerRowsHaveCaptions() {
+    let gameCube = make(boundGameCube)
+    XCTAssertEqual(gameCube.item(id: "device")?.subtitle, PlayerScreenHelp.device)
+    XCTAssertEqual(gameCube.item(id: "device")?.badge, "Xbox Wireless Controller")
+    XCTAssertEqual(gameCube.item(id: "profile-load")?.subtitle, PlayerScreenHelp.loadProfile)
+    XCTAssertEqual(gameCube.item(id: "profile-save")?.subtitle, PlayerScreenHelp.saveProfile)
+    XCTAssertEqual(gameCube.item(id: "profile-reset")?.subtitle, PlayerScreenHelp.resetProfile)
+    let wii = make(state(.wiiRemote))
+    XCTAssertEqual(wii.item(id: "wii-extension")?.subtitle, PlayerScreenHelp.extensionCaption)
+    XCTAssertEqual(wii.item(id: "wii-sideways")?.subtitle, PlayerScreenHelp.sideways)
+  }
+
+  /// Raw Bindings rows read like the capture rows; the editor they push keeps the raw expression.
+  func test_rawBindings_showReadableNames() {
+    var onAPad = boundGameCube
+    onAPad.showsAdvanced = true
+    XCTAssertEqual(make(onAPad).item(id: "expression-gcPad-0-0")?.subtitle, "A")
+    var touch = state(
+      .wiiRemote, device: Self.touch,
+      controls: [RemapControlRow(owner: .wiimote, groupId: 3, index: 0, name: "Up", expression: "`Axis 112`")])
+    touch.showsAdvanced = true
+    XCTAssertEqual(make(touch).item(id: "expression-wiimote-3-0")?.subtitle, "Pointer Up")
+    var custom = boundGameCube
+    custom.showsAdvanced = true
+    custom.controls = [RemapControlRow(owner: .gcPad, groupId: 0, index: 0, name: "A", expression: "`Button A` | `Button B`")]
+    XCTAssertEqual(make(custom).item(id: "expression-gcPad-0-0")?.subtitle, "`Button A` | `Button B`")
+  }
+
+  func test_help_rawBindingsOpenWithACaption() {
+    var screen = boundGameCube
+    screen.showsAdvanced = true
+    let section = make(screen).sections.first { $0.id == "advanced-expressions" }
+    XCTAssertEqual(section?.items.first?.id, "help-expressions")
+    XCTAssertEqual(section?.items.first?.title, PlayerScreenHelp.rawBindings)
+    XCTAssertEqual(section?.items.first?.isEnabled, false)
   }
 }

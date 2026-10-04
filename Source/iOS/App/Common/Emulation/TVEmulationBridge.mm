@@ -10,6 +10,8 @@
 #import "EmulationBootType.h"
 #import "iCube-Swift.h"
 
+#import "TVControllerMappingBridge.h"
+
 // C++ Core host messaging
 #include "Core/HW/ProcessorInterface.h"
 #include "Core/Host.h"
@@ -358,6 +360,11 @@ static bool StateOperationAllowed(Core::System& system, const char* operation)
   // (which nothing is driving) gets silenced instead.
   if (wiimote < 0 || wiimote > 3)
     return;
+  // Never ON for a slot bound to the Touchscreen: the app writes that slot's IR, and the motion it
+  // feeds into the IMU axes would aim the camera off-screen as soon as the phone is held upright.
+  // Only a physical motion controller owns the core's IMU pointer.
+  if (enabled && [TVControllerMappingBridge wiimoteUsesTouchscreen:wiimote + 1])
+    enabled = NO;
   const auto lock = ControllerEmu::EmulatedController::GetStateLock();
   auto* group = Wiimote::GetWiimoteGroup((int)wiimote, WiimoteEmu::WiimoteGroup::IMUPoint);
   if (group)

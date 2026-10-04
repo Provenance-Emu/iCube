@@ -40,6 +40,29 @@ final class TouchOverlayDefaultLayoutTests: XCTestCase {
     return control.frame.offsetBy(dx: box.minX, dy: box.minY)
   }
 
+  /// The game and the full-screen editor host the overlay inside the safe area; the gallery hosts it edge
+  /// to edge and passes the device's insets. All of them must lay out on the whole screen with the
+  /// device's safe area, or a layout saved in one host moves (and resizes) in another.
+  func testEveryHostLaysOutOnTheWholeScreen() {
+    for device in TouchOverlayPreviewDevice.all {
+      for orientation in TouchOverlayOrientation.allCases {
+        let screen = device.size(orientation)
+        let insets = device.insets(orientation)
+        let inSafeArea = CGSize(width: screen.width - insets.left - insets.right, height: screen.height - insets.top - insets.bottom)
+        let live = TouchOverlayCanvas(hostSize: inSafeArea, hostInsets: insets)
+        let gallery = TouchOverlayCanvas(hostSize: screen, hostInsets: .zero, previewSafeArea: insets)
+        let label = "\(device.name) \(orientation)"
+        XCTAssertEqual(live.bounds, CGRect(origin: .zero, size: screen), label)
+        XCTAssertEqual(live.safeArea, insets, label)
+        XCTAssertEqual(live.orientation, orientation, label)
+        XCTAssertEqual(live.hostOrigin, CGPoint(x: insets.left, y: insets.top), label)
+        XCTAssertEqual(gallery.bounds, live.bounds, label)
+        XCTAssertEqual(gallery.safeArea, live.safeArea, label)
+        XCTAssertEqual(gallery.hostOrigin, .zero, label)
+      }
+    }
+  }
+
   func testEveryGroupStaysInsideTheSafeArea() {
     for c in cases() {
       let safe = c.bounds.inset(by: c.safeArea)

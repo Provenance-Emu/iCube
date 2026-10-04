@@ -9,14 +9,10 @@ import UIKit
 /// Controller settings outside the hub's sections, pushed from its "More Controller Settings" row.
 /// The pointer mode and its sensitivity live on the player screen (controller hub Phase 4).
 struct ControllerMoreSettingsView: View {
-  @State private var autoSelectOnScreenBySystem = true
-  @State private var connectWiimotes = false
-  @AppStorage("virtual_mfi_connect") private var mfiConnect = false
   /// Rumble destination, honored by the core rumble path (`Motor`): 0 device haptics, 1 controller,
   /// 2 both. tvOS has no device to hold, so the option is hidden there.
   @AppStorage("rumble_destination") private var rumbleDestination = 1
   @State private var backgroundInput = false
-  @State private var wiimoteSpeaker = false
   #if os(iOS)
   @State private var touchOverlayProgrammatic = false
   /// Connected pads with a light bar, for the LED colour rows.
@@ -26,7 +22,6 @@ struct ControllerMoreSettingsView: View {
   var body: some View {
     List {
       Section(header: Text(L("General"))) {
-        Toggle(L("Connect MFi Controllers"), isOn: $mfiConnect)
         Toggle(L("Background Input"), isOn: $backgroundInput)
           .onChange(of: backgroundInput) { _, enabled in DOLConfigBridge.setMainBackgroundInput(enabled) }
         #if os(iOS)
@@ -36,12 +31,6 @@ struct ControllerMoreSettingsView: View {
           Text(L("Both")).tag(2)
         }
         #endif
-        settingsCaption(
-          Toggle(L("Auto‑select On‑Screen Controller by System"), isOn: $autoSelectOnScreenBySystem)
-            .onChange(of: autoSelectOnScreenBySystem) { _, newValue in
-              UserDefaults.standard.set(newValue, forKey: "auto_touchpad_by_system")
-            },
-          L("Automatically shows the GameCube or Wii on-screen layout based on the game being played."))
         #if os(iOS)
         Button {
           Self.testRumble()
@@ -51,25 +40,14 @@ struct ControllerMoreSettingsView: View {
         #endif
       }
 
-      Section(header: Text(L("Wii Remotes"))) {
-        Toggle(L("Enable Speaker"), isOn: $wiimoteSpeaker)
-          .onChange(of: wiimoteSpeaker) { _, enabled in DOLConfigBridge.setWiimoteEnableSpeaker(enabled) }
-        settingsCaption(
-          Toggle(L("Connect Wiimotes for Controller Interface"), isOn: $connectWiimotes)
-            .onChange(of: connectWiimotes) { _, newValue in
-              DOLConfigBridge.setConnectWiimotesForControllerInterface(newValue)
-            },
-          L("Automatically pairs Wii Remotes when the controller interface is in use."))
-      }
-
       Section(header: Text(L("Alternate Input Sources"))) {
         #if os(iOS)
         settingsCaption(
-          Toggle(L("Programmatic touch overlay (beta)"), isOn: $touchOverlayProgrammatic)
+          Toggle(L("Editable On-Screen Controls"), isOn: $touchOverlayProgrammatic)
             .onChange(of: touchOverlayProgrammatic) { _, newValue in
               TouchOverlayFlag.isProgrammatic = newValue
             },
-          L("Replaces the on-screen GameCube/Wii pads with the new SwiftUI-rendered, user-editable overlay. Long-press the overlay in-game to move or resize its controls."))
+          L("On by default: on-screen controls you can move and resize from Edit Layout or with a long press in-game. Turn off to use the older fixed pads."))
 
         Button(role: .destructive) {
           for kind in TouchOverlayPadKind.allCases { TouchOverlayLayoutStore.shared.reset(padKind: kind) }
@@ -77,21 +55,16 @@ struct ControllerMoreSettingsView: View {
           Label(L("Reset All Overlay Layouts"), systemImage: "arrow.counterclockwise")
         }
 
-        // Gated on the beta flag: these only affect the programmatic overlay's live rendering.
-        if touchOverlayProgrammatic {
-          NavigationLink {
-            TouchOverlayIRAreaEditorView()
-          } label: {
-            Label(L("Edit IR Area…"), systemImage: "scope")
-          }
-        }
+        #if DEBUG
+        NavigationLink("Gallery") { TouchOverlayGalleryView() }
+        #endif
         #endif
 
         NavigationLink(destination: EnhancedMotionControlsView()) {
           Label(L("Advanced Motion Settings"), systemImage: "gyroscope")
         }
         NavigationLink(destination: AnalogStickSettingsView()) {
-          Label(L("Analog Stick Settings"), systemImage: "l.joystick")
+          Label(L("On-Screen Stick Feel"), systemImage: "l.joystick")
         }
       }
 
@@ -116,16 +89,10 @@ struct ControllerMoreSettingsView: View {
   }
 
   private func syncFromConfig() {
-    if UserDefaults.standard.object(forKey: "auto_touchpad_by_system") == nil {
-      UserDefaults.standard.set(true, forKey: "auto_touchpad_by_system")
-    }
-    autoSelectOnScreenBySystem = UserDefaults.standard.bool(forKey: "auto_touchpad_by_system")
-    connectWiimotes = DOLConfigBridge.connectWiimotesForControllerInterface()
     #if os(iOS)
     touchOverlayProgrammatic = TouchOverlayFlag.isProgrammatic
     #endif
     backgroundInput = DOLConfigBridge.mainBackgroundInput()
-    wiimoteSpeaker = DOLConfigBridge.wiimoteEnableSpeaker()
     #if os(iOS)
     reloadLitControllers()
     #endif

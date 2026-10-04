@@ -72,6 +72,40 @@ final class PlayerScreenLeavesTests: XCTestCase {
     XCTAssertEqual(model.focusableIDs, ["no-profiles"])
   }
 
+  // MARK: Load Profile: delete
+
+  /// Delete mode is offered only when one of the listed profiles is the user's own.
+  func test_profiles_deleteModeOnlyWithAUserProfile() {
+    let bundledOnly = ProfileListModelBuilder.make(names: ["Physical Controller"], current: nil, onPick: { _ in })
+    XCTAssertNil(bundledOnly.item(id: ProfileListModelBuilder.deleteModeID))
+    let withMine = ProfileListModelBuilder.make(
+      names: ["Physical Controller", "Mine"], current: nil, onPick: { _ in }, deletable: ["mine"])
+    XCTAssertEqual(withMine.item(id: ProfileListModelBuilder.deleteModeID)?.title, "Delete a Profile…")
+  }
+
+  /// In delete mode a user profile asks to delete (never loads), and a bundled one cannot be picked.
+  func test_profiles_deleteMode_onlyTheUsersProfilesAreDeletable() {
+    var picked: [String] = []
+    var deleted: [String] = []
+    var toggles = 0
+    let model = ProfileListModelBuilder.make(
+      names: ["Physical Controller", "Mine"], current: "Mine", onPick: { picked.append($0) },
+      deletable: ["Mine"], isDeleting: true, onToggleDeleting: { toggles += 1 }, onDelete: { deleted.append($0) })
+    XCTAssertEqual(model.item(id: "profile-Physical Controller")?.isEnabled, false)
+    XCTAssertEqual(model.item(id: "profile-Physical Controller")?.badge, "Built-In")
+    XCTAssertEqual(model.item(id: "profile-Mine")?.isEnabled, true)
+    guard let mine = model.item(id: "profile-Mine"), case .action(let delete) = mine.role else { return XCTFail("not an action") }
+    delete()
+    XCTAssertEqual(deleted, ["Mine"])
+    XCTAssertEqual(picked, [], "delete mode never loads")
+    XCTAssertEqual(model.item(id: ProfileListModelBuilder.deleteModeID)?.title, "Done")
+    guard let done = model.item(id: ProfileListModelBuilder.deleteModeID), case .action(let toggle) = done.role else {
+      return XCTFail("not an action")
+    }
+    toggle()
+    XCTAssertEqual(toggles, 1)
+  }
+
   // MARK: Expression editor
 
   private let valid = ExpressionCheck(status: .valid, message: "The expression is valid.")
@@ -109,5 +143,85 @@ final class PlayerScreenLeavesTests: XCTestCase {
   func test_clear_isOffWhenTheTextIsAlreadyEmpty() {
     XCTAssertEqual(editor(text: "", original: "`Button A`", check: valid).item(id: "expression-clear")?.isEnabled, false)
     XCTAssertEqual(editor(text: "`Button A`", original: "`Button A`", check: valid).item(id: "expression-clear")?.isEnabled, true)
+  }
+
+  // MARK: Expression editor: Reset to Default
+
+  private func editor(text: String, defaultExpression: String?, onDefault: @escaping () -> Void = {}) -> MenuModel {
+    ExpressionEditorModelBuilder.make(
+      text: .constant(text), original: "`Button A`", check: valid, onSave: {}, onRevert: {}, onClear: {},
+      defaultExpression: defaultExpression, onDefault: onDefault)
+  }
+
+  func test_default_offeredOnlyWhenKnown_offWhenAlreadyThere() {
+    XCTAssertNil(editor(text: "`Button A`", defaultExpression: nil).item(id: "expression-default"))
+    let model = editor(text: "`Button A`", defaultExpression: "`Button B`")
+    XCTAssertEqual(model.item(id: "expression-default")?.isEnabled, true)
+    XCTAssertEqual(model.item(id: "expression-default")?.subtitle, "`Button B`")
+    XCTAssertEqual(editor(text: "`Button B`", defaultExpression: "`Button B`").item(id: "expression-default")?.isEnabled, false)
+    XCTAssertEqual(editor(text: "`Button A`", defaultExpression: "").item(id: "expression-default")?.subtitle, "Unbound")
+  }
+
+  func test_default_runsItsAction_andSitsBetweenRevertAndClear() {
+    var ran = false
+    let model = editor(text: "`Button A`", defaultExpression: "`Button B`", onDefault: { ran = true })
+    XCTAssertEqual(
+      model.sections.first { $0.id == "actions" }?.items.map(\.id),
+      ["expression-save", "expression-revert", "expression-default", "expression-clear"])
+    guard let item = model.item(id: "expression-default"), case .action(let action) = item.role else { return XCTFail("not an action") }
+    action()
+    XCTAssertTrue(ran)
+  }
+
+  // MARK: Expression editor: input picker
+
+  func test_inputs_noDeviceNoSection() {
+    XCTAssertFalse(editor(text: "", original: "", check: valid).sections.contains { $0.id == "inputs" })
+  }
+
+  /// One row per input, in the device's order, with its readable label; selecting one inserts it.
+  func test_inputs_listTheDevicesInputs_andInsertOnActivate() {
+    var inserted: [String] = []
+    let model = ExpressionEditorModelBuilder.make(
+      text: .constant(""), original: "", check: valid, onSave: {}, onRevert: {}, onClear: {},
+      inputs: ["Button A", "L Stick Y+", "Paddle 1"], family: .playStation, onInsert: { inserted.append($0) })
+    let section = model.sections.first { $0.id == "inputs" }
+    XCTAssertEqual(section?.items.map(\.id), ["inputs-help", "input-0", "input-1", "input-2"])
+    XCTAssertEqual(section?.items.first?.isEnabled, false, "the caption is never focused")
+    XCTAssertEqual(model.item(id: "input-0")?.title, "Button A")
+    XCTAssertEqual(model.item(id: "input-0")?.subtitle, "✕")
+    XCTAssertEqual(model.item(id: "input-1")?.subtitle, "Left Stick ↑")
+    XCTAssertNil(model.item(id: "input-2")?.subtitle, "no label beyond its name")
+    model.item(id: "input-1")?.onCustomActivate?()
+    XCTAssertEqual(inserted, ["L Stick Y+"])
+  }
+
+  func test_inputs_touchscreenRowsCarryTheirNames() {
+    let model = ExpressionEditorModelBuilder.make(
+      text: .constant(""), original: "", check: valid, onSave: {}, onRevert: {}, onClear: {},
+      inputs: ["Button 100", "Axis 112"], family: .touchscreen)
+    XCTAssertEqual(model.item(id: "input-0")?.subtitle, "On-screen A")
+    XCTAssertEqual(model.item(id: "input-1")?.subtitle, "Pointer Up")
+  }
+
+  /// A blank expression becomes the input; anything else gets it OR'd on, which always parses.
+  func test_inserting() {
+    XCTAssertEqual(ExpressionEditorModelBuilder.inserting("Button A", into: ""), "`Button A`")
+    XCTAssertEqual(ExpressionEditorModelBuilder.inserting("Button A", into: "  "), "`Button A`")
+    XCTAssertEqual(ExpressionEditorModelBuilder.inserting("Button B", into: "`Button A` "), "`Button A` | `Button B`")
+  }
+
+  /// Values are rounded and stored only when they change, so an idle device redraws nothing.
+  @MainActor
+  func test_liveInputValues_roundAndReadPastTheEndAsZero() {
+    var reading: [Float] = [0.123, 1]
+    let live = LiveInputValues(read: { reading })
+    live.refresh()
+    XCTAssertEqual(live.values, [0.12, 1])
+    XCTAssertEqual(live.value(at: 5), 0)
+    reading = [0.1234, 1]
+    live.refresh()
+    XCTAssertEqual(live.values, [0.12, 1])
+    live.stop()
   }
 }

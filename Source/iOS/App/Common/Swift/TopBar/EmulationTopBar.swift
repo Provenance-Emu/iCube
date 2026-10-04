@@ -8,6 +8,8 @@ import SwiftUI
 enum TopBarDestination {
   case exitConfirm, perfOverlay, audioEffects, shaders, shaderParameters
   case controllerSettings, pauseMenu, skylanderImport, skylanderClear
+  /// The on-screen controls' layout editor, over the game.
+  case editLayout
 }
 
 /// The popovers the bar can show. Only one is up at a time.
@@ -50,6 +52,8 @@ struct EmulationTopBar: View {
   let isWii: Bool
   let onScreenControlsVisible: Bool
   let irModeRaw: Int
+  /// The running title has its own pointer mode: a pick lasts for this game only.
+  var pointerIsThisGameOnly = false
   let overscanApplicable: Bool
   let overscanFullscreen: Bool
   /// True while anything the bar opened (or the pause menu) is up. When it goes away the bar re-reads its toggles.
@@ -59,6 +63,8 @@ struct EmulationTopBar: View {
   let open: (TopBarDestination) -> Void
   let onToggleOnScreenControls: () -> Void
   let onSetPointerMode: (PointerMode) -> Void
+  /// Unused: the bar's overlay toggle moved to More Controller Settings only. Kept until
+  /// EmulationScreen's call site drops its argument.
   let onSetProgrammaticOverlay: (Bool) -> Void
   let onSetOverscanFullscreen: (Bool) -> Void
 
@@ -380,6 +386,13 @@ struct EmulationTopBar: View {
     VStack(alignment: .leading, spacing: 0) {
       if isWii {
         sectionHeader(L("Pointer"))
+        if pointerIsThisGameOnly {
+          Text(L("This game only"))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 2)
+        }
         ForEach(PointerMode.allCases) { mode in
           PopoverRow(title: mode.title, systemImage: mode.systemImage, isChecked: irModeRaw == mode.rawValue) {
             close { onSetPointerMode(mode) }
@@ -388,10 +401,7 @@ struct EmulationTopBar: View {
         PopoverRow(title: L("Recenter Pointer"), systemImage: "scope") { close { TCDeviceMotion.requestPointerRecenter() } }
         Divider()
       }
-      PopoverRow(title: L("New On‑Screen Controller (Beta)"), systemImage: "sparkles", isChecked: TouchOverlayFlag.isProgrammatic) {
-        close { onSetProgrammaticOverlay(!TouchOverlayFlag.isProgrammatic) }
-      }
-      Divider()
+      PopoverRow(title: L("Edit Layout…"), systemImage: "rectangle.and.pencil.and.ellipsis") { closeThenOpen(.editLayout) }
       PopoverRow(title: L("Controller Settings…"), systemImage: "gearshape") { closeThenOpen(.controllerSettings) }
     }
   }

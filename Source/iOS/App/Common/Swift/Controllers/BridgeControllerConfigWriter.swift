@@ -44,6 +44,15 @@ final class BridgeControllerConfigWriter: ControllerConfigWriting {
     }
   }
 
+  func defaultDevice(system: EmulatedSystem, port: Int) -> String {
+    switch system {
+    case .gamecube:
+      return TVControllerMappingBridge.defaultDevice(forGCPort: port + 1) as String
+    case .wii:
+      return TVControllerMappingBridge.defaultDevice(forWiimote: port + 1) as String
+    }
+  }
+
   // MARK: Mapping state
 
   func mappingBindsDevice(system: EmulatedSystem, port: Int) -> Bool {
@@ -76,6 +85,26 @@ final class BridgeControllerConfigWriter: ControllerConfigWriting {
     }
   }
 
+  // MARK: Mapping stash
+
+  func stashMapping(forQualifier qualifier: String, system: EmulatedSystem, port: Int) {
+    switch system {
+    case .gamecube:
+      _ = TVControllerMappingBridge.stashMapping(forGCPort: port + 1, qualifier: qualifier)
+    case .wii:
+      _ = TVControllerMappingBridge.stashMapping(forWiimote: port + 1, qualifier: qualifier)
+    }
+  }
+
+  func restoreStashedMapping(forQualifier qualifier: String, system: EmulatedSystem, port: Int) -> Bool {
+    switch system {
+    case .gamecube:
+      return TVControllerMappingBridge.restoreStashedMapping(forGCPort: port + 1, qualifier: qualifier)
+    case .wii:
+      return TVControllerMappingBridge.restoreStashedMapping(forWiimote: port + 1, qualifier: qualifier)
+    }
+  }
+
   // MARK: Touchscreen
 
   func assignTouchscreen(system: EmulatedSystem, port: Int) {
@@ -91,9 +120,14 @@ final class BridgeControllerConfigWriter: ControllerConfigWriting {
   // MARK: Persistence
 
   func saveConfig(system: EmulatedSystem) {
-    // The mutating bridge calls above (setDefaultDevice / setGCPortDeviceForPort /
-    // assignTouchscreen / loadProfile) already persist via SaveConfig. This is an
-    // explicit flush to guarantee the assignment is durable regardless of path.
+    // Two files hold an assignment: the port's SIDevice / Wii Remote source live in Dolphin.ini
+    // (`setGCPortDeviceForPort` / `setWiimoteSourceFor` only change the in-memory Base layer), the
+    // device binding and the mapping in the system's input ini. Most mapping bridge calls save the
+    // latter themselves; writing both here makes the assignment durable whatever path made it.
     DOLConfigBridge.flushSettingsToDisk()
+    switch system {
+    case .gamecube: TVControllerMappingBridge.saveGCPadConfig()
+    case .wii: TVControllerMappingBridge.saveWiimoteConfig()
+    }
   }
 }

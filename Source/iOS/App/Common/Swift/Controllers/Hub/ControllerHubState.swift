@@ -14,7 +14,6 @@ enum ControllerSetupSystem {
   case wiiAndGameCube
 
   var showsGameCube: Bool { self == .gamecube || self == .both || self == .wiiAndGameCube }
-  var showsWii: Bool { self == .wii || self == .both || self == .wiiAndGameCube }
   var wiiFirst: Bool { self == .wiiAndGameCube }
 }
 
@@ -99,7 +98,6 @@ struct ControllerHubState {
   var overlayMode: ControllerManager.OverlayMode
   /// One of `opacityChoices`.
   var overlayOpacityPercent: Int
-  var continuousScanning: Bool
   var dsuClientEnabled: Bool
   var dsuServerCount: Int
 
@@ -107,7 +105,7 @@ struct ControllerHubState {
     ControllerHubState(
       system: system, players: [], showAllPorts: false, pads: [], isGameRunning: false,
       overlayVisible: false, overlayMode: .auto, overlayOpacityPercent: 50,
-      continuousScanning: false, dsuClientEnabled: false, dsuServerCount: 0)
+      dsuClientEnabled: false, dsuServerCount: 0)
   }
 
   /// Ports in on-screen order: a running Wii title lists its Wii Remotes first.
@@ -142,11 +140,13 @@ struct ControllerHubActions {
   var setOverlayMode: (ControllerManager.OverlayMode) -> Void
   /// 0…1.
   var setOverlayOpacity: (Float) -> Void
-  var editLayoutDestination: () -> AnyView
+  /// Edit Layout…: edits on the game's own canvas while a game runs, else opens the full-screen editor.
+  var editLayout: () -> Void
+  /// Edit IR Area…: where a touch moves the Wii pointer, edited full screen.
+  var editIRArea: () -> Void
   var skinsDestination: () -> AnyView
   /// The pad's qualifier.
   var identifyPad: (String) -> Void
-  var setContinuousScanning: (Bool) -> Void
   var dsuDestination: () -> AnyView
   var moreSettingsDestination: () -> AnyView
 }

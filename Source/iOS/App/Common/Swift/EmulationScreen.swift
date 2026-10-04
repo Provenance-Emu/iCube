@@ -297,7 +297,6 @@ struct EmulationScreen: View {
   @State private var touchPadsRefreshToken = UUID()
   @State private var irModeRaw: Int = 1
   @State private var desiredTouchControls: Bool = true
-  @StateObject var touchVM = TouchControlsViewModel()
   @State private var wiiOverlaySignature: Int = 0
   #endif
   // Used by both the iOS and tvOS bodies (Phase 3/4 disconnect-pause + pill),
@@ -344,6 +343,10 @@ struct EmulationScreen: View {
   @State private var skyPickedURL: URL? = nil
   @State private var showSkyClearPicker = false
   @State private var skyLastLoadedSlot: Int = 0
+  /// The on-screen controls are being edited: `TouchOverlayLayoutEditorView` covers the game.
+  @State private var isEditingLayout = false
+  /// The pad being edited: the one on screen when editing began.
+  @State private var layoutEditPadKind: TouchOverlayPadKind = .gameCube
 
   private static let topRevealStripHeight: CGFloat = 80
 
@@ -814,8 +817,9 @@ struct EmulationScreen: View {
         .zIndex(5)
       }
 
-      // Top hit area: tap near status bar to reveal overlay (active only when hidden)
-      if !showTopBar {
+      // Top hit area: tap near status bar to reveal overlay (active only when hidden). Gone while the
+      // layout editor is up: it would swallow the touches that start in the top 80 pt.
+      if !showTopBar && !isEditingLayout {
         GeometryReader { screen in
           let strip = topRevealStrip(canvas: screen.size)
           Color.clear
@@ -837,7 +841,7 @@ struct EmulationScreen: View {
           .allowsHitTesting(true)
       }
 
-      if showTopBar {
+      if showTopBar && !isEditingLayout {
         emulationTopBar
           .onPreferenceChange(TopBarHeightKey.self) { topBarHeight = $0 }
           .transition(.move(edge: .top).combined(with: .opacity))
@@ -1049,6 +1053,9 @@ struct EmulationScreen: View {
         touchPadsContainer
           .id(touchPadsRefreshToken)
           .ignoresSafeArea()
+          // Hidden, not removed, while the editor draws the same layout above it.
+          .opacity(isEditingLayout ? 0 : 1)
+          .allowsHitTesting(!isEditingLayout)
           .transition(.opacity)
           .onAppear {
             // Ensure touch input is always a valid IR source
@@ -1057,19 +1064,29 @@ struct EmulationScreen: View {
             TCDeviceMotion.shared.statusBarOrientationChanged()
           }
       }
+
+      // Edit Layout…: the editor lays out on the same canvas as the pads above (the whole screen), so
+      // nothing moves when play resumes, and sits above the top bar and its reveal strip.
+      if isEditingLayout {
+        TouchOverlayLayoutEditorView(padKind: layoutEditPadKind, overGame: true, onDone: endLayoutEdit)
+          .zIndex(7)
+      }
     }
-    // Single owner of the core's IMU pointer ("phone as Wii Remote"): ON only while the Wii
-    // touch overlay is hidden. While the overlay is visible the app drives IR itself (touch in
-    // drag/follow, device attitude in gyro mode). This used to be toggled from four places
-    // (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode, the long-press handler, and setup),
-    // and the overlay rebuild on a cursor-mode change could leave it ON with the pads visible,
-    // which reads as "changing Follow to Drag breaks the Wii controls".
-    .onChange(of: isTouchControlsActive) { active in
+    // Single owner of the core's IMU pointer on the touchscreen Wii Remote: always OFF, whether the
+    // overlay is shown or hidden. The app drives that slot's IR itself (touch in drag/follow,
+    // device attitude in gyro mode) and keeps feeding the phone's motion into its IMU axes, so
+    // turning the core pointer ON while the overlay was hidden aimed the remote at the ceiling as
+    // soon as the phone was held upright: the hand vanished and never came back (there is no
+    // working Recenter on the touchscreen device). Only a slot bound to a physical motion
+    // controller owns the core pointer, and its profile sets it; this never touches that slot.
+    // This used to be toggled from four places (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode,
+    // the long-press handler, and setup).
+    .onChange(of: isTouchControlsActive) { _ in
       // No touchscreen Wii Remote: the overlay drives no pointer, so there is nothing to keep from
       // fighting. `?? 0` used to flip Wii Remote 1's IMU pointer here even when a gyro pad owns it
       // (controller hub decision 12).
       guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
-      TVEmulationBridge.setWiiIMUPointEnabled(!active, forWiimote: touchSlot)
+      TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
     }
     .modifier(SettingsNavigationFallback(showSettings: $showSettings))
     .fullScreenCover(isPresented: $showPauseMenu) {
@@ -1154,9 +1171,9 @@ struct EmulationScreen: View {
       isTouchControlsActive = controllerManager.overlayVisible
       desiredTouchControls = true
       controllerManager.setSystem(isWii: isWiiSystem)
-      // Reconcile port ownership. The touchscreen fallback (ensurePad1DefaultsToTouchscreen)
-      // runs once, pre-boot, inside the coordinator; calling it here too ran the old C++ policy
-      // AFTER the engine and overwrote what reconcile() had just bound.
+      // Reconcile port ownership. The touchscreen fallback (ControllerManager.prepareForBoot)
+      // runs once, pre-boot, from the coordinator; running it here too would re-decide AFTER
+      // the engine and overwrite what reconcile() had just bound.
       ControllerManager.shared.reconcile()
       // Configure Wiimote sources based on connected controllers
       ControllerManager.shared.updateWiimoteEmulationForExternalControllers()
@@ -1289,6 +1306,12 @@ struct EmulationScreen: View {
     .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
       // Ask the renderer to resize/reconfigure
       TVEmulationBridge.resizeSurfaceNow()
+      // The gyro pointer reads its axes from the interface orientation and re-centres when it
+      // changes, but the orientation was only refreshed by explicit calls (overlay shown, motion
+      // restarted), so the re-centre fired at random. Read it on the next main-actor turn, once
+      // UIKit has applied the rotation; this also covers the 180-degree landscape flip, which the
+      // overlay host's portrait/landscape layout callback does not see.
+      Task { @MainActor in TCDeviceMotion.shared.statusBarOrientationChanged() }
     }
     .onReceive(NotificationCenter.default.publisher(for: SkinLibrary.didChangeNotification)) { _ in
       // A skin was picked, imported or deleted (possibly the one on screen): rebuild the pads and the game placement.
@@ -1300,7 +1323,6 @@ struct EmulationScreen: View {
     .onReceive(controllerManager.controllerConnectedPublisher) { _ in
       touchPadsRefreshToken = UUID()
       ControllerStyleManager.shared.refreshDetection()
-      ControllerStyleManager.shared.applyPresetDefaults()
     }
     .onReceive(controllerManager.controllerDisconnectedPublisher) { _ in
       touchPadsRefreshToken = UUID()
@@ -1310,11 +1332,8 @@ struct EmulationScreen: View {
       fastForwardEnabled = enabled
     }
     .onReceive(controllerManager.$overlayMode) { _ in
+      // Choosing Wii binds Wii Remote 1 to the touchscreen in `overlayMode`'s didSet.
       touchPadsRefreshToken = UUID()
-      if controllerManager.overlayMode == .wii {
-        // Ensure Wiimote1 uses touchscreen and configure external controllers appropriately
-        controllerManager.ensureWiimote1EmulatedTouchscreen()
-      }
     }
     .onChange(of: isWiiSystem) { controllerManager.setSystem(isWii: $0) }
     .onReceive(controllerManager.$overlayVisible) { v in
@@ -1330,6 +1349,7 @@ struct EmulationScreen: View {
       userOverrideTouchControls = true
       touchPadsRefreshToken = UUID()
     }
+    .onReceive(NotificationCenter.default.publisher(for: .DOLEditTouchLayout)) { _ in beginLayoutEdit() }
     // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
     .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
       isPaused = TVEmulationBridge.isPaused()
@@ -1438,6 +1458,7 @@ struct EmulationScreen: View {
       isWii: isWiiSystem,
       onScreenControlsVisible: controllerManager.overlayVisible,
       irModeRaw: irModeRaw,
+      pointerIsThisGameOnly: PointerModeController.shared.isThisGameOnly,
       overscanApplicable: overscanApplicable,
       overscanFullscreen: overscanFullscreen,
       childPresented: topBarChildPresented,
@@ -1474,6 +1495,7 @@ struct EmulationScreen: View {
       controllerSettingsOwnsPause = PauseOwnership.claim(isPaused: TVEmulationBridge.isPaused(), pause: TVEmulationBridge.pause)
       showControllerSettings = true
     case .pauseMenu: showPauseMenu = true
+    case .editLayout: beginLayoutEdit()
     case .skylanderImport: showSkyImporter = true
     case .skylanderClear: showSkyClearPicker = true
     }
@@ -1492,6 +1514,31 @@ struct EmulationScreen: View {
     controllerManager.overlayVisible.toggle()
     isTouchControlsActive = controllerManager.overlayVisible
     touchPadsRefreshToken = UUID()
+  }
+
+  /// Edit Layout… (the top bar, the Controllers hub wherever it is open, or a long-press on the
+  /// overlay): closes whatever covers the game and edits the pad on screen, on the canvas it is played
+  /// on. Edit mode owns the screen: the top bar and its reveal strip stay hidden until Done.
+  private func beginLayoutEdit() {
+    let pads = touchPadsContainer
+    layoutEditPadKind = pads.programmaticPadKind() ?? (pads.isWii ? .wiiRemote : .gameCube)
+    showControllerSettings = false
+    showPauseMenu = false
+    showSettings = false
+    topBar.hideNow()
+    isEditingLayout = true
+  }
+
+  /// Done. The menus closed for editing resume only a pause they made, and a pause menu closed with one
+  /// of its own sheets still up does not, so resume here unless the player paused from the bar or a
+  /// controller disconnected.
+  private func endLayoutEdit() {
+    isEditingLayout = false
+    if TVEmulationBridge.isRunning(), TVEmulationBridge.isPaused(), !PauseOwnership.pausedFromBar,
+       controllerManager.disconnectPause == nil {
+      TVEmulationBridge.resume()
+    }
+    isPaused = TVEmulationBridge.isPaused()
   }
   #endif
 

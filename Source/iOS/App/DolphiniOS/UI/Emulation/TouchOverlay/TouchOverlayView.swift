@@ -20,40 +20,52 @@ struct TouchOverlayView: View {
   /// `TouchPadsContainer.irMode`). Only meaningful for the Wii Remote pad kind's `wiiIRPad` group.
   let irMode: Int
 
+  /// The space the editor's drags are measured in (`PositionedTouchGroup`): the whole overlay, which
+  /// does not move while a group does.
+  static let coordinateSpace = NamedCoordinateSpace.named("TouchOverlayView")
+
   @ObservedObject private var store: TouchOverlayLayoutStore
   @State private var editMode: TouchOverlayEditMode
   /// Set only by the DEBUG layout gallery: the safe area of the device being simulated. Live
   /// overlays read the real one from the window.
   private let previewSafeArea: UIEdgeInsets?
+  /// What Done does in a host that exists only to edit (`TouchOverlayLayoutEditorView`): it closes
+  /// that host. nil returns the overlay to play in place.
+  private let onDone: (() -> Void)?
+  /// Drawn at the start of the edit toolbar (the editor's pad picker).
+  private let toolbarAccessory: AnyView?
 
-  /// - Parameter initialEditMode: opens straight into an edit mode, for the Settings
-  ///   "Edit Layout…" / "Edit IR Area…" previews (task items 1/3) — those previews have no live
-  ///   game/device context, so every group's input is suppressed from the first frame
+  /// - Parameter initialEditMode: opens straight into an edit mode, for
+  ///   `TouchOverlayLayoutEditorView` ("Edit Layout…" / "Edit IR Area…") — it has no live
+  ///   device context, so every group's input is suppressed from the first frame
   ///   (`TouchOverlayEditMode.inputSuppressed`), and no `TCManagerInterface` write can happen
-  ///   regardless of the placeholder `deviceId` those sheets pass. Those sheets also pass
-  ///   `irMode: .none` themselves so the IR pad's `mode`/`isEditingFlag` transition on mount
+  ///   regardless of the placeholder `deviceId` it passes. It also passes
+  ///   `irMode: .none` so the IR pad's `mode`/`isEditingFlag` transition on mount
   ///   can't send a stray "recenter" write either (see `TouchOverlayIRPadView`'s doc comment).
   /// - Parameter store: the gallery passes an empty in-memory store so it always shows defaults.
   init(padKind: TouchOverlayPadKind, deviceId: Int, irMode: Int, initialEditMode: TouchOverlayEditMode = .none,
-       store: TouchOverlayLayoutStore = .shared, previewSafeArea: UIEdgeInsets? = nil) {
+       store: TouchOverlayLayoutStore = .shared, previewSafeArea: UIEdgeInsets? = nil,
+       onDone: (() -> Void)? = nil, toolbarAccessory: AnyView? = nil) {
     self.padKind = padKind
     self.deviceId = deviceId
     self.irMode = irMode
     _editMode = State(initialValue: initialEditMode)
     _store = ObservedObject(wrappedValue: store)
     self.previewSafeArea = previewSafeArea
+    self.onDone = onDone
+    self.toolbarAccessory = toolbarAccessory
   }
 
   var body: some View {
     GeometryReader { geo in
-      // The hosting view may report a safe area; the overlay itself draws edge to edge (the
-      // offset below), so lay out in the full size and keep controls out of the inset edges. The gallery hosts with no safe area and supplies the simulated device's.
-      let liveInsets = previewSafeArea == nil ? UIEdgeInsets(geo.safeAreaInsets) : .zero
-      let canvas = CGSize(width: geo.size.width + liveInsets.left + liveInsets.right,
-                          height: geo.size.height + liveInsets.top + liveInsets.bottom)
-      let safeArea = previewSafeArea ?? liveInsets
-      let bounds = CGRect(origin: .zero, size: canvas)
-      let orientation = TouchOverlayOrientation(isPortrait: canvas.height >= canvas.width)
+      // The host lays this view out inside the safe area; the overlay itself draws edge to edge
+      // (the offset below), so lay out on the whole screen and keep controls out of the inset edges.
+      let geometry = TouchOverlayCanvas(hostSize: geo.size, hostInsets: UIEdgeInsets(geo.safeAreaInsets),
+                                        previewSafeArea: previewSafeArea)
+      let canvas = geometry.size
+      let safeArea = geometry.safeArea
+      let bounds = geometry.bounds
+      let orientation = geometry.orientation
       let layouts = TouchOverlayDefaults.layout(for: padKind, orientation: orientation, canvas: canvas, safeArea: safeArea)
       let opacity = TouchOverlayInput.resolvedOpacity(isEditing: editMode != .none, configuredOpacity: DOLConfigBridge.mainTouchPadOpacity())
       let variant = TouchOverlayArt.variant(for: padKind)
@@ -89,15 +101,20 @@ struct TouchOverlayView: View {
         // on a group's own surface is consumed there and never reaches this layer; only a touch on
         // genuinely empty overlay space does. On the Wii Remote pad this is reachable in the strip
         // outside the IR pad's default margin (`TouchOverlayDefaults.irPadMargin`) even though the
-        // IR pad itself is now hit-testable — the Settings "Edit Layout…" entry (task item 3) is
-        // the primary way in when the IR pad covers the whole screen after a resize.
+        // IR pad itself is now hit-testable — the Controllers hub's "Edit Layout…" entry is the
+        // primary way in when the IR pad covers the whole screen after a resize.
+        // The game screen owns layout editing: it closes its bar and edits on this same canvas
+        // above everything, so ask it instead of editing in place underneath its top strip.
         Color.clear
           .contentShape(Rectangle())
           .onLongPressGesture(minimumDuration: 0.5) {
             guard editMode == .none else { return }
-            editMode = .layout
+            NotificationCenter.default.post(name: .DOLEditTouchLayout, object: nil)
           }
 
+        if editMode != .none {
+          safeAreaGuide(bounds: bounds, safeArea: safeArea)
+        }
         ForEach(backgroundLayouts, id: \.group) { layout in
           groupView(layout: layout, bounds: bounds, orientation: orientation, opacity: opacity,
                     variant: variant, excludedFrames: otherBoxes)
@@ -110,10 +127,11 @@ struct TouchOverlayView: View {
           editToolbar(safeArea: safeArea)
         }
       }
+      .coordinateSpace(Self.coordinateSpace)
       // Pin the full-size canvas to the screen's corner explicitly rather than relying on how
       // `.ignoresSafeArea()` positions an explicitly sized frame.
       .frame(width: canvas.width, height: canvas.height)
-      .offset(x: -liveInsets.left, y: -liveInsets.top)
+      .offset(x: -geometry.hostOrigin.x, y: -geometry.hostOrigin.y)
     }
   }
 
@@ -158,7 +176,7 @@ struct TouchOverlayView: View {
                              defaultCenter: TouchOverlayLayoutEngine.normalize(defaultCenter, in: bounds))
         }) : nil,
         // `.irArea` mode is ONLY ever entered for the Wii Remote pad kind's `wiiIRPad` group
-        // (`TouchOverlayIRAreaEditorView` forces `padKind: .wiiRemote`), so this is the sole
+        // (Edit IR Area… opens the editor with `padKind: .wiiRemote`), so this is the sole
         // group that ever gets `resizeAxes` — task item 1's independent width/height editor.
         resizeAxes: (editMode == .irArea && isIRPad) ? (scale: store.sizeScaleXY(for: layout.group, padKind: padKind, orientation: orientation),
                                                          onCommit: { newScaleXY in
@@ -206,11 +224,30 @@ struct TouchOverlayView: View {
 
   // MARK: Edit chrome
 
+  /// The safe area's edges, drawn faintly while editing. Every editor clamps groups to the whole
+  /// canvas (the defaults stay inside the safe area on their own), so this shows where the rounded
+  /// corners and the sensor housing begin, and that a group stopping past it is at the screen edge.
+  private func safeAreaGuide(bounds: CGRect, safeArea: UIEdgeInsets) -> some View {
+    let safe = bounds.inset(by: safeArea)
+    return Rectangle()
+      .stroke(Color.white.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+      .frame(width: safe.width, height: safe.height)
+      .position(x: safe.midX, y: safe.midY)
+      .allowsHitTesting(false)
+  }
+
+  /// Top centre, inside the safe area: clear of the top corners, where the shoulder buttons sit, and of
+  /// the bottom edge every default hangs from. It used to sit top right, which in landscape (no top
+  /// inset) was under the game screen's 80 pt reveal strip, so Done revealed the top bar instead. The
+  /// editor now covers that strip and the bar, and this keeps it clear of the controls too.
   private func editToolbar(safeArea: UIEdgeInsets) -> some View {
     VStack {
       HStack {
         Spacer()
         HStack(spacing: 8) {
+          if let toolbarAccessory {
+            toolbarAccessory
+          }
           Button {
             // The IR area editor's Reset only clears `wiiIRPad` (task item 1) — resetting the
             // WHOLE pad kind here would also silently discard the user's face-button/D-pad/stick
@@ -225,7 +262,11 @@ struct TouchOverlayView: View {
           .buttonStyle(.bordered)
 
           Button {
-            editMode = .none
+            if let onDone {
+              onDone()
+            } else {
+              editMode = .none
+            }
           } label: {
             Label("Done", systemImage: "checkmark")
           }
@@ -234,6 +275,7 @@ struct TouchOverlayView: View {
         .padding(10)
         .background(.ultraThinMaterial, in: Capsule())
         .padding()
+        Spacer()
       }
       Spacer()
     }
@@ -243,6 +285,29 @@ struct TouchOverlayView: View {
 #endif
 
 #if os(iOS)
+/// The rectangle the overlay lays out on, from what its `GeometryReader` reports. Every host lays the
+/// overlay out inside the safe area (the game's `TouchPadsContainer`, the full-screen layout editor)
+/// and the canvas adds the insets back, so it is the whole screen in each of them; the DEBUG gallery
+/// hosts edge to edge and passes the simulated device's insets instead. Positions are stored as
+/// fractions of `bounds` and sizes scale with it, so the hosts must agree on it: the layout editor
+/// used to sit under a navigation bar and a picker, and everything placed there moved in the game.
+struct TouchOverlayCanvas: Equatable {
+  let size: CGSize
+  let safeArea: UIEdgeInsets
+  /// Where the host's origin sits on the canvas: the leading and top insets it was laid out inside.
+  let hostOrigin: CGPoint
+
+  init(hostSize: CGSize, hostInsets: UIEdgeInsets, previewSafeArea: UIEdgeInsets? = nil) {
+    let live = previewSafeArea == nil ? hostInsets : .zero
+    size = CGSize(width: hostSize.width + live.left + live.right, height: hostSize.height + live.top + live.bottom)
+    safeArea = previewSafeArea ?? live
+    hostOrigin = CGPoint(x: live.left, y: live.top)
+  }
+
+  var bounds: CGRect { CGRect(origin: .zero, size: size) }
+  var orientation: TouchOverlayOrientation { TouchOverlayOrientation(isPortrait: size.height >= size.width) }
+}
+
 private extension UIEdgeInsets {
   init(_ insets: EdgeInsets) {
     self.init(top: insets.top, left: insets.leading, bottom: insets.bottom, right: insets.trailing)

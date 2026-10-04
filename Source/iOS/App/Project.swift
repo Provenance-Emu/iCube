@@ -257,23 +257,16 @@ let iCube = Target.target(
     deploymentTargets: .multiplatform(iOS: "17.0", tvOS: "17.0"),
     infoPlist: .file(path: "DolphiniOS/Info.plist"),
     sources: [
-        // The legacy ObjC/UIKit settings view controllers under Common/UI/Settings/ and
-        // DolphiniOS/UI/Settings/ are the iOS-only settings UI. They use UIKit APIs that are
-        // unavailable on tvOS (UISlider, UISwitch, UIStepper, UITableViewStyleInsetGrouped, touch
-        // APIs). The live tvOS settings UI is SwiftUI (SettingsRootView.swift / TVRootView). These
-        // ObjC sources are not used on tvOS, so exclude the ObjC sources (*.m/*.mm) from the tvOS
-        // build and re-add them iOS/Catalyst-only. We keep the *.swift and *.h files unconditional:
-        // the SwiftUI settings views live under these dirs, and the headers must stay on the
-        // bridging header path.
+        // The legacy ObjC/UIKit settings view controllers under Common/UI/Settings/ are the
+        // iOS-only settings UI. They use UIKit APIs that are unavailable on tvOS (UISlider,
+        // UISwitch, UIStepper, UITableViewStyleInsetGrouped, touch APIs). The live tvOS settings
+        // UI is SwiftUI (SettingsRootView.swift / TVRootView). These ObjC sources are not used on
+        // tvOS, so exclude the ObjC sources (*.m/*.mm) from the tvOS build and re-add them
+        // iOS/Catalyst-only (see the Common globs below). We keep the *.swift and *.h files
+        // unconditional: the SwiftUI settings views live under that dir, and the headers must
+        // stay on the bridging header path.
         .glob("DolphiniOS/**/*.{swift,h}"),
-        .glob(
-            "DolphiniOS/**/*.{m,mm}",
-            excluding: ["DolphiniOS/UI/Settings/**/*.{m,mm}"]
-        ),
-        .glob(
-            "DolphiniOS/UI/Settings/**/*.{m,mm}",
-            compilationCondition: .when([.ios, .catalyst])
-        ),
+        .glob("DolphiniOS/**/*.{m,mm}"),
         // NOTE: GameActivity.swift (Common/Swift/Activity) defines GameActivityManager, used by
         // the app (ControllerExtensions, EmulationScreen, PauseMenuView, PauseGestureTracker).
         // In the original pbxproj it is a membershipEXCEPTION on the appex's "Activity" synchronized

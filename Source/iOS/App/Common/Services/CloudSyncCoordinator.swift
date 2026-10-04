@@ -36,7 +36,7 @@ import PVSyncRules
 ///   `adaptive_clock_enable`, `icube_vertex_loader_mode`, `shader_precopy_enabled`,
 ///   `gfx_overscan_fullscreen`, `motion_debug_*`, `ui_show_dsu_debug_hud`.
 /// - **~18 are peripheral-specific** — the `dsu_*` and `motion_*` families,
-///   `rumble_destination`, `virtual_mfi_connect`. These describe *this* device's
+///   `rumble_destination`. These describe *this* device's
 ///   controllers and sensors. An Apple TV has no gyro; pushing an iPhone's
 ///   motion configuration onto it is a bug, not a feature.
 /// - **8 are genuinely device-independent**, and 7 of those are library view

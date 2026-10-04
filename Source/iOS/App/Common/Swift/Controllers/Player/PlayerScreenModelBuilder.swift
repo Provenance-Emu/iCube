@@ -10,6 +10,10 @@ import SwiftUI
 /// - Pointer & Motion: iOS, Wii ports bound to the touchscreen or a gyro pad.
 /// - Advanced, collapsed: numeric settings and raw expressions.
 ///
+/// Help (`PlayerScreenHelp`): each Buttons category and Raw Bindings opens with a caption row, and
+/// each Device / Profile / Wii Remote row has a caption as its subtitle (its value, if any, is the
+/// badge). Numeric settings carry the core's own explanation.
+///
 /// Pure: state and actions in, `MenuModel` out, no bridge calls, like `ControllerHubModelBuilder`.
 /// Rows that open something push (`.destination`); nothing here presents.
 enum PlayerScreenModelBuilder {
@@ -39,13 +43,14 @@ enum PlayerScreenModelBuilder {
   }
 
   static func captureRowID(_ row: RemapControlRow) -> String { "control-\(row.id)" }
+  static func expressionRowID(_ row: RemapControlRow) -> String { "expression-\(row.id)" }
 
   // MARK: Device (decision 9: a pushed list, one pick = one assignment)
 
   /// What the Device row shows.
   static func deviceSummary(_ state: PlayerScreenState) -> String {
     switch state.deviceChoice {
-    case .noDevice:
+    case .noDevice, .automatic:
       return L("No Device")
     case .touchscreen:
       return L("Touchscreen")
@@ -57,10 +62,15 @@ enum PlayerScreenModelBuilder {
     }
   }
 
-  /// The Device list: None, Touchscreen (iOS), each connected pad, and the bound device when it is
-  /// none of those (a disconnected pad, a DSU device), so the list can mark it current.
+  /// The Device list: Auto on a pinned port, None, Touchscreen (iOS), each connected pad, and the
+  /// bound device when it is none of those (a disconnected pad, a DSU device), so the list can mark
+  /// it current.
   static func deviceOptions(state: PlayerScreenState, platform: PlatformKind) -> [DeviceOption] {
-    var options = [DeviceOption(choice: .noDevice, title: L("None"))]
+    var options: [DeviceOption] = []
+    if state.isPinned {
+      options.append(DeviceOption(choice: .automatic, title: L("Auto")))
+    }
+    options.append(DeviceOption(choice: .noDevice, title: L("None")))
     if platform == .ios {
       options.append(DeviceOption(choice: .touchscreen, title: L("Touchscreen")))
     }
@@ -78,9 +88,12 @@ enum PlayerScreenModelBuilder {
 
   private static func deviceSection(state: PlayerScreenState, actions: PlayerScreenActions) -> MenuSection {
     MenuSection(id: "device", items: [
+      // The bound device is the badge (the row's value); the subtitle says what the row is for, or
+      // that the user pinned the device (pins used to be invisible and permanent).
       MenuItem(
-        id: "device", title: L("Device"), subtitle: deviceSummary(state), icon: "gamecontroller",
-        role: .destination(actions.deviceListDestination())),
+        id: "device", title: L("Device"), subtitle: state.isPinned ? PlayerScreenHelp.devicePinned : PlayerScreenHelp.device,
+        icon: state.isPinned ? "pin.fill" : "gamecontroller",
+        role: .destination(actions.deviceListDestination()), badge: deviceSummary(state)),
     ])
   }
 
@@ -89,12 +102,18 @@ enum PlayerScreenModelBuilder {
   private static func profileSection(state: PlayerScreenState, actions: PlayerScreenActions) -> MenuSection {
     MenuSection(id: "profile", header: L("Profile"), items: [
       MenuItem(
-        id: "profile-load", title: L("Load Profile…"), subtitle: profileDisplayName(state), icon: "tray.and.arrow.down",
-        role: .destination(actions.profileListDestination())),
-      MenuItem(id: "profile-save", title: L("Save Profile As…"), icon: "square.and.arrow.down", role: .action(actions.saveProfileAs)),
+        id: "profile-load", title: L("Load Profile…"), subtitle: PlayerScreenHelp.loadProfile, icon: "tray.and.arrow.down",
+        role: .destination(actions.profileListDestination()), badge: profileDisplayName(state)),
       MenuItem(
-        id: "profile-reset", title: L("Reset to Default Profile"), icon: "arrow.counterclockwise",
-        role: .action(actions.resetProfile), isEnabled: state.deviceChoice != .noDevice),
+        id: "profile-save", title: L("Save Profile As…"), subtitle: PlayerScreenHelp.saveProfile, icon: "square.and.arrow.down",
+        role: .action(actions.saveProfileAs)),
+      MenuItem(
+        id: "profile-reset", title: L("Reset to Default Profile"), subtitle: PlayerScreenHelp.resetProfile,
+        icon: "arrow.counterclockwise", role: .action(actions.resetProfile), isEnabled: state.deviceChoice != .noDevice),
+      // Only where capture works, as a row's Clear: elsewhere nothing could be bound again.
+      MenuItem(
+        id: "profile-clear-all", title: L("Clear All Buttons"), subtitle: PlayerScreenHelp.clearAll, icon: "xmark.circle",
+        role: .destructive(actions.clearAll), isEnabled: state.canCapture),
     ])
   }
 
@@ -108,12 +127,12 @@ enum PlayerScreenModelBuilder {
     }
     return MenuSection(id: "wii", header: L("Wii Remote"), items: [
       MenuItem(
-        id: "wii-extension", title: L("Extension"), icon: "puzzlepiece.extension",
+        id: "wii-extension", title: L("Extension"), subtitle: PlayerScreenHelp.extensionCaption, icon: "puzzlepiece.extension",
         role: .picker(options: extensions, selection: Binding(
           get: { AnyHashable(state.player.wiiExtension) },
           set: { if let value = $0.base as? Int { actions.setExtension(value) } }))),
       MenuItem(
-        id: "wii-sideways", title: L("Sideways"), icon: "rotate.right",
+        id: "wii-sideways", title: L("Sideways"), subtitle: PlayerScreenHelp.sideways, icon: "rotate.right",
         role: .toggle(Binding(get: { state.player.isSideways }, set: { actions.setSideways($0) }))),
     ])
   }
@@ -129,7 +148,7 @@ enum PlayerScreenModelBuilder {
     // Once per build, not per row.
     let family = DeviceFamily.from(qualifier: state.player.deviceQualifier)
     for (category, rows) in ControlCategory.grouped(state.controls) {
-      sections.append(MenuSection(id: "buttons-\(category.id)", header: category.title, items: rows.map { row in
+      let captureRows: [MenuItem] = rows.map { row in
         let title = ControlCategory.title(for: row)
         let isArmed = state.armedControlID == row.id
         let isEnabled = state.canCapture && (!state.isCapturing || isArmed)
@@ -137,19 +156,31 @@ enum PlayerScreenModelBuilder {
           id: captureRowID(row), title: title,
           role: .custom(AnyView(CaptureRowView(
             title: title, binding: BindingDisplay.text(for: row.expression, family: family), isArmed: isArmed,
-            isEnabled: isEnabled, onActivate: { actions.toggleCapture(row) }, onClear: { actions.clearBinding(row) }))),
+            isEnabled: isEnabled, onActivate: { actions.toggleCapture(row) }, onClear: { actions.clearBinding(row) },
+            onReset: { actions.resetBinding(row) }))),
           isEnabled: isEnabled,
           onCustomActivate: { actions.toggleCapture(row) })
-      }))
+      }
+      let help = helpCaption(id: helpID(category), PlayerScreenHelp.category(category, onTouchscreen: state.isTouchscreen))
+      sections.append(MenuSection(id: "buttons-\(category.id)", header: category.title, items: [help] + captureRows))
     }
     return sections
+  }
+
+  static func helpID(_ category: ControlCategory) -> String { "help-\(category.id)" }
+
+  /// A caption row: text only, never focused (`isEnabled` false, so a pad's focus walks past it and
+  /// tvOS skips it), and visible whenever the rows around it are. It reads as a caption because it
+  /// is one `Text` in the caption style, not a disabled button.
+  private static func helpCaption(id: String, _ text: String) -> MenuItem {
+    MenuItem(id: id, title: text, role: .custom(AnyView(PlayerHelpCaption(text: text))), isEnabled: false)
   }
 
   /// Why capture is impossible, or nil when it is possible (decision 11).
   private static func captureHint(_ state: PlayerScreenState) -> String? {
     switch state.deviceChoice {
-    case .noDevice: return L("Choose a device to bind its buttons.")
-    case .touchscreen: return L("Touchscreen controls are laid out by the on-screen overlay.")
+    case .noDevice, .automatic: return L("Choose a device to bind its buttons.")
+    case .touchscreen: return L("On-Screen Controls are laid out with Edit Layout.")
     case .pad: return state.isDisconnected ? L("Connect this controller to capture buttons.") : nil
     }
   }
@@ -171,7 +202,8 @@ enum PlayerScreenModelBuilder {
     let modes: [PointerMode] = [.touchFollow, .touchDrag, .gyro]
     var items = [
       MenuItem(
-        id: "pointer-mode", title: L("Pointer"), icon: motion.pointerMode.systemImage,
+        id: "pointer-mode", title: L("Pointer"), subtitle: motion.pointerIsThisGameOnly ? L("This game only") : nil,
+        icon: motion.pointerMode.systemImage,
         role: .picker(options: modes.map { ($0.title, AnyHashable($0)) }, selection: Binding(
           get: { AnyHashable(motion.pointerMode) },
           set: { if let mode = $0.base as? PointerMode { actions.setPointerMode(mode) } }))),
@@ -179,13 +211,15 @@ enum PlayerScreenModelBuilder {
     ]
     if motion.pointerMode == .touchDrag, motion.usesProgrammaticOverlay {
       items.append(sensitivityItem(
-        choices: PointerMotionState.dragGainChoices, current: motion.dragGain, set: actions.setDragGain))
+        title: L("Drag Sensitivity"), choices: PointerMotionState.dragGainChoices, current: motion.dragGain,
+        set: actions.setDragGain))
     }
     if motion.pointerMode == .gyro {
       // Decision 4: a multiplier on the gyro pointer's constants. Decision 7: invert only here,
       // because only the gyro pointer reads the invert keys.
       items.append(sensitivityItem(
-        choices: PointerMotionState.gyroSensitivityChoices, current: motion.gyroSensitivity, set: actions.setGyroSensitivity))
+        title: L("Gyro Sensitivity"), choices: PointerMotionState.gyroSensitivityChoices,
+        current: motion.gyroSensitivity, set: actions.setGyroSensitivity))
       items.append(MenuItem(
         id: "pointer-invert-x", title: L("Invert X"), icon: "arrow.left.and.right",
         role: .toggle(Binding(get: { motion.invertX }, set: { actions.setInvertX($0) }))))
@@ -200,10 +234,13 @@ enum PlayerScreenModelBuilder {
     return MenuSection(id: "pointer", header: L("Pointer & Motion"), items: items)
   }
 
-  /// The mode's Sensitivity row: a stepped multiplier, one compact row on tvOS.
-  private static func sensitivityItem(choices: [Double], current: Double, set: @escaping (Double) -> Void) -> MenuItem {
+  /// The mode's sensitivity row (drag gain or gyro multiplier): a stepped multiplier, one compact
+  /// row on tvOS.
+  private static func sensitivityItem(
+    title: String, choices: [Double], current: Double, set: @escaping (Double) -> Void
+  ) -> MenuItem {
     MenuItem(
-      id: "pointer-sensitivity", title: L("Sensitivity"), icon: "dial.medium",
+      id: "pointer-sensitivity", title: title, icon: "dial.medium",
       role: .picker(
         options: choices.map { ("×" + NumericSettingSteps.label($0, suffix: ""), AnyHashable($0)) },
         selection: Binding(
@@ -227,30 +264,43 @@ enum PlayerScreenModelBuilder {
         items: group.settings.map { settingItem($0, actions: actions) }))
     }
     if !state.controls.isEmpty {
-      sections.append(MenuSection(id: "advanced-expressions", header: L("Raw Bindings"), items: state.controls.map { row in
+      // Readable names, as the capture rows show them; the editor a row pushes holds the raw text.
+      let family = DeviceFamily.from(qualifier: state.player.deviceQualifier)
+      let expressionRows: [MenuItem] = state.controls.map { row in
         MenuItem(
-          id: "expression-\(row.id)", title: ControlCategory.title(for: row), subtitle: row.expression,
+          id: expressionRowID(row), title: ControlCategory.title(for: row),
+          subtitle: BindingDisplay.text(for: row.expression, family: family),
           role: .destination(actions.expressionDestination(row)))
-      }))
+      }
+      let help = helpCaption(id: "help-expressions", PlayerScreenHelp.rawBindings)
+      sections.append(MenuSection(id: "advanced-expressions", header: L("Raw Bindings"), items: [help] + expressionRows))
     }
     return sections
   }
 
+  /// What a setting's row says under its name: the core's explanation, or that an expression drives
+  /// it. nil when the core has no explanation.
+  static func settingSubtitle(_ setting: NumericSettingState) -> String? {
+    if setting.isExpression { return L("Set by an expression") }
+    return setting.explanation.isEmpty ? nil : setting.explanation
+  }
+
   private static func settingItem(_ setting: NumericSettingState, actions: PlayerScreenActions) -> MenuItem {
+    let subtitle = settingSubtitle(setting)
     if setting.isExpression {
       // Enabled no-op so tvOS focus can reach it; editing an expression-driven value here would
       // silently replace the expression.
-      return MenuItem(id: setting.id, title: setting.name, subtitle: L("Set by an expression"), role: .action({}))
+      return MenuItem(id: setting.id, title: setting.name, subtitle: subtitle, role: .action({}))
     }
     if setting.isToggle {
       return MenuItem(
-        id: setting.id, title: setting.name,
+        id: setting.id, title: setting.name, subtitle: subtitle,
         role: .toggle(Binding(get: { setting.value != 0 }, set: { actions.setNumericSetting(setting, $0 ? 1 : 0) })))
     }
     let values = NumericSettingSteps.values(for: setting)
     let selected = NumericSettingSteps.nearest(to: setting.value, in: values)
     return MenuItem(
-      id: setting.id, title: setting.name,
+      id: setting.id, title: setting.name, subtitle: subtitle,
       role: .picker(
         options: values.map { (NumericSettingSteps.label($0, suffix: setting.suffix), AnyHashable($0)) },
         selection: Binding(
@@ -273,5 +323,17 @@ enum PlayerScreenModelBuilder {
       }
     }
     return locked
+  }
+}
+
+/// A help caption row's view (`PlayerScreenModelBuilder.helpCaption`).
+struct PlayerHelpCaption: View {
+  let text: String
+
+  var body: some View {
+    Text(text)
+      .font(.footnote)
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
   }
 }

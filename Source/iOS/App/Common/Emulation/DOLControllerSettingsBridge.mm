@@ -7,18 +7,20 @@
 #include <cmath>
 #include <string>
 
+#include "Common/FileUtil.h"
+#include "Common/IniFile.h"
 #include "Core/HW/GCPad.h"
 #include "Core/HW/GCPadEmu.h"
 #include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteEmu/Extension/Classic.h"
 #include "Core/HW/WiimoteEmu/Extension/Nunchuk.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
+#include "FoundationStringUtil.h"
 #include "InputCommon/ControlReference/ExpressionParser.h"
 #include "InputCommon/ControllerEmu/ControlGroup/ControlGroup.h"
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerEmu/Setting/NumericSetting.h"
 #include "InputCommon/InputConfig.h"
-#include "FoundationStringUtil.h"
 #include "LocalizationUtil.h"
 
 @interface DOLExpressionParseResult ()
@@ -39,6 +41,7 @@
 @property (nonatomic, readwrite) double maximum;
 @property (nonatomic, readwrite) double defaultValue;
 @property (nonatomic, readwrite) BOOL isExpression;
+@property(nonatomic, readwrite, copy) NSString* explanation;
 @end
 
 @implementation DOLNumericSettingInfo
@@ -71,6 +74,23 @@ static ControllerEmu::ControlGroup* GroupFor(DOLControlGroupOwner owner, NSInteg
     return Wiimote::GetClassicGroup(index, static_cast<WiimoteEmu::ClassicGroup>(groupId));
   }
   return nullptr;
+}
+
+// A profile's keys for an extension's groups start with the extension's ini name
+// (Attachments::LoadConfig: `base + attachment->GetName() + "/"`; Nunchuk.cpp:32, Classic.cpp:50).
+static std::string ProfileKeyPrefix(DOLControlGroupOwner owner)
+{
+  switch (owner)
+  {
+  case DOLControlGroupOwnerNunchuk:
+    return "Nunchuk/";
+  case DOLControlGroupOwnerClassic:
+    return "Classic/";
+  case DOLControlGroupOwnerGCPad:
+  case DOLControlGroupOwnerWiimote:
+    return "";
+  }
+  return "";
 }
 
 static void SaveConfigFor(DOLControlGroupOwner owner)
@@ -120,6 +140,9 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
     info.name = DOLCoreLocalizedString(CToFoundationString(setting->GetUIName()));
     const char* suffix = setting->GetUISuffix();
     info.suffix = suffix ? DOLCoreLocalizedString(CToFoundationString(suffix)) : @"";
+    // English `_trans()` text, like the name: the Core table carries its translations.
+    const char* explanation = setting->GetUIDescription();
+    info.explanation = explanation ? DOLCoreLocalizedString(CToFoundationString(explanation)) : @"";
     info.isExpression = !setting->IsSimpleValue();
     switch (setting->GetType())
     {
@@ -217,6 +240,57 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
     group->enabled_setting->SetValue(enabled == YES);
   }
   SaveConfigFor(owner);
+}
+
++ (nullable NSString*)expressionInProfile:(NSString*)profileName
+                                    owner:(DOLControlGroupOwner)owner
+                                     port:(NSInteger)portOneBased
+                                    group:(NSInteger)groupId
+                                    index:(NSInteger)controlIndex
+{
+  const std::string name = FoundationToCppString(profileName);
+  if (name.empty() || name.find('/') != std::string::npos)
+    return nil;
+  const InputConfig* config = ConfigFor(owner, static_cast<int>(portOneBased - 1));
+  auto* group = GroupFor(owner, portOneBased, groupId);
+  if (!config || !group || controlIndex < 0 ||
+      static_cast<size_t>(controlIndex) >= group->controls.size())
+    return nil;
+
+  // The file `loadProfile:` would load: a user profile shadows the bundled one of the same name.
+  std::string path;
+  for (std::string dir :
+       {config->GetUserProfileDirectoryPath(), config->GetSysProfileDirectoryPath()})
+  {
+    if (dir.empty())
+      continue;
+    if (dir.back() != '/')
+      dir += '/';
+    if (File::Exists(dir + name + ".ini"))
+    {
+      path = dir + name + ".ini";
+      break;
+    }
+  }
+  if (path.empty())
+    return nil;
+  Common::IniFile ini;
+  if (!ini.Load(path))
+    return nil;
+  const auto* section = ini.GetSection("Profile");
+  if (!section)
+    return nil;
+
+  // The key ControlGroup::LoadConfig reads: `<base><group>/<control>`, with ini names.
+  std::string key;
+  {
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+    key = ProfileKeyPrefix(owner) + group->name + "/" + group->controls[controlIndex]->name;
+  }
+  // A missing key loads as unbound, as LoadConfig treats it.
+  std::string expression;
+  section->Get(key, &expression, "");
+  return CppToFoundationString(expression);
 }
 
 @end

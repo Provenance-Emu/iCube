@@ -17,6 +17,8 @@ final class ControllerAssignmentBridgeTests: XCTestCase {
   private static let buttonsGroup = 0
   /// A pad that is not connected: nothing can bind on it, like a touch mapping on a real pad.
   private static let padQualifier = "MFi/0/Gamepad"
+  /// A second pad that is not connected either.
+  private static let otherPadQualifier = "MFi/1/Other Gamepad"
   private static let unboundMarker = "—"
 
   private let service = ControllerAssignmentService(writer: BridgeControllerConfigWriter())
@@ -31,6 +33,7 @@ final class ControllerAssignmentBridgeTests: XCTestCase {
 
   override func setUp() {
     super.setUp()
+    removeStashes()
     savedGC = SavedSlot(
       device: TVControllerMappingBridge.defaultDevice(forGCPort: Self.port) as String,
       type: DOLConfigBridge.gcPortDevice(forPort: Self.port),
@@ -60,6 +63,9 @@ final class ControllerAssignmentBridgeTests: XCTestCase {
       TVControllerMappingBridge.setDefaultDevice(saved.device, forWiimote: Self.port)
       DOLConfigBridge.setWiimoteSourceFor(Self.port, source: saved.type)
     }
+    // Replacing a pad's binding stashes its mapping; a stash left behind would be restored by the
+    // next test that binds the same pad.
+    removeStashes()
     super.tearDown()
   }
 
@@ -101,6 +107,44 @@ final class ControllerAssignmentBridgeTests: XCTestCase {
     XCTAssertEqual(try gcButtonA(), "`Button 1`", "a mapping that binds on the device must not be reloaded")
   }
 
+  /// Phase 3 checklist item 9: a profile saved as "Touchscreen" from a pad's port carries that pad's
+  /// `Device =` line and shadows the bundled Touchscreen profile. Binding the Touchscreen loads it,
+  /// and the port must still end up on the Touchscreen.
+  func test_aUserProfileNamedTouchscreen_doesNotMoveThePortOffTheTouchscreen() throws {
+    let touchscreen = "iOS/\(Self.port - 1)/Touchscreen"
+    try XCTSkipUnless((TVControllerMappingBridge.allQualifiedDevices() as [String]).contains(touchscreen),
+                      "the test host enumerates no \(touchscreen)")
+    try XCTSkipIf((TVControllerMappingBridge.userProfiles(forGCPort: Self.port) as [String]).contains("Touchscreen"),
+                  "the test host has its own Touchscreen profile")
+    TVControllerMappingBridge.setDefaultDevice(Self.padQualifier, forGCPort: Self.port)
+    XCTAssertTrue(TVControllerMappingBridge.saveProfile("Touchscreen", forGCPort: Self.port))
+    defer { _ = TVControllerMappingBridge.deleteProfile("Touchscreen", forGCPort: Self.port) }
+
+    service.assignTouchscreen(toPlayer: Self.port - 1, system: .gamecube)
+
+    XCTAssertEqual(TVControllerMappingBridge.defaultDevice(forGCPort: Self.port) as String, touchscreen,
+                   "the profile's Device line must not take the port off the Touchscreen")
+  }
+
+  /// A pad's custom binding survives another pad taking its port: it is stashed under the pad and
+  /// restored, not replaced by "Physical Controller", when the pad is bound again.
+  func test_aPadsCustomMapping_comesBackAfterAnotherPadHadThePort() throws {
+    service.assign(qualifier: Self.padQualifier, toPlayer: Self.port - 1, system: .gamecube)
+    TVControllerMappingBridge.setPadControlExpressionForPort(
+      Self.port, group: Self.buttonsGroup, index: try gcIndexOfA(), expression: "`Button X`")
+
+    service.assign(qualifier: Self.otherPadQualifier, toPlayer: Self.port - 1, system: .gamecube)
+    XCTAssertEqual(try gcButtonA(), "`Button A`", "precondition: the other pad gets its default profile")
+
+    service.assign(qualifier: Self.padQualifier, toPlayer: Self.port - 1, system: .gamecube)
+
+    XCTAssertEqual(try gcButtonA(), "`Button X`", "the first pad gets its own mapping back")
+    XCTAssertEqual(TVControllerMappingBridge.defaultDevice(forGCPort: Self.port) as String, Self.padQualifier,
+                   "the stash's Device line does not override the binding")
+    XCTAssertFalse(TVControllerMappingBridge.restoreStashedMapping(forGCPort: Self.port, qualifier: Self.padQualifier),
+                   "a restored stash is used up")
+  }
+
   // MARK: Wii
 
   func test_padTakingATouchscreenWiimote_getsThePadProfile() throws {
@@ -113,6 +157,17 @@ final class ControllerAssignmentBridgeTests: XCTestCase {
   }
 
   // MARK: Helpers
+
+  /// The test pads' stash files (`Config/MappingStash/<GCPad|Wiimote>/<qualifier, '/' as '_'>.ini`).
+  private func removeStashes() {
+    guard let root = DolphinPaths.userDirectoryURL()?.appendingPathComponent("Config/MappingStash") else { return }
+    for directory in ["GCPad", "Wiimote"] {
+      for qualifier in [Self.padQualifier, Self.otherPadQualifier] {
+        let file = qualifier.replacingOccurrences(of: "/", with: "_") + ".ini"
+        try? FileManager.default.removeItem(at: root.appendingPathComponent(directory).appendingPathComponent(file))
+      }
+    }
+  }
 
   private func gcButtons() -> [String] {
     TVControllerMappingBridge.padControlExpressions(forGroup: Self.port, group: Self.buttonsGroup) as [String]

@@ -66,6 +66,35 @@ final class PointerModeControllerTests: XCTestCase {
     XCTAssertEqual(controller.mode, .gyro, "mode reads the active layer, so it reports the override")
   }
 
+  /// No per-game value: the choice is the global setting and outlives the game.
+  @MainActor
+  func testSet_withoutAGameOverride_writesBase() {
+    let layers = Layers()
+    let controller = PointerModeController(
+      read: { layers.currentRun ?? layers.base }, write: { layers.base = $0 }, writeCurrentRun: { layers.currentRun = $0 },
+      notificationCenter: NotificationCenter(), isGameOverride: { layers.currentRun != nil })
+    XCTAssertFalse(controller.isThisGameOnly)
+    controller.set(.touchDrag)
+    XCTAssertEqual(layers.base, 2)
+    XCTAssertNil(layers.currentRun)
+  }
+
+  /// The title has its own value: the choice replaces it in CurrentRun for this game only, the
+  /// global setting is untouched, and the controller says so for the captions.
+  @MainActor
+  func testSet_whileTheGameOverridesIt_writesCurrentRunForThisGameOnly() {
+    let layers = Layers()
+    layers.currentRun = 0
+    let controller = PointerModeController(
+      read: { layers.currentRun ?? layers.base }, write: { layers.base = $0 }, writeCurrentRun: { layers.currentRun = $0 },
+      notificationCenter: NotificationCenter(), isGameOverride: { layers.currentRun != nil })
+    XCTAssertTrue(controller.isThisGameOnly)
+    controller.set(.touchDrag)
+    XCTAssertEqual(layers.currentRun, 2)
+    XCTAssertEqual(layers.base, 1, "a choice made over a per-game value must not become the global setting")
+    XCTAssertEqual(controller.mode, .touchDrag)
+  }
+
   @MainActor
   func testSetCurrentRunPostsTheChangeNotification() {
     let center = NotificationCenter()

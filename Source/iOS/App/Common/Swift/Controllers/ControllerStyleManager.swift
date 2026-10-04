@@ -17,18 +17,7 @@ final class ControllerStyleManager {
     let previous = current()
     if detected != previous {
       UserDefaults.standard.set(detected.rawValue, forKey: key)
-      // Persist default mapping for UI hints
-      applyPresetDefaults()
       NotificationCenter.default.post(name: Notification.Name("DOLControllerGlyphSetDidChange"), object: nil, userInfo: ["glyphSet": detected.rawValue])
     }
-  }
-
-  func applyPresetDefaults() {
-    let preset = ControllerPresetLibrary.resolve()
-    for (action, control) in preset.mapping {
-      UserDefaults.standard.set(control, forKey: "controller_action_\(action.rawValue)")
-    }
-    // Surface a brief toast
-    NotificationCenter.default.post(name: Notification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": "Applied \(preset.glyphSet.rawValue.capitalized) preset"])
   }
 }

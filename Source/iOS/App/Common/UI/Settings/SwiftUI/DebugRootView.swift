@@ -51,8 +51,6 @@ struct DebugRootView: View {
           L("Fast memory-access path for the CPU emulator. A large speedup where supported; disabled if the device can't provide it."))
       }
 
-      // The master "Connect MFi Controllers" toggle is in More Controller Settings.
-
       Section(header: Text(L("Recording"))) {
 #if os(iOS)
         settingsCaption(

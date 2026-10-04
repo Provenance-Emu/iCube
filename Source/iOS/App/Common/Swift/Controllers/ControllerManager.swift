@@ -9,19 +9,25 @@ final class ControllerManager: NSObject, ObservableObject {
 
   enum OverlayMode: Int { case auto, gamecube, wii }
   @Published var overlayVisible: Bool = true
-  @Published var overlayMode: OverlayMode = .auto { didSet { if overlayMode == .wii { ensureWiimote1EmulatedTouchscreen() } } }
-  // Map GCController -> Wiimote slot (1-based). Slot 1 reserved for on-screen Touch.
-  private var wiimoteSlotByController: [ObjectIdentifier: Int] = [:]
-  @Published var isWiiSystem: Bool = false
-
-  final class PresetManager: NSObject {
-    func applyCurrentPreset() {
-      ControllerStyleManager.shared.refreshDetection()
-      ControllerStyleManager.shared.applyPresetDefaults()
+  /// The hub's Overlay Style, kept across launches (`overlayModeDefaultsKey`, registered default Auto).
+  @Published var overlayMode: OverlayMode = ControllerManager.storedOverlayMode() {
+    didSet {
+      UserDefaults.standard.set(overlayMode.rawValue, forKey: Self.overlayModeDefaultsKey)
+      if overlayMode == .wii { ensureWiimote1EmulatedTouchscreen() }
     }
   }
 
-  let presets = PresetManager()
+  static let overlayModeDefaultsKey = "controller_overlay_mode"
+
+  private static func storedOverlayMode() -> OverlayMode {
+    let defaults = UserDefaults.standard
+    defaults.register(defaults: [overlayModeDefaultsKey: OverlayMode.auto.rawValue])
+    return OverlayMode(rawValue: defaults.integer(forKey: overlayModeDefaultsKey)) ?? .auto
+  }
+
+  // Map GCController -> Wiimote slot (1-based), for touchpad pads that drive the Wii pointer.
+  private var wiimoteSlotByController: [ObjectIdentifier: Int] = [:]
+  @Published var isWiiSystem: Bool = false
 
   /// Single source of truth for controller assignment: activates the port,
   /// binds the device, applies the default profile, and saves — atomically.
@@ -66,15 +72,17 @@ final class ControllerManager: NSObject, ObservableObject {
     savePinnedSlots()
   }
 
-  // ObjC proxies for wrapped Swift properties
-  var overlayVisibleObjc: Bool {
-    get { overlayVisible }
-    set { overlayVisible = newValue }
+  /// The user chose this slot's device; auto-assignment leaves it alone. Shown on the player
+  /// screen's Device row.
+  func isPinned(_ system: EmulatedSystem, player: Int) -> Bool {
+    pinnedSlots.contains(PinnedSlot(system: system, playerZeroBased: player))
   }
 
-  var overlayModeRaw: Int {
-    get { overlayMode.rawValue }
-    set { overlayMode = OverlayMode(rawValue: newValue) ?? .auto }
+  /// The Device list's "Auto": forget the user's choice for this slot and let auto-assignment place
+  /// a connected controller there again. The slot's device stays until something takes it.
+  func unpinAndReassign(_ system: EmulatedSystem, player: Int) {
+    unpin(system, player: player)
+    reconcile()
   }
 
   // MARK: Observing / Publishers
@@ -162,15 +170,16 @@ final class ControllerManager: NSObject, ObservableObject {
       if let c = note.object as? GCController {
         PauseGestureTracker.shared.noteControllerConnected()
         configureController(c)
-        self.presets.applyCurrentPreset()
+        ControllerStyleManager.shared.refreshDetection()
         // If a disconnect-pause is active, any connecting controller resumes the
         // game so the user is never stranded. If it is the SAME physical device,
         // restore it to its original slot; otherwise auto-assign to the first
         // free slot. Either way, clear the pause + dismiss the banner + resume.
         if let pending = self.disconnectPause {
           // Restoring the *original* slot is knowledge reconcile() does not
-          // have (the binding was already cleared), so it is written here and
+          // have (the Touchscreen may hold it by now), so it is written here and
           // the reconcile below leaves it alone because the device is now bound.
+          // The pad's mapping comes back with it (stashed when the slot changed hands).
           if TVControllerMappingBridge.qualifiedName(for: c) as String == pending.qualifier {
             self.assignmentService.assign(qualifier: pending.qualifier, toPlayer: pending.port, system: pending.isWii ? .wii : .gamecube)
           }
@@ -219,7 +228,7 @@ final class ControllerManager: NSObject, ObservableObject {
       // keyed by ObjectIdentifier (the object address), so leaving them behind
       // both leaks and lets a future allocation inherit dead state.
       if let dropped = c { releaseControllerInputState(for: dropped) }
-      self.presets.applyCurrentPreset()
+      ControllerStyleManager.shared.refreshDetection()
       self.controllerDisconnectedSubject.send(c)
       self.reconcile()
       self.updateWiimoteEmulationForExternalControllers()
@@ -305,14 +314,6 @@ final class ControllerManager: NSObject, ObservableObject {
   }
 
   // MARK: Overlays
-
-  func overlayIsWii(isWiiSystem: Bool) -> Bool {
-    switch overlayMode {
-    case .auto: return isWiiSystem
-    case .gamecube: return false
-    case .wii: return true
-    }
-  }
 
   func setSystem(isWii: Bool) { isWiiSystem = isWii }
 
@@ -409,13 +410,15 @@ final class ControllerManager: NSObject, ObservableObject {
 
   /// The one place controller assignment is decided and applied.
   ///
-  /// Sequence: drop bindings to devices that have gone away (mechanical, in
-  /// C++), snapshot, let `AssignmentEngine` decide, apply every decision through
-  /// `ControllerAssignmentService`, then mirror the result onto `playerIndex`.
+  /// Sequence: snapshot, let `AssignmentEngine` decide, apply every decision through
+  /// `ControllerAssignmentService` (which re-affirms connected pads' slots as active), then
+  /// mirror the result onto `playerIndex`. A device that goes away keeps its binding and its
+  /// mapping, so it comes back to them; when the engine gives its slot to the Touchscreen or
+  /// another pad meanwhile, the service stashes its mapping first.
   /// The engine is idempotent, so calling this repeatedly is free and port
   /// assignments stay put across connect/disconnect cycles.
-  /// `autoAssign: false` is for explicit user actions: apply the drop-vanished-devices pass,
-  /// re-affirm activation and sync player indices, but make no new placement decisions. Running
+  /// `autoAssign: false` is for explicit user actions: re-affirm activation and sync player
+  /// indices, but make no new placement decisions. Running
   /// the engine after every explicit choice is what made a GameCube assignment also rewrite the
   /// Wii Remotes (and vice versa) and put a connected pad straight back onto a slot the user had
   /// just given to the touchscreen.
@@ -428,39 +431,19 @@ final class ControllerManager: NSObject, ObservableObject {
     isReconciling = true
     defer { isReconciling = false }
 
-    TVControllerMappingBridge.reconcileAssignments()
-
-    let state = ControllerStateStore.shared.snapshot()
-    if autoAssign {
-      for assignment in AssignmentEngine().decide(from: state, pinned: pinnedSlots).assignments {
-        if let qualifier = assignment.qualifier {
-          assignmentService.assign(qualifier: qualifier,
-                                   toPlayer: assignment.playerZeroBased,
-                                   system: assignment.system)
-        } else {
-          assignmentService.assignTouchscreen(toPlayer: assignment.playerZeroBased,
-                                              system: assignment.system)
-        }
-      }
-    }
-
-    // Re-affirm: a slot already bound to a CONNECTED physical controller must be active
-    // (SIDevice / Wiimote source Emulated) even if some other writer deactivated it since
-    // the binding was made. The engine only emits writes for NEW bindings, so without this
-    // pass a slot could stay bound-but-dead until the controller reconnected.
-    let connected = Set(state.connectedQualifiers)
-    func isPhysical(_ q: String) -> Bool { !q.isEmpty && !q.hasPrefix("iOS/") && connected.contains(q) }
-    for slot in state.portAssignments where isPhysical(slot.defaultDeviceQualifier) {
-      assignmentService.activate(port: slot.portOneBased - 1, system: .gamecube)
-    }
-    if state.isWiiSystem {
-      for slot in state.wiimoteAssignments where isPhysical(slot.defaultDeviceQualifier) {
-        assignmentService.activate(port: slot.portOneBased - 1, system: .wii)
-      }
-    }
+    assignmentService.reconcile(ControllerStateStore.shared.snapshot(), pinned: pinnedSlots, autoAssign: autoAssign)
 
     syncPlayerIndices()
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
+  }
+
+  /// The pre-boot pass (`AssignmentEngine.decideBoot`). Called by EmulationCoordinator on the main
+  /// thread after `UICommon::InitControllers` and before `BootCore`, with the platform of the title
+  /// about to boot (`isCurrentSystemWii()` means nothing yet). The coordinator keeps only the
+  /// mechanical work around it.
+  func prepareForBoot(isWii: Bool) {
+    let state = ControllerStateStore.shared.snapshot(isWiiSystem: isWii)
+    assignmentService.apply(AssignmentEngine().decideBoot(from: state, pinned: pinnedSlots))
   }
 
   /// The **only** writer of `GCController.playerIndex`.
@@ -547,8 +530,8 @@ final class ControllerManager: NSObject, ObservableObject {
 
   // MARK: Wiimote Emulation for External Controllers
 
-  // Assign Wiimote slots 2..4 to external controllers that have a touchpad (DS4/DS5).
-  // Slot 1 remains for the on-screen touch overlay.
+  // Assign Wiimote slots 2..4 to external controllers that have a touchpad (DS4/DS5). Slot 1 is
+  // never handed out here: it is the on-screen controls' or a pad the AssignmentEngine put there.
   func updateWiimoteEmulationForExternalControllers() {
     wiimoteSlotByController.removeAll()
 
@@ -561,12 +544,18 @@ final class ControllerManager: NSObject, ObservableObject {
     let connected = Set(TVControllerMappingBridge.allQualifiedDevices().filter { !$0.hasPrefix("iOS/") })
     var slotForQualifier: [String: Int] = [:]
     var reserved = Set<Int>()
-    for slot in 2 ... 4 {
+    // Slot 1 is read too, so a touchpad pad the engine put on Wii Remote 1 keeps it rather than
+    // also being given slot 2; it is never switched off here.
+    for slot in 1 ... 4 {
       let qualifier = TVControllerMappingBridge.defaultDevice(forWiimote: slot) as String
       if connected.contains(qualifier) {
         reserved.insert(slot)
         slotForQualifier[qualifier] = slot
-      } else {
+      } else if isPinned(.wii, player: slot - 1) {
+        // The user's choice (a touchscreen Wii Remote 2, a pad that is off): neither switched off
+        // nor handed to a touchpad pad.
+        reserved.insert(slot)
+      } else if slot > 1 {
         DOLConfigBridge.setWiimoteSourceFor(slot, source: 0)
       }
     }

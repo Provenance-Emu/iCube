@@ -52,6 +52,9 @@ NS_SWIFT_NAME(NumericSettingInfo)
 @property (nonatomic, readonly) double defaultValue;
 /// The value is driven by an expression, not a plain number; the player screen shows it read-only.
 @property (nonatomic, readonly) BOOL isExpression;
+/// The core's explanation of the setting (`NumericSettingBase::GetUIDescription`), translated;
+/// empty when the core has none.
+@property(nonatomic, readonly, copy) NSString* explanation;
 @end
 
 /// The player screen's Advanced section: Dolphin's expression parser, used as a check that installs
@@ -92,6 +95,17 @@ NS_SWIFT_NAME(NumericSettingInfo)
                    port:(NSInteger)portOneBased
                   group:(NSInteger)groupId
     NS_SWIFT_NAME(setGroupEnabled(_:owner:port:group:));
+
+/// The expression the profile `profileName` gives one control (index `controlIndex` of the group),
+/// read from the file that loading it would read (the user directory first, then the bundled one).
+/// Empty when the profile leaves the control unbound; nil when the profile cannot be read or the
+/// control does not exist. Changes nothing.
++ (nullable NSString*)expressionInProfile:(NSString*)profileName
+                                    owner:(DOLControlGroupOwner)owner
+                                     port:(NSInteger)portOneBased
+                                    group:(NSInteger)groupId
+                                    index:(NSInteger)controlIndex
+    NS_SWIFT_NAME(expression(inProfile:owner:port:group:index:));
 
 @end
 

@@ -11,8 +11,9 @@ import SwiftUI
 /// - Help.
 ///
 /// Pure: state and actions in, `MenuModel` out, no bridge calls, mirroring `PauseMenuModelBuilder`
-/// and `CheatsMenuModelBuilder`. Rows that open something PUSH (`.destination`); nothing here
-/// presents.
+/// and `CheatsMenuModelBuilder`. Rows that open something PUSH (`.destination`), except Edit
+/// Layout… and Edit IR Area…, actions: their editors must cover the whole screen (see
+/// `ControllerHubViewModel`).
 enum ControllerHubModelBuilder {
   static func make(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuModel {
     var sections = [playersSection(state: state, actions: actions)]
@@ -113,7 +114,12 @@ enum ControllerHubModelBuilder {
           set: { if let percent = $0.base as? Int { actions.setOverlayOpacity(Float(percent) / 100) } }))))
     items.append(MenuItem(
       id: "osc-edit-layout", title: L("Edit Layout…"), icon: "rectangle.and.pencil.and.ellipsis",
-      role: .destination(actions.editLayoutDestination())))
+      role: .action(actions.editLayout)))
+    // The IR area is where a touch moves the Wii pointer; a GameCube game has no pointer.
+    if state.system != .gamecube {
+      items.append(MenuItem(
+        id: "osc-edit-ir-area", title: L("Edit IR Area…"), icon: "scope", role: .action(actions.editIRArea)))
+    }
     items.append(MenuItem(
       id: "osc-skins", title: L("Skins…"), icon: "paintpalette",
       role: .destination(actions.skinsDestination())))
@@ -130,11 +136,6 @@ enum ControllerHubModelBuilder {
     }
     if items.isEmpty {
       items.append(MenuItem(id: "no-pads", title: L("No controllers connected"), role: .action({}), isEnabled: false))
-    }
-    if state.system.showsWii {
-      items.append(MenuItem(
-        id: "wiimote-scan", title: L("Continuous Wii Remote Scanning"), icon: "antenna.radiowaves.left.and.right",
-        role: .toggle(Binding(get: { state.continuousScanning }, set: { actions.setContinuousScanning($0) }))))
     }
     items.append(MenuItem(
       id: "dsu", title: L("Motion Source (DSU)"), subtitle: dsuSummary(state), icon: "dot.radiowaves.left.and.right",

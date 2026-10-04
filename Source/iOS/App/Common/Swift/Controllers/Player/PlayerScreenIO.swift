@@ -12,18 +12,32 @@ protocol PlayerScreenIO {
   func controlRows(owner: RemapGroupOwner, group: Int, port: Int) -> [RemapControlRow]
   func numericSettings(owner: RemapGroupOwner, group: Int, port: Int) -> [NumericSettingState]
   func profiles(for slot: PlayerSlot) -> [String]
+  /// Every saved profile name for the slot's controller type, including the ones `profiles(for:)`
+  /// hides because they cannot work on the bound device: what Save Profile As… would overwrite.
+  func allProfileNames(for slot: PlayerSlot) -> [String]
+  /// The user's own saved profiles for the slot's controller type (never a bundled one): what
+  /// `deleteProfile` can remove.
+  func userProfileNames(for slot: PlayerSlot) -> [String]
   /// The profile a device gets when first bound ("Physical Controller", "Touchscreen", "DSU").
   func defaultProfileName(forQualifier qualifier: String) -> String?
+  /// The expression `profile` gives `row` ("" when it leaves it unbound), nil when the profile
+  /// cannot be read. Reads the file; changes nothing.
+  func expression(inProfile profile: String, for row: RemapControlRow, port: Int) -> String?
   func isMotionPointerEnabled(wiimote: Int) -> Bool
   func pointerMotion() -> PointerMotionState
   func inputNames(forQualifier qualifier: String) -> [String]
   func inputStates(forQualifier qualifier: String) -> [Float]
   func check(_ expression: String) -> ExpressionCheck
+  /// The user picked the port's device, so auto-assignment leaves the port alone.
+  func isPinned(_ slot: PlayerSlot) -> Bool
 
   // Writes
+  /// `.automatic` unpins the port and lets auto-assignment run.
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot)
   func loadProfile(_ name: String, slot: PlayerSlot) -> Bool
   func saveProfile(_ name: String, slot: PlayerSlot) -> Bool
+  /// Deletes a user profile's file; never a bundled one. The port's mapping is not changed.
+  func deleteProfile(_ name: String, slot: PlayerSlot) -> Bool
   func setExtension(_ value: Int, wiimote: Int)
   func setSideways(_ enabled: Bool, wiimote: Int)
   func setExpression(_ expression: String, for row: RemapControlRow, port: Int)
@@ -89,7 +103,8 @@ struct LivePlayerScreenIO: PlayerScreenIO {
       NumericSettingState(
         owner: owner, groupId: group, index: info.index, name: info.name, suffix: info.suffix,
         isToggle: info.type == .bool, isInteger: info.type == .int, value: info.value, minimum: info.minimum,
-        maximum: info.maximum, defaultValue: info.defaultValue, isExpression: info.isExpression)
+        maximum: info.maximum, defaultValue: info.defaultValue, isExpression: info.isExpression,
+        explanation: info.explanation)
     }
   }
 
@@ -99,8 +114,25 @@ struct LivePlayerScreenIO: PlayerScreenIO {
       : TVControllerMappingBridge.profiles(forWiimote: slot.port) as [String]
   }
 
+  func allProfileNames(for slot: PlayerSlot) -> [String] {
+    slot.kind == .gameCube
+      ? TVControllerMappingBridge.allProfiles(forGCPort: slot.port) as [String]
+      : TVControllerMappingBridge.allProfiles(forWiimote: slot.port) as [String]
+  }
+
+  func userProfileNames(for slot: PlayerSlot) -> [String] {
+    slot.kind == .gameCube
+      ? TVControllerMappingBridge.userProfiles(forGCPort: slot.port) as [String]
+      : TVControllerMappingBridge.userProfiles(forWiimote: slot.port) as [String]
+  }
+
   func defaultProfileName(forQualifier qualifier: String) -> String? {
     BridgeControllerConfigWriter().defaultProfileName(forQualifier: qualifier)
+  }
+
+  func expression(inProfile profile: String, for row: RemapControlRow, port: Int) -> String? {
+    DOLControllerSettingsBridge.expression(
+      inProfile: profile, owner: row.owner.controlGroupOwner, port: port, group: row.groupId, index: row.index)
   }
 
   func isMotionPointerEnabled(wiimote: Int) -> Bool {
@@ -108,15 +140,21 @@ struct LivePlayerScreenIO: PlayerScreenIO {
   }
 
   func pointerMotion() -> PointerMotionState {
-    PointerMotionState(
+    #if os(iOS)
+    let usesProgrammaticOverlay = TouchOverlayFlag.isProgrammatic
+    #else
+    let usesProgrammaticOverlay = false
+    #endif
+    return PointerMotionState(
       pointerMode: PointerModeController.shared.mode,
+      pointerIsThisGameOnly: PointerModeController.shared.isThisGameOnly,
       invertX: MotionSettings.invertRoll(),
       invertY: MotionSettings.invertPitch(),
       shakeToWiggle: MotionSettings.enhancedShakeDetection(),
       dragGain: PointerMotionState.snapped(MotionSettings.irPointerGain(), to: PointerMotionState.dragGainChoices),
       gyroSensitivity: PointerMotionState.snapped(
         MotionSettings.gyroPointerSensitivity(), to: PointerMotionState.gyroSensitivityChoices),
-      usesProgrammaticOverlay: UserDefaults.standard.bool(forKey: PointerMotionState.programmaticOverlayKey))
+      usesProgrammaticOverlay: usesProgrammaticOverlay)
   }
 
   func inputNames(forQualifier qualifier: String) -> [String] {
@@ -132,14 +170,20 @@ struct LivePlayerScreenIO: PlayerScreenIO {
     return ExpressionCheck(parseStatus: result.status, parserMessage: result.message)
   }
 
+  func isPinned(_ slot: PlayerSlot) -> Bool {
+    ControllerManager.shared.isPinned(slot.kind == .gameCube ? .gamecube : .wii, player: slot.port - 1)
+  }
+
   // MARK: Writes
 
   /// Through `ControllerManager`'s explicit-choice wrappers, each of which ends in
   /// `reconcile(autoAssign: false)` (ControllerManager.swift:484-542): changing this port never
-  /// re-assigns the others.
+  /// re-assigns the others. Auto is the exception: it hands the port back to auto-assignment.
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
     let manager = ControllerManager.shared
     switch choice {
+    case .automatic:
+      manager.unpinAndReassign(slot.kind == .gameCube ? .gamecube : .wii, player: slot.port - 1)
     case .noDevice:
       if slot.kind == .gameCube {
         manager.clearDefaultDevice(forGCPort: slot.port)
@@ -180,6 +224,12 @@ struct LivePlayerScreenIO: PlayerScreenIO {
     slot.kind == .gameCube
       ? TVControllerMappingBridge.saveProfile(name, forGCPort: slot.port)
       : TVControllerMappingBridge.saveProfile(name, forWiimote: slot.port)
+  }
+
+  func deleteProfile(_ name: String, slot: PlayerSlot) -> Bool {
+    slot.kind == .gameCube
+      ? TVControllerMappingBridge.deleteProfile(name, forGCPort: slot.port)
+      : TVControllerMappingBridge.deleteProfile(name, forWiimote: slot.port)
   }
 
   /// `WiimoteSlotOptions` already ends in `reconcile(autoAssign: false)`.

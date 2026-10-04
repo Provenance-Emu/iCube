@@ -47,10 +47,10 @@ struct EnhancedMotionControlsView: View {
 
   var body: some View {
     List {
-      Section(header: Text(L("Motion IR Cursor"))) {
+      Section(header: Text(L("Gyro Pointer"))) {
         settingsNavCaption(
           destination: HorizontalMotionPicker(selected: $horizontalMotionMode),
-          L("Whether tilting (roll) or turning (yaw) the device moves the pointer left/right.")
+          L("Whether tilting (roll) or turning (yaw) the device moves the pointer left/right while the Pointer is set to Gyro.")
         ) {
           Text(L("Horizontal Movement"))
         }
@@ -62,7 +62,7 @@ struct EnhancedMotionControlsView: View {
       Section(header: Text(L("Full Motion Mapping"))) {
         settingsCaption(
           Toggle(L("Enable 6DOF Motion Controls"), isOn: $fullMotionEnabled),
-          L("Maps device motion to all 6 axes (rotation + acceleration) for games like Wii Sports and Mario Kart. Active only when IR control isn't using gyro mode."))
+          L("Maps device motion to all 6 axes (rotation + acceleration) for games like Wii Sports and Mario Kart. Inactive while the Pointer is set to Gyro, because the gyro then aims the pointer."))
 
         if fullMotionEnabled {
           VStack(alignment: .leading, spacing: 8) {
@@ -86,7 +86,9 @@ struct EnhancedMotionControlsView: View {
       }
 
       Section(header: Text(L("Quick Setup"))) {
-        Button(L("Apply Recommended Settings")) { applyRecommendedSettings() }
+        settingsCaption(
+          Button(L("Recommended Motion Settings")) { applyRecommendedSettings() },
+          L("Turns on 6DOF and Wiimote motion, Shake to Wiggle and roll for horizontal movement, and turns off invert and Nunchuck motion. The Pointer mode is not changed."))
       }
     }
     .navigationTitle(L("Advanced Motion Settings"))
@@ -98,14 +100,13 @@ struct EnhancedMotionControlsView: View {
     .onChange(of: nunchuckIMUEnabled) { _, _ in notifyMotionSettingsChanged() }
   }
 
-  /// The same values the old button set. The pointer mode goes through `PointerModeController`,
-  /// the one writer; the shake and invert keys are written through `MotionSettings` because this
-  /// screen no longer shows them.
+  /// The shake and invert keys are written through `MotionSettings` because this screen no longer
+  /// shows them. The pointer mode is left alone: it used to switch to Gyro, which silently turned
+  /// off the 6DOF mapping this same button turns on, and the player screen owns the mode.
   private func applyRecommendedSettings() {
     MotionSettings.setEnhancedShakeDetection(true)
     MotionSettings.setInvertRoll(false)
     MotionSettings.setInvertPitch(false)
-    PointerModeController.shared.set(.gyro)
     fullMotionEnabled = true
     useYawForHorizontal = false
     wiimoteIMUEnabled = true

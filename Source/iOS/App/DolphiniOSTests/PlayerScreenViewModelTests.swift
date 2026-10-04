@@ -21,7 +21,6 @@ private final class FakeHubReader: ControllerHubReading {
   func overlayVisible() -> Bool { false }
   func overlayMode() -> ControllerManager.OverlayMode { .auto }
   func overlayOpacity() -> Float { 1 }
-  func continuousScanning() -> Bool { false }
   func dsuClientEnabled() -> Bool { false }
   func dsuServerCount() -> Int { 0 }
 }
@@ -37,23 +36,49 @@ private final class FakeIO: PlayerScreenIO {
   /// What `ControllerAssignmentService.assign` does to the port on a pad bind: true loads the pad's
   /// default profile over the mapping (the old mapping bound nothing on the pad), false keeps it.
   var assignmentReplacesMapping = false
-  private var expression = "`Button A`"
+  private var boundExpression = "`Button A`"
   var saveSucceeds = true
   var existingProfiles = ["Physical Controller", "Mine"]
+  /// Saved profiles the list hides for the bound device (a pad profile on a touchscreen slot).
+  var hiddenProfiles: [String] = []
   var parsable: Set<String> = ["`Button B`", ""]
   /// Lets a test make the reader follow a device change, as the real config does.
   var onSetDevice: ((PlayerDeviceChoice) -> Void)?
 
   func controlRows(owner: RemapGroupOwner, group: Int, port: Int) -> [RemapControlRow] {
     groupReads.append("\(owner)-\(group)")
-    return [RemapControlRow(owner: owner, groupId: group, index: 0, name: "Control", expression: expression)]
+    return [RemapControlRow(owner: owner, groupId: group, index: 0, name: "Control", expression: boundExpression)]
   }
 
   func numericSettings(owner: RemapGroupOwner, group: Int, port: Int) -> [NumericSettingState] { [] }
   func profiles(for slot: PlayerSlot) -> [String] { existingProfiles }
+  func allProfileNames(for slot: PlayerSlot) -> [String] { existingProfiles + hiddenProfiles }
+  /// The user's own profiles; the rest of `existingProfiles` are bundled.
+  var userProfiles = ["Mine"]
+  var deleteSucceeds = true
+  func userProfileNames(for slot: PlayerSlot) -> [String] { userProfiles }
+
+  func deleteProfile(_ name: String, slot: PlayerSlot) -> Bool {
+    writes.append("delete:\(name)")
+    guard deleteSucceeds, userProfiles.contains(name) else { return false }
+    userProfiles.removeAll { $0 == name }
+    existingProfiles.removeAll { $0 == name }
+    return true
+  }
 
   func defaultProfileName(forQualifier qualifier: String) -> String? {
     qualifier.hasPrefix("iOS/") ? "Touchscreen" : "Physical Controller"
+  }
+
+  /// What each profile gives the control rows (every row reads the same here); a missing profile
+  /// cannot be read.
+  var profileExpressions: [String: String] = ["Physical Controller": "`Button B`", "Touchscreen": "`Button 0`"]
+  /// Every `expression(inProfile:)` read, as "profile:row".
+  var profileReads: [String] = []
+
+  func expression(inProfile profile: String, for row: RemapControlRow, port: Int) -> String? {
+    profileReads.append("\(profile):\(row.id)")
+    return profileExpressions[profile]
   }
 
   func isMotionPointerEnabled(wiimote: Int) -> Bool { true }
@@ -67,9 +92,14 @@ private final class FakeIO: PlayerScreenIO {
       : ExpressionCheck(status: .invalid, message: "bad")
   }
 
+  /// Whether the port is pinned; picking Auto unpins it.
+  var pinned = false
+  func isPinned(_ slot: PlayerSlot) -> Bool { pinned }
+
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
     writes.append("device:\(choice)")
-    if assignmentReplacesMapping, case .pad = choice { expression = "`Button 0`" }
+    if choice == .automatic { pinned = false }
+    if assignmentReplacesMapping, case .pad = choice { boundExpression = "`Button 0`" }
     onSetDevice?(choice)
   }
 
@@ -757,6 +787,22 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertEqual(io.writes, ["save:mine"])
   }
 
+  /// The list hides profiles that cannot work on the bound device, but saving over one still
+  /// replaces the file, so it still asks.
+  @MainActor
+  func test_save_aNameTheListHides_stillAsksBeforeReplacing() {
+    let (reader, io) = boundGameCube()
+    io.hiddenProfiles = ["Pad Setup"]
+    let model = make(reader, io)
+    model.reload()
+    model.openSavePrompt()
+    model.saveName = "pad setup"
+    model.confirmPrompt()
+    XCTAssertEqual(io.writes, [], "nothing written yet")
+    drainMainQueue()
+    XCTAssertEqual(model.prompt, .confirmOverwrite(name: "pad setup"))
+  }
+
   /// Decision 10: a built-in name (any case) asks first, because the saved profile will be used
   /// instead of the built-in one for future first binds and Reset; confirming saves it.
   @MainActor
@@ -793,7 +839,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
   func test_promptTexts() {
     let prompts: [PlayerPrompt] = [
       .saveAs, .confirmOverwrite(name: "Mine"), .confirmBuiltIn(name: "Touchscreen"),
-      .confirmReset(profile: "Physical Controller"), .saveFailed,
+      .confirmReset(profile: "Physical Controller"), .confirmClearAll, .saveFailed,
     ]
     for prompt in prompts {
       XCTAssertFalse(prompt.title.isEmpty, "\(prompt)")
@@ -840,6 +886,212 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertTrue(model.saveExpression("`Button B`", for: model.state.controls[0]))
     XCTAssertEqual(io.writes, ["expression:gcPad-0-0=`Button B`"])
     XCTAssertTrue(model.state.profileEdited)
+  }
+
+  // MARK: Clear all
+
+  /// Asks first through the one prompt; confirming unbinds every bound control of the port.
+  @MainActor
+  func test_clearAll_asksFirst_thenUnbindsEveryControl() {
+    let (reader, io) = boundGameCube()
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "gc-1")
+    let model = make(reader, io, memory: memory)
+    model.reload()
+    model.requestClearAll()
+    XCTAssertEqual(model.prompt, .confirmClearAll)
+    XCTAssertEqual(io.writes, [], "nothing until confirmed")
+    let rows = model.state.controls
+    model.confirmPrompt()
+    XCTAssertNil(model.prompt)
+    XCTAssertEqual(io.writes, rows.map { "expression:\($0.id)=" })
+    XCTAssertTrue(model.state.profileEdited)
+  }
+
+  @MainActor
+  func test_clearAll_cancelWritesNothing() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+    model.requestClearAll()
+    model.cancelPrompt()
+    XCTAssertEqual(io.writes, [])
+  }
+
+  /// Like a row's Clear: a port that cannot capture could not bind anything again.
+  @MainActor
+  func test_clearAll_notOfferedWhereCaptureIsImpossible() {
+    let reader = FakeHubReader()
+    reader.gameCube[1] = "iOS/0/Touchscreen"
+    let model = make(reader, FakeIO())
+    model.reload()
+    model.requestClearAll()
+    XCTAssertNil(model.prompt)
+  }
+
+  // MARK: Pins
+
+  /// The snapshot says whether the port is pinned, and Auto from the Device list unpins it.
+  @MainActor
+  func test_auto_unpinsThePort() {
+    let (reader, io) = boundGameCube()
+    io.pinned = true
+    let model = make(reader, io)
+    model.reload()
+    XCTAssertTrue(model.state.isPinned)
+    XCTAssertEqual(PlayerScreenModelBuilder.deviceOptions(state: model.state, platform: .ios).first?.choice, .automatic)
+
+    model.setDevice(.automatic)
+
+    XCTAssertEqual(io.writes, ["device:automatic"])
+    XCTAssertFalse(model.state.isPinned)
+  }
+
+  // MARK: Profile name across launches
+
+  /// The loaded profile's name outlives the session for the same port and device (it read "Custom"
+  /// after every relaunch); another device on the port has its own, and an edit drops it.
+  @MainActor
+  func test_profileName_isKeptAcrossLaunches_untilTheMappingIsEdited() throws {
+    let suite = "PlayerProfileMemoryTests"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defaults.removePersistentDomain(forName: suite)
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io, memory: PlayerProfileMemory(defaults: defaults))
+    model.reload()
+    model.loadProfile("Mine")
+
+    let relaunched = make(reader, io, memory: PlayerProfileMemory(defaults: defaults))
+    relaunched.reload()
+    XCTAssertEqual(relaunched.state.profileName, "Mine")
+    XCTAssertFalse(relaunched.state.profileEdited)
+
+    reader.gameCube[1] = Self.dualSense
+    let otherDevice = make(reader, io, memory: PlayerProfileMemory(defaults: defaults))
+    otherDevice.reload()
+    XCTAssertNil(otherDevice.state.profileName, "the name belongs to the device it was applied on")
+
+    reader.gameCube[1] = Self.xbox
+    relaunched.reload()
+    XCTAssertTrue(relaunched.saveExpression("`Button B`", for: relaunched.state.controls[0]))
+    XCTAssertEqual(relaunched.state.profileName, "Mine")
+    XCTAssertTrue(relaunched.state.profileEdited, "this session still says what the edit started from")
+    let afterEdit = make(reader, io, memory: PlayerProfileMemory(defaults: defaults))
+    afterEdit.reload()
+    XCTAssertNil(afterEdit.state.profileName, "an edited mapping is no longer that profile")
+  }
+
+  // MARK: Delete a profile
+
+  @MainActor
+  func test_deleteProfile_deletesAUserProfile_andKeepsTheMapping() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+    let controlsBefore = model.state.controls
+    XCTAssertEqual(model.deletableProfileNames(), ["Mine"])
+    XCTAssertTrue(model.deleteProfile("Mine"))
+    XCTAssertEqual(io.writes, ["delete:Mine"])
+    XCTAssertEqual(model.profileNames(), ["Physical Controller"])
+    XCTAssertEqual(model.state.controls, controlsBefore, "deleting a file changes no binding")
+  }
+
+  /// The bundled profiles are never the user's, so the seam refuses them.
+  @MainActor
+  func test_deleteProfile_aBundledProfileIsRefused() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+    XCTAssertFalse(model.deleteProfile("Physical Controller"))
+    XCTAssertEqual(model.profileNames(), ["Physical Controller", "Mine"])
+  }
+
+  /// The port that remembers the deleted profile reads "Custom" afterwards; another name stays.
+  @MainActor
+  func test_deleteProfile_forgetsTheRememberedName() {
+    let (reader, io) = boundGameCube()
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "gc-1")
+    let model = make(reader, io, memory: memory)
+    model.reload()
+    model.deleteProfile("Mine")
+    XCTAssertNil(model.state.profileName)
+
+    let (otherReader, otherIO) = boundGameCube()
+    let otherMemory = PlayerProfileMemory()
+    otherMemory.remember("Physical Controller", for: "gc-1")
+    let other = make(otherReader, otherIO, memory: otherMemory)
+    other.reload()
+    other.deleteProfile("Mine")
+    XCTAssertEqual(other.state.profileName, "Physical Controller")
+  }
+
+  // MARK: Reset one control to the default
+
+  /// Reads the bound device's default profile's expression for that one control and writes it.
+  @MainActor
+  func test_resetToDefault_writesTheDefaultProfilesExpression() {
+    let (reader, io) = boundGameCube()
+    let memory = PlayerProfileMemory()
+    memory.remember("Physical Controller", for: "gc-1")
+    let model = make(reader, io, memory: memory)
+    model.reload()
+    let row = model.state.controls[0]
+    XCTAssertEqual(model.defaultExpression(for: row), "`Button B`")
+    model.resetToDefault(row)
+    XCTAssertEqual(io.profileReads.last, "Physical Controller:\(row.id)")
+    XCTAssertEqual(io.writes, ["expression:\(row.id)=`Button B`"])
+    XCTAssertTrue(model.state.profileEdited)
+  }
+
+  /// A default profile that cannot be read (no bundled DSU profile yet) writes nothing.
+  @MainActor
+  func test_resetToDefault_anUnreadableProfileWritesNothing() {
+    let (reader, io) = boundGameCube()
+    io.profileExpressions = [:]
+    let model = make(reader, io)
+    model.reload()
+    model.resetToDefault(model.state.controls[0])
+    XCTAssertEqual(io.writes, [])
+  }
+
+  /// The same guards as Clear: not where capture is impossible, not while another row is armed.
+  @MainActor
+  func test_resetToDefault_followsClearsGuards() {
+    let reader = FakeHubReader()
+    reader.gameCube[1] = "iOS/0/Touchscreen"
+    let io = FakeIO()
+    let model = make(reader, io)
+    model.reload()
+    model.resetToDefault(model.state.controls[0])
+    XCTAssertEqual(io.writes, [], "the Touchscreen cannot capture, so it cannot reset a row either")
+
+    let (padReader, padIO) = boundGameCube()
+    let armed = make(padReader, padIO)
+    armed.reload()
+    armed.toggleCapture(armed.state.controls[0])
+    armed.resetToDefault(armed.state.controls[1])
+    XCTAssertEqual(padIO.writes, [])
+    armed.stop()
+  }
+
+  /// No device: no default profile, so nothing to read.
+  @MainActor
+  func test_defaultExpression_needsADevice() {
+    let model = make(FakeHubReader(), FakeIO())
+    model.reload()
+    XCTAssertNil(model.defaultExpression(for: model.state.controls[0]))
+  }
+
+  /// The editor's input picker lists the bound device's inputs, and nothing without a device.
+  @MainActor
+  func test_editorInputs_areTheBoundDevicesInputs() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+    XCTAssertEqual(model.editorInputs(forQualifier: Self.xbox), ["Button A", "Button B"])
+    XCTAssertEqual(model.editorInputs(forQualifier: ""), [])
   }
 
   @MainActor

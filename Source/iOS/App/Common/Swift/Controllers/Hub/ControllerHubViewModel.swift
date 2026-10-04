@@ -22,7 +22,6 @@ protocol ControllerHubReading {
   func overlayMode() -> ControllerManager.OverlayMode
   /// 0…1.
   func overlayOpacity() -> Float
-  func continuousScanning() -> Bool
   func dsuClientEnabled() -> Bool
   func dsuServerCount() -> Int
 }
@@ -65,7 +64,6 @@ struct LiveControllerHubReader: ControllerHubReading {
   func overlayVisible() -> Bool { ControllerManager.shared.overlayVisible }
   func overlayMode() -> ControllerManager.OverlayMode { ControllerManager.shared.overlayMode }
   func overlayOpacity() -> Float { DOLConfigBridge.mainTouchPadOpacity() }
-  func continuousScanning() -> Bool { DOLConfigBridge.wiimoteContinuousScanning() }
   func dsuClientEnabled() -> Bool { DOLConfigBridge.dsuClientEnabled() }
   func dsuServerCount() -> Int { DOLConfigBridge.dsuServersParsed().count }
 }
@@ -80,6 +78,10 @@ struct LiveControllerHubReader: ControllerHubReading {
 final class ControllerHubViewModel {
   let system: ControllerSetupSystem
   private(set) var state: ControllerHubState
+  /// Edit Layout… outside a game: `ControllerHubView` presents the full-screen editor.
+  var isLayoutEditorPresented = false
+  /// Edit IR Area…: `ControllerHubView` presents the full-screen IR area editor.
+  var isIRAreaEditorPresented = false
 
   private let reader: any ControllerHubReading
   private let notificationCenter: NotificationCenter
@@ -122,7 +124,6 @@ final class ControllerHubViewModel {
       overlayVisible: reader.overlayVisible(),
       overlayMode: reader.overlayMode(),
       overlayOpacityPercent: ControllerHubState.snappedOpacityPercent(reader.overlayOpacity()),
-      continuousScanning: reader.continuousScanning(),
       dsuClientEnabled: reader.dsuClientEnabled(),
       dsuServerCount: reader.dsuServerCount())
   }
@@ -177,20 +178,15 @@ final class ControllerHubViewModel {
         DOLConfigBridge.setMainTouchPadOpacity(opacity)
         self?.reload()
       },
-      editLayoutDestination: {
-        #if os(iOS)
-        AnyView(TouchOverlayLayoutEditorView().padBackNavigation())
-        #else
-        AnyView(EmptyView())
-        #endif
+      editLayout: { [weak self] in
+        self?.editLayout()
+      },
+      editIRArea: { [weak self] in
+        self?.isIRAreaEditorPresented = true
       },
       skinsDestination: { [system] in Self.skinsDestination(for: system) },
       identifyPad: { [weak self] qualifier in
         self?.identify(qualifier: qualifier)
-      },
-      setContinuousScanning: { [weak self] enabled in
-        DOLConfigBridge.setWiimoteContinuousScanning(enabled)
-        self?.reload()
       },
       // Plain lists, not menus: they get pad Back from the modifier (Phase 2 left them touch-only).
       dsuDestination: { AnyView(DSUSettingsView().padBackNavigation()) },
@@ -203,6 +199,18 @@ final class ControllerHubViewModel {
     #else
     AnyView(EmptyView())
     #endif
+  }
+
+  /// The controls must be edited on the canvas the game draws them on: positions are stored as
+  /// fractions of it, so a layout made on any other rectangle (the old editor, pushed under this
+  /// hub's navigation bar) moved when play resumed. In a game, the game screen closes this hub and
+  /// edits its live overlay; outside one, the hub presents a full-screen editor.
+  private func editLayout() {
+    if reader.isGameRunning() {
+      notificationCenter.post(name: .DOLEditTouchLayout, object: nil)
+    } else {
+      isLayoutEditorPresented = true
+    }
   }
 
   /// Announces the choice BEFORE applying it: `overlayMode = .wii` posts `assignmentsChanged`

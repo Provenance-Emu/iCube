@@ -9,6 +9,9 @@ enum PlayerDeviceChoice: Hashable {
   case touchscreen
   /// A pad's Dolphin qualifier (`MFi/0/Xbox Wireless Controller`, `DSUClient/0/Pad C`).
   case pad(String)
+  /// "Auto": forget the user's pin on the port, so a controller that connects can take it. Only
+  /// offered on a pinned port; never a port's current device.
+  case automatic
 
   init(qualifier: String) {
     if qualifier.isEmpty {
@@ -44,6 +47,9 @@ extension RemapControlRow {
 /// `MotionSettings`.
 struct PointerMotionState: Equatable {
   var pointerMode: PointerMode
+  /// The running title has its own pointer mode: a change lasts for this game only
+  /// (`PointerModeController.isThisGameOnly`).
+  var pointerIsThisGameOnly = false
   /// `motion_invert_roll`: the gyro pointer's left/right.
   var invertX: Bool
   /// `motion_invert_pitch`: the gyro pointer's up/down.
@@ -54,12 +60,10 @@ struct PointerMotionState: Equatable {
   var dragGain: Double
   /// `motion_gyro_pointer_sensitivity`, snapped to one of `gyroSensitivityChoices`.
   var gyroSensitivity: Double
-  /// The drag gain is read only by the programmatic overlay (`TouchOverlayView.swift:182`), which
-  /// is off by default.
+  /// The drag gain is read only by the programmatic overlay (`TouchOverlayIRPad`), which is on by
+  /// default on iOS (`TouchOverlayFlag`) and does not exist on tvOS.
   var usesProgrammaticOverlay: Bool
 
-  /// Registered as false by `DefaultPreferences.plist`; toggled in More Controller Settings.
-  static let programmaticOverlayKey = "touch_overlay_programmatic"
   /// Steps across `TouchOverlayIRGeometry.dragGainRange` (0.25...4).
   static let dragGainChoices: [Double] = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
   /// Multipliers on the gyro pointer's fixed constants; 1 is the behaviour before the setting.
@@ -104,6 +108,9 @@ struct PlayerScreenState: Equatable {
   /// UI state, kept across reloads.
   var showsAdvanced: Bool
   var advanced: [AdvancedGroupState]
+  /// The user picked this port's device, so controllers that connect leave it alone
+  /// (`ControllerManager.isPinned`). The Device list then offers Auto.
+  var isPinned = false
 
   static func empty(_ player: PlayerState) -> PlayerScreenState {
     PlayerScreenState(
@@ -146,11 +153,15 @@ struct PlayerScreenActions {
   var saveProfileAs: () -> Void
   /// Asks to reset (decision 10); the host's confirmation does the load.
   var resetProfile: () -> Void
+  /// Asks to unbind every control (the host's confirmation does it).
+  var clearAll: () -> Void
   var setExtension: (Int) -> Void
   var setSideways: (Bool) -> Void
   /// Arms the row's capture, or cancels it when that row is the armed one.
   var toggleCapture: (RemapControlRow) -> Void
   var clearBinding: (RemapControlRow) -> Void
+  /// Puts one control back to the bound device's default profile's binding.
+  var resetBinding: (RemapControlRow) -> Void
   var setPointerMode: (PointerMode) -> Void
   var recenterPointer: () -> Void
   var setDragGain: (Double) -> Void

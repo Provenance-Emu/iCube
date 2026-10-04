@@ -26,6 +26,11 @@ FOUNDATION_EXPORT NSNotificationName const DOLPointerModeDidChangeNotification;
 /// `ControllerAssignmentsChanged` synchronously.
 FOUNDATION_EXPORT NSNotificationName const DOLOnScreenControlsChosenNotification;
 
+/// Posted to edit the on-screen controls' layout in the running game (the Controllers hub's Edit
+/// Layout…, a long-press on the overlay). The emulation screen closes whatever covers the game and
+/// edits on the canvas the controls are played on, so a layout cannot move when play resumes.
+FOUNDATION_EXPORT NSNotificationName const DOLEditTouchLayoutNotification;
+
 /// Posted after a motion setting changes that decides whether the motion system runs (shake
 /// detection), so the running emulation restarts it (`EmulationScreen`'s observer). Older posters
 /// still use the literal string; this declares the same name for new code.
