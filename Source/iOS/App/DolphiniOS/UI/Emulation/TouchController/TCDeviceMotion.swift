@@ -106,6 +106,18 @@ import simd
     return requested
   }
 
+  /// Whether the gyro pointer takes the current attitude as its new center: on a recenter request,
+  /// when there is no baseline yet (`baselineOrientation == nil`), and when the interface orientation
+  /// changed since the baseline was taken. `orientation` is kept current by
+  /// `statusBarOrientationChanged()`, which the emulation screen calls on every rotation.
+  static func needsPointerRebaseline(
+    recenterRequested: Bool,
+    baselineOrientation: UIInterfaceOrientation?,
+    orientation: UIInterfaceOrientation
+  ) -> Bool {
+    recenterRequested || baselineOrientation != orientation
+  }
+
   /// Pointer offsets for the turn from `baseline` to `current`, before inversion and clamping.
   ///
   /// The turn is taken as a rotation vector in the baseline's device frame, then read along the
@@ -344,7 +356,10 @@ import simd
 
     // Rotating the UI turns the screen's axes against the device's, so recenter on whatever the
     // player is holding now rather than reading the old turn along the new axes.
-    if takeRecenterRequest() || pointerBaseline == nil || orientation != pointerBaselineOrientation {
+    // `pointerBaselineOrientation` is set together with `pointerBaseline`, so nil means no baseline.
+    if Self.needsPointerRebaseline(
+      recenterRequested: takeRecenterRequest(), baselineOrientation: pointerBaselineOrientation,
+      orientation: orientation) {
       pointerBaseline = attitude
       pointerBaselineOrientation = orientation
       if debug {

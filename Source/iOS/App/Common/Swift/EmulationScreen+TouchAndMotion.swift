@@ -310,6 +310,9 @@ extension EmulationScreen {
     /// Does nothing for the xib pads and the Swift-drawn overlay, which do not depend on orientation here.
     private func watchOrientation(of host: HostView, coordinator: Coordinator) {
       host.onOrientationChange = { [weak host] in
+        // After layout, so the scene already reports the new interface orientation: the gyro
+        // pointer reads its axes from it and re-centres when it changes.
+        TCDeviceMotion.shared.statusBarOrientationChanged()
         guard let host, overlayPlan(in: host).choice.skinID != coordinator.mountedSkinID else { return }
         reconcile(host, coordinator: coordinator)
       }

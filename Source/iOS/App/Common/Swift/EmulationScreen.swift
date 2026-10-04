@@ -1292,6 +1292,12 @@ struct EmulationScreen: View {
     .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
       // Ask the renderer to resize/reconfigure
       TVEmulationBridge.resizeSurfaceNow()
+      // The gyro pointer reads its axes from the interface orientation and re-centres when it
+      // changes, but the orientation was only refreshed by explicit calls (overlay shown, motion
+      // restarted), so the re-centre fired at random. Read it on the next main-actor turn, once
+      // UIKit has applied the rotation; this also covers the 180-degree landscape flip, which the
+      // overlay host's portrait/landscape layout callback does not see.
+      Task { @MainActor in TCDeviceMotion.shared.statusBarOrientationChanged() }
     }
     .onReceive(NotificationCenter.default.publisher(for: SkinLibrary.didChangeNotification)) { _ in
       // A skin was picked, imported or deleted (possibly the one on screen): rebuild the pads and the game placement.
