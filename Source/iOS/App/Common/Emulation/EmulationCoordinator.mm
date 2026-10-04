@@ -1708,14 +1708,14 @@ static void EnsurePad1DefaultsToTouchscreen()
 // iCube: block (bounded) until the previous emulation session has fully shut down.
 //
 // The run loop below leaves its `while (Core::IsRunning(...))` wait as soon as the state becomes
-// Stopping, so exiting a game and quickly launching another can reach BootManager::BootCore while the
-// old emu thread is still tearing down (state Stopping, not yet Uninitialized). Core::Init refuses to
-// start in that case, and before the BootManager guards existed that left SYSCONF owned by the guest
-// and tripped ASSERT(!s_sysconf_controlled_by_guest) on every later boot.
+// Stopping, so exiting a game and quickly launching another can reach BootManager::BootCore while
+// the old emu thread is still tearing down (state Stopping, not yet Uninitialized). Core::Init
+// refuses to start in that case, and before the BootManager guards existed that left SYSCONF owned
+// by the guest and tripped ASSERT(!s_sysconf_controlled_by_guest) on every later boot.
 //
-// MUST be called from the emulation background queue only: never from the main queue (teardown of the
-// renderer can need it) and never from inside DOLHostQueueRunSync (the host queue may be needed to
-// finish the teardown). The matching end-of-run wait is deliberately NOT done: DidEnd has to be
+// MUST be called from the emulation background queue only: never from the main queue (teardown of
+// the renderer can need it) and never from inside DOLHostQueueRunSync (the host queue may be needed
+// to finish the teardown). The matching end-of-run wait is deliberately NOT done: DidEnd has to be
 // posted as soon as the core leaves Running, otherwise it could land after the *next* launch's
 // WillStart and dismiss that game's screen.
 static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
@@ -1731,9 +1731,11 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
       dispatch_semaphore_signal(semaphore);
   });
 
-  const dispatch_time_t deadline = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeoutSeconds * NSEC_PER_SEC));
+  const dispatch_time_t deadline =
+      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeoutSeconds * NSEC_PER_SEC));
   // Re-check the state after every wake-up (and once more after a timeout) rather than trusting the
-  // semaphore: the transition can happen between the first check above and the callback registering.
+  // semaphore: the transition can happen between the first check above and the callback
+  // registering.
   while (!Core::IsUninitialized(system))
   {
     if (dispatch_semaphore_wait(semaphore, deadline) != 0)
@@ -1745,12 +1747,20 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
 - (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter {
   // The previous game may still be in Core::State::Stopping if the user relaunched right after
   // exiting. Wait for the teardown to finish instead of racing it in BootCore.
-  if (!DOLWaitForCoreUninitialized(5.0)) {
-    NSLog(@"[Emulation] Previous emulation session did not shut down within 5s (state=%d); not booting",
+  if (!DOLWaitForCoreUninitialized(5.0))
+  {
+    NSLog(@"[Emulation] Previous emulation session did not shut down within 5s (state=%d); not "
+          @"booting",
           (int)Core::GetState(Core::System::GetInstance()));
-    PanicAlertFmt("{}", [DOLCoreLocalizedString(@"The previous game is still shutting down. Wait a moment, then try launching again.") UTF8String]);
+    PanicAlertFmt(
+        "{}",
+        [DOLCoreLocalizedString(
+            @"The previous game is still shutting down. Wait a moment, then try launching again.")
+            UTF8String]);
     // Same end-of-run cleanup as a normal exit so the UI leaves the emulation screen.
-    [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification object:self userInfo:nil];
+    [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification
+                                                        object:self
+                                                      userInfo:nil];
     _mainDisplayView = nil;
     return;
   }
