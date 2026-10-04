@@ -63,9 +63,6 @@ struct EmulationTopBar: View {
   let open: (TopBarDestination) -> Void
   let onToggleOnScreenControls: () -> Void
   let onSetPointerMode: (PointerMode) -> Void
-  /// Unused: the bar's overlay toggle moved to More Controller Settings only. Kept until
-  /// EmulationScreen's call site drops its argument.
-  let onSetProgrammaticOverlay: (Bool) -> Void
   let onSetOverscanFullscreen: (Bool) -> Void
 
   @Environment(\.verticalSizeClass) private var verticalSizeClass

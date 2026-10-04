@@ -1469,10 +1469,6 @@ struct EmulationScreen: View {
         userOverrideTouchControls = true
         PointerModeController.shared.set(mode)
       },
-      onSetProgrammaticOverlay: { enabled in
-        TouchOverlayFlag.isProgrammatic = enabled
-        touchPadsRefreshToken = UUID()
-      },
       onSetOverscanFullscreen: { applyOverscanFullscreenToggle($0) })
   }
 

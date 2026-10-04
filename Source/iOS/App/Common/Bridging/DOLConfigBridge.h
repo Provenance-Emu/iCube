@@ -73,10 +73,6 @@ NS_ASSUME_NONNULL_BEGIN
 // Controllers (single page)
 + (BOOL)mainBackgroundInput;
 + (void)setMainBackgroundInput:(BOOL)enabled;
-+ (BOOL)wiimoteContinuousScanning;
-+ (void)setWiimoteContinuousScanning:(BOOL)enabled;
-+ (BOOL)wiimoteEnableSpeaker;
-+ (void)setWiimoteEnableSpeaker:(BOOL)enabled;
 + (BOOL)connectWiimotesForControllerInterface;
 + (void)setConnectWiimotesForControllerInterface:(BOOL)enabled;
 
