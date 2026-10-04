@@ -30,7 +30,8 @@ struct ProfileListView: View {
 }
 
 /// Pure: the profile names (user and bundled, as `TVControllerMappingBridge.profiles(forGCPort:)`
-/// lists them) in case-insensitive order, the current one marked.
+/// lists them, already narrowed to the ones that work on the slot's device) in case-insensitive
+/// order, the current one marked.
 enum ProfileListModelBuilder {
   static func make(names: [String], current: String?, onPick: @escaping (String) -> Void) -> MenuModel {
     let sorted = names.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }

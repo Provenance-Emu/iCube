@@ -519,54 +519,81 @@ static bool RepairTouchscreenIRPointer(int idx)
   attachments->SetSelectedAttachment((u32)attachmentIndex);
 }
 
-+ (NSArray<NSString*>*)profilesForGCPort:(NSInteger)portOneBased
+// Bundled profiles for hardware no iOS/tvOS backend reaches: SDL and hidapi (real Wii Remotes)
+// are not built for IOS (root CMakeLists.txt), so `Bluetooth/0/Wii Remote` and the SDL gamepad
+// never exist and every control of these profiles is dead.
+static bool IsUnsupportedProfile(const std::string& name)
+{
+  return name == "Wii Remote with MotionPlus Pointing" || name == "SDL Gamepad";
+}
+
+static constexpr const char* kTouchscreenProfileName = "Touchscreen";
+
+// True when the profile's `Device =` line names an on-screen `iOS/<id>/Touchscreen`.
+static bool ProfileTargetsTouchscreen(const std::string& path)
+{
+  Common::IniFile ini;
+  if (!ini.Load(path))
+    return false;
+  const auto* section = ini.GetSection("Profile");
+  std::string device;
+  if (!section || !section->Get("Device", &device))
+    return false;
+  ciface::Core::DeviceQualifier dq;
+  dq.FromString(device);
+  return IsTouchscreenDevice(dq);
+}
+
+// The profile names the player screen offers for a slot. The user directory is searched first
+// because a user profile shadows a bundled one of the same name (`loadProfile:` loads it). On a
+// slot bound to the Touchscreen only `Touchscreen` and profiles written for an on-screen device
+// are offered: a physical-controller profile's inputs (`Button A`, ...) do not exist on it, and
+// loading one left the Wii pointer unbound and the core's motion pointer on.
+static NSArray<NSString*>*
+ProfilesForController(const ControllerEmu::EmulatedController* controller)
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
-  auto* cfg = Pad::GetConfig();
-  if (!cfg) return result;
-  const int port = (int)portOneBased - 1;
-  auto* pad = cfg->GetController(port);
-  if (!pad) return result;
-  std::unordered_set<std::string> names;
-  for (const auto& filename : Common::DoFileSearch({pad->GetConfig()->GetUserProfileDirectoryPath()}, {".ini"}))
+  if (!controller)
+    return result;
+  const InputConfig* config = controller->GetConfig();
+  const bool touchscreen_slot = IsTouchscreenDevice(controller->GetDefaultDevice());
+  std::unordered_set<std::string> seen;
+  for (const std::string& dir :
+       {config->GetUserProfileDirectoryPath(), config->GetSysProfileDirectoryPath()})
   {
-    std::string basename;
-    SplitPath(filename, nullptr, &basename, nullptr);
-    if (!basename.empty()) names.insert(basename);
+    for (const auto& filename : Common::DoFileSearch(dir, ".ini"))
+    {
+      std::string basename;
+      SplitPath(filename, nullptr, &basename, nullptr);
+      if (basename.empty() || !seen.insert(basename).second || IsUnsupportedProfile(basename))
+        continue;
+      if (touchscreen_slot && basename != kTouchscreenProfileName &&
+          !ProfileTargetsTouchscreen(filename))
+      {
+        continue;
+      }
+      [result addObject:CppToFoundationString(basename)];
+    }
   }
-  for (const auto& filename : Common::DoFileSearch({pad->GetConfig()->GetSysProfileDirectoryPath()}, {".ini"}))
-  {
-    std::string basename;
-    SplitPath(filename, nullptr, &basename, nullptr);
-    if (!basename.empty()) names.insert(basename);
-  }
-  for (const auto& n : names) { [result addObject:[NSString stringWithUTF8String:n.c_str()]]; }
   return result;
+}
+
++ (NSArray<NSString*>*)profilesForGCPort:(NSInteger)portOneBased
+{
+  auto* cfg = Pad::GetConfig();
+  const int port = (int)portOneBased - 1;
+  if (!cfg || port < 0 || port >= cfg->GetControllerCount())
+    return @[];
+  return ProfilesForController(cfg->GetController(port));
 }
 
 + (NSArray<NSString*>*)profilesForWiimote:(NSInteger)indexOneBased
 {
-  NSMutableArray<NSString*>* result = [NSMutableArray array];
   auto* cfg = Wiimote::GetConfig();
-  if (!cfg) return result;
   const int idx = (int)indexOneBased - 1;
-  auto* wm = cfg->GetController(idx);
-  if (!wm) return result;
-  std::unordered_set<std::string> names;
-  for (const auto& filename : Common::DoFileSearch({wm->GetConfig()->GetUserProfileDirectoryPath()}, {".ini"}))
-  {
-    std::string basename;
-    SplitPath(filename, nullptr, &basename, nullptr);
-    if (!basename.empty()) names.insert(basename);
-  }
-  for (const auto& filename : Common::DoFileSearch({wm->GetConfig()->GetSysProfileDirectoryPath()}, {".ini"}))
-  {
-    std::string basename;
-    SplitPath(filename, nullptr, &basename, nullptr);
-    if (!basename.empty()) names.insert(basename);
-  }
-  for (const auto& n : names) { [result addObject:[NSString stringWithUTF8String:n.c_str()]]; }
-  return result;
+  if (!cfg || idx < 0 || idx >= cfg->GetControllerCount())
+    return @[];
+  return ProfilesForController(cfg->GetController(idx));
 }
 
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore

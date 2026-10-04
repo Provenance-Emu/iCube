@@ -108,7 +108,11 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 + (NSInteger)selectedWiimoteAttachmentForIndex:(NSInteger)indexOneBased;
 + (void)setSelectedWiimoteAttachment:(NSInteger)attachmentIndex forWiimote:(NSInteger)indexOneBased;
 
-/// Profiles (enumeration and loading)
+/// Profiles (enumeration and loading). The lists name the profiles that can work on the slot's
+/// current device: never the bundled `Wii Remote with MotionPlus Pointing` / `SDL Gamepad` (no
+/// Bluetooth or SDL backend on iOS/tvOS), and on a slot bound to the Touchscreen only
+/// `Touchscreen` plus profiles whose `Device =` line is an `iOS/<id>/Touchscreen`. Loading still
+/// accepts any name.
 + (NSArray<NSString*>*)profilesForGCPort:(NSInteger)portOneBased;
 + (NSArray<NSString*>*)profilesForWiimote:(NSInteger)indexOneBased;
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore;
