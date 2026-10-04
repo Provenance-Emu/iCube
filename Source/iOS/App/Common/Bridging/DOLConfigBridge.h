@@ -111,10 +111,16 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setMainEmulationSpeedPercent:(NSInteger)percent;
 
 // Controllers > Touchscreen (iOS)
+// The setters write the global (Base) value, dropping a CurrentRun copy the last title left behind,
+// unless the running title overrides the setting (`is…GameOverride`); then they write CurrentRun,
+// which lasts for this game only.
 + (float)mainTouchPadOpacity;
 + (void)setMainTouchPadOpacity:(float)opacity;
 + (NSInteger)mainTouchPadIRMode;
 + (void)setMainTouchPadIRMode:(NSInteger)mode;
+/// YES while the running title has its own value (a per-game CurrentRun value or a game INI).
++ (BOOL)isMainTouchPadOpacityGameOverride;
++ (BOOL)isMainTouchPadIRModeGameOverride;
 
 // Config > Advanced
 + (NSInteger)mainCpuCore;

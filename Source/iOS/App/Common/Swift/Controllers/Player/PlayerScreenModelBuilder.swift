@@ -195,7 +195,8 @@ enum PlayerScreenModelBuilder {
     let modes: [PointerMode] = [.touchFollow, .touchDrag, .gyro]
     var items = [
       MenuItem(
-        id: "pointer-mode", title: L("Pointer"), icon: motion.pointerMode.systemImage,
+        id: "pointer-mode", title: L("Pointer"), subtitle: motion.pointerIsThisGameOnly ? L("This game only") : nil,
+        icon: motion.pointerMode.systemImage,
         role: .picker(options: modes.map { ($0.title, AnyHashable($0)) }, selection: Binding(
           get: { AnyHashable(motion.pointerMode) },
           set: { if let mode = $0.base as? PointerMode { actions.setPointerMode(mode) } }))),

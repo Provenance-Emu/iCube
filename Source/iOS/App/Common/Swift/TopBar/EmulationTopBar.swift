@@ -52,6 +52,8 @@ struct EmulationTopBar: View {
   let isWii: Bool
   let onScreenControlsVisible: Bool
   let irModeRaw: Int
+  /// The running title has its own pointer mode: a pick lasts for this game only.
+  var pointerIsThisGameOnly = false
   let overscanApplicable: Bool
   let overscanFullscreen: Bool
   /// True while anything the bar opened (or the pause menu) is up. When it goes away the bar re-reads its toggles.
@@ -384,6 +386,13 @@ struct EmulationTopBar: View {
     VStack(alignment: .leading, spacing: 0) {
       if isWii {
         sectionHeader(L("Pointer"))
+        if pointerIsThisGameOnly {
+          Text(L("This game only"))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 2)
+        }
         ForEach(PointerMode.allCases) { mode in
           PopoverRow(title: mode.title, systemImage: mode.systemImage, isChecked: irModeRaw == mode.rawValue) {
             close { onSetPointerMode(mode) }

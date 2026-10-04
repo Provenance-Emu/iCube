@@ -239,10 +239,55 @@ static bool ICubeEmulationActive() {
 + (void)setMainEmulationSpeedPercent:(NSInteger)percent { float v = (percent <= 0 ? 0.0f : ((float)percent) / 100.0f); Config::SetBaseOrCurrent(Config::MAIN_EMULATION_SPEED, v); }
 
 // Controllers > Touchscreen (iOS)
+//
+// SetBaseOrCurrent wrote CurrentRun whenever any layer above Base had the key: in game, a per-game
+// value made a change vanish at game end without saying so, and after the game (CurrentRun is
+// only cleared at the next boot) the leftover copy shadowed the value just written.
+
+// The running title has its own value for the setting: a write then belongs to this game only.
+static bool IsGameOverride(const Config::Location& location)
+{
+  return Core::IsRunning(Core::System::GetInstance()) &&
+         Config::GetActiveLayerForConfig(location) != Config::LayerType::Base;
+}
+
+static bool HasCurrentRunLayer()
+{
+  return Config::GetLayer(Config::LayerType::CurrentRun) != nullptr;
+}
+
 + (float)mainTouchPadOpacity { return Config::Get(Config::MAIN_TOUCH_PAD_OPACITY); }
-+ (void)setMainTouchPadOpacity:(float)opacity { Config::SetBaseOrCurrent(Config::MAIN_TOUCH_PAD_OPACITY, (float)opacity); }
++ (void)setMainTouchPadOpacity:(float)opacity
+{
+  if (IsGameOverride(Config::MAIN_TOUCH_PAD_OPACITY.GetLocation()))
+  {
+    Config::SetCurrent(Config::MAIN_TOUCH_PAD_OPACITY, opacity);
+    return;
+  }
+  Config::SetBase(Config::MAIN_TOUCH_PAD_OPACITY, opacity);
+  if (HasCurrentRunLayer())
+    Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_TOUCH_PAD_OPACITY);
+}
 + (NSInteger)mainTouchPadIRMode { return (NSInteger)Config::Get(Config::MAIN_TOUCH_PAD_IR_MODE); }
-+ (void)setMainTouchPadIRMode:(NSInteger)mode { Config::SetBaseOrCurrent(Config::MAIN_TOUCH_PAD_IR_MODE, (int)mode); }
++ (void)setMainTouchPadIRMode:(NSInteger)mode
+{
+  if (IsGameOverride(Config::MAIN_TOUCH_PAD_IR_MODE.GetLocation()))
+  {
+    Config::SetCurrent(Config::MAIN_TOUCH_PAD_IR_MODE, static_cast<int>(mode));
+    return;
+  }
+  Config::SetBase(Config::MAIN_TOUCH_PAD_IR_MODE, static_cast<int>(mode));
+  if (HasCurrentRunLayer())
+    Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_TOUCH_PAD_IR_MODE);
+}
++ (BOOL)isMainTouchPadOpacityGameOverride
+{
+  return IsGameOverride(Config::MAIN_TOUCH_PAD_OPACITY.GetLocation()) ? YES : NO;
+}
++ (BOOL)isMainTouchPadIRModeGameOverride
+{
+  return IsGameOverride(Config::MAIN_TOUCH_PAD_IR_MODE.GetLocation()) ? YES : NO;
+}
 
 // Config > Advanced
 + (NSInteger)mainCpuCore {

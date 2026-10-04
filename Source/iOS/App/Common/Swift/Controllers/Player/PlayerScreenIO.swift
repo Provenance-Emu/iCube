@@ -144,6 +144,7 @@ struct LivePlayerScreenIO: PlayerScreenIO {
     #endif
     return PointerMotionState(
       pointerMode: PointerModeController.shared.mode,
+      pointerIsThisGameOnly: PointerModeController.shared.isThisGameOnly,
       invertX: MotionSettings.invertRoll(),
       invertY: MotionSettings.invertPitch(),
       shakeToWiggle: MotionSettings.enhancedShakeDetection(),

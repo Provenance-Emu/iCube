@@ -41,31 +41,46 @@ final class PointerModeController {
     read: { Int(DOLConfigBridge.mainTouchPadIRMode()) },
     write: { DOLConfigBridge.setMainTouchPadIRMode($0) },
     writeCurrentRun: { DOLConfigBridge.setCurrentRunMainTouchPadIRMode($0) },
-    notificationCenter: .default)
+    notificationCenter: .default,
+    isGameOverride: { DOLConfigBridge.isMainTouchPadIRModeGameOverride() })
 
   private let read: () -> Int
   private let write: (Int) -> Void
   private let writeCurrentRun: (Int) -> Void
   private let notificationCenter: NotificationCenter
+  private let isGameOverride: () -> Bool
 
   init(
     read: @escaping () -> Int,
     write: @escaping (Int) -> Void,
     writeCurrentRun: @escaping (Int) -> Void,
-    notificationCenter: NotificationCenter
+    notificationCenter: NotificationCenter,
+    isGameOverride: @escaping () -> Bool = { false }
   ) {
     self.read = read
     self.write = write
     self.writeCurrentRun = writeCurrentRun
     self.notificationCenter = notificationCenter
+    self.isGameOverride = isGameOverride
   }
 
   /// The active value. `DOLConfigBridge.mainTouchPadIRMode()` is `Config::Get`, so a per-game
   /// CurrentRun override is what this reports while its title runs.
   var mode: PointerMode { PointerMode(rawValue: read()) ?? .touchFollow }
 
+  /// The running title has its own pointer mode (Game Settings or a game INI): a change made now
+  /// lasts for this game only. The player screen's Pointer row and the top bar say so.
+  var isThisGameOnly: Bool { isGameOverride() }
+
+  /// The user's choice. Without a per-game value it is the global setting (Base) and outlives the
+  /// game; with one it can only replace that value, in CurrentRun, until the game ends. It used to
+  /// land in CurrentRun whenever any layer had the key, and vanish at game end unannounced.
   func set(_ mode: PointerMode) {
-    write(mode.rawValue)
+    if isGameOverride() {
+      writeCurrentRun(mode.rawValue)
+    } else {
+      write(mode.rawValue)
+    }
     notifyChanged()
   }
 

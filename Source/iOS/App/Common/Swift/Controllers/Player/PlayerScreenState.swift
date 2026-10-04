@@ -44,6 +44,9 @@ extension RemapControlRow {
 /// `MotionSettings`.
 struct PointerMotionState: Equatable {
   var pointerMode: PointerMode
+  /// The running title has its own pointer mode: a change lasts for this game only
+  /// (`PointerModeController.isThisGameOnly`).
+  var pointerIsThisGameOnly = false
   /// `motion_invert_roll`: the gyro pointer's left/right.
   var invertX: Bool
   /// `motion_invert_pitch`: the gyro pointer's up/down.

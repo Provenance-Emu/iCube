@@ -1458,6 +1458,7 @@ struct EmulationScreen: View {
       isWii: isWiiSystem,
       onScreenControlsVisible: controllerManager.overlayVisible,
       irModeRaw: irModeRaw,
+      pointerIsThisGameOnly: PointerModeController.shared.isThisGameOnly,
       overscanApplicable: overscanApplicable,
       overscanFullscreen: overscanFullscreen,
       childPresented: topBarChildPresented,

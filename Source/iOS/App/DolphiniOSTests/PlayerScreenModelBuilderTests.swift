@@ -211,6 +211,14 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(recorder.calls, ["gain:2.0"])
   }
 
+  /// While the running title has its own pointer mode, a pick lasts for this game only; the row says so.
+  func test_pointer_saysThisGameOnly_whileTheGameHasItsOwnMode() {
+    var screen = state(.wiiRemote, device: Self.touch)
+    XCTAssertNil(make(screen).item(id: "pointer-mode")?.subtitle)
+    screen.pointerMotion.pointerIsThisGameOnly = true
+    XCTAssertEqual(make(screen).item(id: "pointer-mode")?.subtitle, "This game only")
+  }
+
   func test_pointerModes_inTheSpecsOrder() {
     XCTAssertEqual(
       optionTitles(make(state(.wiiRemote, device: Self.touch)).item(id: "pointer-mode")),
