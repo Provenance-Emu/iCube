@@ -587,7 +587,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
       if case .pad(let qualifier) = choice { reader.gameCube[1] = qualifier }
     }
     let memory = PlayerProfileMemory()
-    memory.remember("Touchscreen", for: "gc-1")
+    memory.remember("Touchscreen", for: "gc-1", qualifier: "iOS/4/Touchscreen")
     let model = make(reader, io, memory: memory)
     model.reload()
     model.setDevice(.pad(Self.xbox))
@@ -607,7 +607,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
       if choice == .touchscreen { reader.wii[1] = "iOS/4/Touchscreen" }
     }
     let memory = PlayerProfileMemory()
-    memory.remember("Mine", for: "wii-1")
+    memory.remember("Mine", for: "wii-1", qualifier: Self.xbox)
     let model = make(reader, io, slot: PlayerSlot(kind: .wiiRemote, port: 1), memory: memory)
     model.reload()
     model.setDevice(.touchscreen)
@@ -880,7 +880,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
   func test_saveExpression_writesValidText_andMarksTheProfileEdited() {
     let (reader, io) = boundGameCube()
     let memory = PlayerProfileMemory()
-    memory.remember("Mine", for: "gc-1")
+    memory.remember("Mine", for: "gc-1", qualifier: Self.xbox)
     let model = make(reader, io, memory: memory)
     model.reload()
     XCTAssertTrue(model.saveExpression("`Button B`", for: model.state.controls[0]))
@@ -895,7 +895,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
   func test_clearAll_asksFirst_thenUnbindsEveryControl() {
     let (reader, io) = boundGameCube()
     let memory = PlayerProfileMemory()
-    memory.remember("Mine", for: "gc-1")
+    memory.remember("Mine", for: "gc-1", qualifier: Self.xbox)
     let model = make(reader, io, memory: memory)
     model.reload()
     model.requestClearAll()
@@ -982,6 +982,27 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertNil(afterEdit.state.profileName, "an edited mapping is no longer that profile")
   }
 
+  /// The session's name belongs to the device it was applied on: when the port's device changes
+  /// without this screen (automatic assignment), the old device's name is not shown, and it comes
+  /// back with the device.
+  @MainActor
+  func test_profileName_followsTheDevice_whenThePortIsReassignedElsewhere() {
+    let (reader, io) = boundGameCube()
+    let memory = PlayerProfileMemory()
+    let model = make(reader, io, memory: memory)
+    model.reload()
+    model.loadProfile("Mine")
+    XCTAssertEqual(model.state.profileName, "Mine")
+
+    reader.gameCube[1] = "iOS/4/Touchscreen"
+    model.reload()
+    XCTAssertNil(model.state.profileName)
+
+    reader.gameCube[1] = Self.xbox
+    model.reload()
+    XCTAssertEqual(model.state.profileName, "Mine")
+  }
+
   // MARK: Delete a profile
 
   @MainActor
@@ -1012,7 +1033,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
   func test_deleteProfile_forgetsTheRememberedName() {
     let (reader, io) = boundGameCube()
     let memory = PlayerProfileMemory()
-    memory.remember("Mine", for: "gc-1")
+    memory.remember("Mine", for: "gc-1", qualifier: Self.xbox)
     let model = make(reader, io, memory: memory)
     model.reload()
     model.deleteProfile("Mine")
@@ -1020,7 +1041,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
 
     let (otherReader, otherIO) = boundGameCube()
     let otherMemory = PlayerProfileMemory()
-    otherMemory.remember("Physical Controller", for: "gc-1")
+    otherMemory.remember("Physical Controller", for: "gc-1", qualifier: Self.xbox)
     let other = make(otherReader, otherIO, memory: otherMemory)
     other.reload()
     other.deleteProfile("Mine")
@@ -1034,7 +1055,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
   func test_resetToDefault_writesTheDefaultProfilesExpression() {
     let (reader, io) = boundGameCube()
     let memory = PlayerProfileMemory()
-    memory.remember("Physical Controller", for: "gc-1")
+    memory.remember("Physical Controller", for: "gc-1", qualifier: Self.xbox)
     let model = make(reader, io, memory: memory)
     model.reload()
     let row = model.state.controls[0]
