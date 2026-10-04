@@ -327,7 +327,7 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
 
   func test_touchscreen_disablesCapture_withAHint() {
     let model = make(state(.gameCube, device: "iOS/0/Touchscreen", controls: gameCubeControls))
-    XCTAssertEqual(model.item(id: "buttons-hint")?.title, "Touchscreen controls are laid out by the on-screen overlay.")
+    XCTAssertEqual(model.item(id: "buttons-hint")?.title, "On-Screen Controls are laid out with Edit Layout.")
     XCTAssertEqual(model.item(id: "control-gcPad-0-0")?.isEnabled, false)
   }
 

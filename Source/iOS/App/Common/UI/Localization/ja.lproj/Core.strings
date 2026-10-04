@@ -4718,7 +4718,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The controller's gyro moves the Wii pointer." = "The controller's gyro moves the Wii pointer.";
 "The expression is valid." = "The expression is valid.";
 "Tilt %@" = "Tilt %@";
-"Touchscreen controls are laid out by the on-screen overlay." = "Touchscreen controls are laid out by the on-screen overlay.";
 "Your profile named %@ will be used instead of the built-in one whenever a device of this kind is first bound, and by Reset to Default Profile." = "Your profile named %@ will be used instead of the built-in one whenever a device of this kind is first bound, and by Reset to Default Profile.";
 "%d archives couldn't be imported and were moved to Rejected Imports." = "%d archives couldn't be imported and were moved to Rejected Imports.";
 "Couldn't import %@. It was moved to Rejected Imports." = "Couldn't import %@. It was moved to Rejected Imports.";
@@ -4820,3 +4819,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Clear Game Settings" = "Clear Game Settings";
 "Differences from Saved Settings" = "Differences from Saved Settings";
 "On-Screen Controls Opacity" = "On-Screen Controls Opacity";
+"On-Screen Controls are laid out with Edit Layout." = "On-Screen Controls are laid out with Edit Layout.";

@@ -173,7 +173,7 @@ enum PlayerScreenModelBuilder {
   private static func captureHint(_ state: PlayerScreenState) -> String? {
     switch state.deviceChoice {
     case .noDevice: return L("Choose a device to bind its buttons.")
-    case .touchscreen: return L("Touchscreen controls are laid out by the on-screen overlay.")
+    case .touchscreen: return L("On-Screen Controls are laid out with Edit Layout.")
     case .pad: return state.isDisconnected ? L("Connect this controller to capture buttons.") : nil
     }
   }
