@@ -41,6 +41,7 @@ jobs:
           # HEAD is the PR's merge commit, so base..HEAD is exactly the PR's diff.
           git diff --name-only --diff-filter=ACMR "$base" HEAD > "$RUNNER_TEMP/changed_files.txt"
           echo "LINT_CHANGED_FILES=$RUNNER_TEMP/changed_files.txt" >> "$GITHUB_ENV"
+          echo "LINT_BASE_SHA=$base" >> "$GITHUB_ENV"
 
       - name: Install tools
         run: |
@@ -100,6 +101,7 @@ jobs:
           # HEAD is the PR's merge commit, so base..HEAD is exactly the PR's diff.
           git diff --name-only --diff-filter=ACMR "$base" HEAD > "$RUNNER_TEMP/changed_files.txt"
           echo "LINT_CHANGED_FILES=$RUNNER_TEMP/changed_files.txt" >> "$GITHUB_ENV"
+          echo "LINT_BASE_SHA=$base" >> "$GITHUB_ENV"
 
       - name: Install clang-format
         run: |
@@ -111,13 +113,19 @@ jobs:
         # intentionally excluded. clang-format auto-discovers Source/.clang-format.
         run: |
           set -euo pipefail
-          if [ -n "${LINT_CHANGED_FILES:-}" ]; then
-            files=$(grep -E '^Source/iOS/.*\.(mm|m|cpp|cc|h|hpp)$' "$LINT_CHANGED_FILES" || true)
-          else
-            files=$(git ls-files \
-              'Source/iOS/*.mm' 'Source/iOS/*.m' 'Source/iOS/*.cpp' \
-              'Source/iOS/*.cc' 'Source/iOS/*.h'  'Source/iOS/*.hpp')
+          if [ -n "${LINT_BASE_SHA:-}" ]; then
+            # Only the lines the PR adds or changes: the iOS ObjC tree is written in a
+            # different style from Source/.clang-format, so a whole changed file is
+            # never clean. git-clang-format exits 1 and prints the diff when the
+            # changed lines need formatting, 0 with "no modified files to format"
+            # otherwise.
+            git clang-format --diff --extensions mm,m,cpp,cc,h,hpp \
+              "$LINT_BASE_SHA" HEAD -- Source/iOS
+            exit 0
           fi
+          files=$(git ls-files \
+            'Source/iOS/*.mm' 'Source/iOS/*.m' 'Source/iOS/*.cpp' \
+            'Source/iOS/*.cc' 'Source/iOS/*.h'  'Source/iOS/*.hpp')
           if [ -z "$files" ]; then
             echo "No iCube ObjC/C++ files found; nothing to check."
             exit 0
