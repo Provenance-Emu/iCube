@@ -702,6 +702,65 @@ static BOOL SaveControllerProfile(ControllerEmu::EmulatedController* controller,
   return SaveControllerProfile(cfg->GetController((int)indexOneBased - 1), name);
 }
 
+// The profile names in the controller type's user directory: the ones a delete can remove.
+static NSArray<NSString*>* UserProfileNames(const ControllerEmu::EmulatedController* controller)
+{
+  NSMutableArray<NSString*>* result = [NSMutableArray array];
+  if (!controller)
+    return result;
+  const std::string dir = controller->GetConfig()->GetUserProfileDirectoryPath();
+  if (dir.empty())
+    return result;
+  for (const auto& filename : Common::DoFileSearch(dir, ".ini"))
+  {
+    std::string basename;
+    SplitPath(filename, nullptr, &basename, nullptr);
+    if (!basename.empty())
+      [result addObject:CppToFoundationString(basename)];
+  }
+  return result;
+}
+
+// Deletes `<user profile dir>/<name>.ini` and nothing else: the sys (bundled) directory is never
+// looked at, and a name that would leave the user directory is refused.
+static BOOL DeleteUserProfile(const ControllerEmu::EmulatedController* controller, NSString* name)
+{
+  if (!controller || name.length == 0)
+    return NO;
+  const std::string n = FoundationToCppString(name);
+  if (n.find('/') != std::string::npos)
+    return NO;
+  std::string userDir = controller->GetConfig()->GetUserProfileDirectoryPath();
+  if (userDir.empty())
+    return NO;
+  if (userDir.back() != '/')
+    userDir += '/';
+  const std::string path = userDir + n + ".ini";
+  if (!File::Exists(path))
+    return NO;
+  return File::Delete(path, File::IfAbsentBehavior::NoConsoleWarning) ? YES : NO;
+}
+
++ (NSArray<NSString*>*)userProfilesForGCPort:(NSInteger)portOneBased
+{
+  return UserProfileNames(PadAt(portOneBased));
+}
+
++ (NSArray<NSString*>*)userProfilesForWiimote:(NSInteger)indexOneBased
+{
+  return UserProfileNames(WiimoteAt(indexOneBased));
+}
+
++ (BOOL)deleteProfile:(NSString*)name forGCPort:(NSInteger)portOneBased
+{
+  return DeleteUserProfile(PadAt(portOneBased), name);
+}
+
++ (BOOL)deleteProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased
+{
+  return DeleteUserProfile(WiimoteAt(indexOneBased), name);
+}
+
 + (NSArray<NSString*>*)padControlNamesForGroup:(NSInteger)portOneBased group:(NSInteger)groupId
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];

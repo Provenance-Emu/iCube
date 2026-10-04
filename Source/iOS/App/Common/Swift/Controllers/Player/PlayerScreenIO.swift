@@ -15,6 +15,9 @@ protocol PlayerScreenIO {
   /// Every saved profile name for the slot's controller type, including the ones `profiles(for:)`
   /// hides because they cannot work on the bound device: what Save Profile As… would overwrite.
   func allProfileNames(for slot: PlayerSlot) -> [String]
+  /// The user's own saved profiles for the slot's controller type (never a bundled one): what
+  /// `deleteProfile` can remove.
+  func userProfileNames(for slot: PlayerSlot) -> [String]
   /// The profile a device gets when first bound ("Physical Controller", "Touchscreen", "DSU").
   func defaultProfileName(forQualifier qualifier: String) -> String?
   /// The expression `profile` gives `row` ("" when it leaves it unbound), nil when the profile
@@ -30,6 +33,8 @@ protocol PlayerScreenIO {
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot)
   func loadProfile(_ name: String, slot: PlayerSlot) -> Bool
   func saveProfile(_ name: String, slot: PlayerSlot) -> Bool
+  /// Deletes a user profile's file; never a bundled one. The port's mapping is not changed.
+  func deleteProfile(_ name: String, slot: PlayerSlot) -> Bool
   func setExtension(_ value: Int, wiimote: Int)
   func setSideways(_ enabled: Bool, wiimote: Int)
   func setExpression(_ expression: String, for row: RemapControlRow, port: Int)
@@ -110,6 +115,12 @@ struct LivePlayerScreenIO: PlayerScreenIO {
     slot.kind == .gameCube
       ? TVControllerMappingBridge.allProfiles(forGCPort: slot.port) as [String]
       : TVControllerMappingBridge.allProfiles(forWiimote: slot.port) as [String]
+  }
+
+  func userProfileNames(for slot: PlayerSlot) -> [String] {
+    slot.kind == .gameCube
+      ? TVControllerMappingBridge.userProfiles(forGCPort: slot.port) as [String]
+      : TVControllerMappingBridge.userProfiles(forWiimote: slot.port) as [String]
   }
 
   func defaultProfileName(forQualifier qualifier: String) -> String? {
@@ -198,6 +209,12 @@ struct LivePlayerScreenIO: PlayerScreenIO {
     slot.kind == .gameCube
       ? TVControllerMappingBridge.saveProfile(name, forGCPort: slot.port)
       : TVControllerMappingBridge.saveProfile(name, forWiimote: slot.port)
+  }
+
+  func deleteProfile(_ name: String, slot: PlayerSlot) -> Bool {
+    slot.kind == .gameCube
+      ? TVControllerMappingBridge.deleteProfile(name, forGCPort: slot.port)
+      : TVControllerMappingBridge.deleteProfile(name, forWiimote: slot.port)
   }
 
   /// `WiimoteSlotOptions` already ends in `reconcile(autoAssign: false)`.

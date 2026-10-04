@@ -4791,3 +4791,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Select an input to add it to the expression. A value near 1 means it is pressed." = "Select an input to add it to the expression. A value near 1 means it is pressed.";
 "Inputs" = "Inputs";
 "Reset to Default" = "Reset to Default";
+"Delete Profile?" = "Delete Profile?";
+"%@ will be deleted from this device. Players using it keep their buttons." = "%@ will be deleted from this device. Players using it keep their buttons.";
+"Built-In" = "Built-In";
+"Delete a Profile…" = "Delete a Profile…";
+"Only profiles you saved can be deleted." = "Only profiles you saved can be deleted.";

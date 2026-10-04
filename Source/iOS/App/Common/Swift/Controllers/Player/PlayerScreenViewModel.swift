@@ -67,6 +67,11 @@ final class PlayerProfileMemory {
   func markEdited(_ playerID: String) {
     entries[playerID]?.edited = true
   }
+
+  /// The remembered profile no longer exists: the port reads "Custom".
+  func forget(_ playerID: String) {
+    entries[playerID] = nil
+  }
 }
 
 /// One player's screen state (controller hub spec, "Player screen"; decision 1). It fills
@@ -251,7 +256,9 @@ final class PlayerScreenViewModel {
         AnyView(ProfileListView(
           current: self?.state.profileName,
           loadNames: { [weak self] in self?.profileNames() ?? [] },
-          onPick: { [weak self] in self?.loadProfile($0) }))
+          onPick: { [weak self] in self?.loadProfile($0) },
+          loadDeletable: { [weak self] in self?.deletableProfileNames() ?? [] },
+          onDelete: { [weak self] in self?.deleteProfile($0) ?? false }))
       },
       saveProfileAs: { [weak self] in self?.openSavePrompt() },
       resetProfile: { [weak self] in self?.requestReset() },
@@ -334,6 +341,24 @@ final class PlayerScreenViewModel {
   // MARK: Profile (decisions 5 and 10)
 
   func profileNames() -> [String] { io.profiles(for: slot) }
+
+  /// The profiles Load Profile… may offer to delete: the user's own, never a bundled one.
+  func deletableProfileNames() -> [String] { io.userProfileNames(for: slot) }
+
+  /// Deletes one of the user's profiles (Load Profile… asked first). The port keeps its mapping; if
+  /// the deleted profile was the one this port remembers and no profile of that name is left (a
+  /// bundled one it shadowed would be), the port reads "Custom".
+  @discardableResult
+  func deleteProfile(_ name: String) -> Bool {
+    guard io.deleteProfile(name, slot: slot) else { return false }
+    if let remembered = memory.entry(for: slot.playerID)?.name,
+       remembered.caseInsensitiveCompare(name) == .orderedSame,
+       !ProfileNaming.exists(remembered, in: io.allProfileNames(for: slot)) {
+      memory.forget(slot.playerID)
+    }
+    reload()
+    return true
+  }
 
   func loadProfile(_ name: String) {
     endCapture()

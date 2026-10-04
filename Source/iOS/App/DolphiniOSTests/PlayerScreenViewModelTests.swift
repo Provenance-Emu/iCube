@@ -54,6 +54,18 @@ private final class FakeIO: PlayerScreenIO {
   func numericSettings(owner: RemapGroupOwner, group: Int, port: Int) -> [NumericSettingState] { [] }
   func profiles(for slot: PlayerSlot) -> [String] { existingProfiles }
   func allProfileNames(for slot: PlayerSlot) -> [String] { existingProfiles + hiddenProfiles }
+  /// The user's own profiles; the rest of `existingProfiles` are bundled.
+  var userProfiles = ["Mine"]
+  var deleteSucceeds = true
+  func userProfileNames(for slot: PlayerSlot) -> [String] { userProfiles }
+
+  func deleteProfile(_ name: String, slot: PlayerSlot) -> Bool {
+    writes.append("delete:\(name)")
+    guard deleteSucceeds, userProfiles.contains(name) else { return false }
+    userProfiles.removeAll { $0 == name }
+    existingProfiles.removeAll { $0 == name }
+    return true
+  }
 
   func defaultProfileName(forQualifier qualifier: String) -> String? {
     qualifier.hasPrefix("iOS/") ? "Touchscreen" : "Physical Controller"
@@ -870,6 +882,51 @@ final class PlayerScreenViewModelTests: XCTestCase {
     XCTAssertTrue(model.saveExpression("`Button B`", for: model.state.controls[0]))
     XCTAssertEqual(io.writes, ["expression:gcPad-0-0=`Button B`"])
     XCTAssertTrue(model.state.profileEdited)
+  }
+
+  // MARK: Delete a profile
+
+  @MainActor
+  func test_deleteProfile_deletesAUserProfile_andKeepsTheMapping() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+    let controlsBefore = model.state.controls
+    XCTAssertEqual(model.deletableProfileNames(), ["Mine"])
+    XCTAssertTrue(model.deleteProfile("Mine"))
+    XCTAssertEqual(io.writes, ["delete:Mine"])
+    XCTAssertEqual(model.profileNames(), ["Physical Controller"])
+    XCTAssertEqual(model.state.controls, controlsBefore, "deleting a file changes no binding")
+  }
+
+  /// The bundled profiles are never the user's, so the seam refuses them.
+  @MainActor
+  func test_deleteProfile_aBundledProfileIsRefused() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+    XCTAssertFalse(model.deleteProfile("Physical Controller"))
+    XCTAssertEqual(model.profileNames(), ["Physical Controller", "Mine"])
+  }
+
+  /// The port that remembers the deleted profile reads "Custom" afterwards; another name stays.
+  @MainActor
+  func test_deleteProfile_forgetsTheRememberedName() {
+    let (reader, io) = boundGameCube()
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "gc-1")
+    let model = make(reader, io, memory: memory)
+    model.reload()
+    model.deleteProfile("Mine")
+    XCTAssertNil(model.state.profileName)
+
+    let (otherReader, otherIO) = boundGameCube()
+    let otherMemory = PlayerProfileMemory()
+    otherMemory.remember("Physical Controller", for: "gc-1")
+    let other = make(otherReader, otherIO, memory: otherMemory)
+    other.reload()
+    other.deleteProfile("Mine")
+    XCTAssertEqual(other.state.profileName, "Physical Controller")
   }
 
   // MARK: Reset one control to the default

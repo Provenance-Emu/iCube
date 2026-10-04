@@ -131,6 +131,20 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 + (BOOL)saveProfile:(NSString*)name forGCPort:(NSInteger)portOneBased;
 + (BOOL)saveProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased;
 
+/// Profiles (deleting). The names in the user profile directory only (what Save Profile As…
+/// wrote), unfiltered: the profiles `deleteProfile:` can remove.
++ (NSArray<NSString*>*)userProfilesForGCPort:(NSInteger)portOneBased
+    NS_SWIFT_NAME(userProfiles(forGCPort:));
++ (NSArray<NSString*>*)userProfilesForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(userProfiles(forWiimote:));
+/// Deletes `<user profile dir>/<name>.ini`. Never touches the sys directory, so a bundled profile
+/// is never deleted (one the user's file shadowed is listed again). NO when there is no such user
+/// profile or it could not be deleted. The live mapping is not changed.
++ (BOOL)deleteProfile:(NSString*)name
+            forGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(deleteProfile(_:forGCPort:));
++ (BOOL)deleteProfile:(NSString*)name
+           forWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(deleteProfile(_:forWiimote:));
+
 /// Device hotplug notifications
 + (void)beginPostingDevicesChangedNotifications;
 + (void)endPostingDevicesChangedNotifications;

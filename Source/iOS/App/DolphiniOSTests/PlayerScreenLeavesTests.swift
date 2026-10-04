@@ -72,6 +72,40 @@ final class PlayerScreenLeavesTests: XCTestCase {
     XCTAssertEqual(model.focusableIDs, ["no-profiles"])
   }
 
+  // MARK: Load Profile: delete
+
+  /// Delete mode is offered only when one of the listed profiles is the user's own.
+  func test_profiles_deleteModeOnlyWithAUserProfile() {
+    let bundledOnly = ProfileListModelBuilder.make(names: ["Physical Controller"], current: nil, onPick: { _ in })
+    XCTAssertNil(bundledOnly.item(id: ProfileListModelBuilder.deleteModeID))
+    let withMine = ProfileListModelBuilder.make(
+      names: ["Physical Controller", "Mine"], current: nil, onPick: { _ in }, deletable: ["mine"])
+    XCTAssertEqual(withMine.item(id: ProfileListModelBuilder.deleteModeID)?.title, "Delete a Profile…")
+  }
+
+  /// In delete mode a user profile asks to delete (never loads), and a bundled one cannot be picked.
+  func test_profiles_deleteMode_onlyTheUsersProfilesAreDeletable() {
+    var picked: [String] = []
+    var deleted: [String] = []
+    var toggles = 0
+    let model = ProfileListModelBuilder.make(
+      names: ["Physical Controller", "Mine"], current: "Mine", onPick: { picked.append($0) },
+      deletable: ["Mine"], isDeleting: true, onToggleDeleting: { toggles += 1 }, onDelete: { deleted.append($0) })
+    XCTAssertEqual(model.item(id: "profile-Physical Controller")?.isEnabled, false)
+    XCTAssertEqual(model.item(id: "profile-Physical Controller")?.badge, "Built-In")
+    XCTAssertEqual(model.item(id: "profile-Mine")?.isEnabled, true)
+    guard let mine = model.item(id: "profile-Mine"), case .action(let delete) = mine.role else { return XCTFail("not an action") }
+    delete()
+    XCTAssertEqual(deleted, ["Mine"])
+    XCTAssertEqual(picked, [], "delete mode never loads")
+    XCTAssertEqual(model.item(id: ProfileListModelBuilder.deleteModeID)?.title, "Done")
+    guard let done = model.item(id: ProfileListModelBuilder.deleteModeID), case .action(let toggle) = done.role else {
+      return XCTFail("not an action")
+    }
+    toggle()
+    XCTAssertEqual(toggles, 1)
+  }
+
   // MARK: Expression editor
 
   private let valid = ExpressionCheck(status: .valid, message: "The expression is valid.")
