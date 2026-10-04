@@ -16,7 +16,10 @@ Four workstreams, in the order they should ship. A–C are bug fixes with a root
 
 Repo rules that apply to every PR: `make test` / `make gate-release`; new strings need identity
 entries in `Common/UI/Localization/{en,ja}.lproj/Core.strings` (`check_localized_keys.py --check`);
-`git checkout -- build/xcframework` before committing; conventional commits, no AI trailers.
+`git checkout -- build/xcframework` before committing an app-only change, while a change under
+`Source/Core` refreshes it instead (`BuildiOSXCFramework.py`, committed as `build: refresh the
+prebuilt core …`; `.gitignore` explains why the binary is tracked); conventional commits, no AI
+trailers.
 
 ---
 
