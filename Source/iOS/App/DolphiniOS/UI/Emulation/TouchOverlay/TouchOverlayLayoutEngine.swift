@@ -49,8 +49,8 @@ enum TouchOverlayLayoutEngine {
     clampCenter(proposed, size: size, bounds: bounds)
   }
 
-  /// Normalized (0-1 of `bounds`) <-> points. The store keeps normalized centers so a layout
-  /// survives device and orientation changes; the result is re-clamped by the caller.
+  /// Normalized (0-1 of `bounds`) <-> points. The layout store reads v1 positions, which were
+  /// stored this way, until it re-anchors them (`TouchOverlayAnchoredCenter`).
   static func normalize(_ center: CGPoint, in bounds: CGRect) -> CGPoint {
     guard bounds.width > 0, bounds.height > 0 else { return .zero }
     return CGPoint(x: (center.x - bounds.minX) / bounds.width,
