@@ -12,17 +12,21 @@ final class ControllerManager: NSObject, ObservableObject {
   /// The hub's Overlay Style, kept across launches (`overlayModeDefaultsKey`, registered default Auto).
   @Published var overlayMode: OverlayMode = ControllerManager.storedOverlayMode() {
     didSet {
-      UserDefaults.standard.set(overlayMode.rawValue, forKey: Self.overlayModeDefaultsKey)
+      Self.storeOverlayMode(overlayMode)
       if overlayMode == .wii { ensureWiimote1EmulatedTouchscreen() }
     }
   }
 
   static let overlayModeDefaultsKey = "controller_overlay_mode"
 
-  private static func storedOverlayMode() -> OverlayMode {
-    let defaults = UserDefaults.standard
+  /// The Overlay Style kept across launches; Auto when none was kept or the value is unknown.
+  static func storedOverlayMode(in defaults: UserDefaults = .standard) -> OverlayMode {
     defaults.register(defaults: [overlayModeDefaultsKey: OverlayMode.auto.rawValue])
     return OverlayMode(rawValue: defaults.integer(forKey: overlayModeDefaultsKey)) ?? .auto
+  }
+
+  static func storeOverlayMode(_ mode: OverlayMode, in defaults: UserDefaults = .standard) {
+    defaults.set(mode.rawValue, forKey: overlayModeDefaultsKey)
   }
 
   // Map GCController -> Wiimote slot (1-based), for touchpad pads that drive the Wii pointer.
