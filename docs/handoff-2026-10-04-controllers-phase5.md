@@ -180,11 +180,17 @@ leaves it on its default spot.
 
 ## Known gaps and deferred work
 
-- `WiiPointerProfileTests` and the D1 bridge tests need an `iOS/7/Touchscreen` device on the test
-  host; they skip otherwise. Check CI actually runs them (look for `XCTSkip` in the test log).
-- D5's "Reset to Default" reads the bundled profile; for a DSU device that is the new `DSU.ini`.
-- No overlay-mode persistence test (`ControllerManager` is a singleton with side effects).
-- Phase 4 handoff's checklist item 5 (Apply Recommended → Gyro) is stale.
+Closed on the same branch:
+- `tests.yml` lists every skipped test in the job summary and fails if `WiiPointerProfileTests`
+  skips. The test host is the app, whose launch (`DolphinCoreService` → `UICommon::InitControllers`)
+  always adds `iOS/0-7/Touchscreen`, so those tests should run on the simulator.
+- D5's Reset to Default for a DSU device reads `DSU.ini` (GCPad and Wiimote both ship one). A
+  control the default profile does not bind (the Classic Controller on Physical Controller or DSU)
+  resets to unbound, which is what loading that profile does.
+- `OverlayModePersistenceTests` covers the Overlay Style across a relaunch through
+  `ControllerManager.storedOverlayMode(in:)` / `storeOverlayMode(_:in:)`.
+- The phase 4 handoff's checklist items 5 and 6 no longer describe Apply Recommended → Gyro or the
+  tvOS "IR Mode" picker.
 
 ## Conventions this phase settled
 
