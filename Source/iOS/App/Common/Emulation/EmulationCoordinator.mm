@@ -62,18 +62,18 @@ std::string BuildHotBlocksReport(u32 top_n);
 void Reset();
 }  // namespace CIRProfiler
 
+#include "Core/Config/WiimoteSettings.h"
+#include "Core/System.h"  // 2606: PerformanceMetrics lives on Core::System
+#import "DOLConfigBridge.h"
 #import "EmulationBootParameter.h"
 #import "FastmemManager.h"
 #import "HostNotifications.h"
 #import "HostQueue.h"
-#import "MainSceneCoordinator.h"
-#import "DOLConfigBridge.h"
 #import "JitManager.h"
-#import "TVControllerMappingBridge.h"
 #import "LocalizationUtil.h"
+#import "MainSceneCoordinator.h"
+#import "TVControllerMappingBridge.h"
 #import "iCube-Swift.h"
-#include "Core/Config/WiimoteSettings.h"
-#include "Core/System.h"  // 2606: PerformanceMetrics lives on Core::System
 
 // Dump the perf-relevant settings as one readable key=value block, once at game START and once at
 // game EXIT. Goes to both NSLog (device console) and INFO_LOG_FMT(CORE, ...) (Dolphin log file) so
