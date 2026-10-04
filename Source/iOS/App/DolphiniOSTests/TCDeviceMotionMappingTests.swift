@@ -13,6 +13,12 @@ import XCTest
 final class TCDeviceMotionMappingTests: XCTestCase {
   private let g = TCDeviceMotion.gravityToMetersPerSecondSquared
 
+  /// What the core reads from one written half-axis: Touchscreen.mm's `Axis::GetState()`
+  /// multiplies by `m_neg`, and `ControlExpression` (ExpressionParser.cpp) clamps at 0.
+  private func half(_ written: Float?, _ neg: Float) -> Float {
+    max(0, (written ?? 0) * neg)
+  }
+
   // MARK: - Required case: 6DOF at rest in portrait
 
   func testAccelAtRestInPortraitPutsGravityOnExactlyOneWiimoteZSide() {
@@ -29,13 +35,13 @@ final class TCDeviceMotionMappingTests: XCTestCase {
     let writes = TCDeviceMotion.wiimoteAccelWrites(x: mapped.x, y: mapped.y, z: mapped.z)
 
     XCTAssertEqual(writes[.wiiAccelUp] ?? 0, Float(g), accuracy: 0.001)
-    XCTAssertEqual(writes[.wiiAccelDown], 0)
 
-    // Also check the core-side combination directly: IMUAccelerometer::GetState()
-    // computes z = Up.GetState() - Down.GetState(), and Axis::GetState() multiplies by
-    // m_neg (WIIMOTE_ACCEL_UP has m_neg = +1, WIIMOTE_ACCEL_DOWN has m_neg = -1).
-    let upState = (writes[.wiiAccelUp] ?? 0) * 1.0
-    let downState = (writes[.wiiAccelDown] ?? 0) * -1.0
+    // The core-side combination: IMUAccelerometer::GetState() computes
+    // z = Up.GetState() - Down.GetState() on the clamped halves (WIIMOTE_ACCEL_UP has
+    // m_neg = +1, WIIMOTE_ACCEL_DOWN has m_neg = -1), so only Up reads gravity.
+    let upState = half(writes[.wiiAccelUp], 1)
+    let downState = half(writes[.wiiAccelDown], -1)
+    XCTAssertEqual(downState, 0)
     XCTAssertEqual(upState - downState, Float(g), accuracy: 0.001)
   }
 
@@ -46,7 +52,10 @@ final class TCDeviceMotionMappingTests: XCTestCase {
     let writes = TCDeviceMotion.wiimoteGyroWrites(pitch: gyro.pitch, roll: gyro.roll, yaw: gyro.yaw)
 
     XCTAssertEqual(writes[.wiiGyroPitchDown] ?? 0, -1.0, accuracy: 0.0001)
-    XCTAssertEqual(writes[.wiiGyroPitchUp], 0)
+    XCTAssertEqual(writes[.wiiGyroPitchUp] ?? 0, -1.0, accuracy: 0.0001)
+    // pitch = PitchDown - PitchUp on the clamped halves: the negative rate survives.
+    let pitch = half(writes[.wiiGyroPitchDown], 1) - half(writes[.wiiGyroPitchUp], -1)
+    XCTAssertEqual(pitch, -1.0, accuracy: 0.0001)
     XCTAssertEqual(writes[.wiiGyroRollLeft], 0)
     XCTAssertEqual(writes[.wiiGyroRollRight], 0)
     XCTAssertEqual(writes[.wiiGyroYawLeft], 0)
@@ -58,12 +67,13 @@ final class TCDeviceMotionMappingTests: XCTestCase {
   func testImuAccelWritesReproduceExactlyTheSignedInputAfterCoreCombination() {
     // For arbitrary x/y/z, writing through imuAccelWrites and then applying the same
     // m_neg signs Touchscreen.mm uses (Left/Backward/Up = +1, Right/Forward/Down = -1)
-    // must reconstruct x, y, z exactly, with no doubling and no cancellation.
+    // and the core's clamp at 0 must reconstruct x, y, z exactly, negative values
+    // included, with no doubling and no cancellation.
     let writes = TCDeviceMotion.wiimoteAccelWrites(x: 3.5, y: -2.25, z: 9.80665)
 
-    let x = (writes[.wiiAccelLeft] ?? 0) * 1.0 - (writes[.wiiAccelRight] ?? 0) * -1.0
-    let y = (writes[.wiiAccelBackward] ?? 0) * 1.0 - (writes[.wiiAccelForward] ?? 0) * -1.0
-    let z = (writes[.wiiAccelUp] ?? 0) * 1.0 - (writes[.wiiAccelDown] ?? 0) * -1.0
+    let x = half(writes[.wiiAccelLeft], 1) - half(writes[.wiiAccelRight], -1)
+    let y = half(writes[.wiiAccelBackward], 1) - half(writes[.wiiAccelForward], -1)
+    let z = half(writes[.wiiAccelUp], 1) - half(writes[.wiiAccelDown], -1)
 
     XCTAssertEqual(x, 3.5, accuracy: 0.0001)
     XCTAssertEqual(y, -2.25, accuracy: 0.0001)
@@ -73,9 +83,9 @@ final class TCDeviceMotionMappingTests: XCTestCase {
   func testImuGyroWritesReproduceExactlyTheSignedInputAfterCoreCombination() {
     let writes = TCDeviceMotion.wiimoteGyroWrites(pitch: 1.1, roll: -0.4, yaw: 2.2)
 
-    let pitch = (writes[.wiiGyroPitchDown] ?? 0) * 1.0 - (writes[.wiiGyroPitchUp] ?? 0) * -1.0
-    let roll = (writes[.wiiGyroRollLeft] ?? 0) * 1.0 - (writes[.wiiGyroRollRight] ?? 0) * -1.0
-    let yaw = (writes[.wiiGyroYawLeft] ?? 0) * 1.0 - (writes[.wiiGyroYawRight] ?? 0) * -1.0
+    let pitch = half(writes[.wiiGyroPitchDown], 1) - half(writes[.wiiGyroPitchUp], -1)
+    let roll = half(writes[.wiiGyroRollLeft], 1) - half(writes[.wiiGyroRollRight], -1)
+    let yaw = half(writes[.wiiGyroYawLeft], 1) - half(writes[.wiiGyroYawRight], -1)
 
     XCTAssertEqual(pitch, 1.1, accuracy: 0.0001)
     XCTAssertEqual(roll, -0.4, accuracy: 0.0001)
@@ -87,9 +97,9 @@ final class TCDeviceMotionMappingTests: XCTestCase {
     XCTAssertEqual(writes[.nunchukAccelLeft], 1)
     XCTAssertEqual(writes[.nunchukAccelBackward], 2)
     XCTAssertEqual(writes[.nunchukAccelUp], 3)
-    XCTAssertEqual(writes[.nunchukAccelRight], 0)
-    XCTAssertEqual(writes[.nunchukAccelForward], 0)
-    XCTAssertEqual(writes[.nunchukAccelDown], 0)
+    XCTAssertEqual(writes[.nunchukAccelRight], 1)
+    XCTAssertEqual(writes[.nunchukAccelForward], 2)
+    XCTAssertEqual(writes[.nunchukAccelDown], 3)
   }
 
   // MARK: - Orientation table: accelerometer matches the legacy handler exactly
@@ -171,28 +181,29 @@ final class TCDeviceMotionMappingTests: XCTestCase {
     )
   }
 
-  // MARK: - Gyro-mode IR cursor: single-sided writes, four directions + clamp
+  // MARK: - Gyro-mode IR cursor: both-sides writes, four directions + clamp
   //
   // ControllerEmu::Cursor::GetReshapableState() (Cursor.cpp:67-68) combines
   // y = Up.GetState() - Down.GetState(), x = Right.GetState() - Left.GetState().
   // Axis::GetState() multiplies by m_neg (Touchscreen.mm ~line 74-77):
   // WIIMOTE_IR_RIGHT/DOWN default to +1, WIIMOTE_IR_UP/LEFT are explicitly -1 --
-  // the reverse of the accelerometer's Up/Left-positive convention above. These
-  // tests reconstruct the core's combine directly from the write dictionary so a
-  // future change to the sign derivation is caught here, not on a device.
+  // the reverse of the accelerometer's Up/Left-positive convention above -- and
+  // ControlExpression clamps each half at 0. These tests reconstruct the core's
+  // combine directly from the write dictionary so a future change to the sign
+  // derivation is caught here, not on a device.
 
   private func coreCursorState(_ writes: [TCButtonType: Float]) -> (x: Float, y: Float) {
-    let up = (writes[.wiiInfraredUp] ?? 0) * -1.0
-    let down = (writes[.wiiInfraredDown] ?? 0) * 1.0
-    let left = (writes[.wiiInfraredLeft] ?? 0) * -1.0
-    let right = (writes[.wiiInfraredRight] ?? 0) * 1.0
+    let up = half(writes[.wiiInfraredUp], -1)
+    let down = half(writes[.wiiInfraredDown], 1)
+    let left = half(writes[.wiiInfraredLeft], -1)
+    let right = half(writes[.wiiInfraredRight], 1)
     return (x: right - left, y: up - down)
   }
 
   func testIRCursorTiltUpMovesPointerUp() {
     let writes = TCDeviceMotion.irCursorWrites(horizontal: 0, vertical: 1.0)
     XCTAssertEqual(writes[.wiiInfraredUp] ?? 0, -1.0, accuracy: 0.0001)
-    XCTAssertEqual(writes[.wiiInfraredDown], 0)
+    XCTAssertEqual(writes[.wiiInfraredDown] ?? 0, -1.0, accuracy: 0.0001)
     let state = coreCursorState(writes)
     XCTAssertEqual(state.y, 1.0, accuracy: 0.0001, "positive vertical must yield a positive (up) cursor state")
     XCTAssertEqual(state.x, 0, accuracy: 0.0001)
@@ -201,7 +212,7 @@ final class TCDeviceMotionMappingTests: XCTestCase {
   func testIRCursorTiltDownMovesPointerDown() {
     let writes = TCDeviceMotion.irCursorWrites(horizontal: 0, vertical: -1.0)
     XCTAssertEqual(writes[.wiiInfraredUp] ?? 0, 1.0, accuracy: 0.0001)
-    XCTAssertEqual(writes[.wiiInfraredDown], 0)
+    XCTAssertEqual(writes[.wiiInfraredDown] ?? 0, 1.0, accuracy: 0.0001)
     let state = coreCursorState(writes)
     XCTAssertEqual(state.y, -1.0, accuracy: 0.0001, "negative vertical must yield a negative (down) cursor state")
   }
@@ -209,7 +220,7 @@ final class TCDeviceMotionMappingTests: XCTestCase {
   func testIRCursorRollRightMovesPointerRight() {
     let writes = TCDeviceMotion.irCursorWrites(horizontal: 1.0, vertical: 0)
     XCTAssertEqual(writes[.wiiInfraredRight] ?? 0, 1.0, accuracy: 0.0001)
-    XCTAssertEqual(writes[.wiiInfraredLeft], 0)
+    XCTAssertEqual(writes[.wiiInfraredLeft] ?? 0, 1.0, accuracy: 0.0001)
     let state = coreCursorState(writes)
     XCTAssertEqual(state.x, 1.0, accuracy: 0.0001, "positive horizontal must yield a positive (right) cursor state")
     XCTAssertEqual(state.y, 0, accuracy: 0.0001)
@@ -218,7 +229,7 @@ final class TCDeviceMotionMappingTests: XCTestCase {
   func testIRCursorRollLeftMovesPointerLeft() {
     let writes = TCDeviceMotion.irCursorWrites(horizontal: -1.0, vertical: 0)
     XCTAssertEqual(writes[.wiiInfraredRight] ?? 0, -1.0, accuracy: 0.0001)
-    XCTAssertEqual(writes[.wiiInfraredLeft], 0)
+    XCTAssertEqual(writes[.wiiInfraredLeft] ?? 0, -1.0, accuracy: 0.0001)
     let state = coreCursorState(writes)
     XCTAssertEqual(state.x, -1.0, accuracy: 0.0001, "negative horizontal must yield a negative (left) cursor state")
   }
