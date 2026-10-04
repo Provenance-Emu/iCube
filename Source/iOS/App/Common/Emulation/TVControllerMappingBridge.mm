@@ -527,8 +527,6 @@ static bool IsUnsupportedProfile(const std::string& name)
   return name == "Wii Remote with MotionPlus Pointing" || name == "SDL Gamepad";
 }
 
-static constexpr const char* kTouchscreenProfileName = "Touchscreen";
-
 // True when the profile's `Device =` line names an on-screen `iOS/<id>/Touchscreen`.
 static bool ProfileTargetsTouchscreen(const std::string& path)
 {
@@ -545,11 +543,13 @@ static bool ProfileTargetsTouchscreen(const std::string& path)
 }
 
 // The profile names the player screen offers for a slot. The user directory is searched first
-// because a user profile shadows a bundled one of the same name (`loadProfile:` loads it). On a
-// slot bound to the Touchscreen only `Touchscreen` and profiles written for an on-screen device
-// are offered: a physical-controller profile's inputs (`Button A`, ...) do not exist on it, and
-// loading one left the Wii pointer unbound and the core's motion pointer on. With `filter` false,
-// every name on disk (what a save would collide with).
+// because a user profile shadows a bundled one of the same name (`loadProfile:` loads it), and
+// each filter looks at the file that would actually load: the unsupported names are dropped
+// only for the bundled copies (a user may save anything under those names), and on a slot bound
+// to the Touchscreen only profiles whose `Device =` line is an on-screen device are offered,
+// the bundled `Touchscreen` included: a physical-controller profile's inputs (`Button A`, ...)
+// do not exist on it, and loading one left the Wii pointer unbound and the core's motion pointer
+// on. With `filter` false, every name on disk (what a save would collide with).
 static NSArray<NSString*>*
 ProfilesForController(const ControllerEmu::EmulatedController* controller, bool filter)
 {
@@ -559,23 +559,20 @@ ProfilesForController(const ControllerEmu::EmulatedController* controller, bool 
   const InputConfig* config = controller->GetConfig();
   const bool touchscreen_slot = filter && IsTouchscreenDevice(controller->GetDefaultDevice());
   std::unordered_set<std::string> seen;
-  for (const std::string& dir :
-       {config->GetUserProfileDirectoryPath(), config->GetSysProfileDirectoryPath()})
+  const std::string sys_dir = config->GetSysProfileDirectoryPath();
+  for (const std::string& dir : {config->GetUserProfileDirectoryPath(), sys_dir})
   {
+    const bool bundled = dir == sys_dir;
     for (const auto& filename : Common::DoFileSearch(dir, ".ini"))
     {
       std::string basename;
       SplitPath(filename, nullptr, &basename, nullptr);
-      if (basename.empty() || !seen.insert(basename).second ||
-          (filter && IsUnsupportedProfile(basename)))
-      {
+      if (basename.empty() || !seen.insert(basename).second)
         continue;
-      }
-      if (touchscreen_slot && basename != kTouchscreenProfileName &&
-          !ProfileTargetsTouchscreen(filename))
-      {
+      if (filter && bundled && IsUnsupportedProfile(basename))
         continue;
-      }
+      if (touchscreen_slot && !ProfileTargetsTouchscreen(filename))
+        continue;
       [result addObject:CppToFoundationString(basename)];
     }
   }
