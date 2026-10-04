@@ -61,6 +61,8 @@ struct EmulationTopBar: View {
   let open: (TopBarDestination) -> Void
   let onToggleOnScreenControls: () -> Void
   let onSetPointerMode: (PointerMode) -> Void
+  /// Unused: the bar's overlay toggle moved to More Controller Settings only. Kept until
+  /// EmulationScreen's call site drops its argument.
   let onSetProgrammaticOverlay: (Bool) -> Void
   let onSetOverscanFullscreen: (Bool) -> Void
 
@@ -390,10 +392,6 @@ struct EmulationTopBar: View {
         PopoverRow(title: L("Recenter Pointer"), systemImage: "scope") { close { TCDeviceMotion.requestPointerRecenter() } }
         Divider()
       }
-      PopoverRow(title: L("New On‑Screen Controller (Beta)"), systemImage: "sparkles", isChecked: TouchOverlayFlag.isProgrammatic) {
-        close { onSetProgrammaticOverlay(!TouchOverlayFlag.isProgrammatic) }
-      }
-      Divider()
       PopoverRow(title: L("Edit Layout…"), systemImage: "rectangle.and.pencil.and.ellipsis") { closeThenOpen(.editLayout) }
       PopoverRow(title: L("Controller Settings…"), systemImage: "gearshape") { closeThenOpen(.controllerSettings) }
     }

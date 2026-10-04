@@ -45,11 +45,11 @@ struct ControllerMoreSettingsView: View {
       Section(header: Text(L("Alternate Input Sources"))) {
         #if os(iOS)
         settingsCaption(
-          Toggle(L("Programmatic touch overlay (beta)"), isOn: $touchOverlayProgrammatic)
+          Toggle(L("Editable On-Screen Controls"), isOn: $touchOverlayProgrammatic)
             .onChange(of: touchOverlayProgrammatic) { _, newValue in
               TouchOverlayFlag.isProgrammatic = newValue
             },
-          L("Replaces the on-screen GameCube/Wii pads with the new SwiftUI-rendered, user-editable overlay. Long-press the overlay in-game to move or resize its controls."))
+          L("On by default: on-screen controls you can move and resize from Edit Layout or with a long press in-game. Turn off to use the older fixed pads."))
 
         Button(role: .destructive) {
           for kind in TouchOverlayPadKind.allCases { TouchOverlayLayoutStore.shared.reset(padKind: kind) }

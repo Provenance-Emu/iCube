@@ -4274,7 +4274,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Preset" = "Preset";
 "Press a button…" = "Press a button…";
 "Preview intermediate pass" = "Preview intermediate pass";
-"Programmatic touch overlay (beta)" = "Programmatic touch overlay (beta)";
 "Progressive Scan" = "Progressive Scan";
 "Queues and defers EFB copies to reduce pipeline stalls.\n\nCan increase performance but reorders copies and may break effects that need immediate results (heat haze, mirrors).\n\niOS note: can reduce CPU-thread stalls on the bottleneck — a real potential win — but verify visuals per game.\n\nIf unsure, leave this unchecked." = "Queues and defers EFB copies to reduce pipeline stalls.\n\nCan increase performance but reorders copies and may break effects that need immediate results (heat haze, mirrors).\n\niOS note: can reduce CPU-thread stalls on the bottleneck — a real potential win — but verify visuals per game.\n\nIf unsure, leave this unchecked.";
 "Quick Links" = "Quick Links";
@@ -4315,7 +4314,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Renders the game above native resolution for a sharper image. Higher costs more GPU; on the CPU-bound path 1x–2x is usually plenty." = "Renders the game above native resolution for a sharper image. Higher costs more GPU; on the CPU-bound path 1x–2x is usually plenty.";
 "Replace Game" = "Replace Game";
 "Replaces raw disc IDs with proper game titles from the built-in database." = "Replaces raw disc IDs with proper game titles from the built-in database.";
-"Replaces the on-screen GameCube/Wii pads with the new SwiftUI-rendered, user-editable overlay. Long-press the overlay in-game to move or resize its controls." = "Replaces the on-screen GameCube/Wii pads with the new SwiftUI-rendered, user-editable overlay. Long-press the overlay in-game to move or resize its controls.";
 "Requires AVAudioEngine backend." = "Requires AVAudioEngine backend.";
 "Rescan" = "Rescan";
 "Reset All Overlay Layouts" = "Reset All Overlay Layouts";
@@ -4673,7 +4671,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Nunchuk Swing" = "Nunchuk Swing";
 "Nunchuk Tilt" = "Nunchuk Tilt";
 "On · 1 server" = "On · 1 server";
-"New On‑Screen Controller (Beta)" = "New On‑Screen Controller (Beta)";
 "A profile named %@ already exists. Replace it?" = "A profile named %@ already exists. Replace it?";
 "Aim with Controller Motion" = "Aim with Controller Motion";
 "C-Stick %@" = "C-Stick %@";
@@ -4810,3 +4807,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Drag Sensitivity" = "Drag Sensitivity";
 "Gyro Sensitivity" = "Gyro Sensitivity";
 "On-Screen Stick Feel" = "On-Screen Stick Feel";
+"Editable On-Screen Controls" = "Editable On-Screen Controls";
+"On by default: on-screen controls you can move and resize from Edit Layout or with a long press in-game. Turn off to use the older fixed pads." = "On by default: on-screen controls you can move and resize from Edit Layout or with a long press in-game. Turn off to use the older fixed pads.";
