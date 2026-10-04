@@ -87,6 +87,9 @@ final class TouchOverlayLayoutTests: XCTestCase {
     .wiiRemoteSideways: CGSize(width: 768, height: 1024),
   ]
 
+  /// A plain canvas for the store tests.
+  private static let storeBounds = CGRect(x: 0, y: 0, width: 400, height: 800)
+
   private func designBounds(_ kind: TouchOverlayPadKind) -> CGRect {
     CGRect(origin: .zero, size: Self.wiiDesignSizes[kind]!)
   }
@@ -193,22 +196,88 @@ final class TouchOverlayLayoutTests: XCTestCase {
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
 
+    let bounds = Self.storeBounds
     let store = TouchOverlayLayoutStore(fileURL: url)
-    XCTAssertNil(store.normalizedCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait))
+    XCTAssertNil(store.center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: bounds))
     XCTAssertFalse(store.hasCustomLayout(padKind: .gameCube, orientation: .portrait))
 
-    store.setNormalizedCenter(CGPoint(x: 0.25, y: 1.7), for: .gcDpad, padKind: .gameCube, orientation: .portrait)
+    store.setCenter(CGPoint(x: 100, y: 1360), in: bounds, for: .gcDpad, padKind: .gameCube, orientation: .portrait)
     XCTAssertEqual(store.revision, 1)
-    XCTAssertEqual(store.normalizedCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait), CGPoint(x: 0.25, y: 1))
-    XCTAssertNil(store.normalizedCenter(for: .gcDpad, padKind: .gameCube, orientation: .landscape), "orientations are independent")
+    XCTAssertEqual(store.center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: bounds), CGPoint(x: 100, y: 800),
+                   "a drop past the edge is stored on it")
+    XCTAssertNil(store.center(for: .gcDpad, padKind: .gameCube, orientation: .landscape, in: bounds), "orientations are independent")
 
     let reloaded = TouchOverlayLayoutStore(fileURL: url)
-    XCTAssertEqual(reloaded.normalizedCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait), CGPoint(x: 0.25, y: 1))
+    XCTAssertEqual(reloaded.center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: bounds), CGPoint(x: 100, y: 800))
     XCTAssertTrue(reloaded.hasCustomLayout(padKind: .gameCube, orientation: .portrait))
 
     reloaded.reset(padKind: .gameCube)
-    XCTAssertNil(reloaded.normalizedCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait))
-    XCTAssertNil(TouchOverlayLayoutStore(fileURL: url).normalizedCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait))
+    XCTAssertNil(reloaded.center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: bounds))
+    XCTAssertNil(TouchOverlayLayoutStore(fileURL: url).center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: bounds))
+  }
+
+  /// A layout made on one phone, read on a bigger one: a moved group keeps its distance in points
+  /// from the edges it was nearest to (fractions of the canvas used to stretch it towards the middle).
+  @MainActor
+  func testAMovedGroupKeepsItsDistanceFromTheNearestEdges() {
+    let store = TouchOverlayLayoutStore(fileURL: nil)
+    let small = CGRect(x: 0, y: 0, width: 390, height: 844)
+    let large = CGRect(x: 0, y: 0, width: 430, height: 932)
+    store.setCenter(CGPoint(x: 350, y: 780), in: small, for: .gcMainStick, padKind: .gameCube, orientation: .portrait)
+    store.setCenter(CGPoint(x: 60, y: 100), in: small, for: .gcStart, padKind: .gameCube, orientation: .portrait)
+    store.setCenter(CGPoint(x: 205, y: 430), in: small, for: .gcDpad, padKind: .gameCube, orientation: .portrait)
+
+    XCTAssertEqual(store.center(for: .gcMainStick, padKind: .gameCube, orientation: .portrait, in: large), CGPoint(x: 390, y: 868))
+    XCTAssertEqual(store.center(for: .gcStart, padKind: .gameCube, orientation: .portrait, in: large), CGPoint(x: 60, y: 100))
+    XCTAssertEqual(store.center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: large), CGPoint(x: 225, y: 474),
+                   "the middle third hangs from the centre lines")
+  }
+
+  func testAnchoringPicksTheNearestEdge() {
+    let bounds = CGRect(x: 10, y: 20, width: 300, height: 600)
+    XCTAssertEqual(TouchOverlayAnchoredCenter.anchoring(CGPoint(x: 50, y: 590), in: bounds),
+                   TouchOverlayAnchoredCenter(h: .min, x: 40, v: .max, y: 30))
+    XCTAssertEqual(TouchOverlayAnchoredCenter.anchoring(CGPoint(x: 150, y: 330), in: bounds),
+                   TouchOverlayAnchoredCenter(h: .mid, x: -10, v: .mid, y: 10))
+    let trailingTop = TouchOverlayAnchoredCenter.anchoring(CGPoint(x: 290, y: 40), in: bounds)
+    XCTAssertEqual(trailingTop, TouchOverlayAnchoredCenter(h: .max, x: 20, v: .min, y: 20))
+    XCTAssertEqual(trailingTop.point(in: bounds), CGPoint(x: 290, y: 40))
+  }
+
+  /// A v1 file (0-1 fractions) is read when there is no v2 file, shows where it did, and is
+  /// re-anchored against the canvas on the first edit of that pad and orientation. The v1 file
+  /// itself is never rewritten, so an older build still reads it.
+  @MainActor
+  func testALegacyLayoutIsReadAsFractionsAndReanchoredOnTheFirstEdit() throws {
+    let url = temporaryFile()
+    let dir = url.deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let legacyURL = dir.appendingPathComponent(TouchOverlayLayoutStore.legacyFileName)
+    let legacy = Data(#"{"gameCube.portrait": {"gcDpad": [0.25, 0.875, 1.5], "gcCStick": [0.8, 0.9, 1.2, 0.8]}}"#.utf8)
+    try legacy.write(to: legacyURL)
+    let bounds = Self.storeBounds
+    let wider = CGRect(x: 0, y: 0, width: 600, height: 800)
+
+    let store = TouchOverlayLayoutStore(fileURL: url, legacyFileURL: legacyURL)
+    XCTAssertEqual(store.center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: bounds), CGPoint(x: 100, y: 700))
+    XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), 1.5)
+    XCTAssertEqual(store.sizeScaleXY(for: .gcCStick, padKind: .gameCube, orientation: .portrait), CGSize(width: 1.2, height: 0.8))
+    XCTAssertNil(store.anchoredCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait))
+
+    store.setCenter(CGPoint(x: 200, y: 400), in: bounds, for: .gcStart, padKind: .gameCube, orientation: .portrait)
+    XCTAssertEqual(store.anchoredCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait),
+                   TouchOverlayAnchoredCenter(h: .min, x: 100, v: .max, y: 100))
+    XCTAssertEqual(store.center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: bounds), CGPoint(x: 100, y: 700),
+                   "re-anchoring moves nothing on the canvas it was done on")
+    XCTAssertEqual(store.center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: wider), CGPoint(x: 100, y: 700))
+    XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), 1.5)
+
+    XCTAssertEqual(try Data(contentsOf: legacyURL), legacy)
+    let reloaded = TouchOverlayLayoutStore(fileURL: url, legacyFileURL: legacyURL)
+    XCTAssertEqual(reloaded.anchoredCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait),
+                   TouchOverlayAnchoredCenter(h: .min, x: 100, v: .max, y: 100), "the v2 file wins once it exists")
+    XCTAssertEqual(reloaded.sizeScaleXY(for: .gcCStick, padKind: .gameCube, orientation: .portrait), CGSize(width: 1.2, height: 0.8))
   }
 
   @MainActor
@@ -240,7 +309,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
 
     let dpad = defaultLayout(.wiiDpad, .wiiRemoteSideways)!
     store.setCenter(CGPoint(x: 300, y: 700), in: editor, for: .wiiDpad, padKind: .wiiRemoteSideways, orientation: .portrait)
-    store.setSizeScale(1.5, for: .wiiDpad, padKind: .wiiRemoteSideways, orientation: .portrait, defaultCenter: .zero)
+    store.setSizeScale(1.5, for: .wiiDpad, padKind: .wiiRemoteSideways, orientation: .portrait, in: editor)
     let dropped = store.resolvedBox(for: dpad, padKind: .wiiRemoteSideways, orientation: .portrait, in: editor)
     let played = store.resolvedBox(for: dpad, padKind: .wiiRemoteSideways, orientation: .portrait, in: gameplay)
     XCTAssertEqual(played.midX, 300, accuracy: 1e-6)
@@ -290,7 +359,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
     let store = TouchOverlayLayoutStore(fileURL: nil)
     XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), 1.0)
     // A plain 2-element move (phase 1 shape) must keep reading scale 1.0.
-    store.setNormalizedCenter(CGPoint(x: 0.3, y: 0.4), for: .gcDpad, padKind: .gameCube, orientation: .portrait)
+    store.setCenter(CGPoint(x: 120, y: 320), in: Self.storeBounds, for: .gcDpad, padKind: .gameCube, orientation: .portrait)
     XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), 1.0)
   }
 
@@ -300,32 +369,34 @@ final class TouchOverlayLayoutTests: XCTestCase {
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
 
+    let bounds = Self.storeBounds
     let store = TouchOverlayLayoutStore(fileURL: url)
-    store.setNormalizedCenter(CGPoint(x: 0.2, y: 0.6), for: .gcCStick, padKind: .gameCube, orientation: .portrait)
-    store.setSizeScale(1.5, for: .gcCStick, padKind: .gameCube, orientation: .portrait, defaultCenter: CGPoint(x: 0.9, y: 0.9))
+    store.setCenter(CGPoint(x: 80, y: 480), in: bounds, for: .gcCStick, padKind: .gameCube, orientation: .portrait)
+    store.setSizeScale(1.5, for: .gcCStick, padKind: .gameCube, orientation: .portrait, in: bounds)
     XCTAssertEqual(store.sizeScale(for: .gcCStick, padKind: .gameCube, orientation: .portrait), 1.5)
     // The center set beforehand must survive the resize write.
-    XCTAssertEqual(store.normalizedCenter(for: .gcCStick, padKind: .gameCube, orientation: .portrait), CGPoint(x: 0.2, y: 0.6))
+    XCTAssertEqual(store.center(for: .gcCStick, padKind: .gameCube, orientation: .portrait, in: bounds), CGPoint(x: 80, y: 480))
 
     let reloaded = TouchOverlayLayoutStore(fileURL: url)
     XCTAssertEqual(reloaded.sizeScale(for: .gcCStick, padKind: .gameCube, orientation: .portrait), 1.5)
-    XCTAssertEqual(reloaded.normalizedCenter(for: .gcCStick, padKind: .gameCube, orientation: .portrait), CGPoint(x: 0.2, y: 0.6))
+    XCTAssertEqual(reloaded.center(for: .gcCStick, padKind: .gameCube, orientation: .portrait, in: bounds), CGPoint(x: 80, y: 480))
   }
 
+  /// A resize alone does not pin the group: it keeps following its default placement.
   @MainActor
-  func testSetSizeScaleUsesDefaultCenterWhenGroupNeverMoved() {
+  func testSetSizeScaleLeavesANeverMovedGroupOnItsDefault() {
     let store = TouchOverlayLayoutStore(fileURL: nil)
-    store.setSizeScale(0.75, for: .gcDpad, padKind: .gameCube, orientation: .portrait, defaultCenter: CGPoint(x: 0.5, y: 0.5))
-    XCTAssertEqual(store.normalizedCenter(for: .gcDpad, padKind: .gameCube, orientation: .portrait), CGPoint(x: 0.5, y: 0.5))
+    store.setSizeScale(0.75, for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: Self.storeBounds)
+    XCTAssertNil(store.center(for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: Self.storeBounds))
     XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), 0.75)
   }
 
   @MainActor
   func testSetSizeScaleClampsToScaleRange() {
     let store = TouchOverlayLayoutStore(fileURL: nil)
-    store.setSizeScale(10, for: .gcDpad, padKind: .gameCube, orientation: .portrait, defaultCenter: .zero)
+    store.setSizeScale(10, for: .gcDpad, padKind: .gameCube, orientation: .portrait, in: Self.storeBounds)
     XCTAssertEqual(store.sizeScale(for: .gcDpad, padKind: .gameCube, orientation: .portrait), TouchOverlayLayoutStore.scaleRange.upperBound)
-    store.setSizeScale(0.01, for: .gcCStick, padKind: .gameCube, orientation: .portrait, defaultCenter: .zero)
+    store.setSizeScale(0.01, for: .gcCStick, padKind: .gameCube, orientation: .portrait, in: Self.storeBounds)
     XCTAssertEqual(store.sizeScale(for: .gcCStick, padKind: .gameCube, orientation: .portrait), TouchOverlayLayoutStore.scaleRange.lowerBound)
   }
 
@@ -334,8 +405,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
     let store = TouchOverlayLayoutStore(fileURL: nil)
     let bounds = designBounds(.wiiRemoteSideways)
     let dpad = defaultLayout(.wiiDpad, .wiiRemoteSideways)!
-    store.setSizeScale(2.0, for: .wiiDpad, padKind: .wiiRemoteSideways, orientation: .portrait,
-                       defaultCenter: TouchOverlayLayoutEngine.normalize(dpad.placement.center(in: bounds), in: bounds))
+    store.setSizeScale(2.0, for: .wiiDpad, padKind: .wiiRemoteSideways, orientation: .portrait, in: bounds)
     let box = store.resolvedBox(for: dpad, padKind: .wiiRemoteSideways, orientation: .portrait, in: bounds)
     XCTAssertEqual(box.width, dpad.size.width * 2, accuracy: 1e-9)
     XCTAssertEqual(box.height, dpad.size.height * 2, accuracy: 1e-9)
@@ -592,7 +662,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
   @MainActor
   func testSizeScaleXYReadsUniformFromThreeElementEntry() {
     let store = TouchOverlayLayoutStore(fileURL: nil)
-    store.setSizeScale(1.4, for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait, defaultCenter: CGPoint(x: 0.5, y: 0.5))
+    store.setSizeScale(1.4, for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait, in: Self.storeBounds)
     XCTAssertEqual(store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait), CGSize(width: 1.4, height: 1.4))
   }
 
@@ -610,7 +680,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
     let bounds = CGRect(x: 0, y: 0, width: 500, height: 800)
     let baseSize = CGSize(width: 350, height: 750)
     store.setIRSizeScale(CGSize(width: 1.2, height: 0.7), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
-                        bounds: bounds, baseSize: baseSize, defaultCenter: CGPoint(x: 0.5, y: 0.5))
+                        bounds: bounds, baseSize: baseSize)
     let scale = store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
     XCTAssertEqual(scale.width, 1.2, accuracy: 1e-6)
     XCTAssertEqual(scale.height, 0.7, accuracy: 1e-6)
@@ -630,17 +700,16 @@ final class TouchOverlayLayoutTests: XCTestCase {
     let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
     let baseSize = CGSize(width: 342, height: 796) // `TouchOverlayDefaults.irPadMargin` (24) inset.
     store.setIRSizeScale(CGSize(width: 5.0, height: 5.0), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
-                        bounds: bounds, baseSize: baseSize, defaultCenter: CGPoint(x: 0.5, y: 0.5))
+                        bounds: bounds, baseSize: baseSize)
     let scale = store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
     XCTAssertEqual(scale.width, bounds.width / baseSize.width, accuracy: 1e-6)
     XCTAssertEqual(scale.height, bounds.height / baseSize.height, accuracy: 1e-6)
   }
 
   @MainActor
-  func testSetNormalizedCenterPreservesAllTrailingElementsIncludingAsymmetricScale() {
+  func testSetCenterPreservesAnAsymmetricScale() {
     // Regression test (task item 2's DSU-adjacent store fix): moving a `wiiIRPad` with an
-    // asymmetric `[x, y, sx, sy]` entry used to drop `sy` back to "unset" because
-    // `setNormalizedCenter` only ever preserved a single trailing element.
+    // independent width/height scale used to drop the height back to "unset".
     let store = TouchOverlayLayoutStore(fileURL: nil)
     // Same margin reasoning as `testSetIRSizeScaleRoundTripsIndependentAxesAndSurvivesReload`
     // above: bounds wide enough that 1.3 isn't itself clamped, so this test isolates the
@@ -648,22 +717,23 @@ final class TouchOverlayLayoutTests: XCTestCase {
     let bounds = CGRect(x: 0, y: 0, width: 500, height: 800)
     let baseSize = CGSize(width: 350, height: 750)
     store.setIRSizeScale(CGSize(width: 1.3, height: 0.6), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait,
-                        bounds: bounds, baseSize: baseSize, defaultCenter: CGPoint(x: 0.5, y: 0.5))
-    store.setNormalizedCenter(CGPoint(x: 0.2, y: 0.3), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
+                        bounds: bounds, baseSize: baseSize)
+    store.setCenter(CGPoint(x: 100, y: 240), in: bounds, for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
     let scale = store.sizeScaleXY(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
     XCTAssertEqual(scale.width, 1.3, accuracy: 1e-6)
     XCTAssertEqual(scale.height, 0.6, accuracy: 1e-6, "sy must survive a plain move, not collapse back to sx")
-    XCTAssertEqual(store.normalizedCenter(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait), CGPoint(x: 0.2, y: 0.3))
+    XCTAssertEqual(store.center(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait, in: bounds), CGPoint(x: 100, y: 240))
   }
 
   @MainActor
   func testResetGroupClearsOnlyThatGroup() {
     let store = TouchOverlayLayoutStore(fileURL: nil)
-    store.setNormalizedCenter(CGPoint(x: 0.1, y: 0.1), for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
-    store.setNormalizedCenter(CGPoint(x: 0.2, y: 0.2), for: .wiiDpad, padKind: .wiiRemote, orientation: .portrait)
+    let bounds = Self.storeBounds
+    store.setCenter(CGPoint(x: 40, y: 80), in: bounds, for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait)
+    store.setCenter(CGPoint(x: 80, y: 160), in: bounds, for: .wiiDpad, padKind: .wiiRemote, orientation: .portrait)
     store.resetGroup(.wiiIRPad, padKind: .wiiRemote)
-    XCTAssertNil(store.normalizedCenter(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait))
-    XCTAssertEqual(store.normalizedCenter(for: .wiiDpad, padKind: .wiiRemote, orientation: .portrait), CGPoint(x: 0.2, y: 0.2),
+    XCTAssertNil(store.center(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait, in: bounds))
+    XCTAssertEqual(store.center(for: .wiiDpad, padKind: .wiiRemote, orientation: .portrait, in: bounds), CGPoint(x: 80, y: 160),
                   "resetting the IR pad must not discard the rest of the layout")
   }
 
