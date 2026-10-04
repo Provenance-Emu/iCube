@@ -59,6 +59,18 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 /// Wiimote counterpart of `padMappingBindsDevice:`.
 + (BOOL)wiimoteMappingBindsDevice:(NSInteger)indexOneBased NS_SWIFT_NAME(wiimoteMappingBindsDevice(forWiimote:));
 
+/// True when the Wii Remote slot's default device is an on-screen `iOS/<id>/Touchscreen`.
++ (BOOL)wiimoteUsesTouchscreen:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(wiimoteUsesTouchscreen(forWiimote:));
+
+/// Puts a touchscreen Wii Remote slot's pointer back into the shape the app drives: the core's
+/// motion pointer (`IMUIR/Enabled`) off, since the app writes IR itself. Saves when it changed
+/// anything and returns whether it did; a no-op for a slot not bound to the Touchscreen.
+/// `loadProfile:forWiimote:restoreDevice:` and the coordinator's touchscreen binding already
+/// apply it; call it after any other write that can replace a touchscreen slot's mapping.
++ (BOOL)enforceTouchscreenPointerForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(enforceTouchscreenPointer(forWiimote:));
+
 /// Assign the iOS Touchscreen virtual device as the default device for a GC port.
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
 

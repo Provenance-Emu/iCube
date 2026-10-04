@@ -100,6 +100,7 @@ NS_ASSUME_NONNULL_BEGIN
 // app's own touch/gyro IR. `wiimote` is the zero-based Wii Remote slot (0-3); callers should
 // pass `ControllerManager.shared.touchscreenSlot(system: .wii) ?? 0` so the right emulated pad
 // is targeted when the on-screen overlay is bound to a port other than Wii Remote 1.
+// Enabling is refused on a slot bound to the Touchscreen (the group stays off there).
 + (void)setWiiIMUPointEnabled:(BOOL)enabled forWiimote:(NSInteger)wiimote;
 
 // Video Geometry

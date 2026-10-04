@@ -184,6 +184,56 @@ static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController
   return ControllerMappingBindsDevice(cfg->GetController(idx));
 }
 
+// The iOS backend's on-screen device, `iOS/<id>/Touchscreen` (ids 0-3 GameCube pads, 4-7 Wii
+// Remotes; iOS.mm PopulateDevices).
+static bool IsTouchscreenDevice(const ciface::Core::DeviceQualifier& dq)
+{
+  return dq.source == "iOS" && dq.name == "Touchscreen";
+}
+
+// `idx` is zero-based. False for an out-of-range index (`GetController` is `vector::at`).
+static bool WiimoteIsOnTouchscreen(int idx)
+{
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg || idx < 0 || idx >= cfg->GetControllerCount())
+    return false;
+  const auto* wm = cfg->GetController(idx);
+  return wm && IsTouchscreenDevice(wm->GetDefaultDevice());
+}
+
+// The core's motion pointer (`IMUIR/Enabled`) aims the IR camera from the IMU axes, which the app
+// fills with the phone's own motion whenever the overlay is up. On a touchscreen slot the app
+// writes IR itself, so with it on, holding the phone upright points the remote at the ceiling and
+// the pointer vanishes. The physical-remote profiles (`Physical Controller`, `Wii Remote with
+// MotionPlus Pointing`) and the core's `LoadDefaults` all turn it on, so every load onto a
+// touchscreen slot must end here. Does not save; returns whether it changed anything.
+static bool DisableCoreIMUPointerIfTouchscreen(int idx)
+{
+  if (!WiimoteIsOnTouchscreen(idx))
+    return false;
+  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  auto* group = Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::IMUPoint);
+  if (!group || (group->enabled.IsSimpleValue() && !group->enabled.GetValue()))
+    return false;
+  group->enabled.SetValue(false);
+  NSLog(@"[iCube][Input] Wiimote%d: core IMU pointer disabled (touchscreen drives IR)", idx + 1);
+  return true;
+}
+
++ (BOOL)wiimoteUsesTouchscreen:(NSInteger)indexOneBased
+{
+  return WiimoteIsOnTouchscreen(static_cast<int>(indexOneBased - 1)) ? YES : NO;
+}
+
++ (BOOL)enforceTouchscreenPointerForWiimote:(NSInteger)indexOneBased
+{
+  const int idx = static_cast<int>(indexOneBased - 1);
+  const bool changed = DisableCoreIMUPointerIfTouchscreen(idx);
+  if (changed)
+    Wiimote::GetConfig()->SaveConfig();
+  return changed ? YES : NO;
+}
+
 + (void)reconcileAssignments
 {
   auto* cfg = Pad::GetConfig();
@@ -496,6 +546,7 @@ static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController
   wm->LoadConfig(ini.GetOrCreateSection("Profile"));
   if (restore) wm->SetDefaultDevice(selectedDev);
   wm->UpdateReferences(g_controller_interface);
+  DisableCoreIMUPointerIfTouchscreen(idx);
   Wiimote::GetConfig()->SaveConfig();
   return YES;
 }

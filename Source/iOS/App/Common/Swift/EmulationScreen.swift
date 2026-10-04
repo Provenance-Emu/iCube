@@ -1058,18 +1058,21 @@ struct EmulationScreen: View {
           }
       }
     }
-    // Single owner of the core's IMU pointer ("phone as Wii Remote"): ON only while the Wii
-    // touch overlay is hidden. While the overlay is visible the app drives IR itself (touch in
-    // drag/follow, device attitude in gyro mode). This used to be toggled from four places
-    // (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode, the long-press handler, and setup),
-    // and the overlay rebuild on a cursor-mode change could leave it ON with the pads visible,
-    // which reads as "changing Follow to Drag breaks the Wii controls".
-    .onChange(of: isTouchControlsActive) { active in
+    // Single owner of the core's IMU pointer on the touchscreen Wii Remote: always OFF, whether the
+    // overlay is shown or hidden. The app drives that slot's IR itself (touch in drag/follow,
+    // device attitude in gyro mode) and keeps feeding the phone's motion into its IMU axes, so
+    // turning the core pointer ON while the overlay was hidden aimed the remote at the ceiling as
+    // soon as the phone was held upright: the hand vanished and never came back (there is no
+    // working Recenter on the touchscreen device). Only a slot bound to a physical motion
+    // controller owns the core pointer, and its profile sets it; this never touches that slot.
+    // This used to be toggled from four places (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode,
+    // the long-press handler, and setup).
+    .onChange(of: isTouchControlsActive) { _ in
       // No touchscreen Wii Remote: the overlay drives no pointer, so there is nothing to keep from
       // fighting. `?? 0` used to flip Wii Remote 1's IMU pointer here even when a gyro pad owns it
       // (controller hub decision 12).
       guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
-      TVEmulationBridge.setWiiIMUPointEnabled(!active, forWiimote: touchSlot)
+      TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
     }
     .modifier(SettingsNavigationFallback(showSettings: $showSettings))
     .fullScreenCover(isPresented: $showPauseMenu) {

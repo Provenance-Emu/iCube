@@ -1498,30 +1498,15 @@ static bool IsTouchscreenQualifier(const ciface::Core::DeviceQualifier& dq)
 // went dead ("touch controls not working"; turning the gyro toggle off does not help because the
 // core keeps the last integrated rotation). Disable it on every Wiimote bound to a Touchscreen
 // device so IR comes from the app alone, exactly as it did while the IMU feed was inert.
+// The per-slot work (and the save) lives in TVControllerMappingBridge so a profile load from the
+// player screen applies the same rule.
 static void DisableCoreIMUPointerOnTouchscreenWiimotes()
 {
   auto* config = Wiimote::GetConfig();
   if (!config)
     return;
-  bool changed = false;
   for (int i = 0; i < config->GetControllerCount(); ++i)
-  {
-    auto* wm = config->GetController(i);
-    if (!wm)
-      continue;
-    const auto& dq = wm->GetDefaultDevice();
-    if (dq.source != "iOS" || dq.name != "Touchscreen")
-      continue;
-    auto* group = Wiimote::GetWiimoteGroup(i, WiimoteEmu::WiimoteGroup::IMUPoint);
-    if (group && group->enabled.GetValue())
-    {
-      group->enabled.SetValue(false);
-      changed = true;
-      NSLog(@"[iCube][Input] Wiimote%d: core IMU pointer disabled (touchscreen drives IR)", i + 1);
-    }
-  }
-  if (changed)
-    config->SaveConfig();
+    [TVControllerMappingBridge enforceTouchscreenPointerForWiimote:i + 1];
 }
 
 // ---- Touchscreen binding: one mechanical helper, three policies -------------------------------
@@ -1588,6 +1573,10 @@ static void BindTouchscreen(InputConfig* config, int index, const ciface::Core::
   controller->SetDefaultDevice(dq_touch);
   controller->UpdateReferences(g_controller_interface);
   config->SaveConfig();
+  // The LoadDefaults fallback and a user Touchscreen.ini without `IMUIR/Enabled` both leave the
+  // core's motion pointer on, and a kept mapping may come from a physical-remote profile.
+  if (config == Wiimote::GetConfig())
+    [TVControllerMappingBridge enforceTouchscreenPointerForWiimote:index + 1];
   NSLog(@"[iCube][Input] %s %d -> %s (%s)", config->GetGUIName().c_str(), index + 1,
         dq_touch.ToString().c_str(), what.c_str());
 }
