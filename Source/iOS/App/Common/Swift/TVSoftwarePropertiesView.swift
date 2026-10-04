@@ -8,7 +8,6 @@ struct TVSoftwarePropertiesView: View, Identifiable {
   let item: TVGameItem
   @Environment(\.dismiss) private var dismiss
   @State private var profilesVersion: Int = 0
-  @State private var wiiControllerType: Int = 0 // 0=Nunchuk (default), 1=Classic, 2=Sideways
 
   var body: some View {
     #if os(iOS)
@@ -46,7 +45,7 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                 Text(combinedId)
                   .font(.system(size: 14, weight: .medium))
                   .foregroundColor(.secondary)
-                Toggle("Favorite", isOn: Binding(get: { item.isFavorite }, set: { item.isFavorite = $0 }))
+                Toggle(L("Favorite"), isOn: Binding(get: { item.isFavorite }, set: { item.isFavorite = $0 }))
               }
               .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -54,28 +53,28 @@ struct TVSoftwarePropertiesView: View, Identifiable {
             LazyVGrid(columns: columns, spacing: 12) {
               let fileSizeText = ByteCountFormatter.string(fromByteCount: Int64(item.fileSize), countStyle: .file)
 
-              PropertyCard(title: "Internal Name", value: internalName)
-              PropertyCard(title: "Game ID", value: item.gameID)
+              PropertyCard(title: L("Internal Name"), value: internalName)
+              PropertyCard(title: L("Game ID"), value: item.gameID)
 
-              PropertyCard(title: "Disc", value: String(item.discNumber + 1))
-              PropertyCard(title: "Revision", value: String(item.revision))
+              PropertyCard(title: L("Disc"), value: String(item.discNumber + 1))
+              PropertyCard(title: L("Revision"), value: String(item.revision))
 
-              PropertyCard(title: "Manufacturer", value: item.makerLong)
-              PropertyCard(title: "Region", value: item.countryName)
+              PropertyCard(title: L("Manufacturer"), value: item.makerLong)
+              PropertyCard(title: L("Region"), value: item.countryName)
 
-              PropertyCard(title: "Title ID (Hex)", value: item.titleIDHex ?? "-")
-              PropertyCard(title: "GameTDB ID", value: item.gametdbID)
+              PropertyCard(title: L("Title ID (Hex)"), value: item.titleIDHex ?? "-")
+              PropertyCard(title: L("GameTDB ID"), value: item.gametdbID)
 
-              PropertyCard(title: "Apploader Date", value: item.apploaderDateString ?? "-")
-              PropertyCard(title: "File Size", value: fileSizeText)
+              PropertyCard(title: L("Apploader Date"), value: item.apploaderDateString ?? "-")
+              PropertyCard(title: L("File Size"), value: fileSizeText)
             }
 
-            // Profiles (MVP)
+            // Game Settings: this title's saved settings (`GameProfiles`), not a Dolphin input profile.
             VStack(alignment: .leading, spacing: 12) {
-              Text("Profiles").font(.headline)
+              Text(L("Game Settings")).font(.headline)
               HStack(spacing: 12) {
                 if GameProfiles.shared.profile(for: item.gameID) != nil {
-                  Button("Apply Recommended") {
+                  Button(L("Apply Recommended")) {
                     if let rec = GameProfiles.shared.profile(for: item.gameID) {
                       GameProfiles.shared.setProfile(rec, for: item.gameID)
                       GameProfiles.shared.applyProfileIfAvailable(for: item)
@@ -84,34 +83,11 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                   }
                   .buttonStyle(.bordered)
                 }
-                Toggle("Widescreen Hack", isOn: Binding(get: { DOLConfigBridge.gfxWidescreenHack() }, set: { DOLConfigBridge.setGfxWidescreenHack($0) }))
+                Toggle(L("Widescreen Hack"), isOn: Binding(get: { DOLConfigBridge.gfxWidescreenHack() }, set: { DOLConfigBridge.setGfxWidescreenHack($0) }))
               }
-              // Wii Controller Type
-              HStack(spacing: 12) {
-                Picker("Wii Controller", selection: $wiiControllerType) {
-                  Text("Nunchuk").tag(0)
-                  Text("Classic").tag(1)
-                  Text("Sideways").tag(2)
-                }
-                .pickerStyle(.segmented)
-                .onChange(of: wiiControllerType) { newVal in
-                  // Port 0 in core terms (Wiimote 1)
-                  if newVal == 1 {
-                    DOLWiimoteBridge.setExtensionForWiimote(0, extension: 2) // CLASSIC
-                    DOLWiimoteBridge.setSidewaysForWiimote(0, enabled: false)
-                  } else if newVal == 2 {
-                    DOLWiimoteBridge.setExtensionForWiimote(0, extension: 0) // NONE (bare Wiimote)
-                    DOLWiimoteBridge.setSidewaysForWiimote(0, enabled: true)
-                  } else {
-                    DOLWiimoteBridge.setExtensionForWiimote(0, extension: 1) // NUNCHUK
-                    DOLWiimoteBridge.setSidewaysForWiimote(0, enabled: false)
-                  }
-                  NotificationCenter.default.post(name: ControllerManager.assignmentsChanged, object: nil)
-                }
-              }
-              // Per-game Wii IR Sensitivity
+              // Per-game sensor bar sensitivity (SYSCONF)
               VStack(alignment: .leading) {
-                HStack { Text("Wii IR Sensitivity")
+                HStack { Text(L("Sensor Bar Sensitivity"))
                   Spacer()
                   Text("\(DOLConfigBridge.sysconfSensorBarSensitivity())").foregroundStyle(.secondary)
                 }
@@ -122,21 +98,21 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                 NavigationLink(destination: ShaderPickerView(selectedPresetPath: Binding(get: { UserDefaults.standard.string(forKey: "shader_preset_path") }, set: { UserDefaults.standard.set($0, forKey: "shader_preset_path")
                   NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
                 }))) {
-                  Text("Shader Preset")
+                  Text(L("Shader Preset"))
                   Spacer()
                   Text(UserDefaults.standard.string(forKey: "shader_preset_path")?.split(separator: "/").last.map(String.init) ?? L("None")).foregroundStyle(.secondary)
                 }
               }
               Divider()
               HStack(spacing: 12) {
-                Button("Save Current as Profile") {
+                Button(L("Save as Game Settings")) {
                   let snap = GameProfiles.shared.buildProfileFromCurrentSettings()
                   GameProfiles.shared.setProfile(snap, for: item.gameID)
                   GameProfiles.shared.applyProfileIfAvailable(for: item)
                   profilesVersion &+= 1
                 }
                 .buttonStyle(.borderedProminent)
-                Button("Clear Profile") {
+                Button(L("Clear Game Settings")) {
                   GameProfiles.shared.clearProfile(for: item.gameID)
                   // Force update for the toggles and pickers to reflect cleared state
                   DOLConfigBridge.setGfxWidescreenHack(false)
@@ -144,7 +120,7 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                 }
                 .buttonStyle(.bordered)
                 if GameProfiles.shared.hasSavedProfile(for: item.gameID) {
-                  Text("Saved").font(.caption).foregroundStyle(.secondary)
+                  Text(L("Saved")).font(.caption).foregroundStyle(.secondary)
                 }
               }
               // Optional diff view
@@ -152,7 +128,7 @@ struct TVSoftwarePropertiesView: View, Identifiable {
                 let diff = GameProfiles.shared.diffCurrentSettings(from: prof)
                 if !diff.isEmpty {
                   VStack(alignment: .leading, spacing: 6) {
-                    Text("Profile Differences").font(.subheadline).foregroundStyle(.secondary)
+                    Text(L("Differences from Saved Settings")).font(.subheadline).foregroundStyle(.secondary)
                     ForEach(Array(diff.enumerated()), id: \.offset) { pair in
                       let row = pair.element
                       HStack { Text(row.0)
@@ -181,19 +157,11 @@ struct TVSoftwarePropertiesView: View, Identifiable {
             .ignoresSafeArea()
         )
       }
-      .navigationTitle("Properties")
+      .navigationTitle(L("Properties"))
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) { Button("Done") { dismiss() } }
+        ToolbarItem(placement: .navigationBarTrailing) { Button(L("Done")) { dismiss() } }
       }
-    }
-    .onAppear {
-      // Initialize Wii controller picker based on current core state
-      let classic = DOLWiimoteBridge.isClassicActive(forWiimote: 0)
-      let sideways = DOLWiimoteBridge.isSideways(forWiimote: 0)
-      if classic { wiiControllerType = 1 }
-      else if sideways { wiiControllerType = 2 }
-      else { wiiControllerType = 0 }
     }
   }
   #endif
@@ -252,24 +220,24 @@ struct TVSoftwarePropertiesView: View, Identifiable {
 
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 20), GridItem(.flexible(), spacing: 20)], spacing: 16) {
               // Core identifiers
-              PropertyCard(title: "Internal Name", value: internalName)
-              PropertyCard(title: "Game ID", value: item.gameID)
+              PropertyCard(title: L("Internal Name"), value: internalName)
+              PropertyCard(title: L("Game ID"), value: item.gameID)
 
               // Disc/Revision
-              PropertyCard(title: "Disc", value: String(item.discNumber + 1))
-              PropertyCard(title: "Revision", value: String(item.revision))
+              PropertyCard(title: L("Disc"), value: String(item.discNumber + 1))
+              PropertyCard(title: L("Revision"), value: String(item.revision))
 
               // Publisher/Manufacturer and Region
-              PropertyCard(title: "Manufacturer", value: item.makerLong)
-              PropertyCard(title: "Region", value: item.countryName)
+              PropertyCard(title: L("Manufacturer"), value: item.makerLong)
+              PropertyCard(title: L("Region"), value: item.countryName)
 
               // IDs
-              PropertyCard(title: "Title ID (Hex)", value: item.titleIDHex ?? "-")
-              PropertyCard(title: "GameTDB ID", value: item.gametdbID)
+              PropertyCard(title: L("Title ID (Hex)"), value: item.titleIDHex ?? "-")
+              PropertyCard(title: L("GameTDB ID"), value: item.gametdbID)
 
               // Other
-              PropertyCard(title: "Apploader Date", value: item.apploaderDateString ?? "-")
-              PropertyCard(title: "File Size", value: fileSizeText)
+              PropertyCard(title: L("Apploader Date"), value: item.apploaderDateString ?? "-")
+              PropertyCard(title: L("File Size"), value: fileSizeText)
             }
           }
         }
@@ -281,7 +249,7 @@ struct TVSoftwarePropertiesView: View, Identifiable {
     .background(backgroundView)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .overlay(alignment: .topTrailing) {
-      Button("Close") { dismiss() }
+      Button(L("Close")) { dismiss() }
         .buttonStyle(.borderedProminent)
         .padding(24)
     }

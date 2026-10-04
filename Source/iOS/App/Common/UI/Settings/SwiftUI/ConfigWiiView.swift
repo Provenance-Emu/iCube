@@ -81,7 +81,7 @@ struct ConfigWiiView: View {
         .onChange(of: sensorBarPos) { DOLConfigBridge.setSysconfSensorBarPosition($0) }
         settingsCaption(
           HStack {
-            Text(L("IR Sensitivity")); Spacer()
+            Text(L("Sensor Bar Sensitivity")); Spacer()
 #if os(tvOS)
             TVIntStepper(value: $sensorBarSens, range: 1...5, step: 1)
 #else

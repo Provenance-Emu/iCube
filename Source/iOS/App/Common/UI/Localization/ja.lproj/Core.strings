@@ -3260,7 +3260,6 @@ WiiLinkは、ForecastやNintendoチャンネルなど、廃止されたWiiConnec
 "Whitelisted USB Passthrough Devices" = "常にパススルーを行うUSBデバイスリスト";
 "Wii Remote Settings" = "Wiiリモコンの設定";
 "Sensor Bar Position" = "センサーバーの位置";
-"IR Sensitivity" = "Wiiリモコンの感度";
 "Speaker Volume" = "リモコンスピーカー音量";
 "Add New USB Device" = "USBデバイスを追加";
 "USB Whitelist Error" = "USB ホワイトリストエラー";
@@ -4809,3 +4808,15 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "On-Screen Stick Feel" = "On-Screen Stick Feel";
 "Editable On-Screen Controls" = "Editable On-Screen Controls";
 "On by default: on-screen controls you can move and resize from Edit Layout or with a long press in-game. Turn off to use the older fixed pads." = "On by default: on-screen controls you can move and resize from Edit Layout or with a long press in-game. Turn off to use the older fixed pads.";
+"Internal Name" = "Internal Name";
+"Manufacturer" = "Manufacturer";
+"Title ID (Hex)" = "Title ID (Hex)";
+"GameTDB ID" = "GameTDB ID";
+"Game Settings" = "Game Settings";
+"Apply Recommended" = "Apply Recommended";
+"Sensor Bar Sensitivity" = "Sensor Bar Sensitivity";
+"Shader Preset" = "Shader Preset";
+"Save as Game Settings" = "Save as Game Settings";
+"Clear Game Settings" = "Clear Game Settings";
+"Differences from Saved Settings" = "Differences from Saved Settings";
+"On-Screen Controls Opacity" = "On-Screen Controls Opacity";

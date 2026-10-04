@@ -215,22 +215,31 @@ final class GameProfiles {
     var rows: [(String, String, String)] = []
     // widescreen
     let wsNow = DOLConfigBridge.gfxWidescreenHack()
-    if let ws = profile.widescreenHack, ws != wsNow { rows.append(("Widescreen", ws ? "On" : "Off", wsNow ? "On" : "Off")) }
-    // touch IR mode
+    if let ws = profile.widescreenHack, ws != wsNow { rows.append((L("Widescreen Hack"), ws ? L("On") : L("Off"), wsNow ? L("On") : L("Off"))) }
+    // pointer mode
     let irNow = DOLConfigBridge.mainTouchPadIRMode()
-    if let ir = profile.wiimoteTouchIRMode ?? profile.irMode, ir != irNow { rows.append(("Touch IR Mode", String(ir), String(irNow))) }
-    // IR sensitivity
+    if let ir = profile.wiimoteTouchIRMode ?? profile.irMode, ir != irNow {
+      rows.append((L("Pointer"), Self.pointerModeTitle(ir), Self.pointerModeTitle(irNow)))
+    }
+    // sensor bar sensitivity
     let sensNow = DOLConfigBridge.sysconfSensorBarSensitivity()
-    if let s = profile.wiimoteIRSensitivity, s != sensNow { rows.append(("IR Sensitivity", String(s), String(sensNow))) }
+    if let s = profile.wiimoteIRSensitivity, s != sensNow { rows.append((L("Sensor Bar Sensitivity"), String(s), String(sensNow))) }
     // opacity
     #if os(iOS)
     let opNow = DOLConfigBridge.mainTouchPadOpacity()
-    if let op = profile.touchOpacity, fabsf(op - opNow) > 0.001 { rows.append(("Touch Opacity", String(format: "%.2f", op), String(format: "%.2f", opNow))) }
+    if let op = profile.touchOpacity, fabsf(op - opNow) > 0.001 {
+      rows.append((L("On-Screen Controls Opacity"), String(format: "%.2f", op), String(format: "%.2f", opNow)))
+    }
     #endif
     // shader
     let presetNow = UserDefaults.standard.string(forKey: "shader_preset_path") ?? "-"
-    if let pr = profile.shaderPresetPath, pr != presetNow { rows.append(("Shader Preset", (pr as NSString).lastPathComponent, (presetNow as NSString).lastPathComponent)) }
+    if let pr = profile.shaderPresetPath, pr != presetNow { rows.append((L("Shader Preset"), (pr as NSString).lastPathComponent, (presetNow as NSString).lastPathComponent)) }
     return rows
+  }
+
+  /// `PointerMode`'s title for a raw `MAIN_TOUCH_PAD_IR_MODE` value; an unknown value shows as the number.
+  private static func pointerModeTitle(_ raw: Int) -> String {
+    PointerMode(rawValue: raw)?.title ?? String(raw)
   }
 
   // Stub for curated recommendations; currently unused.
