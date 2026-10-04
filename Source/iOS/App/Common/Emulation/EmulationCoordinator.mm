@@ -1485,11 +1485,6 @@ static bool FindTouchscreenQualifier(int controller_id, ciface::Core::DeviceQual
   return false;
 }
 
-static bool IsTouchscreenQualifier(const ciface::Core::DeviceQualifier& dq)
-{
-  return dq.source == "iOS" && dq.name == "Touchscreen";
-}
-
 // iCube: the emulated Wiimote's own IMU pointer ("IMUIR", enabled by default upstream) folds the
 // gyro/accelerometer it receives into the IR camera transform. That is right for a physical
 // motion controller, wrong for the touchscreen: the app synthesizes the pointer itself (drag /
@@ -1512,12 +1507,12 @@ static void EnforceTouchscreenPointerOnWiimotes()
     [TVControllerMappingBridge enforceTouchscreenPointerForWiimote:i + 1];
 }
 
-// ---- Touchscreen binding: one mechanical helper, three policies -------------------------------
+// ---- Touchscreen binding: one mechanical helper ---------------------------------------------
 //
 // The policies (Pad 1 fallback, Wii Remote 1 fallback, explicit per-slot assignment) used to carry
-// three copies of the profile search with three different rules. Long term the policy belongs in
-// the Swift ControllerAssignmentService; what stays here must be mechanical: bind, load profile,
-// save.
+// three copies of the profile search with three different rules. The policy now lives in Swift
+// (AssignmentEngine, ControllerAssignmentService; the boot pass is
+// ControllerManager.prepareForBoot); what stays here is mechanical: bind, load profile, save.
 
 static bool HasAnyBoundControl(const ControllerEmu::EmulatedController* controller)
 {
@@ -1588,96 +1583,25 @@ static void BindTouchscreen(InputConfig* config, int index, const ciface::Core::
         dq_touch.ToString().c_str(), what.c_str());
 }
 
-// True when some OTHER active slot already holds a touchscreen instance. "Active" matters: every
-// slot's stock default is `iOS/0/Touchscreen` with the port/source off, and treating that as an
-// explicit assignment left Pad 1 / Wii Remote 1 unbound forever.
-static bool TouchscreenOwnedByAnotherPad(int except_index)
+// The platform of the title about to boot, from its boot parameters: the system is not booted yet,
+// so `isCurrentSystemWii()` cannot say. The GameCube menu (IPL) and FIFO logs count as GameCube.
+static bool IsWiiBoot(const BootParameters& boot)
 {
-  auto* config = Pad::GetConfig();
-  for (int i = 0; i < config->GetControllerCount(); ++i)
-  {
-    if (i == except_index)
-      continue;
-    auto* p = config->GetController(i);
-    if (p && IsTouchscreenQualifier(p->GetDefaultDevice()) &&
-        Config::Get(Config::GetInfoForSIDevice(i)) != SerialInterface::SIDEVICE_NONE)
-      return true;
-  }
-  return false;
-}
-
-static bool TouchscreenOwnedByAnotherWiimote(int except_index)
-{
-  auto* config = Wiimote::GetConfig();
-  for (int i = 0; i < config->GetControllerCount(); ++i)
-  {
-    if (i == except_index)
-      continue;
-    auto* w = config->GetController(i);
-    if (w && IsTouchscreenQualifier(w->GetDefaultDevice()) &&
-        Config::Get(Config::GetInfoForWiimoteSource(i)) == WiimoteSource::Emulated)
-      return true;
-  }
-  return false;
-}
-
-// A slot whose default device is a CONNECTED physical controller is not ours to take: choosing
-// what owns a slot is the Swift AssignmentEngine's job. The on-screen pad is only the fallback
-// when nothing physical is attached. Without this check the fallback ran after reconcile() on
-// the pause-menu path and overwrote the controller the engine had just bound.
-static bool OwnedByConnectedPhysicalDevice(const ControllerEmu::EmulatedController* controller)
-{
-  const auto dq = controller->GetDefaultDevice();
-  return !IsTouchscreenQualifier(dq) && !dq.ToString().empty() &&
-         g_controller_interface.HasConnectedDevice(dq);
-}
-
-static void EnsurePad1DefaultsToTouchscreen()
-{
-  // Pad 1 binds to Touchscreen instance 0 (GC inputs); Wii Remote 1 to instance 4 (Wii inputs).
-  if (!Pad::GetConfig() || Pad::GetConfig()->GetControllerCount() == 0)
-    return;
-  ciface::Core::DeviceQualifier dq_touch;
-  if (!FindTouchscreenQualifier(0, &dq_touch))
-    return;
-
-  if (auto* pad0 = Pad::GetConfig()->GetController(0))
-  {
-    if (!OwnedByConnectedPhysicalDevice(pad0) && !TouchscreenOwnedByAnotherPad(0))
-      BindTouchscreen(Pad::GetConfig(), 0, dq_touch);
-  }
-
-  if (Wiimote::GetConfig() && Wiimote::GetConfig()->GetControllerCount() > 0)
-  {
-    if (auto* wm0 = Wiimote::GetConfig()->GetController(0))
-    {
-      Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(0), WiimoteSource::Emulated);
-      // Disable Wiimote 2-4 to avoid a phantom P2 on Wii IR -- but ONLY slots that are not
-      // bound to a connected physical controller. Which controller owns a slot is the Swift
-      // AssignmentEngine's decision; zeroing every slot here (as this loop used to) ran after
-      // reconcile() and silently dropped input from any pad bound to Wiimote 2-4.
-      for (int i = 1; i < std::min(4, Wiimote::GetConfig()->GetControllerCount()); ++i)
-      {
-        auto* wmi = Wiimote::GetConfig()->GetController(i);
-        if (!(wmi && OwnedByConnectedPhysicalDevice(wmi)))
-          Config::SetBaseOrCurrent(Config::GetInfoForWiimoteSource(i), WiimoteSource::None);
-      }
-
-      ciface::Core::DeviceQualifier dq_touch_wii;
-      if (FindTouchscreenQualifier(kTouchscreenWiimoteIdBase, &dq_touch_wii) &&
-          !OwnedByConnectedPhysicalDevice(wm0) && !TouchscreenOwnedByAnotherWiimote(0))
-        BindTouchscreen(Wiimote::GetConfig(), 0, dq_touch_wii);
-    }
-  }
-  EnforceTouchscreenPointerOnWiimotes();
-}
-
-
-+ (void)ensurePad1DefaultsToTouchscreen
-{
-  DOLHostQueueRunSync(^{
-    EnsurePad1DefaultsToTouchscreen();
-  });
+  return std::visit(
+      [](const auto& parameters) -> bool {
+        using T = std::decay_t<decltype(parameters)>;
+        if constexpr (std::is_same_v<T, BootParameters::Disc>)
+          return parameters.volume &&
+                 parameters.volume->GetVolumeType() == DiscIO::Platform::WiiDisc;
+        else if constexpr (std::is_same_v<T, BootParameters::Executable>)
+          return parameters.reader && parameters.reader->IsWii();
+        else if constexpr (std::is_same_v<T, DiscIO::VolumeWAD> ||
+                           std::is_same_v<T, BootParameters::NANDTitle>)
+          return true;
+        else
+          return false;
+      },
+      boot.parameters);
 }
 
 // Explicit assignment: the caller (ControllerAssignmentService / DS4 touchpad slots) has already
@@ -1912,9 +1836,11 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
       auto local_boot = std::move(boot);
       // Initialize controller backends before boot so devices are available
       UICommon::InitControllers(wsi);
-      // Ensure GameCube Port 1 is plugged with an emulated controller and default to Touchscreen if needed
-      Config::SetBaseOrCurrent(Config::GetInfoForSIDevice(0), SerialInterface::SIDEVICE_GC_CONTROLLER);
-      EnsurePad1DefaultsToTouchscreen();
+      // Which ports play and what Player 1 / Wii Remote 1 fall back to is the Swift boot pass's
+      // decision (pins, pads switched off at boot, a Player 1 the user turned off in a Wii title);
+      // it binds through the mechanical helpers above.
+      [[ControllerManager shared] prepareForBootWithIsWii:local_boot && IsWiiBoot(*local_boot)];
+      EnforceTouchscreenPointerOnWiimotes();
       // iCube: bridge the hot-block profiler toggle from an NSUserDefault into the Dolphin config
       // BEFORE boot, so CachedInterpreter::Init() reads MAIN_CIR_PROFILE for this run. Default OFF
       // (absent key => false). Set `defaults write <bundleid> icube.cirProfile -bool YES` (or via the

@@ -103,6 +103,18 @@ final class ControllerAssignmentService {
     }
   }
 
+  /// Applies the pre-boot pass: GameCube port 1 plugged in for a GameCube title, Wii Remote 1
+  /// emulated, the Wii Remotes nothing holds switched off, then the Touchscreen fallbacks (each
+  /// stashing the mapping of a pad that is bound but switched off).
+  func apply(_ boot: BootDecision) {
+    if boot.activatesGCPort1 { activate(system: .gamecube, port: 0) }
+    if boot.activatesWiimote1 { activate(system: .wii, port: 0) }
+    for port in boot.deactivatedWiimotes {
+      writer.setWiimoteSource(emulated: false, port: port)
+    }
+    apply(AssignmentDecision(assignments: boot.assignments))
+  }
+
   /// The writes of one `ControllerManager.reconcile()` pass over `state`: with
   /// `autoAssign`, what `AssignmentEngine` decides; then every slot bound to a
   /// CONNECTED physical controller is re-affirmed active (SIDevice / Wii Remote

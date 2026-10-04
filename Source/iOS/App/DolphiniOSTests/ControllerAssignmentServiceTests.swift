@@ -225,7 +225,10 @@ private final class SimulatedConfig: ControllerConfigWriting {
   /// What `ControllerStateStore.snapshot()` would read with `pads` connected.
   func state(pads: [String], isWii: Bool = false) -> ControllerStateStore.State {
     func assignments(_ slots: [Slot]) -> [ControllerStateStore.PortAssignment] {
-      slots.enumerated().map { ControllerStateStore.PortAssignment(portOneBased: $0.offset + 1, defaultDeviceQualifier: $0.element.device) }
+      slots.enumerated().map {
+        ControllerStateStore.PortAssignment(
+          portOneBased: $0.offset + 1, defaultDeviceQualifier: $0.element.device, isActive: $0.element.active)
+      }
     }
     return ControllerStateStore.State(
       controllers: [], portAssignments: assignments(gc), wiimoteAssignments: assignments(wii),
@@ -345,5 +348,42 @@ final class ControllerReconnectTests: XCTestCase {
     service.assign(qualifier: pad, toPlayer: 0, system: .wii)
 
     XCTAssertEqual(config.wii[0].mapping, "pad:custom")
+  }
+
+  // MARK: Boot
+
+  /// The pad is switched off when the game boots: the boot pass gives Player 1 to the Touchscreen
+  /// (it used to load Touchscreen.ini over the pad's mapping for good), and the pad gets its own
+  /// mapping back when it is switched on mid-game.
+  func test_padSwitchedOffAtBoot_getsItsMappingBackWhenItConnects() {
+    let config = SimulatedConfig()
+    config.gc[0] = SimulatedConfig.Slot(device: pad, mapping: "pad:custom", active: true)
+    let service = ControllerAssignmentService(writer: config)
+
+    service.apply(AssignmentEngine().decideBoot(from: config.state(pads: [])))
+    XCTAssertEqual(config.gc[0].device, SimulatedConfig.touchscreen)
+    XCTAssertTrue(config.wii[0].active)
+
+    service.reconcile(config.state(pads: [pad]), pinned: [], autoAssign: true)
+    XCTAssertEqual(config.gc[0], SimulatedConfig.Slot(device: pad, mapping: "pad:custom", active: true))
+  }
+
+  /// Booting again with Player 1 already on the Touchscreen keeps the touch mapping the user edited.
+  func test_boot_keepsAnEditedTouchMapping() {
+    let config = SimulatedConfig()
+    config.gc[0] = SimulatedConfig.Slot(device: SimulatedConfig.touchscreen, mapping: "touch:edited", active: true)
+    let service = ControllerAssignmentService(writer: config)
+    service.apply(AssignmentEngine().decideBoot(from: config.state(pads: [])))
+    XCTAssertEqual(config.gc[0].mapping, "touch:edited")
+  }
+
+  /// A Wii title leaves a Player 1 the user switched off alone, before and after boot.
+  func test_wiiTitle_aSwitchedOffPlayer1_staysOff() {
+    let config = SimulatedConfig()
+    config.gc[0] = SimulatedConfig.Slot(device: pad, mapping: "pad:custom", active: false)
+    let service = ControllerAssignmentService(writer: config)
+    service.apply(AssignmentEngine().decideBoot(from: config.state(pads: [], isWii: true)))
+    service.reconcile(config.state(pads: [], isWii: true), pinned: [], autoAssign: true)
+    XCTAssertEqual(config.gc[0], SimulatedConfig.Slot(device: pad, mapping: "pad:custom", active: false))
   }
 }

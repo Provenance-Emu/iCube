@@ -409,6 +409,15 @@ final class ControllerManager: NSObject, ObservableObject {
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
   }
 
+  /// The pre-boot pass (`AssignmentEngine.decideBoot`). Called by EmulationCoordinator on the main
+  /// thread after `UICommon::InitControllers` and before `BootCore`, with the platform of the title
+  /// about to boot (`isCurrentSystemWii()` means nothing yet). The coordinator keeps only the
+  /// mechanical work around it.
+  func prepareForBoot(isWii: Bool) {
+    let state = ControllerStateStore.shared.snapshot(isWiiSystem: isWii)
+    assignmentService.apply(AssignmentEngine().decideBoot(from: state, pinned: pinnedSlots))
+  }
+
   /// The **only** writer of `GCController.playerIndex`.
   ///
   /// It is derived from the config bindings rather than set alongside them, so

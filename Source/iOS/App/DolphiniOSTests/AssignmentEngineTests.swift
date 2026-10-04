@@ -203,3 +203,94 @@ final class AssignmentEngineTests: XCTestCase {
     ], "padB gets no GameCube port in a Wii title")
   }
 }
+
+/// `AssignmentEngine.decideBoot`: the pre-boot pass that used to be `EnsurePad1DefaultsToTouchscreen`
+/// in EmulationCoordinator.mm.
+final class AssignmentEngineBootTests: XCTestCase {
+  private let touchGC = ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .gamecube)
+  private let touchWii = ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .wii)
+
+  /// `gcActive` / `wiiActive` list the 1-based ports that play; every other port is off.
+  private func boot(
+    gc: [String] = ["", "", "", ""], gcActive: Set<Int> = [1],
+    wii: [String] = ["", "", "", ""], wiiActive: Set<Int> = [1],
+    connected: [String] = [touchscreen, wiiTouchscreen], isWii: Bool = false,
+    pinned: Set<PinnedSlot> = []
+  ) -> BootDecision {
+    func slots(_ qualifiers: [String], _ active: Set<Int>) -> [ControllerStateStore.PortAssignment] {
+      qualifiers.enumerated().map {
+        ControllerStateStore.PortAssignment(
+          portOneBased: $0.offset + 1, defaultDeviceQualifier: $0.element, isActive: active.contains($0.offset + 1))
+      }
+    }
+    let state = ControllerStateStore.State(
+      controllers: [], portAssignments: slots(gc, gcActive), wiimoteAssignments: slots(wii, wiiActive),
+      connectedQualifiers: connected, isWiiSystem: isWii, touchscreenHoldsWiimote1: false)
+    return AssignmentEngine().decideBoot(from: state, pinned: pinned)
+  }
+
+  func test_gameCubeTitle_freshInstall_touchscreenOnPlayer1AndWiiRemote1() {
+    XCTAssertEqual(boot(), BootDecision(
+      activatesGCPort1: true, activatesWiimote1: true, deactivatedWiimotes: [1, 2, 3], assignments: [touchGC, touchWii]))
+  }
+
+  /// A pad bound to Player 1 but switched off at boot: the Touchscreen takes Player 1 so the game is
+  /// playable, and the service stashes the pad's mapping on the way (it used to be overwritten).
+  func test_padSwitchedOffAtBoot_touchscreenTakesPlayer1() {
+    XCTAssertEqual(boot(gc: [padA, "", "", ""], wii: [padA, "", "", ""]).assignments, [touchGC, touchWii])
+  }
+
+  func test_padConnectedAtBoot_keepsItsSlots() {
+    let decision = boot(gc: [padA, "", "", ""], wii: [padA, padA, "", ""], connected: [touchscreen, padA])
+    XCTAssertEqual(decision.assignments, [])
+    XCTAssertEqual(decision.deactivatedWiimotes, [2, 3], "Wii Remote 2 is held by a connected pad")
+  }
+
+  /// The user's explicit choice holds at boot: a pinned Player 1 waits for its pad.
+  func test_pinnedSlots_areLeftAlone() {
+    let pinned: Set<PinnedSlot> = [
+      PinnedSlot(system: .gamecube, playerZeroBased: 0),
+      PinnedSlot(system: .wii, playerZeroBased: 0),
+      PinnedSlot(system: .wii, playerZeroBased: 1),
+    ]
+    let decision = boot(
+      gc: [padA, "", "", ""], wii: [padA, wiiTouchscreen, "", ""], wiiActive: [1, 2], pinned: pinned)
+    XCTAssertEqual(decision.assignments, [])
+    XCTAssertEqual(decision.deactivatedWiimotes, [2, 3], "a pinned Wii Remote 2 stays on")
+  }
+
+  /// One touchscreen per system: Wii Remote 1 does not take it while a pinned Wii Remote 2 has it.
+  func test_aPinnedTouchscreenWiiRemote2_keepsWiiRemote1OffTheTouchscreen() {
+    let decision = boot(
+      wii: ["", "iOS/5/Touchscreen", "", ""], wiiActive: [1, 2], pinned: [PinnedSlot(system: .wii, playerZeroBased: 1)])
+    XCTAssertEqual(decision.assignments, [touchGC])
+  }
+
+  /// A Wii title no longer plugs GameCube port 1 in; a Player 1 the user switched off stays off.
+  func test_wiiTitle_player1SwitchedOff_staysOff() {
+    let decision = boot(gc: [touchscreen, "", "", ""], gcActive: [], isWii: true)
+    XCTAssertFalse(decision.activatesGCPort1)
+    XCTAssertEqual(decision.assignments, [touchWii])
+  }
+
+  func test_wiiTitle_player1On_keepsTheTouchscreen() {
+    let decision = boot(gc: [touchscreen, "", "", ""], isWii: true)
+    XCTAssertFalse(decision.activatesGCPort1)
+    XCTAssertEqual(decision.assignments, [touchGC, touchWii])
+  }
+
+  /// tvOS has no Touchscreen: only GameCube port 1 is written, as the C++ pass did.
+  func test_noTouchscreen_onlyPlugsInPort1() {
+    XCTAssertEqual(boot(gc: [padA, "", "", ""], connected: []), BootDecision(
+      activatesGCPort1: true, activatesWiimote1: false, deactivatedWiimotes: [], assignments: []))
+  }
+
+  /// The reconcile pass follows the same rule for Player 1 in a Wii title.
+  func test_reconcile_wiiTitle_player1SwitchedOff_noTouchscreenFallback() {
+    let state = ControllerStateStore.State(
+      controllers: [],
+      portAssignments: [ControllerStateStore.PortAssignment(portOneBased: 1, defaultDeviceQualifier: padA, isActive: false)],
+      wiimoteAssignments: [], connectedQualifiers: [touchscreen], isWiiSystem: true, touchscreenHoldsWiimote1: false)
+    XCTAssertEqual(AssignmentEngine().decide(from: state), .none)
+  }
+}

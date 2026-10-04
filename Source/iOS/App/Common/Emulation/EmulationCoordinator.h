@@ -52,15 +52,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Applies the overscan preference to the active render screen when applicable.
 - (void)applyOverscanCompensationPreference;
 
-/// Ensures GameCube Pad 1 is bound to the iOS Touchscreen when no default device is connected.
-///
-/// Auto-assignment of external controllers is NOT here any more: it hardcoded
-/// `isWii:NO`, so during a Wii game it only ever touched GC pad config and
-/// silently no-opped on Wiimote config. All assignment policy now lives in the
-/// Swift `AssignmentEngine`, reached via `ControllerManager.reconcile()`.
-+ (void)ensurePad1DefaultsToTouchscreen;
-
-// Ensure a given Wiimote port (1-based) is set to Emulated and uses the iOS Touchscreen profile
+// Ensure a given Wiimote port (1-based) is set to Emulated and uses the iOS Touchscreen profile.
+// Mechanical: every assignment policy, the pre-boot fallbacks included, lives in the Swift
+// `AssignmentEngine` (`ControllerManager.reconcile()`, `ControllerManager.prepareForBoot`).
 + (void)ensureWiimoteDefaultsToTouchscreenForPort:(NSInteger)portOneBased;
 
 /// Live adaptive-clock (auto) toggle. Writes the `adaptive_clock_enable` NSUserDefault and either

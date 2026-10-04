@@ -29,6 +29,18 @@ struct AssignmentDecision: Equatable {
   static let none = AssignmentDecision(assignments: [])
 }
 
+/// What the pre-boot pass writes (`AssignmentEngine.decideBoot`).
+struct BootDecision: Equatable {
+  /// Plug a standard controller into GameCube port 1 (`SIDevice0`).
+  let activatesGCPort1: Bool
+  /// Switch Wii Remote 1 to Emulated.
+  let activatesWiimote1: Bool
+  /// 0-based Wii Remotes whose source is switched off.
+  let deactivatedWiimotes: [Int]
+  /// Touchscreen fallbacks (`qualifier == nil`) for Player 1 and Wii Remote 1.
+  let assignments: [ControllerAssignment]
+}
+
 /// The **only** policy that chooses which controller owns which port.
 ///
 /// Before this, six writers raced: two C++ auto-assign policies, this engine, a
@@ -82,9 +94,12 @@ final class AssignmentEngine {
     // A pad that disconnected keeps its binding, so Pad 1 may still name it: the
     // service stashes that pad's mapping before the Touchscreen takes the port and
     // gives it back when the pad returns. tvOS enumerates no Touchscreen, and
-    // there the binding simply waits for the pad.
+    // there the binding simply waits for the pad. In a Wii title a Player 1 the
+    // user switched off stays off: binding would plug it back in.
+    let player1IsOff = state.portAssignments.contains { $0.portOneBased == 1 && !$0.isActive }
     if physical.isEmpty, state.connectedQualifiers.contains(where: Self.isVirtual),
-       let pad1 = gcSlots.first, !Self.isVirtual(pad1), !pinnedGC.contains(0) {
+       let pad1 = gcSlots.first, !Self.isVirtual(pad1), !pinnedGC.contains(0),
+       !(state.isWiiSystem && player1IsOff) {
       out.append(ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .gamecube))
     }
 
@@ -106,6 +121,54 @@ final class AssignmentEngine {
     }
 
     return AssignmentDecision(assignments: out)
+  }
+
+  // MARK: Boot
+
+  /// The pre-boot pass, run once after the ControllerInterface starts and before the core boots
+  /// (`ControllerManager.prepareForBoot`). It used to be `EnsurePad1DefaultsToTouchscreen` in
+  /// EmulationCoordinator.mm, which ignored pins, loaded Touchscreen.ini over the mapping of a pad
+  /// that was switched off at boot, and plugged GameCube port 1 in for every title.
+  ///
+  /// `state.isWiiSystem` is the title about to boot. Player 1 and Wii Remote 1 fall back to the
+  /// Touchscreen unless the user pinned them, a connected pad holds them, or another active slot
+  /// already has the Touchscreen; a pad that is bound but off keeps its mapping (the service
+  /// stashes it) and takes the slot back when it connects. Wii Remote 1 is emulated, and Wii
+  /// Remotes 2-4 are switched off unless a connected pad holds them or the user pinned them.
+  /// Without a Touchscreen (tvOS) only GameCube port 1 is written, as before.
+  func decideBoot(from state: ControllerStateStore.State, pinned: Set<PinnedSlot> = []) -> BootDecision {
+    let connected = Set(state.connectedQualifiers)
+    func heldByConnectedPad(_ slot: ControllerStateStore.PortAssignment) -> Bool {
+      Self.isPhysical(slot.defaultDeviceQualifier) && connected.contains(slot.defaultDeviceQualifier)
+    }
+    let pinnedGC = Set(pinned.filter { $0.system == .gamecube }.map(\.playerZeroBased))
+    let pinnedWii = Set(pinned.filter { $0.system == .wii }.map(\.playerZeroBased))
+    let gc = state.portAssignments.sorted { $0.portOneBased < $1.portOneBased }
+    let wii = state.wiimoteAssignments.sorted { $0.portOneBased < $1.portOneBased }
+    let hasTouchscreen = state.connectedQualifiers.contains(where: Self.isVirtual)
+    // A GameCube title needs a controller in port 1; a Wii title keeps the port as the user left it.
+    let activatesGCPort1 = !state.isWiiSystem
+
+    let deactivatedWiimotes: [Int] = hasTouchscreen
+      ? wii.indices.dropFirst().filter { !heldByConnectedPad(wii[$0]) && !pinnedWii.contains($0) }
+      : []
+    var assignments: [ControllerAssignment] = []
+    if hasTouchscreen, let player1 = gc.first, !pinnedGC.contains(0), !heldByConnectedPad(player1),
+       activatesGCPort1 || player1.isActive,
+       !gc.dropFirst().contains(where: { $0.isActive && Self.isVirtual($0.defaultDeviceQualifier) }) {
+      assignments.append(ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .gamecube))
+    }
+    // The other Wii Remotes count once this pass has switched off the ones it switches off.
+    let otherWiimoteHasTouchscreen = wii.indices.dropFirst().contains { index in
+      wii[index].isActive && !deactivatedWiimotes.contains(index) && Self.isVirtual(wii[index].defaultDeviceQualifier)
+    }
+    if hasTouchscreen, let wiimote1 = wii.first, !pinnedWii.contains(0), !heldByConnectedPad(wiimote1),
+       !otherWiimoteHasTouchscreen {
+      assignments.append(ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .wii))
+    }
+    return BootDecision(
+      activatesGCPort1: activatesGCPort1, activatesWiimote1: hasTouchscreen, deactivatedWiimotes: deactivatedWiimotes,
+      assignments: assignments)
   }
 
   /// Device qualifiers are `source/id/name`. The only virtual source the app

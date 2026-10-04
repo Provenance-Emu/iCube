@@ -17,6 +17,8 @@ final class ControllerStateStore: NSObject, Sendable {
   struct PortAssignment: Equatable {
     let portOneBased: Int
     let defaultDeviceQualifier: String
+    /// The port plays: a GameCube port's SIDevice is not None, a Wii Remote's source is Emulated.
+    var isActive = true
   }
 
   struct State: Equatable {
@@ -35,7 +37,9 @@ final class ControllerStateStore: NSObject, Sendable {
     let touchscreenHoldsWiimote1: Bool
   }
 
-  func snapshot() -> State {
+  /// `isWiiSystem`: the title about to boot, for the pre-boot pass; nil reads the running one
+  /// (`isCurrentSystemWii()`, meaningful only once the core runs).
+  func snapshot(isWiiSystem: Bool? = nil) -> State {
     let controllers = GCController.controllers().map { c in
       ControllerInfo(
         id: ObjectIdentifier(c),
@@ -50,13 +54,15 @@ final class ControllerStateStore: NSObject, Sendable {
     for port in 1 ... 4 {
       gcAssigns.append(PortAssignment(
         portOneBased: port,
-        defaultDeviceQualifier: TVControllerMappingBridge.defaultDevice(forGCPort: port) as String))
+        defaultDeviceQualifier: TVControllerMappingBridge.defaultDevice(forGCPort: port) as String,
+        isActive: DOLConfigBridge.gcPortDevice(forPort: port) != 0))
       wiiAssigns.append(PortAssignment(
         portOneBased: port,
-        defaultDeviceQualifier: TVControllerMappingBridge.defaultDevice(forWiimote: port) as String))
+        defaultDeviceQualifier: TVControllerMappingBridge.defaultDevice(forWiimote: port) as String,
+        isActive: DOLConfigBridge.wiimoteSource(for: port) == 1))
     }
     let connected = TVControllerMappingBridge.allQualifiedDevices()
-    let isWii = TVEmulationBridge.isCurrentSystemWii()
+    let isWii = isWiiSystem ?? TVEmulationBridge.isCurrentSystemWii()
     #if os(iOS)
     let touchscreenHoldsWiimote1 = ControllerManager.shared.overlayVisible
       && DOLConfigBridge.wiimoteSource(for: 1) == 1

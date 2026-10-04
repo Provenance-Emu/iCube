@@ -1171,9 +1171,9 @@ struct EmulationScreen: View {
       isTouchControlsActive = controllerManager.overlayVisible
       desiredTouchControls = true
       controllerManager.setSystem(isWii: isWiiSystem)
-      // Reconcile port ownership. The touchscreen fallback (ensurePad1DefaultsToTouchscreen)
-      // runs once, pre-boot, inside the coordinator; calling it here too ran the old C++ policy
-      // AFTER the engine and overwrote what reconcile() had just bound.
+      // Reconcile port ownership. The touchscreen fallback (ControllerManager.prepareForBoot)
+      // runs once, pre-boot, from the coordinator; running it here too would re-decide AFTER
+      // the engine and overwrite what reconcile() had just bound.
       ControllerManager.shared.reconcile()
       // Configure Wiimote sources based on connected controllers
       ControllerManager.shared.updateWiimoteEmulationForExternalControllers()
