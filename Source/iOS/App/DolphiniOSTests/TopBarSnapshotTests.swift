@@ -44,7 +44,7 @@ final class TopBarSnapshotTests: XCTestCase {
           overscanApplicable: false, overscanFullscreen: false,
           readToggles: { TopBarToggles(isMuted: togglesOn, fastForwardEnabled: togglesOn) },
           open: { _ in }, onToggleOnScreenControls: {}, onSetPointerMode: { _ in },
-          onSetProgrammaticOverlay: { _ in }, onSetOverscanFullscreen: { _ in })
+          onSetOverscanFullscreen: { _ in })
       }
       .environment(\.verticalSizeClass, compactHeight ? .compact : .regular)
     }

@@ -173,10 +173,6 @@ static bool ICubeEmulationActive() {
 // Controllers
 + (BOOL)mainBackgroundInput { return Config::Get(Config::MAIN_INPUT_BACKGROUND_INPUT); }
 + (void)setMainBackgroundInput:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_INPUT_BACKGROUND_INPUT, (bool)enabled); }
-+ (BOOL)wiimoteContinuousScanning { return Config::Get(Config::MAIN_WIIMOTE_CONTINUOUS_SCANNING); }
-+ (void)setWiimoteContinuousScanning:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_WIIMOTE_CONTINUOUS_SCANNING, (bool)enabled); }
-+ (BOOL)wiimoteEnableSpeaker { return Config::Get(Config::MAIN_WIIMOTE_ENABLE_SPEAKER); }
-+ (void)setWiimoteEnableSpeaker:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_WIIMOTE_ENABLE_SPEAKER, (bool)enabled); }
 + (BOOL)connectWiimotesForControllerInterface { return Config::Get(Config::MAIN_CONNECT_WIIMOTES_FOR_CONTROLLER_INTERFACE); }
 + (void)setConnectWiimotesForControllerInterface:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_CONNECT_WIIMOTES_FOR_CONTROLLER_INTERFACE, (bool)enabled); }
 
