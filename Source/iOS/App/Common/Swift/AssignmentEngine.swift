@@ -43,12 +43,15 @@ struct AssignmentDecision: Equatable {
 /// layer: Dolphin polls per frame through per-system INI profiles shared with
 /// every other backend. The arbitration lives above it, in app code.
 final class AssignmentEngine {
-  /// Wiimote slot 1 is reserved for the on-screen touch overlay — see
-  /// `ControllerManager.updateWiimoteEmulationForExternalControllers`, which
-  /// starts external controllers at slot 2. GameCube pads have no such
-  /// reservation and start at port 1.
-  static let firstWiimoteSlotOneBased = 2
   static let firstGCPortOneBased = 1
+
+  /// Wii Remote 1 belongs to the on-screen controls only while they are actually using it
+  /// (`State.touchscreenHoldsWiimote1`: iOS, controls shown, Wii Remote 1 on the Touchscreen).
+  /// Otherwise (tvOS, controls hidden, or Wii Remote 1 on another device) the first pad takes it,
+  /// instead of a lone pad landing on Wii Remote 2.
+  static func firstWiimoteSlotOneBased(for state: ControllerStateStore.State) -> Int {
+    state.touchscreenHoldsWiimote1 ? 2 : 1
+  }
 
   func decide(from state: ControllerStateStore.State, pinned: Set<PinnedSlot> = []) -> AssignmentDecision {
     let connected = Set(state.connectedQualifiers)
@@ -59,12 +62,18 @@ final class AssignmentEngine {
 
     // MARK: GameCube pads
 
+    // A pad goes where the running title reads it: GameCube ports for a GameCube title, Wii
+    // Remotes for a Wii title. Binding it to both made one press reach two emulated controllers
+    // in Wii games that also read the GameCube ports. Bindings already in place are left alone.
+
     var gcSlots = Self.slots(from: state.portAssignments)
-    for qualifier in physical where !gcSlots.contains(qualifier) {
-      guard let slot = Self.firstFreeSlot(in: gcSlots, connected: connected,
-                                          startingAt: Self.firstGCPortOneBased, pinned: pinnedGC) else { break }
-      gcSlots[slot] = qualifier
-      out.append(ControllerAssignment(qualifier: qualifier, playerZeroBased: slot, system: .gamecube))
+    if !state.isWiiSystem {
+      for qualifier in physical where !gcSlots.contains(qualifier) {
+        guard let slot = Self.firstFreeSlot(in: gcSlots, connected: connected,
+                                            startingAt: Self.firstGCPortOneBased, pinned: pinnedGC) else { break }
+        gcSlots[slot] = qualifier
+        out.append(ControllerAssignment(qualifier: qualifier, playerZeroBased: slot, system: .gamecube))
+      }
     }
 
     // With nothing physical attached, Pad 1 falls back to the on-screen pad so
@@ -82,9 +91,10 @@ final class AssignmentEngine {
     guard state.isWiiSystem else { return AssignmentDecision(assignments: out) }
 
     var wiiSlots = Self.slots(from: state.wiimoteAssignments)
+    let firstWiimoteSlot = Self.firstWiimoteSlotOneBased(for: state)
     for qualifier in physical where !wiiSlots.contains(qualifier) {
       guard let slot = Self.firstFreeSlot(in: wiiSlots, connected: connected,
-                                          startingAt: Self.firstWiimoteSlotOneBased, pinned: pinnedWii) else { break }
+                                          startingAt: firstWiimoteSlot, pinned: pinnedWii) else { break }
       wiiSlots[slot] = qualifier
       out.append(ControllerAssignment(qualifier: qualifier, playerZeroBased: slot, system: .wii))
     }

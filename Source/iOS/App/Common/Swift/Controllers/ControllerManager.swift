@@ -10,7 +10,7 @@ final class ControllerManager: NSObject, ObservableObject {
   enum OverlayMode: Int { case auto, gamecube, wii }
   @Published var overlayVisible: Bool = true
   @Published var overlayMode: OverlayMode = .auto { didSet { if overlayMode == .wii { ensureWiimote1EmulatedTouchscreen() } } }
-  // Map GCController -> Wiimote slot (1-based). Slot 1 reserved for on-screen Touch.
+  // Map GCController -> Wiimote slot (1-based), for touchpad pads that drive the Wii pointer.
   private var wiimoteSlotByController: [ObjectIdentifier: Int] = [:]
   @Published var isWiiSystem: Bool = false
 
@@ -519,8 +519,8 @@ final class ControllerManager: NSObject, ObservableObject {
 
   // MARK: Wiimote Emulation for External Controllers
 
-  // Assign Wiimote slots 2..4 to external controllers that have a touchpad (DS4/DS5).
-  // Slot 1 remains for the on-screen touch overlay.
+  // Assign Wiimote slots 2..4 to external controllers that have a touchpad (DS4/DS5). Slot 1 is
+  // never handed out here: it is the on-screen controls' or a pad the AssignmentEngine put there.
   func updateWiimoteEmulationForExternalControllers() {
     wiimoteSlotByController.removeAll()
 
@@ -533,12 +533,14 @@ final class ControllerManager: NSObject, ObservableObject {
     let connected = Set(TVControllerMappingBridge.allQualifiedDevices().filter { !$0.hasPrefix("iOS/") })
     var slotForQualifier: [String: Int] = [:]
     var reserved = Set<Int>()
-    for slot in 2 ... 4 {
+    // Slot 1 is read too, so a touchpad pad the engine put on Wii Remote 1 keeps it rather than
+    // also being given slot 2; it is never switched off here.
+    for slot in 1 ... 4 {
       let qualifier = TVControllerMappingBridge.defaultDevice(forWiimote: slot) as String
       if connected.contains(qualifier) {
         reserved.insert(slot)
         slotForQualifier[qualifier] = slot
-      } else {
+      } else if slot > 1 {
         DOLConfigBridge.setWiimoteSourceFor(slot, source: 0)
       }
     }

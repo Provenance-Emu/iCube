@@ -9,12 +9,16 @@ private let touchscreen = "iOS/0/Touchscreen"
 private let padA = "MFi/0/Gamepad A"
 private let padB = "MFi/1/Gamepad B"
 private let padC = "DSUClient/0/Pad C"
+private let wiiTouchscreen = "iOS/4/Touchscreen"
 
+/// `touchscreenHoldsWiimote1` is true on iOS while the on-screen controls are shown and Wii Remote 1
+/// is on the Touchscreen; tvOS always passes false.
 private func state(
   gc: [String],
   wii: [String] = ["", "", "", ""],
   connected: [String],
-  isWii: Bool = false
+  isWii: Bool = false,
+  touchscreenHoldsWiimote1: Bool = false
 ) -> ControllerStateStore.State {
   func slots(_ qualifiers: [String]) -> [ControllerStateStore.PortAssignment] {
     qualifiers.enumerated().map {
@@ -26,7 +30,8 @@ private func state(
     portAssignments: slots(gc),
     wiimoteAssignments: slots(wii),
     connectedQualifiers: connected,
-    isWiiSystem: isWii)
+    isWiiSystem: isWii,
+    touchscreenHoldsWiimote1: touchscreenHoldsWiimote1)
 }
 
 final class AssignmentEngineTests: XCTestCase {
@@ -110,20 +115,41 @@ final class AssignmentEngineTests: XCTestCase {
 
   // MARK: Wii
 
-  func test_wiiSystem_assignsWiimoteSlot2_reservingSlot1ForTouchOverlay() {
+  func test_wiiSystem_assignsWiimoteSlot2_whileTheOnScreenControlsHoldSlot1() {
     let decision = AssignmentEngine().decide(
-      from: state(gc: [padA, "", "", ""], wii: ["", "", "", ""],
-                  connected: [padA], isWii: true))
+      from: state(gc: [padA, "", "", ""], wii: [wiiTouchscreen, "", "", ""],
+                  connected: [wiiTouchscreen, padA], isWii: true, touchscreenHoldsWiimote1: true))
     XCTAssertEqual(decision.assignments,
                    [ControllerAssignment(qualifier: padA, playerZeroBased: 1, system: .wii)])
   }
 
-  func test_wiiSystem_secondControllerGetsWiimote3() {
+  func test_wiiSystem_secondControllerGetsWiimote3_whileTheOnScreenControlsHoldSlot1() {
     let decision = AssignmentEngine().decide(
-      from: state(gc: [padA, padB, "", ""], wii: ["", padA, "", ""],
-                  connected: [padA, padB], isWii: true))
+      from: state(gc: [padA, padB, "", ""], wii: [wiiTouchscreen, padA, "", ""],
+                  connected: [wiiTouchscreen, padA, padB], isWii: true, touchscreenHoldsWiimote1: true))
     XCTAssertEqual(decision.assignments,
                    [ControllerAssignment(qualifier: padB, playerZeroBased: 2, system: .wii)])
+  }
+
+  /// iOS with the on-screen controls hidden: Wii Remote 1 still names the Touchscreen, but
+  /// nothing is using it, so a lone pad takes it instead of landing on Wii Remote 2.
+  func test_wiiSystem_lonePadTakesWiimote1_whenTheOnScreenControlsAreHidden() {
+    let decision = AssignmentEngine().decide(
+      from: state(gc: [touchscreen, "", "", ""], wii: [wiiTouchscreen, "", "", ""],
+                  connected: [touchscreen, wiiTouchscreen, padA], isWii: true, touchscreenHoldsWiimote1: false))
+    XCTAssertEqual(decision.assignments,
+                   [ControllerAssignment(qualifier: padA, playerZeroBased: 0, system: .wii)])
+  }
+
+  /// tvOS has no touchscreen to hold Wii Remote 1 (the snapshot always says false there).
+  func test_tvOS_wiiSystem_firstPadIsWiimote1_secondIsWiimote2() {
+    let decision = AssignmentEngine().decide(
+      from: state(gc: ["", "", "", ""], wii: ["", "", "", ""],
+                  connected: [padA, padB], isWii: true, touchscreenHoldsWiimote1: false))
+    XCTAssertEqual(decision.assignments, [
+      ControllerAssignment(qualifier: padA, playerZeroBased: 0, system: .wii),
+      ControllerAssignment(qualifier: padB, playerZeroBased: 1, system: .wii),
+    ])
   }
 
   func test_gameCubeSystem_neverTouchesWiimoteSlots() {
@@ -133,13 +159,23 @@ final class AssignmentEngineTests: XCTestCase {
     XCTAssertEqual(decision, .none)
   }
 
-  func test_wiiSystem_assignsBothGCPortAndWiimote_forAFreshController() {
+  /// One pad, one emulated controller: a Wii title gets a Wii Remote, not a GameCube port as well.
+  func test_wiiSystem_bindsAFreshControllerToAWiiRemoteOnly() {
     let decision = AssignmentEngine().decide(
       from: state(gc: ["", "", "", ""], wii: ["", "", "", ""],
                   connected: [padA], isWii: true))
     XCTAssertEqual(decision.assignments, [
-      ControllerAssignment(qualifier: padA, playerZeroBased: 0, system: .gamecube),
-      ControllerAssignment(qualifier: padA, playerZeroBased: 1, system: .wii),
+      ControllerAssignment(qualifier: padA, playerZeroBased: 0, system: .wii),
     ])
+  }
+
+  func test_wiiSystem_leavesAnExistingGameCubeBindingAlone() {
+    let decision = AssignmentEngine().decide(
+      from: state(gc: [padA, "", "", ""], wii: ["", "", "", ""],
+                  connected: [padA, padB], isWii: true, touchscreenHoldsWiimote1: false))
+    XCTAssertEqual(decision.assignments, [
+      ControllerAssignment(qualifier: padA, playerZeroBased: 0, system: .wii),
+      ControllerAssignment(qualifier: padB, playerZeroBased: 1, system: .wii),
+    ], "padB gets no GameCube port in a Wii title")
   }
 }
