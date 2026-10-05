@@ -332,6 +332,52 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(model.item(id: scripted.id)?.subtitle, "Set by an expression")
   }
 
+  private func verticalOffset(_ value: Double) -> NumericSettingState {
+    NumericSettingState(
+      owner: .wiimote, groupId: AdvancedSettingGroups.pointerGroup, index: 1, name: "Vertical Offset", suffix: "cm",
+      isToggle: false, isInteger: false, value: value, minimum: -100, maximum: 100, defaultValue: 10, isExpression: false,
+      coreName: "Vertical Offset")
+  }
+
+  private func pointerScreen(_ offset: NumericSettingState, sensorBarOnTop: Bool = false) -> PlayerScreenState {
+    var screen = state(.wiiRemote)
+    screen.showsAdvanced = true
+    screen.isSensorBarOnTop = sensorBarOnTop
+    screen.advanced = [AdvancedGroupState(owner: .wiimote, groupId: AdvancedSettingGroups.pointerGroup, title: "Pointer", settings: [offset])]
+    return screen
+  }
+
+  /// The core does not explain Vertical Offset and applies it negatively with the sensor bar at the
+  /// bottom; the row says which position is set.
+  func test_advanced_verticalOffset_namesTheSensorBarPosition() {
+    let offset = verticalOffset(10)
+    let bottom = make(pointerScreen(offset)).item(id: offset.id)?.subtitle ?? ""
+    let top = make(pointerScreen(offset, sensorBarOnTop: true)).item(id: offset.id)?.subtitle ?? ""
+    XCTAssertTrue(bottom.contains("Bottom"), bottom)
+    XCTAssertTrue(top.contains("Top"), top)
+    XCTAssertNotEqual(bottom, top)
+  }
+
+  /// A translated name alone is not enough: only the core's own name in the IR group counts.
+  func test_advanced_verticalOffset_isMatchedByTheCoresName() {
+    var other = verticalOffset(10)
+    other.coreName = "Total Pitch"
+    XCTAssertFalse(PlayerScreenModelBuilder.isVerticalOffset(other))
+    XCTAssertNil(PlayerScreenModelBuilder.settingSubtitle(other))
+  }
+
+  func test_advanced_resetVerticalOffset_onlyWhenChanged_writesTheDefault() {
+    XCTAssertNil(make(pointerScreen(verticalOffset(10))).item(id: "advanced-reset-vertical-offset"))
+    let recorder = Recorder()
+    let changed = verticalOffset(-10)
+    let model = make(pointerScreen(changed), recorder)
+    let reset = model.item(id: "advanced-reset-vertical-offset")
+    XCTAssertEqual(reset?.subtitle, "Back to 10 cm, the default.")
+    XCTAssertEqual(ids(model, section: "advanced-wiimote-3").last, "advanced-reset-vertical-offset")
+    run(reset)
+    XCTAssertEqual(recorder.calls, ["setting:\(changed.id)=10.0"])
+  }
+
   // MARK: Buttons and capture (decision 11)
 
   func test_rumbleIsNotACaptureRow() {

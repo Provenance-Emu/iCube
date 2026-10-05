@@ -4821,3 +4821,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "On-Screen Controls are laid out with Edit Layout." = "On-Screen Controls are laid out with Edit Layout.";
 "This game only" = "This game only";
 "Pinned: you chose this device, so controllers that connect leave this player alone. Choose Auto to undo." = "Pinned: you chose this device, so controllers that connect leave this player alone. Choose Auto to undo.";
+"Reset Vertical Offset" = "Reset Vertical Offset";
+"Back to %@, the default." = "Back to %@, the default.";
+"Height of the emulated sensor bar. The default, 10 cm, keeps the pointer where you aim. Sensor Bar Position (Settings → Wii) is Top." = "Height of the emulated sensor bar. The default, 10 cm, keeps the pointer where you aim. Sensor Bar Position (Settings → Wii) is Top.";
+"Height of the emulated sensor bar. The default, 10 cm, keeps the pointer where you aim. Sensor Bar Position (Settings → Wii) is Bottom, which applies this value the other way up." = "Height of the emulated sensor bar. The default, 10 cm, keeps the pointer where you aim. Sensor Bar Position (Settings → Wii) is Bottom, which applies this value the other way up.";

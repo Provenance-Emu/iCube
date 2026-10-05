@@ -30,6 +30,8 @@ protocol PlayerScreenIO {
   func check(_ expression: String) -> ExpressionCheck
   /// The user picked the port's device, so auto-assignment leaves the port alone.
   func isPinned(_ slot: PlayerSlot) -> Bool
+  /// SYSCONF's Sensor Bar Position (Settings → Wii) is Top.
+  func isSensorBarOnTop() -> Bool
 
   // Writes
   /// `.automatic` unpins the port and lets auto-assignment run.
@@ -104,8 +106,12 @@ struct LivePlayerScreenIO: PlayerScreenIO {
         owner: owner, groupId: group, index: info.index, name: info.name, suffix: info.suffix,
         isToggle: info.type == .bool, isInteger: info.type == .int, value: info.value, minimum: info.minimum,
         maximum: info.maximum, defaultValue: info.defaultValue, isExpression: info.isExpression,
-        explanation: info.explanation)
+        explanation: info.explanation, coreName: info.coreName)
     }
+  }
+
+  func isSensorBarOnTop() -> Bool {
+    DOLConfigBridge.sysconfSensorBarPosition() != 0
   }
 
   func profiles(for slot: PlayerSlot) -> [String] {

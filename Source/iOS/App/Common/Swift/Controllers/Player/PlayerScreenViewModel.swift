@@ -269,7 +269,8 @@ final class PlayerScreenViewModel {
           owner: entry.owner, groupId: entry.groupId, title: entry.title,
           settings: io.numericSettings(owner: entry.owner, group: entry.groupId, port: slot.port))
       },
-      isPinned: io.isPinned(slot))
+      isPinned: io.isPinned(slot),
+      isSensorBarOnTop: io.isSensorBarOnTop())
   }
 
   /// The same reads, in the same shape, as `ControllerHubViewModel.reload()` makes for this port.

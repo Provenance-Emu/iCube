@@ -21,4 +21,14 @@ final class PlayerScreenIOTests: XCTestCase {
     XCTAssertTrue(io.check("").canSave, "blank unbinds")
     XCTAssertFalse(io.check("(`Button A`").canSave)
   }
+
+  /// The builder finds the pointer's Vertical Offset by the core's untranslated name in the IR group.
+  @MainActor
+  func test_liveNumericSettings_carryTheCoresNameForVerticalOffset() throws {
+    let settings = LivePlayerScreenIO().numericSettings(owner: .wiimote, group: AdvancedSettingGroups.pointerGroup, port: 4)
+    try XCTSkipIf(settings.isEmpty, "no Wii Remote config in this host")
+    let offset = try XCTUnwrap(settings.first { $0.coreName == AdvancedSettingGroups.verticalOffsetName })
+    XCTAssertTrue(PlayerScreenModelBuilder.isVerticalOffset(offset))
+    XCTAssertEqual(offset.defaultValue, 10)
+  }
 }

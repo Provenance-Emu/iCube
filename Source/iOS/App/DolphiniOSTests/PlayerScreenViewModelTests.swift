@@ -95,6 +95,7 @@ private final class FakeIO: PlayerScreenIO {
   /// Whether the port is pinned; picking Auto unpins it.
   var pinned = false
   func isPinned(_ slot: PlayerSlot) -> Bool { pinned }
+  func isSensorBarOnTop() -> Bool { false }
 
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
     writes.append("device:\(choice)")
