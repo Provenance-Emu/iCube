@@ -12,6 +12,16 @@ enum TopBarDestination {
   case editLayout
 }
 
+/// One choice in the Controller menu's Player 1 section.
+struct TopBarDeviceOption: Identifiable, Equatable {
+  /// nil: the on-screen controls.
+  let qualifier: String?
+  let name: String
+  let isSelected: Bool
+
+  var id: String { qualifier ?? "touchscreen" }
+}
+
 /// The popovers the bar can show. Only one is up at a time.
 private enum TopBarPopover: String {
   case quickSaveSlots, quickLoadSlots, slot, controller, display, more
@@ -64,6 +74,10 @@ struct EmulationTopBar: View {
   let onToggleOnScreenControls: () -> Void
   let onSetPointerMode: (PointerMode) -> Void
   let onSetOverscanFullscreen: (Bool) -> Void
+  /// Player 1's choices, read when the Controller menu opens; the section shows only with a pad connected.
+  var readPlayer1Devices: () -> [TopBarDeviceOption] = { [] }
+  /// nil puts the on-screen controls on Player 1.
+  var onChoosePlayer1: (String?) -> Void = { _ in }
 
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   @State private var popover: TopBarPopover?
@@ -381,6 +395,17 @@ struct EmulationTopBar: View {
 
   private var controllerPopover: some View {
     VStack(alignment: .leading, spacing: 0) {
+      let player1Devices = readPlayer1Devices()
+      if player1Devices.count > 1 {
+        sectionHeader(L("Player 1"))
+        ForEach(player1Devices) { device in
+          PopoverRow(title: device.name, systemImage: device.qualifier == nil ? "hand.tap" : "gamecontroller",
+                     isChecked: device.isSelected) {
+            close { onChoosePlayer1(device.qualifier) }
+          }
+        }
+        Divider()
+      }
       if isWii {
         sectionHeader(L("Pointer"))
         if pointerIsThisGameOnly {

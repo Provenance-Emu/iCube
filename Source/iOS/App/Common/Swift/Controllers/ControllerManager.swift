@@ -19,6 +19,15 @@ final class ControllerManager: NSObject, ObservableObject {
 
   static let overlayModeDefaultsKey = "controller_overlay_mode"
 
+  /// "Controllers Take Player 1" (More Controller Settings), on unless turned off:
+  /// `AssignmentEngine.player1Takeover`.
+  static let connectTakesPlayer1DefaultsKey = "controller_connect_takes_player1"
+
+  static func connectTakesPlayer1(in defaults: UserDefaults = .standard) -> Bool {
+    defaults.register(defaults: [connectTakesPlayer1DefaultsKey: true])
+    return defaults.bool(forKey: connectTakesPlayer1DefaultsKey)
+  }
+
   /// The Overlay Style kept across launches; Auto when none was kept or the value is unknown.
   static func storedOverlayMode(in defaults: UserDefaults = .standard) -> OverlayMode {
     defaults.register(defaults: [overlayModeDefaultsKey: OverlayMode.auto.rawValue])
@@ -209,6 +218,7 @@ final class ControllerManager: NSObject, ObservableObject {
           }
         }
         self.controllerConnectedSubject.send(c)
+        self.takePlayer1FromTouchscreen(for: c)
         self.reconcile()
       }
     }
@@ -508,6 +518,44 @@ final class ControllerManager: NSObject, ObservableObject {
     assignmentService.assign(qualifier: qualifier, toPlayer: portZeroBased, system: system)
     pin(system, player: portZeroBased)
     reconcile(autoAssign: false)
+  }
+
+  /// The top bar's Player 1 picker: the Touchscreen (nil) or a connected pad becomes Player 1
+  /// (GameCube port 1, or Wii Remote 1 in a Wii title), pinned like any explicit choice. A pad leaves
+  /// the other slots of that system it held, so one press does not reach two players.
+  func choosePlayer1(_ qualifier: String?, isWii: Bool) {
+    let system: EmulatedSystem = isWii ? .wii : .gamecube
+    guard let qualifier else {
+      if isWii { assignTouchscreen(toWiimote: 1) } else { assignTouchscreen(toGCPort: 1) }
+      return
+    }
+    guard let controller = GCController.controllers().first(where: {
+      (TVControllerMappingBridge.qualifiedName(for: $0) as String) == qualifier
+    }) else { return }
+    let state = ControllerStateStore.shared.snapshot(isWiiSystem: isWii)
+    for slot in isWii ? state.wiimoteAssignments : state.portAssignments
+      where slot.portOneBased != 1 && slot.defaultDeviceQualifier == qualifier {
+      assignmentService.clear(player: slot.portOneBased - 1, system: system)
+      unpin(system, player: slot.portOneBased - 1)
+    }
+    if isWii { assign(controller, toWiimote: 1) } else { assign(controller, toGCPort: 1) }
+  }
+
+  /// A pad that connects while the on-screen controls are Player 1 takes Player 1, unpinning it, when
+  /// "Controllers Take Player 1" is on (`AssignmentEngine.player1Takeover`). The pad's mapping moves
+  /// with it: clearing its old slot stashes it, and the assign restores it.
+  private func takePlayer1FromTouchscreen(for controller: GCController) {
+    #if os(iOS)
+    guard Self.connectTakesPlayer1() else { return }
+    let qualifier = TVControllerMappingBridge.qualifiedName(for: controller) as String
+    guard let takeover = AssignmentEngine.player1Takeover(
+      of: qualifier, in: ControllerStateStore.shared.snapshot(), pinned: pinnedSlots) else { return }
+    if let vacated = takeover.vacatedPlayerZeroBased {
+      assignmentService.clear(player: vacated, system: takeover.system)
+    }
+    assignmentService.assign(qualifier: qualifier, toPlayer: 0, system: takeover.system)
+    unpin(takeover.system, player: 0)
+    #endif
   }
 
   func clearDefaultDevice(forWiimote indexOneBased: Int) {

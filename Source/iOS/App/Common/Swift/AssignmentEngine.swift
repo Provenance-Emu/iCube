@@ -29,6 +29,16 @@ struct AssignmentDecision: Equatable {
   static let none = AssignmentDecision(assignments: [])
 }
 
+/// A pad that just connected taking Player 1 from the on-screen controls
+/// (`AssignmentEngine.player1Takeover`).
+struct Player1Takeover: Equatable {
+  /// GameCube port 1 in a GameCube title, Wii Remote 1 in a Wii title.
+  let system: EmulatedSystem
+  /// The 0-based slot of the same system the pad held before, cleared so one press does not reach
+  /// two players.
+  let vacatedPlayerZeroBased: Int?
+}
+
 /// What the pre-boot pass writes (`AssignmentEngine.decideBoot`).
 struct BootDecision: Equatable {
   /// Plug a standard controller into GameCube port 1 (`SIDevice0`).
@@ -121,6 +131,28 @@ final class AssignmentEngine {
     }
 
     return AssignmentDecision(assignments: out)
+  }
+
+  // MARK: Connect
+
+  /// "Controllers Take Player 1": a pad that connects while the on-screen controls are Player 1
+  /// (GameCube port 1 in a GameCube title, Wii Remote 1 in a Wii title) takes Player 1, even when
+  /// the user picked the Touchscreen there; `decide` alone leaves a pinned Touchscreen alone and, in
+  /// a Wii title with the controls shown, starts at Wii Remote 2. nil when Player 1 is not on the
+  /// Touchscreen or is switched off, the pad already is Player 1, or the user pinned the pad to the
+  /// slot it holds.
+  static func player1Takeover(
+    of qualifier: String, in state: ControllerStateStore.State, pinned: Set<PinnedSlot>
+  ) -> Player1Takeover? {
+    guard isPhysical(qualifier) else { return nil }
+    let system: EmulatedSystem = state.isWiiSystem ? .wii : .gamecube
+    let slots = (state.isWiiSystem ? state.wiimoteAssignments : state.portAssignments)
+      .sorted { $0.portOneBased < $1.portOneBased }
+    guard let player1 = slots.first, player1.portOneBased == 1, player1.isActive,
+          isVirtual(player1.defaultDeviceQualifier) else { return nil }
+    let held = slots.firstIndex { $0.defaultDeviceQualifier == qualifier }
+    if let held, pinned.contains(PinnedSlot(system: system, playerZeroBased: held)) { return nil }
+    return Player1Takeover(system: system, vacatedPlayerZeroBased: held)
   }
 
   // MARK: Boot
