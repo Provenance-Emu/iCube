@@ -402,7 +402,7 @@ final class MenuFocusRouterTests: XCTestCase {
 
   /// Each section is its own `LazyVGrid`, so it starts a new row.
   func test_gridMove_eachSectionStartsANewRow() {
-    let model = twoSectionModel()  // [a b c] [d e], two columns: a b / c / d e
+    let model = twoSectionModel() // [a b c] [d e], two columns: a b / c / d e
     let move = { (id: String, rows: Int) in
       MenuFocusRouter.gridMove(id, rowStep: rows, columnStep: 0, columns: 2, in: model)
     }

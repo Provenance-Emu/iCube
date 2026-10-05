@@ -205,7 +205,7 @@ struct MenuFocusRouter {
     for section in model.sections {
       var start = 0
       while start < section.items.count {
-        rows.append(Array(section.items[start..<min(start + columns, section.items.count)]))
+        rows.append(Array(section.items[start ..< min(start + columns, section.items.count)]))
         start += columns
       }
     }
