@@ -334,7 +334,7 @@ static const double ACStarveRefMaxDup = 0.90;  // a window above this is loading
 // reference clock; only if that window presents clearly more new frames than the tripped one is the
 // underclock the cause. Otherwise the scene changed: re-base the reference there and resume.
 static const double ACStarveConfirmDrop = 0.05;  // ratio must fall this much back at the reference
-static const int    ACStarveMaxUnconfirmed = 2;  // unconfirmed trips before the guard stands down
+static const int ACStarveMaxUnconfirmed = 2;     // unconfirmed trips before the guard stands down
 
 @implementation EmulationCoordinator {
   UIView* _renderHost;
@@ -385,11 +385,11 @@ static const int    ACStarveMaxUnconfirmed = 2;  // unconfirmed trips before the
   BOOL  _acCpuLeverParked;     // GPU/video wall: CPU lever gives no gain -> stop fighting it with clock
   float  _acRefCPU;            // highest applied clock with a trusted dup-ratio sample this run (-1 = none)
   double _acRefDupRatio;       // duplicate-present ratio measured at _acRefCPU (starvation reference)
-  BOOL   _acStarveConfirming;  // tripped: re-measuring at the reference clock before parking
+  BOOL _acStarveConfirming;    // tripped: re-measuring at the reference clock before parking
   double _acStarveTripRatio;   // dup ratio of the window that tripped the guard
-  float  _acStarveTripCPU;     // clock that tripped it (resumed if the trip is not confirmed)
-  int    _acStarveResumePhase; // phase to resume if the trip is not confirmed
-  int    _acStarveUnconfirmed; // unconfirmed trips this run; the guard stands down at the max
+  float _acStarveTripCPU;      // clock that tripped it (resumed if the trip is not confirmed)
+  int _acStarveResumePhase;    // phase to resume if the trip is not confirmed
+  int _acStarveUnconfirmed;    // unconfirmed trips this run; the guard stands down at the max
 
   int   _acPhase;          // ACPhase_* below
   int   _acPhaseTicks;     // ticks elapsed in the current phase (timer fires every ACTickMs)
@@ -973,20 +973,24 @@ static bool s_backgroundAutoPaused = false;
           default: break;
         }
         // While confirming a trip, the phases wait: the window runs at the reference clock.
-        if (self->_acStarveConfirming && self->_acPhaseTicks < needTicks) return;
+        if (self->_acStarveConfirming && self->_acPhaseTicks < needTicks)
+          return;
         if (self->_acPhaseTicks >= needTicks) {
           const unsigned long long wTotal = (total > self->_acTotalBase) ? (total - self->_acTotalBase) : 0ULL;
           const unsigned long long wDups = (dups > self->_acDupBase) ? (dups - self->_acDupBase) : 0ULL;
-          if (self->_acStarveConfirming && wTotal < ACStarveMinPresents) {
+          if (self->_acStarveConfirming && wTotal < ACStarveMinPresents)
+          {
             // Loading or a black screen: measure the confirmation again.
             resetWindow();
             return;
           }
-          if (self->_acStarveConfirming) {
+          if (self->_acStarveConfirming)
+          {
             self->_acStarveConfirming = NO;
             const double dupRatio = (double)wDups / (double)wTotal;
             const float appliedNow = MIN(self->_acCPU, ceiling);
-            if (dupRatio <= self->_acStarveTripRatio - ACStarveConfirmDrop) {
+            if (dupRatio <= self->_acStarveTripRatio - ACStarveConfirmDrop)
+            {
               INFO_LOG_FMT(CORE, "AdaptiveClock: starvation confirmed at {:.2f}", appliedNow);
               self->_acRefDupRatio = dupRatio;
               self->_acStableCPU = self->_acCPU;
@@ -1002,7 +1006,8 @@ static bool s_backgroundAutoPaused = false;
             self->_acStarveUnconfirmed++;
             INFO_LOG_FMT(CORE, "AdaptiveClock: starvation not confirmed, resuming {:.2f}",
                          self->_acStarveTripCPU);
-            if (dupRatio < ACStarveRefMaxDup) {
+            if (dupRatio < ACStarveRefMaxDup)
+            {
               self->_acRefCPU = appliedNow;
               self->_acRefDupRatio = dupRatio;
             }
@@ -1011,12 +1016,14 @@ static bool s_backgroundAutoPaused = false;
             resetWindow();
             return;
           }
-          if (wTotal >= ACStarveMinPresents) {
+          if (wTotal >= ACStarveMinPresents)
+          {
             const double dupRatio = (double)wDups / (double)wTotal;
             const float appliedNow = MIN(self->_acCPU, ceiling);
             if (self->_acRefCPU >= 0.f && appliedNow < self->_acRefCPU - 0.001f &&
                 dupRatio > self->_acRefDupRatio + ACStarveDupRise && !self->_acCpuYielded &&
-                self->_acStarveUnconfirmed < ACStarveMaxUnconfirmed) {
+                self->_acStarveUnconfirmed < ACStarveMaxUnconfirmed)
+            {
               INFO_LOG_FMT(CORE, "AdaptiveClock: starvation suspected at {:.2f}", appliedNow);
               self->_acStarveConfirming = YES;
               self->_acStarveTripRatio = dupRatio;
