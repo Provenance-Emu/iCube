@@ -355,4 +355,118 @@ final class MenuFocusRouterTests: XCTestCase {
     XCTAssertNil(result.focusedID)
     XCTAssertNil(result.activatedID)
   }
+
+  // MARK: Grid (`MenuStyle.grid`)
+
+  /// Laid out three columns wide:
+  ///
+  ///     a b c
+  ///     d e f
+  ///     g
+  private func gridModel() -> MenuModel {
+    MenuModel(sections: [MenuSection(id: "s1", items: ["a", "b", "c", "d", "e", "f", "g"].map { item($0) })])
+  }
+
+  /// `gridMove` on a three-column grid.
+  private func gridMove(_ id: String?, rowStep: Int = 0, columnStep: Int = 0, in model: MenuModel) -> String? {
+    MenuFocusRouter.gridMove(id, rowStep: rowStep, columnStep: columnStep, columns: 3, in: model)
+  }
+
+  func test_gridMove_upAndDown_keepTheColumn() {
+    let model = gridModel()
+    XCTAssertEqual(gridMove("b", rowStep: 1, in: model), "e", "down lands on the card below, not the next one")
+    XCTAssertEqual(gridMove("e", rowStep: -1, in: model), "b")
+  }
+
+  func test_gridMove_downIntoAShortRow_clampsToItsLastCard() {
+    XCTAssertEqual(gridMove("f", rowStep: 1, in: gridModel()), "g")
+  }
+
+  func test_gridMove_leftAndRight_stayInTheRow() {
+    let model = gridModel()
+    XCTAssertEqual(gridMove("a", columnStep: 1, in: model), "b")
+    XCTAssertEqual(gridMove("e", columnStep: -1, in: model), "d")
+    XCTAssertEqual(gridMove("c", columnStep: 1, in: model), "c", "right at the row's end does not wrap to the next row")
+    XCTAssertEqual(gridMove("d", columnStep: -1, in: model), "d", "left at the row's start does not wrap to the previous row")
+  }
+
+  func test_gridMove_clampsAtTheTopAndBottom() {
+    let model = gridModel()
+    XCTAssertEqual(gridMove("b", rowStep: -1, in: model), "b")
+    XCTAssertEqual(gridMove("g", rowStep: 1, in: model), "g")
+  }
+
+  func test_gridMove_withNoFocus_landsOnTheFirstItem() {
+    XCTAssertEqual(gridMove(nil, rowStep: 1, in: gridModel()), "a")
+  }
+
+  /// Each section is its own `LazyVGrid`, so it starts a new row.
+  func test_gridMove_eachSectionStartsANewRow() {
+    let model = twoSectionModel()  // [a b c] [d e], two columns: a b / c / d e
+    let move = { (id: String, rows: Int) in
+      MenuFocusRouter.gridMove(id, rowStep: rows, columnStep: 0, columns: 2, in: model)
+    }
+    XCTAssertEqual(move("b", 1), "c")
+    XCTAssertEqual(move("c", 1), "d")
+    XCTAssertEqual(move("e", -1), "c")
+  }
+
+  /// A disabled card keeps its cell but is never focused.
+  func test_gridMove_skipsDisabledCards() {
+    let model = MenuModel(sections: [MenuSection(id: "s1", items: [
+      item("a"), item("b"), item("c"),
+      item("d", enabled: false), item("e"), item("f"),
+    ])])
+    XCTAssertEqual(gridMove("a", rowStep: 1, in: model), "e", "nearest enabled card in the row below")
+    XCTAssertEqual(gridMove("f", columnStep: -1, in: model), "e")
+    XCTAssertEqual(gridMove("e", columnStep: -1, in: model), "e", "nothing enabled to the left")
+  }
+
+  func test_grid_downMovesARow_rightMovesWithinIt_neitherAdjusts() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = gridModel()
+    var result = router.update(.init(down: true), at: 0, model: model, focusedID: "b", isActive: true, columns: 3)
+    XCTAssertEqual(result.focusedID, "e")
+    result = router.update(.init(), at: 0.01, model: model, focusedID: result.focusedID, isActive: true, columns: 3)
+    result = router.update(.init(right: true), at: 0.02, model: model, focusedID: result.focusedID, isActive: true, columns: 3)
+    XCTAssertEqual(result.focusedID, "f")
+    XCTAssertNil(result.adjust, "in a grid, right moves focus; it does not step the card")
+  }
+
+  /// `MenuScreen` drives the multi-pad path; the column count must reach it too.
+  func test_multiPad_grid_downMovesARow() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = gridModel()
+    let p1 = AnyHashable("p1")
+    _ = router.update(padInputs: [(p1, .init())], at: 0, model: model, focusedID: "b", isActive: true, columns: 3)
+    let result = router.update(padInputs: [(p1, .init(down: true))], at: 0.1, model: model, focusedID: "b", isActive: true, columns: 3)
+    XCTAssertEqual(result.focusedID, "e")
+    XCTAssertNil(result.activatedID)
+  }
+
+  /// D-pad down, pressed or held long enough to repeat, only ever moves: in a list and in a
+  /// grid. Only A activates.
+  func test_down_neverActivates() {
+    for columns in [1, 3] {
+      var router = MenuFocusRouter(config: cfg)
+      let model = gridModel()
+      var focused: String? = "a"
+      for t in stride(from: 0.0, through: 1.0, by: 0.05) {
+        let result = router.update(.init(down: true), at: t, model: model, focusedID: focused, isActive: true, columns: columns)
+        XCTAssertNil(result.activatedID, "\(columns) column(s): down activated a row")
+        XCTAssertNil(result.adjust)
+        focused = result.focusedID
+      }
+      XCTAssertEqual(focused, "g", "\(columns) column(s): down walked to the last row")
+    }
+  }
+
+  func test_gridColumnCount_followsTheWidth() {
+    XCTAssertEqual(MenuGridLayout.columnCount(forWidth: 390), 1, "iPhone portrait")
+    XCTAssertEqual(MenuGridLayout.columnCount(forWidth: 834), 2, "11-inch iPad portrait")
+    XCTAssertEqual(MenuGridLayout.columnCount(forWidth: 1194), 3, "11-inch iPad landscape")
+    XCTAssertEqual(MenuGridLayout.columnCount(forWidth: 683), 1, "one point short of two 320pt cards")
+    XCTAssertEqual(MenuGridLayout.columnCount(forWidth: 684), 2, "two 320pt cards, 12pt apart, 16pt padding")
+    XCTAssertEqual(MenuGridLayout.columnCount(forWidth: 0), 1)
+  }
 }

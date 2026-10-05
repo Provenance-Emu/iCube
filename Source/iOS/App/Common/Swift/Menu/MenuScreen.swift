@@ -121,6 +121,9 @@ struct MenuScreen: View {
   /// which only draws its ring while `pauseMenuControllerNavActive`.
   @State private var focusedID: String?
   @State private var scopeID = UUID()
+  /// `.grid` only: how many columns `gridBody` is drawing right now, so the d-pad moves through
+  /// the grid as drawn (up/down a row, left/right within a row). 1 for `.list`.
+  @State private var gridColumnCount = 1
   /// Single shared 60 Hz publisher rather than a per-instance `Timer`. This
   /// matters for correctness, not just efficiency: a `Timer(... ) { tick() }`
   /// closure captures `self` — and therefore `model`, a `let` — from
@@ -282,19 +285,28 @@ struct MenuScreen: View {
 
   // MARK: iOS — grid style (pause-menu card look, §5 token table)
 
+  /// Fixed columns from `MenuGridLayout` rather than `GridItem(.adaptive(...))`, so the d-pad
+  /// navigation (`tick()`) knows the real column count for the current width.
   private var gridBody: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 16) {
-        ForEach(model.sections) { section in
-          if let header = section.header {
-            Text(header).font(.headline).foregroundStyle(.white)
-          }
-          LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 12)], spacing: 12) {
-            ForEach(section.items) { item in gridCard(item) }
+    GeometryReader { proxy in
+      let columnCount = MenuGridLayout.columnCount(forWidth: proxy.size.width)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          ForEach(model.sections) { section in
+            if let header = section.header {
+              Text(header).font(.headline).foregroundStyle(.white)
+            }
+            LazyVGrid(
+              columns: Array(repeating: GridItem(.flexible(), spacing: MenuGridLayout.spacing), count: columnCount),
+              spacing: MenuGridLayout.spacing
+            ) {
+              ForEach(section.items) { item in gridCard(item) }
+            }
           }
         }
+        .padding(MenuGridLayout.padding)
       }
-      .padding(16)
+      .onChange(of: columnCount, initial: true) { _, count in gridColumnCount = count }
     }
   }
 
@@ -372,7 +384,9 @@ struct MenuScreen: View {
       return
     }
 
-    let result = router.update(padInputs: padInputs, at: time, model: model, focusedID: focusedID, isActive: isActive)
+    let result = router.update(
+      padInputs: padInputs, at: time, model: model, focusedID: focusedID, isActive: isActive,
+      columns: style == .grid ? gridColumnCount : 1)
     // Focus only ever appears once a controller is actually present — never
     // seeded in `.onAppear`, so a touch-only session shows no tint. A brand
     // new pad emits no events on its first tick (it gets `resync`ed, see
