@@ -36,7 +36,9 @@ CI on #20's head: Unit Tests, build, Swift lint and clang-format all green. Test
    bottom. Tell users to update to TestFlight ≥ run 48 and set Vertical Offset back to 10 cm (the
    bundled default). If it still sticks, ask which Pointer mode (Gyro, Touch Follow, Touch Drag)
    and the Settings → Wii → Sensor Bar Position.
-4. **`release.yml`** has never run since it moved to Tuist; check the first published release.
+4. **`release.yml`** has never run since it moved to Tuist. It now dry-runs (builds every product,
+   uploads them as the `release-products` artifact, publishes nothing) on a manual dispatch and on a
+   pull request that changes it; only a published release attaches them to a GitHub release.
 5. **Policy changes to confirm on device** (from phase 5): a Wii title no longer auto-binds a pad
    to a GameCube port; Recommended Motion Settings no longer sets the pointer to Gyro.
 6. **Remote branch** `claude/jolly-planck-43gyz5` carries this doc's PR; delete it after merge
