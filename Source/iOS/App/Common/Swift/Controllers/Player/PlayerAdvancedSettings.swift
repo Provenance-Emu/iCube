@@ -24,6 +24,8 @@ struct NumericSettingState: Equatable {
   /// The core's explanation (`NumericSettingBase::GetUIDescription`, translated), shown as the row's
   /// subtitle; empty when the core has none. Last and defaulted, so a memberwise init may omit it.
   var explanation = ""
+  /// The core's untranslated name ("Vertical Offset"), for the few settings the app explains itself.
+  var coreName = ""
 
   var id: String { "setting-\(owner)-\(groupId)-\(index)" }
 }
@@ -91,6 +93,11 @@ enum AdvancedSettingGroups {
   /// `WiimoteEmu::WiimoteGroup::IMUPoint` (WiimoteEmu.h:48-64). Its `Enabled` setting is the pad
   /// port's "Aim with Controller Motion"; the Physical Controller profile turns it on.
   static let imuPointGroup = 12
+  /// `WiimoteEmu::WiimoteGroup::IR`, the Wii Remote's pointer (`ControllerEmu::Cursor`).
+  static let pointerGroup = 3
+  /// `Cursor`'s height setting. `Dynamics.cpp` applies it negatively when SYSCONF's sensor bar is
+  /// at the bottom, so it is not a plain shift.
+  static let verticalOffsetName = "Vertical Offset"
 
   static func entries(for system: RemapSystem, attachment: Int) -> [Entry] {
     switch system {
@@ -102,7 +109,7 @@ enum AdvancedSettingGroups {
       ]
     case .wii:
       var entries = [
-        Entry(owner: .wiimote, groupId: 3, title: L("Pointer")),
+        Entry(owner: .wiimote, groupId: pointerGroup, title: L("Pointer")),
         Entry(owner: .wiimote, groupId: imuPointGroup, title: L("Aim with Controller Motion")),
       ]
       switch attachment {

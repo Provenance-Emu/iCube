@@ -471,7 +471,12 @@ func installExtraInputHandlers(_ c: GCController) {
   // in order to prevent GameCenter from opening.
   // IGNORE THE COMPILER WARNING, USING .HOME HANDLER IS NOT GOOD ENOUGH!
   // FUCK YOU APPLE I HATE THIS STUPID MENU BUTTON SHIT AND ALL OF GCCONTROLLER!!!
-  c.controllerPausedHandler = { _ in
+  // The framework calls this for the Menu button, which on an extended gamepad (PlayStation
+  // OPTIONS, Xbox "≡", Switch "+") is the emulated Start/+, so it opened the pause menu on every
+  // Start press. Those pads pause from Options/Home (installPauseMenuHandlers); keep the handler set
+  // for them, doing nothing, so the system does not take the press.
+  c.controllerPausedHandler = { controller in
+    guard controller.extendedGamepad == nil else { return }
     presentPauseMenu("controllerPausedHandler")
   }
 

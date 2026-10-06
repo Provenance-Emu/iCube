@@ -114,6 +114,8 @@ struct PlayerScreenState: Equatable {
   /// The user picked this port's device, so controllers that connect leave it alone
   /// (`ControllerManager.isPinned`). The Device list then offers Auto.
   var isPinned = false
+  /// SYSCONF's sensor bar is at the top: how the core applies the pointer's Vertical Offset.
+  var isSensorBarOnTop = false
 
   static func empty(_ player: PlayerState) -> PlayerScreenState {
     PlayerScreenState(

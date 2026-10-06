@@ -140,11 +140,13 @@ const Info<bool> GFX_SHADER_CACHE{{System::GFX, "Settings", "ShaderCache"}, true
 const Info<bool> GFX_WAIT_FOR_SHADERS_BEFORE_STARTING{
     {System::GFX, "Settings", "WaitForShadersBeforeStarting"}, false};
 const Info<ShaderCompilationMode> GFX_SHADER_COMPILATION_MODE{
-    // iCube: Hybrid Ubershaders by default. Measured 2026-09-26 on an iPhone 16 Pro Max
-    // (docs/perf/2026-09-26-default-settings-matrix.md): equal interpreter throughput to
-    // Synchronous (specialized) and no first-compile stutter by construction; exclusive
-    // ubershaders measured ~4.5 % slower and stay opt-in.
-    {System::GFX, "Settings", "ShaderCompilationMode"}, ShaderCompilationMode::AsynchronousUberShaders};
+    // iCube: Specialized (Synchronous) by default. The app compiles shaders before starting by
+    // default (DolphinCoreService.mm), so every shader a game has used before is ready at boot and
+    // only a new one can hitch. Hybrid Ubershaders measured even with Specialized on an iPhone 16
+    // Pro Max (docs/perf/2026-09-26-default-settings-matrix.md) but adds the ubershader pipelines to
+    // that boot compile and draws every uncompiled material with the far heavier ubershader, which
+    // older GPUs (A10X) pay for. Both ubershader modes stay opt-in.
+    {System::GFX, "Settings", "ShaderCompilationMode"}, ShaderCompilationMode::Synchronous};
 const Info<int> GFX_SHADER_COMPILER_THREADS{{System::GFX, "Settings", "ShaderCompilerThreads"}, 1};
 const Info<int> GFX_SHADER_PRECOMPILER_THREADS{
     {System::GFX, "Settings", "ShaderPrecompilerThreads"}, -1};

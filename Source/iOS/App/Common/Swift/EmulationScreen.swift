@@ -1469,7 +1469,24 @@ struct EmulationScreen: View {
         userOverrideTouchControls = true
         PointerModeController.shared.set(mode)
       },
-      onSetOverscanFullscreen: { applyOverscanFullscreenToggle($0) })
+      onSetOverscanFullscreen: { applyOverscanFullscreenToggle($0) },
+      readPlayer1Devices: player1DeviceOptions,
+      onChoosePlayer1: { qualifier in
+        // The on-screen controls follow the choice (the assignmentsChanged observer).
+        userOverrideTouchControls = false
+        controllerManager.choosePlayer1(qualifier, isWii: isWiiSystem)
+      })
+  }
+
+  /// The top bar's Player 1 section: the on-screen controls and every connected pad, the current one checked.
+  private func player1DeviceOptions() -> [TopBarDeviceOption] {
+    let reader = LiveControllerHubReader()
+    let bound = isWiiSystem ? reader.boundQualifier(forWiimote: 1) : reader.boundQualifier(forGCPort: 1)
+    let touchscreen = TopBarDeviceOption(
+      qualifier: nil, name: L("On-Screen Controls"), isSelected: AssignmentEngine.isVirtual(bound))
+    return [touchscreen] + reader.connectedPads().filter { !$0.qualifier.isEmpty }.map { pad in
+      TopBarDeviceOption(qualifier: pad.qualifier, name: pad.name, isSelected: pad.qualifier == bound)
+    }
   }
 
   /// True while anything the bar opened (or the pause menu) is on screen; the bar must not hide under it.

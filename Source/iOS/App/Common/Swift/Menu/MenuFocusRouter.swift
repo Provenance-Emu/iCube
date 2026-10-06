@@ -1,6 +1,7 @@
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import CoreGraphics
 import Foundation
 
 /// D18: composes `MenuControllerNav` (raw input -> move/activate/back/
@@ -42,13 +43,14 @@ struct MenuFocusRouter {
     at time: TimeInterval,
     model: MenuModel,
     focusedID: String?,
-    isActive: Bool
+    isActive: Bool,
+    columns: Int = 1
   ) -> MenuFocusUpdate {
     guard isActive else {
       nav.resync(input, at: time)
       return MenuFocusUpdate(focusedID: focusedID)
     }
-    return MenuFocusRouter.apply(nav.update(input, at: time), model: model, focusedID: focusedID)
+    return MenuFocusRouter.apply(nav.update(input, at: time), model: model, focusedID: focusedID, columns: columns)
   }
 
   /// Multi-pad variant (D18 gap: "MenuScreen listens only to the first
@@ -75,12 +77,15 @@ struct MenuFocusRouter {
   /// `update`d, exactly like the single-pad `resync(_:at:)` this composes:
   /// otherwise a pad that is already holding A the instant it is first
   /// observed would read as a fresh press-edge and fire a phantom activate.
+  ///
+  /// `columns` is the grid's column count for `MenuStyle.grid` (see `apply`); a list passes 1.
   mutating func update(
     padInputs: [(AnyHashable, MenuControllerNav.Input)],
     at time: TimeInterval,
     model: MenuModel,
     focusedID: String?,
-    isActive: Bool
+    isActive: Bool,
+    columns: Int = 1
   ) -> MenuFocusUpdate {
     let connected = Set(padInputs.map(\.0))
     navByPad = navByPad.filter { connected.contains($0.key) }
@@ -100,7 +105,7 @@ struct MenuFocusRouter {
       }
       let events = padNav.update(input, at: time)
       navByPad[padID] = padNav
-      let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current)
+      let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current, columns: columns)
       current = padResult.focusedID
       if activated == nil { activated = padResult.activatedID }
       if adjust == nil { adjust = padResult.adjust }
@@ -127,7 +132,17 @@ struct MenuFocusRouter {
   /// Shared event-application core for both the single-pad `update` above
   /// and the multi-pad `update(padInputs:...)` -- kept as one function so
   /// the two paths cannot silently drift apart.
-  private static func apply(_ events: [MenuControllerNav.Event], model: MenuModel, focusedID: String?) -> MenuFocusUpdate {
+  ///
+  /// With `columns` > 1 (`MenuStyle.grid`), up/down move one row and d-pad left/right move
+  /// within the row (`gridMove`) instead of stepping a picker; a picker row still steps.
+  /// With 1 (a list), up/down walk the flat order and left/right only ever step a picker.
+  /// Neither direction ever activates: only A does.
+  private static func apply(
+    _ events: [MenuControllerNav.Event],
+    model: MenuModel,
+    focusedID: String?,
+    columns: Int = 1
+  ) -> MenuFocusUpdate {
     var current = focusedID
     var activated: String?
     var didGoBack = false
@@ -135,7 +150,9 @@ struct MenuFocusRouter {
     for event in events {
       switch event {
       case .move(let step):
-        current = MenuFocusRouter.move(current, by: step, in: model)
+        current = columns > 1
+          ? MenuFocusRouter.gridMove(current, rowStep: step, columnStep: 0, columns: columns, in: model)
+          : MenuFocusRouter.move(current, by: step, in: model)
       case .jumpSection(let step):
         if let existing = current, let jumped = model.firstFocusableID(sectionOffsetFrom: existing, by: step) {
           current = jumped
@@ -147,7 +164,11 @@ struct MenuFocusRouter {
       case .back:
         didGoBack = true
       case .adjust(let step):
-        if let current { adjust = (current, step) }
+        if columns > 1, !MenuFocusRouter.isPicker(current, in: model) {
+          current = MenuFocusRouter.gridMove(current, rowStep: 0, columnStep: step, columns: columns, in: model)
+        } else if let current {
+          adjust = (current, step)
+        }
       }
     }
     // A and d-pad left/right on the same row in one tick: the activate already stepped a picker.
@@ -166,6 +187,57 @@ struct MenuFocusRouter {
       return order.first
     }
     return order[max(0, min(order.count - 1, index + step))]
+  }
+
+  /// Move through `model` laid out the way `MenuScreen`'s grid style draws it: `columns` cards
+  /// per row, each section its own `LazyVGrid` (so a section always starts a new row, and its last
+  /// row may be short), and a disabled item still taking up its cell.
+  ///
+  /// - `columnStep` moves within the current row only, clamped: it never wraps onto the next or
+  ///   previous row. Disabled cells are skipped.
+  /// - `rowStep` moves to the row above/below, onto the same column, clamped to a short row's last
+  ///   card. If that card is disabled, the nearest enabled one in the row; a row with none is
+  ///   skipped. Clamped at the first/last row.
+  /// - No current focus (or a focus the model no longer has): the first focusable item, as `move`.
+  static func gridMove(_ focusedID: String?, rowStep: Int, columnStep: Int, columns: Int, in model: MenuModel) -> String? {
+    let columns = max(1, columns)
+    var rows: [[MenuItem]] = []
+    for section in model.sections {
+      var start = 0
+      while start < section.items.count {
+        rows.append(Array(section.items[start ..< min(start + columns, section.items.count)]))
+        start += columns
+      }
+    }
+    guard let focusedID,
+          let row = rows.firstIndex(where: { cells in cells.contains { $0.id == focusedID } }),
+          let column = rows[row].firstIndex(where: { $0.id == focusedID }) else {
+      return model.focusableIDs.first
+    }
+    if columnStep != 0 {
+      var target = column + columnStep
+      while rows[row].indices.contains(target) {
+        if rows[row][target].isEnabled { return rows[row][target].id }
+        target += columnStep
+      }
+      return focusedID
+    }
+    guard rowStep != 0 else { return focusedID }
+    var target = row + rowStep
+    while rows.indices.contains(target) {
+      let cells = rows[target]
+      let enabled = cells.indices.filter { cells[$0].isEnabled }
+      if let nearest = enabled.min(by: { abs($0 - column) < abs($1 - column) }) {
+        return cells[nearest].id
+      }
+      target += rowStep
+    }
+    return focusedID
+  }
+
+  private static func isPicker(_ id: String?, in model: MenuModel) -> Bool {
+    guard let id, let role = model.item(id: id)?.role, case .picker = role else { return false }
+    return true
   }
 
   /// Reconciles a live `focusedID` against a freshly rebuilt `model`.
@@ -206,5 +278,23 @@ extension MenuFocusUpdate: Equatable {
   static func == (lhs: MenuFocusUpdate, rhs: MenuFocusUpdate) -> Bool {
     lhs.focusedID == rhs.focusedID && lhs.activatedID == rhs.activatedID && lhs.didGoBack == rhs.didGoBack
       && lhs.adjust?.id == rhs.adjust?.id && lhs.adjust?.step == rhs.adjust?.step
+  }
+}
+
+/// `MenuStyle.grid`'s column count. `MenuScreen` draws exactly this many columns and hands the
+/// same number to `MenuFocusRouter`, so d-pad up/down lands on the card drawn above or below
+/// rather than on the next card in reading order.
+enum MenuGridLayout {
+  static let minimumCardWidth: CGFloat = 320
+  static let spacing: CGFloat = 12
+  static let padding: CGFloat = 16
+
+  /// Columns for a grid `width` points wide, its own padding included: as many
+  /// `minimumCardWidth` cards as fit with `spacing` between them, never fewer than one. The same
+  /// count `GridItem(.adaptive(minimum: 320), spacing: 12)` produced before the grid had to know it.
+  static func columnCount(forWidth width: CGFloat) -> Int {
+    let available = width - padding * 2
+    guard available.isFinite, available > minimumCardWidth else { return 1 }
+    return max(1, Int(((available + spacing) / (minimumCardWidth + spacing)).rounded(.down)))
   }
 }

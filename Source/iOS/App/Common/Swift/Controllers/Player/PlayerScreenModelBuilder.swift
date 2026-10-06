@@ -259,9 +259,14 @@ enum PlayerScreenModelBuilder {
     ])]
     guard state.showsAdvanced else { return sections }
     for group in state.advanced where !group.settings.isEmpty {
-      sections.append(MenuSection(
-        id: "advanced-\(group.owner)-\(group.groupId)", header: group.title,
-        items: group.settings.map { settingItem($0, actions: actions) }))
+      var items = group.settings.map { settingItem($0, sensorBarOnTop: state.isSensorBarOnTop, actions: actions) }
+      if let offset = group.settings.first(where: isVerticalOffset), !offset.isExpression, offset.value != offset.defaultValue {
+        items.append(MenuItem(
+          id: "advanced-reset-vertical-offset", title: L("Reset Vertical Offset"),
+          subtitle: String(format: L("Back to %@, the default."), NumericSettingSteps.label(offset.defaultValue, suffix: offset.suffix)),
+          icon: "arrow.counterclockwise", role: .action({ actions.setNumericSetting(offset, offset.defaultValue) })))
+      }
+      sections.append(MenuSection(id: "advanced-\(group.owner)-\(group.groupId)", header: group.title, items: items))
     }
     if !state.controls.isEmpty {
       // Readable names, as the capture rows show them; the editor a row pushes holds the raw text.
@@ -278,15 +283,27 @@ enum PlayerScreenModelBuilder {
     return sections
   }
 
+  /// The Wii Remote pointer's Vertical Offset, which the core leaves unexplained.
+  static func isVerticalOffset(_ setting: NumericSettingState) -> Bool {
+    setting.owner == .wiimote && setting.groupId == AdvancedSettingGroups.pointerGroup
+      && setting.coreName == AdvancedSettingGroups.verticalOffsetName
+  }
+
   /// What a setting's row says under its name: the core's explanation, or that an expression drives
-  /// it. nil when the core has no explanation.
-  static func settingSubtitle(_ setting: NumericSettingState) -> String? {
+  /// it. nil when the core has no explanation. Vertical Offset gets the app's own, naming the Sensor
+  /// Bar Position because the core flips the offset's sign when the bar is at the bottom.
+  static func settingSubtitle(_ setting: NumericSettingState, sensorBarOnTop: Bool = false) -> String? {
     if setting.isExpression { return L("Set by an expression") }
+    if isVerticalOffset(setting) {
+      return sensorBarOnTop
+        ? L("Height of the emulated sensor bar. The default, 10 cm, keeps the pointer where you aim. Sensor Bar Position (Settings → Wii) is Top.")
+        : L("Height of the emulated sensor bar. The default, 10 cm, keeps the pointer where you aim. Sensor Bar Position (Settings → Wii) is Bottom, which applies this value the other way up.")
+    }
     return setting.explanation.isEmpty ? nil : setting.explanation
   }
 
-  private static func settingItem(_ setting: NumericSettingState, actions: PlayerScreenActions) -> MenuItem {
-    let subtitle = settingSubtitle(setting)
+  private static func settingItem(_ setting: NumericSettingState, sensorBarOnTop: Bool, actions: PlayerScreenActions) -> MenuItem {
+    let subtitle = settingSubtitle(setting, sensorBarOnTop: sensorBarOnTop)
     if setting.isExpression {
       // Enabled no-op so tvOS focus can reach it; editing an expression-driven value here would
       // silently replace the expression.

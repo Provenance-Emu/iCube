@@ -14,6 +14,7 @@ struct ControllerMoreSettingsView: View {
   @AppStorage("rumble_destination") private var rumbleDestination = 1
   @State private var backgroundInput = false
   #if os(iOS)
+  @AppStorage(ControllerManager.connectTakesPlayer1DefaultsKey) private var connectTakesPlayer1 = true
   @State private var touchOverlayProgrammatic = false
   /// Connected pads with a light bar, for the LED colour rows.
   @State private var litControllers: [GCController] = []
@@ -25,6 +26,9 @@ struct ControllerMoreSettingsView: View {
         Toggle(L("Background Input"), isOn: $backgroundInput)
           .onChange(of: backgroundInput) { _, enabled in DOLConfigBridge.setMainBackgroundInput(enabled) }
         #if os(iOS)
+        settingsCaption(
+          Toggle(L("Controllers Take Player 1"), isOn: $connectTakesPlayer1),
+          L("A controller that connects while the on-screen controls are Player 1 becomes Player 1, even if you chose the on-screen controls there."))
         Picker(L("Rumble Output"), selection: $rumbleDestination) {
           Text(L("Device Haptics")).tag(0)
           Text(L("Controller")).tag(1)

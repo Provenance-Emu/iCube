@@ -4,11 +4,25 @@ on:
   release:
     types:
       - published
+  # Dry run: builds every product and uploads them as a run artifact, publishes nothing.
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: 'Build the Beta configurations, as a prerelease would'
+        type: boolean
+        default: false
+  # A pull request that changes this workflow dry-runs it, so it is not first tried on a release.
+  pull_request:
+    branches: [ develop, master ]
+    paths:
+      - '.github/workflows/release.yml'
 
 # Builds the same way build.yml does: the PVlibDolphin xcframework first, then the Xcode project
 # generated from Source/iOS/App/Project.swift by Tuist. This workflow used to archive the
 # hand-maintained DolphiniOS.xcodeproj with the upstream "DiOS" schemes and DolphiniOS.app, none
-# of which exist any more, on a self-hosted runner the repo does not have.
+# of which exist any more, on a self-hosted runner the repo does not have. Only a published release
+# attaches the products to a GitHub release; a manual run or a pull request touching this file is a
+# dry run that uploads them as an artifact.
 jobs:
   build:
     runs-on: macos-26
@@ -16,6 +30,8 @@ jobs:
       contents: write
 
     env:
+      # Every slice is built up front, so the app's Build Dolphin Core phase skips its rebuild.
+      DOL_SKIP_CORE_BUILD: '1'
       TUIST_VERSION: '4.200.0'
       XCODE_VERSION: '26.3'
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
@@ -35,21 +51,25 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
-      - name: Set Schema for Normal
-        if: "!github.event.release.prerelease"
+      # A prerelease, or a dry run asked to, builds the Beta configurations; a pull request's dry
+      # run builds the normal ones.
+      - name: Select configurations
+        env:
+          PRERELEASE: ${{ (github.event_name == 'release' && github.event.release.prerelease) || (github.event_name == 'workflow_dispatch' && inputs.prerelease) }}
         run: |
-          echo "XCODE_CONFIGURATION_NJB=Release (Non-Jailbroken)" >> $GITHUB_ENV
-          echo "XCODE_CONFIGURATION_JB=Release (Jailbroken)" >> $GITHUB_ENV
-          echo "XCODE_CONFIGURATION_TS=Release (TrollStore)" >> $GITHUB_ENV
-          echo "DEB_CONTROL_NAME=control-normal" >> $GITHUB_ENV
-
-      - name: Set Schema for Beta
-        if: "github.event.release.prerelease"
-        run: |
-          echo "XCODE_CONFIGURATION_NJB=Release (Beta, Non-Jailbroken)" >> $GITHUB_ENV
-          echo "XCODE_CONFIGURATION_JB=Release (Beta, Jailbroken)" >> $GITHUB_ENV
-          echo "XCODE_CONFIGURATION_TS=Release (Beta, TrollStore)" >> $GITHUB_ENV
-          echo "DEB_CONTROL_NAME=control-beta" >> $GITHUB_ENV
+          set -euo pipefail
+          if [ "$PRERELEASE" = "true" ]; then
+            echo "XCODE_CONFIGURATION_NJB=Release (Beta, Non-Jailbroken)" >> "$GITHUB_ENV"
+            echo "XCODE_CONFIGURATION_JB=Release (Beta, Jailbroken)" >> "$GITHUB_ENV"
+            echo "XCODE_CONFIGURATION_TS=Release (Beta, TrollStore)" >> "$GITHUB_ENV"
+            echo "DEB_CONTROL_NAME=control-beta" >> "$GITHUB_ENV"
+          else
+            echo "XCODE_CONFIGURATION_NJB=Release (Non-Jailbroken)" >> "$GITHUB_ENV"
+            echo "XCODE_CONFIGURATION_JB=Release (Jailbroken)" >> "$GITHUB_ENV"
+            echo "XCODE_CONFIGURATION_TS=Release (TrollStore)" >> "$GITHUB_ENV"
+            echo "DEB_CONTROL_NAME=control-normal" >> "$GITHUB_ENV"
+          fi
+          echo "Prerelease configurations: $PRERELEASE"
 
       # Shares build.yml's cache: a release of a commit develop already built restores its slices.
       - name: Restore Dolphin xcframework cache
@@ -113,7 +133,17 @@ jobs:
           "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateDeb.sh" "${{ github.workspace }}/archives/Jailbroken.xcarchive/Products/Applications/iCube.app" "-" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/${{ env.DEB_CONTROL_NAME }}.in" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postinst.sh" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postrm.sh" "Applications" "${{ github.workspace }}/products/Jailbroken-Rootful.deb"
           "${{ github.workspace }}/Source/iOS/App/Project/Scripts/CreateDeb.sh" "${{ github.workspace }}/archives/Jailbroken.xcarchive/Products/Applications/iCube.app" "-" "${{ github.workspace }}/Source/iOS/App/Project/Entitlements/Private.entitlements" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/${{ env.DEB_CONTROL_NAME }}-rootless.in" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postinst.sh" "${{ github.workspace }}/Source/iOS/App/Project/Package/Deb/postrm.sh" "var/jb/Applications" "${{ github.workspace }}/products/Jailbroken-Rootless.deb"
 
+      - name: Upload products (dry run)
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-products
+          path: products/
+          retention-days: 7
+          if-no-files-found: error
+
       - uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
         with:
           files: |
             products/Non-Jailbroken.ipa

@@ -329,6 +329,12 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
 static const double ACStarveDupRise = 0.10;   // dup-ratio rise vs the reference clock = starving
 static const unsigned long long ACStarveMinPresents = 30;  // presents a window needs before judging
 static const double ACStarveRefMaxDup = 0.90;  // a window above this is loading/black, never a reference
+// A trip is only a suspicion: the reference may come from another scene (a 60fps menu before 30fps
+// gameplay reads as a dup-ratio rise at ANY lower clock). The guard first re-measures at the
+// reference clock; only if that window presents clearly more new frames than the tripped one is the
+// underclock the cause. Otherwise the scene changed: re-base the reference there and resume.
+static const double ACStarveConfirmDrop = 0.05;  // ratio must fall this much back at the reference
+static const int ACStarveMaxUnconfirmed = 2;     // unconfirmed trips before the guard stands down
 
 @implementation EmulationCoordinator {
   UIView* _renderHost;
@@ -379,6 +385,11 @@ static const double ACStarveRefMaxDup = 0.90;  // a window above this is loading
   BOOL  _acCpuLeverParked;     // GPU/video wall: CPU lever gives no gain -> stop fighting it with clock
   float  _acRefCPU;            // highest applied clock with a trusted dup-ratio sample this run (-1 = none)
   double _acRefDupRatio;       // duplicate-present ratio measured at _acRefCPU (starvation reference)
+  BOOL _acStarveConfirming;    // tripped: re-measuring at the reference clock before parking
+  double _acStarveTripRatio;   // dup ratio of the window that tripped the guard
+  float _acStarveTripCPU;      // clock that tripped it (resumed if the trip is not confirmed)
+  int _acStarveResumePhase;    // phase to resume if the trip is not confirmed
+  int _acStarveUnconfirmed;    // unconfirmed trips this run; the guard stands down at the max
 
   int   _acPhase;          // ACPhase_* below
   int   _acPhaseTicks;     // ticks elapsed in the current phase (timer fires every ACTickMs)
@@ -459,7 +470,11 @@ static bool s_backgroundAutoPaused = false;
 
 - (void)applyMetalLayerPreferences {
   NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
-  BOOL tripleBuffering = [defaults boolForKey:@"gfx_triple_buffering"];
+  // On unless turned off, as Graphics → General shows it: two drawables made the GPU thread wait
+  // for a free one whenever a frame ran long.
+  BOOL tripleBuffering = YES;
+  if ([defaults objectForKey:@"gfx_triple_buffering"] != nil)
+    tripleBuffering = [defaults boolForKey:@"gfx_triple_buffering"];
   BOOL forceScaleOneOnNonProMotion = [defaults boolForKey:@"gfx_force_scale_one_non_promo"];
   BOOL edrEnabled = [defaults boolForKey:@"gfx_edr_enabled"];
 
@@ -742,20 +757,12 @@ static bool s_backgroundAutoPaused = false;
     [defaults setInteger:5 forKey:@"adaptive_clock_schema_v"];
   }
 
-  // A learned clock is only meaningful for the core that learned it. f* is "the highest clock THIS
-  // engine sustains", and a seeded boot only re-checks one step around the seed, so after the core
-  // gets faster every game stays pinned near its old, lower clock: the emulator reports 100 % speed
-  // (the CPU thread even sleeps in the throttle) while the game itself runs slow-motion. Relearn from
-  // 1.0 whenever the core revision changes. Runs whether or not the adaptive clock is enabled now, so
-  // stale seeds are gone by the time it is switched on.
-  NSString* const engineRev = [NSString stringWithUTF8String:Common::GetScmRevStr().c_str()];
-  if (![[defaults stringForKey:@"adaptive_clock_engine_rev"] isEqualToString:engineRev]) {
-    for (NSString* key in [[defaults dictionaryRepresentation] allKeys]) {
-      if ([key hasPrefix:@"adaptive_clock_cpu_"] || [key hasPrefix:@"adaptive_clock_vi_"])
-        [defaults removeObjectForKey:key];
-    }
-    [defaults setObject:engineRev forKey:@"adaptive_clock_engine_rev"];
-  }
+  // Learned clocks are kept across core revisions. Every app update changes the revision, so
+  // relearning on each one put every game back at 1.0: a full search per title after each
+  // TestFlight build, and on a slow device (A10X) a game that only reaches full speed underclocked
+  // ran slow until it relearned. A seeded boot already probes one step up (ACPhase_Verify), so a
+  // faster core still raises a seed, one step per boot. The key below is no longer read.
+  [defaults removeObjectForKey:@"adaptive_clock_engine_rev"];
 
   // The adaptive loop itself only runs when the user has enabled it (existing toggle — no new one).
   if (![defaults boolForKey:@"adaptive_clock_enable"]) return;
@@ -789,6 +796,11 @@ static bool s_backgroundAutoPaused = false;
   _acCpuLeverParked = NO;
   _acRefCPU = -1.f;
   _acRefDupRatio = -1.0;
+  _acStarveConfirming = NO;
+  _acStarveTripRatio = 0.0;
+  _acStarveTripCPU = 1.0f;
+  _acStarveResumePhase = ACPhase_Search;
+  _acStarveUnconfirmed = 0;
   _acPhase = ACPhase_Search;  // default: full descending sweep from 1.0
   _acPhaseTicks = 0;
   _acUnderrunBase = PerformanceMetrics::GetAudioUnderrunCount();
@@ -960,24 +972,65 @@ static bool s_backgroundAutoPaused = false;
           case ACPhase_Settle:   needTicks = ACSettleTicks;     break;
           default: break;
         }
+        // While confirming a trip, the phases wait: the window runs at the reference clock.
+        if (self->_acStarveConfirming && self->_acPhaseTicks < needTicks)
+          return;
         if (self->_acPhaseTicks >= needTicks) {
           const unsigned long long wTotal = (total > self->_acTotalBase) ? (total - self->_acTotalBase) : 0ULL;
           const unsigned long long wDups = (dups > self->_acDupBase) ? (dups - self->_acDupBase) : 0ULL;
-          if (wTotal >= ACStarveMinPresents) {
+          if (self->_acStarveConfirming && wTotal < ACStarveMinPresents)
+          {
+            // Loading or a black screen: measure the confirmation again.
+            resetWindow();
+            return;
+          }
+          if (self->_acStarveConfirming)
+          {
+            self->_acStarveConfirming = NO;
             const double dupRatio = (double)wDups / (double)wTotal;
             const float appliedNow = MIN(self->_acCPU, ceiling);
-            if (self->_acRefCPU >= 0.f && appliedNow < self->_acRefCPU - 0.001f &&
-                dupRatio > self->_acRefDupRatio + ACStarveDupRise && !self->_acCpuYielded) {
-              INFO_LOG_FMT(CORE,
-                           "AdaptiveClock: starvation guard — clock {:.2f} dup-ratio {:.2f} vs reference "
-                           "clock {:.2f} dup-ratio {:.2f} ({} presents): restoring reference, parking CPU lever",
-                           appliedNow, dupRatio, self->_acRefCPU, self->_acRefDupRatio, wTotal);
-              applyCPU(self->_acRefCPU);
+            if (dupRatio <= self->_acStarveTripRatio - ACStarveConfirmDrop)
+            {
+              INFO_LOG_FMT(CORE, "AdaptiveClock: starvation at {:.2f} confirmed, keeping {:.2f}",
+                           self->_acStarveTripCPU, appliedNow);
+              self->_acRefDupRatio = dupRatio;
               self->_acStableCPU = self->_acCPU;
               self->_acCpuLeverParked = YES;
               self->_acUpProbeLever = AC_LEVER_NONE;
               self->_acPhase = ACPhase_Hold;
               persistConverged();
+              resetWindow();
+              return;
+            }
+            // The reference clock presents no more new frames than the tripped one: the scene
+            // changed, not the clock's effect. Re-base the reference on this scene and resume.
+            self->_acStarveUnconfirmed++;
+            INFO_LOG_FMT(CORE, "AdaptiveClock: starvation not confirmed, resuming {:.2f}",
+                         self->_acStarveTripCPU);
+            if (dupRatio < ACStarveRefMaxDup)
+            {
+              self->_acRefCPU = appliedNow;
+              self->_acRefDupRatio = dupRatio;
+            }
+            applyCPU(self->_acStarveTripCPU);
+            self->_acPhase = self->_acStarveResumePhase;
+            resetWindow();
+            return;
+          }
+          if (wTotal >= ACStarveMinPresents)
+          {
+            const double dupRatio = (double)wDups / (double)wTotal;
+            const float appliedNow = MIN(self->_acCPU, ceiling);
+            if (self->_acRefCPU >= 0.f && appliedNow < self->_acRefCPU - 0.001f &&
+                dupRatio > self->_acRefDupRatio + ACStarveDupRise && !self->_acCpuYielded &&
+                self->_acStarveUnconfirmed < ACStarveMaxUnconfirmed)
+            {
+              INFO_LOG_FMT(CORE, "AdaptiveClock: starvation suspected at {:.2f}", appliedNow);
+              self->_acStarveConfirming = YES;
+              self->_acStarveTripRatio = dupRatio;
+              self->_acStarveTripCPU = self->_acCPU;
+              self->_acStarveResumePhase = self->_acPhase;
+              applyCPU(self->_acRefCPU);
               resetWindow();
               return;
             }

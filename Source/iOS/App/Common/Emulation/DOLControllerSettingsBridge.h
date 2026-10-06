@@ -55,6 +55,9 @@ NS_SWIFT_NAME(NumericSettingInfo)
 /// The core's explanation of the setting (`NumericSettingBase::GetUIDescription`), translated;
 /// empty when the core has none.
 @property(nonatomic, readonly, copy) NSString* explanation;
+/// The core's untranslated name (`GetUIName`, "Vertical Offset"): what the app matches a setting
+/// by, since `name` is translated.
+@property(nonatomic, readonly, copy) NSString* coreName;
 @end
 
 /// The player screen's Advanced section: Dolphin's expression parser, used as a check that installs
