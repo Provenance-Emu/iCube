@@ -215,6 +215,9 @@ import simd
   /// While set, real CoreMotion samples are dropped so an injected pose (debug API) sticks.
   /// Motion queue only.
   private var debugPoseHeld = false
+  /// The slot a held debug pose was written to, so releasing it rests that slot even if the
+  /// binding changed meanwhile.
+  private var debugPosePort: Int?
   #endif
 
   override required init() {
@@ -307,20 +310,28 @@ import simd
   }
 
   private func writeAcceleration(wiimote: SIMD3<Double>, nunchuk: SIMD3<Double>) {
+    writeAcceleration(wiimote: wiimote, nunchuk: nunchuk, controller: port)
+  }
+
+  private func writeAcceleration(wiimote: SIMD3<Double>, nunchuk: SIMD3<Double>, controller: Int) {
     for (button, value) in Self.wiimoteAccelWrites(x: wiimote.x, y: wiimote.y, z: wiimote.z) {
-      TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
+      TCManagerInterface.setAxisValueFor(button.rawValue, controller: controller, value: value)
     }
     for (button, value) in Self.nunchukAccelWrites(x: nunchuk.x, y: nunchuk.y, z: nunchuk.z) {
-      TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
+      TCManagerInterface.setAxisValueFor(button.rawValue, controller: controller, value: value)
     }
   }
 
   /// A level, motionless remote and Nunchuk. The axes keep their last value, so this is written
   /// whenever motion starts or stops (or the bound slot changes), not left to the last tilt.
   private func writeRestingIMU() {
-    writeAcceleration(wiimote: Self.levelAcceleration, nunchuk: Self.levelAcceleration)
+    writeRestingIMU(controller: port)
+  }
+
+  private func writeRestingIMU(controller: Int) {
+    writeAcceleration(wiimote: Self.levelAcceleration, nunchuk: Self.levelAcceleration, controller: controller)
     for (button, value) in Self.wiimoteGyroWrites(pitch: 0, roll: 0, yaw: 0) {
-      TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
+      TCManagerInterface.setAxisValueFor(button.rawValue, controller: controller, value: value)
     }
   }
 
@@ -514,10 +525,14 @@ import simd
 
   @objc func setPort(_ port: Int) {
     guard port != self.port else { return }
+    let previousPort = self.port
     self.port = port
-    // The new slot has never seen a sample: rest it until the next one.
-    if motionEnabled {
-      operationQueue.addOperation { self.writeRestingIMU() }
+    let restNewPort = motionEnabled
+    operationQueue.addOperation {
+      // The old slot keeps its last tilt otherwise, and it comes back if that slot is rebound.
+      self.writeRestingIMU(controller: previousPort)
+      // The new slot has never seen a sample: rest it until the next one.
+      if restNewPort { self.writeRestingIMU(controller: port) }
     }
   }
 
@@ -687,6 +702,7 @@ import simd
     var result: [String: Any] = [:]
     operationQueue.addOperations([BlockOperation {
       self.debugPoseHeld = true
+      self.debugPosePort = self.port
       if let orientation { self.orientation = orientation }
       if recenter { self.recenterPointer() }
       let gravity = attitude.inverse.act(SIMD3(0, 0, -1))
@@ -715,6 +731,7 @@ import simd
   func debugWriteRawWiimoteAcceleration(_ acceleration: SIMD3<Double>) -> [String: Any] {
     operationQueue.addOperations([BlockOperation {
       self.debugPoseHeld = true
+      self.debugPosePort = self.port
       for (button, value) in Self.wiimoteAccelWrites(x: acceleration.x, y: acceleration.y, z: acceleration.z) {
         TCManagerInterface.setAxisValueFor(button.rawValue, controller: self.port, value: value)
       }
@@ -743,6 +760,10 @@ import simd
   func debugReleasePose() {
     operationQueue.addOperations([BlockOperation {
       self.debugPoseHeld = false
+      if let posePort = self.debugPosePort, posePort != self.port {
+        self.writeRestingIMU(controller: posePort)
+      }
+      self.debugPosePort = nil
       self.writeRestingIMU()
     }], waitUntilFinished: true)
   }

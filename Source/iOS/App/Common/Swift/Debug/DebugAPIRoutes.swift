@@ -869,8 +869,8 @@ final class DebugAPIRoutes {
         motion.debugReleasePose()
         return ["ok": true, "data": ["released": true]]
       }
-      if let mode = asJSONInt(dict["irMode"]) {
-        guard (0 ... 2).contains(mode) else {
+      if let rawMode = dict["irMode"] {
+        guard let mode = asJSONInt(rawMode), (0 ... 2).contains(mode) else {
           return ["ok": false, "status": 400, "error": "irMode must be 0 (gyro), 1 (follow) or 2 (drag)"]
         }
         DispatchQueue.main.sync { DOLConfigBridge.setCurrentRunMainTouchPadIRMode(mode) }
