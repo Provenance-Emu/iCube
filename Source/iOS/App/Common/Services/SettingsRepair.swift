@@ -170,11 +170,11 @@ final class SettingsRepair: NSObject {
     defaults.integer(forKey: versionKey) < version
   }
 
-  /// Runs the repair once per install version. The version is recorded last, after the config is
-  /// saved and the defaults are cleaned, so a launch that dies part-way repeats the repair on the
+  /// Runs the repair once per install version. The defaults are cleaned and the version recorded
+  /// last, after the config is saved, so a launch that dies part-way repeats the repair on the
   /// next launch; the rules are idempotent, so a second pass deletes nothing more. Config::Save
-  /// reports no failure, so the version is recorded only when the files read back from disk hold
-  /// nothing the rules would still delete; otherwise the next launch tries again. Touches only
+  /// reports no failure, so both wait until the files read back from disk hold nothing the rules
+  /// would still delete; otherwise the next launch tries again. Touches only
   /// Base-layer config keys and the defaults above, never save states, NAND, game files,
   /// controller profiles or touch layouts. Returns whether it ran.
   @discardableResult
@@ -188,15 +188,17 @@ final class SettingsRepair: NSObject {
     config.save()
     let unsaved = baseKeysToDelete(config.savedBaseSnapshot(), fastmemAvailable: fastmemAvailable,
                                    afterVersion: previousVersion, configRules: configRules)
-    let removedDefaults = cleanUserDefaults(defaults, afterVersion: previousVersion)
     for key in deleted.keys.sorted() {
       NSLog("[SettingsRepair] deleted %@ (was %@)", key, deleted[key] ?? "")
     }
+    // Retried on the next launch; the defaults wait for that run, so a disk that keeps refusing the
+    // write does not wipe the learned clocks on every launch.
     guard unsaved.isEmpty else {
       NSLog("[SettingsRepair] v%ld -> v%ld not recorded: the saved config still holds %@; retrying next launch",
             previousVersion, version, unsaved.joined(separator: ", "))
       return true
     }
+    let removedDefaults = cleanUserDefaults(defaults, afterVersion: previousVersion)
     defaults.set(version, forKey: versionKey)
     NSLog("[SettingsRepair] v%ld -> v%ld: %ld config keys deleted, %ld defaults removed",
           previousVersion, version, deleted.count, removedDefaults.count)

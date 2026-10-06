@@ -275,16 +275,20 @@ final class SettingsRepairTests: XCTestCase {
   func testAFailedSaveIsRetriedOnTheNextLaunch() {
     let store = FakeStore(["Dolphin.Core.CIRDynLinking": "False", "Dolphin.Core.CPUThread": "True"])
     store.saveReachesDisk = false
+    defaults.set(0.6, forKey: "adaptive_clock_cpu_GALE01")
 
     XCTAssertTrue(SettingsRepair.runIfNeeded(defaults: defaults, config: store, fastmemAvailable: true))
     XCTAssertEqual(store.saves, 1)
     XCTAssertEqual(defaults.integer(forKey: SettingsRepair.versionKey), 0)
+    // The defaults are cleaned once, on the run that sticks, not on every failed launch.
+    XCTAssertEqual(defaults.double(forKey: "adaptive_clock_cpu_GALE01"), 0.6)
 
     // The next launch reloads what the disk still holds; this time the save lands.
     store.base = store.disk
     store.saveReachesDisk = true
     XCTAssertTrue(SettingsRepair.runIfNeeded(defaults: defaults, config: store, fastmemAvailable: true))
     XCTAssertEqual(store.disk, ["Dolphin.Core.CPUThread": "True"])
+    XCTAssertNil(defaults.object(forKey: "adaptive_clock_cpu_GALE01"))
     XCTAssertEqual(defaults.integer(forKey: SettingsRepair.versionKey), SettingsRepair.currentVersion)
   }
 
