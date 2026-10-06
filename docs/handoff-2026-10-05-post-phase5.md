@@ -23,7 +23,7 @@ CI on #20's head: Unit Tests, build, Swift lint and clang-format all green. Test
      before `tuist generate`. TestFlight run 48 already carries the `BootCore` guard.
    - **Provenance** consumes this repo as a submodule and links the committed
      `build/xcframework/PVlibDolphin.xcframework` (`.gitignore`). It gets no core change (the
-     `BootCore` guard, the Specialized shader default) until the prebuilt is refreshed and
+     `BootCore` guard) until the prebuilt is refreshed and
      committed. The committed copy was last refreshed at `5343a78f39` (Oct 2).
 2. **Device checks** (none of #18–#20 has run on a phone):
    - Gyro pointer reaches all four edges; 6DOF tilt/turn register both ways (Wii Sports).
