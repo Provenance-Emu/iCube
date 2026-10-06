@@ -991,7 +991,8 @@ static bool s_backgroundAutoPaused = false;
             const float appliedNow = MIN(self->_acCPU, ceiling);
             if (dupRatio <= self->_acStarveTripRatio - ACStarveConfirmDrop)
             {
-              INFO_LOG_FMT(CORE, "AdaptiveClock: starvation confirmed at {:.2f}", appliedNow);
+              INFO_LOG_FMT(CORE, "AdaptiveClock: starvation at {:.2f} confirmed, keeping {:.2f}",
+                           self->_acStarveTripCPU, appliedNow);
               self->_acRefDupRatio = dupRatio;
               self->_acStableCPU = self->_acCPU;
               self->_acCpuLeverParked = YES;

@@ -16,14 +16,15 @@ CI on #20's head: Unit Tests, build, Swift lint and clang-format all green. Test
 
 ## Open items
 
-1. **xcframework refresh** (Mac, housekeeping only): `python3 BuildiOSXCFramework.py --platforms
-   OS64 SIMULATORARM64 TVOS SIMULATOR_TVOS`, commit as `build: refresh the prebuilt core …`. The
-   committed `build/xcframework` (last refreshed `5343a78f39`, Oct 2) predates #18, but nothing
-   ships it: the app target's "Build Dolphin Core" pre-script (`Project.swift`) rebuilds the slice
-   being built from source on every Xcode build, and `testflight.yml` / `build.yml` run
-   `BuildiOSXCFramework.py` before `tuist generate`. So TestFlight run 48 already carries the
-   `BootCore` guard. The prebuilt only has to exist for `tuist generate` to resolve the binary
-   target.
+1. **xcframework refresh** (needs a Mac): `python3 BuildiOSXCFramework.py --platforms OS64
+   SIMULATORARM64 TVOS SIMULATOR_TVOS`, commit as `build: refresh the prebuilt core …`. Two paths:
+   - **iCube's own builds** compile the core from source: the app target's "Build Dolphin Core"
+     pre-script (`Project.swift`), and `testflight.yml` / `build.yml` run `BuildiOSXCFramework.py`
+     before `tuist generate`. TestFlight run 48 already carries the `BootCore` guard.
+   - **Provenance** consumes this repo as a submodule and links the committed
+     `build/xcframework/PVlibDolphin.xcframework` (`.gitignore`). It gets no core change (the
+     `BootCore` guard, the Specialized shader default) until the prebuilt is refreshed and
+     committed. The committed copy was last refreshed at `5343a78f39` (Oct 2).
 2. **Device checks** (none of #18–#20 has run on a phone):
    - Gyro pointer reaches all four edges; 6DOF tilt/turn register both ways (Wii Sports).
    - An existing custom layout is unchanged after updating and after moving one control; a layout

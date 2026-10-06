@@ -546,7 +546,9 @@ final class ControllerManager: NSObject, ObservableObject {
   /// with it: clearing its old slot stashes it, and the assign restores it.
   private func takePlayer1FromTouchscreen(for controller: GCController) {
     #if os(iOS)
-    guard Self.connectTakesPlayer1() else { return }
+    // Only in a running game: outside one the snapshot's system (`isCurrentSystemWii`) is stale,
+    // and the boot pass places a pad connected beforehand.
+    guard Self.connectTakesPlayer1(), TVEmulationBridge.isRunning() else { return }
     let qualifier = TVControllerMappingBridge.qualifiedName(for: controller) as String
     guard let takeover = AssignmentEngine.player1Takeover(
       of: qualifier, in: ControllerStateStore.shared.snapshot(), pinned: pinnedSlots) else { return }

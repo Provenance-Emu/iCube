@@ -39,8 +39,9 @@ and clang-format all green. None of it has been run on a device yet.
   and calls `RestoreConfig()` when `Core::Init` fails.
 - `EmulationCoordinator emulationLoopWithBootParameter:` waits (5 s) for `Uninitialized`
   (`DOLWaitForCoreUninitialized`) and shows "The previous game is still shutting down…" on timeout.
-- The core half ships: every app build compiles the core from source (see
-  `handoff-2026-10-05-post-phase5.md`, open item 1).
+- iCube's own builds carry the core half (they compile the core from source); Provenance, which
+  links the committed xcframework, needs the refresh (`handoff-2026-10-05-post-phase5.md`, open
+  item 1).
 
 ### D. Mapping overhaul
 - D4: ~900 lines deleted (unreachable ObjC controllers screens, `ControllerPresets` and its toast,
@@ -84,8 +85,8 @@ and clang-format all green. None of it has been run on a device yet.
 
 1. **xcframework refresh** on a Mac: `python3 BuildiOSXCFramework.py --platforms OS64
    SIMULATORARM64 TVOS SIMULATOR_TVOS`, committed as `build: refresh the prebuilt core …`.
-   Housekeeping only: app builds compile the core from source, so `BootCore`'s guard ships
-   without it.
+   iCube's own builds compile the core from source and already ship `BootCore`'s guard; Provenance
+   links the committed binary and needs the refresh.
 2. ~~Delete the remote branch~~: `claude/jolly-planck-43gyz5` was restarted from `develop` for
    the follow-up below; delete it once that PR merges.
 3. **Policy changes to confirm on device, revert if unwanted:** a Wii title no longer auto-binds a
