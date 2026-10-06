@@ -385,7 +385,7 @@ import simd
     lastIRMode = irMode
 
     // The baseline is the pointer's center AND the IMU mount, taken from the same sample. It is
-    // only consumed when the phone's attitude drives something (gyro pointer or 6DOF), so a
+    // only consumed when the phone's attitude drives something (gyro pointer, 6DOF Nunchuk), so a
     // recenter request made in a touch mode waits for a mode that uses it.
     let uiOrientation = orientation
     if Self.currentIMUPolicy(irMode: irMode).tracksPhone {
@@ -584,20 +584,20 @@ import simd
   /// - Touch pointer modes (follow 1, drag 2, the default): the pointer comes from the screen, so
   ///   the phone's orientation must never decide whether a game shows it. Games hide the pointer
   ///   when the remote reads as aimed at the floor or ceiling, which is how every normal grip read
-  ///   before this policy existed.
+  ///   before this policy existed. This holds even with Full 6DOF and Wii Remote motion on: both
+  ///   are ON by default (`MotionSettings.defaults`), and that 6DOF path was how most players got
+  ///   the bug, so in a touch mode they cannot tilt the remote.
   /// - Gyro pointer (0): the phone IS the remote, so the Wii Remote tracks it (baseline-relative).
-  ///   The Nunchuk stays level: it is in the player's other hand, not in the phone.
-  /// - Opt-in full 6DOF: each IMU enabled in Motion settings tracks the phone.
-  static func imuPolicy(irMode: Int, full6DOF: Bool, wiimoteIMU: Bool, nunchukIMU: Bool) -> IMUPolicy {
+  /// - The Nunchuk tracks the phone only with Full 6DOF and Nunchuk motion on (off by default); its
+  ///   tilt never hides the pointer.
+  static func imuPolicy(irMode: Int, full6DOF: Bool, nunchukIMU: Bool) -> IMUPolicy {
     IMUPolicy(
-      wiimote: irMode == 0 || (full6DOF && wiimoteIMU) ? .phone : .level,
+      wiimote: irMode == 0 ? .phone : .level,
       nunchuk: full6DOF && nunchukIMU ? .phone : .level)
   }
 
   static func currentIMUPolicy(irMode: Int = Int(DOLConfigBridge.mainTouchPadIRMode())) -> IMUPolicy {
-    imuPolicy(
-      irMode: irMode, full6DOF: MotionSettings.full6DOF(),
-      wiimoteIMU: MotionSettings.wiimoteIMU(), nunchukIMU: MotionSettings.nunchukIMU())
+    imuPolicy(irMode: irMode, full6DOF: MotionSettings.full6DOF(), nunchukIMU: MotionSettings.nunchukIMU())
   }
 
   /// What a level remote at rest reads, m/s^2.
@@ -720,6 +720,22 @@ import simd
     }], waitUntilFinished: true)
     return ["wiimoteAccel": [acceleration.x, acceleration.y, acceleration.z],
             "wiimoteAccel10bit": Self.debugAccel10Bit(acceleration)]
+  }
+
+  /// Presses touch-controller buttons (`TCButtonType` raw values) on the slot motion is bound to,
+  /// releasing them after `holdSeconds`: drives a game's menus on a simulator, where nobody can
+  /// press A and B together on the overlay.
+  func debugPressButtons(_ buttons: [Int], holdSeconds: TimeInterval) -> [String: Any] {
+    let port = port
+    for button in buttons {
+      TCManagerInterface.setButtonStateFor(button, controller: port, state: true)
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + holdSeconds) {
+      for button in buttons {
+        TCManagerInterface.setButtonStateFor(button, controller: port, state: false)
+      }
+    }
+    return ["port": port, "buttons": buttons]
   }
 
   /// Lets real samples through again and rests the remote level.

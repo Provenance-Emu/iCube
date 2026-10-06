@@ -106,28 +106,36 @@ final class TCDeviceMotionIMUPoseTests: XCTestCase {
 
   // MARK: - Policy
 
-  func testTouchModesNeverTrackThePhone() {
+  /// Full 6DOF and Wii Remote motion are ON by default, so they must not bring tilt back.
+  func testTouchModesNeverTrackThePhoneWithTheRemote() {
     for irMode in [1, 2] {
-      let policy = TCDeviceMotion.imuPolicy(irMode: irMode, full6DOF: false, wiimoteIMU: true, nunchukIMU: true)
-      XCTAssertEqual(policy, .init(wiimote: .level, nunchuk: .level), "irMode \(irMode)")
+      for full6DOF in [false, true] {
+        let policy = TCDeviceMotion.imuPolicy(irMode: irMode, full6DOF: full6DOF, nunchukIMU: false)
+        XCTAssertEqual(policy.wiimote, .level, "irMode \(irMode) 6DOF \(full6DOF)")
+      }
     }
   }
 
   func testGyroModeTracksTheRemoteButNotTheNunchuk() {
-    let policy = TCDeviceMotion.imuPolicy(irMode: 0, full6DOF: false, wiimoteIMU: false, nunchukIMU: false)
+    let policy = TCDeviceMotion.imuPolicy(irMode: 0, full6DOF: false, nunchukIMU: false)
     XCTAssertEqual(policy, .init(wiimote: .phone, nunchuk: .level))
   }
 
-  func testFull6DOFTracksEachEnabledIMU() {
-    XCTAssertEqual(
-      TCDeviceMotion.imuPolicy(irMode: 2, full6DOF: true, wiimoteIMU: true, nunchukIMU: false),
-      .init(wiimote: .phone, nunchuk: .level))
-    XCTAssertEqual(
-      TCDeviceMotion.imuPolicy(irMode: 1, full6DOF: true, wiimoteIMU: false, nunchukIMU: true),
-      .init(wiimote: .level, nunchuk: .phone))
-    XCTAssertEqual(
-      TCDeviceMotion.imuPolicy(irMode: 2, full6DOF: false, wiimoteIMU: true, nunchukIMU: true),
-      .init(wiimote: .level, nunchuk: .level))
+  func testNunchukTracksThePhoneOnlyWith6DOFAndNunchukMotion() {
+    for irMode in [0, 1, 2] {
+      XCTAssertEqual(TCDeviceMotion.imuPolicy(irMode: irMode, full6DOF: true, nunchukIMU: true).nunchuk, .phone)
+      XCTAssertEqual(TCDeviceMotion.imuPolicy(irMode: irMode, full6DOF: false, nunchukIMU: true).nunchuk, .level)
+      XCTAssertEqual(TCDeviceMotion.imuPolicy(irMode: irMode, full6DOF: true, nunchukIMU: false).nunchuk, .level)
+    }
+  }
+
+  func testShippedMotionDefaultsKeepTouchModesLevel() {
+    let store = UserDefaults(suiteName: "TCDeviceMotionIMUPoseTests")!
+    store.removePersistentDomain(forName: "TCDeviceMotionIMUPoseTests")
+    MotionSettings.registerDefaults(in: store)
+    let policy = TCDeviceMotion.imuPolicy(
+      irMode: 2, full6DOF: MotionSettings.full6DOF(in: store), nunchukIMU: MotionSettings.nunchukIMU(in: store))
+    XCTAssertEqual(policy, .init(wiimote: .level, nunchuk: .level))
   }
 
   // MARK: - Touch modes: always a level remote
