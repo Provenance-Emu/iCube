@@ -23,8 +23,7 @@ struct ControllerMoreSettingsView: View {
   var body: some View {
     List {
       Section(header: Text(L("General"))) {
-        Toggle(L("Background Input"), isOn: $backgroundInput)
-          .onChange(of: backgroundInput) { _, enabled in DOLConfigBridge.setMainBackgroundInput(enabled) }
+        Toggle(L("Background Input"), isOn: $backgroundInput.onSet { enabled in DOLConfigBridge.setMainBackgroundInput(enabled) })
         #if os(iOS)
         settingsCaption(
           Toggle(L("Controllers Take Player 1"), isOn: $connectTakesPlayer1),

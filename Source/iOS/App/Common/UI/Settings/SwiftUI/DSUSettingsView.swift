@@ -55,8 +55,7 @@ struct DSUSettingsView: View {
           L("Receiver pulls motion/input from a DSU server; Sender shares this device's input instead."))
         #endif
         settingsCaption(
-          Toggle(L("Enable DSU Client"), isOn: $dsuEnabled)
-            .onChange(of: dsuEnabled) { _, enabled in DOLConfigBridge.setDsuClientEnabled(enabled) }
+          Toggle(L("Enable DSU Client"), isOn: $dsuEnabled.onSet { enabled in DOLConfigBridge.setDsuClientEnabled(enabled) })
             .disabled(isClientLocked),
           L("Receives input from a Cemuhook DSU server on your network (e.g. a phone's gyro). Add servers below as IP:Port."))
         Toggle(L("Show DSU Debug HUD"), isOn: Binding(get: {

@@ -340,6 +340,17 @@ enum SentryTelemetryService {
     SentrySDK.addBreadcrumb(crumb)
   }
 
+  /// One crumb for the whole one-time settings repair (the buffer holds only 100).
+  static func recordSettingsRepair(version: Int, deleted: [String: String], removedDefaults: [String]) {
+    let crumb = Breadcrumb(level: .info, category: "settings.repair")
+    crumb.message = "settings repair v\(version): \(deleted.count) config keys, \(removedDefaults.count) defaults"
+    crumb.data = [
+      "deleted": deleted.keys.sorted().map { "\($0)=\(deleted[$0] ?? "")" },
+      "removed_defaults": removedDefaults,
+    ]
+    SentrySDK.addBreadcrumb(crumb)
+  }
+
   // MARK: - Private
 
   private static func addEmulationBreadcrumb(_ message: String, data: [String: Any] = [:]) {

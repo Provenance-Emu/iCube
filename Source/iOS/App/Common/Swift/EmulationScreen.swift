@@ -453,16 +453,15 @@ struct EmulationScreen: View {
             .tint(.blue)
             .foregroundColor(.white)
             // Resolver step #3: while the adaptive clock drives this key (CurrentRun), the manual
-            // control is disabled and the displayed % is the live effective value.
+            // control is disabled; it shows the user's Base %.
             .disabled(ocAutoOverridden)
             autoBadge(ocAutoOverridden)
           }
           HStack {
             Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8))
             Spacer()
-            TVIntStepperOverlay(value: $ocPercent, range: 1 ... 400, step: 1)
+            TVIntStepperOverlay(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }, range: 1 ... 400, step: 1)
               .disabled(!ocEnabled || ocAutoOverridden)
-              .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
           }
 
           // VBI
@@ -480,9 +479,8 @@ struct EmulationScreen: View {
           HStack {
             Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8))
             Spacer()
-            TVIntStepperOverlay(value: $vbiPercentQuick, range: 1 ... 400, step: 1)
+            TVIntStepperOverlay(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }, range: 1 ... 400, step: 1)
               .disabled(!vbiEnabledQuick || vbiAutoOverridden)
-              .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
           }
 
           // Adaptive clock (auto) + VI-skip mode
@@ -498,22 +496,15 @@ struct EmulationScreen: View {
             Text("Internal Resolution: \(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x")").foregroundColor(.white.opacity(0.8))
             autoBadge(efbAutoOverridden)
             Spacer()
-            TVIntStepperOverlay(value: $efbScaleQuick, range: 0 ... efbMaxScaleQuick, step: 1)
+            TVIntStepperOverlay(value: efbScaleQuickBinding, range: 0 ... efbMaxScaleQuick, step: 1)
               // Resolver step #3: while Auto-IR / thermal drives GFX_EFB_SCALE (CurrentRun), the
-              // manual stepper is disabled and the value shown is the live effective scale.
+              // manual stepper is disabled; it shows the user's Base scale.
               .disabled(efbAutoOverridden)
-              .onChange(of: efbScaleQuick) { newScale in
-                DOLConfigBridge.setGfxEfbScale(newScale)
-                // A manual IR pick fights Auto-IR (both drive GFX_EFB_SCALE). Disable Auto-IR so
-                // the manual choice sticks -- same rule as the Settings picker (step #6).
-                if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
-              }
           }
           HStack {
             Text("Anisotropic: \(anisotropyQuick)x").foregroundColor(.white.opacity(0.8))
             Spacer()
-            TVIntStepperOverlay(value: $anisotropyQuick, range: 1 ... 16, step: 1)
-              .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+            TVIntStepperOverlay(value: $anisotropyQuick.onSet { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }, range: 1 ... 16, step: 1)
           }
           if overscanApplicable {
             Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
@@ -634,10 +625,10 @@ struct EmulationScreen: View {
         // Keep pause menu visible when returning to foreground so user can choose to resume
       }
       // Load current OC/VBI state
-      ocEnabled = DOLConfigBridge.mainOverclockEnable()
-      ocPercent = DOLConfigBridge.mainOverclockPercent()
-      vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
-      vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+      ocEnabled = DOLConfigBridge.mainOverclockEnableBase()
+      ocPercent = DOLConfigBridge.mainOverclockPercentBase()
+      vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnableBase()
+      vbiPercentQuick = DOLConfigBridge.mainViOverclockPercentBase()
       // Resolver step #3: is an auto controller currently overriding these keys (CurrentRun)?
       ocAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
       vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()
@@ -648,7 +639,7 @@ struct EmulationScreen: View {
       showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
       showVBlankQuick = DOLConfigBridge.gfxShowVTimes()
       efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
-      efbScaleQuick = DOLConfigBridge.gfxEfbScale()
+      efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
       anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
       // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
       adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
@@ -885,9 +876,8 @@ struct EmulationScreen: View {
                       autoBadge(ocAutoOverridden)
                     }
                     HStack {
-                      Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
+                      Slider(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }.asDouble, in: 1 ... 400)
                         .disabled(!ocEnabled || ocAutoOverridden)
-                        .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
                       Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                     }
 
@@ -903,9 +893,8 @@ struct EmulationScreen: View {
                       autoBadge(vbiAutoOverridden)
                     }
                     HStack {
-                      Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
+                      Slider(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }.asDouble, in: 1 ... 400)
                         .disabled(!vbiEnabledQuick || vbiAutoOverridden)
-                        .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
                       Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                     }
 
@@ -916,13 +905,8 @@ struct EmulationScreen: View {
                         .font(.caption)
                       autoBadge(efbAutoOverridden)
                       Spacer()
-                      Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
+                      Slider(value: efbScaleQuickBinding.asDouble, in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
                         .disabled(efbAutoOverridden)
-                        .onChange(of: efbScaleQuick) { newScale in
-                          DOLConfigBridge.setGfxEfbScale(newScale)
-                          // Manual IR pick disables Auto-IR so the choice sticks (step #6).
-                          if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
-                        }
                       Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
                     }
                     HStack {
@@ -930,8 +914,7 @@ struct EmulationScreen: View {
                         .foregroundColor(.white.opacity(0.8))
                         .font(.caption)
                       Spacer()
-                      Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
-                        .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+                      Slider(value: $anisotropyQuick.onSet { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }.asDouble, in: 1 ... 16, step: 1)
                       Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
                     }
                     if overscanApplicable {
@@ -976,9 +959,8 @@ struct EmulationScreen: View {
                   autoBadge(ocAutoOverridden)
                 }
                 HStack {
-                  Slider(value: Binding(get: { Double(ocPercent) }, set: { ocPercent = Int($0) }), in: 1 ... 400)
+                  Slider(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }.asDouble, in: 1 ... 400)
                     .disabled(!ocEnabled || ocAutoOverridden)
-                    .onChange(of: ocPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
                   Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                 }
                 HStack {
@@ -993,9 +975,8 @@ struct EmulationScreen: View {
                   autoBadge(vbiAutoOverridden)
                 }
                 HStack {
-                  Slider(value: Binding(get: { Double(vbiPercentQuick) }, set: { vbiPercentQuick = Int($0) }), in: 1 ... 400)
+                  Slider(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }.asDouble, in: 1 ... 400)
                     .disabled(!vbiEnabledQuick || vbiAutoOverridden)
-                    .onChange(of: vbiPercentQuick) { DOLConfigBridge.setMainViOverclockPercent($0) }
                   Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
                 }
 
@@ -1012,21 +993,15 @@ struct EmulationScreen: View {
                     .foregroundColor(.white.opacity(0.8))
                   autoBadge(efbAutoOverridden)
                   Spacer()
-                  Slider(value: Binding(get: { Double(efbScaleQuick) }, set: { efbScaleQuick = Int($0) }), in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
+                  Slider(value: efbScaleQuickBinding.asDouble, in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
                     .disabled(efbAutoOverridden)
-                    .onChange(of: efbScaleQuick) { newScale in
-                      DOLConfigBridge.setGfxEfbScale(newScale)
-                      // Manual IR pick disables Auto-IR so the choice sticks (step #6).
-                      if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
-                    }
                   Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
                 }
                 HStack {
                   Text(L("Anisotropic Filtering"))
                     .foregroundColor(.white.opacity(0.8))
                   Spacer()
-                  Slider(value: Binding(get: { Double(anisotropyQuick) }, set: { anisotropyQuick = Int($0) }), in: 1 ... 16, step: 1)
-                    .onChange(of: anisotropyQuick) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
+                  Slider(value: $anisotropyQuick.onSet { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }.asDouble, in: 1 ... 16, step: 1)
                   Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
                 }
                 if overscanApplicable {
@@ -1226,10 +1201,10 @@ struct EmulationScreen: View {
         applyCoreAudioDSPDefaults()
       }
       // Load current OC/VBI state
-      ocEnabled = DOLConfigBridge.mainOverclockEnable()
-      ocPercent = DOLConfigBridge.mainOverclockPercent()
-      vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
-      vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+      ocEnabled = DOLConfigBridge.mainOverclockEnableBase()
+      ocPercent = DOLConfigBridge.mainOverclockPercentBase()
+      vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnableBase()
+      vbiPercentQuick = DOLConfigBridge.mainViOverclockPercentBase()
       // Resolver step #3: is an auto controller currently overriding these keys (CurrentRun)?
       ocAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
       vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()
@@ -1240,7 +1215,7 @@ struct EmulationScreen: View {
       showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
       showVBlankQuick = DOLConfigBridge.gfxShowVTimes()
       efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
-      efbScaleQuick = DOLConfigBridge.gfxEfbScale()
+      efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
       anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
       // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
       adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
@@ -1555,23 +1530,34 @@ struct EmulationScreen: View {
   }
   #endif
 
+  /// The quick IR control: writes Base only when the player moves it, and turns Auto-IR off for an
+  /// explicit scale, since both drive GFX_EFB_SCALE (same rule as the Settings picker, step #6).
+  private var efbScaleQuickBinding: Binding<Int> {
+    $efbScaleQuick.onSet { newScale in
+      DOLConfigBridge.setGfxEfbScale(newScale)
+      if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
+    }
+  }
+
+  /// Seeds the quick controls from the user's own values (Base). The adaptive clock and Auto-IR write
+  /// CurrentRun; seeding from the resolved value let those reach Base through the controls' writers.
   private func refreshPerfOverlayState() {
-    ocEnabled = DOLConfigBridge.mainOverclockEnable()
-    ocPercent = DOLConfigBridge.mainOverclockPercent()
-    vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnable()
-    vbiPercentQuick = DOLConfigBridge.mainViOverclockPercent()
+    ocEnabled = DOLConfigBridge.mainOverclockEnableBase()
+    ocPercent = DOLConfigBridge.mainOverclockPercentBase()
+    vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnableBase()
+    vbiPercentQuick = DOLConfigBridge.mainViOverclockPercentBase()
     ocAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
     vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()
     efbAutoOverridden = DOLConfigBridge.isEfbScaleAutoOverridden()
     efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
-    efbScaleQuick = DOLConfigBridge.gfxEfbScale()
+    efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
     anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
   }
 
   // Resolver step #3: small "Auto" pill shown next to a perf control whose key is currently being
   // driven by an auto controller (CurrentRun override shadowing the user's manual Base value). When
-  // shown, the corresponding manual control is also disabled so the displayed effective value can't
-  // be silently shadowed by a stale Base authored underneath.
+  // shown, the corresponding manual control is also disabled: it shows and edits the user's Base
+  // value, which applies again once the override clears.
   @ViewBuilder
   private func autoBadge(_ active: Bool) -> some View {
     if active {

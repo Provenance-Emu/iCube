@@ -32,6 +32,9 @@
 #import "Swift.h"
 #import "EmulationCoordinator.h"
 
+#include "Common/StringUtil.h"
+#import "FastmemManager.h"
+
 // Extern DSU client RX counter for DEBUG HUD (defined in DualShockUDPClient.cpp)
 namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g_rx_counter; } }
 
@@ -47,6 +50,34 @@ static std::atomic_bool s_cfg_save_pending{false};
 // (adaptive clock, per-run layer) that churn rapidly and that Save() (Base-only) shouldn't thrash
 // I/O for — the save-on-background path persists those. Settings the user edits in menus happen
 // outside this state.
+// Every Cached Interpreter knob lives in Dolphin.ini [Core] under a "CIR" key prefix
+// (MainSettings.cpp): the optimization flags, their Validate twins, the IR engine's, the tape and
+// profiler knobs. Location compares case-insensitively, and so does this.
+static bool IsCirKey(const Config::Location& location)
+{
+  return location.system == Config::System::Main &&
+         Common::CaseInsensitiveEquals(location.section, "Core") && location.key.size() > 3 &&
+         Common::CaseInsensitiveEquals(std::string_view(location.key).substr(0, 3), "CIR");
+}
+
+// Delete every CIR key from one layer, so each falls back to its compiled default.
+static void DeleteCirKeys(Config::LayerType layer_type)
+{
+  const std::shared_ptr<Config::Layer> layer = Config::GetLayer(layer_type);
+  if (!layer)
+    return;
+  std::vector<Config::Location> doomed;
+  for (const auto& [location, value] : layer->GetLayerMap())
+  {
+    if (value && IsCirKey(location))
+      doomed.push_back(location);
+  }
+  for (const Config::Location& location : doomed)
+    layer->DeleteKey(location);
+  if (!doomed.empty())
+    Config::OnConfigChanged();
+}
+
 static bool ICubeEmulationActive() {
   const Core::State st = Core::GetState(Core::System::GetInstance());
   return st == Core::State::Running || st == Core::State::Starting;
@@ -112,6 +143,10 @@ static bool ICubeEmulationActive() {
 // Reads (Config::Get) prefer CurrentRun, so an active auto override is automatically "effective"
 // while the user's Base value is preserved underneath and re-exposed when the override clears.
 + (void)setGfxEfbScale:(NSInteger)scale { Config::SetBase(Config::GFX_EFB_SCALE, (int)scale); }
++ (NSInteger)gfxEfbScaleBase
+{
+  return (NSInteger)Config::GetBase(Config::GFX_EFB_SCALE);
+}
 // AUTO setter: writes the CurrentRun layer (like AutoIRController). Used by thermal auto-tuning so
 // its throttle shadows — never overwrites — the user's manual Base value. Guard against a missing
 // CurrentRun layer: thermal notifications can fire outside emulation, and Config::Set dereferences
@@ -421,6 +456,22 @@ static bool HasCurrentRunLayer()
 + (void)setMainViOverclockEnable:(BOOL)enabled { Config::SetBase(Config::MAIN_VI_OVERCLOCK_ENABLE, (bool)enabled); }
 + (NSInteger)mainViOverclockPercent { float v = Config::Get(Config::MAIN_VI_OVERCLOCK); return (NSInteger)lroundf(v * 100.0f); }
 + (void)setMainViOverclockPercent:(NSInteger)percent { float v = ((float)percent) / 100.0f; Config::SetBase(Config::MAIN_VI_OVERCLOCK, v); }
++ (BOOL)mainOverclockEnableBase
+{
+  return Config::GetBase(Config::MAIN_OVERCLOCK_ENABLE);
+}
++ (NSInteger)mainOverclockPercentBase
+{
+  return (NSInteger)lroundf(Config::GetBase(Config::MAIN_OVERCLOCK) * 100.0f);
+}
++ (BOOL)mainViOverclockEnableBase
+{
+  return Config::GetBase(Config::MAIN_VI_OVERCLOCK_ENABLE);
+}
++ (NSInteger)mainViOverclockPercentBase
+{
+  return (NSInteger)lroundf(Config::GetBase(Config::MAIN_VI_OVERCLOCK) * 100.0f);
+}
 + (BOOL)mainRamOverrideEnable { return Config::Get(Config::MAIN_RAM_OVERRIDE_ENABLE); }
 + (void)setMainRamOverrideEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_RAM_OVERRIDE_ENABLE, (bool)enabled); }
 + (NSInteger)mainMem1SizeMB { int bytes = Config::Get(Config::MAIN_MEM1_SIZE); return (NSInteger)(bytes / 0x100000); }
@@ -781,39 +832,16 @@ static bool HasCurrentRunLayer()
   del(Config::MAIN_SYNC_ON_SKIP_IDLE);
   del(Config::MAIN_RELAXED_IDLE_DETECTION);
   del(Config::MAIN_FAST_FORWARD_CTR_IDLE);
-  del(Config::MAIN_CACHED_INTERPRETER_PREFETCH);   // default true -> optimized
-  // CIR optimization toggles: compiled defaults already match iCube intent, so del-to-default is correct.
-  del(Config::MAIN_CIR_PIC_LOADSTORE);
-  del(Config::MAIN_CIR_MICROOP_FUSION);
-  del(Config::MAIN_CIR_MICROOP_FUSION_VALIDATE);
-  del(Config::MAIN_CIR_BLOCK_LINKING);
-  del(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE);
-  del(Config::MAIN_CIR_SPECIALIZED_OPS);
-  del(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE);
-  del(Config::MAIN_CIR_SPECIALIZED_FP_LS);
-  del(Config::MAIN_CIR_SPECIALIZED_PSQ);
-  del(Config::MAIN_CIR_SPECIALIZED_FP_ARITH);
-  del(Config::MAIN_CIR_SPECIALIZED_FP_ARITH_VALIDATE);
-  del(Config::MAIN_CIR_DEAD_FLAG_ELIM);
-  del(Config::MAIN_CIR_DEAD_FLAG_ELIM_VALIDATE);
-  del(Config::MAIN_CIR_DEAD_FPRF_ELIM);
-  del(Config::MAIN_CIR_DEAD_FPRF_ELIM_VALIDATE);
-  del(Config::MAIN_CIR_PSQ_FASTPATH);
-  del(Config::MAIN_CIR_PSQ_FASTPATH_VALIDATE);
-  del(Config::MAIN_CIR_STORE_LOOP_FF);
-  del(Config::MAIN_CIR_STORE_LOOP_FF_VALIDATE);
-  del(Config::MAIN_CIR_CACHE_LOOP_FF);
-  del(Config::MAIN_CIR_CACHE_LOOP_FF_VALIDATE);
-  del(Config::MAIN_CIR_IR_CONST_FUSION);
-  del(Config::MAIN_CIR_IR_CONST_FUSION_VALIDATE);
-  del(Config::MAIN_CIR_PS_NEON);
-  del(Config::MAIN_CIR_PS_NEON_VALIDATE);
-  del(Config::MAIN_CIR_IR_MICROOP_FUSION);
-  del(Config::MAIN_CIR_IR_MICROOP_FUSION_VALIDATE);
-  del(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM);
-  del(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM_VALIDATE);
-  del(Config::MAIN_CIR_IR_PIC_LOADSTORE_VALIDATE);
-  del(Config::MAIN_CIR_IR_SPECIALIZED_OPS_VALIDATE);
+  del(Config::MAIN_CACHED_INTERPRETER_PREFETCH);
+  del(Config::MAIN_FASTMEM_ARENA);
+  del(Config::MAIN_SYNC_GPU);
+  del(Config::MAIN_ACCURATE_NANS);
+  del(Config::MAIN_STALL_METRICS);
+  // Every Cached Interpreter knob (optimizations, their Validate twins, the IR engine's, tape and
+  // profiler knobs). A hand-kept list here missed the ones added after it (dynamic linking, micro
+  // pairs, ...), so Reset left them pinned.
+  for (Config::LayerType lt : kLayers)
+    DeleteCirKeys(lt);
   del(Config::MAIN_OVERCLOCK_ENABLE);
   del(Config::MAIN_OVERCLOCK);
   del(Config::MAIN_VI_OVERCLOCK_ENABLE);
@@ -882,6 +910,7 @@ static bool HasCurrentRunLayer()
   del(Config::GFX_HACK_NEON_TEXTURE_DECODE);       // default true -> optimized
   del(Config::GFX_HACK_GPU_EFB_PEEK_RESOLVE);      // default false
   del(Config::GFX_HACK_VI_SKIP_MODE);
+  del(Config::GFX_HACK_VI_SKIP);
   del(Config::GFX_HACK_VI_DECIMATE_INTERLACE);
   del(Config::GFX_HACK_FAST_TEXTURE_SAMPLING);
   del(Config::GFX_HACK_FAST_MATH);
@@ -939,6 +968,12 @@ static bool HasCurrentRunLayer()
   Config::SetBase(Config::MAIN_DSP_THREAD, true);
   Config::SetBase(Config::GFX_HACK_IMMEDIATE_XFB, true);
 
+  // Fastmem compiles to true, which is wrong on a device without it. Seed both keys the way
+  // DolphinCoreService does at launch instead of leaving them on the compiled value until then.
+  const bool fastmemAvailable = [FastmemManager shared].fastmemAvailable;
+  Config::SetBase(Config::MAIN_FASTMEM, fastmemAvailable);
+  Config::SetBase(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
+
   // GFX_HACK_VI_SKIP_MODE compiles to TriState::Auto on Apple (GraphicsSettings.cpp). Reset should
   // land on Auto too — Auto is the bounded (4-skip cap) FALLBACK catch-up for the adaptive-clock-OFF
   // case, and when the adaptive clock is ON (the default) the runtime resolver forces VISkip Off
@@ -952,6 +987,60 @@ static bool HasCurrentRunLayer()
   //   - MAIN_INPUT_BACKGROUND_INPUT, wiimote scanning/speaker (input prefs)
   //   - SYSCONF_* and MAIN_WII_* region/console identity
   //   - MAIN_GFX/perf stats overlays (cosmetic; left as-is)
+}
+
++ (void)resetCirOptimizationsToDefaults
+{
+  DeleteCirKeys(Config::LayerType::Base);
+  DeleteCirKeys(Config::LayerType::CurrentRun);
+  Config::Save();
+}
+
+static NSString* BaseLayerKeyName(const Config::Location& location)
+{
+  const std::string name =
+      Config::GetSystemName(location.system) + "." + location.section + "." + location.key;
+  return [NSString stringWithUTF8String:name.c_str()];
+}
+
++ (NSDictionary<NSString*, NSString*>*)baseLayerSnapshot
+{
+  NSMutableDictionary<NSString*, NSString*>* snapshot = [NSMutableDictionary dictionary];
+  const std::shared_ptr<Config::Layer> base = Config::GetLayer(Config::LayerType::Base);
+  if (!base)
+    return snapshot;
+  for (const auto& [location, value] : base->GetLayerMap())
+  {
+    if (value)
+      snapshot[BaseLayerKeyName(location)] = [NSString stringWithUTF8String:value->c_str()];
+  }
+  return snapshot;
+}
+
++ (NSDictionary<NSString*, NSString*>*)deleteBaseLayerKeys:(NSArray<NSString*>*)keys
+{
+  NSMutableDictionary<NSString*, NSString*>* deleted = [NSMutableDictionary dictionary];
+  const std::shared_ptr<Config::Layer> base = Config::GetLayer(Config::LayerType::Base);
+  if (!base || keys.count == 0)
+    return deleted;
+  NSMutableSet<NSString*>* wanted = [NSMutableSet setWithCapacity:keys.count];
+  for (NSString* key in keys)
+    [wanted addObject:key.lowercaseString];
+  std::vector<std::pair<Config::Location, NSString*>> doomed;
+  for (const auto& [location, value] : base->GetLayerMap())
+  {
+    NSString* name = BaseLayerKeyName(location);
+    if (value && [wanted containsObject:name.lowercaseString])
+    {
+      doomed.emplace_back(location, name);
+      deleted[name] = [NSString stringWithUTF8String:value->c_str()];
+    }
+  }
+  for (const auto& [location, name] : doomed)
+    base->DeleteKey(location);
+  if (!doomed.empty())
+    Config::OnConfigChanged();
+  return deleted;
 }
 
 + (void)resetGameplayUserDefaults {

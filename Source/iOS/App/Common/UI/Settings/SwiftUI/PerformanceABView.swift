@@ -77,9 +77,6 @@ enum PerfAB {
     Flag(key: "irSpecializedOpsValidate", get: { DOLConfigBridge.cirIrSpecializedOpsValidate() }, set: { DOLConfigBridge.setCirIrSpecializedOpsValidate($0) }),
     Flag(key: "blockLinkingValidate", get: { DOLConfigBridge.cirBlockLinkingValidate() }, set: { DOLConfigBridge.setCirBlockLinkingValidate($0) }),
   ]
-  // The four proven default-on wins; everything else is experimental.
-  static let recommendedOn: Set<String> = ["blockLinking", "picLoadStore", "specializedOps", "microOpFusion"]
-
   static let storeKey = "icube.perfSnapshots"
 
   static func capture(name: String) -> PerfSnapshot {
@@ -87,8 +84,8 @@ enum PerfAB {
     for f in flags { bools[f.key] = f.get() }
     return PerfSnapshot(
       name: name, bools: bools, cpuEngine: DOLConfigBridge.mainCpuCore(),
-      overclockEnable: DOLConfigBridge.mainOverclockEnable(), overclockPercent: DOLConfigBridge.mainOverclockPercent(),
-      viOverclockEnable: DOLConfigBridge.mainViOverclockEnable(), viOverclockPercent: DOLConfigBridge.mainViOverclockPercent(),
+      overclockEnable: DOLConfigBridge.mainOverclockEnableBase(), overclockPercent: DOLConfigBridge.mainOverclockPercentBase(),
+      viOverclockEnable: DOLConfigBridge.mainViOverclockEnableBase(), viOverclockPercent: DOLConfigBridge.mainViOverclockPercentBase(),
       adaptiveClock: UserDefaults.standard.bool(forKey: "adaptive_clock_enable"))
   }
 
@@ -114,13 +111,11 @@ enum PerfAB {
     DOLConfigBridge.flushSettingsToDisk()
   }
 
-  private static func setExperimentalAndValidatorsOff() {
-    for f in flags where !recommendedOn.contains(f.key) { f.set(false) }
-  }
+  /// "Recommended" is the compiled default of every CIR knob (MainSettings.cpp), so delete the keys
+  /// rather than pin values: a hand-kept "on" list here fell behind the defaults and switched
+  /// Dynamic Links (a shipped default win) off.
   static func applyAllOptimizationsOn() {
-    for k in recommendedOn { flags.first { $0.key == k }?.set(true) }
-    setExperimentalAndValidatorsOff()
-    DOLConfigBridge.flushSettingsToDisk()
+    DOLConfigBridge.resetCirOptimizationsToDefaults()
   }
   static func applyAllOptimizationsOff() {
     for f in flags { f.set(false) }

@@ -30,8 +30,7 @@ struct ConfigAudioView: View {
   var body: some View {
     List {
       Section(header: Text(L("Audio Backend"))) {
-        NavigationLink(backend.isEmpty ? L("Default Device") : (backend == "AVAudioEngine" ? "AVAudioEngine" : (backend == "CoreAudio" ? "CoreAudio (Speakers/HDMI)" : backend)), destination: BackendPickerView(selected: $backend, options: availableBackends))
-          .onChange(of: backend) { DOLConfigBridge.setAudioBackend($0) }
+        NavigationLink(backend.isEmpty ? L("Default Device") : (backend == "AVAudioEngine" ? "AVAudioEngine" : (backend == "CoreAudio" ? "CoreAudio (Speakers/HDMI)" : backend)), destination: BackendPickerView(selected: $backend.onSet { DOLConfigBridge.setAudioBackend($0) }, options: availableBackends))
         Text(L("CoreAudio: Best for TV/HDMI speakers. AVAudioEngine: Enables AUv3 FXs."))
           .font(.footnote)
           .foregroundStyle(.secondary)
@@ -53,39 +52,34 @@ struct ConfigAudioView: View {
       Section(header: Text(L("Volume"))) {
         HStack {
 #if os(tvOS)
-          TVIntStepper(value: $volume, range: 0...100, step: 1)
+          TVIntStepper(value: $volume.onSet { DOLConfigBridge.setAudioVolume($0) }, range: 0 ... 100, step: 1)
 #else
-          Slider(value: Binding(get: { Double(volume) }, set: { volume = Int($0) }), in: 0...100)
+          Slider(value: $volume.onSet { DOLConfigBridge.setAudioVolume($0) }.asDouble, in: 0 ... 100)
             .frame(width: 260)
 #endif
           Spacer()
           Text("\(volume)%").foregroundStyle(.secondary)
         }
-        .onChange(of: volume) { DOLConfigBridge.setAudioVolume($0) }
       }
 
       Section(header: Text(L("Audio Stretching Settings"))) {
-        Toggle(L("Enable Audio Stretching"), isOn: $stretch)
-          .onChange(of: stretch) { DOLConfigBridge.setAudioStretch($0) }
+        Toggle(L("Enable Audio Stretching"), isOn: $stretch.onSet { DOLConfigBridge.setAudioStretch($0) })
         HStack {
 #if os(tvOS)
-          TVIntStepper(value: $stretchLatency, range: 5...200, step: 1)
+          TVIntStepper(value: $stretchLatency.onSet { DOLConfigBridge.setAudioStretchLatencyMs($0) }, range: 5 ... 200, step: 1)
 #else
-          Slider(value: Binding(get: { Double(stretchLatency) }, set: { stretchLatency = Int($0) }), in: 5...200)
+          Slider(value: $stretchLatency.onSet { DOLConfigBridge.setAudioStretchLatencyMs($0) }.asDouble, in: 5 ... 200)
             .frame(width: 260)
 #endif
           Spacer()
           Text(String(format: L("%1$ld ms"), stretchLatency)).foregroundStyle(.secondary)
         }
         .disabled(!stretch)
-        .onChange(of: stretchLatency) { DOLConfigBridge.setAudioStretchLatencyMs($0) }
       }
 
       Section(header: Text(L("Misc. Controls"))) {
-        Toggle(L("Mute When Disabling Speed Limit"), isOn: $muteOnNoSpeedLimit)
-          .onChange(of: muteOnNoSpeedLimit) { DOLConfigBridge.setAudioMuteOnDisabledSpeedLimit($0) }
-        Toggle(L("Use Mute Hardware Switch"), isOn: $obeyMuteSwitch)
-          .onChange(of: obeyMuteSwitch) { DOLConfigBridge.setAudioMuteSwitchObey($0) }
+        Toggle(L("Mute When Disabling Speed Limit"), isOn: $muteOnNoSpeedLimit.onSet { DOLConfigBridge.setAudioMuteOnDisabledSpeedLimit($0) })
+        Toggle(L("Use Mute Hardware Switch"), isOn: $obeyMuteSwitch.onSet { DOLConfigBridge.setAudioMuteSwitchObey($0) })
       }
     }
     .navigationTitle(L("Audio"))

@@ -37,28 +37,22 @@ struct ConfigGeneralView: View {
     List {
       Section(header: Text(L("Basic Settings"))) {
         settingsCaption(
-          Toggle(L("Enable Dual Core (speedup)"), isOn: $dualCore)
-            .onChange(of: dualCore) { DOLConfigBridge.setMainCpuThread($0) },
+          Toggle(L("Enable Dual Core (speedup)"), isOn: $dualCore.onSet { DOLConfigBridge.setMainCpuThread($0) }),
           L("Runs the emulated GPU on a separate thread from the emulated CPU (can deadlock some games on this interpreter)."))
         settingsCaption(
-          Toggle(L("DSP Thread (speedup)"), isOn: $dspThread)
-            .onChange(of: dspThread) { DOLConfigBridge.setMainDSPThread($0) },
+          Toggle(L("DSP Thread (speedup)"), isOn: $dspThread.onSet { DOLConfigBridge.setMainDSPThread($0) }),
           L("Runs audio emulation on its own thread. Small speedup; safe to leave ON."))
         settingsCaption(
-          Toggle(L("Enable Cheats"), isOn: $cheats)
-            .onChange(of: cheats) { DOLConfigBridge.setMainEnableCheats($0) },
+          Toggle(L("Enable Cheats"), isOn: $cheats.onSet { DOLConfigBridge.setMainEnableCheats($0) }),
           L("Activates AR/Gecko cheat codes for the running game."))
         settingsCaption(
-          Toggle(L("Override Region Mismatch"), isOn: $mismatchedRegion)
-            .onChange(of: mismatchedRegion) { DOLConfigBridge.setMainOverrideRegionSettings($0) },
+          Toggle(L("Override Region Mismatch"), isOn: $mismatchedRegion.onSet { DOLConfigBridge.setMainOverrideRegionSettings($0) }),
           L("Lets a game boot under a different region's settings. Can cause issues; leave OFF unless a game needs it."))
         settingsCaption(
-          Toggle(L("Auto Disc Change"), isOn: $autoDiscChange)
-            .onChange(of: autoDiscChange) { DOLConfigBridge.setMainAutoDiscChange($0) },
+          Toggle(L("Auto Disc Change"), isOn: $autoDiscChange.onSet { DOLConfigBridge.setMainAutoDiscChange($0) }),
           L("Automatically swaps to the next disc for multi-disc games."))
         settingsCaption(
-          Toggle(L("Fast Disc Speed (speedup)"), isOn: $fastDiscSpeed)
-            .onChange(of: fastDiscSpeed) { DOLConfigBridge.setMainFastDiscSpeed($0) },
+          Toggle(L("Fast Disc Speed (speedup)"), isOn: $fastDiscSpeed.onSet { DOLConfigBridge.setMainFastDiscSpeed($0) }),
           L("Removes emulated disc-read delays. Speeds up loading in most games but breaks a few that depend on real timing."))
         settingsCaption(
           Toggle(L("Resume Where I Left Off"), isOn: $resumeWhereLeftOff),
@@ -67,7 +61,7 @@ struct ConfigGeneralView: View {
 
       Section(header: Text(L("Speed"))) {
         settingsNavCaption(
-          destination: SpeedLimitPicker(selectedPercent: $speedLimitPercent),
+          destination: SpeedLimitPicker(selectedPercent: $speedLimitPercent.onSet { DOLConfigBridge.setMainEmulationSpeedPercent($0) }),
           L("Caps emulation speed as a percentage of real hardware. 100% is full speed; Unlimited runs as fast as the device allows. Lower it only to slow a game down deliberately.")
         ) {
           HStack {
@@ -77,10 +71,9 @@ struct ConfigGeneralView: View {
               .foregroundStyle(.secondary)
           }
         }
-        .onChange(of: speedLimitPercent) { DOLConfigBridge.setMainEmulationSpeedPercent($0) }
 
         settingsNavCaption(
-          destination: FastForwardSpeedPicker(selectedPercent: $fastForwardSpeedPercent),
+          destination: FastForwardSpeedPicker(selectedPercent: $fastForwardSpeedPercent.onSet { UserDefaults.standard.set($0, forKey: "fast_forward_speed_percent") }),
           L("Speed used while the fast-forward button is held. Unlimited runs as fast as possible; the CPU-bound interpreter may not reach high multiples.")
         ) {
           HStack {
@@ -90,17 +83,15 @@ struct ConfigGeneralView: View {
               .foregroundStyle(.secondary)
           }
         }
-        .onChange(of: fastForwardSpeedPercent) { UserDefaults.standard.set($0, forKey: "fast_forward_speed_percent") }
       }
 
       Section(header: Text(L("Fallback Region"))) {
         settingsNavCaption(
-          destination: FallbackRegionPicker(selected: $fallbackRegion),
+          destination: FallbackRegionPicker(selected: $fallbackRegion.onSet { DOLConfigBridge.setMainFallbackRegion($0.rawValue) }),
           L("Region used for titles whose region can't be detected automatically.")
         ) {
           Text("\(L("Fallback Region")): \(fallbackRegion.label)")
         }
-        .onChange(of: fallbackRegion) { DOLConfigBridge.setMainFallbackRegion($0.rawValue) }
       }
     }
     .navigationTitle(L("General"))

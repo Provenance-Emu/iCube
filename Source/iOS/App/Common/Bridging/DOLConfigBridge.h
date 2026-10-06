@@ -26,6 +26,10 @@ NS_ASSUME_NONNULL_BEGIN
 // Caller is responsible for mapping to display labels.
 // Also see Config::GFX_MAX_EFB_SCALE for bounds if needed.
 + (NSInteger)gfxEfbScale;
+// The user's own EFB scale: the Base layer, ignoring Auto-IR / thermal CurrentRun overrides.
+// Settings screens show and seed from this, so the value a MANUAL setter writes back is never an
+// auto one.
++ (NSInteger)gfxEfbScaleBase;
 // MANUAL setter — writes Base (resolver step #3 layer discipline).
 + (void)setGfxEfbScale:(NSInteger)scale;
 // AUTO setter — writes CurrentRun (for thermal/auto throttling; shadows but preserves manual Base).
@@ -224,6 +228,12 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setMainViOverclockEnable:(BOOL)enabled;
 + (NSInteger)mainViOverclockPercent;
 + (void)setMainViOverclockPercent:(NSInteger)percent;
+// The user's own clock settings: the Base layer, ignoring the adaptive clock's CurrentRun values.
+// Settings screens seed from these; the getters above return the effective (resolved) clock.
++ (BOOL)mainOverclockEnableBase;
++ (NSInteger)mainOverclockPercentBase;
++ (BOOL)mainViOverclockEnableBase;
++ (NSInteger)mainViOverclockPercentBase;
 + (BOOL)mainRamOverrideEnable;
 + (void)setMainRamOverrideEnable:(BOOL)enabled;
 + (NSInteger)mainMem1SizeMB;
@@ -496,6 +506,17 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxCpuCull:(BOOL)enabled;
 
 + (void)resetAllToDefaults NS_SWIFT_NAME(resetAllToDefaults());
+// Delete every Cached Interpreter knob (Core/CIR*) from the Base and CurrentRun layers, so each one
+// is back on its compiled default (the recommended set), then save.
++ (void)resetCirOptimizationsToDefaults NS_SWIFT_NAME(resetCirOptimizationsToDefaults());
+
+// The Base layer (what Dolphin.ini, GFX.ini, ... hold) as "<system>.<section>.<key>" -> stored
+// string, e.g. "Dolphin.Core.Overclock" -> "0.6". Used by the one-time settings repair.
++ (NSDictionary<NSString*, NSString*>*)baseLayerSnapshot NS_SWIFT_NAME(baseLayerSnapshot());
+// Delete these "<system>.<section>.<key>" keys from the Base layer (matched case-insensitively);
+// returns the ones that were present, with their old values. Does not save.
++ (NSDictionary<NSString*, NSString*>*)deleteBaseLayerKeys:(NSArray<NSString*>*)keys
+    NS_SWIFT_NAME(deleteBaseLayerKeys(_:));
 + (void)resetPageToDefaults:(NSInteger)page NS_SWIFT_NAME(resetPage(toDefaults:)); // 0=config, 1=graphics, 2=controllers, 3=debug, 4=about
 
 // Flush the in-memory Base config layer to disk. Most setters write Base via
