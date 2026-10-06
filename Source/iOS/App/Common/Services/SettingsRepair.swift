@@ -186,11 +186,16 @@ final class SettingsRepair: NSObject {
                                   afterVersion: previousVersion, configRules: configRules)
     let deleted = config.deleteBaseKeys(doomed)
     config.save()
-    let unsaved = baseKeysToDelete(config.savedBaseSnapshot(), fastmemAvailable: fastmemAvailable,
-                                   afterVersion: previousVersion, configRules: configRules)
     for key in deleted.keys.sorted() {
       NSLog("[SettingsRepair] deleted %@ (was %@)", key, deleted[key] ?? "")
     }
+    guard let saved = config.savedBaseSnapshot() else {
+      NSLog("[SettingsRepair] v%ld -> v%ld not recorded: the saved config could not be read back; retrying next launch",
+            previousVersion, version)
+      return true
+    }
+    let unsaved = baseKeysToDelete(saved, fastmemAvailable: fastmemAvailable,
+                                   afterVersion: previousVersion, configRules: configRules)
     // Retried on the next launch; the defaults wait for that run, so a disk that keeps refusing the
     // write does not wipe the learned clocks on every launch.
     guard unsaved.isEmpty else {
@@ -252,13 +257,14 @@ protocol SettingsRepairConfigStore {
   func deleteBaseKeys(_ keys: [String]) -> [String: String]
   /// Writes the Base layer to disk.
   func save()
-  /// What the config files on disk hold now, keyed like `baseSnapshot`.
-  func savedBaseSnapshot() -> [String: String]
+  /// What the config files on disk hold now, keyed like `baseSnapshot`; nil when a file exists
+  /// but cannot be read.
+  func savedBaseSnapshot() -> [String: String]?
 }
 
 struct BridgeSettingsRepairConfigStore: SettingsRepairConfigStore {
   func baseSnapshot() -> [String: String] { DOLConfigBridge.baseLayerSnapshot() }
   func deleteBaseKeys(_ keys: [String]) -> [String: String] { DOLConfigBridge.deleteBaseLayerKeys(keys) }
   func save() { DOLConfigBridge.flushSettingsToDisk() }
-  func savedBaseSnapshot() -> [String: String] { DOLConfigBridge.savedBaseConfigSnapshot() }
+  func savedBaseSnapshot() -> [String: String]? { DOLConfigBridge.savedBaseConfigSnapshot() }
 }

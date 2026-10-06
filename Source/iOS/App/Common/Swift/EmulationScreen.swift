@@ -1581,8 +1581,10 @@ struct EmulationScreen: View {
       // state immediately, then reconcile the effective values once that write lands. (Fixes: toggling
       // Auto didn't lock/unlock the sliders, and a stale manual VI bled through because the UI never
       // re-read the override layer on toggle.)
-      ocOverride = v ? .auto : .none
-      vbiOverride = v ? .auto : .none
+      // Turning Auto off may leave a game INI's clock in charge (RHT, UGP, RDC): read it rather
+      // than assume none. The CurrentRun clear is async, so the refresh below reconciles.
+      ocOverride = v ? .auto : DOLConfigBridge.overclockOverride()
+      vbiOverride = v ? .auto : DOLConfigBridge.viOverclockOverride()
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { refreshPerfOverlayState() }
     }))
     .tint(.blue)

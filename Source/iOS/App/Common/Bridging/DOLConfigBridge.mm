@@ -1078,7 +1078,7 @@ static NSString* BaseLayerKeyName(const Config::Location& location)
   return snapshot;
 }
 
-+ (NSDictionary<NSString*, NSString*>*)savedBaseConfigSnapshot
++ (nullable NSDictionary<NSString*, NSString*>*)savedBaseConfigSnapshot
 {
   NSMutableDictionary<NSString*, NSString*>* snapshot = [NSMutableDictionary dictionary];
   // The two files the repair rules cover ("Dolphin.*" and "Graphics.*" keys).
@@ -1088,9 +1088,12 @@ static NSString* BaseLayerKeyName(const Config::Location& location)
   };
   for (const auto& [system, path_index] : files)
   {
-    Common::IniFile ini;
-    if (!ini.Load(File::GetUserPath(path_index)))
+    const std::string& path = File::GetUserPath(path_index);
+    if (!File::Exists(path))
       continue;
+    Common::IniFile ini;
+    if (!ini.Load(path))
+      return nil;
     for (const auto& section : ini.GetSections())
     {
       for (const auto& [key, value] : section.GetValues())
@@ -1101,6 +1104,36 @@ static NSString* BaseLayerKeyName(const Config::Location& location)
     }
   }
   return snapshot;
+}
+
++ (void)restoreBaseLayerSnapshot:(NSDictionary<NSString*, NSString*>*)snapshot
+{
+  const std::shared_ptr<Config::Layer> base = Config::GetLayer(Config::LayerType::Base);
+  if (!base)
+    return;
+  std::vector<Config::Location> added;
+  for (const auto& [location, value] : base->GetLayerMap())
+  {
+    if (value && snapshot[BaseLayerKeyName(location)] == nil)
+      added.push_back(location);
+  }
+  for (const auto& location : added)
+    base->DeleteKey(location);
+  for (NSString* name in snapshot)
+  {
+    // "<system>.<section>.<key>": system and section names hold no dots; a key may.
+    NSArray<NSString*>* parts = [name componentsSeparatedByString:@"."];
+    if (parts.count < 3)
+      continue;
+    const std::optional<Config::System> system = Config::GetSystemFromName(parts[0].UTF8String);
+    if (!system)
+      continue;
+    NSString* key =
+        [[parts subarrayWithRange:NSMakeRange(2, parts.count - 2)] componentsJoinedByString:@"."];
+    base->Set(Config::Location{*system, parts[1].UTF8String, key.UTF8String},
+              std::string(snapshot[name].UTF8String));
+  }
+  Config::OnConfigChanged();
 }
 
 + (NSDictionary<NSString*, NSString*>*)deleteBaseLayerKeys:(NSArray<NSString*>*)keys

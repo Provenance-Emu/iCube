@@ -168,16 +168,21 @@ final class SettingsRepairTests: XCTestCase {
 
   private let suiteName = "SettingsRepairTests"
   private var defaults: UserDefaults!
+  /// The host's Base layer before the test: the live tests below delete and change real keys.
+  private var savedBase: [String: String] = [:]
 
   override func setUp() {
     super.setUp()
     UserDefaults().removePersistentDomain(forName: suiteName)
     defaults = UserDefaults(suiteName: suiteName)
+    savedBase = DOLConfigBridge.baseLayerSnapshot()
   }
 
   override func tearDown() {
     UserDefaults().removePersistentDomain(forName: suiteName)
-    // Leave no unsaved Base layer behind (see SettingsWriteBackTests.tearDown).
+    // Put the host's Base layer back as it was, then save, leaving nothing unsaved behind (see
+    // SettingsWriteBackTests.tearDown).
+    DOLConfigBridge.restoreBaseLayerSnapshot(savedBase)
     DOLConfigBridge.flushSettingsToDisk()
     super.tearDown()
   }
@@ -214,6 +219,8 @@ final class SettingsRepairTests: XCTestCase {
     var disk: [String: String]
     /// false: save() runs but the write never lands (a full disk, say).
     var saveReachesDisk = true
+    /// false: the files exist but cannot be read back.
+    var diskReadable = true
     var saves = 0
     var onSave: () -> Void = {}
     init(_ base: [String: String]) {
@@ -235,7 +242,7 @@ final class SettingsRepairTests: XCTestCase {
       onSave()
     }
 
-    func savedBaseSnapshot() -> [String: String] { disk }
+    func savedBaseSnapshot() -> [String: String]? { diskReadable ? disk : nil }
   }
 
   func testRunsOnceAndRecordsTheVersionOnlyAfterSaving() {
@@ -288,6 +295,23 @@ final class SettingsRepairTests: XCTestCase {
     store.saveReachesDisk = true
     XCTAssertTrue(SettingsRepair.runIfNeeded(defaults: defaults, config: store, fastmemAvailable: true))
     XCTAssertEqual(store.disk, ["Dolphin.Core.CPUThread": "True"])
+    XCTAssertNil(defaults.object(forKey: "adaptive_clock_cpu_GALE01"))
+    XCTAssertEqual(defaults.integer(forKey: SettingsRepair.versionKey), SettingsRepair.currentVersion)
+  }
+
+  /// A file that exists but cannot be read back verifies nothing: like a failed save, the version
+  /// and the defaults wait for the next launch.
+  func testAnUnreadableSavedConfigIsRetriedOnTheNextLaunch() {
+    let store = FakeStore(["Dolphin.Core.CIRDynLinking": "False"])
+    store.diskReadable = false
+    defaults.set(0.6, forKey: "adaptive_clock_cpu_GALE01")
+
+    XCTAssertTrue(SettingsRepair.runIfNeeded(defaults: defaults, config: store, fastmemAvailable: true))
+    XCTAssertEqual(defaults.integer(forKey: SettingsRepair.versionKey), 0)
+    XCTAssertEqual(defaults.double(forKey: "adaptive_clock_cpu_GALE01"), 0.6)
+
+    store.diskReadable = true
+    XCTAssertTrue(SettingsRepair.runIfNeeded(defaults: defaults, config: store, fastmemAvailable: true))
     XCTAssertNil(defaults.object(forKey: "adaptive_clock_cpu_GALE01"))
     XCTAssertEqual(defaults.integer(forKey: SettingsRepair.versionKey), SettingsRepair.currentVersion)
   }
@@ -346,11 +370,28 @@ final class SettingsRepairTests: XCTestCase {
   func testTheSavedSnapshotReadsBackTheFiles() {
     DOLConfigBridge.setCirDynTargetCache(true)
     DOLConfigBridge.flushSettingsToDisk()
-    XCTAssertEqual(DOLConfigBridge.savedBaseConfigSnapshot()["Dolphin.Core.CIRDynTargetCache"], "True")
+    XCTAssertEqual(DOLConfigBridge.savedBaseConfigSnapshot()?["Dolphin.Core.CIRDynTargetCache"], "True")
 
     DOLConfigBridge.deleteBaseLayerKeys(["Dolphin.Core.CIRDynTargetCache"])
     DOLConfigBridge.flushSettingsToDisk()
-    XCTAssertNil(DOLConfigBridge.savedBaseConfigSnapshot()["Dolphin.Core.CIRDynTargetCache"])
+    XCTAssertNotNil(DOLConfigBridge.savedBaseConfigSnapshot())
+    XCTAssertNil(DOLConfigBridge.savedBaseConfigSnapshot()?["Dolphin.Core.CIRDynTargetCache"])
+  }
+
+  /// The tearDown restore the live tests rely on: deleted keys come back with their values, added
+  /// keys go away.
+  func testRestoringABaseSnapshotUndoesChanges() {
+    DOLConfigBridge.setCirDynTargetCache(true)
+    DOLConfigBridge.setMainOverclockPercent(150)
+    let before = DOLConfigBridge.baseLayerSnapshot()
+
+    DOLConfigBridge.deleteBaseLayerKeys(["Dolphin.Core.Overclock"]) // deleted
+    DOLConfigBridge.setCirDynTargetCache(false) // changed
+    DOLConfigBridge.setCirPsNeon(before["Dolphin.Core.CIRPsNeon"] != "True") // changed or added
+    XCTAssertNotEqual(DOLConfigBridge.baseLayerSnapshot(), before)
+
+    DOLConfigBridge.restoreBaseLayerSnapshot(before)
+    XCTAssertEqual(DOLConfigBridge.baseLayerSnapshot(), before)
   }
 
   func testBridgeSnapshotAndDeleteRoundTrip() {

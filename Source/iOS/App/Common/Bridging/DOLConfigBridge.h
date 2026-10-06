@@ -538,8 +538,14 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
     NS_SWIFT_NAME(deleteBaseLayerKeys(_:));
 // What Dolphin.ini and GFX.ini hold on disk right now, keyed like baseLayerSnapshot. Config::Save
 // reports no failure, so SettingsRepair reads the files back to see whether its deletions stuck.
-+ (NSDictionary<NSString*, NSString*>*)
+// A missing file contributes nothing; nil when a file exists but cannot be read, since then
+// nothing is verified.
++ (nullable NSDictionary<NSString*, NSString*>*)
     savedBaseConfigSnapshot NS_SWIFT_NAME(savedBaseConfigSnapshot());
+// Tests only: make the Base layer hold exactly `snapshot` (a baseLayerSnapshot from earlier):
+// keys added since are deleted, changed and deleted ones put back. Does not save.
++ (void)restoreBaseLayerSnapshot:(NSDictionary<NSString*, NSString*>*)snapshot
+    NS_SWIFT_NAME(restoreBaseLayerSnapshot(_:));
 + (void)resetPageToDefaults:(NSInteger)page NS_SWIFT_NAME(resetPage(toDefaults:)); // 0=config, 1=graphics, 2=controllers, 3=debug, 4=about
 
 // Flush the in-memory Base config layer to disk. Most setters write Base via

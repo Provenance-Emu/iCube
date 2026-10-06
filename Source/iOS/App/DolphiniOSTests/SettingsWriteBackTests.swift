@@ -20,7 +20,16 @@ final class SettingsWriteBackTests: XCTestCase {
   /// Config changes save on a 0.8 s debounce. If the test process exits first, the still-dirty
   /// Base layer is saved from a static destructor during exit(), which locks a mutex that is
   /// already gone and aborts the test host ("recursive_mutex lock failed"). Save now instead.
+  /// The host's Base layer before the test; the live tests below change real keys.
+  private var savedBase: [String: String] = [:]
+
+  override func setUp() {
+    super.setUp()
+    savedBase = DOLConfigBridge.baseLayerSnapshot()
+  }
+
   override func tearDown() {
+    DOLConfigBridge.restoreBaseLayerSnapshot(savedBase)
     DOLConfigBridge.flushSettingsToDisk()
     super.tearDown()
   }
@@ -74,6 +83,10 @@ final class SettingsWriteBackTests: XCTestCase {
   func testNoOnChangeClosureWritesConfig() throws {
     let appRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
     let settings = appRoot.appendingPathComponent("Common/UI/Settings")
+    // The sources are on the Mac: a simulator host can read them, a device host cannot.
+    guard FileManager.default.fileExists(atPath: settings.path) else {
+      throw XCTSkip("the repository is not reachable from this test host")
+    }
     let enumerator = try XCTUnwrap(FileManager.default.enumerator(at: settings, includingPropertiesForKeys: nil))
     var files = enumerator.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
     files.append(appRoot.appendingPathComponent("Common/Swift/EmulationScreen.swift"))
