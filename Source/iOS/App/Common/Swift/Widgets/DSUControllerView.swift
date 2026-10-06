@@ -162,6 +162,8 @@ struct DSUControllerView: View {
         // Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping)
         #if canImport(CoreMotion)
         TCDeviceMotion.shared.setPort(0)
+        // The client gets the phone's own motion, whatever the pointer mode.
+        TCDeviceMotion.shared.setDSUStreaming(true)
         TCDeviceMotion.shared.setMotionEnabled(true)
         #endif
       }
@@ -172,6 +174,7 @@ struct DSUControllerView: View {
         }
         #if canImport(CoreMotion)
         TCDeviceMotion.shared.setMotionEnabled(false)
+        TCDeviceMotion.shared.setDSUStreaming(false)
         #endif
       }
       .toolbar {
