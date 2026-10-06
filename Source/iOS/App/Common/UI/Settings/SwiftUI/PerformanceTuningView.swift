@@ -95,11 +95,9 @@ struct PerformanceTuningView: View {
               footer: Text(jitAvailable
                            ? L("These options control the PowerPC CPU emulation. On iCube the emulated CPU is almost always the performance bottleneck, so the CPU options below matter far more than any graphics setting.")
                            : L("This build runs without JIT, so games always use the Cached Interpreter (the JIT engine choices are hidden). The emulated CPU is the performance bottleneck on iCube — these options matter far more than any graphics setting."))) {
-        NavigationLink("\(L("CPU Emulation Engine")): \(effectiveCpuEngineLabel)", destination: CpuEnginePicker(selected: $cpuEngine, jitAvailable: jitAvailable))
-          .onChange(of: cpuEngine) { DOLConfigBridge.setMainCpuCore($0.rawValue) }
+        NavigationLink("\(L("CPU Emulation Engine")): \(effectiveCpuEngineLabel)", destination: CpuEnginePicker(selected: $cpuEngine.onSet { DOLConfigBridge.setMainCpuCore($0.rawValue) }, jitAvailable: jitAvailable))
         rowWithCaption(
-          Toggle(L("Enable MMU"), isOn: $mmu)
-            .onChange(of: mmu) { DOLConfigBridge.setMainMMU($0) },
+          Toggle(L("Enable MMU"), isOn: $mmu.onSet { DOLConfigBridge.setMainMMU($0) }),
           L("Emulates the PowerPC memory management unit. Required by a small number of games (e.g. some Star Wars titles) but adds CPU overhead on every memory access, so it hurts the framerate on this already CPU-bound build. Leave OFF unless a specific game needs it."))
         rowWithCaption(
           Toggle(L("Adaptive Clock (auto VI/CPU)"), isOn: $adaptiveClock),
@@ -114,48 +112,39 @@ struct PerformanceTuningView: View {
             .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         rowWithCaption(
-          Toggle(L("Pause on Panic"), isOn: $pauseOnPanic)
-            .onChange(of: pauseOnPanic) { DOLConfigBridge.setMainPauseOnPanic($0) },
+          Toggle(L("Pause on Panic"), isOn: $pauseOnPanic.onSet { DOLConfigBridge.setMainPauseOnPanic($0) }),
           L("Pauses emulation and shows a dialog when the core hits an internal error. Useful for debugging; leave OFF for normal play."))
         rowWithCaption(
-          Toggle(L("Accurate CPU Cache (slower)"), isOn: $writeBackCache)
-            .onChange(of: writeBackCache) { DOLConfigBridge.setMainAccurateCpuCache($0) },
+          Toggle(L("Accurate CPU Cache (slower)"), isOn: $writeBackCache.onSet { DOLConfigBridge.setMainAccurateCpuCache($0) }),
           L("Emulates the PowerPC data cache more precisely. Fixes a few games that depend on cache timing, but noticeably slows the interpreter. Leave OFF unless a game misbehaves without it."))
         rowWithCaption(
-          Toggle(L("Bypass Instruction Cache"), isOn: $disableICache)
-            .onChange(of: disableICache) { DOLConfigBridge.setMainDisableICache($0) },
+          Toggle(L("Bypass Instruction Cache"), isOn: $disableICache.onSet { DOLConfigBridge.setMainDisableICache($0) }),
           L("Skips emulation of the PowerPC instruction cache. Can give a small CPU speedup but may cause bugs in games that rely on I-cache behavior. Usually keep OFF."))
         // "Fast FP" (MAIN_FP_FAST) toggle removed: it's vestigial — the config key gates nothing
         // in this interpreter build and can't be wired without a large architecture port. Config key
         // stays defined so the bridge/config layer doesn't break; only the dead UI row is dropped.
         rowWithCaption(
-          Toggle(L("CachedInterpreter Prefetch (Apple Silicon)"), isOn: $cachedInterpreterPrefetch)
-            .onChange(of: cachedInterpreterPrefetch) { DOLConfigBridge.setMainCachedInterpreterPrefetch($0) },
+          Toggle(L("CachedInterpreter Prefetch (Apple Silicon)"), isOn: $cachedInterpreterPrefetch.onSet { DOLConfigBridge.setMainCachedInterpreterPrefetch($0) }),
           L("Adds software-prefetch hints to the Cached Interpreter hot loop on Apple Silicon. OFF by default: on A18 the hints measured slower (removing them gained about a third). A/B knob; applies on next game launch."))
         rowWithCaption(
-          Toggle(L("NEON Texture Decoder"), isOn: $neonTextureDecode)
-            .onChange(of: neonTextureDecode) { DOLConfigBridge.setGfxHackNeonTextureDecode($0) },
+          Toggle(L("NEON Texture Decoder"), isOn: $neonTextureDecode.onSet { DOLConfigBridge.setGfxHackNeonTextureDecode($0) }),
           L("ARM64 NEON SIMD texture decoder. ON by default; turning it off falls back to the slower scalar decoder. A/B knob. Applies on next game launch."))
         // Engine-specific optimizations (PIC, specialized ops, fusion, etc.) and their
         // correctness-validation twins now live in their own engine-aware sections below
         // (see "Engine Optimizations" + "Correctness Validation"), so this list only carries
         // the general, engine-agnostic CPU options.
         rowWithCaption(
-          Toggle(L("DCBZ Hack"), isOn: $lowDCBZ)
-            .onChange(of: lowDCBZ) { DOLConfigBridge.setMainLowDCBZHack($0) },
+          Toggle(L("DCBZ Hack"), isOn: $lowDCBZ.onSet { DOLConfigBridge.setMainLowDCBZHack($0) }),
           L("Skips part of the dcbz (data-cache-block-zero) instruction. Can speed up a few games but breaks others (notably some Wii titles). Leave OFF unless you know a game needs it."))
         // CPU Idle Detection / Fast-Forward
         rowWithCaption(
-          Toggle(L("Relaxed Idle Loop Detection"), isOn: $relaxedIdleDetection)
-            .onChange(of: relaxedIdleDetection) { DOLConfigBridge.setMainRelaxedIdleDetection($0) },
+          Toggle(L("Relaxed Idle Loop Detection"), isOn: $relaxedIdleDetection.onSet { DOLConfigBridge.setMainRelaxedIdleDetection($0) }),
           L("Detects more idle loops so the CPU can skip busy-waiting. ON helps reclaim CPU time on the bottlenecked interpreter; very rarely affects timing. Default ON."))
         rowWithCaption(
-          Toggle(L("Fast-Forward CTR Idle Loops"), isOn: $fastForwardCtrIdle)
-            .onChange(of: fastForwardCtrIdle) { DOLConfigBridge.setMainFastForwardCtrIdle($0) },
+          Toggle(L("Fast-Forward CTR Idle Loops"), isOn: $fastForwardCtrIdle.onSet { DOLConfigBridge.setMainFastForwardCtrIdle($0) }),
           L("Fast-forwards counter-based idle loops instead of emulating every iteration. Can recover CPU headroom; may slightly affect timing-sensitive games. iCube tuning knob."))
         rowWithCaption(
-          Toggle(L("Sync on Skip Idle"), isOn: $syncOnSkipIdle)
-            .onChange(of: syncOnSkipIdle) { DOLConfigBridge.setMainSyncOnSkipIdle($0) },
+          Toggle(L("Sync on Skip Idle"), isOn: $syncOnSkipIdle.onSet { DOLConfigBridge.setMainSyncOnSkipIdle($0) }),
           L("When the CPU fast-forwards through an idle loop, flush the GPU so it stays in sync. ON by default for correctness; turning it off skips the flush for a small CPU win but can cause graphical glitches in some games. A/B knob."))
       }
 
@@ -318,15 +307,14 @@ struct PerformanceTuningView: View {
 
       Section(header: Text(L("Clock Override"))) {
         rowWithCaption(
-          Toggle(L("Enable Emulated CPU Clock Override"), isOn: $cpuClockEnabled)
-            .disabled(cpuClockAutoOverridden)
-            .onChange(of: cpuClockEnabled) { DOLConfigBridge.setMainOverclockEnable($0) },
+          Toggle(L("Enable Emulated CPU Clock Override"), isOn: $cpuClockEnabled.onSet { DOLConfigBridge.setMainOverclockEnable($0) })
+            .disabled(cpuClockAutoOverridden),
           L("Adjusts the emulated CPU's clock rate. Higher values can raise the framerate of variable-rate games at a performance cost; lower values may trigger a game's internal frameskip. ⚠️ Changing this from 100% can and will break games — use at your own risk."))
         HStack {
 #if os(tvOS)
-          TVIntStepper(value: $cpuClockPercent, range: 1...400, step: 1)
+          TVIntStepper(value: $cpuClockPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }, range: 1 ... 400, step: 1)
 #else
-          Slider(value: Binding(get: { Double(cpuClockPercent) }, set: { cpuClockPercent = Int($0) }), in: 1...400)
+          Slider(value: $cpuClockPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }.asDouble, in: 1 ... 400)
             .frame(width: 260)
 #endif
           Spacer()
@@ -341,23 +329,21 @@ struct PerformanceTuningView: View {
           Text("\(cpuClockPercent)%")
             .foregroundStyle(.secondary)
         }
-        // While the adaptive clock drives this key (CurrentRun), disable the manual control so the
-        // displayed effective % can't be silently shadowed by a stale Base value authored here.
+        // While the adaptive clock drives this key (CurrentRun), disable the manual control: a value
+        // set here would not apply until the override clears.
         .disabled(!cpuClockEnabled || cpuClockAutoOverridden)
-        .onChange(of: cpuClockPercent) { DOLConfigBridge.setMainOverclockPercent($0) }
       }
 
       Section(header: Text(L("Override VBI Frequency"))) {
         rowWithCaption(
-          Toggle(L("Enable VBI Frequency Override"), isOn: $vbiEnabled)
-            .disabled(vbiAutoOverridden)
-            .onChange(of: vbiEnabled) { DOLConfigBridge.setMainViOverclockEnable($0) },
+          Toggle(L("Enable VBI Frequency Override"), isOn: $vbiEnabled.onSet { DOLConfigBridge.setMainViOverclockEnable($0) })
+            .disabled(vbiAutoOverridden),
           L("Makes games run at a different frame rate. Lowering it makes emulation less demanding; raising it can improve smoothness. May change gameplay speed, since speed is often tied to frame rate."))
         HStack {
 #if os(tvOS)
-          TVIntStepper(value: $vbiPercent, range: 1...400, step: 1)
+          TVIntStepper(value: $vbiPercent.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }, range: 1 ... 400, step: 1)
 #else
-          Slider(value: Binding(get: { Double(vbiPercent) }, set: { vbiPercent = Int($0) }), in: 1...400)
+          Slider(value: $vbiPercent.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }.asDouble, in: 1 ... 400)
             .frame(width: 260)
 #endif
           Spacer()
@@ -373,7 +359,6 @@ struct PerformanceTuningView: View {
             .foregroundStyle(.secondary)
         }
         .disabled(!vbiEnabled || vbiAutoOverridden)
-        .onChange(of: vbiPercent) { DOLConfigBridge.setMainViOverclockPercent($0) }
       }
     }
     .navigationTitle(L("Performance Tuning"))
@@ -423,14 +408,13 @@ struct PerformanceTuningView: View {
   private func optRow(_ title: String, recommended: Bool = false, isOn: Binding<Bool>,
                       set: @escaping (Bool) -> Void, caption: String) -> some View {
     rowWithCaption(
-      Toggle(isOn: isOn) {
+      Toggle(isOn: isOn.onSet(set)) {
         if recommended {
           HStack(spacing: 6) { Text(L(title)); RecommendedBadge() }
         } else {
           Text(L(title))
         }
-      }
-      .onChange(of: isOn.wrappedValue) { set($0) },
+      },
       L(caption))
   }
 
@@ -439,50 +423,17 @@ struct PerformanceTuningView: View {
   private func validateRow(_ title: String, isOn: Binding<Bool>,
                            set: @escaping (Bool) -> Void, parentOn: Bool, caption: String) -> some View {
     rowWithCaption(
-      Toggle(L(title), isOn: isOn)
-        .disabled(!parentOn)
-        .onChange(of: isOn.wrappedValue) { set($0) },
+      Toggle(L(title), isOn: isOn.onSet(set))
+        .disabled(!parentOn),
       L(caption))
   }
 
-  /// Restore every optimization flag to its shipping default: the proven wins ON,
-  /// every experimental knob and every Validate twin OFF. This is the fix for the
-  /// "no gains" reports that turned out to be runs with the recommended opts toggled off.
+  /// Restore every optimization flag to its shipping default by deleting the keys, so each one
+  /// follows the compiled default (MainSettings.cpp). This is the fix for the "no gains" reports
+  /// that turned out to be runs with the recommended opts toggled off.
   private func resetOptimizationsToRecommended() {
-    // Shared + CIR proven wins -> ON.
-    cirBlockLinking = true; DOLConfigBridge.setCirBlockLinking(true)
-    cirDynLinking = true; DOLConfigBridge.setCirDynLinking(true)
-    cirPicLoadStore = true; DOLConfigBridge.setCirPicLoadStore(true)
-    cirSpecializedOps = true; DOLConfigBridge.setCirSpecializedOps(true)
-    cirMicroOpFusion = true; DOLConfigBridge.setCirMicroOpFusion(true)
-    // Experimental -> OFF.
-    cirPsNeon = false; DOLConfigBridge.setCirPsNeon(false)
-    cirSpecializedFpLs = false; DOLConfigBridge.setCirSpecializedFpLs(false)
-    cirSpecializedPsq = false; DOLConfigBridge.setCirSpecializedPsq(false)
-    cirSpecializedFpArith = false; DOLConfigBridge.setCirSpecializedFpArith(false)
-    cirDeadFlagElim = false; DOLConfigBridge.setCirDeadFlagElim(false)
-    cirDeadFprfElim = false; DOLConfigBridge.setCirDeadFprfElim(false)
-    cirPsqFastPath = false; DOLConfigBridge.setCirPsqFastPath(false)
-    cirStoreLoopFF = false; DOLConfigBridge.setCirStoreLoopFF(false)
-    cirCacheLoopFF = false; DOLConfigBridge.setCirCacheLoopFF(false)
-    cirIrConstFusion = false; DOLConfigBridge.setCirIrConstFusion(false)
-    cirIrMicroOpFusion = false; DOLConfigBridge.setCirIrMicroOpFusion(false)
-    cirIrDeadFlagElim = false; DOLConfigBridge.setCirIrDeadFlagElim(false)
-    // All Validate twins -> OFF.
-    cirSpecializedOpsValidate = false; DOLConfigBridge.setCirSpecializedOpsValidate(false)
-    cirMicroOpFusionValidate = false; DOLConfigBridge.setCirMicroOpFusionValidate(false)
-    cirDeadFlagElimValidate = false; DOLConfigBridge.setCirDeadFlagElimValidate(false)
-    cirDeadFprfElimValidate = false; DOLConfigBridge.setCirDeadFprfElimValidate(false)
-    cirPsqFastPathValidate = false; DOLConfigBridge.setCirPsqFastPathValidate(false)
-    cirStoreLoopFFValidate = false; DOLConfigBridge.setCirStoreLoopFFValidate(false)
-    cirCacheLoopFFValidate = false; DOLConfigBridge.setCirCacheLoopFFValidate(false)
-    cirIrConstFusionValidate = false; DOLConfigBridge.setCirIrConstFusionValidate(false)
-    cirPsNeonValidate = false; DOLConfigBridge.setCirPsNeonValidate(false)
-    cirIrMicroOpFusionValidate = false; DOLConfigBridge.setCirIrMicroOpFusionValidate(false)
-    cirIrDeadFlagElimValidate = false; DOLConfigBridge.setCirIrDeadFlagElimValidate(false)
-    cirIrPicLoadStoreValidate = false; DOLConfigBridge.setCirIrPicLoadStoreValidate(false)
-    cirIrSpecializedOpsValidate = false; DOLConfigBridge.setCirIrSpecializedOpsValidate(false)
-    cirBlockLinkingValidate = false; DOLConfigBridge.setCirBlockLinkingValidate(false)
+    DOLConfigBridge.resetCirOptimizationsToDefaults()
+    syncPerformanceTuning()
   }
 
   private func syncPerformanceTuning() {
@@ -532,10 +483,11 @@ struct PerformanceTuningView: View {
     fastForwardCtrIdle = DOLConfigBridge.mainFastForwardCtrIdle()
     syncOnSkipIdle = DOLConfigBridge.mainSyncOnSkipIdle()
     // CI block linking toggle does not need local state; bound directly
-    cpuClockEnabled = DOLConfigBridge.mainOverclockEnable()
-    cpuClockPercent = DOLConfigBridge.mainOverclockPercent()
-    vbiEnabled = DOLConfigBridge.mainViOverclockEnable()
-    vbiPercent = DOLConfigBridge.mainViOverclockPercent()
+    // The user's own clocks (Base), not the adaptive clock's CurrentRun value: these rows edit Base.
+    cpuClockEnabled = DOLConfigBridge.mainOverclockEnableBase()
+    cpuClockPercent = DOLConfigBridge.mainOverclockPercentBase()
+    vbiEnabled = DOLConfigBridge.mainViOverclockEnableBase()
+    vbiPercent = DOLConfigBridge.mainViOverclockPercentBase()
     // Resolver step #3: is an auto controller currently overriding these clock keys (CurrentRun)?
     cpuClockAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
     vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()

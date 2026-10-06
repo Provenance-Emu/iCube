@@ -39,17 +39,16 @@ struct ConfigAchievementsView: View {
           HStack {
             Label(L("Enable Integration"), systemImage: "trophy.fill")
             Spacer()
-            Toggle("", isOn: $enabled).onChange(of: enabled) { DOLConfigBridge.setRaEnabled($0) }
+            Toggle("", isOn: $enabled.onSet { DOLConfigBridge.setRaEnabled($0) })
           },
           L("Connects to RetroAchievements.org to unlock achievements and track progress across supported games."))
 
         HStack {
           Label(L("Username"), systemImage: "person.fill")
           Spacer()
-          TextField(L("Username"), text: $username)
+          TextField(L("Username"), text: $username.onSet { DOLConfigBridge.setRaUsername($0) })
             .multilineTextAlignment(.trailing)
             .disabled(hasToken || !enabled)
-            .onChange(of: username) { DOLConfigBridge.setRaUsername($0) }
         }
         .disabled(!enabled)
 
@@ -82,7 +81,7 @@ struct ConfigAchievementsView: View {
             Label(L("Hardcore Mode"), systemImage: "flame.fill")
               .foregroundColor(.orange)
             Spacer()
-            Toggle("", isOn: $hardcore).onChange(of: hardcore) { DOLConfigBridge.setRaHardcoreEnabled($0) }
+            Toggle("", isOn: $hardcore.onSet { DOLConfigBridge.setRaHardcoreEnabled($0) })
           },
           L("Disables save states, cheats, and speed changes for authentic difficulty and full achievement credit."))
         settingsCaption(
@@ -90,7 +89,7 @@ struct ConfigAchievementsView: View {
             Label(L("Enable Unofficial"), systemImage: "person.3.sequence.fill")
               .foregroundColor(.purple)
             Spacer()
-            Toggle("", isOn: $unofficial).onChange(of: unofficial) { DOLConfigBridge.setRaUnofficialEnabled($0) }
+            Toggle("", isOn: $unofficial.onSet { DOLConfigBridge.setRaUnofficialEnabled($0) })
           },
           L("Includes community achievements that haven't been officially promoted yet."))
         settingsCaption(
@@ -98,7 +97,7 @@ struct ConfigAchievementsView: View {
             Label(L("Encore Mode"), systemImage: "arrow.clockwise.circle.fill")
               .foregroundColor(.green)
             Spacer()
-            Toggle("", isOn: $encore).onChange(of: encore) { DOLConfigBridge.setRaEncoreEnabled($0) }
+            Toggle("", isOn: $encore.onSet { DOLConfigBridge.setRaEncoreEnabled($0) })
           },
           L("Re-enables achievements you've already earned so you can unlock them again."))
         settingsCaption(
@@ -106,7 +105,7 @@ struct ConfigAchievementsView: View {
             Label(L("Spectator Mode"), systemImage: "eye.fill")
               .foregroundColor(.blue)
             Spacer()
-            Toggle("", isOn: $spectator).onChange(of: spectator) { DOLConfigBridge.setRaSpectatorEnabled($0) }
+            Toggle("", isOn: $spectator.onSet { DOLConfigBridge.setRaSpectatorEnabled($0) })
           },
           L("Tracks achievements without earning them — view progress without affecting your record."))
       }
@@ -117,7 +116,7 @@ struct ConfigAchievementsView: View {
             Label(L("Discord Presence"), systemImage: "bubble.left.and.bubble.right.fill")
               .foregroundColor(.indigo)
             Spacer()
-            Toggle("", isOn: $discordPresence).onChange(of: discordPresence) { DOLConfigBridge.setRaDiscordPresenceEnabled($0) }
+            Toggle("", isOn: $discordPresence.onSet { DOLConfigBridge.setRaDiscordPresenceEnabled($0) })
           },
           L("Shows your current game and achievements in your Discord status."))
         settingsCaption(
@@ -125,7 +124,7 @@ struct ConfigAchievementsView: View {
             Label(L("Show Progress Popups"), systemImage: "bell.badge.fill")
               .foregroundColor(.orange)
             Spacer()
-            Toggle("", isOn: $progress).onChange(of: progress) { DOLConfigBridge.setRaProgressEnabled($0) }
+            Toggle("", isOn: $progress.onSet { DOLConfigBridge.setRaProgressEnabled($0) })
           },
           L("Displays achievement-progress notifications during gameplay."))
       }
@@ -135,12 +134,11 @@ struct ConfigAchievementsView: View {
           HStack {
             Label(L("Server URL"), systemImage: "server.rack")
             Spacer()
-            TextField("https://retroachievements.org", text: $hostURL)
+            TextField("https://retroachievements.org", text: $hostURL.onSet { DOLConfigBridge.setRaHostURL($0) })
               .textInputAutocapitalization(.never)
               .autocorrectionDisabled(true)
               .keyboardType(.URL)
               .multilineTextAlignment(.trailing)
-              .onChange(of: hostURL) { DOLConfigBridge.setRaHostURL($0) }
           },
           L("Custom RetroAchievements API server. Only change this for a custom/self-hosted server."))
       }

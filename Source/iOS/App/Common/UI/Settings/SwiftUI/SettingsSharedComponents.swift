@@ -33,10 +33,39 @@ struct ConfigSynced: ViewModifier {
 extension View {
   /// Seed from Config on appear and re-sync whenever Config changes. `sync` should copy the relevant
   /// Config values into the view's @State (the view's existing syncX() function).
+  ///
+  /// `sync` only assigns @State. Write Config from the control's binding with `onSet`, never from
+  /// `.onChange(of:)`: SwiftUI runs `onChange` for the assignments `sync` makes too, so a value it
+  /// read (a game INI's, or the adaptive clock's CurrentRun override) went straight back into the
+  /// Base layer and was saved as the user's own setting.
   func configSynced(_ sync: @escaping () -> Void) -> some View {
     modifier(ConfigSynced(sync: sync))
   }
 }
+
+extension Binding where Value: Equatable {
+  /// The binding to give a control whose value is written somewhere (Config, user defaults).
+  /// `action` runs only when the control sets a different value, i.e. the user changed it.
+  /// Assigning the underlying @State directly, as `configSynced` does, never calls it.
+  func onSet(_ action: @escaping (Value) -> Void) -> Binding<Value> {
+    Binding(
+      get: { wrappedValue },
+      set: { newValue, transaction in
+        guard newValue != wrappedValue else { return }
+        self.transaction(transaction).wrappedValue = newValue
+        action(newValue)
+      }
+    )
+  }
+}
+
+extension Binding where Value == Int {
+  /// An Int setting as the Double a `Slider` takes.
+  var asDouble: Binding<Double> {
+    Binding<Double>(get: { Double(wrappedValue) }, set: { wrappedValue = Int($0) })
+  }
+}
+
 // MARK: tvOS-friendly selectable row
 struct SettingsSelectRow: View {
   let label: String

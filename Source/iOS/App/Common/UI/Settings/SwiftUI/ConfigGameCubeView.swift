@@ -25,19 +25,20 @@ struct ConfigGameCubeView: View {
     List {
       Section(header: Text(L("General"))) {
         settingsCaption(
-          Toggle(L("Load GameCube Main Menu"), isOn: Binding(get: { !skipIPL }, set: { skipIPL = !$0 }))
-            .onChange(of: skipIPL) { DOLConfigBridge.setMainSkipIPL($0) },
+          Toggle(L("Load GameCube Main Menu"), isOn: Binding(get: { !skipIPL }, set: { loadMenu in
+            skipIPL = !loadMenu
+            DOLConfigBridge.setMainSkipIPL(skipIPL)
+          })),
           L("Boots through the console's startup menu (IPL/BIOS animation) instead of straight into the game. Needs a matching-region GameCube IPL dump; without one, games boot directly anyway. Turn off to start games faster."))
       }
 
       Section(header: Text(L("System Language"))) {
         settingsNavCaption(
-          destination: GCLanguagePicker(selected: $gcLanguage),
+          destination: GCLanguagePicker(selected: $gcLanguage.onSet { DOLConfigBridge.setMainGCLanguage($0) }),
           L("Language the emulated GameCube reports to games. The GameCube supports English, German, French, Spanish, Italian, and Dutch only. Defaults to your device language where supported, otherwise English.")
         ) {
           Text(languageLabel(for: gcLanguage))
         }
-        .onChange(of: gcLanguage) { DOLConfigBridge.setMainGCLanguage($0) }
       }
     }
     .navigationTitle(L("GameCube"))

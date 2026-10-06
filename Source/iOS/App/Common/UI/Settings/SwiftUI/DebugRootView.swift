@@ -45,8 +45,7 @@ struct DebugRootView: View {
     List {
       Section(header: Text(L("CPU / Memory"))) {
         settingsCaption(
-          Toggle(L("Fastmem"), isOn: $fastmem)
-            .onChange(of: fastmem) { DOLConfigBridge.setMainFastmem($0) }
+          Toggle(L("Fastmem"), isOn: $fastmem.onSet { DOLConfigBridge.setMainFastmem($0) })
             .disabled(!fastmemAvailable),
           L("Fast memory-access path for the CPU emulator. A large speedup where supported; disabled if the device can't provide it."))
       }
@@ -54,8 +53,7 @@ struct DebugRootView: View {
       Section(header: Text(L("Recording"))) {
 #if os(iOS)
         settingsCaption(
-          Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay)
-            .onChange(of: instantReplay) { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") },
+          Toggle(L("Enable ReplayKit Instant Replay"), isOn: $instantReplay.onSet { UserDefaults.standard.set($0, forKey: "replaykit_instant_replay_enabled") }),
           L("Continuously buffers gameplay for instant replay. May reduce performance on older devices."))
 #endif
       }
@@ -181,8 +179,7 @@ struct DebugRootView: View {
 
       Section(header: Text(L("Logging"))) {
         settingsCaption(
-          Toggle(L("Enable Console Logging"), isOn: $loggingEnabled)
-            .onChange(of: loggingEnabled) { UserDefaults.standard.set($0, forKey: "logger_console_enabled") },
+          Toggle(L("Enable Console Logging"), isOn: $loggingEnabled.onSet { UserDefaults.standard.set($0, forKey: "logger_console_enabled") }),
           L("Writes core log messages to the device console. For diagnostics; leave off for normal use."))
         settingsCaption(
           HStack {
@@ -198,8 +195,7 @@ struct DebugRootView: View {
           },
           L("How much detail the log captures (1 = errors only, 5 = everything)."))
         settingsCaption(
-          Toggle(L("Input Event Debug"), isOn: $inputDebug)
-            .onChange(of: inputDebug) { UserDefaults.standard.set($0, forKey: "input_debug") },
+          Toggle(L("Input Event Debug"), isOn: $inputDebug.onSet { UserDefaults.standard.set($0, forKey: "input_debug") }),
           L("Logs every controller/touch input event. Noisy; for input troubleshooting only."))
       }
 

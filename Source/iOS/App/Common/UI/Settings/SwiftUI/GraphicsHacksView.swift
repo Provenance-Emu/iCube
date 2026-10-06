@@ -59,116 +59,94 @@ struct GraphicsHacksView: View {
     List {
       Section(header: Text(L("General Hacks"))) {
         settingsNavCaption(
-          destination: TextureCacheAccuracyPicker(selected: $textureCacheSamples),
+          destination: TextureCacheAccuracyPicker(selected: $textureCacheSamples.onSet { DOLConfigBridge.setGfxSafeTextureCacheColorSamples($0) }),
           L("Adjusts how strictly the GPU tracks texture updates from RAM. Safer is slower but avoids garbled text in some games.")
         ) {
           Text("\(L("Texture Cache Accuracy")): \(textureCacheAccuracyLabel(textureCacheSamples))")
         }
-        .onChange(of: textureCacheSamples) { DOLConfigBridge.setGfxSafeTextureCacheColorSamples($0) }
         settingsCaption(
-          Toggle(L("Bounding Box Emulation"), isOn: $bboxEnabled)
-            .disabled(!backendSupportsBbox)
-            .onChange(of: bboxEnabled) { DOLConfigBridge.setGfxHackBboxEnable($0) },
+          Toggle(L("Bounding Box Emulation"), isOn: $bboxEnabled.onSet { DOLConfigBridge.setGfxHackBboxEnable($0) })
+            .disabled(!backendSupportsBbox),
           backendSupportsBbox
             ? L("Emulates GameCube/Wii bounding-box tests on the GPU. Required by some games; leave off unless needed.")
             : L("The current graphics backend does not support bounding box emulation on this device."))
         settingsNavCaption(
-          destination: BBoxSyncModePicker(selected: $bboxSyncMode),
+          destination: BBoxSyncModePicker(selected: $bboxSyncMode.onSet { DOLConfigBridge.setGfxBboxSyncMode($0) }),
           L("How iCube delivers bounding-box values. Latched serves a 1-frame-stale snapshot with no CPU stall (faster). Force Sync blocks for exact same-frame values — try it if a game's bbox-driven effects (some 2D/UI culling) look wrong.")
         ) {
           Text("\(L("Bounding Box Sync")): \(bboxSyncLabel(bboxSyncMode))")
         }
         .disabled(!bboxEnabled || !backendSupportsBbox)
-        .onChange(of: bboxSyncMode) { DOLConfigBridge.setGfxBboxSyncMode($0) }
         settingsCaption(
-          Toggle(L("Enable EFB Access"), isOn: $efbAccess)
-            .onChange(of: efbAccess) { DOLConfigBridge.setGfxHackEfbAccessEnable($0) },
+          Toggle(L("Enable EFB Access"), isOn: $efbAccess.onSet { DOLConfigBridge.setGfxHackEfbAccessEnable($0) }),
           L("Lets the CPU read back the framebuffer. Required by some effects but costly; many games run fine and faster with it off."))
         settingsCaption(
-          Toggle(L("Skip EFB Copy to RAM"), isOn: $skipEfbToRam)
-            .onChange(of: skipEfbToRam) { DOLConfigBridge.setGfxHackSkipEfbCopyToRam($0) },
+          Toggle(L("Skip EFB Copy to RAM"), isOn: $skipEfbToRam.onSet { DOLConfigBridge.setGfxHackSkipEfbCopyToRam($0) }),
           L("Keeps embedded-framebuffer copies on the GPU instead of system RAM. Faster; breaks a few effects. Recommended on."))
         settingsCaption(
-          Toggle(L("Skip XFB Copy to RAM"), isOn: $skipXfbToRam)
-            .onChange(of: skipXfbToRam) { DOLConfigBridge.setGfxHackSkipXfbCopyToRam($0) },
+          Toggle(L("Skip XFB Copy to RAM"), isOn: $skipXfbToRam.onSet { DOLConfigBridge.setGfxHackSkipXfbCopyToRam($0) }),
           L("Keeps the external framebuffer on the GPU. Faster; can break games that read the final image."))
         settingsCaption(
-          Toggle(L("Immediate XFB"), isOn: $immediateXfb)
-            .onChange(of: immediateXfb) { DOLConfigBridge.setGfxHackImmediateXfb($0) },
+          Toggle(L("Immediate XFB"), isOn: $immediateXfb.onSet { DOLConfigBridge.setGfxHackImmediateXfb($0) }),
           L("Presents frames the moment they're drawn — lower latency, but can cause flicker or tearing in some games."))
         settingsCaption(
-          Toggle(L("Copy EFB Scaled"), isOn: $copyEfbScaled)
-            .onChange(of: copyEfbScaled) { DOLConfigBridge.setGfxHackCopyEfbScaled($0) },
+          Toggle(L("Copy EFB Scaled"), isOn: $copyEfbScaled.onSet { DOLConfigBridge.setGfxHackCopyEfbScaled($0) }),
           L("Copies the framebuffer at the higher internal resolution rather than native. Keeps upscaled detail; recommended on."))
         settingsCaption(
-          Toggle(L("Early XFB Output"), isOn: $earlyXfbOutput)
-            .onChange(of: earlyXfbOutput) { DOLConfigBridge.setGfxHackEarlyXfbOutput($0) },
+          Toggle(L("Early XFB Output"), isOn: $earlyXfbOutput.onSet { DOLConfigBridge.setGfxHackEarlyXfbOutput($0) }),
           L("Outputs the frame earlier in the pipeline for lower latency. Recommended on; turn off if a game shows glitches."))
         settingsCaption(
-          Toggle(L("Skip Duplicate XFBs"), isOn: $skipDuplicateXFBs)
-            .disabled(!skipDuplicateXFBsEnabled)
-            .onChange(of: skipDuplicateXFBs) { DOLConfigBridge.setGfxHackSkipDuplicateXFBs($0) },
+          Toggle(L("Skip Duplicate XFBs"), isOn: $skipDuplicateXFBs.onSet { DOLConfigBridge.setGfxHackSkipDuplicateXFBs($0) })
+            .disabled(!skipDuplicateXFBsEnabled),
           skipDuplicateXFBsEnabled
             ? L("Avoids re-presenting identical frames, saving GPU work. Recommended on.")
             : L("Unavailable while Immediate XFB or VI Skip is enabled — duplicate frames are already handled."))
         settingsCaption(
-          Toggle(L("Emulate EFB Format Changes"), isOn: $efbFormatChanges)
-            .onChange(of: efbFormatChanges) { DOLConfigBridge.setGfxHackEfbEmulateFormatChanges($0) },
+          Toggle(L("Emulate EFB Format Changes"), isOn: $efbFormatChanges.onSet { DOLConfigBridge.setGfxHackEfbEmulateFormatChanges($0) }),
           L("Emulates pixel-format changes some games rely on. Needed for correct colors/effects in those games; small cost."))
         settingsCaption(
-          Toggle(L("Vertex Rounding"), isOn: $vertexRounding)
-            .onChange(of: vertexRounding) { DOLConfigBridge.setGfxHackVertexRounding($0) },
+          Toggle(L("Vertex Rounding"), isOn: $vertexRounding.onSet { DOLConfigBridge.setGfxHackVertexRounding($0) }),
           L("Rounds vertex positions to reduce seams between tiles at higher resolutions. Only helps above 1x; leave off at 1x."))
         settingsCaption(
-          Toggle(L("Force Progressive Scan"), isOn: $forceProgressive)
-            .onChange(of: forceProgressive) { DOLConfigBridge.setGfxHackForceProgressive($0) },
+          Toggle(L("Force Progressive Scan"), isOn: $forceProgressive.onSet { DOLConfigBridge.setGfxHackForceProgressive($0) }),
           L("Forces 480p output where games allow it, for a cleaner image."))
         settingsCaption(
-          Toggle(L("Defer EFB Copies"), isOn: $deferEfbCopies)
-            .disabled(!deferEfbCopiesEnabled)
-            .onChange(of: deferEfbCopies) { DOLConfigBridge.setGfxHackDeferEfbCopies($0) },
+          Toggle(L("Defer EFB Copies"), isOn: $deferEfbCopies.onSet { DOLConfigBridge.setGfxHackDeferEfbCopies($0) })
+            .disabled(!deferEfbCopiesEnabled),
           deferEfbCopiesEnabled
             ? L("Batches framebuffer copies to reduce overhead. Faster in most games; recommended on.")
             : L("Unavailable while both EFB and XFB copies stay on the GPU — there is no RAM copy to defer."))
         settingsNavCaption(
-          destination: ViSkipModePicker(selected: $viSkipMode),
+          destination: ViSkipModePicker(selected: $viSkipMode.onSet { DOLConfigBridge.setGfxHackViSkipMode($0) }),
           L("Skips video-interrupt frames to gain speed. Auto is the safe choice; On is more aggressive but can cause flicker.")
         ) {
           Text("\(L("VI Skip Mode")): \(viSkipLabel(viSkipMode))")
         }
-        .onChange(of: viSkipMode) { DOLConfigBridge.setGfxHackViSkipMode($0) }
         settingsCaption(
-          Toggle(L("Fast Texture Sampling"), isOn: $fastTextureSampling)
-            .onChange(of: fastTextureSampling) { DOLConfigBridge.setGfxHackFastTextureSampling($0) },
+          Toggle(L("Fast Texture Sampling"), isOn: $fastTextureSampling.onSet { DOLConfigBridge.setGfxHackFastTextureSampling($0) }),
           L("Uses faster, less precise texture sampling. Small speed win; rarely causes minor texture artifacts. Recommended on."))
         settingsCaption(
-          Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath)
-            .onChange(of: fastMath) { DOLConfigBridge.setGfxHackFastMath($0) },
+          Toggle(L("Fast Math (Metal Shaders)"), isOn: $fastMath.onSet { DOLConfigBridge.setGfxHackFastMath($0) }),
           L("Lets Metal shaders use fast, relaxed-precision math. Can speed up the GPU; may cause subtle rendering differences."))
         // iCube native-Metal moat: routes EFB/XFB color/depth resolve, blit, scale and
         // gamma through Metal compute kernels instead of the stock raster path. Wired into
         // the Metal backend (TryCompute* overrides) and gated on GFX_USE_COMPUTE_EFBXFB.
         settingsCaption(
-          Toggle(L("Use Compute for EFB/XFB"), isOn: $useComputeEfbXfb)
-            .onChange(of: useComputeEfbXfb) { DOLConfigBridge.setGfxUseComputeEfbXfb($0) },
+          Toggle(L("Use Compute for EFB/XFB"), isOn: $useComputeEfbXfb.onSet { DOLConfigBridge.setGfxUseComputeEfbXfb($0) }),
           L("Native-Metal compute acceleration for EFB/XFB. Experimental GPU perf knob; OFF by default. Applies on next launch."))
         settingsCaption(
-          Toggle(L("Use Compute for Vertex Decode"), isOn: $useComputeVertexDecode)
-            .onChange(of: useComputeVertexDecode) { DOLConfigBridge.setGfxUseComputeVertexDecode($0) },
+          Toggle(L("Use Compute for Vertex Decode"), isOn: $useComputeVertexDecode.onSet { DOLConfigBridge.setGfxUseComputeVertexDecode($0) }),
           L("Offload vertex decoding to a Metal compute shader (CPU→GPU). Experimental — currently only position-only-float formats use the GPU path (others fall back to CPU), so most games see little change yet. OFF by default. Applies on next launch."))
         settingsCaption(
-          Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping)
-            .onChange(of: noMipmapping) { DOLConfigBridge.setGfxHackNoMipmapping($0) },
+          Toggle(L("No Mipmapping (iOS)"), isOn: $noMipmapping.onSet { DOLConfigBridge.setGfxHackNoMipmapping($0) }),
           L("Disables mipmaps. Saves a little memory/bandwidth but makes distant textures shimmer. Leave off normally."))
         settingsCaption(
-          Toggle(L("GPU EFB Peek Resolve"), isOn: $gpuEfbPeekResolve)
-            .onChange(of: gpuEfbPeekResolve) { DOLConfigBridge.setGfxHackGpuEfbPeekResolve($0) },
+          Toggle(L("GPU EFB Peek Resolve"), isOn: $gpuEfbPeekResolve.onSet { DOLConfigBridge.setGfxHackGpuEfbPeekResolve($0) }),
           L("Experimental: resolves EFB peek reads on the GPU instead of a CPU readback. May reduce CPU-thread stalls for games that read the framebuffer; OFF by default. Verify visuals per game."))
       }
       Section {
         settingsCaption(
-          Toggle(L("Interlaced Field Decimation"), isOn: $viDecimateInterlace)
-            .onChange(of: viDecimateInterlace) { DOLConfigBridge.setGfxHackViDecimateInterlace($0) },
+          Toggle(L("Interlaced Field Decimation"), isOn: $viDecimateInterlace.onSet { DOLConfigBridge.setGfxHackViDecimateInterlace($0) }),
           L("Skips every other interlaced field for higher FPS. May reduce temporal resolution or cause flicker in some games."))
       }
     }

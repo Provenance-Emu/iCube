@@ -131,9 +131,13 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // fresh and existing installs.
   [[NSUserDefaults standardUserDefaults] registerDefaults:@{@"adaptive_clock_enable": @YES}];
 
+  // One-time repair of settings older builds saved by mistake (SettingsRepair.swift). Before the
+  // seeds below, so a key it deletes is seeded again where the launch has a value for it.
+  const bool fastmemAvailable = [FastmemManager shared].fastmemAvailable;
+  [ICubeSettingsRepair runAtLaunchWithFastmemAvailable:fastmemAvailable];
+
   SetBaseIfUnspecified(Config::MAIN_USE_GAME_COVERS, true);
 
-  const bool fastmemAvailable = [FastmemManager shared].fastmemAvailable;
   SetBaseIfUnspecified(Config::MAIN_FASTMEM, fastmemAvailable);
   SetBaseIfUnspecified(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
   SetBaseIfUnspecified(Config::MAIN_FAST_DISC_SPEED, true);

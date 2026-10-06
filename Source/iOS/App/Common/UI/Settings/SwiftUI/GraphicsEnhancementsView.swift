@@ -32,7 +32,8 @@ struct GraphicsEnhancementsView: View {
   @State private var efbScale: Int = 1
   @State private var efbMaxScale: Int = 6
   // Resolver step #3 "Auto" badge: true when Auto-IR / thermal is overriding GFX_EFB_SCALE on the
-  // CurrentRun layer. While true the manual picker is disabled and the value shown is effective.
+  // CurrentRun layer. While true the manual picker is disabled; the value shown is the user's own
+  // (Base), which applies again once the override clears.
   @State private var efbAutoOverridden: Bool = false
   @State private var widescreenHack: Bool = false
   @State private var disableFog: Bool = false
@@ -46,7 +47,16 @@ struct GraphicsEnhancementsView: View {
     List {
       Section(content: {
         settingsNavCaption(
-          destination: EfbScalePicker(selected: $efbScale, maxScale: efbMaxScale),
+          destination: EfbScalePicker(selected: $efbScale.onSet { newScale in
+            DOLConfigBridge.setGfxEfbScale(newScale)
+            // Picking an explicit (non-fit-window) scale means the user wants that exact IR. The Auto-IR
+            // controller also drives GFX_EFB_SCALE, so leave it on and the two fight. Turn Auto-IR off so
+            // the manual choice sticks. (The Auto-IR toggle lives on the Graphics > General screen and
+            // re-reads its state from the bridge when it next appears.)
+            if newScale != 0 {
+              DOLConfigBridge.setGfxAutoIREnable(false)
+            }
+          }, maxScale: efbMaxScale),
           L("Renders the game above native resolution for a sharper image. Higher costs more GPU; on the CPU-bound path 1x–2x is usually plenty.")
         ) {
           HStack {
@@ -61,87 +71,66 @@ struct GraphicsEnhancementsView: View {
             }
           }
         }
-        // While an auto controller drives this key (CurrentRun), disable the manual picker so the
-        // displayed effective value can't be silently shadowed by a stale Base value authored here.
+        // While an auto controller drives this key (CurrentRun), disable the manual picker: a choice
+        // made here would not apply until the override clears.
         .disabled(efbAutoOverridden)
-        .onChange(of: efbScale) { newScale in
-          DOLConfigBridge.setGfxEfbScale(newScale)
-          // Picking an explicit (non-fit-window) scale means the user wants that exact IR. The Auto-IR
-          // controller also drives GFX_EFB_SCALE, so leave it on and the two fight. Turn Auto-IR off so
-          // the manual choice sticks. (The Auto-IR toggle lives on the Graphics > General screen and
-          // re-reads its state from the bridge when it next appears.)
-          if newScale != 0 {
-            DOLConfigBridge.setGfxAutoIREnable(false)
-          }
-        }
       }, header: { Text(L("Internal Resolution")) })
       Section(content: {
         settingsNavCaption(
-          destination: AnisotropyPicker(selected: $anisotropy),
+          destination: AnisotropyPicker(selected: $anisotropy.onSet { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }),
           L("Sharpens textures viewed at steep angles (floors, walls). Cheap on modern GPUs; 4x–16x is a safe quality win.")
         ) {
           Text("\(L("Anisotropic Filtering")): \(anisotropy)x")
         }
-        .onChange(of: anisotropy) { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }
         settingsNavCaption(
-          destination: MSAAPicker(selected: $msaa),
+          destination: MSAAPicker(selected: $msaa.onSet { newMsaa in
+            DOLConfigBridge.setGfxMsaa(newMsaa)
+            // Desktop parity: SSAA only applies when MSAA > 1. Clear it if MSAA drops to None.
+            if newMsaa <= 1, ssaa {
+              ssaa = false
+              DOLConfigBridge.setGfxSsaa(false)
+            }
+          }),
           L("Multisample anti-aliasing smooths jagged polygon edges. Higher costs more GPU. The Metal backend clamps unsupported sample counts automatically.")
         ) {
           Text("\(L("Anti-Aliasing (MSAA)")): \(msaa == 1 ? L("None") : "\(msaa)x")")
         }
-        .onChange(of: msaa) { newMsaa in
-          DOLConfigBridge.setGfxMsaa(newMsaa)
-          // Desktop parity: SSAA only applies when MSAA > 1. Clear it if MSAA drops to None.
-          if newMsaa <= 1 && ssaa {
-            ssaa = false
-            DOLConfigBridge.setGfxSsaa(false)
-          }
-        }
         settingsCaption(
-          Toggle(L("Supersampling (SSAA)"), isOn: $ssaa)
-            .disabled(msaa <= 1)
-            .onChange(of: ssaa) { DOLConfigBridge.setGfxSsaa($0) },
+          Toggle(L("Supersampling (SSAA)"), isOn: $ssaa.onSet { DOLConfigBridge.setGfxSsaa($0) })
+            .disabled(msaa <= 1),
           msaa > 1
             ? L("Supersampling renders MSAA samples at full shading for the sharpest result, at a heavy GPU cost. Requires MSAA above None.")
             : L("Enable MSAA (above None) first to use supersampling."))
         settingsNavCaption(
-          destination: OutputResamplingPicker(selected: $outputResampling),
+          destination: OutputResamplingPicker(selected: $outputResampling.onSet { DOLConfigBridge.setGfxEnhanceOutputResampling($0) }),
           L("How the final image is resampled to the screen. Default matches the backend; Sharp Bilinear and Area Sampling can look cleaner when up/down-scaling.")
         ) {
           Text("\(L("Output Resampling")): \(outputResamplingLabel(outputResampling))")
         }
-        .onChange(of: outputResampling) { DOLConfigBridge.setGfxEnhanceOutputResampling($0) }
       }, header: { Text(L("Texture Filtering")) })
       Section(content: {
         settingsCaption(
-          Toggle(L("Force 24-bit Color"), isOn: $trueColor)
-            .onChange(of: trueColor) { DOLConfigBridge.setGfxEnhanceForceTrueColor($0) },
+          Toggle(L("Force 24-bit Color"), isOn: $trueColor.onSet { DOLConfigBridge.setGfxEnhanceForceTrueColor($0) }),
           L("Forces full 24-bit color instead of the GameCube/Wii's banded 16/18-bit output. Reduces gradient banding at negligible cost. Recommended ON."))
         settingsCaption(
-          Toggle(L("Disable Copy Filter"), isOn: $disableCopyFilter)
-            .onChange(of: disableCopyFilter) { DOLConfigBridge.setGfxEnhanceDisableCopyFilter($0) },
+          Toggle(L("Disable Copy Filter"), isOn: $disableCopyFilter.onSet { DOLConfigBridge.setGfxEnhanceDisableCopyFilter($0) }),
           L("Disables the deflicker/blur the console applied to copies. Gives a sharper image; may slightly change how a few games look."))
         settingsCaption(
-          Toggle(L("Widescreen Hack"), isOn: $widescreenHack)
-            .onChange(of: widescreenHack) { DOLConfigBridge.setGfxWidescreenHack($0) },
+          Toggle(L("Widescreen Hack"), isOn: $widescreenHack.onSet { DOLConfigBridge.setGfxWidescreenHack($0) }),
           L("Forces 16:9 in games that only render 4:3. Can stretch HUDs or break some games; leave off for natively-widescreen titles."))
         settingsCaption(
-          Toggle(L("HDR Output"), isOn: $hdrOutput)
-            .onChange(of: hdrOutput) { DOLConfigBridge.setGfxEnhanceHDROutput($0) },
+          Toggle(L("HDR Output"), isOn: $hdrOutput.onSet { DOLConfigBridge.setGfxEnhanceHDROutput($0) }),
           L("Outputs in HDR on capable displays. Most games are SDR, so the effect is subtle; harmless to leave off."))
         settingsCaption(
-          Toggle(L("GPU Texture Decoding"), isOn: $gpuTextureDecoding)
-            .onChange(of: gpuTextureDecoding) { DOLConfigBridge.setGfxEnableGPUTextureDecoding($0) },
+          Toggle(L("GPU Texture Decoding"), isOn: $gpuTextureDecoding.onSet { DOLConfigBridge.setGfxEnableGPUTextureDecoding($0) }),
           L("Decodes textures on the GPU instead of the CPU. Moves work off the bottleneck thread, so it can help CPU-bound titles that stream many textures. iCube already ships a NEON CPU decoder (Config ▸ Advanced) as the default fast path."))
       }, header: { Text(L("Enhancements")) })
       Section(content: {
         settingsCaption(
-          Toggle(L("Disable Fog"), isOn: $disableFog)
-            .onChange(of: disableFog) { DOLConfigBridge.setGfxDisableFog($0) },
+          Toggle(L("Disable Fog"), isOn: $disableFog.onSet { DOLConfigBridge.setGfxDisableFog($0) }),
           L("Removes distance fog. Can improve visibility but breaks the intended look and a few effects. Leave off normally."))
         settingsCaption(
-          Toggle(L("Arbitrary Mipmap Detection"), isOn: $arbitraryMipmapDetection)
-            .onChange(of: arbitraryMipmapDetection) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetection($0) },
+          Toggle(L("Arbitrary Mipmap Detection"), isOn: $arbitraryMipmapDetection.onSet { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetection($0) }),
           L("Detects games that abuse mipmaps for special effects and renders them correctly. Leave on unless a game looks wrong."))
         if arbitraryMipmapDetection {
           VStack(alignment: .leading, spacing: 8) {
@@ -157,15 +146,16 @@ struct GraphicsEnhancementsView: View {
             TVIntStepper(
               value: Binding(
                 get: { Int(arbitraryMipmapThreshold * 10) },
-                set: { arbitraryMipmapThreshold = Double($0) / 10.0 }
+                set: { tenths in
+                  arbitraryMipmapThreshold = Double(tenths) / 10.0
+                  DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float(arbitraryMipmapThreshold))
+                }
               ),
               range: 0...300,
               step: 1
             )
-            .onChange(of: arbitraryMipmapThreshold) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float($0)) }
 #else
-            Slider(value: $arbitraryMipmapThreshold, in: 0.0...30.0, step: 0.1)
-              .onChange(of: arbitraryMipmapThreshold) { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float($0)) }
+            Slider(value: $arbitraryMipmapThreshold.onSet { DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float($0)) }, in: 0.0 ... 30.0, step: 0.1)
 #endif
             Text(L("Sensitivity of arbitrary-mipmap detection. Leave at the default unless a game's textures look wrong."))
               .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -185,7 +175,8 @@ struct GraphicsEnhancementsView: View {
   }
   private func sync() {
     efbMaxScale = max(1, DOLConfigBridge.gfxEfbMaxScale())
-    efbScale = DOLConfigBridge.gfxEfbScale()
+    // The user's own scale (Base), not an Auto-IR / thermal CurrentRun override: this row edits Base.
+    efbScale = DOLConfigBridge.gfxEfbScaleBase()
     efbAutoOverridden = DOLConfigBridge.isEfbScaleAutoOverridden()
     anisotropy = DOLConfigBridge.gfxEnhanceAnisotropySamples()
     msaa = normalizedMsaa(DOLConfigBridge.gfxMsaa())

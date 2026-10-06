@@ -59,37 +59,37 @@ struct GraphicsAdvancedView: View {
     List {
       Section(header: Text(L("Performance Statistics")), footer: Text(L("These overlays can also be toggled in-game from the pause menu."))) {
         settingsCaption(
-          Toggle(L("Show FPS"), isOn: $showFPS).onChange(of: showFPS) { _ in DOLConfigBridge.setGfxShowFPS(showFPS) },
+          Toggle(L("Show FPS"), isOn: $showFPS.onSet { DOLConfigBridge.setGfxShowFPS($0) }),
           L("Frames per second actually presented to the display."))
         settingsCaption(
-          Toggle(L("Show VPS"), isOn: $showVPS).onChange(of: showVPS) { _ in DOLConfigBridge.setGfxShowVPS(showVPS) },
+          Toggle(L("Show VPS"), isOn: $showVPS.onSet { DOLConfigBridge.setGfxShowVPS($0) }),
           L("Emulated video interrupts per second — the game's internal frame rate."))
         settingsCaption(
-          Toggle(L("Show Speed"), isOn: $showSpeed).onChange(of: showSpeed) { _ in DOLConfigBridge.setGfxShowSpeed(showSpeed) },
+          Toggle(L("Show Speed"), isOn: $showSpeed.onSet { DOLConfigBridge.setGfxShowSpeed($0) }),
           L("Emulation speed as a percentage of full speed."))
         settingsCaption(
-          Toggle(L("Show Frame Times"), isOn: $showFrameTimes).onChange(of: showFrameTimes) { _ in DOLConfigBridge.setGfxShowFTimes(showFrameTimes) },
+          Toggle(L("Show Frame Times"), isOn: $showFrameTimes.onSet { DOLConfigBridge.setGfxShowFTimes($0) }),
           L("Per-frame render time in milliseconds. Useful for spotting hitches."))
         settingsCaption(
-          Toggle(L("Show VBlank Times"), isOn: $showVBlankTimes).onChange(of: showVBlankTimes) { _ in DOLConfigBridge.setGfxShowVTimes(showVBlankTimes) },
+          Toggle(L("Show VBlank Times"), isOn: $showVBlankTimes.onSet { DOLConfigBridge.setGfxShowVTimes($0) }),
           L("Time between emulated vertical-blank interrupts."))
         settingsCaption(
-          Toggle(L("Show Graphs"), isOn: $showGraphs).onChange(of: showGraphs) { _ in DOLConfigBridge.setGfxShowGraphs(showGraphs) },
+          Toggle(L("Show Graphs"), isOn: $showGraphs.onSet { DOLConfigBridge.setGfxShowGraphs($0) }),
           L("Draws the timing stats as live graphs instead of numbers."))
         settingsCaption(
-          Toggle(L("Log Render Time to File"), isOn: $logRenderTime).onChange(of: logRenderTime) { _ in DOLConfigBridge.setGfxLogRenderTimeToFile(logRenderTime) },
+          Toggle(L("Log Render Time to File"), isOn: $logRenderTime.onSet { DOLConfigBridge.setGfxLogRenderTimeToFile($0) }),
           L("Writes per-frame render times to a log file for offline analysis."))
         settingsCaption(
-          Toggle(L("Speed Colors"), isOn: $speedColors).onChange(of: speedColors) { _ in DOLConfigBridge.setGfxShowSpeedColors(speedColors) },
+          Toggle(L("Speed Colors"), isOn: $speedColors.onSet { DOLConfigBridge.setGfxShowSpeedColors($0) }),
           L("Color-codes the speed readout (green = full speed, red = slow)."))
       }
 
       Section(header: Text(L("Debugging"))) {
         settingsCaption(
-          Toggle(L("Overlay Stats"), isOn: $overlayStats).onChange(of: overlayStats) { _ in DOLConfigBridge.setGfxOverlayStats(overlayStats) },
+          Toggle(L("Overlay Stats"), isOn: $overlayStats.onSet { DOLConfigBridge.setGfxOverlayStats($0) }),
           L("Detailed rendering statistics overlay for developers."))
         settingsCaption(
-          Toggle(L("API Validation Layer"), isOn: $validationLayer).onChange(of: validationLayer) { _ in DOLConfigBridge.setGfxEnableValidationLayer(validationLayer) },
+          Toggle(L("API Validation Layer"), isOn: $validationLayer.onSet { DOLConfigBridge.setGfxEnableValidationLayer($0) }),
           L("Extra graphics-API error checking. For debugging only — reduces performance. Leave off."))
       }
 
@@ -99,97 +99,92 @@ struct GraphicsAdvancedView: View {
             Text(L("Compiler Threads"))
             Spacer()
 #if os(tvOS)
-            TVIntStepper(value: $compilerThreads, range: 1...maxThreads, step: 1)
+            TVIntStepper(value: $compilerThreads.onSet { v in DOLConfigBridge.setGfxShaderCompilerThreads(v) }, range: 1 ... maxThreads, step: 1)
 #else
-            Stepper(value: $compilerThreads, in: 1...maxThreads) { Text("\(compilerThreads)") }
+            Stepper(value: $compilerThreads.onSet { v in DOLConfigBridge.setGfxShaderCompilerThreads(v) }, in: 1 ... maxThreads) { Text("\(compilerThreads)") }
 #endif
-          }
-          .onChange(of: compilerThreads) { v in DOLConfigBridge.setGfxShaderCompilerThreads(v) },
+          },
           L("CPU threads used to compile shaders on demand. More can reduce stutter but competes with the emulated CPU. 2–4 is a good range."))
         settingsCaption(
           HStack {
             Text(L("Precompiler Threads"))
             Spacer()
 #if os(tvOS)
-            TVIntStepper(value: $precompilerThreads, range: 1...maxThreads, step: 1)
+            TVIntStepper(value: $precompilerThreads.onSet { v in DOLConfigBridge.setGfxShaderPrecompilerThreads(v) }, range: 1 ... maxThreads, step: 1)
 #else
-            Stepper(value: $precompilerThreads, in: 1...maxThreads) { Text("\(precompilerThreads)") }
+            Stepper(value: $precompilerThreads.onSet { v in DOLConfigBridge.setGfxShaderPrecompilerThreads(v) }, in: 1 ... maxThreads) { Text("\(precompilerThreads)") }
 #endif
-          }
-          .onChange(of: precompilerThreads) { v in DOLConfigBridge.setGfxShaderPrecompilerThreads(v) },
+          },
           L("Threads used to pre-build shaders before a game starts."))
       }
 
       Section(header: Text(L("Utility"))) {
         settingsCaption(
-          Toggle(L("Load Custom Textures"), isOn: $hiresTextures).onChange(of: hiresTextures) { _ in DOLConfigBridge.setGfxHiresTextures(hiresTextures) },
+          Toggle(L("Load Custom Textures"), isOn: $hiresTextures.onSet { DOLConfigBridge.setGfxHiresTextures($0) }),
           L("Loads installed high-resolution texture packs in place of the originals."))
         settingsCaption(
-          Toggle(L("Prefetch Custom Textures"), isOn: $prefetchTextures)
-            .disabled(!hiresTextures)
-            .onChange(of: prefetchTextures) { _ in DOLConfigBridge.setGfxCacheHiresTextures(prefetchTextures) },
+          Toggle(L("Prefetch Custom Textures"), isOn: $prefetchTextures.onSet { DOLConfigBridge.setGfxCacheHiresTextures($0) })
+            .disabled(!hiresTextures),
           L("Loads all custom textures into memory up front for smoother play, at higher memory use."))
         settingsCaption(
-          Toggle(L("Disable EFB Copy to VRAM"), isOn: $disableEfbToVRAM).onChange(of: disableEfbToVRAM) { _ in DOLConfigBridge.setGfxHackDisableCopyToVRAM(disableEfbToVRAM) },
+          Toggle(L("Disable EFB Copy to VRAM"), isOn: $disableEfbToVRAM.onSet { DOLConfigBridge.setGfxHackDisableCopyToVRAM($0) }),
           L("Forces framebuffer copies through RAM instead of VRAM. Slower; only for rare compatibility cases."))
         settingsCaption(
-          Toggle(L("Enable Graphics Mods"), isOn: $graphicsMods).onChange(of: graphicsMods) { _ in DOLConfigBridge.setGfxModsEnable(graphicsMods) },
+          Toggle(L("Enable Graphics Mods"), isOn: $graphicsMods.onSet { DOLConfigBridge.setGfxModsEnable($0) }),
           L("Enables community-created graphics mods for supported games."))
       }
 
       Section(header: Text(L("Misc"))) {
         settingsCaption(
-          Toggle(L("Crop"), isOn: $cropPicture).onChange(of: cropPicture) { _ in DOLConfigBridge.setGfxCrop(cropPicture) },
+          Toggle(L("Crop"), isOn: $cropPicture.onSet { DOLConfigBridge.setGfxCrop($0) }),
           L("Crops the black borders some games render around the picture."))
         settingsCaption(
-          Toggle(L("Progressive Scan"), isOn: $progressiveScan).onChange(of: progressiveScan) { _ in DOLConfigBridge.setSysconfProgressiveScan(progressiveScan) },
+          Toggle(L("Progressive Scan"), isOn: $progressiveScan.onSet { DOLConfigBridge.setSysconfProgressiveScan($0) }),
           L("Enables 480p progressive output for games that support it, reducing flicker."))
       }
 
       Section(header: Text(L("Rendering"))) {
         settingsCaption(
-          Toggle(L("Fast Depth Calculation"), isOn: $fastDepth).onChange(of: fastDepth) { DOLConfigBridge.setGfxFastDepthCalc($0) },
+          Toggle(L("Fast Depth Calculation"), isOn: $fastDepth.onSet { DOLConfigBridge.setGfxFastDepthCalc($0) }),
           L("Uses a faster, less precise depth formula. Small speed win; can cause depth glitches in a few games. Recommended on."))
         settingsCaption(
-          Toggle(L("Per-Pixel Lighting"), isOn: $pixelLighting).onChange(of: pixelLighting) { DOLConfigBridge.setGfxEnablePixelLighting($0) },
+          Toggle(L("Per-Pixel Lighting"), isOn: $pixelLighting.onSet { DOLConfigBridge.setGfxEnablePixelLighting($0) }),
           L("Computes lighting per pixel for smoother shading, at a GPU cost. Off matches original hardware."))
         settingsCaption(
-          Toggle(L("Backend Multithreading"), isOn: $backendMT).onChange(of: backendMT) { DOLConfigBridge.setGfxBackendMultithreading($0) },
+          Toggle(L("Backend Multithreading"), isOn: $backendMT.onSet { DOLConfigBridge.setGfxBackendMultithreading($0) }),
           L("Lets the Metal video backend record/submit draw commands on a worker thread (host-side rendering optimization; unrelated to emulation threading)."))
         settingsCaption(
-          Toggle(L("Enable Shader Cache"), isOn: $shaderCache).onChange(of: shaderCache) { DOLConfigBridge.setGfxShaderCache($0) },
+          Toggle(L("Enable Shader Cache"), isOn: $shaderCache.onSet { DOLConfigBridge.setGfxShaderCache($0) }),
           L("Saves compiled shaders to disk so they aren't rebuilt every launch. Recommended on."))
         settingsCaption(
-          Toggle(L("Save Texture Cache to State"), isOn: $saveTexCache).onChange(of: saveTexCache) { DOLConfigBridge.setGfxSaveTextureCacheToState($0) },
+          Toggle(L("Save Texture Cache to State"), isOn: $saveTexCache.onSet { DOLConfigBridge.setGfxSaveTextureCacheToState($0) }),
           L("Includes the texture cache in save states for more accurate restores, at larger state files."))
         settingsCaption(
-          Toggle(L("Prefer Vertex Shader for Line/Point Expansion"), isOn: $preferVSForLines).onChange(of: preferVSForLines) { DOLConfigBridge.setGfxPreferVSForLinePointExpansion($0) },
+          Toggle(L("Prefer Vertex Shader for Line/Point Expansion"), isOn: $preferVSForLines.onSet { DOLConfigBridge.setGfxPreferVSForLinePointExpansion($0) }),
           L("Expands lines and points in a vertex shader instead of a geometry shader. Can be faster on some GPUs."))
         settingsCaption(
-          Toggle(L("CPU Culling"), isOn: $cpuCull).onChange(of: cpuCull) { DOLConfigBridge.setGfxCpuCull($0) },
+          Toggle(L("CPU Culling"), isOn: $cpuCull.onSet { DOLConfigBridge.setGfxCpuCull($0) }),
           L("Culls off-screen geometry on the CPU. Usually a net loss on the CPU-bound path; leave off unless GPU-limited."))
       }
 
       Section(header: Text(L("Experimental")), footer: Text(L("⚠️ Experimental — may cause instability or glitches in some games."))) {
         settingsCaption(
-          Toggle(L("Defer EFB Cache Invalidation"), isOn: $deferEfbInvalidation).onChange(of: deferEfbInvalidation) { _ in DOLConfigBridge.setGfxHackEfbDeferInvalidation(deferEfbInvalidation) },
+          Toggle(L("Defer EFB Cache Invalidation"), isOn: $deferEfbInvalidation.onSet { DOLConfigBridge.setGfxHackEfbDeferInvalidation($0) }),
           L("Delays invalidating cached framebuffer copies. Can speed things up but may show stale graphics."))
         settingsNavCaption(
-          destination: MetalTriStatePicker(selected: $usePresentDrawable, title: L("Use Present Drawable"),
+          destination: MetalTriStatePicker(selected: $usePresentDrawable.onSet { DOLConfigBridge.setGfxMtlUsePresentDrawable($0) }, title: L("Use Present Drawable"),
                                             setter: { DOLConfigBridge.setGfxMtlUsePresentDrawable($0) }),
           L("Metal present path. Auto uses the presentDrawable path when VSync is active (correct for most). Force On/Off to A/B present latency vs stability.")
         ) {
           Text("\(L("Use Present Drawable")): \(metalTriStateLabel(usePresentDrawable))")
         }
-        .onChange(of: usePresentDrawable) { DOLConfigBridge.setGfxMtlUsePresentDrawable($0) }
         settingsNavCaption(
-          destination: MetalTriStatePicker(selected: $manuallyUploadBuffers, title: L("Manually Upload Buffers"),
+          destination: MetalTriStatePicker(selected: $manuallyUploadBuffers.onSet { DOLConfigBridge.setGfxMtlManuallyUploadBuffers($0) }, title: L("Manually Upload Buffers"),
                                             setter: { DOLConfigBridge.setGfxMtlManuallyUploadBuffers($0) }),
           L("Metal buffer upload strategy (managed vs shared). Auto detects unified memory and is correct on Apple Silicon; override only for benchmarking.")
         ) {
           Text("\(L("Manually Upload Buffers")): \(metalTriStateLabel(manuallyUploadBuffers))")
         }
-        .onChange(of: manuallyUploadBuffers) { DOLConfigBridge.setGfxMtlManuallyUploadBuffers($0) }
       }
     }
     .navigationTitle(L("Advanced"))

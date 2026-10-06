@@ -63,12 +63,10 @@ struct ConfigInterfaceView: View {
     List {
       Section(header: Text(L("Game List"))) {
         settingsCaption(
-          Toggle(L("Use Built-In Database of Game Names"), isOn: $useNamesDB)
-            .onChange(of: useNamesDB) { DOLConfigBridge.setMainUseBuiltInTitleDatabase($0) },
+          Toggle(L("Use Built-In Database of Game Names"), isOn: $useNamesDB.onSet { DOLConfigBridge.setMainUseBuiltInTitleDatabase($0) }),
           L("Replaces raw disc IDs with proper game titles from the built-in database."))
         settingsCaption(
-          Toggle(L("Download Game Covers from GameTDB.com for Use in Grid Mode"), isOn: $useCovers)
-            .onChange(of: useCovers) { DOLConfigBridge.setMainUseGameCovers($0) },
+          Toggle(L("Download Game Covers from GameTDB.com for Use in Grid Mode"), isOn: $useCovers.onSet { DOLConfigBridge.setMainUseGameCovers($0) }),
           L("Fetches box art from GameTDB.com over the network (once per game) for grid view. Turn off to stay fully offline."))
       }
 
@@ -95,16 +93,13 @@ struct ConfigInterfaceView: View {
 
       Section(header: Text(L("General"))) {
         settingsCaption(
-          Toggle(L("Confirm on Stop"), isOn: $confirmOnStop)
-            .onChange(of: confirmOnStop) { DOLConfigBridge.setMainConfirmOnStop($0) },
+          Toggle(L("Confirm on Stop"), isOn: $confirmOnStop.onSet { DOLConfigBridge.setMainConfirmOnStop($0) }),
           L("Asks before quitting a running game so you don't lose unsaved progress."))
         settingsCaption(
-          Toggle(L("Use Panic Handlers"), isOn: $usePanicHandlers)
-            .onChange(of: usePanicHandlers) { DOLConfigBridge.setMainUsePanicHandlers($0) },
+          Toggle(L("Use Panic Handlers"), isOn: $usePanicHandlers.onSet { DOLConfigBridge.setMainUsePanicHandlers($0) }),
           L("Shows a dialog when the core hits an internal error instead of failing silently."))
         settingsCaption(
-          Toggle(L("Show On-Screen Display Messages"), isOn: $osdMessages)
-            .onChange(of: osdMessages) { DOLConfigBridge.setMainOSDMessages($0) },
+          Toggle(L("Show On-Screen Display Messages"), isOn: $osdMessages.onSet { DOLConfigBridge.setMainOSDMessages($0) }),
           L("Transient status overlays drawn over the game (save-state notices, performance toggles)."))
       }
     }
