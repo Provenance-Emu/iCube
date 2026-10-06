@@ -148,7 +148,13 @@ const Info<ShaderCompilationMode> GFX_SHADER_COMPILATION_MODE{
     // compiled measured equal (docs/perf/2026-09-26-default-settings-matrix.md); the cost is a
     // longer boot compile and brief ubershader frames on new materials. Exclusive ubershaders
     // measured ~4.5 % slower and stay opt-in.
-    {System::GFX, "Settings", "ShaderCompilationMode"}, ShaderCompilationMode::AsynchronousUberShaders};
+    // Desktop frontends keep upstream's Specialized default (DolphinQt labels it "Default").
+    {System::GFX, "Settings", "ShaderCompilationMode"},
+#ifdef IPHONEOS
+    ShaderCompilationMode::AsynchronousUberShaders};
+#else
+    ShaderCompilationMode::Synchronous};
+#endif
 const Info<int> GFX_SHADER_COMPILER_THREADS{{System::GFX, "Settings", "ShaderCompilerThreads"}, 1};
 const Info<int> GFX_SHADER_PRECOMPILER_THREADS{
     {System::GFX, "Settings", "ShaderPrecompilerThreads"}, -1};
