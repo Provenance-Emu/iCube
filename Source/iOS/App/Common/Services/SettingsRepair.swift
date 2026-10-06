@@ -172,9 +172,10 @@ final class SettingsRepair: NSObject {
 
   /// Runs the repair once per install version. The version is recorded last, after the config is
   /// saved and the defaults are cleaned, so a launch that dies part-way repeats the repair on the
-  /// next launch; the rules are idempotent, so a second pass deletes nothing more. (Config::Save
-  /// reports no failure, so "saved" means the save ran, not that the write was verified.) Touches
-  /// only Base-layer config keys and the defaults above, never save states, NAND, game files,
+  /// next launch; the rules are idempotent, so a second pass deletes nothing more. Config::Save
+  /// reports no failure, so the version is recorded only when the files read back from disk hold
+  /// nothing the rules would still delete; otherwise the next launch tries again. Touches only
+  /// Base-layer config keys and the defaults above, never save states, NAND, game files,
   /// controller profiles or touch layouts. Returns whether it ran.
   @discardableResult
   static func runIfNeeded(defaults: UserDefaults, config: SettingsRepairConfigStore, fastmemAvailable: Bool,
@@ -185,11 +186,18 @@ final class SettingsRepair: NSObject {
                                   afterVersion: previousVersion, configRules: configRules)
     let deleted = config.deleteBaseKeys(doomed)
     config.save()
+    let unsaved = baseKeysToDelete(config.savedBaseSnapshot(), fastmemAvailable: fastmemAvailable,
+                                   afterVersion: previousVersion, configRules: configRules)
     let removedDefaults = cleanUserDefaults(defaults, afterVersion: previousVersion)
-    defaults.set(version, forKey: versionKey)
     for key in deleted.keys.sorted() {
       NSLog("[SettingsRepair] deleted %@ (was %@)", key, deleted[key] ?? "")
     }
+    guard unsaved.isEmpty else {
+      NSLog("[SettingsRepair] v%ld -> v%ld not recorded: the saved config still holds %@; retrying next launch",
+            previousVersion, version, unsaved.joined(separator: ", "))
+      return true
+    }
+    defaults.set(version, forKey: versionKey)
     NSLog("[SettingsRepair] v%ld -> v%ld: %ld config keys deleted, %ld defaults removed",
           previousVersion, version, deleted.count, removedDefaults.count)
     SentryTelemetryService.recordSettingsRepair(version: version, deleted: deleted,
@@ -242,10 +250,13 @@ protocol SettingsRepairConfigStore {
   func deleteBaseKeys(_ keys: [String]) -> [String: String]
   /// Writes the Base layer to disk.
   func save()
+  /// What the config files on disk hold now, keyed like `baseSnapshot`.
+  func savedBaseSnapshot() -> [String: String]
 }
 
 struct BridgeSettingsRepairConfigStore: SettingsRepairConfigStore {
   func baseSnapshot() -> [String: String] { DOLConfigBridge.baseLayerSnapshot() }
   func deleteBaseKeys(_ keys: [String]) -> [String: String] { DOLConfigBridge.deleteBaseLayerKeys(keys) }
   func save() { DOLConfigBridge.flushSettingsToDisk() }
+  func savedBaseSnapshot() -> [String: String] { DOLConfigBridge.savedBaseConfigSnapshot() }
 }

@@ -177,6 +177,8 @@ final class SettingsRepairTests: XCTestCase {
 
   override func tearDown() {
     UserDefaults().removePersistentDomain(forName: suiteName)
+    // Leave no unsaved Base layer behind (see SettingsWriteBackTests.tearDown).
+    DOLConfigBridge.flushSettingsToDisk()
     super.tearDown()
   }
 
@@ -208,9 +210,16 @@ final class SettingsRepairTests: XCTestCase {
 
   private final class FakeStore: SettingsRepairConfigStore {
     var base: [String: String]
+    /// What the files on disk hold: `base` as of the last save that reached the disk.
+    var disk: [String: String]
+    /// false: save() runs but the write never lands (a full disk, say).
+    var saveReachesDisk = true
     var saves = 0
     var onSave: () -> Void = {}
-    init(_ base: [String: String]) { self.base = base }
+    init(_ base: [String: String]) {
+      self.base = base
+      disk = base
+    }
 
     func baseSnapshot() -> [String: String] { base }
 
@@ -222,8 +231,11 @@ final class SettingsRepairTests: XCTestCase {
 
     func save() {
       saves += 1
+      if saveReachesDisk { disk = base }
       onSave()
     }
+
+    func savedBaseSnapshot() -> [String: String] { disk }
   }
 
   func testRunsOnceAndRecordsTheVersionOnlyAfterSaving() {
@@ -258,6 +270,24 @@ final class SettingsRepairTests: XCTestCase {
     XCTAssertEqual(defaults.integer(forKey: SettingsRepair.versionKey), SettingsRepair.currentVersion)
   }
 
+  /// Config::Save reports no failure. When the deletions never reach the disk, the version stays
+  /// unrecorded so the next launch, which loads the old file again, repeats the repair.
+  func testAFailedSaveIsRetriedOnTheNextLaunch() {
+    let store = FakeStore(["Dolphin.Core.CIRDynLinking": "False", "Dolphin.Core.CPUThread": "True"])
+    store.saveReachesDisk = false
+
+    XCTAssertTrue(SettingsRepair.runIfNeeded(defaults: defaults, config: store, fastmemAvailable: true))
+    XCTAssertEqual(store.saves, 1)
+    XCTAssertEqual(defaults.integer(forKey: SettingsRepair.versionKey), 0)
+
+    // The next launch reloads what the disk still holds; this time the save lands.
+    store.base = store.disk
+    store.saveReachesDisk = true
+    XCTAssertTrue(SettingsRepair.runIfNeeded(defaults: defaults, config: store, fastmemAvailable: true))
+    XCTAssertEqual(store.disk, ["Dolphin.Core.CPUThread": "True"])
+    XCTAssertEqual(defaults.integer(forKey: SettingsRepair.versionKey), SettingsRepair.currentVersion)
+  }
+
   /// A later rule runs once on installs that already ran v1, and the v1 rules do not run again:
   /// after v1 a key they match is the user's own choice.
   func testAVersionBumpRunsOnlyTheNewRules() {
@@ -289,12 +319,34 @@ final class SettingsRepairTests: XCTestCase {
 
   // MARK: - Live config (the test host's Base layer)
 
-  /// The host app ran the repair and then the launch seeds; the resulting Base layer must already
-  /// be clean, or the rules and the seeds disagree.
-  func testTheLaunchedHostsBaseLayerNeedsNoRepair() {
-    let doomed = SettingsRepair.baseKeysToDelete(DOLConfigBridge.baseLayerSnapshot(),
-                                                 fastmemAvailable: FastmemManager.shared().fastmemAvailable)
-    XCTAssertEqual(doomed, [])
+  /// The launch seeds must never write a value the rules delete, or the two fight on every
+  /// install. Starts from a Base layer without any key a rule looks at, whatever the simulator's
+  /// stored Dolphin.ini holds, seeds it the way a launch does and checks the rules pass it.
+  func testTheLaunchSeedsNeedNoRepair() {
+    let fastmem = FastmemManager.shared().fastmemAvailable
+    let everyRuleKey = SettingsRepair.configRules.map {
+      SettingsRepair.ConfigRule(key: $0.key, prefix: $0.prefix, condition: .always, since: $0.since)
+    }
+    let clockKeys = SettingsRepair.clockRules.flatMap { [$0.clock, $0.enable] }
+    let ruled = SettingsRepair.baseKeysToDelete(DOLConfigBridge.baseLayerSnapshot(), fastmemAvailable: fastmem,
+                                                configRules: everyRuleKey, clockRules: [])
+    DOLConfigBridge.deleteBaseLayerKeys(ruled + clockKeys)
+
+    DolphinCoreService.seedLaunchDefaults(fastmemAvailable: fastmem)
+
+    XCTAssertEqual(SettingsRepair.baseKeysToDelete(DOLConfigBridge.baseLayerSnapshot(), fastmemAvailable: fastmem), [])
+  }
+
+  /// The read-back the repair trusts instead of Config::Save: a Base value, once saved, is in the
+  /// on-disk snapshot under the same key.
+  func testTheSavedSnapshotReadsBackTheFiles() {
+    DOLConfigBridge.setCirDynTargetCache(true)
+    DOLConfigBridge.flushSettingsToDisk()
+    XCTAssertEqual(DOLConfigBridge.savedBaseConfigSnapshot()["Dolphin.Core.CIRDynTargetCache"], "True")
+
+    DOLConfigBridge.deleteBaseLayerKeys(["Dolphin.Core.CIRDynTargetCache"])
+    DOLConfigBridge.flushSettingsToDisk()
+    XCTAssertNil(DOLConfigBridge.savedBaseConfigSnapshot()["Dolphin.Core.CIRDynTargetCache"])
   }
 
   func testBridgeSnapshotAndDeleteRoundTrip() {

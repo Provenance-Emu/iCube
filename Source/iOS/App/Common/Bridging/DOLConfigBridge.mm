@@ -35,6 +35,9 @@
 #include "Common/StringUtil.h"
 #import "FastmemManager.h"
 
+#include "Common/FileUtil.h"
+#include "Common/IniFile.h"
+
 // Extern DSU client RX counter for DEBUG HUD (defined in DualShockUDPClient.cpp)
 namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g_rx_counter; } }
 
@@ -189,7 +192,8 @@ static DOLConfigOverride OverrideFor(const Config::Info<T>& info)
 }
 
 // A clock and its enable key: the first one overridden decides the badge.
-static DOLConfigOverride ClockOverride(const Config::Info<float>& clock, const Config::Info<bool>& enable)
+static DOLConfigOverride ClockOverride(const Config::Info<float>& clock,
+                                       const Config::Info<bool>& enable)
 {
   const DOLConfigOverride clockOverride = OverrideFor(clock);
   return clockOverride != DOLConfigOverrideNone ? clockOverride : OverrideFor(enable);
@@ -207,24 +211,29 @@ public:
 };
 }  // namespace
 
-+ (void)addTestGameLayerWithEfbScale:(NSInteger)scale {
++ (void)addTestGameLayerWithEfbScale:(NSInteger)scale
+{
   if (Config::GetLayer(Config::LayerType::LocalGame))
     return;
   Config::AddLayer(std::make_unique<InMemoryLayerLoader>(Config::LayerType::LocalGame));
   Config::Set(Config::LayerType::LocalGame, Config::GFX_EFB_SCALE, (int)scale);
   Config::Set(Config::LayerType::LocalGame, Config::MAIN_OVERCLOCK_ENABLE, true);
 }
-+ (void)removeTestGameLayer {
++ (void)removeTestGameLayer
+{
   Config::RemoveLayer(Config::LayerType::LocalGame);
 }
 
-+ (DOLConfigOverride)efbScaleOverride {
++ (DOLConfigOverride)efbScaleOverride
+{
   return OverrideFor(Config::GFX_EFB_SCALE);
 }
-+ (DOLConfigOverride)overclockOverride {
++ (DOLConfigOverride)overclockOverride
+{
   return ClockOverride(Config::MAIN_OVERCLOCK, Config::MAIN_OVERCLOCK_ENABLE);
 }
-+ (DOLConfigOverride)viOverclockOverride {
++ (DOLConfigOverride)viOverclockOverride
+{
   return ClockOverride(Config::MAIN_VI_OVERCLOCK, Config::MAIN_VI_OVERCLOCK_ENABLE);
 }
 // Maximum Internal Resolution supported by backend/device
@@ -1065,6 +1074,31 @@ static NSString* BaseLayerKeyName(const Config::Location& location)
   {
     if (value)
       snapshot[BaseLayerKeyName(location)] = [NSString stringWithUTF8String:value->c_str()];
+  }
+  return snapshot;
+}
+
++ (NSDictionary<NSString*, NSString*>*)savedBaseConfigSnapshot
+{
+  NSMutableDictionary<NSString*, NSString*>* snapshot = [NSMutableDictionary dictionary];
+  // The two files the repair rules cover ("Dolphin.*" and "Graphics.*" keys).
+  const std::pair<Config::System, unsigned int> files[] = {
+      {Config::System::Main, F_DOLPHINCONFIG_IDX},
+      {Config::System::GFX, F_GFXCONFIG_IDX},
+  };
+  for (const auto& [system, path_index] : files)
+  {
+    Common::IniFile ini;
+    if (!ini.Load(File::GetUserPath(path_index)))
+      continue;
+    for (const auto& section : ini.GetSections())
+    {
+      for (const auto& [key, value] : section.GetValues())
+      {
+        const Config::Location location{system, section.GetName(), key};
+        snapshot[BaseLayerKeyName(location)] = [NSString stringWithUTF8String:value.c_str()];
+      }
+    }
   }
   return snapshot;
 }

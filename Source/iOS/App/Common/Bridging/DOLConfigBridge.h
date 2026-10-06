@@ -536,6 +536,10 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 // returns the ones that were present, with their old values. Does not save.
 + (NSDictionary<NSString*, NSString*>*)deleteBaseLayerKeys:(NSArray<NSString*>*)keys
     NS_SWIFT_NAME(deleteBaseLayerKeys(_:));
+// What Dolphin.ini and GFX.ini hold on disk right now, keyed like baseLayerSnapshot. Config::Save
+// reports no failure, so SettingsRepair reads the files back to see whether its deletions stuck.
++ (NSDictionary<NSString*, NSString*>*)
+    savedBaseConfigSnapshot NS_SWIFT_NAME(savedBaseConfigSnapshot());
 + (void)resetPageToDefaults:(NSInteger)page NS_SWIFT_NAME(resetPage(toDefaults:)); // 0=config, 1=graphics, 2=controllers, 3=debug, 4=about
 
 // Flush the in-memory Base config layer to disk. Most setters write Base via
