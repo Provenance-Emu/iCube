@@ -180,7 +180,7 @@ final class SettingsRepairTests: XCTestCase {
     super.tearDown()
   }
 
-  func testCleanUserDefaultsRemovesLearnedClocksAndABKeysOnly() {
+  func testCleanUserDefaultsRemovesLearnedClocksAndTheProfilerOnly() {
     defaults.set(0.6, forKey: "adaptive_clock_cpu_GALE01")
     defaults.set(0.8, forKey: "adaptive_clock_vi_GALE01")
     defaults.set(true, forKey: "icube.cirProfile")
@@ -191,9 +191,11 @@ final class SettingsRepairTests: XCTestCase {
 
     let removed = SettingsRepair.cleanUserDefaults(defaults)
 
-    XCTAssertEqual(removed, ["ICubeBenchServerEnabled", "adaptive_clock_cpu_GALE01", "adaptive_clock_vi_GALE01",
-                             "icube.cirProfile", "icube.perfSnapshots"])
+    XCTAssertEqual(removed, ["adaptive_clock_cpu_GALE01", "adaptive_clock_vi_GALE01", "icube.cirProfile"])
     XCTAssertNil(defaults.object(forKey: "adaptive_clock_cpu_GALE01"))
+    // The Perf Test Bench toggle is a user choice and A/B snapshots are user data: both stay.
+    XCTAssertTrue(defaults.bool(forKey: "ICubeBenchServerEnabled"))
+    XCTAssertNotNil(defaults.data(forKey: "icube.perfSnapshots"))
     XCTAssertTrue(defaults.bool(forKey: "adaptive_clock_enable"))
     XCTAssertEqual(defaults.integer(forKey: "adaptive_clock_schema_v"), 5)
   }
