@@ -198,8 +198,27 @@ import simd
   }
 
   /// Standard gravity, used to convert CoreMotion's g-relative acceleration into the
-  /// m/s^2 the core's IMUAccelerometer expects (see `mapAccelToWiimoteFrame`).
+  /// m/s^2 the core's IMUAccelerometer expects (see `wiimoteFrame`).
   static let gravityToMetersPerSecondSquared: Double = 9.80665
+
+  // MARK: IMU mount
+
+  /// The fixed turn (device frame) that makes the grip held at the last baseline read as a level
+  /// Wii Remote: set together with `pointerBaseline`, so Recenter and a rotation re-take both.
+  /// Only touched on the serial motion queue.
+  private var imuMount: simd_quatd?
+  /// Latest `CMDeviceMotion.gravity` (device frame, g), subtracted from the 200 Hz accelerometer in
+  /// the touch pointer modes to keep only the player's own swings. Motion queue only.
+  private var latestGravity: SIMD3<Double>?
+
+  #if DEBUG
+  /// While set, real CoreMotion samples are dropped so an injected pose (debug API) sticks.
+  /// Motion queue only.
+  private var debugPoseHeld = false
+  /// The slot a held debug pose was written to, so releasing it rests that slot even if the
+  /// binding changed meanwhile.
+  private var debugPosePort: Int?
+  #endif
 
   override required init() {
     //
@@ -214,6 +233,13 @@ import simd
       statusBarOrientationChanged()
     }
 
+    // Until the first sample arrives (and forever on a simulator, which has no motion hardware)
+    // the remote rests level instead of keeping whatever the axes held before.
+    operationQueue.addOperation {
+      self.latestGravity = nil
+      self.writeRestingIMU()
+    }
+
     // Set the sensor update times
     // 200Hz is the Wiimote update interval
     let updateInterval: Double = 1.0 / 200.0
@@ -221,77 +247,138 @@ import simd
     motionManager.gyroUpdateInterval = updateInterval
     motionManager.deviceMotionUpdateInterval = 1.0 / 60.0 // Device motion for enhanced features
 
-    // Register the handlers
+    // Register the handlers. These two are the ONLY writers of the IMU axes: the device-motion
+    // handler below only records gravity and the baseline. Two writers at different rates (the
+    // 6DOF path used to write from device motion too) interleave and make the remote jitter.
     motionManager.startAccelerometerUpdates(to: operationQueue) { data, error in
-      if error != nil { return }
-      // Get the data. CMAcceleration's units are G's (gravity included); the core's
-      // IMUAccelerometer expects m/s^2, so scale by standard gravity. No clamping:
-      // the core does not clamp its accelerometer state either.
-      let acceleration = data!.acceleration
-      let mapped = Self.mapAccelToWiimoteFrame(
-        x: acceleration.x * Self.gravityToMetersPerSecondSquared,
-        y: acceleration.y * Self.gravityToMetersPerSecondSquared,
-        z: acceleration.z * Self.gravityToMetersPerSecondSquared,
-        orientation: self.orientation
-      )
-
-      // Check if 6DOF motion mapping is enabled - if so, skip original IMU mappings to avoid conflicts
-      let full6DOFEnabled = MotionSettings.full6DOF()
-      let wiimoteIMUEnabled = MotionSettings.wiimoteIMU()
-      let nunchuckIMUEnabled = MotionSettings.nunchukIMU()
-      let isGyroIRMode = (DOLConfigBridge.mainTouchPadIRMode() == 0)
-
-      // Only use original Wiimote accelerometer mapping if 6DOF is disabled OR Wiimote IMU is disabled
-      if !full6DOFEnabled || !wiimoteIMUEnabled || isGyroIRMode {
-        for (button, value) in Self.wiimoteAccelWrites(x: mapped.x, y: mapped.y, z: mapped.z) {
-          TCManagerInterface.setAxisValueFor(button.rawValue, controller: self.port, value: value)
-        }
-      }
-
-      // Only use original Nunchuk accelerometer mapping if 6DOF is disabled OR Nunchuk IMU is disabled
-      if !full6DOFEnabled || !nunchuckIMUEnabled || isGyroIRMode {
-        for (button, value) in Self.nunchukAccelWrites(x: mapped.x, y: mapped.y, z: mapped.z) {
-          TCManagerInterface.setAxisValueFor(button.rawValue, controller: self.port, value: value)
-        }
-      }
+      guard let data, error == nil, !self.isDebugPoseHeld else { return }
+      let acceleration = data.acceleration
+      self.handleAccelerometer(SIMD3(acceleration.x, acceleration.y, acceleration.z))
     }
 
     motionManager.startGyroUpdates(to: operationQueue) { data, error in
-      if error != nil { return }
-
-      // CMRotationRate's units are already rad/s, which is what the core's
-      // IMUGyroscope expects. No gain, no clamping: the core does not clamp either.
-      let rr = data!.rotationRate
-      let mapped = Self.mapGyroToWiimoteFrame(x: rr.x, y: rr.y, z: rr.z, orientation: self.orientation)
-
-      // Check if 6DOF motion mapping is enabled - if so, skip original gyro mappings to avoid conflicts
-      let full6DOFEnabled = MotionSettings.full6DOF()
-      let wiimoteIMUEnabled = MotionSettings.wiimoteIMU()
-      let isGyroIRMode = (DOLConfigBridge.mainTouchPadIRMode() == 0)
-
-      // Only use original Wiimote gyro mapping if 6DOF is disabled OR Wiimote IMU is disabled
-      if !full6DOFEnabled || !wiimoteIMUEnabled || isGyroIRMode {
-        for (button, value) in Self.wiimoteGyroWrites(pitch: mapped.pitch, roll: mapped.roll, yaw: mapped.yaw) {
-          TCManagerInterface.setAxisValueFor(button.rawValue, controller: self.port, value: value)
-        }
-      }
+      guard let data, error == nil, !self.isDebugPoseHeld else { return }
+      let rate = data.rotationRate
+      self.handleGyro(SIMD3(rate.x, rate.y, rate.z))
     }
 
-    // Enhanced device motion updates for shake detection, IR cursor, and 6DOF motion
+    // Enhanced device motion updates for shake detection, the gyro IR cursor and the IMU baseline
     if motionManager.isDeviceMotionAvailable {
       motionManager.startDeviceMotionUpdates(using: .xMagneticNorthZVertical, to: operationQueue) { motion, error in
-        guard let motion = motion, error == nil else { return }
-
-        self.handleEnhancedMotionFeatures(motion: motion)
+        guard let motion, error == nil, !self.isDebugPoseHeld else { return }
+        self.handleEnhancedMotionFeatures(DeviceMotionSample(motion))
       }
     }
   }
 
-  /// Handle enhanced motion features: shake detection, IR cursor, and 6DOF motion mapping
-  private func handleEnhancedMotionFeatures(motion: CMDeviceMotion) {
+  private var isDebugPoseHeld: Bool {
+    #if DEBUG
+    return debugPoseHeld
+    #else
+    return false
+    #endif
+  }
+
+  /// The accelerometer writes for one raw sample (CoreMotion's units and sign: g, reading the
+  /// gravity vector at rest). Returns what was written, in the remote's frame (m/s^2).
+  @discardableResult
+  private func handleAccelerometer(_ acceleration: SIMD3<Double>) -> (wiimote: SIMD3<Double>, nunchuk: SIMD3<Double>) {
+    let uiOrientation = orientation
+    let policy = Self.currentIMUPolicy()
+    let mount = imuMount(for: uiOrientation)
+    let wiimote = Self.imuAcceleration(
+      source: policy.wiimote, acceleration: acceleration, gravity: latestGravity, mount: mount, orientation: uiOrientation)
+    let nunchuk = Self.imuAcceleration(
+      source: policy.nunchuk, acceleration: acceleration, gravity: latestGravity, mount: mount, orientation: uiOrientation)
+    writeAcceleration(wiimote: wiimote, nunchuk: nunchuk)
+    return (wiimote, nunchuk)
+  }
+
+  /// The gyroscope writes for one raw sample (rad/s, device frame). Returns the remote's
+  /// (pitch, roll, yaw) rates as written.
+  @discardableResult
+  private func handleGyro(_ rate: SIMD3<Double>) -> SIMD3<Double> {
+    let uiOrientation = orientation
+    // Rotation rates are the same whether or not gravity is fed through, but in the phone-tracking
+    // modes they must turn with the same mount as the accelerometer or MotionPlus disagrees with it.
+    let mount = Self.currentIMUPolicy().wiimote == .phone ? imuMount(for: uiOrientation) : nil
+    let rates = Self.imuAngularVelocity(rate, mount: mount, orientation: uiOrientation)
+    for (button, value) in Self.wiimoteGyroWrites(pitch: rates.x, roll: rates.y, yaw: rates.z) {
+      TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
+    }
+    return rates
+  }
+
+  private func writeAcceleration(wiimote: SIMD3<Double>, nunchuk: SIMD3<Double>) {
+    writeAcceleration(wiimote: wiimote, nunchuk: nunchuk, controller: port)
+  }
+
+  private func writeAcceleration(wiimote: SIMD3<Double>, nunchuk: SIMD3<Double>, controller: Int) {
+    for (button, value) in Self.wiimoteAccelWrites(x: wiimote.x, y: wiimote.y, z: wiimote.z) {
+      TCManagerInterface.setAxisValueFor(button.rawValue, controller: controller, value: value)
+    }
+    for (button, value) in Self.nunchukAccelWrites(x: nunchuk.x, y: nunchuk.y, z: nunchuk.z) {
+      TCManagerInterface.setAxisValueFor(button.rawValue, controller: controller, value: value)
+    }
+  }
+
+  /// A level, motionless remote and Nunchuk. The axes keep their last value, so this is written
+  /// whenever motion starts or stops (or the bound slot changes), not left to the last tilt.
+  private func writeRestingIMU() {
+    writeRestingIMU(controller: port)
+  }
+
+  private func writeRestingIMU(controller: Int) {
+    writeAcceleration(wiimote: Self.levelAcceleration, nunchuk: Self.levelAcceleration, controller: controller)
+    for (button, value) in Self.wiimoteGyroWrites(pitch: 0, roll: 0, yaw: 0) {
+      TCManagerInterface.setAxisValueFor(button.rawValue, controller: controller, value: value)
+    }
+  }
+
+  /// The mount for the current orientation, or nil until a baseline exists for it (the static
+  /// mapping applies until the next device-motion sample re-takes it).
+  private func imuMount(for orientation: UIInterfaceOrientation) -> simd_quatd? {
+    pointerBaselineOrientation == orientation ? imuMount : nil
+  }
+
+  /// One device-motion sample, as plain values so the debug API can feed the same path.
+  struct DeviceMotionSample {
+    var attitude: simd_quatd
+    /// Device frame, g, pointing at the ground (CoreMotion's convention).
+    var gravity: SIMD3<Double>
+    var userAcceleration: SIMD3<Double>
+    var rotationRate: SIMD3<Double>
+    var roll = 0.0, pitch = 0.0, yaw = 0.0
+    var timestamp: TimeInterval = 0
+
+    init(attitude: simd_quatd, gravity: SIMD3<Double>, userAcceleration: SIMD3<Double>, rotationRate: SIMD3<Double>) {
+      self.attitude = attitude
+      self.gravity = gravity
+      self.userAcceleration = userAcceleration
+      self.rotationRate = rotationRate
+    }
+
+    init(_ motion: CMDeviceMotion) {
+      let q = motion.attitude.quaternion
+      self.init(
+        attitude: simd_quatd(ix: q.x, iy: q.y, iz: q.z, r: q.w),
+        gravity: SIMD3(motion.gravity.x, motion.gravity.y, motion.gravity.z),
+        userAcceleration: SIMD3(motion.userAcceleration.x, motion.userAcceleration.y, motion.userAcceleration.z),
+        rotationRate: SIMD3(motion.rotationRate.x, motion.rotationRate.y, motion.rotationRate.z))
+      roll = motion.attitude.roll
+      pitch = motion.attitude.pitch
+      yaw = motion.attitude.yaw
+      timestamp = motion.timestamp
+    }
+  }
+
+  /// Handle enhanced motion features: shake detection, the IMU baseline and the gyro IR cursor.
+  /// Returns the gyro pointer written, if any.
+  @discardableResult
+  private func handleEnhancedMotionFeatures(_ motion: DeviceMotionSample) -> (horizontal: Double, vertical: Double)? {
     // Shake statistics are always kept (they feed the debug view); the Wii Remote shake is only
     // fired when enhanced shake detection is on.
-    let shake = updateShakeStatistics(motion: motion)
+    let shake = updateShakeStatistics(userAcceleration: motion.userAcceleration)
     if shake.detected, MotionSettings.enhancedShakeDetection() {
       let currentTime = Date().timeIntervalSinceReferenceDate
       if (currentTime - lastShakeTime) > Self.shakeCooldown {
@@ -300,33 +387,44 @@ import simd
       }
     }
     publishSample(motion: motion, shake: shake)
+    latestGravity = motion.gravity
 
-    // IR cursor mapping (when gyro mode is active)
-    let irMode = DOLConfigBridge.mainTouchPadIRMode()
+    let irMode = Int(DOLConfigBridge.mainTouchPadIRMode())
     if irMode == 0, lastIRMode != 0 {
       recenterPointer()
     }
     lastIRMode = irMode
-    if irMode == 0 {
-      handleIRCursorMapping(motion: motion)
-    }
 
-    // Full 6DOF motion mapping (when not using gyro IR)
-    let full6DOFEnabled = MotionSettings.full6DOF()
-    if irMode != 0, full6DOFEnabled {
-      // Debug logging to verify this is being called
-//      if UserDefaults.standard.bool(forKey: "input_debug") {
-//        NSLog("[MOTION] 6DOF mapping active: IR mode=\(irMode), 6DOF enabled=\(full6DOFEnabled)")
-//      }
-      handle6DOFMotionMapping(motion: motion)
+    // The baseline is the pointer's center AND the IMU mount, taken from the same sample. It is
+    // only consumed when the phone's attitude drives something (gyro pointer, 6DOF Nunchuk), so a
+    // recenter request made in a touch mode waits for a mode that uses it.
+    let uiOrientation = orientation
+    if Self.currentIMUPolicy(irMode: irMode).tracksPhone {
+      rebaselineIfNeeded(motion: motion, orientation: uiOrientation)
+    }
+    guard irMode == 0 else { return nil }
+    return handleIRCursorMapping(attitude: motion.attitude, orientation: uiOrientation)
+  }
+
+  /// Rotating the UI turns the screen's axes against the device's, so recenter on whatever the
+  /// player is holding now rather than reading the old turn along the new axes.
+  /// `pointerBaselineOrientation` is set together with `pointerBaseline`, so nil means no baseline.
+  private func rebaselineIfNeeded(motion: DeviceMotionSample, orientation: UIInterfaceOrientation) {
+    guard Self.needsPointerRebaseline(
+      recenterRequested: takeRecenterRequest(), baselineOrientation: pointerBaselineOrientation,
+      orientation: orientation) else { return }
+    pointerBaseline = motion.attitude
+    pointerBaselineOrientation = orientation
+    imuMount = Self.imuMount(gravity: motion.gravity, orientation: orientation)
+    if UserDefaults.standard.bool(forKey: "input_debug") {
+      NSLog("[MOTION] gyro pointer / IMU baseline orientation=%d", orientation.rawValue)
     }
   }
 
   /// Variance-based shake detection over the recent user-acceleration magnitude (gravity already
   /// removed by CoreMotion). A shake needs both high variance and a high current magnitude.
-  private func updateShakeStatistics(motion: CMDeviceMotion) -> (intensity: Double, detected: Bool) {
-    let userAccel = motion.userAcceleration
-    let magnitude = sqrt(userAccel.x * userAccel.x + userAccel.y * userAccel.y + userAccel.z * userAccel.z)
+  private func updateShakeStatistics(userAcceleration: SIMD3<Double>) -> (intensity: Double, detected: Bool) {
+    let magnitude = simd_length(userAcceleration)
 
     shakeHistory.append(magnitude)
     if shakeHistory.count > Self.shakeHistoryLength {
@@ -341,11 +439,11 @@ import simd
     return (standardDeviation * Self.shakeIntensityScale, detected)
   }
 
-  private func publishSample(motion: CMDeviceMotion, shake: (intensity: Double, detected: Bool)) {
+  private func publishSample(motion: DeviceMotionSample, shake: (intensity: Double, detected: Bool)) {
     var sample = Sample()
-    sample.roll = motion.attitude.roll
-    sample.pitch = motion.attitude.pitch
-    sample.yaw = motion.attitude.yaw
+    sample.roll = motion.roll
+    sample.pitch = motion.pitch
+    sample.yaw = motion.yaw
     sample.rotationX = motion.rotationRate.x
     sample.rotationY = motion.rotationRate.y
     sample.rotationZ = motion.rotationRate.z
@@ -360,39 +458,22 @@ import simd
     sampleLock.unlock()
   }
 
-  /// Map device attitude to IR cursor movement
-  private func handleIRCursorMapping(motion: CMDeviceMotion) {
-    let q = motion.attitude.quaternion
-    let attitude = simd_quatd(ix: q.x, iy: q.y, iz: q.z, r: q.w)
-    // Written on the main thread by statusBarOrientationChanged, behind its lock; read once per
-    // sample.
-    let orientation = self.orientation
-    let useYawForHorizontal = MotionSettings.useYawForHorizontal()
-    let invertRoll = MotionSettings.invertRoll()
-    let invertPitch = MotionSettings.invertPitch()
+  /// Map device attitude to IR cursor movement. Returns the clamped pointer written, or nil
+  /// without a baseline.
+  @discardableResult
+  private func handleIRCursorMapping(
+    attitude: simd_quatd, orientation: UIInterfaceOrientation
+  ) -> (horizontal: Double, vertical: Double)? {
+    guard let baseline = pointerBaseline else { return nil }
     let debug = UserDefaults.standard.bool(forKey: "input_debug")
 
-    // Rotating the UI turns the screen's axes against the device's, so recenter on whatever the
-    // player is holding now rather than reading the old turn along the new axes.
-    // `pointerBaselineOrientation` is set together with `pointerBaseline`, so nil means no baseline.
-    if Self.needsPointerRebaseline(
-      recenterRequested: takeRecenterRequest(), baselineOrientation: pointerBaselineOrientation,
-      orientation: orientation) {
-      pointerBaseline = attitude
-      pointerBaselineOrientation = orientation
-      if debug {
-        NSLog("[MOTION] gyro pointer baseline orientation=%d", orientation.rawValue)
-      }
-    }
-    guard let baseline = pointerBaseline else { return }
-
-    // Read per sample, like the invert keys above, so a change applies without a restart.
+    // Read per sample, like the invert keys below, so a change applies without a restart.
     var (horizontalValue, verticalValue) = Self.gyroPointerOffsets(
       current: attitude, baseline: baseline, orientation: orientation,
-      useYawForHorizontal: useYawForHorizontal, gain: MotionSettings.gyroPointerSensitivity())
+      useYawForHorizontal: MotionSettings.useYawForHorizontal(), gain: MotionSettings.gyroPointerSensitivity())
 
-    if invertRoll { horizontalValue = -horizontalValue }
-    if invertPitch { verticalValue = -verticalValue }
+    if MotionSettings.invertRoll() { horizontalValue = -horizontalValue }
+    if MotionSettings.invertPitch() { verticalValue = -verticalValue }
 
     gyroPointerSampleCount += 1
     if debug, gyroPointerSampleCount % Self.gyroPointerLogInterval == 0 {
@@ -404,50 +485,7 @@ import simd
     for (button, value) in Self.irCursorWrites(horizontal: horizontalValue, vertical: verticalValue) {
       TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
     }
-  }
-
-  /// Map full 6DOF motion to Wiimote/Nunchuck IMU axes
-  private func handle6DOFMotionMapping(motion: CMDeviceMotion) {
-    let wiimoteEnabled = MotionSettings.wiimoteIMU()
-    let nunchuckEnabled = MotionSettings.nunchukIMU()
-
-    guard wiimoteEnabled || nunchuckEnabled else { return }
-
-    // The Wiimote accelerometer must include gravity (that's how the game senses tilt),
-    // so combine gravity + userAcceleration rather than userAcceleration alone, which
-    // has gravity removed. Both are in G's, in the device's own frame (like
-    // CMAccelerometerData), so this is scaled and remapped exactly like the legacy
-    // accelerometer handler above.
-    let gravity = motion.gravity
-    let userAccel = motion.userAcceleration
-    let accel = Self.mapAccelToWiimoteFrame(
-      x: (gravity.x + userAccel.x) * Self.gravityToMetersPerSecondSquared,
-      y: (gravity.y + userAccel.y) * Self.gravityToMetersPerSecondSquared,
-      z: (gravity.z + userAccel.z) * Self.gravityToMetersPerSecondSquared,
-      orientation: orientation
-    )
-
-    if wiimoteEnabled {
-      for (button, value) in Self.wiimoteAccelWrites(x: accel.x, y: accel.y, z: accel.z) {
-        TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
-      }
-
-      // motion.rotationRate is in the device's own frame, like CMGyroData.rotationRate,
-      // so it goes through the same mapping as the legacy gyro handler.
-      let rr = motion.rotationRate
-      let gyro = Self.mapGyroToWiimoteFrame(x: rr.x, y: rr.y, z: rr.z, orientation: orientation)
-      for (button, value) in Self.wiimoteGyroWrites(pitch: gyro.pitch, roll: gyro.roll, yaw: gyro.yaw) {
-        TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
-      }
-    }
-
-    if nunchuckEnabled {
-      for (button, value) in Self.nunchukAccelWrites(x: accel.x, y: accel.y, z: accel.z) {
-        TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
-      }
-
-      // Note: Nunchuk gyro is not available in TCButtonType enum (only accelerometer)
-    }
+    return (max(-1, min(1, horizontalValue)), max(-1, min(1, verticalValue)))
   }
 
   /// Trigger Wiimote shake events
@@ -480,10 +518,23 @@ import simd
       motionManager.stopAccelerometerUpdates()
       motionManager.stopGyroUpdates()
       motionManager.stopDeviceMotionUpdates()
+      // Otherwise the remote stays frozen at its last tilt.
+      operationQueue.addOperation { self.writeRestingIMU() }
     }
   }
 
-  @objc func setPort(_ port: Int) { self.port = port }
+  @objc func setPort(_ port: Int) {
+    guard port != self.port else { return }
+    let previousPort = self.port
+    self.port = port
+    let restNewPort = motionEnabled
+    operationQueue.addOperation {
+      // The old slot keeps its last tilt otherwise, and it comes back if that slot is rebound.
+      self.writeRestingIMU(controller: previousPort)
+      // The new slot has never seen a sample: rest it until the next one.
+      if restNewPort { self.writeRestingIMU(controller: port) }
+    }
+  }
 
   // UIApplicationDidChangeStatusBarOrientationNotification is deprecated...
   @MainActor
@@ -504,80 +555,226 @@ import simd
   // details of this file, not part of any public API, but DolphiniOSTests needs to
   // reach them via `@testable import iCube` to unit test the mapping independently
   // of CoreMotion and the touch controller runtime.
+  //
+  // THE WII REMOTE'S FRAME. The core's IMU groups read `x = Left - Right`,
+  // `y = Backward - Forward`, `z = Up - Down` (IMUAccelerometer.cpp, IMUGyroscope.cpp), and
+  // a level remote at rest reads (0, 0, +1 g) (WiimoteEmu.cpp `GetTotalAcceleration`'s
+  // default). Upstream Android (DolphinSensorEventListener.kt + getNegativeAxes) feeds its
+  // phone axes so that state = (-x, -y, +z) for both the accelerometer and the gyroscope,
+  // with the phone lying face up and its top edge toward the TV: so +x is the remote's LEFT,
+  // +y its BACK (toward the player), +z its TOP (button face), a right-handed frame, with
+  // the accelerometer reading proper acceleration (+1 g up at rest) and the gyroscope
+  // right-handed angular velocity about those same axes.
+  //
+  // THE NEUTRAL GRIP. The player holds the phone like a remote aimed at the TV with the
+  // screen facing them: the remote's front is out of the phone's BACK, its top is the
+  // screen's current up edge and its right the screen's right, in every interface orientation.
+  //
+  // COREMOTION'S SIGN. CMAccelerometerData / CMDeviceMotion acceleration reports the gravity
+  // vector at rest (face up reads z = -1 g), the negative of proper acceleration; rotation
+  // rates are right-handed like Android's. Measured on the core's 10-bit accelerometer
+  // (512 = 0 g) through the old pass-through mapping: face down raw z = +1 read (512,513,616),
+  // the level remote that kept SMG2's pointer; upright portrait raw y = -1 read (521,616,511),
+  // a remote pointing at the floor, and SMG2 hid the pointer.
 
-  /// Rotates a phone-frame vector's X/Y components into the Wiimote's frame for the
-  /// given interface orientation. This is the exact rotation the legacy accelerometer
-  /// handler used. Z (out of the screen) is left to the caller: it passes straight
-  /// through unchanged for every orientation, because gravity relative to "out of the
-  /// screen" doesn't depend on which edge of the UI is currently "up".
-  static func rotateInPlane(x: Double, y: Double, orientation: UIInterfaceOrientation) -> (x: Double, y: Double) {
-    switch orientation {
-    case .portrait, .unknown:
-      return (-x, -y)
-    case .landscapeRight:
-      return (y, -x)
-    case .portraitUpsideDown:
-      return (x, y)
-    case .landscapeLeft:
-      return (-y, x)
-    @unknown default:
-      return (0, 0)
+  /// Where the phone's motion comes from for one IMU.
+  enum IMUSource: Equatable {
+    /// A level remote at rest plus the player's own acceleration (gravity removed): the phone's
+    /// tilt never reaches the game, but swings and shakes do.
+    case level
+    /// The phone's full acceleration (gravity included) through the baseline mount: the remote
+    /// tilts with the phone.
+    case phone
+  }
+
+  struct IMUPolicy: Equatable {
+    var wiimote: IMUSource
+    var nunchuk: IMUSource
+
+    var tracksPhone: Bool { wiimote == .phone || nunchuk == .phone }
+  }
+
+  /// Which IMU follows the phone's tilt.
+  ///
+  /// - Touch pointer modes (follow 1, drag 2, the default): the pointer comes from the screen, so
+  ///   the phone's orientation must never decide whether a game shows it. Games hide the pointer
+  ///   when the remote reads as aimed at the floor or ceiling, which is how every normal grip read
+  ///   before this policy existed. This holds even with Full 6DOF and Wii Remote motion on: both
+  ///   are ON by default (`MotionSettings.defaults`), and that 6DOF path was how most players got
+  ///   the bug, so in a touch mode they cannot tilt the remote.
+  /// - Gyro pointer (0): the phone IS the remote, so the Wii Remote tracks it (baseline-relative).
+  /// - The Nunchuk tracks the phone only with Full 6DOF and Nunchuk motion on (off by default); its
+  ///   tilt never hides the pointer.
+  static func imuPolicy(irMode: Int, full6DOF: Bool, nunchukIMU: Bool) -> IMUPolicy {
+    IMUPolicy(
+      wiimote: irMode == 0 ? .phone : .level,
+      nunchuk: full6DOF && nunchukIMU ? .phone : .level)
+  }
+
+  static func currentIMUPolicy(irMode: Int = Int(DOLConfigBridge.mainTouchPadIRMode())) -> IMUPolicy {
+    imuPolicy(irMode: irMode, full6DOF: MotionSettings.full6DOF(), nunchukIMU: MotionSettings.nunchukIMU())
+  }
+
+  /// What a level remote at rest reads, m/s^2.
+  static let levelAcceleration = SIMD3<Double>(0, 0, gravityToMetersPerSecondSquared)
+
+  /// A device-frame vector expressed in the remote's (left, back, top) frame for the neutral grip
+  /// in `orientation`. Unknown folds into portrait.
+  static func wiimoteFrame(_ vector: SIMD3<Double>, orientation: UIInterfaceOrientation) -> SIMD3<Double> {
+    let axes = screenAxes(for: orientation)
+    return SIMD3(-simd_dot(vector, axes.right), simd_dot(vector, axes.out), simd_dot(vector, axes.up))
+  }
+
+  /// CoreMotion acceleration (g, gravity-vector sign) as proper acceleration in m/s^2.
+  static func properAcceleration(_ coreMotion: SIMD3<Double>) -> SIMD3<Double> {
+    -coreMotion * gravityToMetersPerSecondSquared
+  }
+
+  /// The turn (device frame) that carries the "up" of the grip held at the baseline onto the
+  /// screen's up edge, so that grip reads as a level remote and every later move tilts the remote
+  /// by the same amount, as if it were rigidly strapped to the phone. The shortest such turn adds
+  /// no yaw, and turning about the true vertical afterwards changes nothing.
+  ///
+  /// `gravity` is `CMDeviceMotion.gravity` at the baseline (device frame, toward the ground).
+  static func imuMount(gravity: SIMD3<Double>, orientation: UIInterfaceOrientation) -> simd_quatd {
+    let identity = simd_quatd(ix: 0, iy: 0, iz: 0, r: 1)
+    let length = simd_length(gravity)
+    guard length > 1e-6 else { return identity }
+    let up = -gravity / length
+    let axes = screenAxes(for: orientation)
+    // Upside down (the screen's up edge at the floor): any perpendicular axis works; flip about
+    // the screen's right so the turn stays a pure pitch.
+    if simd_dot(up, axes.up) < -0.9999 {
+      return simd_quatd(angle: .pi, axis: axes.right)
+    }
+    return simd_quatd(from: up, to: axes.up)
+  }
+
+  /// The accelerometer reading for one IMU, in the remote's frame (m/s^2).
+  ///
+  /// - `acceleration`: raw CoreMotion acceleration (g, gravity included, gravity-vector sign).
+  /// - `gravity`: the latest `CMDeviceMotion.gravity`, nil before the first device-motion sample.
+  /// - `mount`: the baseline mount (`imuMount`), nil for the static neutral grip.
+  static func imuAcceleration(
+    source: IMUSource, acceleration: SIMD3<Double>, gravity: SIMD3<Double>?, mount: simd_quatd?,
+    orientation: UIInterfaceOrientation
+  ) -> SIMD3<Double> {
+    switch source {
+    case .phone:
+      let proper = properAcceleration(acceleration)
+      return wiimoteFrame(mount?.act(proper) ?? proper, orientation: orientation)
+    case .level:
+      // Without a gravity estimate there is no telling swing from tilt: rest level.
+      guard let gravity else { return levelAcceleration }
+      return levelAcceleration + wiimoteFrame(properAcceleration(acceleration - gravity), orientation: orientation)
     }
   }
 
-  /// Maps a phone-frame acceleration vector (already in m/s^2, gravity included) into
-  /// the Wiimote's frame, honoring the current interface orientation.
-  static func mapAccelToWiimoteFrame(
-    x: Double, y: Double, z: Double, orientation: UIInterfaceOrientation
-  ) -> (x: Double, y: Double, z: Double) {
-    let (wx, wy) = rotateInPlane(x: x, y: y, orientation: orientation)
-    return (wx, wy, z)
+  /// A device-frame rotation rate (rad/s) as the remote's (pitch, roll, yaw) rates, i.e.
+  /// right-handed about its (left, back, top) axes, through the same mount as the accelerometer.
+  static func imuAngularVelocity(
+    _ rate: SIMD3<Double>, mount: simd_quatd?, orientation: UIInterfaceOrientation
+  ) -> SIMD3<Double> {
+    wiimoteFrame(mount?.act(rate) ?? rate, orientation: orientation)
   }
 
-  /// Maps a phone-frame rotation rate vector (rad/s) into the Wiimote's pitch/roll/yaw,
-  /// honoring the current interface orientation.
-  ///
-  /// Pitch and yaw reuse the legacy gyro handler's orientation switch verbatim (it
-  /// mapped `vert` to pitch and `horiz` to yaw; roll was always written as 0).
-  ///
-  /// Roll is derived, not copied from existing code: rr.x and rr.y are, like the
-  /// accelerometer's x/y, a vector lying in the screen plane, so they transform under
-  /// the same in-plane rotation as accelerometer x/y (`rotateInPlane`). Roll is the
-  /// negated Y component of that same rotation applied to (rr.x, rr.y). That formula
-  /// was picked because it reproduces "portrait roll == +rr.y" exactly while staying
-  /// consistent with how pitch/yaw are permuted across orientations (see the
-  /// implementation notes in the PR/commit this shipped with for the full derivation).
-  /// This has NOT been verified on-device for perceived roll direction in-game; treat
-  /// the sign as provisional until confirmed with a real Wiimote-roll test (e.g. a
-  /// steering game) in each orientation.
-  static func mapGyroToWiimoteFrame(
-    x: Double, y: Double, z: Double, orientation: UIInterfaceOrientation
-  ) -> (pitch: Double, roll: Double, yaw: Double) {
-    let pitch: Double
-    let yaw: Double
+  #if DEBUG
 
-    switch orientation {
-    case .portrait, .unknown:
-      yaw = z
-      pitch = -x
-    case .portraitUpsideDown:
-      yaw = -z
-      pitch = x
-    case .landscapeLeft:
-      yaw = z
-      pitch = -y
-    case .landscapeRight:
-      yaw = -z
-      pitch = y
-    @unknown default:
-      return (0, 0, 0)
+  // MARK: - Debug pose injection
+
+  /// Attitude (CoreMotion reference frame: X right, Y away from the player, Z up) of the phone in
+  /// the neutral grip for `orientation`, reclined by `reclineDegrees` (top edge away from the
+  /// player; 90 = face up, -90 = face down).
+  static func debugHeldAttitude(orientation: UIInterfaceOrientation, reclineDegrees: Double) -> simd_quatd {
+    let axes = screenAxes(for: orientation)
+    let device = simd_double3x3(columns: (axes.right, axes.up, axes.out))
+    let world = simd_double3x3(columns: (SIMD3(1, 0, 0), SIMD3(0, 0, 1), SIMD3(0, -1, 0)))
+    let upright = simd_quatd(world * device.transpose)
+    return simd_quatd(angle: -reclineDegrees * .pi / 180, axis: SIMD3(1, 0, 0)) * upright
+  }
+
+  /// Feeds one pose through the real sample handlers (device motion, then accelerometer and
+  /// gyro) on the motion queue and holds it against real samples until `debugReleasePose()`.
+  func debugInjectPose(
+    attitude: simd_quatd, userAcceleration: SIMD3<Double>, rotationRate: SIMD3<Double>,
+    orientation: UIInterfaceOrientation?, recenter: Bool
+  ) -> [String: Any] {
+    var result: [String: Any] = [:]
+    operationQueue.addOperations([BlockOperation {
+      self.debugPoseHeld = true
+      self.debugPosePort = self.port
+      if let orientation { self.orientation = orientation }
+      if recenter { self.recenterPointer() }
+      let gravity = attitude.inverse.act(SIMD3(0, 0, -1))
+      let pointer = self.handleEnhancedMotionFeatures(DeviceMotionSample(
+        attitude: attitude, gravity: gravity, userAcceleration: userAcceleration, rotationRate: rotationRate))
+      let accel = self.handleAccelerometer(gravity + userAcceleration)
+      let gyro = self.handleGyro(rotationRate)
+      result = [
+        "port": self.port,
+        "orientation": self.orientation.rawValue,
+        "irMode": Int(DOLConfigBridge.mainTouchPadIRMode()),
+        "policy": ["wiimote": "\(Self.currentIMUPolicy().wiimote)", "nunchuk": "\(Self.currentIMUPolicy().nunchuk)"],
+        "deviceGravity": [gravity.x, gravity.y, gravity.z],
+        "wiimoteAccel": [accel.wiimote.x, accel.wiimote.y, accel.wiimote.z],
+        "wiimoteAccel10bit": Self.debugAccel10Bit(accel.wiimote),
+        "nunchukAccel": [accel.nunchuk.x, accel.nunchuk.y, accel.nunchuk.z],
+        "wiimoteGyro": [gyro.x, gyro.y, gyro.z],
+        "gyroPointer": pointer.map { [$0.horizontal, $0.vertical] } as Any,
+      ]
+    }], waitUntilFinished: true)
+    return result
+  }
+
+  /// Writes `acceleration` (m/s^2, remote frame) to the Wii Remote's axes as-is, bypassing every
+  /// mapping, and holds it: reproduces what an older mapping wrote for a pose.
+  func debugWriteRawWiimoteAcceleration(_ acceleration: SIMD3<Double>) -> [String: Any] {
+    operationQueue.addOperations([BlockOperation {
+      self.debugPoseHeld = true
+      self.debugPosePort = self.port
+      for (button, value) in Self.wiimoteAccelWrites(x: acceleration.x, y: acceleration.y, z: acceleration.z) {
+        TCManagerInterface.setAxisValueFor(button.rawValue, controller: self.port, value: value)
+      }
+    }], waitUntilFinished: true)
+    return ["wiimoteAccel": [acceleration.x, acceleration.y, acceleration.z],
+            "wiimoteAccel10bit": Self.debugAccel10Bit(acceleration)]
+  }
+
+  /// Presses touch-controller buttons (`TCButtonType` raw values) on the slot motion is bound to,
+  /// releasing them after `holdSeconds`: drives a game's menus on a simulator, where nobody can
+  /// press A and B together on the overlay.
+  func debugPressButtons(_ buttons: [Int], holdSeconds: TimeInterval) -> [String: Any] {
+    let port = port
+    for button in buttons {
+      TCManagerInterface.setButtonStateFor(button, controller: port, state: true)
     }
-
-    let (_, rotatedY) = rotateInPlane(x: x, y: y, orientation: orientation)
-    let roll = -rotatedY
-
-    return (pitch, roll, yaw)
+    DispatchQueue.main.asyncAfter(deadline: .now() + holdSeconds) {
+      for button in buttons {
+        TCManagerInterface.setButtonStateFor(button, controller: port, state: false)
+      }
+    }
+    return ["port": port, "buttons": buttons]
   }
+
+  /// Lets real samples through again and rests the remote level.
+  func debugReleasePose() {
+    operationQueue.addOperations([BlockOperation {
+      self.debugPoseHeld = false
+      if let posePort = self.debugPosePort, posePort != self.port {
+        self.writeRestingIMU(controller: posePort)
+      }
+      self.debugPosePort = nil
+      self.writeRestingIMU()
+    }], waitUntilFinished: true)
+  }
+
+  /// The core's 10-bit reading (Wii Remote calibration: 512 = 0 g, 616 = 1 g), for comparing with
+  /// the accelerometer bytes a game sees.
+  private static func debugAccel10Bit(_ acceleration: SIMD3<Double>) -> [Int] {
+    let scaled = acceleration * (616 - 512) / gravityToMetersPerSecondSquared
+    return [scaled.x, scaled.y, scaled.z].map { max(0, min(1023, Int(($0 + 512).rounded()))) }
+  }
+  #endif
 
   /// Builds the raw axis writes for one IMU accelerometer triple, given the six
   /// Touchscreen.mm button types (in Left/Right/Forward/Backward/Up/Down order) and an
