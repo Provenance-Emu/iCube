@@ -206,6 +206,20 @@ func configureController(_ c: GCController) {
   installExtraInputHandlers(c)
 }
 
+/// Standard gravity, for converting GCMotion's g to the IMU axes' m/s^2.
+let physicalControllerStandardGravity: Float = 9.80665
+
+/// The Wii accelerometer writes for a physical controller's user acceleration (in g): the same
+/// signed value on both halves of each pair, in m/s^2.
+func physicalControllerAccelWrites(x: Float, y: Float, z: Float) -> [(TCButtonType, Float)] {
+  let g = physicalControllerStandardGravity
+  return [
+    (.wiiAccelLeft, x * g), (.wiiAccelRight, x * g),
+    (.wiiAccelForward, y * g), (.wiiAccelBackward, y * g),
+    (.wiiAccelUp, z * g), (.wiiAccelDown, z * g),
+  ]
+}
+
 private func installMotionHandler(_ c: GCController) {
   // Map controller motion (if available) to Wii accelerometer and gyro
   if #available(iOS 14.0, tvOS 14.0, *), let motion = c.motion {
@@ -218,15 +232,13 @@ private func installMotionHandler(_ c: GCController) {
       let ax = Float(m.userAcceleration.x)
       let ay = Float(m.userAcceleration.y)
       let az = Float(m.userAcceleration.z)
-      // Accelerometer -> Wii accel axes
+      // Accelerometer -> Wii accel axes. GCMotion reports g; the IMU axes (and the DSU forwarder)
+      // take m/s^2, like the phone's own motion. The shake check below stays in g.
       if let slot = ControllerManager.shared.wiimoteIndex(for: c) {
         let controllerId = ControllerManager.touchscreenWiimoteIdBase - 1 + slot
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelLeft.rawValue, controller: controllerId, value: ax)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelRight.rawValue, controller: controllerId, value: ax)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelForward.rawValue, controller: controllerId, value: ay)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelBackward.rawValue, controller: controllerId, value: ay)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelUp.rawValue, controller: controllerId, value: az)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiAccelDown.rawValue, controller: controllerId, value: az)
+        for (button, value) in physicalControllerAccelWrites(x: ax, y: ay, z: az) {
+          TCManagerInterface.setAxisValueFor(button.rawValue, controller: controllerId, value: value)
+        }
       }
       // Gyro -> Wii gyro axes
       let gx = Float(m.rotationRate.x)
