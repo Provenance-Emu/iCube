@@ -8,9 +8,9 @@ name: Unit Tests
 # own concurrency group, so a rerun of build.yml's slow archive jobs can never
 # cancel or be cancelled by this job or vice versa.
 #
-# No shared build cache with build.yml -- see the "No build cache" comment
-# below for why an object-dir cache doesn't actually help here, and why
-# build.yml's own dolphin-xcf-* cache doesn't either.
+# The simulator core compile is cached with ccache (see "Install ccache"); an
+# object-dir cache would not help, because checkout gives every source a fresh
+# mtime and Ninja would rebuild everything anyway.
 
 on:
   push:
@@ -46,6 +46,11 @@ jobs:
       TUIST_VERSION: '4.200.0'
       XCODE_VERSION: '26.3'
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      # ccache for the simulator core compile (see "Install ccache").
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_MAXSIZE: 3G
+      CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
 
     steps:
       - uses: actions/checkout@v4
@@ -94,43 +99,36 @@ jobs:
           tuist generate --no-open
           ls -d iCube.xcworkspace iCube.xcodeproj
 
-      # No build cache for the Dolphin core compile itself, deliberately not
-      # implemented here (see below for why, and for what would actually work).
-      #
-      # The app target's "Build Dolphin Core" pre-script (Project.swift) has
-      # `basedOnDependencyAnalysis: false`, so it unconditionally re-runs
-      # BuildiOSXCFramework.py for whatever platform Xcode is building --
-      # SIMULATORARM64 here -- on every `xcodebuild test`, into an untracked
-      # CMake+Ninja dir (build-iphonesimulator-Release/, excluded by
-      # .gitignore's `/build-*/`). build.yml's own "dolphin-xcf-*" cache does
-      # NOT cover this: that cache's path is `build`, i.e. the already
-      # git-tracked build/xcframework output, so restoring it again is
-      # redundant with checkout, not a compile-time win -- its own comment
-      # claiming it "restores the previous object files" does not hold for a
-      # from-scratch checkout, in that job or this one.
-      #
-      # A naive cache of build-iphonesimulator-Release/ itself would not help:
-      # actions/cache preserves the object files' OLD mtimes, but
-      # `actions/checkout` gives every source/header file a fresh mtime at
-      # clone time, so Ninja sees every input as newer than the restored
-      # outputs and does a full rebuild anyway -- paying multi-GB
-      # upload/download for no compile-time benefit. (Not verified empirically
-      # here; this follows from how Ninja's mtime-based staleness check and
-      # actions/cache's tar-preserved timestamps interact, not from a run.)
-      #
-      # A cache keyed on content instead of mtime would actually work:
-      # `CMAKE_<LANG>_COMPILER_LAUNCHER` is a real CMake env var since 3.17
-      # (confirmed via `cmake --help-manual cmake-env-variables`) that seeds
-      # the matching cache variable at configure time, and
-      # BuildiOSXCFramework.py's `subprocess.check_call(cmake_cmd)` passes no
-      # `env=`, so it inherits whatever this job exports -- no change to that
-      # script needed. Setting CMAKE_C_COMPILER_LAUNCHER / CMAKE_CXX_.../
-      # CMAKE_OBJC_.../CMAKE_OBJCXX_COMPILER_LAUNCHER=ccache here, installing
-      # ccache, and caching $CCACHE_DIR (save on push only, not every PR) is a
-      # workflow-only follow-up. Left out of this change because the core
-      # builds with `-DENABLE_LTO=ON`, so it would only cache the per-TU
-      # compile step, not the link-time codegen -- the actual win is unproven
-      # until measured.
+      # ccache for the core compile. The app's "Build Dolphin Core" pre-script runs
+      # BuildiOSXCFramework.py for SIMULATORARM64 on every `xcodebuild test`; its CMake configure
+      # (from scratch on a fresh checkout) seeds CMAKE_<LANG>_COMPILER_LAUNCHER from the
+      # environment, and the script's subprocess calls pass no env=, so every compile goes through
+      # ccache. ccache keys on content, not mtimes, so checkout's fresh timestamps do not defeat it
+      # the way a cache of the CMake build dir would; the ThinLTO link is still paid each run.
+      # The launcher is an absolute path: Xcode script phases run with a minimal PATH.
+      - name: Install ccache
+        run: |
+          set -euo pipefail
+          brew install ccache
+          bin="$(command -v ccache)"
+          {
+            echo "CMAKE_C_COMPILER_LAUNCHER=$bin"
+            echo "CMAKE_CXX_COMPILER_LAUNCHER=$bin"
+            echo "CMAKE_OBJC_COMPILER_LAUNCHER=$bin"
+            echo "CMAKE_OBJCXX_COMPILER_LAUNCHER=$bin"
+          } >> "$GITHUB_ENV"
+          ccache --zero-stats
+
+      # A new key per run so each run saves what it compiled; restore takes the newest entry for
+      # this ref, then develop's.
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-icubetests-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-icubetests-${{ github.ref_name }}-
+            ccache-icubetests-develop-
 
       # Runner images vary which simulator runtimes they ship, so a hardcoded
       # "iPhone 17 Pro" is one image update away from breaking the job. Pick
@@ -210,6 +208,10 @@ jobs:
       # Touchscreen devices skips: the test host is the app, whose launch (DolphinCoreService ->
       # UICommon::InitControllers) always adds iOS/0-7/Touchscreen, so a skip there means the host
       # stopped initializing input and those tests stopped testing.
+      - name: ccache statistics
+        if: always()
+        run: ccache --show-stats || true
+
       - name: Report test results
         if: always() && (steps.run_tests.outcome == 'success' || steps.run_tests.outcome == 'failure')
         env:

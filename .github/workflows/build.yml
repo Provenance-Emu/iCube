@@ -54,6 +54,8 @@ jobs:
     runs-on: macos-26
 
     env:
+      # Every slice is built up front, so the app's Build Dolphin Core phase skips its rebuild.
+      DOL_SKIP_CORE_BUILD: '1'
       # DOL_PBID_ORGANIZATION_IDENTIFIER is NOT overridden here any more. It
       # used to force "me.oatmealdome" on the command line, which outranks
       # Config/BundleIdentifier.xcconfig and shipped every CI build under the

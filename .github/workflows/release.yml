@@ -30,6 +30,8 @@ jobs:
       contents: write
 
     env:
+      # Every slice is built up front, so the app's Build Dolphin Core phase skips its rebuild.
+      DOL_SKIP_CORE_BUILD: '1'
       TUIST_VERSION: '4.200.0'
       XCODE_VERSION: '26.3'
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer

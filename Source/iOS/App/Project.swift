@@ -174,8 +174,16 @@ let preScripts: [TargetScript] = [
             fi ;;
           *) echo "Error: Unsupported PLATFORM_NAME: ${PLATFORM_NAME}"; exit 1 ;;
         esac
-        echo "Building PVlibDolphin for platform: ${platform} (CONFIGURATION=${CONFIGURATION})"
-        /usr/bin/python3 "${SCRIPT}" -p "${platform}" -v
+        # CI jobs that build every slice up front (build.yml, testflight.yml, release.yml) set
+        # DOL_SKIP_CORE_BUILD=1: rebuilding here repeated the configure and the core's link once per
+        # archive. The fresh slice below is still synced into the build products.
+        prebuilt="$PROJECT_DIR/../../../build/xcframework/${slice}.framework"
+        if [[ "${DOL_SKIP_CORE_BUILD:-}" == "1" && -n "${slice}" && -d "${prebuilt}" ]]; then
+          echo "DOL_SKIP_CORE_BUILD=1: using the ${slice}.framework this job already built"
+        else
+          echo "Building PVlibDolphin for platform: ${platform} (CONFIGURATION=${CONFIGURATION})"
+          /usr/bin/python3 "${SCRIPT}" -p "${platform}" -v
+        fi
         # Xcode's ProcessXCFramework step copies the slice into BUILT_PRODUCTS_DIR BEFORE this phase
         # has rebuilt it, so the first app build after any core change would link and embed the
         # PREVIOUS core (undefined new symbols at best, a silently stale engine at worst). Put the
