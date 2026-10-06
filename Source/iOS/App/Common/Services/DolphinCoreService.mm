@@ -52,6 +52,64 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 
 @implementation DolphinCoreService
 
++ (void)seedLaunchDefaultsWithFastmemAvailable:(BOOL)fastmemAvailable
+{
+  SetBaseIfUnspecified(Config::MAIN_USE_GAME_COVERS, true);
+
+  const bool fastmem = fastmemAvailable;
+  SetBaseIfUnspecified(Config::MAIN_FASTMEM, fastmem);
+  SetBaseIfUnspecified(Config::MAIN_FASTMEM_ARENA, fastmem);
+  SetBaseIfUnspecified(Config::MAIN_FAST_DISC_SPEED, true);
+  SetBaseIfUnspecified(Config::MAIN_DSP_THREAD, true);
+  // Dual-core: intentionally NOT set here. iOS already defaults to single-core via upstream
+  // DEFAULT_CPU_THREAD=false (MainSettings.cpp), so no explicit default is needed. An earlier
+  // SetBaseIfUnspecified(false) was redundant AND made the dual-core toggle appear to force-reset
+  // back to off — removing it lets the user's toggle persist normally. (Dual-core ON deadlocks
+  // most games on the lean CachedInterpreter, so single-core is the right default — but that IS
+  // the upstream default; let the user opt in if they want it.)
+  // Speed-first video/CPU defaults
+  SetBaseIfUnspecified(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
+  SetBaseIfUnspecified(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
+  SetBaseIfUnspecified(Config::GFX_HACK_IMMEDIATE_XFB, true);
+  // GFX_HACK_VI_SKIP: do NOT default ON on this rebaseline. VISkip lets the throttle DROP VI
+  // interrupts (VideoInterface.cpp:987 early-returns before asserting IR_INT) whenever the core
+  // lags >~20ms, as a catch-up. On HEAD's lean CachedInterpreter, CPU-heavy titles run
+  // CHRONICALLY >20ms behind realtime, so VISkip pins PERMANENTLY on and starves the game of
+  // vblank IRQs -> the main loop stalls. That is the "boot lockup": HUD freezes; pause/continue
+  // fires ResetThrottle (CoreTiming.cpp:113) which clears the lag flag and unsticks it for a few
+  // seconds until it drifts back past the 20ms threshold and re-wedges. Manual downclocking
+  // (or the adaptive clock) fixes it by keeping the core inside the 20ms window. NOTE: the good
+  // icube-testflight branch ALSO defaults this ON, but its faster custom CIR stays within the
+  // window so it never wedges — so this is a lean-CIR-speed limitation, not a wrong default per se.
+  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP, false);
+  // The legacy GFX_HACK_VI_SKIP bool above is NOT what the runtime reads.
+  // CoreTimingManager::GetVISkip (CoreTiming.cpp:502-522) consults the tri-state
+  // GFX_HACK_VI_SKIP_MODE, which "supersedes the legacy bool" (CoreTiming.cpp:507). Default it to
+  // Auto: Auto is the FALLBACK catch-up for when the adaptive clock is OFF (it really helps on some
+  // games). When the adaptive clock is ON (the default), the resolver forces VISkip Off at runtime
+  // anyway (CoreTiming GetVISkip), so this default only takes effect in the adaptive-off case. The
+  // bounded-Auto (4-skip cap) prevents hard-pinning, so it no longer permanently starves vblank
+  // IRQs even on the lean CachedInterpreter.
+  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP_MODE, TriState::Auto);
+  SetBaseIfUnspecified(Config::MAIN_ACCURATE_NANS, false);
+  SetBaseIfUnspecified(Config::MAIN_SYNC_GPU, false);
+
+  // Enforce safe shader compiler limits
+  const int hw = (int)[[NSProcessInfo processInfo] processorCount];
+  const int threads = std::max(1, std::min(2, hw - 1));
+  SetBaseIfUnspecified(Config::GFX_SHADER_COMPILER_THREADS, threads);
+  SetBaseIfUnspecified(Config::GFX_SHADER_PRECOMPILER_THREADS, threads);
+
+  // Compile shaders up front (a one-time wait at boot) rather than on first
+  // encounter during gameplay — far better than mid-game stutter on the jitless
+  // CPU-bound path. Pairs with the on-disk Metal binary-archive (persists PSOs
+  // across launches, so the boot wait shrinks on subsequent runs).
+  SetBaseIfUnspecified(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING, true);
+
+  // Prefer asynchronous present on iOS/tvOS by default (can be toggled in UI)
+  SetBaseIfUnspecified(Config::GFX_ASYNC_PRESENT, true);
+}
+
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary<UIApplicationLaunchOptionsKey,id>*)launchOptions {
   Core::DeclareAsHostThread();
 
@@ -136,58 +194,7 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   const bool fastmemAvailable = [FastmemManager shared].fastmemAvailable;
   [ICubeSettingsRepair runAtLaunchWithFastmemAvailable:fastmemAvailable];
 
-  SetBaseIfUnspecified(Config::MAIN_USE_GAME_COVERS, true);
-
-  SetBaseIfUnspecified(Config::MAIN_FASTMEM, fastmemAvailable);
-  SetBaseIfUnspecified(Config::MAIN_FASTMEM_ARENA, fastmemAvailable);
-  SetBaseIfUnspecified(Config::MAIN_FAST_DISC_SPEED, true);
-  SetBaseIfUnspecified(Config::MAIN_DSP_THREAD, true);
-  // Dual-core: intentionally NOT set here. iOS already defaults to single-core via upstream
-  // DEFAULT_CPU_THREAD=false (MainSettings.cpp), so no explicit default is needed. An earlier
-  // SetBaseIfUnspecified(false) was redundant AND made the dual-core toggle appear to force-reset
-  // back to off — removing it lets the user's toggle persist normally. (Dual-core ON deadlocks
-  // most games on the lean CachedInterpreter, so single-core is the right default — but that IS
-  // the upstream default; let the user opt in if they want it.)
-  // Speed-first video/CPU defaults
-  SetBaseIfUnspecified(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
-  SetBaseIfUnspecified(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
-  SetBaseIfUnspecified(Config::GFX_HACK_IMMEDIATE_XFB, true);
-  // GFX_HACK_VI_SKIP: do NOT default ON on this rebaseline. VISkip lets the throttle DROP VI
-  // interrupts (VideoInterface.cpp:987 early-returns before asserting IR_INT) whenever the core
-  // lags >~20ms, as a catch-up. On HEAD's lean CachedInterpreter, CPU-heavy titles run
-  // CHRONICALLY >20ms behind realtime, so VISkip pins PERMANENTLY on and starves the game of
-  // vblank IRQs -> the main loop stalls. That is the "boot lockup": HUD freezes; pause/continue
-  // fires ResetThrottle (CoreTiming.cpp:113) which clears the lag flag and unsticks it for a few
-  // seconds until it drifts back past the 20ms threshold and re-wedges. Manual downclocking
-  // (or the adaptive clock) fixes it by keeping the core inside the 20ms window. NOTE: the good
-  // icube-testflight branch ALSO defaults this ON, but its faster custom CIR stays within the
-  // window so it never wedges — so this is a lean-CIR-speed limitation, not a wrong default per se.
-  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP, false);
-  // The legacy GFX_HACK_VI_SKIP bool above is NOT what the runtime reads. CoreTimingManager::GetVISkip
-  // (CoreTiming.cpp:502-522) consults the tri-state GFX_HACK_VI_SKIP_MODE, which "supersedes the legacy
-  // bool" (CoreTiming.cpp:507). Default it to Auto: Auto is the FALLBACK catch-up for when the adaptive
-  // clock is OFF (it really helps on some games). When the adaptive clock is ON (the default), the
-  // resolver forces VISkip Off at runtime anyway (CoreTiming GetVISkip), so this default only takes
-  // effect in the adaptive-off case. The bounded-Auto (4-skip cap) prevents hard-pinning, so it no
-  // longer permanently starves vblank IRQs even on the lean CachedInterpreter.
-  SetBaseIfUnspecified(Config::GFX_HACK_VI_SKIP_MODE, TriState::Auto);
-  SetBaseIfUnspecified(Config::MAIN_ACCURATE_NANS, false);
-  SetBaseIfUnspecified(Config::MAIN_SYNC_GPU, false);
-
-  // Enforce safe shader compiler limits
-  const int hw = (int)[[NSProcessInfo processInfo] processorCount];
-  const int threads = std::max(1, std::min(2, hw - 1));
-  SetBaseIfUnspecified(Config::GFX_SHADER_COMPILER_THREADS, threads);
-  SetBaseIfUnspecified(Config::GFX_SHADER_PRECOMPILER_THREADS, threads);
-
-  // Compile shaders up front (a one-time wait at boot) rather than on first
-  // encounter during gameplay — far better than mid-game stutter on the jitless
-  // CPU-bound path. Pairs with the on-disk Metal binary-archive (persists PSOs
-  // across launches, so the boot wait shrinks on subsequent runs).
-  SetBaseIfUnspecified(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING, true);
-
-  // Prefer asynchronous present on iOS/tvOS by default (can be toggled in UI)
-  SetBaseIfUnspecified(Config::GFX_ASYNC_PRESENT, true);
+  [DolphinCoreService seedLaunchDefaultsWithFastmemAvailable:fastmemAvailable];
 
   WindowSystemInfo wsi;
   wsi.type = WindowSystemType::iOS;

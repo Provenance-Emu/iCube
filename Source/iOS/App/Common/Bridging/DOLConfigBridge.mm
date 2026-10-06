@@ -35,6 +35,9 @@
 #include "Common/StringUtil.h"
 #import "FastmemManager.h"
 
+#include "Common/FileUtil.h"
+#include "Common/IniFile.h"
+
 // Extern DSU client RX counter for DEBUG HUD (defined in DualShockUDPClient.cpp)
 namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g_rx_counter; } }
 
@@ -164,16 +167,74 @@ static bool ICubeEmulationActive() {
   if (Config::GetLayer(Config::LayerType::CurrentRun))
     Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_EFB_SCALE);
 }
-// Resolver step #3 "Auto" badge: is a perf key currently overridden by an auto controller? True iff
-// the effective (active) layer for the key is CurrentRun — i.e. an auto write is shadowing Base.
-+ (BOOL)isEfbScaleAutoOverridden {
-  return Config::GetActiveLayerForConfig(Config::GFX_EFB_SCALE) == Config::LayerType::CurrentRun;
+// Resolver step #3 badge: which layer, if not Base, holds the effective value of a perf key. Any
+// layer above Base wins over the user's own value: CurrentRun (Auto-IR, thermal, adaptive clock),
+// and also a game's INI (GlobalGame / LocalGame), e.g. per-game Internal Resolution or the shipped
+// RHT / UGP / RDC overclocks.
+static DOLConfigOverride OverrideForLayer(Config::LayerType layer)
+{
+  switch (layer)
+  {
+  case Config::LayerType::Base:
+    return DOLConfigOverrideNone;
+  case Config::LayerType::GlobalGame:
+  case Config::LayerType::LocalGame:
+    return DOLConfigOverrideGame;
+  default:
+    return DOLConfigOverrideAuto;
+  }
 }
-+ (BOOL)isOverclockAutoOverridden {
-  return Config::GetActiveLayerForConfig(Config::MAIN_OVERCLOCK) == Config::LayerType::CurrentRun;
+
+template <typename T>
+static DOLConfigOverride OverrideFor(const Config::Info<T>& info)
+{
+  return OverrideForLayer(Config::GetActiveLayerForConfig(info));
 }
-+ (BOOL)isViOverclockAutoOverridden {
-  return Config::GetActiveLayerForConfig(Config::MAIN_VI_OVERCLOCK) == Config::LayerType::CurrentRun;
+
+// A clock and its enable key: the first one overridden decides the badge.
+static DOLConfigOverride ClockOverride(const Config::Info<float>& clock,
+                                       const Config::Info<bool>& enable)
+{
+  const DOLConfigOverride clockOverride = OverrideFor(clock);
+  return clockOverride != DOLConfigOverrideNone ? clockOverride : OverrideFor(enable);
+}
+
+namespace
+{
+// A config layer with nothing on disk behind it: the tests' stand-in for a game INI layer.
+class InMemoryLayerLoader final : public Config::ConfigLayerLoader
+{
+public:
+  explicit InMemoryLayerLoader(Config::LayerType layer) : ConfigLayerLoader(layer) {}
+  void Load(Config::Layer*) override {}
+  void Save(Config::Layer*) override {}
+};
+}  // namespace
+
++ (void)addTestGameLayerWithEfbScale:(NSInteger)scale
+{
+  if (Config::GetLayer(Config::LayerType::LocalGame))
+    return;
+  Config::AddLayer(std::make_unique<InMemoryLayerLoader>(Config::LayerType::LocalGame));
+  Config::Set(Config::LayerType::LocalGame, Config::GFX_EFB_SCALE, (int)scale);
+  Config::Set(Config::LayerType::LocalGame, Config::MAIN_OVERCLOCK_ENABLE, true);
+}
++ (void)removeTestGameLayer
+{
+  Config::RemoveLayer(Config::LayerType::LocalGame);
+}
+
++ (DOLConfigOverride)efbScaleOverride
+{
+  return OverrideFor(Config::GFX_EFB_SCALE);
+}
++ (DOLConfigOverride)overclockOverride
+{
+  return ClockOverride(Config::MAIN_OVERCLOCK, Config::MAIN_OVERCLOCK_ENABLE);
+}
++ (DOLConfigOverride)viOverclockOverride
+{
+  return ClockOverride(Config::MAIN_VI_OVERCLOCK, Config::MAIN_VI_OVERCLOCK_ENABLE);
 }
 // Maximum Internal Resolution supported by backend/device
 + (NSInteger)gfxEfbMaxScale { return (NSInteger)Config::Get(Config::GFX_MAX_EFB_SCALE); }
@@ -1015,6 +1076,64 @@ static NSString* BaseLayerKeyName(const Config::Location& location)
       snapshot[BaseLayerKeyName(location)] = [NSString stringWithUTF8String:value->c_str()];
   }
   return snapshot;
+}
+
++ (nullable NSDictionary<NSString*, NSString*>*)savedBaseConfigSnapshot
+{
+  NSMutableDictionary<NSString*, NSString*>* snapshot = [NSMutableDictionary dictionary];
+  // The two files the repair rules cover ("Dolphin.*" and "Graphics.*" keys).
+  const std::pair<Config::System, unsigned int> files[] = {
+      {Config::System::Main, F_DOLPHINCONFIG_IDX},
+      {Config::System::GFX, F_GFXCONFIG_IDX},
+  };
+  for (const auto& [system, path_index] : files)
+  {
+    const std::string& path = File::GetUserPath(path_index);
+    if (!File::Exists(path))
+      continue;
+    Common::IniFile ini;
+    if (!ini.Load(path))
+      return nil;
+    for (const auto& section : ini.GetSections())
+    {
+      for (const auto& [key, value] : section.GetValues())
+      {
+        const Config::Location location{system, section.GetName(), key};
+        snapshot[BaseLayerKeyName(location)] = [NSString stringWithUTF8String:value.c_str()];
+      }
+    }
+  }
+  return snapshot;
+}
+
++ (void)restoreBaseLayerSnapshot:(NSDictionary<NSString*, NSString*>*)snapshot
+{
+  const std::shared_ptr<Config::Layer> base = Config::GetLayer(Config::LayerType::Base);
+  if (!base)
+    return;
+  std::vector<Config::Location> added;
+  for (const auto& [location, value] : base->GetLayerMap())
+  {
+    if (value && snapshot[BaseLayerKeyName(location)] == nil)
+      added.push_back(location);
+  }
+  for (const auto& location : added)
+    base->DeleteKey(location);
+  for (NSString* name in snapshot)
+  {
+    // "<system>.<section>.<key>": system and section names hold no dots; a key may.
+    NSArray<NSString*>* parts = [name componentsSeparatedByString:@"."];
+    if (parts.count < 3)
+      continue;
+    const std::optional<Config::System> system = Config::GetSystemFromName(parts[0].UTF8String);
+    if (!system)
+      continue;
+    NSString* key =
+        [[parts subarrayWithRange:NSMakeRange(2, parts.count - 2)] componentsJoinedByString:@"."];
+    base->Set(Config::Location{*system, parts[1].UTF8String, key.UTF8String},
+              std::string(snapshot[name].UTF8String));
+  }
+  Config::OnConfigChanged();
 }
 
 + (NSDictionary<NSString*, NSString*>*)deleteBaseLayerKeys:(NSArray<NSString*>*)keys

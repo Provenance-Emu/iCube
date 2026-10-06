@@ -31,10 +31,10 @@ struct GraphicsEnhancementsView: View {
   @State private var disableCopyFilter: Bool = true
   @State private var efbScale: Int = 1
   @State private var efbMaxScale: Int = 6
-  // Resolver step #3 "Auto" badge: true when Auto-IR / thermal is overriding GFX_EFB_SCALE on the
-  // CurrentRun layer. While true the manual picker is disabled; the value shown is the user's own
-  // (Base), which applies again once the override clears.
-  @State private var efbAutoOverridden: Bool = false
+  // Resolver step #3 badge: set while Auto-IR / thermal (CurrentRun) or the running game's INI
+  // outranks the user's GFX_EFB_SCALE. Then the manual picker is disabled; the value shown is the
+  // user's own (Base), which applies again once the override clears.
+  @State private var efbOverride: DOLConfigOverride = .none
   @State private var widescreenHack: Bool = false
   @State private var disableFog: Bool = false
   @State private var arbitraryMipmapDetection: Bool = false
@@ -61,19 +61,13 @@ struct GraphicsEnhancementsView: View {
         ) {
           HStack {
             Text("\(L("Internal Resolution")): \(efbScale == 0 ? L("Auto (fit window)") : "\(efbScale)x")")
-            // Resolver step #3: "Auto" badge when Auto-IR / thermal is overriding GFX_EFB_SCALE.
-            if efbAutoOverridden {
-              Text(L("Auto"))
-                .font(.caption).bold()
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(Color.blue.opacity(0.1), in: Capsule())
-            }
+            // Resolver step #3: "Auto" / "Game" badge while something outranks the user's scale.
+            ConfigOverrideBadge(override: efbOverride)
           }
         }
-        // While an auto controller drives this key (CurrentRun), disable the manual picker: a choice
+        // While an auto controller or the game drives this key, disable the manual picker: a choice
         // made here would not apply until the override clears.
-        .disabled(efbAutoOverridden)
+        .disabled(efbOverride != .none)
       }, header: { Text(L("Internal Resolution")) })
       Section(content: {
         settingsNavCaption(
@@ -177,7 +171,7 @@ struct GraphicsEnhancementsView: View {
     efbMaxScale = max(1, DOLConfigBridge.gfxEfbMaxScale())
     // The user's own scale (Base), not an Auto-IR / thermal CurrentRun override: this row edits Base.
     efbScale = DOLConfigBridge.gfxEfbScaleBase()
-    efbAutoOverridden = DOLConfigBridge.isEfbScaleAutoOverridden()
+    efbOverride = DOLConfigBridge.efbScaleOverride()
     anisotropy = DOLConfigBridge.gfxEnhanceAnisotropySamples()
     msaa = normalizedMsaa(DOLConfigBridge.gfxMsaa())
     ssaa = DOLConfigBridge.gfxSsaa()

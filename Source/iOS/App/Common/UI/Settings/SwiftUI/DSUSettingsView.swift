@@ -42,15 +42,16 @@ struct DSUSettingsView: View {
       ) {
         #if !os(tvOS)
         settingsCaption(
-          Picker(L("Role"), selection: $dsuRole) {
-            Text(L("Receiver")).tag(DSUSettings.Role.receiver.rawValue)
-            Text(L("Sender")).tag(DSUSettings.Role.sender.rawValue)
-          }
-          .onChange(of: dsuRole) { _, role in
+          // A sender is not a client: picking Sender turns the client off. On the user's pick only
+          // (onSet), not whenever the stored role changes.
+          Picker(L("Role"), selection: $dsuRole.onSet { role in
             if role == DSUSettings.Role.sender.rawValue {
               dsuEnabled = false
               DOLConfigBridge.setDsuClientEnabled(false)
             }
+          }) {
+            Text(L("Receiver")).tag(DSUSettings.Role.receiver.rawValue)
+            Text(L("Sender")).tag(DSUSettings.Role.sender.rawValue)
           },
           L("Receiver pulls motion/input from a DSU server; Sender shares this device's input instead."))
         #endif

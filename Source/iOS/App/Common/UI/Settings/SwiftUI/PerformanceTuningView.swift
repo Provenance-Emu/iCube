@@ -77,14 +77,14 @@ struct PerformanceTuningView: View {
 
   @State private var cpuClockEnabled: Bool = false
   @State private var cpuClockPercent: Int = 100
-  // Resolver step #3 "Auto" badge: true when an auto controller (adaptive clock) is overriding the
-  // clock key on the CurrentRun layer, shadowing the user's manual Base value. While true the manual
-  // control is disabled and the displayed % is the live effective value (not a stale Base value).
-  @State private var cpuClockAutoOverridden: Bool = false
+  // Resolver step #3 badge: set while the adaptive clock (CurrentRun) or the running game's INI
+  // outranks the user's clock keys. Then the manual controls are disabled; they show the user's own
+  // (Base) value, which applies again once the override clears.
+  @State private var cpuClockOverride: DOLConfigOverride = .none
 
   @State private var vbiEnabled: Bool = false
   @State private var vbiPercent: Int = 100
-  @State private var vbiAutoOverridden: Bool = false
+  @State private var vbiOverride: DOLConfigOverride = .none
 
   // Correctness Validation disclosure (manual; DisclosureGroup is tvOS-unavailable). Collapsed by default.
   @State private var showValidation: Bool = false
@@ -308,7 +308,7 @@ struct PerformanceTuningView: View {
       Section(header: Text(L("Clock Override"))) {
         rowWithCaption(
           Toggle(L("Enable Emulated CPU Clock Override"), isOn: $cpuClockEnabled.onSet { DOLConfigBridge.setMainOverclockEnable($0) })
-            .disabled(cpuClockAutoOverridden),
+            .disabled(cpuClockOverride != .none),
           L("Adjusts the emulated CPU's clock rate. Higher values can raise the framerate of variable-rate games at a performance cost; lower values may trigger a game's internal frameskip. ⚠️ Changing this from 100% can and will break games — use at your own risk."))
         HStack {
 #if os(tvOS)
@@ -318,26 +318,20 @@ struct PerformanceTuningView: View {
             .frame(width: 260)
 #endif
           Spacer()
-          // Resolver step #3: "Auto" badge when the adaptive clock is overriding this key.
-          if cpuClockAutoOverridden {
-            Text(L("Auto"))
-              .font(.caption).bold()
-              .foregroundStyle(.secondary)
-              .padding(.horizontal, 8).padding(.vertical, 4)
-              .background(Color.blue.opacity(0.1), in: Capsule())
-          }
+          // Resolver step #3: "Auto" / "Game" badge while something outranks the user's clock.
+          ConfigOverrideBadge(override: cpuClockOverride)
           Text("\(cpuClockPercent)%")
             .foregroundStyle(.secondary)
         }
-        // While the adaptive clock drives this key (CurrentRun), disable the manual control: a value
+        // While the adaptive clock or the game drives this key, disable the manual control: a value
         // set here would not apply until the override clears.
-        .disabled(!cpuClockEnabled || cpuClockAutoOverridden)
+        .disabled(!cpuClockEnabled || cpuClockOverride != .none)
       }
 
       Section(header: Text(L("Override VBI Frequency"))) {
         rowWithCaption(
           Toggle(L("Enable VBI Frequency Override"), isOn: $vbiEnabled.onSet { DOLConfigBridge.setMainViOverclockEnable($0) })
-            .disabled(vbiAutoOverridden),
+            .disabled(vbiOverride != .none),
           L("Makes games run at a different frame rate. Lowering it makes emulation less demanding; raising it can improve smoothness. May change gameplay speed, since speed is often tied to frame rate."))
         HStack {
 #if os(tvOS)
@@ -347,18 +341,12 @@ struct PerformanceTuningView: View {
             .frame(width: 260)
 #endif
           Spacer()
-          // Resolver step #3: "Auto" badge when the adaptive clock is overriding this key.
-          if vbiAutoOverridden {
-            Text(L("Auto"))
-              .font(.caption).bold()
-              .foregroundStyle(.secondary)
-              .padding(.horizontal, 8).padding(.vertical, 4)
-              .background(Color.blue.opacity(0.1), in: Capsule())
-          }
+          // Resolver step #3: "Auto" / "Game" badge while something outranks the user's clock.
+          ConfigOverrideBadge(override: vbiOverride)
           Text("\(vbiPercent)%")
             .foregroundStyle(.secondary)
         }
-        .disabled(!vbiEnabled || vbiAutoOverridden)
+        .disabled(!vbiEnabled || vbiOverride != .none)
       }
     }
     .navigationTitle(L("Performance Tuning"))
@@ -488,9 +476,9 @@ struct PerformanceTuningView: View {
     cpuClockPercent = DOLConfigBridge.mainOverclockPercentBase()
     vbiEnabled = DOLConfigBridge.mainViOverclockEnableBase()
     vbiPercent = DOLConfigBridge.mainViOverclockPercentBase()
-    // Resolver step #3: is an auto controller currently overriding these clock keys (CurrentRun)?
-    cpuClockAutoOverridden = DOLConfigBridge.isOverclockAutoOverridden()
-    vbiAutoOverridden = DOLConfigBridge.isViOverclockAutoOverridden()
+    // Resolver step #3: does the adaptive clock or the running game outrank these clock keys?
+    cpuClockOverride = DOLConfigBridge.overclockOverride()
+    vbiOverride = DOLConfigBridge.viOverclockOverride()
   }
 }
 

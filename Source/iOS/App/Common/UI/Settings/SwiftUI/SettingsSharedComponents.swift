@@ -43,6 +43,32 @@ extension View {
   }
 }
 
+/// The pill beside a setting whose user value (Base) is outranked right now: "Auto" while an auto
+/// controller drives it for this run, "Game" while the running game's settings do. The control
+/// beside it is disabled: it shows and edits the user's own value, which applies again once the
+/// override goes away.
+struct ConfigOverrideBadge: View {
+  let override: DOLConfigOverride
+
+  var body: some View {
+    if let title {
+      Text(title)
+        .font(.caption).bold()
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Color.blue.opacity(0.1), in: Capsule())
+    }
+  }
+
+  private var title: String? {
+    switch override {
+    case .auto: return L("Auto")
+    case .game: return L("Game")
+    default: return nil
+    }
+  }
+}
+
 extension Binding where Value: Equatable {
   /// The binding to give a control whose value is written somewhere (Config, user defaults).
   /// `action` runs only when the control sets a different value, i.e. the user changed it.
