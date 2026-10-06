@@ -84,6 +84,17 @@ final class DSUMotionForwardingTests: XCTestCase {
     XCTAssertEqual(rest.accel[2], 0, accuracy: 1e-5)
   }
 
+  func testPhysicalControllerAccelerationReachesDSUInG() {
+    // GCMotion reports g; the controller's IMU writes must be in m/s^2 like the phone's, so a 1 g
+    // impulse on the Up axis arrives at DSU as 1 g, not 1/9.8 g.
+    let writes = physicalControllerAccelWrites(x: 0, y: 0, z: 1)
+    XCTAssertEqual(writes.first { $0.0 == .wiiAccelUp }?.1 ?? 0, 9.80665, accuracy: 1e-4)
+    let pad = apply(writes)
+    XCTAssertEqual(pad.accel[0], 0, accuracy: 1e-5)
+    XCTAssertEqual(pad.accel[1], -1.0, accuracy: 1e-4)
+    XCTAssertEqual(pad.accel[2], 0, accuracy: 1e-5)
+  }
+
   func testGyroIsConvertedFromRadiansToDegreesPerSecond() {
     let pad = apply(writes(gyro: SIMD3(.pi, 0, 0)))
     XCTAssertEqual(abs(pad.gyro[0]), 180.0, accuracy: 1e-3)
