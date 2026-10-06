@@ -34,6 +34,13 @@
 //   GET  /api/logs                   -> query {"tail":N=200} -> last N log lines
 //   GET  /api/debug/mem              -> query {"addr":"0x..","len":N=64} -> raw guest RAM as hex
 //   GET  /api/debug/memarena         -> arena mode + alias matrix of the real RAM views
+//   POST /api/debug/motion/pose      (DEBUG, iOS) body {"orientation":O?,"recline":deg?,"turn":deg?,
+//                                    "roll":deg?,"userAccel":[x,y,z]?,"recenter":Bool?,"irMode":0|1|2?}
+//                                    -> feed a phone pose through TCDeviceMotion's real sample
+//                                    handlers and hold it; {"rawWiimoteAccel":[x,y,z]} writes m/s^2
+//                                    straight to the remote's axes; {"buttons":[100,101],"holdMs":150}
+//                                    presses TCButtonType buttons; {"release":true} lets real
+//                                    samples through again
 //
 // frame-advance/savestate/loadstate bodies are parsed by `parseBody` below: a
 // non-JSON-object body (including a missing one) returns nil, which callers
@@ -41,6 +48,10 @@
 // convention.
 
 import Foundation
+#if DEBUG && canImport(CoreMotion)
+import simd
+import UIKit
+#endif
 
 /// The error message every `parseBody` caller returns (as a 400) when the
 /// request body is missing, empty, or not a JSON object.
@@ -828,8 +839,91 @@ final class DebugAPIRoutes {
       return ["ok": true, "data": ["lines": DOLDebugBridge.logTail(n)]]
     }
 
+    #if DEBUG && canImport(CoreMotion)
+    registerMotionPoseRoute(on: server)
+    #endif
+
     registered = true
   }
+
+  #if DEBUG && canImport(CoreMotion)
+  // MARK: - Motion pose injection
+
+  /// POST /api/debug/motion/pose: drives the Wii Remote's IMU from a described phone pose through
+  /// the same TCDeviceMotion handlers CoreMotion samples go through, so pointer-visibility
+  /// regressions (a game hiding the pointer for a remote aimed at the floor) reproduce on a
+  /// simulator, which has no motion hardware.
+  ///
+  /// The pose is the neutral grip for `orientation` (default: the current UI orientation), screen
+  /// at the player, then reclined by `recline` degrees (top edge away; 90 = face up, -90 = face
+  /// down), rolled by `roll` (clockwise as the player sees it) and turned left by `turn` about the
+  /// vertical. `orientation` only overrides what the mapping reads; the UI does not rotate.
+  private func registerMotionPoseRoute(on server: NativeWebServer) {
+    server.addCustomHandler(forMethod: "POST", path: "/api/debug/motion/pose") { _, _, _, body in
+      guard let dict = parseBody(body) else {
+        return ["ok": false, "status": 400, "error": bodyMustBeJSONObjectError]
+      }
+      let motion = DispatchQueue.main.sync { MainActor.assumeIsolated { TCDeviceMotion.shared } }
+      if dict["release"] as? Bool == true {
+        motion.debugReleasePose()
+        return ["ok": true, "data": ["released": true]]
+      }
+      if let mode = asJSONInt(dict["irMode"]) {
+        guard (0...2).contains(mode) else {
+          return ["ok": false, "status": 400, "error": "irMode must be 0 (gyro), 1 (follow) or 2 (drag)"]
+        }
+        DispatchQueue.main.sync { DOLConfigBridge.setCurrentRunMainTouchPadIRMode(mode) }
+      }
+      if let buttons = dict["buttons"] {
+        guard let raws = buttons as? [NSNumber], !raws.isEmpty else {
+          return ["ok": false, "status": 400, "error": "buttons must be a non-empty array of TCButtonType raw values"]
+        }
+        let holdSeconds = ((dict["holdMs"] as? NSNumber)?.doubleValue ?? 150) / 1000
+        return ["ok": true, "data": motion.debugPressButtons(raws.map(\.intValue), holdSeconds: holdSeconds)]
+      }
+      if let raw = dict["rawWiimoteAccel"] {
+        guard let vector = Self.vector3(raw) else {
+          return ["ok": false, "status": 400, "error": "rawWiimoteAccel must be [x, y, z] in m/s^2"]
+        }
+        return ["ok": true, "data": motion.debugWriteRawWiimoteAcceleration(vector)]
+      }
+      var orientation: UIInterfaceOrientation?
+      if let name = dict["orientation"] {
+        guard let parsed = Self.orientations[name as? String ?? ""] else {
+          return ["ok": false, "status": 400,
+                  "error": "orientation must be one of \(Self.orientations.keys.sorted())"]
+        }
+        orientation = parsed
+      }
+      var userAcceleration = SIMD3<Double>.zero
+      if let user = dict["userAccel"] {
+        guard let vector = Self.vector3(user) else {
+          return ["ok": false, "status": 400, "error": "userAccel must be [x, y, z] in g (CoreMotion sign)"]
+        }
+        userAcceleration = vector
+      }
+      let degrees = { (key: String) in (dict[key] as? NSNumber)?.doubleValue ?? 0 }
+      let poseOrientation = orientation ?? motion.orientation
+      var attitude = TCDeviceMotion.debugHeldAttitude(orientation: poseOrientation, reclineDegrees: degrees("recline"))
+      attitude = simd_quatd(angle: degrees("roll") * .pi / 180, axis: SIMD3(0, 1, 0)) * attitude
+      attitude = simd_quatd(angle: degrees("turn") * .pi / 180, axis: SIMD3(0, 0, 1)) * attitude
+      let result = motion.debugInjectPose(
+        attitude: attitude, userAcceleration: userAcceleration, rotationRate: .zero,
+        orientation: orientation, recenter: dict["recenter"] as? Bool == true)
+      return ["ok": true, "data": result]
+    }
+  }
+
+  private static let orientations: [String: UIInterfaceOrientation] = [
+    "portrait": .portrait, "portraitUpsideDown": .portraitUpsideDown,
+    "landscapeLeft": .landscapeLeft, "landscapeRight": .landscapeRight,
+  ]
+
+  private static func vector3(_ value: Any) -> SIMD3<Double>? {
+    guard let array = value as? [NSNumber], array.count == 3 else { return nil }
+    return SIMD3(array[0].doubleValue, array[1].doubleValue, array[2].doubleValue)
+  }
+  #endif
 
   // MARK: - Encoding helper
 
