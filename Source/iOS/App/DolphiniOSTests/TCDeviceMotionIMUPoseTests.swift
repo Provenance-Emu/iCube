@@ -156,15 +156,22 @@ final class TCDeviceMotionIMUPoseTests: XCTestCase {
     }
   }
 
-  /// "Wiimote Motion Controls" off: the remote rests level in every mode, sideways or not.
+  /// "Wiimote Motion Controls" off: the remote rests level and still in every mode, sideways or
+  /// not: no tilt, no swing, no rotation.
   func testWiiRemoteMotionOffRestsTheRemoteLevelInEveryMode() {
     for irMode in [0, 1, 2] {
       for sideways in [false, true] {
         let policy = TCDeviceMotion.imuPolicy(
           irMode: irMode, full6DOF: true, nunchukIMU: false, wiimoteIMU: false, sideways: sideways)
-        XCTAssertEqual(policy.wiimote, .level, "irMode \(irMode) sideways \(sideways)")
+        XCTAssertEqual(policy.wiimote, .resting, "irMode \(irMode) sideways \(sideways)")
       }
     }
+    let pose = Self.reclined(.portrait, 45)
+    let gravity = Self.rawAtRest(pose)
+    let swing = -pose.inverse.act(SIMD3(0.5, 0.8, 0))
+    let reading = TCDeviceMotion.imuAcceleration(
+      source: .resting, acceleration: gravity + swing, gravity: gravity, mount: nil, orientation: .portrait)
+    assertVector(reading, level(), "swinging a reclined phone")
   }
 
   /// The DSU server streams the phone's own motion whatever the pointer mode and settings, through

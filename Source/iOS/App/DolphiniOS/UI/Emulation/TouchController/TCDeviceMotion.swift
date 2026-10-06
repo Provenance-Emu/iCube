@@ -132,6 +132,10 @@ import simd
   /// re-take the mount whenever the remote starts following the phone (gyro mode, or the bound
   /// remote turning sideways) instead of reusing one from an earlier grip.
   private var lastWiimoteSource: IMUSource?
+  /// Set when the remote starts following the phone and cleared once the next device-motion sample
+  /// has re-taken the mount: until then the 200 Hz handlers keep it level rather than apply the
+  /// mount of an earlier grip. Motion queue only.
+  private var awaitingMount = false
   private var gyroPointerSampleCount = 0
   /// Set from any thread by `recenterPointer()`, consumed on the motion queue.
   private let recenterLock = NSLock()
@@ -348,7 +352,7 @@ import simd
   @discardableResult
   private func handleAccelerometer(_ acceleration: SIMD3<Double>) -> (wiimote: SIMD3<Double>, nunchuk: SIMD3<Double>) {
     let uiOrientation = orientation
-    let policy = currentIMUPolicy()
+    let policy = effectiveIMUPolicy(currentIMUPolicy())
     let mount = imuMount(for: uiOrientation)
     let wiimote = Self.imuAcceleration(
       source: policy.wiimote, acceleration: acceleration, gravity: latestGravity, mount: mount, orientation: uiOrientation)
@@ -366,8 +370,10 @@ import simd
     // Rotation rates are the same whether or not gravity is fed through, but in the phone-tracking
     // modes they must turn with the same mount as the accelerometer or MotionPlus disagrees with it.
     // DSU (`.phoneUnmounted`) keeps the static grip, like its accelerometer.
-    let mount = currentIMUPolicy().wiimote == .phone ? imuMount(for: uiOrientation) : nil
-    let rates = Self.imuAngularVelocity(rate, mount: mount, orientation: uiOrientation)
+    let source = effectiveIMUPolicy(currentIMUPolicy()).wiimote
+    let mount = source == .phone ? imuMount(for: uiOrientation) : nil
+    // A resting remote (Wii Remote motion off) does not turn either.
+    let rates = source == .resting ? .zero : Self.imuAngularVelocity(rate, mount: mount, orientation: uiOrientation)
     for (button, value) in Self.wiimoteGyroWrites(pitch: rates.x, roll: rates.y, yaw: rates.z) {
       TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
     }
@@ -462,11 +468,7 @@ import simd
 
     // Whenever the remote starts following the phone (sideways turned on, Wii Remote motion
     // turned back on), center on the current grip rather than a mount from an earlier session.
-    let policy = currentIMUPolicy(irMode: irMode)
-    if policy.wiimote == .phone, lastWiimoteSource != .phone {
-      recenterPointer()
-    }
-    lastWiimoteSource = policy.wiimote
+    let policy = effectiveIMUPolicy(currentIMUPolicy(irMode: irMode))
 
     // The baseline is the pointer's center AND the IMU mount, taken from the same sample. It is
     // only consumed when the phone's attitude drives something (gyro pointer, a phone-tracking
@@ -489,6 +491,7 @@ import simd
     pointerBaseline = motion.attitude
     pointerBaselineOrientation = orientation
     imuMount = Self.imuMount(gravity: motion.gravity, orientation: orientation)
+    awaitingMount = false
     if UserDefaults.standard.bool(forKey: "input_debug") {
       NSLog("[MOTION] gyro pointer / IMU baseline orientation=%d", orientation.rawValue)
     }
@@ -663,20 +666,24 @@ import simd
     /// The phone's full acceleration through the static neutral grip, never the baseline mount:
     /// the DSU server streams the phone's own motion to a client.
     case phoneUnmounted
+    /// A level, motionless remote: no tilt, no swing, no rotation ("Wiimote Motion Controls" off).
+    case resting
   }
 
   struct IMUPolicy: Equatable {
     var wiimote: IMUSource
     var nunchuk: IMUSource
+    /// The remote will follow the phone once the next device-motion sample re-takes the mount.
+    var awaitingMount = false
 
-    var tracksPhone: Bool { wiimote == .phone || nunchuk == .phone }
+    var tracksPhone: Bool { wiimote == .phone || nunchuk == .phone || awaitingMount }
   }
 
   /// Which IMU follows the phone's tilt.
   ///
   /// - DSU server (`dsu`): the client wants the phone's own motion, whatever the pointer mode, so
   ///   the remote's axes carry it through the static grip (no baseline, as DSU always streamed).
-  /// - Wii Remote motion off (`wiimoteIMU` false): the remote rests level in every mode.
+  /// - Wii Remote motion off (`wiimoteIMU` false): the remote rests level and still in every mode.
   /// - Touch pointer modes (follow 1, drag 2, the default) with an upright remote: the pointer
   ///   comes from the screen, so the phone's orientation must never decide whether a game shows
   ///   it. Games hide the pointer when the remote reads as aimed at the floor or ceiling, which is
@@ -695,13 +702,31 @@ import simd
     if dsu {
       wiimote = .phoneUnmounted
     } else if !wiimoteIMU {
-      wiimote = .level
+      wiimote = .resting
     } else if irMode == 0 || sideways {
       wiimote = .phone
     } else {
       wiimote = .level
     }
     return IMUPolicy(wiimote: wiimote, nunchuk: full6DOF && nunchukIMU ? .phone : .level)
+  }
+
+  /// `policy` as the handlers apply it right now (motion queue only). When the remote starts
+  /// following the phone (sideways turned on, Wii Remote motion turned back on) its old mount
+  /// belongs to an earlier grip, and the 200 Hz handlers can see the switch before the 60 Hz
+  /// device-motion sample re-takes it: recenter, and keep the remote level until then.
+  private func effectiveIMUPolicy(_ policy: IMUPolicy) -> IMUPolicy {
+    if policy.wiimote == .phone, lastWiimoteSource != .phone {
+      awaitingMount = true
+      recenterPointer()
+    }
+    lastWiimoteSource = policy.wiimote
+    guard awaitingMount, policy.wiimote == .phone else { return policy }
+    var held = policy
+    held.wiimote = .level
+    // Still counts as tracking, so the next device-motion sample takes the baseline.
+    held.awaitingMount = true
+    return held
   }
 
   /// The policy for the live settings and the snapshotted routing state. Safe on the motion queue.
@@ -761,6 +786,8 @@ import simd
       return wiimoteFrame(mount?.act(proper) ?? proper, orientation: orientation)
     case .phoneUnmounted:
       return wiimoteFrame(properAcceleration(acceleration), orientation: orientation)
+    case .resting:
+      return levelAcceleration
     case .level:
       // Without a gravity estimate there is no telling swing from tilt: rest level.
       guard let gravity else { return levelAcceleration }
