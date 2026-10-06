@@ -48,6 +48,30 @@
   if (button == 5) { [DSUServerBridge setTouch:controllerId state:state]; }
 }
 
+// Dolphin's own DSU client (DualShockUDPClient.cpp) is the reference for the DSU axis convention:
+//   accel (g -> m/s^2): Left = +x, Right = -x; Down = +y, Up = -y; Forward = +z, Backward = -z
+//   gyro (deg/s -> rad/s): PitchUp = +pitch, PitchDown = -pitch; RollRight = +roll, RollLeft = -roll;
+//                          YawRight = +yaw, YawLeft = -yaw
+// The core reads IMUAccelerometer as x = Left - Right, y = Backward - Forward, z = Up - Down and
+// IMUGyroscope as pitch = PitchDown - PitchUp, roll = RollLeft - RollRight, yaw = YawLeft - YawRight.
+// Inverting the client therefore gives, for the core's signed vector (cx, cy, cz) and rates:
+//   dsu x = cx / g, dsu y = -cz / g, dsu z = -cy / g, and every gyro component = -(core rate) in deg/s,
+// so a Dolphin DSU client reproduces exactly the remote motion the game sees.
+static const float kStandardGravity = 9.80665f;
+
++ (TCDSUMotionComponent)dsuMotionComponentForAxis:(NSInteger)axis value:(float)value {
+  const float degPerRad = 180.0f / (float)M_PI;
+  switch (axis) {
+    case 625: return (TCDSUMotionComponent){TCDSUMotionKindAccelerometer, 0, value / kStandardGravity};  // WIIMOTE_ACCEL_LEFT
+    case 628: return (TCDSUMotionComponent){TCDSUMotionKindAccelerometer, 2, -value / kStandardGravity}; // WIIMOTE_ACCEL_BACKWARD
+    case 629: return (TCDSUMotionComponent){TCDSUMotionKindAccelerometer, 1, -value / kStandardGravity}; // WIIMOTE_ACCEL_UP
+    case 632: return (TCDSUMotionComponent){TCDSUMotionKindGyro, 0, -value * degPerRad}; // WIIMOTE_GYRO_PITCH_DOWN
+    case 635: return (TCDSUMotionComponent){TCDSUMotionKindGyro, 1, -value * degPerRad}; // WIIMOTE_GYRO_YAW_LEFT
+    case 633: return (TCDSUMotionComponent){TCDSUMotionKindGyro, 2, -value * degPerRad}; // WIIMOTE_GYRO_ROLL_LEFT
+    default: return (TCDSUMotionComponent){TCDSUMotionKindNone, 0, 0.0f};
+  }
+}
+
 + (float)axisValueFor:(NSInteger)axis controller:(NSInteger)controllerId {
   // StateManager::GetAxisValue uses std::map::at, which throws for an axis never written.
   try {
@@ -148,36 +172,19 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
       [DSUServerBridge setTouchPoint:0 controller:controllerId active:active x:touch_x y:touch_y];
     }
 
-    // Forward Wiimote gyro data to DSU (axes 631-636 are IMU gyro)
-    if (axis >= 631 && axis <= 636) {
-      static float gyro_pitch = 0.0f, gyro_yaw = 0.0f, gyro_roll = 0.0f;
-      // Convert radians/sec to degrees/sec for DSU protocol
-      float deg_per_sec = v * (180.0f / M_PI);
-
-      if (axis == 631 || axis == 632) { // Pitch Up/Down
-        gyro_pitch = (axis == 632) ? deg_per_sec : -deg_per_sec;
-      } else if (axis == 635 || axis == 636) { // Yaw Left/Right
-        gyro_yaw = (axis == 636) ? deg_per_sec : -deg_per_sec;
-      } else if (axis == 633 || axis == 634) { // Roll Left/Right
-        gyro_roll = (axis == 634) ? deg_per_sec : -deg_per_sec;
+    // Wii Remote IMU (accel 625-630, gyro 631-636) -> DSU motion. One signed value per axis, in
+    // g and deg/s; see dsuMotionComponentForAxis:value:.
+    const TCDSUMotionComponent motion = [self dsuMotionComponentForAxis:axis value:v];
+    if (motion.kind != TCDSUMotionKindNone) {
+      static float accel[3] = {0.0f, 0.0f, 0.0f};
+      static float gyro[3] = {0.0f, 0.0f, 0.0f}; // pitch, yaw, roll
+      if (motion.kind == TCDSUMotionKindAccelerometer) {
+        accel[motion.index] = motion.value;
+        [DSUServerBridge setAccelerometer:controllerId x:accel[0] y:accel[1] z:accel[2]];
+      } else {
+        gyro[motion.index] = motion.value;
+        [DSUServerBridge setGyro:controllerId pitch:gyro[0] yaw:gyro[1] roll:gyro[2]];
       }
-
-      [DSUServerBridge setGyro:controllerId pitch:gyro_pitch yaw:gyro_yaw roll:gyro_roll];
-    }
-
-    // Forward Wiimote accelerometer data to DSU (axes 625-630 are IMU accel)
-    if (axis >= 625 && axis <= 630) {
-      static float accel_x = 0.0f, accel_y = 0.0f, accel_z = 0.0f;
-
-      if (axis == 625 || axis == 626) { // Accel Left/Right
-        accel_x = (axis == 626) ? v : -v;
-      } else if (axis == 627 || axis == 628) { // Accel Forward/Backward
-        accel_y = (axis == 628) ? v : -v;
-      } else if (axis == 629 || axis == 630) { // Accel Up/Down
-        accel_z = (axis == 630) ? v : -v;
-      }
-
-      [DSUServerBridge setAccelerometer:controllerId x:accel_x y:accel_y z:accel_z];
     }
     // GC analog triggers: L(20)->DSU axis 4, R(21)->DSU axis 5, map [0..1] to [-1..1]
     if (axis == 20 || axis == 21) {
