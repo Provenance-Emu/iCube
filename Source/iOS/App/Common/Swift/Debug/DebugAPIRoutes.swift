@@ -847,6 +847,7 @@ final class DebugAPIRoutes {
   }
 
   #if DEBUG && canImport(CoreMotion)
+
   // MARK: - Motion pose injection
 
   /// POST /api/debug/motion/pose: drives the Wii Remote's IMU from a described phone pose through
@@ -869,7 +870,7 @@ final class DebugAPIRoutes {
         return ["ok": true, "data": ["released": true]]
       }
       if let mode = asJSONInt(dict["irMode"]) {
-        guard (0...2).contains(mode) else {
+        guard (0 ... 2).contains(mode) else {
           return ["ok": false, "status": 400, "error": "irMode must be 0 (gyro), 1 (follow) or 2 (drag)"]
         }
         DispatchQueue.main.sync { DOLConfigBridge.setCurrentRunMainTouchPadIRMode(mode) }

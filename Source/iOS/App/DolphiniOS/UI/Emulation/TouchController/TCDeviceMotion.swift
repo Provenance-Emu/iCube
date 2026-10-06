@@ -664,6 +664,7 @@ import simd
   }
 
   #if DEBUG
+
   // MARK: - Debug pose injection
 
   /// Attitude (CoreMotion reference frame: X right, Y away from the player, Z up) of the phone in

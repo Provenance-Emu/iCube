@@ -1,8 +1,8 @@
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import UIKit
 import simd
+import UIKit
 import XCTest
 
 @testable import iCube
