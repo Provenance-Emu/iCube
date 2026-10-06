@@ -925,7 +925,8 @@ static bool HasCurrentRunLayer()
   // Synchronous shader compilation WITHOUT precompiling = mid-gameplay stutter. iCube precompiles
   // up front (one-time boot wait, then no stutter), so force it on at reset too — a plain
   // delete-to-default would silently land back on the stuttery upstream default. The mode is
-  // deleted above and lands on the compiled iOS/tvOS default, Hybrid Ubershaders (GraphicsSettings.cpp).
+  // deleted above and lands on the compiled iOS/tvOS default, Hybrid Ubershaders
+  // (GraphicsSettings.cpp).
   Config::SetBase(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING, true);
 
   // fast-disc, DSP-on-thread, and immediate-XFB all compile to the CONSERVATIVE upstream default
