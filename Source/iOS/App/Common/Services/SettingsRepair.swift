@@ -103,10 +103,10 @@ final class SettingsRepair: NSObject {
     // Per-game learned adaptive clocks: each game relearns its clock on its next boot.
     DefaultsRule(key: "adaptive_clock_cpu_", prefix: true, since: 1),
     DefaultsRule(key: "adaptive_clock_vi_", prefix: true, since: 1),
-    // Written only by the Performance A/B tools.
+    // The CIR profiler is a user toggle (Performance Tuning), reset because leaving it on costs
+    // performance. The "Perf Test Bench (HTTP)" toggle and saved A/B snapshots are kept: one is a
+    // deliberate choice, the other is the user's data, not a setting.
     DefaultsRule(key: "icube.cirProfile", since: 1),
-    DefaultsRule(key: "ICubeBenchServerEnabled", since: 1),
-    DefaultsRule(key: "icube.perfSnapshots", since: 1),
   ]
 
   /// The Base-layer keys to delete. `base` maps each key present in the Base layer
