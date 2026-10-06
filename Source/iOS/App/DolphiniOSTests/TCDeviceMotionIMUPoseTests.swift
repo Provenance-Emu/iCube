@@ -138,6 +138,96 @@ final class TCDeviceMotionIMUPoseTests: XCTestCase {
     XCTAssertEqual(policy, .init(wiimote: .level, nunchuk: .level))
   }
 
+  /// A sideways remote has no pointer to hide, and its tilt is the steering (Mario Kart Wii) or
+  /// tilt control (New Super Mario Bros. Wii): it follows the phone in the touch modes too.
+  func testSidewaysRemoteFollowsThePhoneInTouchModes() {
+    for irMode in [0, 1, 2] {
+      for full6DOF in [false, true] {
+        let policy = TCDeviceMotion.imuPolicy(irMode: irMode, full6DOF: full6DOF, nunchukIMU: false, sideways: true)
+        XCTAssertEqual(policy.wiimote, .phone, "irMode \(irMode) 6DOF \(full6DOF)")
+      }
+    }
+  }
+
+  func testUprightRemoteStaysLevelInTouchModesWithWiiRemoteMotionOn() {
+    for irMode in [1, 2] {
+      let policy = TCDeviceMotion.imuPolicy(irMode: irMode, full6DOF: true, nunchukIMU: false, wiimoteIMU: true, sideways: false)
+      XCTAssertEqual(policy.wiimote, .level, "irMode \(irMode)")
+    }
+  }
+
+  /// "Wiimote Motion Controls" off: the remote rests level in every mode, sideways or not.
+  func testWiiRemoteMotionOffRestsTheRemoteLevelInEveryMode() {
+    for irMode in [0, 1, 2] {
+      for sideways in [false, true] {
+        let policy = TCDeviceMotion.imuPolicy(
+          irMode: irMode, full6DOF: true, nunchukIMU: false, wiimoteIMU: false, sideways: sideways)
+        XCTAssertEqual(policy.wiimote, .level, "irMode \(irMode) sideways \(sideways)")
+      }
+    }
+  }
+
+  /// The DSU server streams the phone's own motion whatever the pointer mode and settings, through
+  /// the static grip (DSU never had a baseline).
+  func testDSUFollowsThePhoneRegardlessOfThePointerMode() {
+    for irMode in [0, 1, 2] {
+      for wiimoteIMU in [false, true] {
+        for sideways in [false, true] {
+          let policy = TCDeviceMotion.imuPolicy(
+            irMode: irMode, full6DOF: true, nunchukIMU: false, wiimoteIMU: wiimoteIMU, sideways: sideways, dsu: true)
+          XCTAssertEqual(policy.wiimote, .phoneUnmounted, "irMode \(irMode) imu \(wiimoteIMU) sideways \(sideways)")
+        }
+      }
+    }
+  }
+
+  func testDSUReadingIsTheStaticGripAndIgnoresAMount() {
+    let faceUp = Self.rawAtRest(Self.reclined(.portrait, 90))
+    let mount = TCDeviceMotion.imuMount(gravity: faceUp, orientation: .portrait)
+    let reading = TCDeviceMotion.imuAcceleration(
+      source: .phoneUnmounted, acceleration: faceUp, gravity: faceUp, mount: mount, orientation: .portrait)
+    // Face up is the remote aimed at the floor: its back (+y) up.
+    assertVector(reading, SIMD3(0, g, 0), "face up, static grip")
+  }
+
+  /// The policy the motion queue uses reads the snapshotted routing state.
+  func testCurrentPolicyReadsTheDSUAndSidewaysSnapshots() {
+    let motion = TCDeviceMotion()
+    motion.setDSUStreaming(true)
+    XCTAssertEqual(motion.currentIMUPolicy(irMode: 2).wiimote, .phoneUnmounted)
+    motion.setDSUStreaming(false)
+    motion.boundRemoteSideways = true
+    XCTAssertEqual(
+      motion.currentIMUPolicy(irMode: 2).wiimote, MotionSettings.wiimoteIMU() ? .phone : .level)
+    motion.boundRemoteSideways = false
+    XCTAssertEqual(motion.currentIMUPolicy(irMode: 2).wiimote, .level)
+  }
+
+  /// Sideways in drag mode, phone held upright in landscape at the baseline: steering the phone
+  /// (turning it about the axis out of the screen) tilts the remote by the same angle, where an
+  /// upright remote in the same mode stays level.
+  func testSidewaysDragModeSteeringTiltsTheRemote() {
+    let steer = 30.0
+    for orientation in [UIInterfaceOrientation.landscapeLeft, .landscapeRight] {
+      let baseline = Self.upright(orientation)
+      let steered = Self.turned(baseline, steer, about: Self.towardPlayer)
+      let raw = Self.rawAtRest(steered)
+      let mount = TCDeviceMotion.imuMount(gravity: Self.rawAtRest(baseline), orientation: orientation)
+
+      let sideways = TCDeviceMotion.imuPolicy(irMode: 2, full6DOF: true, nunchukIMU: false, sideways: true)
+      let tilted = TCDeviceMotion.imuAcceleration(
+        source: sideways.wiimote, acceleration: raw, gravity: raw, mount: mount, orientation: orientation)
+      XCTAssertEqual(abs(tilted.x), g * sin(steer * .pi / 180), accuracy: accuracy, "\(orientation.rawValue)")
+      XCTAssertEqual(tilted.y, 0, accuracy: accuracy, "\(orientation.rawValue)")
+      XCTAssertEqual(tilted.z, g * cos(steer * .pi / 180), accuracy: accuracy, "\(orientation.rawValue)")
+
+      let upright = TCDeviceMotion.imuPolicy(irMode: 2, full6DOF: true, nunchukIMU: false, sideways: false)
+      let level = TCDeviceMotion.imuAcceleration(
+        source: upright.wiimote, acceleration: raw, gravity: raw, mount: mount, orientation: orientation)
+      assertVector(level, self.level(), "upright remote, \(orientation.rawValue)")
+    }
+  }
+
   // MARK: - Touch modes: always a level remote
 
   func testTouchModesReadLevelForEveryPoseAndOrientation() {
@@ -188,6 +278,35 @@ final class TCDeviceMotionIMUPoseTests: XCTestCase {
         source: .level, acceleration: gravity + user, gravity: gravity, mount: nil, orientation: orientation)
       // Forward is -y (the remote's back is +y).
       assertVector(reading, SIMD3(0, -thrust * g, g), "\(orientation.rawValue)")
+    }
+  }
+
+  /// With the phone reclined or flat, a thrust toward the TV leaves through its top edge; it must
+  /// still read as the remote moving forward, not up.
+  func testTouchModeThrustTowardTheTVReadsForwardWhenReclined() {
+    let thrust = 0.8
+    for orientation in Self.orientations {
+      for recline in [30.0, 60, 90] {
+        let pose = Self.reclined(orientation, recline)
+        let gravity = Self.rawAtRest(pose)
+        let user = -pose.inverse.act(SIMD3(0, thrust, 0))
+        let reading = TCDeviceMotion.imuAcceleration(
+          source: .level, acceleration: gravity + user, gravity: gravity, mount: nil, orientation: orientation)
+        assertVector(reading, SIMD3(0, -thrust * g, g), "\(orientation.rawValue) recline \(recline)")
+      }
+    }
+  }
+
+  /// Lifting a flat phone straight up reads as the remote's top moving up.
+  func testTouchModeLiftOfAFlatPhoneReadsUp() {
+    let lift = 0.5
+    for orientation in Self.orientations {
+      let pose = Self.reclined(orientation, 90)
+      let gravity = Self.rawAtRest(pose)
+      let user = -pose.inverse.act(SIMD3(0, 0, lift))
+      let reading = TCDeviceMotion.imuAcceleration(
+        source: .level, acceleration: gravity + user, gravity: gravity, mount: nil, orientation: orientation)
+      assertVector(reading, SIMD3(0, 0, g + lift * g), "\(orientation.rawValue)")
     }
   }
 

@@ -41,6 +41,41 @@ import simd
 
   private let orientationLock = NSLock()
   private var storedOrientation: UIInterfaceOrientation = .portrait
+
+  /// Whether the Wii Remote the touch overlay is bound to is held sideways (the overlay shows the
+  /// sideways pad). Snapshotted on the main thread by `refreshBoundRemote()`, read by the IMU
+  /// policy on `operationQueue` at 200 Hz, so it is behind a lock and never read from the core there.
+  var boundRemoteSideways: Bool {
+    get {
+      routingLock.lock()
+      defer { routingLock.unlock() }
+      return storedBoundRemoteSideways
+    }
+    set {
+      routingLock.lock()
+      storedBoundRemoteSideways = newValue
+      routingLock.unlock()
+    }
+  }
+
+  /// Whether the DSU server screen is streaming this device's motion. Set from the main thread by
+  /// `setDSUStreaming(_:)`, read on `operationQueue`.
+  var dsuStreaming: Bool {
+    get {
+      routingLock.lock()
+      defer { routingLock.unlock() }
+      return storedDSUStreaming
+    }
+    set {
+      routingLock.lock()
+      storedDSUStreaming = newValue
+      routingLock.unlock()
+    }
+  }
+
+  private let routingLock = NSLock()
+  private var storedBoundRemoteSideways = false
+  private var storedDSUStreaming = false
   public private(set) var motionEnabled = false
   private var port = 0
 
@@ -93,6 +128,10 @@ import simd
   /// IR mode seen on the previous device-motion sample (motion queue only), to catch a switch
   /// into gyro mode from any of the places that set it.
   private var lastIRMode: Int?
+  /// The Wii Remote's IMU source on the previous device-motion sample (motion queue only), to
+  /// re-take the mount whenever the remote starts following the phone (gyro mode, or the bound
+  /// remote turning sideways) instead of reusing one from an earlier grip.
+  private var lastWiimoteSource: IMUSource?
   private var gyroPointerSampleCount = 0
   /// Set from any thread by `recenterPointer()`, consumed on the motion queue.
   private let recenterLock = NSLock()
@@ -221,7 +260,31 @@ import simd
   #endif
 
   override required init() {
-    //
+    super.init()
+    // A sideways or extension change mid-game rebuilds the overlay (which calls `setPort`), but
+    // refresh here too so the IMU policy never runs on a stale layout.
+    NotificationCenter.default.addObserver(
+      forName: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.refreshBoundRemote() }
+    }
+  }
+
+  /// Re-reads whether the Wii Remote the touch overlay is bound to is sideways, the same way the
+  /// overlay picks its pad (`programmaticPadKind()`), so motion and overlay never disagree. Main
+  /// thread only: it reads the core's controller config.
+  @MainActor
+  func refreshBoundRemote() {
+    let slot = ControllerManager.shared.touchscreenSlot(system: .wii) ?? 0
+    let kind = TouchOverlayPadKind.wii(
+      classicActive: DOLWiimoteBridge.isClassicActive(forWiimote: slot),
+      sideways: DOLWiimoteBridge.isSideways(forWiimote: slot))
+    boundRemoteSideways = kind == .wiiRemoteSideways
+  }
+
+  /// The DSU server screen streams the phone's own motion to a client, whatever the pointer mode.
+  @objc public func setDSUStreaming(_ streaming: Bool) {
+    dsuStreaming = streaming
   }
 
   @objc func registerMotionHandlers() {
@@ -231,6 +294,7 @@ import simd
     // Set our orientation properly
     Task { @MainActor in
       statusBarOrientationChanged()
+      refreshBoundRemote()
     }
 
     // Until the first sample arrives (and forever on a simulator, which has no motion hardware)
@@ -284,7 +348,7 @@ import simd
   @discardableResult
   private func handleAccelerometer(_ acceleration: SIMD3<Double>) -> (wiimote: SIMD3<Double>, nunchuk: SIMD3<Double>) {
     let uiOrientation = orientation
-    let policy = Self.currentIMUPolicy()
+    let policy = currentIMUPolicy()
     let mount = imuMount(for: uiOrientation)
     let wiimote = Self.imuAcceleration(
       source: policy.wiimote, acceleration: acceleration, gravity: latestGravity, mount: mount, orientation: uiOrientation)
@@ -301,7 +365,8 @@ import simd
     let uiOrientation = orientation
     // Rotation rates are the same whether or not gravity is fed through, but in the phone-tracking
     // modes they must turn with the same mount as the accelerometer or MotionPlus disagrees with it.
-    let mount = Self.currentIMUPolicy().wiimote == .phone ? imuMount(for: uiOrientation) : nil
+    // DSU (`.phoneUnmounted`) keeps the static grip, like its accelerometer.
+    let mount = currentIMUPolicy().wiimote == .phone ? imuMount(for: uiOrientation) : nil
     let rates = Self.imuAngularVelocity(rate, mount: mount, orientation: uiOrientation)
     for (button, value) in Self.wiimoteGyroWrites(pitch: rates.x, roll: rates.y, yaw: rates.z) {
       TCManagerInterface.setAxisValueFor(button.rawValue, controller: port, value: value)
@@ -395,11 +460,19 @@ import simd
     }
     lastIRMode = irMode
 
+    // Whenever the remote starts following the phone (sideways turned on, Wii Remote motion
+    // turned back on), center on the current grip rather than a mount from an earlier session.
+    let policy = currentIMUPolicy(irMode: irMode)
+    if policy.wiimote == .phone, lastWiimoteSource != .phone {
+      recenterPointer()
+    }
+    lastWiimoteSource = policy.wiimote
+
     // The baseline is the pointer's center AND the IMU mount, taken from the same sample. It is
-    // only consumed when the phone's attitude drives something (gyro pointer, 6DOF Nunchuk), so a
-    // recenter request made in a touch mode waits for a mode that uses it.
+    // only consumed when the phone's attitude drives something (gyro pointer, a phone-tracking
+    // remote or Nunchuk), so a recenter request made in a touch mode waits for a mode that uses it.
     let uiOrientation = orientation
-    if Self.currentIMUPolicy(irMode: irMode).tracksPhone {
+    if policy.tracksPhone || irMode == 0 {
       rebaselineIfNeeded(motion: motion, orientation: uiOrientation)
     }
     guard irMode == 0 else { return nil }
@@ -524,6 +597,8 @@ import simd
   }
 
   @objc func setPort(_ port: Int) {
+    // Every overlay (re)build lands here, including the one a sideways change triggers.
+    Task { @MainActor in self.refreshBoundRemote() }
     guard port != self.port else { return }
     let previousPort = self.port
     self.port = port
@@ -585,6 +660,9 @@ import simd
     /// The phone's full acceleration (gravity included) through the baseline mount: the remote
     /// tilts with the phone.
     case phone
+    /// The phone's full acceleration through the static neutral grip, never the baseline mount:
+    /// the DSU server streams the phone's own motion to a client.
+    case phoneUnmounted
   }
 
   struct IMUPolicy: Equatable {
@@ -596,23 +674,41 @@ import simd
 
   /// Which IMU follows the phone's tilt.
   ///
-  /// - Touch pointer modes (follow 1, drag 2, the default): the pointer comes from the screen, so
-  ///   the phone's orientation must never decide whether a game shows it. Games hide the pointer
-  ///   when the remote reads as aimed at the floor or ceiling, which is how every normal grip read
-  ///   before this policy existed. This holds even with Full 6DOF and Wii Remote motion on: both
-  ///   are ON by default (`MotionSettings.defaults`), and that 6DOF path was how most players got
-  ///   the bug, so in a touch mode they cannot tilt the remote.
+  /// - DSU server (`dsu`): the client wants the phone's own motion, whatever the pointer mode, so
+  ///   the remote's axes carry it through the static grip (no baseline, as DSU always streamed).
+  /// - Wii Remote motion off (`wiimoteIMU` false): the remote rests level in every mode.
+  /// - Touch pointer modes (follow 1, drag 2, the default) with an upright remote: the pointer
+  ///   comes from the screen, so the phone's orientation must never decide whether a game shows
+  ///   it. Games hide the pointer when the remote reads as aimed at the floor or ceiling, which is
+  ///   how every normal grip read before this policy existed, so the remote stays level.
+  /// - Sideways remote (`sideways`, any mode): there is no pointer to hide, and tilt is the game's
+  ///   steering (Mario Kart Wii) or tilt control (New Super Mario Bros. Wii), so the remote tracks
+  ///   the phone (baseline-relative). The core turns the sideways grip itself (WiimoteEmu.cpp
+  ///   `GetOrientation`, `RotateZ(-tau/4 * IsSideways())`), so the neutral grip needs no change.
   /// - Gyro pointer (0): the phone IS the remote, so the Wii Remote tracks it (baseline-relative).
   /// - The Nunchuk tracks the phone only with Full 6DOF and Nunchuk motion on (off by default); its
   ///   tilt never hides the pointer.
-  static func imuPolicy(irMode: Int, full6DOF: Bool, nunchukIMU: Bool) -> IMUPolicy {
-    IMUPolicy(
-      wiimote: irMode == 0 ? .phone : .level,
-      nunchuk: full6DOF && nunchukIMU ? .phone : .level)
+  static func imuPolicy(
+    irMode: Int, full6DOF: Bool, nunchukIMU: Bool, wiimoteIMU: Bool = true, sideways: Bool = false, dsu: Bool = false
+  ) -> IMUPolicy {
+    let wiimote: IMUSource
+    if dsu {
+      wiimote = .phoneUnmounted
+    } else if !wiimoteIMU {
+      wiimote = .level
+    } else if irMode == 0 || sideways {
+      wiimote = .phone
+    } else {
+      wiimote = .level
+    }
+    return IMUPolicy(wiimote: wiimote, nunchuk: full6DOF && nunchukIMU ? .phone : .level)
   }
 
-  static func currentIMUPolicy(irMode: Int = Int(DOLConfigBridge.mainTouchPadIRMode())) -> IMUPolicy {
-    imuPolicy(irMode: irMode, full6DOF: MotionSettings.full6DOF(), nunchukIMU: MotionSettings.nunchukIMU())
+  /// The policy for the live settings and the snapshotted routing state. Safe on the motion queue.
+  func currentIMUPolicy(irMode: Int = Int(DOLConfigBridge.mainTouchPadIRMode())) -> IMUPolicy {
+    Self.imuPolicy(
+      irMode: irMode, full6DOF: MotionSettings.full6DOF(), nunchukIMU: MotionSettings.nunchukIMU(),
+      wiimoteIMU: MotionSettings.wiimoteIMU(), sideways: boundRemoteSideways, dsu: dsuStreaming)
   }
 
   /// What a level remote at rest reads, m/s^2.
@@ -663,10 +759,18 @@ import simd
     case .phone:
       let proper = properAcceleration(acceleration)
       return wiimoteFrame(mount?.act(proper) ?? proper, orientation: orientation)
+    case .phoneUnmounted:
+      return wiimoteFrame(properAcceleration(acceleration), orientation: orientation)
     case .level:
       // Without a gravity estimate there is no telling swing from tilt: rest level.
       guard let gravity else { return levelAcceleration }
-      return levelAcceleration + wiimoteFrame(properAcceleration(acceleration - gravity), orientation: orientation)
+      // The swing is read in the level remote's frame, not the phone's: turn it by the same
+      // shortest rotation that would make the current grip level. Upright that is no turn; with
+      // the phone reclined or flat, a thrust toward the TV leaves through the phone's top edge,
+      // and without the turn it read as the remote moving up.
+      let levelTurn = imuMount(gravity: gravity, orientation: orientation)
+      let swing = levelTurn.act(properAcceleration(acceleration - gravity))
+      return levelAcceleration + wiimoteFrame(swing, orientation: orientation)
     }
   }
 
@@ -714,7 +818,7 @@ import simd
         "port": self.port,
         "orientation": self.orientation.rawValue,
         "irMode": Int(DOLConfigBridge.mainTouchPadIRMode()),
-        "policy": ["wiimote": "\(Self.currentIMUPolicy().wiimote)", "nunchuk": "\(Self.currentIMUPolicy().nunchuk)"],
+        "policy": ["wiimote": "\(self.currentIMUPolicy().wiimote)", "nunchuk": "\(self.currentIMUPolicy().nunchuk)"],
         "deviceGravity": [gravity.x, gravity.y, gravity.z],
         "wiimoteAccel": [accel.wiimote.x, accel.wiimote.y, accel.wiimote.z],
         "wiimoteAccel10bit": Self.debugAccel10Bit(accel.wiimote),

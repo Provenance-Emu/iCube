@@ -60,20 +60,16 @@ struct EnhancedMotionControlsView: View {
       }
 
       Section(header: Text(L("Full Motion Mapping"))) {
+        // Read by TCDeviceMotion's IMU policy in every pointer mode, so it is not nested under 6DOF.
+        settingsCaption(
+          Toggle(L("Wiimote Motion Controls"), isOn: $wiimoteIMUEnabled),
+          L("The Wii Remote tilts and turns with the device while the Pointer is set to Gyro and while the remote is held sideways. With a touch Pointer the upright remote stays level, so tilting the device never hides the pointer; swings and shakes still reach the game. Off: the remote always rests level."))
+
         settingsCaption(
           Toggle(L("Enable 6DOF Motion Controls"), isOn: $fullMotionEnabled),
-          L("Maps device motion to all 6 axes (rotation + acceleration) for games like Wii Sports and Mario Kart. Inactive while the Pointer is set to Gyro, because the gyro then aims the pointer."))
+          L("Lets device motion reach the Nunchuck too, with Nunchuck Motion Controls below."))
 
         if fullMotionEnabled {
-          VStack(alignment: .leading, spacing: 8) {
-            Toggle(L("Wiimote Motion Controls"), isOn: $wiimoteIMUEnabled)
-            Text(L("Maps device motion to Wiimote's built-in accelerometer and gyroscope. Required for most motion-controlled Wii games."))
-              .font(.caption)
-              .foregroundColor(.secondary)
-              .fixedSize(horizontal: false, vertical: true)
-          }
-          .padding(.leading)
-
           VStack(alignment: .leading, spacing: 8) {
             Toggle(L("Nunchuck Motion Controls"), isOn: $nunchuckIMUEnabled)
             Text(L("Maps device motion to Nunchuck's accelerometer. Used by fewer games, mainly for secondary motion controls when using Nunchuck + Wiimote."))
