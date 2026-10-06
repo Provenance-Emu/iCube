@@ -205,9 +205,9 @@ final class TCDeviceMotionIMUPoseTests: XCTestCase {
     motion.setDSUStreaming(false)
     motion.boundRemoteSideways = true
     XCTAssertEqual(
-      motion.currentIMUPolicy(irMode: 2).wiimote, MotionSettings.wiimoteIMU() ? .phone : .level)
+      motion.currentIMUPolicy(irMode: 2).wiimote, MotionSettings.wiimoteIMU() ? .phone : .resting)
     motion.boundRemoteSideways = false
-    XCTAssertEqual(motion.currentIMUPolicy(irMode: 2).wiimote, .level)
+    XCTAssertEqual(motion.currentIMUPolicy(irMode: 2).wiimote, MotionSettings.wiimoteIMU() ? .level : .resting)
   }
 
   /// Sideways in drag mode, phone held upright in landscape at the baseline: steering the phone

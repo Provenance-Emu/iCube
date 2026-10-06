@@ -305,6 +305,9 @@ import simd
     // the remote rests level instead of keeping whatever the axes held before.
     operationQueue.addOperation {
       self.latestGravity = nil
+      // A resume goes through the level hold in `effectiveIMUPolicy` rather than apply the
+      // previous session's mount until the first device-motion sample.
+      self.lastWiimoteSource = nil
       self.writeRestingIMU()
     }
 
