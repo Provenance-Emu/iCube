@@ -5,6 +5,17 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// What, if anything, outranks the user's own (Base layer) value of a setting right now.
+typedef NS_ENUM(NSInteger, DOLConfigOverride) {
+  /// The user's own value is in effect.
+  DOLConfigOverrideNone = 0,
+  /// Set for this run by the app: Auto-IR, thermal or the adaptive clock (CurrentRun), or by
+  /// netplay, a movie or the command line.
+  DOLConfigOverrideAuto,
+  /// Set by the running game's settings (GlobalGame / LocalGame INI).
+  DOLConfigOverrideGame,
+};
+
 /// Typed config bridge for Graphics settings (safe for Swift)
 @interface DOLConfigBridge : NSObject
 
@@ -36,10 +47,18 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setGfxEfbScaleAuto:(NSInteger)scale;
 // Clear the auto (CurrentRun) EFB override, re-exposing the manual Base value.
 + (void)clearGfxEfbScaleAuto;
-// "Auto" badge helpers — YES iff an auto controller is currently overriding the key on CurrentRun.
-+ (BOOL)isEfbScaleAutoOverridden;
-+ (BOOL)isOverclockAutoOverridden;
-+ (BOOL)isViOverclockAutoOverridden;
+// Badge helpers: which layer above Base, if any, decides the key now. Settings screens show the
+// user's Base value, so while this is not None they disable the control and badge it ("Auto" or
+// "Game"): an edit there would not apply until the override goes away. The clock helpers cover both
+// the clock and its enable key (a game INI may set either).
++ (DOLConfigOverride)efbScaleOverride;
++ (DOLConfigOverride)overclockOverride;
++ (DOLConfigOverride)viOverclockOverride;
+// Tests only: stand in for a running game's LocalGame INI (a layer with no file behind it) that
+// sets the EFB scale and enables the CPU overclock, and take it away again. Outside emulation
+// there is no game layer, so these never touch a real game's settings.
++ (void)addTestGameLayerWithEfbScale:(NSInteger)scale;
++ (void)removeTestGameLayer;
 // Maximum Internal Resolution supported by backend/device
 + (NSInteger)gfxEfbMaxScale;
 // GPU Texture Decoding

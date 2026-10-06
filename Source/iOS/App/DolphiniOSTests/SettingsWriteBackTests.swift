@@ -74,7 +74,27 @@ final class SettingsWriteBackTests: XCTestCase {
 
     XCTAssertEqual(DOLConfigBridge.gfxEfbScale(), 4)
     XCTAssertEqual(DOLConfigBridge.gfxEfbScaleBase(), 2)
-    XCTAssertTrue(DOLConfigBridge.isEfbScaleAutoOverridden())
+    XCTAssertEqual(DOLConfigBridge.efbScaleOverride(), .auto)
+  }
+
+  /// A running game's INI (per-game Internal Resolution, the shipped RHT / UGP / RDC overclocks)
+  /// outranks Base too. The rows must show it as a "Game" override and disable the control, not
+  /// look editable while an edit would change nothing for this game.
+  func testAGameLayerCountsAsAnOverride() {
+    XCTAssertEqual(DOLConfigBridge.efbScaleOverride(), .none)
+    DOLConfigBridge.addTestGameLayer(withEfbScale: 3)
+    defer { DOLConfigBridge.removeTestGameLayer() }
+
+    XCTAssertEqual(DOLConfigBridge.gfxEfbScale(), 3)
+    XCTAssertEqual(DOLConfigBridge.efbScaleOverride(), .game)
+    // The game sets only OverclockEnable; the clock row still counts as overridden.
+    XCTAssertEqual(DOLConfigBridge.overclockOverride(), .game)
+    XCTAssertEqual(DOLConfigBridge.viOverclockOverride(), .none)
+
+    // CurrentRun outranks the game: the adaptive clock / Auto-IR badge wins.
+    DOLConfigBridge.setGfxEfbScaleAuto(4)
+    defer { DOLConfigBridge.clearGfxEfbScaleAuto() }
+    XCTAssertEqual(DOLConfigBridge.efbScaleOverride(), .auto)
   }
 
   /// "Recommended" deletes every CIR key, so each knob follows its compiled default, including
