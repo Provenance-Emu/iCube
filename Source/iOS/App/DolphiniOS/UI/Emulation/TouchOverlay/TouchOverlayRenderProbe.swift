@@ -24,8 +24,15 @@ enum TouchOverlayRenderProbe {
     case stick
     case stickBase
     case stickKnob
-    /// A skin's thumbstick knob (`SkinStickView`).
+    /// A skin's touch layer (`SkinTouchLayer`), which owns the pressed set: once per press or release.
+    case skinTouchLayer
+    /// A skin thumbstick (`SkinStickView`), which resolves its knob art.
+    case skinStick
+    /// A skin's thumbstick knob (`SkinStickKnobView`).
     case skinStickKnob
+    /// Not a body: a skin stick actually resolving its knob file (`SkinKnobArt`), which should happen
+    /// once per stick, not per press or move.
+    case skinKnobResolve
   }
 
   private static let signposter = OSSignposter(

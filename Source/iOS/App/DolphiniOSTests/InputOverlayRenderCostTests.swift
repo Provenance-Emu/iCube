@@ -157,6 +157,36 @@ final class TouchOverlayRenderCountTests: XCTestCase {
     XCTAssertEqual(TouchOverlayRenderProbe.count(.stickBase), 0)
     send(surface, .ended, CGPoint(x: 95, y: 55))
   }
+
+  /// Pressing a skin button re-renders the skin's touch layer (it owns the pressed set); its sticks
+  /// must not resolve their knob file again (symlink resolution and stats on the main thread).
+  func testPressingASkinButtonDoesNotReResolveTheKnobArt() throws {
+    let directory = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "TestCube", withExtension: "deltaskin", subdirectory: "Skins"))
+    let info = try SkinInfo.load(directory: directory)
+    let skin = InstalledSkin(id: info.identifier, name: info.name, gameType: info.gameType, directory: directory)
+    let device = try XCTUnwrap(TouchOverlayPreviewDevice.all.first { !$0.isPad })
+    let view = SkinOverlayView(skin: skin, padKind: .gameCube, deviceId: deviceId, previewDevice: device.skinDevice, onAction: { _ in })
+    let surfaces = try host(view, size: device.size(.portrait))
+    // The button surface covers the whole skin; each stick has its own, smaller one. The skin lays out
+    // on the size the host gave it, which is the button surface's own bounds.
+    let cluster = try XCTUnwrap(surfaces.max { $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height })
+    let canvas = cluster.bounds.size
+    let representation = try XCTUnwrap(SkinOverlayInput.representation(info: info, isPad: false, orientation: .portrait))
+    let layout = SkinLayout.make(representation, canvas: canvas)
+    let input = SkinOverlayInput(layout: layout, padKind: .gameCube)
+    XCTAssertFalse(input.sticks.isEmpty, "the fixture has a thumbstick")
+    let stickFrames = input.sticks.map(\.hitFrame)
+    let button = try XCTUnwrap(layout.items.map(\.hitFrame).first { frame in
+      let center = CGPoint(x: frame.midX, y: frame.midY)
+      return !stickFrames.contains { $0.contains(center) } && !input.hits(at: center, previous: []).isEmpty
+    })
+
+    TouchOverlayRenderProbe.reset()
+    send(cluster, .began, CGPoint(x: button.midX, y: button.midY))
+    XCTAssertGreaterThan(TouchOverlayRenderProbe.count(.skinTouchLayer), 0, "the press reached the skin")
+    send(cluster, .ended, CGPoint(x: button.midX, y: button.midY))
+    XCTAssertEqual(TouchOverlayRenderProbe.count(.skinKnobResolve), 0)
+  }
 }
 #endif
 

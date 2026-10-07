@@ -185,6 +185,8 @@ private struct SkinTouchLayer: View {
   @State private var held: Set<SkinOverlayInput.Key> = []
 
   var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.skinTouchLayer)
     ZStack(alignment: .topLeading) {
       TouchOverlayCluster<SkinOverlayInput.Hit>(
         hitTest: { location, _ in input.hits(at: location, previous: pressed) },
@@ -202,8 +204,11 @@ private struct SkinTouchLayer: View {
         }
       )
       ForEach(input.sticks, id: \.itemIndex) { stick in
+        // Equatable: a button press re-renders this layer (it owns `pressed`), and without this every
+        // stick re-ran its body, which resolves and stats its knob file on the main thread.
         SkinStickView(stick: stick, directory: directory, deviceId: deviceId,
                       displayScale: displayScale, controlOpacity: controlOpacity)
+          .equatable()
       }
     }
     .onChange(of: pressed) { _, now in apply(now) }
@@ -248,7 +253,7 @@ private struct SkinPointerLayer: View {
 
 /// A thumbstick: the knob follows the finger inside the item and the four half-axes are written
 /// with `TouchOverlayInput.stickWrites`, exactly like the xib stick.
-private struct SkinStickView: View {
+private struct SkinStickView: View, Equatable {
   let stick: SkinOverlayInput.Stick
   let directory: URL
   let deviceId: Int
@@ -258,11 +263,20 @@ private struct SkinStickView: View {
   /// Read only by `SkinStickKnobView`, so a move sample re-renders the knob alone: this body, which
   /// resolves and decodes the knob's art, runs again only when the stick itself changes.
   @State private var knob = TouchOverlayKnobPosition()
+  /// The knob image, resolved once per (file, size, scale) instead of on every body evaluation.
+  @State private var knobArt = SkinKnobArt()
+
+  static func == (lhs: SkinStickView, rhs: SkinStickView) -> Bool {
+    lhs.stick == rhs.stick && lhs.directory == rhs.directory && lhs.deviceId == rhs.deviceId
+      && lhs.displayScale == rhs.displayScale && lhs.controlOpacity == rhs.controlOpacity
+  }
 
   var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.skinStick)
     ZStack(alignment: .topLeading) {
       if let name = stick.knobName, let size = stick.thumbSize,
-         let image = SkinAssetRenderer.image(named: name, in: directory, size: size, scale: displayScale) {
+         let image = knobArt.image(named: name, in: directory, size: size, scale: displayScale) {
         SkinStickKnobView(image: image, size: size, center: stick.center, opacity: controlOpacity, position: knob)
       }
       TouchOverlaySingleTouch { location in
@@ -274,6 +288,31 @@ private struct SkinStickView: View {
     }
     .frame(width: stick.hitFrame.width, height: stick.hitFrame.height, alignment: .topLeading)
     .position(x: stick.hitFrame.midX, y: stick.hitFrame.midY)
+  }
+}
+
+/// Remembers the last knob image a stick resolved. `SkinAssetRenderer.image` resolves symlinks, checks the
+/// file exists and reads its modification date before its own cache lookup, all on the main thread; a
+/// stick's body can run on every skin button press, so the lookup happens here only when its inputs change.
+/// A plain reference held in `@State`, so updating it never invalidates the view.
+final class SkinKnobArt {
+  private struct Key: Equatable {
+    let name: String
+    let directory: URL
+    let size: CGSize
+    let scale: CGFloat
+  }
+
+  private var key: Key?
+  private var cached: UIImage?
+
+  func image(named name: String, in directory: URL, size: CGSize, scale: CGFloat) -> UIImage? {
+    let wanted = Key(name: name, directory: directory, size: size, scale: scale)
+    if wanted == key { return cached }
+    TouchOverlayRenderProbe.body(.skinKnobResolve)
+    key = wanted
+    cached = SkinAssetRenderer.image(named: name, in: directory, size: size, scale: scale)
+    return cached
   }
 }
 
