@@ -83,3 +83,90 @@ enum MotionSettings {
     store.set(false, forKey: Key.invertPitch)
   }
 }
+
+extension MotionSettings {
+  /// Every motion setting the device-motion handlers read per sample, plus `input_debug`.
+  struct Snapshot: Equatable {
+    var useYawForHorizontal: Bool
+    var invertRoll: Bool
+    var invertPitch: Bool
+    var enhancedShakeDetection: Bool
+    var full6DOF: Bool
+    var wiimoteIMU: Bool
+    var nunchukIMU: Bool
+    var gyroPointerSensitivity: Double
+    var inputDebug: Bool
+
+    static let inputDebugKey = "input_debug"
+
+    init(store: UserDefaults = .standard) {
+      useYawForHorizontal = MotionSettings.useYawForHorizontal(in: store)
+      invertRoll = MotionSettings.invertRoll(in: store)
+      invertPitch = MotionSettings.invertPitch(in: store)
+      enhancedShakeDetection = MotionSettings.enhancedShakeDetection(in: store)
+      full6DOF = MotionSettings.full6DOF(in: store)
+      wiimoteIMU = MotionSettings.wiimoteIMU(in: store)
+      nunchukIMU = MotionSettings.nunchukIMU(in: store)
+      gyroPointerSensitivity = MotionSettings.gyroPointerSensitivity(in: store)
+      inputDebug = store.bool(forKey: Self.inputDebugKey)
+    }
+  }
+}
+
+/// `MotionSettings.Snapshot`, re-read only after a user default changes. `TCDeviceMotion` used to
+/// read eight user defaults on every sample (the accelerometer and gyro at 200 Hz each, device motion
+/// at 60 Hz); a change still applies from the next sample, because the change notification is posted
+/// synchronously on the writing thread before the write returns.
+///
+/// Safe from any thread. The lock is never held while UserDefaults is called, so a defaults write
+/// that posts its notification while holding UserDefaults' own lock can never deadlock against a
+/// reader here.
+final class MotionSettingsCache {
+  static let shared = MotionSettingsCache()
+
+  private let store: UserDefaults
+  private let lock = NSLock()
+  private var cached: MotionSettings.Snapshot?
+  /// Bumped by every invalidation, so a snapshot read from the store before a change is never
+  /// cached after it.
+  private var generation = 0
+  private let center: NotificationCenter
+  private var observer: NSObjectProtocol?
+
+  init(store: UserDefaults = .standard, center: NotificationCenter = .default) {
+    self.store = store
+    self.center = center
+    // Any defaults object, not just `store`: a write through another `UserDefaults` instance on the
+    // same domain posts with that instance as the object.
+    observer = center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: nil) { [weak self] _ in
+      self?.invalidate()
+    }
+  }
+
+  deinit {
+    if let observer { center.removeObserver(observer) }
+  }
+
+  var snapshot: MotionSettings.Snapshot {
+    lock.lock()
+    if let cached {
+      lock.unlock()
+      return cached
+    }
+    let readGeneration = generation
+    lock.unlock()
+
+    let fresh = MotionSettings.Snapshot(store: store)
+    lock.lock()
+    if generation == readGeneration { cached = fresh }
+    lock.unlock()
+    return fresh
+  }
+
+  func invalidate() {
+    lock.lock()
+    generation &+= 1
+    cached = nil
+    lock.unlock()
+  }
+}

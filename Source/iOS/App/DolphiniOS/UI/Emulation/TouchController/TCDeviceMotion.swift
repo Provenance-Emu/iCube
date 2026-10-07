@@ -113,6 +113,10 @@ import simd
 
   @objc public var isDeviceMotionAvailable: Bool { motionManager.isDeviceMotionAvailable }
 
+  /// The motion settings, re-read only after a user default changes rather than on every 200 Hz
+  /// sample. Read on the motion queue.
+  private let settingsCache = MotionSettingsCache.shared
+
   // MARK: Gyro pointer baseline
 
   /// Radians of tilt from the baseline to a full-width / full-height pointer swing (1 / gain).
@@ -453,7 +457,7 @@ import simd
     // Shake statistics are always kept (they feed the debug view); the Wii Remote shake is only
     // fired when enhanced shake detection is on.
     let shake = updateShakeStatistics(userAcceleration: motion.userAcceleration)
-    if shake.detected, MotionSettings.enhancedShakeDetection() {
+    if shake.detected, settingsCache.snapshot.enhancedShakeDetection {
       let currentTime = Date().timeIntervalSinceReferenceDate
       if (currentTime - lastShakeTime) > Self.shakeCooldown {
         triggerWiimoteShake()
@@ -495,7 +499,7 @@ import simd
     pointerBaselineOrientation = orientation
     imuMount = Self.imuMount(gravity: motion.gravity, orientation: orientation)
     awaitingMount = false
-    if UserDefaults.standard.bool(forKey: "input_debug") {
+    if settingsCache.snapshot.inputDebug {
       NSLog("[MOTION] gyro pointer / IMU baseline orientation=%d", orientation.rawValue)
     }
   }
@@ -544,15 +548,16 @@ import simd
     attitude: simd_quatd, orientation: UIInterfaceOrientation
   ) -> (horizontal: Double, vertical: Double)? {
     guard let baseline = pointerBaseline else { return nil }
-    let debug = UserDefaults.standard.bool(forKey: "input_debug")
+    // One cached snapshot per sample; a settings change still applies from the next sample.
+    let settings = settingsCache.snapshot
+    let debug = settings.inputDebug
 
-    // Read per sample, like the invert keys below, so a change applies without a restart.
     var (horizontalValue, verticalValue) = Self.gyroPointerOffsets(
       current: attitude, baseline: baseline, orientation: orientation,
-      useYawForHorizontal: MotionSettings.useYawForHorizontal(), gain: MotionSettings.gyroPointerSensitivity())
+      useYawForHorizontal: settings.useYawForHorizontal, gain: settings.gyroPointerSensitivity)
 
-    if MotionSettings.invertRoll() { horizontalValue = -horizontalValue }
-    if MotionSettings.invertPitch() { verticalValue = -verticalValue }
+    if settings.invertRoll { horizontalValue = -horizontalValue }
+    if settings.invertPitch { verticalValue = -verticalValue }
 
     gyroPointerSampleCount += 1
     if debug, gyroPointerSampleCount % Self.gyroPointerLogInterval == 0 {
@@ -734,9 +739,10 @@ import simd
 
   /// The policy for the live settings and the snapshotted routing state. Safe on the motion queue.
   func currentIMUPolicy(irMode: Int = Int(DOLConfigBridge.mainTouchPadIRMode())) -> IMUPolicy {
-    Self.imuPolicy(
-      irMode: irMode, full6DOF: MotionSettings.full6DOF(), nunchukIMU: MotionSettings.nunchukIMU(),
-      wiimoteIMU: MotionSettings.wiimoteIMU(), sideways: boundRemoteSideways, dsu: dsuStreaming)
+    let settings = settingsCache.snapshot
+    return Self.imuPolicy(
+      irMode: irMode, full6DOF: settings.full6DOF, nunchukIMU: settings.nunchukIMU,
+      wiimoteIMU: settings.wiimoteIMU, sideways: boundRemoteSideways, dsu: dsuStreaming)
   }
 
   /// What a level remote at rest reads, m/s^2.
