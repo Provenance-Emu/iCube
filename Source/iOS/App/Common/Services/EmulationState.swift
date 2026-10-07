@@ -3,6 +3,7 @@
 
 import Foundation
 import Observation
+import os
 
 /// Whether a game session is running, for everything that should stay quiet while one is.
 ///
@@ -24,7 +25,16 @@ import Observation
 @MainActor
 @Observable
 final class EmulationState {
-  static let shared = EmulationState()
+  static let shared = EmulationState(publishesProcessWideFlag: true)
+
+  private static let processWideActive = OSAllocatedUnfairLock(initialState: false)
+
+  /// The shared state's `isActive`, readable from any thread (background loops such as the WebDAV
+  /// scanner). Follows `WillStart` as soon as the main queue applies it, which is earlier than the
+  /// core's own running flag and so covers the boot. Always `false` until `shared` exists.
+  nonisolated static var isSessionActive: Bool {
+    processWideActive.withLock { $0 }
+  }
 
   static let willStartName = Notification.Name("DOLEmulationWillStartNotification")
   static let didEndName = Notification.Name("DOLEmulationDidEndNotification")
@@ -34,10 +44,13 @@ final class EmulationState {
   @ObservationIgnored private var handlers: [UUID: @MainActor (Bool) -> Void] = [:]
   @ObservationIgnored private var observers: [NSObjectProtocol] = []
   @ObservationIgnored private let center: NotificationCenter
+  @ObservationIgnored private let publishesProcessWideFlag: Bool
 
-  /// `center` is injectable so tests can post the notifications without touching the app's.
-  init(center: NotificationCenter = .default) {
+  /// `center` is injectable so tests can post the notifications without touching the app's. Only the
+  /// shared instance updates `isSessionActive`; test instances leave the process-wide flag alone.
+  init(center: NotificationCenter = .default, publishesProcessWideFlag: Bool = false) {
     self.center = center
+    self.publishesProcessWideFlag = publishesProcessWideFlag
     observers = [
       center.addObserver(forName: Self.willStartName, object: nil, queue: .main) { [weak self] _ in
         MainActor.assumeIsolated { self?.setActive(true) }
@@ -63,6 +76,7 @@ final class EmulationState {
   func setActive(_ active: Bool) {
     guard active != isActive else { return }
     isActive = active
+    if publishesProcessWideFlag { Self.processWideActive.withLock { $0 = active } }
     for handler in Array(handlers.values) { handler(active) }
   }
 

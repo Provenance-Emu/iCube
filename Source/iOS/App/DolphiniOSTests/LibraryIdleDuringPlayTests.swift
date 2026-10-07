@@ -1,6 +1,7 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import os
 import XCTest
 
 @testable import iCube
@@ -95,6 +96,67 @@ final class RemoteSourcesCoordinatorDeferralTests: XCTestCase {
     XCTAssertTrue(pushes.isEmpty, "with no remote sources a network change must not walk the library")
   }
 
+  // MARK: - Path sequences
+
+  private func wait(_ seconds: TimeInterval) {
+    let done = expectation(description: "waited")
+    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { done.fulfill() }
+    wait(for: [done], timeout: seconds + 2)
+  }
+
+  func test_initialUnsatisfiedPathIsRecordedAndNothingIsPushed() {
+    addRemoteItem()
+    coordinator.handlePathUpdate(satisfied: false)
+    XCTAssertTrue(pushes.isEmpty, "an offline launch has no online-to-offline transition to announce")
+    XCTAssertFalse(coordinator.needsPush)
+  }
+
+  func test_reconnectAfterAnOfflineLaunchIsARealReconnectNotTheInitialCallback() {
+    addRemoteItem()
+    coordinator.onlineSettleDelay = 0.05
+    coordinator.handlePathUpdate(satisfied: false)
+
+    coordinator.handlePathUpdate(satisfied: true)
+    XCTAssertTrue(pushes.isEmpty, "a real reconnection waits out the settle delay; the initial one pushes at once")
+
+    wait(0.3)
+    XCTAssertEqual(pushes.count, 1)
+  }
+
+  func test_goingOfflineDuringTheSettleWindowCancelsTheStaleRefresh() {
+    addRemoteItem()
+    coordinator.onlineSettleDelay = 0.05
+    coordinator.handlePathUpdate(satisfied: true) // initial: push 1
+    coordinator.handlePathUpdate(satisfied: false) // push 2
+    coordinator.handlePathUpdate(satisfied: true) // settle window opens
+    coordinator.handlePathUpdate(satisfied: false) // push 3, supersedes the window
+    XCTAssertEqual(pushes.count, 3)
+
+    wait(0.3)
+    XCTAssertEqual(pushes.count, 3, "no relist, push or Back online snackbar for a path that is offline again")
+  }
+
+  func test_onlineDuringPlayAfterAnOfflineLaunchIsNotLostOnceThereIsSomethingToPush() {
+    coordinator.handlePathUpdate(satisfied: false) // fresh install, launched offline
+    state.setActive(true)
+    coordinator.handlePathUpdate(satisfied: true)
+    XCTAssertTrue(coordinator.needsPush)
+    XCTAssertTrue(pushes.isEmpty)
+
+    addRemoteItem() // a source finished listing
+    state.setActive(false)
+    XCTAssertEqual(pushes.count, 1)
+  }
+
+  func test_onlineDuringPlayWithNothingRemoteDoesNotWalkTheLibrary() {
+    coordinator.handlePathUpdate(satisfied: false)
+    state.setActive(true)
+    coordinator.handlePathUpdate(satisfied: true)
+    state.setActive(false)
+    XCTAssertTrue(pushes.isEmpty, "no sources and nothing pushed: there is nothing to add or remove")
+    XCTAssertFalse(coordinator.needsPush)
+  }
+
   func test_removingASourceStillCleansUpTheCache() {
     // The deleted source's games may be in the persisted cache even if this session never pushed.
     coordinator.pushCacheUpdate(forceUpdate: true, cleanup: true)
@@ -161,6 +223,27 @@ final class LibraryCoordinatorDeferralTests: XCTestCase {
     XCTAssertEqual(loads, 1, "a library opened mid-session has nothing to show without it")
   }
 
+  func test_endingWithinTheDebounceWindowReloadsOnce() {
+    state.setActive(true)
+    NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+    wait(0.5) // the debounce fires mid-game: held
+    XCTAssertEqual(loads, 0)
+    XCTAssertTrue(coordinator.needsReload)
+
+    NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+    state.setActive(false) // inside the new debounce window
+    XCTAssertEqual(loads, 1)
+
+    wait(0.5)
+    XCTAssertEqual(loads, 1, "the end-of-session reload covers the pending debounced one")
+  }
+
+  private func wait(_ seconds: TimeInterval) {
+    let done = expectation(description: "waited")
+    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { done.fulfill() }
+    wait(for: [done], timeout: seconds + 2)
+  }
+
   func test_initialRescanWaitsForTheSessionToEnd() {
     state.setActive(true)
     coordinator.refreshLocalWhenIdle()
@@ -174,6 +257,12 @@ final class LibrarySnapshotSchedulerTests: XCTestCase {
   private var state: EmulationState!
   private var scheduled: [(delay: TimeInterval, work: DispatchWorkItem)] = []
   private var writes = 0
+  /// Completions of writes that have started and not yet been reported saved or failed.
+  private var running: [@MainActor (Bool) -> Void] = []
+  /// When true the fake writer reports saved immediately; otherwise the test completes it.
+  private var autoComplete = true
+  private var backgroundTasksBegun = 0
+  private var backgroundTasksEnded = 0
   private var scheduler: LibrarySnapshotScheduler!
 
   override func setUp() {
@@ -181,16 +270,34 @@ final class LibrarySnapshotSchedulerTests: XCTestCase {
     state = EmulationState(center: NotificationCenter())
     scheduled = []
     writes = 0
+    running = []
+    autoComplete = true
+    backgroundTasksBegun = 0
+    backgroundTasksEnded = 0
     scheduler = LibrarySnapshotScheduler(
       state: state,
-      write: { [unowned self] in self.writes += 1 },
-      schedule: { [unowned self] delay, work in self.scheduled.append((delay, work)) })
+      write: { [unowned self] completion in
+        self.writes += 1
+        if self.autoComplete { completion(true) } else { self.running.append(completion) }
+      },
+      schedule: { [unowned self] delay, work in self.scheduled.append((delay, work)) },
+      beginBackgroundTask: { [unowned self] _ in
+        self.backgroundTasksBegun += 1
+        return UIBackgroundTaskIdentifier(rawValue: 42)
+      },
+      endBackgroundTask: { [unowned self] _ in self.backgroundTasksEnded += 1 })
     scheduler.installEmulationGate()
   }
 
   private func runScheduled() {
-    for item in scheduled { item.work.perform() }
+    let items = scheduled
     scheduled = []
+    for item in items { item.work.perform() }
+  }
+
+  private func finishRunningWrite(saved: Bool) {
+    let completion = running.removeFirst()
+    completion(saved)
   }
 
   func test_idleRequestSchedulesAWrite() {
@@ -242,31 +349,6 @@ final class LibrarySnapshotSchedulerTests: XCTestCase {
     XCTAssertEqual(writes, 1)
   }
 
-  func test_backgroundingMidGameWritesWhatWasHeld() {
-    // The app can be killed before the session ever ends.
-    state.setActive(true)
-    scheduler.requestWrite(after: 2)
-    XCTAssertEqual(writes, 0)
-
-    scheduler.flushHeldWriteForBackground()
-    XCTAssertEqual(writes, 1)
-    XCTAssertFalse(scheduler.writeHeldForSession)
-
-    state.setActive(false)
-    runScheduled()
-    XCTAssertEqual(writes, 1, "nothing changed since the background write, so the end owes none")
-  }
-
-  func test_backgroundFlushIsOneShotAndSkippedWhenIdle() {
-    scheduler.flushHeldWriteForBackground()
-    XCTAssertEqual(writes, 0)
-    state.setActive(true)
-    scheduler.flushHeldWriteForBackground()
-    XCTAssertEqual(writes, 1, "a session start owes a write (last-played changed at boot)")
-    scheduler.flushHeldWriteForBackground()
-    XCTAssertEqual(writes, 1)
-  }
-
   func test_endWithoutASessionDoesNotWrite() {
     state.setActive(false)
     runScheduled()
@@ -279,6 +361,163 @@ final class LibrarySnapshotSchedulerTests: XCTestCase {
     state.setActive(false)
     runScheduled()
     XCTAssertEqual(writes, 1)
+  }
+
+  // MARK: - Durability
+
+  func test_heldWriteStaysHeldUntilTheSaveCompletes() {
+    autoComplete = false
+    state.setActive(true)
+    state.setActive(false)
+    runScheduled()
+    XCTAssertEqual(writes, 1)
+    XCTAssertTrue(scheduler.writeHeldForSession, "launching the write is not the same as saving it")
+
+    finishRunningWrite(saved: true)
+    XCTAssertFalse(scheduler.writeHeldForSession)
+  }
+
+  func test_failedSaveKeepsTheWriteOwed() {
+    autoComplete = false
+    state.setActive(true)
+    state.setActive(false)
+    runScheduled()
+    finishRunningWrite(saved: false)
+    XCTAssertTrue(scheduler.writeHeldForSession)
+  }
+
+  func test_aDebtIncurredDuringAWriteSurvivesItsCompletion() {
+    autoComplete = false
+    state.setActive(true)
+    state.setActive(false)
+    runScheduled() // write 1 in flight
+    state.setActive(true) // a new session owes another write
+    finishRunningWrite(saved: true)
+    XCTAssertTrue(scheduler.writeHeldForSession, "the write that finished predates the new debt")
+  }
+
+  // MARK: - Backgrounding
+
+  func test_backgroundingMidGameWritesWhatWasHeldUnderABackgroundTask() {
+    autoComplete = false
+    state.setActive(true)
+    scheduler.requestWrite(after: 2)
+    XCTAssertEqual(writes, 0)
+
+    scheduler.flushForBackground()
+    XCTAssertEqual(writes, 1)
+    XCTAssertEqual(backgroundTasksBegun, 1)
+    XCTAssertEqual(backgroundTasksEnded, 0, "the assertion lasts until the snapshot is saved")
+    XCTAssertTrue(scheduler.writeHeldForSession)
+
+    finishRunningWrite(saved: true)
+    XCTAssertFalse(scheduler.writeHeldForSession)
+    XCTAssertEqual(backgroundTasksEnded, 1)
+
+    state.setActive(false)
+    runScheduled()
+    XCTAssertEqual(writes, 1, "nothing changed since the background write, so the end owes none")
+  }
+
+  func test_backgroundingJustAfterTheGameEndedFlushesTheScheduledWrite() {
+    state.setActive(true)
+    state.setActive(false) // the post-session write is scheduled 1 s out, state is no longer active
+    XCTAssertEqual(writes, 0)
+
+    scheduler.flushForBackground()
+
+    XCTAssertEqual(writes, 1)
+    XCTAssertFalse(scheduler.writeHeldForSession)
+    runScheduled() // the cancelled scheduled item must not write again
+    XCTAssertEqual(writes, 1)
+  }
+
+  func test_backgroundingWithAnIdleScheduledWriteFlushesIt() {
+    scheduler.requestWrite(after: 2)
+    scheduler.flushForBackground()
+    XCTAssertEqual(writes, 1)
+    XCTAssertEqual(backgroundTasksEnded, 1)
+  }
+
+  func test_backgroundingWithNothingOwedDoesNothing() {
+    scheduler.flushForBackground()
+    XCTAssertEqual(writes, 0)
+    XCTAssertEqual(backgroundTasksBegun, 0)
+  }
+
+  func test_backgroundingDuringAWriteInFlightQueuesOneMoreAndHoldsTheTask() {
+    autoComplete = false
+    scheduler.requestWrite(after: 2)
+    runScheduled() // write 1 in flight
+    scheduler.requestWrite(after: 2) // a change after it started
+    scheduler.flushForBackground()
+    XCTAssertEqual(writes, 1, "one write at a time")
+    XCTAssertEqual(backgroundTasksBegun, 1)
+
+    finishRunningWrite(saved: true)
+    XCTAssertEqual(writes, 2, "the change made during the first write is saved too")
+    XCTAssertEqual(backgroundTasksEnded, 0)
+
+    finishRunningWrite(saved: true)
+    XCTAssertEqual(backgroundTasksEnded, 1)
+  }
+
+  func test_failedBackgroundSaveEndsTheTaskAndStaysOwed() {
+    autoComplete = false
+    state.setActive(true)
+    scheduler.flushForBackground()
+    finishRunningWrite(saved: false)
+    XCTAssertEqual(backgroundTasksEnded, 1)
+    XCTAssertTrue(scheduler.writeHeldForSession)
+  }
+}
+
+/// A WebDAV scan must not run PROPFINDs through a boot or a session: `TVEmulationBridge.isRunning()`
+/// is false until the core reaches Starting, and a scan already under way used to ignore the game.
+final class WebDAVSessionGateTests: XCTestCase {
+  private func makeSource(active: OSAllocatedUnfairLock<Bool>) -> WebDAVSource {
+    let source = WebDAVSource(name: "t", url: URL(string: "https://example.test/dav")!, username: nil, password: nil, recursive: true)
+    source.isEmulationSessionActive = { active.withLock { $0 } }
+    source.sessionPollInterval = 0.02
+    return source
+  }
+
+  func test_waitReturnsAtOnceWhenNoSessionIsActive() async {
+    let source = makeSource(active: OSAllocatedUnfairLock(initialState: false))
+    let start = Date()
+    await source.waitWhileEmulationActive()
+    XCTAssertLessThan(Date().timeIntervalSince(start), 0.5)
+  }
+
+  func test_waitHoldsUntilTheSessionEnds() async {
+    let active = OSAllocatedUnfairLock(initialState: true)
+    let source = makeSource(active: active)
+    let finished = OSAllocatedUnfairLock(initialState: false)
+    let task = Task {
+      await source.waitWhileEmulationActive()
+      finished.withLock { $0 = true }
+    }
+    try? await Task.sleep(nanoseconds: 200_000_000)
+    XCTAssertFalse(finished.withLock { $0 }, "an in-flight scan must stay paused for the whole session")
+
+    active.withLock { $0 = false }
+    await task.value
+    XCTAssertTrue(finished.withLock { $0 })
+  }
+
+  func test_waitEndsWhenTheScanIsCancelled() async {
+    let source = makeSource(active: OSAllocatedUnfairLock(initialState: true))
+    let task = Task { await source.waitWhileEmulationActive() }
+    try? await Task.sleep(nanoseconds: 100_000_000)
+    task.cancel()
+    await task.value
+  }
+
+  @MainActor
+  func test_onlyTheSharedStatePublishesTheProcessWideFlag() {
+    let state = EmulationState(center: NotificationCenter())
+    state.setActive(true)
+    XCTAssertFalse(EmulationState.isSessionActive, "a test instance must not flip the app's flag")
   }
 }
 

@@ -326,6 +326,9 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
             while let current = queue.first {
                 if Task.isCancelled { break }
                 if !isOnline { break }
+                // A game started mid-scan: stop issuing PROPFINDs until it ends, then carry on.
+                await waitWhileEmulationActive()
+                if Task.isCancelled || !isOnline { break }
                 queue.removeFirst()
                 // Normalize URL by removing trailing slash for comparison
                 let normalizedCurrentString = current.absoluteString.hasSuffix("/") ? String(current.absoluteString.dropLast()) : current.absoluteString
@@ -958,22 +961,28 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
     }
 
     // MARK: - Emulation coordination
-    private func emulationIsRunning() -> Bool {
+    /// Whether a game session is on. `TVEmulationBridge.isRunning()` alone is false between
+    /// `WillStart` and the core entering Starting, which is exactly an auto-resume boot, so the
+    /// session flag counts too. Injectable for tests.
+    var isEmulationSessionActive: @Sendable () -> Bool = {
         #if os(iOS) || os(tvOS)
-        return TVEmulationBridge.isRunning()
+        return EmulationState.isSessionActive || TVEmulationBridge.isRunning()
         #else
         return false
         #endif
     }
 
-    private func waitWhileEmulationActive() async {
-        while emulationIsRunning() {
+    /// How often a paused scan or download checks whether the session has ended.
+    var sessionPollInterval: TimeInterval = 1
+
+    func waitWhileEmulationActive() async {
+        while isEmulationSessionActive() {
             if Task.isCancelled { break }
             #if canImport(os)
             Self.logger.info("Emulation active; deferring WebDAV activity")
             #endif
             do {
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                try await Task.sleep(nanoseconds: UInt64(sessionPollInterval * 1_000_000_000))
             } catch {
                 break
             }

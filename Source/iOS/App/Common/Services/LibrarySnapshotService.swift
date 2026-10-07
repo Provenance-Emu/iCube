@@ -41,10 +41,10 @@ final class LibrarySnapshotService: UIResponder, UIApplicationDelegate {
   }
 
   /// A game's session can end with the process (jetsam, a swipe-kill from the app switcher), and
-  /// then the write held for the session end never happens. Backgrounding pauses the game, so it
-  /// is a safe moment to write what was held.
+  /// then a write held or scheduled for the session end never happens. Backgrounding pauses the
+  /// game, so write what is owed now, under a background task.
   func applicationDidEnterBackground(_ application: UIApplication) {
-    LibrarySnapshotScheduler.shared.flushHeldWriteForBackground()
+    LibrarySnapshotScheduler.shared.flushForBackground()
   }
 
   private func libraryChanged() {
@@ -70,8 +70,15 @@ final class LibrarySnapshotService: UIResponder, UIApplicationDelegate {
 /// mid-game) is remembered and written once, shortly after the session ends. A write that was already
 /// scheduled when the session started is cancelled for the same reason. The write is idempotent and
 /// reads current state when it runs, so one write after the game covers every request.
+///
+/// "Written" means durable: the writer reports back once the snapshot is saved, and a held write stays
+/// held until then. Backgrounding writes whatever is owed (held, scheduled, or behind a write already
+/// in flight) under a background task, because the process can be suspended or killed right after.
 @MainActor
 final class LibrarySnapshotScheduler {
+  /// Starts a write and reports, on the main actor, whether the snapshot was saved.
+  typealias Writer = @MainActor (_ completion: @escaping @MainActor (Bool) -> Void) -> Void
+
   static let defaultDebounce: TimeInterval = 2
   static let shared = LibrarySnapshotScheduler()
 
@@ -79,23 +86,38 @@ final class LibrarySnapshotScheduler {
   static let postSessionDelay: TimeInterval = 1
 
   private let state: EmulationState
-  private let write: @MainActor () -> Void
+  private let write: Writer
   private let schedule: (TimeInterval, DispatchWorkItem) -> Void
+  private let beginBackgroundTask: (@escaping () -> Void) -> UIBackgroundTaskIdentifier
+  private let endBackgroundTask: (UIBackgroundTaskIdentifier) -> Void
   private var pending: DispatchWorkItem?
   private var gateInstalled = false
-  /// A write was requested (or cancelled by a session start) and has not happened yet.
+  private var backgroundTask = UIBackgroundTaskIdentifier.invalid
+  /// A write is running (started, not yet reported saved or failed).
+  private var inFlight = false
+  /// Something was owed while a write was in flight, so another follows it.
+  private var rewriteAfterInFlight = false
+  /// Bumped whenever a write becomes owed; a write that started earlier cannot clear a later debt.
+  private var owedGeneration = 0
+  /// A write is owed and has not been saved yet.
   private(set) var writeHeldForSession = false
 
   init(
     state: EmulationState = .shared,
-    write: @escaping @MainActor () -> Void = { LibrarySnapshotWriter.writeNow() },
+    write: @escaping Writer = { completion in LibrarySnapshotWriter.writeNow(completion: completion) },
     schedule: @escaping (TimeInterval, DispatchWorkItem) -> Void = { delay, work in
       DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
-    }
+    },
+    beginBackgroundTask: @escaping (@escaping () -> Void) -> UIBackgroundTaskIdentifier = { expiration in
+      UIApplication.shared.beginBackgroundTask(withName: "icube.librarysnapshot", expirationHandler: expiration)
+    },
+    endBackgroundTask: @escaping (UIBackgroundTaskIdentifier) -> Void = { UIApplication.shared.endBackgroundTask($0) }
   ) {
     self.state = state
     self.write = write
     self.schedule = schedule
+    self.beginBackgroundTask = beginBackgroundTask
+    self.endBackgroundTask = endBackgroundTask
   }
 
   /// Registers the end-of-session flush and the start-of-session cancel. Idempotent.
@@ -108,35 +130,88 @@ final class LibrarySnapshotScheduler {
         // Last-played changed at boot, so a write is owed at the end even if none was pending.
         self.pending?.cancel()
         self.pending = nil
-        self.writeHeldForSession = true
+        self.markOwed()
       } else if self.writeHeldForSession {
-        self.writeHeldForSession = false
+        // Stays held until the write reports saved.
         self.requestWrite(after: Self.postSessionDelay)
       }
     }
   }
 
-  /// Writes now what a running game was holding back. No-op when nothing is held or no game runs
-  /// (an idle app's debounced write is already on its way).
-  func flushHeldWriteForBackground() {
-    guard state.isActive, writeHeldForSession else { return }
-    writeHeldForSession = false
-    write()
+  /// Writes what is owed before the process can be suspended: a held write, a scheduled one (it
+  /// would not fire in time), or one already running. Does not depend on a game being active: the
+  /// session may have ended a moment ago with its write still scheduled.
+  func flushForBackground() {
+    guard writeHeldForSession || pending != nil || inFlight else { return }
+    let owedBeyondInFlight = writeHeldForSession || pending != nil
+    pending?.cancel()
+    pending = nil
+    beginBackgroundTaskIfNeeded()
+    if inFlight {
+      if owedBeyondInFlight { rewriteAfterInFlight = true }
+    } else {
+      performWrite()
+    }
   }
 
   func requestWrite(after delay: TimeInterval) {
     if state.isActive {
       pending?.cancel()
       pending = nil
-      writeHeldForSession = true
+      markOwed()
       return
     }
     pending?.cancel()
     let work = DispatchWorkItem { [weak self] in
       self?.pending = nil
-      self?.write()
+      self?.performWrite()
     }
     pending = work
     schedule(delay, work)
+  }
+
+  private func markOwed() {
+    writeHeldForSession = true
+    owedGeneration += 1
+  }
+
+  private func performWrite() {
+    guard !inFlight else {
+      rewriteAfterInFlight = true
+      return
+    }
+    inFlight = true
+    let generation = owedGeneration
+    write { [weak self] saved in
+      guard let self else { return }
+      self.inFlight = false
+      if saved {
+        if self.owedGeneration == generation { self.writeHeldForSession = false }
+      } else {
+        // Not durable: keep it owed so the session end, the next background or the next foreground retries.
+        self.markOwed()
+      }
+      if self.rewriteAfterInFlight, saved {
+        self.rewriteAfterInFlight = false
+        self.performWrite()
+      } else {
+        self.rewriteAfterInFlight = false
+        if self.pending == nil { self.endBackgroundTaskIfIdle() }
+      }
+    }
+  }
+
+  private func beginBackgroundTaskIfNeeded() {
+    guard backgroundTask == .invalid else { return }
+    backgroundTask = beginBackgroundTask { [weak self] in
+      // Out of time: the write stays owed (it is still held or failed), only the assertion goes.
+      Task { @MainActor in self?.endBackgroundTaskIfIdle(force: true) }
+    }
+  }
+
+  private func endBackgroundTaskIfIdle(force: Bool = false) {
+    guard backgroundTask != .invalid, force || !inFlight else { return }
+    endBackgroundTask(backgroundTask)
+    backgroundTask = .invalid
   }
 }

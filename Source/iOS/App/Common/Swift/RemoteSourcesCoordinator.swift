@@ -26,6 +26,10 @@ class RemoteSourcesCoordinator: ObservableObject {
   private let pathMonitor = NWPathMonitor()
   private let pathQueue = DispatchQueue(label: "net.dolphinios.remotesources.reachability")
   private var lastPathSatisfied: Bool = false
+  /// Bumped on every real path transition; a delayed follow-up that finds it changed has been superseded.
+  private var pathGeneration = 0
+  /// How long a regained network settles before WebDAV is relisted.
+  var onlineSettleDelay: TimeInterval = 0.75
   /// Avoid triggering an immediate duplicate refresh on cold boot when we were already online.
   private var suppressNextOnlineRefresh: Bool = true
   /// During cold boot, avoid clearing/rebuilding the library; write only after first full scan completes.
@@ -135,26 +139,30 @@ class RemoteSourcesCoordinator: ObservableObject {
   /// `pushCacheUpdate` reads them), but while a game is running defers the library work to
   /// `emulationDidEnd()`: no snackbars, no WebDAV relisting, no cache walk.
   func handlePathUpdate(satisfied: Bool) {
-    let wasOffline = !lastPathSatisfied
-    let wasOnline = lastPathSatisfied
-
-    if satisfied, wasOffline {
+    if satisfied {
+      guard !lastPathSatisfied else { return }
       isSystemOnline = true
       if suppressNextOnlineRefresh {
         print("Reachability: Online detected (initial). Suppressing first refresh.")
         lastPathSatisfied = true
         suppressNextOnlineRefresh = false
+        // A game may already be running; its end owes the sources a fresh listing.
+        if isEmulationActive() { needsSourceRefresh = true }
         pushCacheUpdate(forceUpdate: true)
         return
       }
       lastPathSatisfied = true
+      pathGeneration += 1
       if isEmulationActive() {
         needsSourceRefresh = true
         pushCacheUpdate(forceUpdate: true)
         return
       }
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
+      let generation = pathGeneration
+      DispatchQueue.main.asyncAfter(deadline: .now() + onlineSettleDelay) { [weak self] in
         guard let self else { return }
+        // The path flapped again during the settle window; that callback owns the follow-up.
+        guard generation == self.pathGeneration, self.isSystemOnline else { return }
         if self.isEmulationActive() {
           // A game booted during the settle delay.
           self.needsSourceRefresh = true
@@ -166,9 +174,16 @@ class RemoteSourcesCoordinator: ObservableObject {
         self.pushCacheUpdate(forceUpdate: true)
         NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Back online — refreshing library…")])
       }
-    } else if !satisfied, wasOnline {
+    } else {
+      // Every offline callback is recorded: the first callback of the launch can be unsatisfied, and
+      // the reconnection after it is a real one, not the "initial online" the suppress flag is for.
+      let wasOnline = lastPathSatisfied
       isSystemOnline = false
       lastPathSatisfied = false
+      suppressNextOnlineRefresh = false
+      pathGeneration += 1
+      // Only a real online-to-offline transition has anything to push or announce.
+      guard wasOnline else { return }
       let quiet = isEmulationActive()
       pushCacheUpdate(forceUpdate: true)
       if !quiet {
@@ -542,6 +557,9 @@ final class LibraryCoordinator: ObservableObject {
   private let gamesProvider: () -> [TVGameItem]
   /// A reload was requested while a game was running; it runs when the session ends.
   private(set) var needsReload = false
+  /// A reload is waiting out the debounce. The end-of-session reload covers it and clears this, so a
+  /// game ending inside the debounce window does not reload twice.
+  private var debouncedReloadPending = false
   /// The first-appearance local rescan was requested while a game was running.
   private(set) var needsLocalRefresh = false
 
@@ -562,6 +580,7 @@ final class LibraryCoordinator: ObservableObject {
         self.refreshLocal()
       } else if self.needsReload {
         self.needsReload = false
+        self.debouncedReloadPending = false
         self.loadCurrent()
       }
     }
@@ -578,7 +597,8 @@ final class LibraryCoordinator: ObservableObject {
     reloadSubject
       .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
       .sink { [weak self] in
-        guard let self else { return }
+        guard let self, self.debouncedReloadPending else { return }
+        self.debouncedReloadPending = false
         #if DEBUG
         print("LibraryCoordinator: Debounced reload executing loadCurrent()")
         #endif
@@ -636,6 +656,7 @@ final class LibraryCoordinator: ObservableObject {
     #if DEBUG
     print("LibraryCoordinator.triggerReload(): Triggering reload")
     #endif
+    debouncedReloadPending = true
     reloadSubject.send(())
   }
 
