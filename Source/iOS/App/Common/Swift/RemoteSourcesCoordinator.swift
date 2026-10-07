@@ -503,8 +503,8 @@ class RemoteSourcesCoordinator: ObservableObject {
       "library.remote_sync",
       op: "library.remote_sync",
       tags: ["url_count": "\(allUrls.count)"]) {
-      pushToLibrary(allUrls)
-    }
+        pushToLibrary(allUrls)
+      }
 
     if forceUpdate, allUrls.isEmpty {
       print("DEBUG PUSH: *** FORCE UPDATE: Cleaned up library after source deletion ***")

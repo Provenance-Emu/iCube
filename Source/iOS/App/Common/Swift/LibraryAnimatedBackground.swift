@@ -46,7 +46,7 @@ struct LibraryAnimatedBackground: View {
       baseGradient
 
       // Elegant animated orbs with GameCube/Wii theming
-      ForEach(0..<Self.orbCount, id: \.self) { index in
+      ForEach(0 ..< Self.orbCount, id: \.self) { index in
         let size = 200 + Self.unit(index, salt: 1) * 200
         let x = (Self.unit(index, salt: 2) - 0.5) * 300
         let y = (Self.unit(index, salt: 3) - 0.5) * 400
@@ -65,7 +65,7 @@ struct LibraryAnimatedBackground: View {
       minorGrid
 
       // Floating elements
-      ForEach(0..<Self.tileCount, id: \.self) { index in
+      ForEach(0 ..< Self.tileCount, id: \.self) { index in
         let side = 20 + Self.unit(index, salt: 6) * 20
         let x = (Self.unit(index, salt: 7) - 0.5) * 400
         let y = (Self.unit(index, salt: 8) - 0.5) * 600
@@ -75,7 +75,7 @@ struct LibraryAnimatedBackground: View {
           .fill(
             LinearGradient(
               colors: [
-                (colorScheme == .dark ? Color.white.opacity(0.03) : Color.white.opacity(0.5)),
+                colorScheme == .dark ? Color.white.opacity(0.03) : Color.white.opacity(0.5),
                 Color.clear
               ],
               startPoint: .topLeading,
@@ -131,10 +131,10 @@ struct LibraryAnimatedBackground: View {
       .fill(
         RadialGradient(
           colors: [
-            (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05))
-             : (index % 2 == 0 ? Color.purple.opacity(0.10) : Color.blue.opacity(0.10))),
-            (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025))
-             : Color.white.opacity(0.0)),
+            colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05))
+              : (index % 2 == 0 ? Color.purple.opacity(0.10) : Color.blue.opacity(0.10)),
+            colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025))
+              : Color.white.opacity(0.0),
             Color.clear
           ],
           center: .center,
@@ -150,9 +150,9 @@ struct LibraryAnimatedBackground: View {
       let spacing: CGFloat = 80
       let lineWidth: CGFloat = 0.5
       let gradient = Gradient(colors: [
-        (colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.06)),
+        colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.06),
         .clear,
-        (colorScheme == .dark ? .white.opacity(0.04) : .black.opacity(0.03))
+        colorScheme == .dark ? .white.opacity(0.04) : .black.opacity(0.03)
       ])
 
       context.stroke(
