@@ -57,13 +57,16 @@ final class LoggerIniMigration: NSObject {
   }
 
   /// True when the file is what older builds shipped and nobody has touched since: a [Logs] section
-  /// of exactly the old key set, every type on, Verbosity 4 and WriteToWindow on. A Verbosity above 4 is a
+  /// of exactly the old key set, every type on, Verbosity 4, WriteToWindow on and WriteToFile off. A Verbosity above 4 is a
   /// deliberate choice (the debug menu stores it), so it counts as customized.
   static func looksLikeOldDefault(_ text: String) -> Bool {
     let parsed = parse(text)
     guard Set(parsed.logs.keys) == oldDefaultTypes, parsed.logs.allSatisfy({ isTrue($0.value) }) else { return false }
+    // WriteToConsole is ignored: earlier launches rewrote it themselves. WriteToFile shipped False, so
+    // a True there is the user's choice to log to a file.
     return parsed.options["Verbosity"].flatMap { Int($0) } == oldDefaultVerbosity
       && isTrue(parsed.options["WriteToWindow"] ?? "")
+      && !isTrue(parsed.options["WriteToFile"] ?? "")
   }
 
   static func decide(text: String?, recordedVersion: Int, version: Int = currentVersion) -> Decision {

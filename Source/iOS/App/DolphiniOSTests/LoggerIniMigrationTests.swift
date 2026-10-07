@@ -55,6 +55,13 @@ final class LoggerIniMigrationTests: XCTestCase {
     XCTAssertEqual(value("BOOT", in: options), "True")
   }
 
+  func testFileLoggingTurnedOnIsKept() {
+    // WriteToFile shipped False; turning it on is a deliberate choice the migration must keep.
+    let text = oldDefault.replacingOccurrences(of: "WriteToFile = False", with: "WriteToFile = True")
+    XCTAssertFalse(LoggerIniMigration.looksLikeOldDefault(text))
+    XCTAssertEqual(LoggerIniMigration.decide(text: text, recordedVersion: 0), .keepCustomized)
+  }
+
   func testACustomizedFileIsKept() {
     var some = Dictionary(uniqueKeysWithValues: types.map { ($0, true) })
     some["OSREPORT"] = false
