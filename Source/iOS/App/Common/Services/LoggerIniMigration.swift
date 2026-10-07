@@ -34,6 +34,17 @@ final class LoggerIniMigration: NSObject {
     "IOS_ES", "IOS_FS", "MASTER", "MemCard Manager", "Video",
   ]
 
+  /// The [Logs] keys the old shipped Logger.ini held, all True. Absent keys read as disabled, so a
+  /// file that dropped some is not the old default even if every key left is True.
+  static let oldDefaultTypes: Set<String> = [
+    "ActionReplay", "AI", "Audio", "BOOT", "CI", "COMMON", "CONSOLE", "CORE", "CP", "DIO", "DSP",
+    "DSPHLE", "DSPLLE", "DSPMails", "DVD", "EXI", "FileMon", "FRAMEDUMP", "GDB_STUB", "GP", "HLE",
+    "Host GPU", "HSP", "IOS", "IOS_DI", "IOS_ES", "IOS_FS", "IOS_NET", "IOS_SD", "IOS_SSL",
+    "IOS_STM", "IOS_USB", "IOS_WC24", "IOS_WFS", "IOS_WIIMOTE", "JIT", "MASTER", "MemCard Manager",
+    "MI", "NETPLAY", "OSREPORT", "OSREPORT_HLE", "PE", "PI", "PowerPC", "RetroAchievements", "SI",
+    "SP1", "SYMBOLS", "VI", "Video", "WII_IPC", "Wiimote",
+  ]
+
   enum Decision: Equatable {
     /// Still the old default; rewrite it.
     case rewrite
@@ -45,12 +56,12 @@ final class LoggerIniMigration: NSObject {
     case nothingToMigrate
   }
 
-  /// True when the file is what older builds shipped and nobody has touched since: a non-empty
-  /// [Logs] section with every type on, Verbosity 4 and WriteToWindow on. A Verbosity above 4 is a
+  /// True when the file is what older builds shipped and nobody has touched since: a [Logs] section
+  /// of exactly the old key set, every type on, Verbosity 4 and WriteToWindow on. A Verbosity above 4 is a
   /// deliberate choice (the debug menu stores it), so it counts as customized.
   static func looksLikeOldDefault(_ text: String) -> Bool {
     let parsed = parse(text)
-    guard !parsed.logs.isEmpty, parsed.logs.allSatisfy({ isTrue($0.value) }) else { return false }
+    guard Set(parsed.logs.keys) == oldDefaultTypes, parsed.logs.allSatisfy({ isTrue($0.value) }) else { return false }
     return parsed.options["Verbosity"].flatMap { Int($0) } == oldDefaultVerbosity
       && isTrue(parsed.options["WriteToWindow"] ?? "")
   }
@@ -66,7 +77,7 @@ final class LoggerIniMigration: NSObject {
   /// (comments, other keys) are kept as they are.
   static func quietDefault(from text: String) -> String {
     var section = ""
-    let lines = text.components(separatedBy: "\n").map { line -> String in
+    let lines = splitLines(text).map { line -> String in
       if let name = sectionName(line) {
         section = name
         return line
@@ -115,7 +126,72 @@ final class LoggerIniMigration: NSObject {
     run(iniPath: iniPath, defaults: .standard)
   }
 
+  // MARK: - Launch options
+
+  /// The options the launch forces into [Options] whatever the file holds: console output follows
+  /// the debug menu, Verbosity is the menu's value, and WriteToWindow is off. No window listener
+  /// exists when LogManager initializes (the debug bench registers and enables its own at runtime),
+  /// and a True here, from the old default or a saved bench run, would make every enabled log line
+  /// count as having a listener.
+  static func launchOptions(consoleEnabled: Bool, verbosity: Int) -> [(key: String, value: String)] {
+    [("WriteToConsole", consoleEnabled ? "True" : "False"), ("Verbosity", String(verbosity)), ("WriteToWindow", "False")]
+  }
+
+  /// The text with `values` set inside [Options] only: a matching line there is replaced, a key
+  /// that is missing is added at the end of the section (the section is added if absent), and the
+  /// same text in a comment or in another section is left alone.
+  static func settingOptions(_ values: [(key: String, value: String)], in text: String) -> String {
+    var lines = splitLines(text)
+    var handled = Set<String>()
+    var section = ""
+    var optionsEnd: Int? // the index just after the last non-blank line of [Options]
+    for index in lines.indices {
+      if let name = sectionName(lines[index]) {
+        section = name
+        if name == "Options" { optionsEnd = index + 1 }
+        continue
+      }
+      guard section == "Options" else { continue }
+      if let (key, _) = keyValue(lines[index]), let match = values.first(where: { $0.key == key }) {
+        lines[index] = "\(key) = \(match.value)"
+        handled.insert(key)
+      }
+      if !lines[index].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { optionsEnd = index + 1 }
+    }
+    let missing = values.filter { !handled.contains($0.key) }.map { "\($0.key) = \($0.value)" }
+    guard !missing.isEmpty else { return lines.joined(separator: "\n") }
+    if let end = optionsEnd {
+      lines.insert(contentsOf: missing, at: end)
+    } else {
+      if lines.last == "" { lines.removeLast() }
+      lines += ["[Options]"] + missing + [""]
+    }
+    return lines.joined(separator: "\n")
+  }
+
+  /// Applies `launchOptions` to the file at `iniPath` (no file, nothing to do). Runs at launch,
+  /// before LogManager reads it.
+  @objc(applyLaunchOptionsToIniPath:consoleEnabled:verbosity:)
+  static func applyLaunchOptions(iniPath: String, consoleEnabled: Bool, verbosity: Int) {
+    guard let text = try? String(contentsOfFile: iniPath, encoding: .utf8), !text.isEmpty else { return }
+    let updated = settingOptions(launchOptions(consoleEnabled: consoleEnabled, verbosity: verbosity), in: text)
+    guard updated != text else { return }
+    do {
+      try updated.write(toFile: iniPath, atomically: true, encoding: .utf8)
+    } catch {
+      NSLog("[LoggerIniMigration] could not write the launch options to Logger.ini: %@", error.localizedDescription)
+    }
+  }
+
   // MARK: - Minimal INI reading
+
+  /// The lines of `text` whatever its endings (LF, CRLF or CR). The rewrites join with "\n", so a
+  /// CRLF file comes out with consistent LF endings and no stray "\r" on any value; Dolphin's
+  /// IniFile reads both.
+  private static func splitLines(_ text: String) -> [String] {
+    text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+      .components(separatedBy: "\n")
+  }
 
   private static func isTrue(_ value: String) -> Bool {
     value.trimmingCharacters(in: .whitespaces).lowercased() == "true"
@@ -140,7 +216,7 @@ final class LoggerIniMigration: NSObject {
     var logs: [String: String] = [:]
     var options: [String: String] = [:]
     var section = ""
-    for line in text.components(separatedBy: .newlines) {
+    for line in splitLines(text) {
       if let name = sectionName(line) {
         section = name
       } else if let (key, value) = keyValue(line) {

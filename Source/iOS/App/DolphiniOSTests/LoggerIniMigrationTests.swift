@@ -7,7 +7,8 @@ import XCTest
 /// The Logger.ini migration: which files count as the old shipped default (rewritten), which are
 /// the user's own (left alone), what the rewrite produces, and that a second pass changes nothing.
 final class LoggerIniMigrationTests: XCTestCase {
-  private let types = ["AI", "Audio", "BOOT", "CORE", "DIO", "DVD", "Host GPU", "IOS_FS", "OSREPORT", "SI", "Video"]
+  /// The key set the old shipped file held; the migration only trusts a file with exactly these.
+  private let types = LoggerIniMigration.oldDefaultTypes.sorted()
 
   private func ini(types allTypes: [String: Bool], verbosity: Int, window: Bool, console: Bool = true) -> String {
     var lines = ["[Logs]"]
@@ -40,10 +41,36 @@ final class LoggerIniMigrationTests: XCTestCase {
     XCTAssertEqual(LoggerIniMigration.decide(text: crlf, recordedVersion: 0), .rewrite)
   }
 
+  func testCRLFFilesAreRewrittenWithConsistentLineEndings() {
+    let crlf = oldDefault.replacingOccurrences(of: "\n", with: "\r\n")
+    XCTAssertTrue(LoggerIniMigration.looksLikeOldDefault(crlf))
+    let out = LoggerIniMigration.quietDefault(from: crlf)
+    XCTAssertFalse(out.contains("\r"))
+    XCTAssertEqual(out, LoggerIniMigration.quietDefault(from: oldDefault))
+    // A file with a CR on the last value (no trailing newline) is still classified correctly.
+    XCTAssertTrue(LoggerIniMigration.looksLikeOldDefault(crlf.trimmingCharacters(in: .newlines) + "\r"))
+    let options = launch(crlf)
+    XCTAssertFalse(options.contains("\r"))
+    XCTAssertEqual(value("WriteToWindow", in: options), "False")
+    XCTAssertEqual(value("BOOT", in: options), "True")
+  }
+
   func testACustomizedFileIsKept() {
     var some = Dictionary(uniqueKeysWithValues: types.map { ($0, true) })
     some["OSREPORT"] = false
     XCTAssertEqual(LoggerIniMigration.decide(text: ini(types: some, verbosity: 4, window: true), recordedVersion: 0), .keepCustomized)
+    // A removed key reads as disabled, so a file that dropped one is customized even though every key
+    // left is True.
+    var dropped = Dictionary(uniqueKeysWithValues: types.map { ($0, true) })
+    dropped["OSREPORT"] = nil
+    XCTAssertFalse(LoggerIniMigration.looksLikeOldDefault(ini(types: dropped, verbosity: 4, window: true)))
+    XCTAssertEqual(LoggerIniMigration.decide(text: ini(types: dropped, verbosity: 4, window: true), recordedVersion: 0),
+                   .keepCustomized)
+    // An extra key (a newer build saved SI_AMBB and friends) is not the shipped file either.
+    var extra = Dictionary(uniqueKeysWithValues: types.map { ($0, true) })
+    extra["SI_AMBB"] = true
+    XCTAssertEqual(LoggerIniMigration.decide(text: ini(types: extra, verbosity: 4, window: true), recordedVersion: 0),
+                   .keepCustomized)
     let all = Dictionary(uniqueKeysWithValues: types.map { ($0, true) })
     // Verbosity above 4 is what the debug menu stores for a deliberate choice.
     XCTAssertEqual(LoggerIniMigration.decide(text: ini(types: all, verbosity: 5, window: true), recordedVersion: 0), .keepCustomized)
@@ -103,6 +130,42 @@ final class LoggerIniMigrationTests: XCTestCase {
     XCTAssertFalse(LoggerIniMigration.looksLikeOldDefault(shipped))
   }
 
+  // MARK: - Launch options
+
+  private func launch(_ text: String, console: Bool = false, verbosity: Int = 3) -> String {
+    LoggerIniMigration.settingOptions(LoggerIniMigration.launchOptions(consoleEnabled: console, verbosity: verbosity), in: text)
+  }
+
+  func testLaunchOptionsSetTheThreeKeys() {
+    let out = launch(oldDefault, console: true, verbosity: 5)
+    XCTAssertEqual(value("WriteToConsole", in: out), "True")
+    XCTAssertEqual(value("Verbosity", in: out), "5")
+    XCTAssertEqual(value("WriteToWindow", in: out), "False")
+    XCTAssertEqual(value("WriteToFile", in: out), "False")
+    XCTAssertEqual(value("BOOT", in: out), "True")
+  }
+
+  func testLaunchOptionsOnlyTouchTheOptionsSection() {
+    // The same key text in a comment and in another section, both before the real [Options] key.
+    let text = "# WriteToWindow = True and Verbosity = 4\n[Notes]\nWriteToWindow = True\nVerbosity = 4\n"
+      + "[Logs]\nBOOT = True\n[Options]\nVerbosity = 4\nWriteToConsole = True\nWriteToWindow = True\n"
+    let out = launch(text)
+    XCTAssertEqual(out, "# WriteToWindow = True and Verbosity = 4\n[Notes]\nWriteToWindow = True\nVerbosity = 4\n"
+      + "[Logs]\nBOOT = True\n[Options]\nVerbosity = 3\nWriteToConsole = False\nWriteToWindow = False\n")
+  }
+
+  func testLaunchOptionsAddMissingKeysInsideOptions() {
+    let out = launch("[Options]\nVerbosity = 4\n[Logs]\nBOOT = True\n")
+    XCTAssertEqual(out, "[Options]\nVerbosity = 3\nWriteToConsole = False\nWriteToWindow = False\n[Logs]\nBOOT = True\n")
+    XCTAssertEqual(launch("[Logs]\nBOOT = True\n"),
+                   "[Logs]\nBOOT = True\n[Options]\nWriteToConsole = False\nVerbosity = 3\nWriteToWindow = False\n")
+  }
+
+  func testLaunchOptionsAreIdempotent() {
+    let once = launch(oldDefault)
+    XCTAssertEqual(launch(once), once)
+  }
+
   // MARK: - On disk
 
   private let suiteName = "LoggerIniMigrationTests"
@@ -151,6 +214,25 @@ final class LoggerIniMigrationTests: XCTestCase {
     defaults.set(true, forKey: "logger_console_enabled")
     XCTAssertEqual(LoggerIniMigration.run(iniPath: path, defaults: defaults), .rewrite)
     XCTAssertEqual(try String(contentsOfFile: path, encoding: .utf8), LoggerIniMigration.quietDefault(from: oldDefault))
+  }
+
+  func testRunLeavesAFileThatDroppedAKeyUntouched() throws {
+    let dropped = oldDefault.replacingOccurrences(of: "OSREPORT = True\n", with: "")
+    try dropped.write(toFile: path, atomically: true, encoding: .utf8)
+    XCTAssertEqual(LoggerIniMigration.run(iniPath: path, defaults: defaults), .keepCustomized)
+    XCTAssertEqual(try String(contentsOfFile: path, encoding: .utf8), dropped)
+  }
+
+  func testApplyLaunchOptionsRewritesTheFileOnDisk() throws {
+    try oldDefault.write(toFile: path, atomically: true, encoding: .utf8)
+    LoggerIniMigration.applyLaunchOptions(iniPath: path, consoleEnabled: false, verbosity: 3)
+    let out = try String(contentsOfFile: path, encoding: .utf8)
+    XCTAssertEqual(value("WriteToWindow", in: out), "False")
+    XCTAssertEqual(value("Verbosity", in: out), "3")
+    // No file: nothing is created.
+    let missing = path + ".missing"
+    LoggerIniMigration.applyLaunchOptions(iniPath: missing, consoleEnabled: false, verbosity: 3)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: missing))
   }
 
   func testRunWithoutAFileDoesNothing() {

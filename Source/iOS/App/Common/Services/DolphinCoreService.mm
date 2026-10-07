@@ -140,43 +140,14 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   if (verbosity <= 0)
     verbosity = ICubeLoggerIniMigration.defaultVerbosity;
   {
-    std::string iniPath = File::GetUserPath(F_LOGGERCONFIG_IDX);
-    std::string content;
-    if (File::Exists(iniPath)) {
-      FILE* fp = fopen(iniPath.c_str(), "rb");
-      if (fp) {
-        fseek(fp, 0, SEEK_END);
-        long sz = ftell(fp);
-        fseek(fp, 0, SEEK_SET);
-        if (sz > 0) {
-          content.resize((size_t)sz);
-          fread(content.data(), 1, (size_t)sz, fp);
-        }
-        fclose(fp);
-      }
-    }
-    if (!content.empty()) {
-      auto replaceLine = [&](const std::string& key, const std::string& value) {
-        const std::string prefix = key + " = ";
-        size_t pos = content.find(prefix);
-        if (pos != std::string::npos) {
-          size_t end = content.find('\n', pos);
-          if (end == std::string::npos) end = content.size();
-          content.replace(pos + prefix.size(), end - (pos + prefix.size()), value);
-        }
-      };
-      replaceLine("WriteToConsole", logsEnabled ? "True" : "False");
-      replaceLine("Verbosity", std::to_string((int)verbosity));
-      // No window listener exists when LogManager initializes; the debug bench registers and
-      // enables its own at runtime. A True here (an old default, or a saved bench run) would make
-      // every enabled log line count as having a listener.
-      replaceLine("WriteToWindow", "False");
-      FILE* out = fopen(iniPath.c_str(), "wb");
-      if (out) {
-        fwrite(content.data(), 1, content.size(), out);
-        fclose(out);
-      }
-    }
+    // [Options] keys only (a comment or another section holding the same text is not touched).
+    // No window listener exists when LogManager initializes; the debug bench registers and enables
+    // its own at runtime, so WriteToWindow stays off: a True here (an old default, or a saved bench
+    // run) would make every enabled log line count as having a listener.
+    [ICubeLoggerIniMigration
+        applyLaunchOptionsToIniPath:CppToFoundationString(File::GetUserPath(F_LOGGERCONFIG_IDX))
+                     consoleEnabled:logsEnabled
+                          verbosity:verbosity];
   }
 
   UICommon::Init();
