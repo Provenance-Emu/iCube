@@ -26,12 +26,32 @@ class RemoteSourcesCoordinator: ObservableObject {
   private let pathMonitor = NWPathMonitor()
   private let pathQueue = DispatchQueue(label: "net.dolphinios.remotesources.reachability")
   private var lastPathSatisfied: Bool = false
+  /// Bumped on every real path transition; a delayed follow-up that finds it changed has been superseded.
+  private var pathGeneration = 0
+  /// How long a regained network settles before WebDAV is relisted.
+  var onlineSettleDelay: TimeInterval = 0.75
   /// Avoid triggering an immediate duplicate refresh on cold boot when we were already online.
   private var suppressNextOnlineRefresh: Bool = true
   /// During cold boot, avoid clearing/rebuilding the library; write only after first full scan completes.
   private var suppressWritesUntilFirstScanComplete: Bool = true
   /// Tracks if system network is currently online; used to filter remote sources while offline.
   private var isSystemOnline: Bool = true
+
+  // MARK: - Emulation deferral
+
+  /// Whether a game is running. While one is, nothing here may walk the Software folder or rewrite
+  /// the game cache: a Wi-Fi flap used to do both, mid-game.
+  private let isEmulationActive: @MainActor () -> Bool
+  /// Pushes the flattened URL list into the game cache. Injectable so tests can count pushes.
+  private let pushToLibrary: ([String]) -> Void
+  /// A push was requested while emulation was active; it runs once, when the session ends.
+  private(set) var needsPush = false
+  /// The deferred push includes a forced one (an offline/online transition or a source removal).
+  private var deferredPushWasForced = false
+  /// WebDAV sources need a fresh listing once the session ends (the network came back mid-game).
+  private var needsSourceRefresh = false
+  /// The deferred push must also clean up after a removed source (it bypasses the no-sources skip).
+  private var deferredPushWasCleanup = false
 
   // MARK: - Disk cache
 
@@ -64,7 +84,21 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
   }
 
-  init() {
+  init(
+    startPathMonitor: Bool = true,
+    emulationState: EmulationState? = nil,
+    pushToLibrary: @escaping ([String]) -> Void = { urls in
+      // Force metadata fetch for remote games to ensure artwork and database lookups work
+      TVLibraryBridge.updateLibrary(withRemotePaths: urls, fetchMetadata: true)
+    }
+  ) {
+    let state = emulationState ?? .shared
+    self.isEmulationActive = { state.isActive }
+    self.pushToLibrary = pushToLibrary
+    state.addTransitionHandler { [weak self] active in
+      if !active { self?.emulationDidEnd() }
+    }
+
     // Listen for refresh requests - trigger in-place refresh on sources without resetting streams
     NotificationCenter.default.addObserver(
       forName: NSNotification.Name("RefreshRemoteSources"),
@@ -91,41 +125,92 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
 
     // Start reachability monitoring
+    guard startPathMonitor else { return }
     pathMonitor.pathUpdateHandler = { [weak self] path in
+      let satisfied = path.status == .satisfied
       Task { @MainActor in
-        guard let self else { return }
-        let satisfied = path.status == .satisfied
-
-        let wasOffline = !self.lastPathSatisfied
-        let wasOnline = self.lastPathSatisfied
-
-        if satisfied, wasOffline {
-          self.isSystemOnline = true
-          if self.suppressNextOnlineRefresh {
-            print("Reachability: Online detected (initial). Suppressing first refresh.")
-            self.lastPathSatisfied = true
-            self.suppressNextOnlineRefresh = false
-            self.pushCacheUpdate(forceUpdate: true)
-            return
-          }
-          self.lastPathSatisfied = true
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
-            print("Reachability: Online detected, refreshing remote sources")
-            for src in self.sources {
-              if let w = src as? WebDAVSource { w.requestRefresh() }
-            }
-            self.pushCacheUpdate(forceUpdate: true)
-            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Back online — refreshing library…")])
-          }
-        } else if !satisfied, wasOnline {
-          self.isSystemOnline = false
-          self.lastPathSatisfied = false
-          self.pushCacheUpdate(forceUpdate: true)
-          NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Offline — some sources unavailable")])
-        }
+        self?.handlePathUpdate(satisfied: satisfied)
       }
     }
     pathMonitor.start(queue: pathQueue)
+  }
+
+  /// Reacts to a network path change. Always keeps the online flags current (they are cheap and
+  /// `pushCacheUpdate` reads them), but while a game is running defers the library work to
+  /// `emulationDidEnd()`: no snackbars, no WebDAV relisting, no cache walk.
+  func handlePathUpdate(satisfied: Bool) {
+    if satisfied {
+      guard !lastPathSatisfied else { return }
+      isSystemOnline = true
+      if suppressNextOnlineRefresh {
+        print("Reachability: Online detected (initial). Suppressing first refresh.")
+        lastPathSatisfied = true
+        suppressNextOnlineRefresh = false
+        // A game may already be running; its end owes the sources a fresh listing.
+        if isEmulationActive() { needsSourceRefresh = true }
+        pushCacheUpdate(forceUpdate: true)
+        return
+      }
+      lastPathSatisfied = true
+      pathGeneration += 1
+      if isEmulationActive() {
+        needsSourceRefresh = true
+        pushCacheUpdate(forceUpdate: true)
+        return
+      }
+      let generation = pathGeneration
+      DispatchQueue.main.asyncAfter(deadline: .now() + onlineSettleDelay) { [weak self] in
+        guard let self else { return }
+        // The path flapped again during the settle window; that callback owns the follow-up.
+        guard generation == self.pathGeneration, self.isSystemOnline else { return }
+        if self.isEmulationActive() {
+          // A game booted during the settle delay.
+          self.needsSourceRefresh = true
+          self.pushCacheUpdate(forceUpdate: true)
+          return
+        }
+        print("Reachability: Online detected, refreshing remote sources")
+        self.refreshWebDAVSources()
+        self.pushCacheUpdate(forceUpdate: true)
+        NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Back online — refreshing library…")])
+      }
+    } else {
+      // Every offline callback is recorded: the first callback of the launch can be unsatisfied, and
+      // the reconnection after it is a real one, not the "initial online" the suppress flag is for.
+      let wasOnline = lastPathSatisfied
+      isSystemOnline = false
+      lastPathSatisfied = false
+      suppressNextOnlineRefresh = false
+      pathGeneration += 1
+      // Only a real online-to-offline transition has anything to push or announce.
+      guard wasOnline else { return }
+      let quiet = isEmulationActive()
+      pushCacheUpdate(forceUpdate: true)
+      if !quiet {
+        NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Offline — some sources unavailable")])
+      }
+    }
+  }
+
+  private func refreshWebDAVSources() {
+    for src in sources {
+      if let w = src as? WebDAVSource { w.requestRefresh() }
+    }
+  }
+
+  /// Runs everything that was held back while a game was running, once.
+  func emulationDidEnd() {
+    if needsSourceRefresh, isSystemOnline {
+      refreshWebDAVSources()
+    }
+    needsSourceRefresh = false
+    guard needsPush else { return }
+    let forced = deferredPushWasForced
+    let cleanup = deferredPushWasCleanup
+    needsPush = false
+    deferredPushWasForced = false
+    deferredPushWasCleanup = false
+    pushCacheUpdate(forceUpdate: forced, cleanup: cleanup)
   }
 
   func add(source: any RemoteLibrarySource) {
@@ -193,7 +278,7 @@ class RemoteSourcesCoordinator: ObservableObject {
     // Remove from factory to clean up singleton instance
     RemoteSourceFactory.removeSource(id: id)
 
-    pushCacheUpdate(forceUpdate: true) // Force update to clean up games from deleted source
+    pushCacheUpdate(forceUpdate: true, cleanup: true) // Force update to clean up games from deleted source
     // Remove persisted listing
     try? FileManager.default.removeItem(at: cacheFileURL(for: id))
   }
@@ -326,7 +411,25 @@ class RemoteSourcesCoordinator: ObservableObject {
     pushCacheUpdate()
   }
 
-  private func pushCacheUpdate(forceUpdate: Bool = false) {
+  /// - Parameter cleanup: the push removes a deleted source's games from the cache, so it must run
+  ///   even when this session never pushed anything for that source.
+  func pushCacheUpdate(forceUpdate: Bool = false, cleanup: Bool = false) {
+    // The push walks the whole Software folder and rewrites the game cache, then fans out to the
+    // library UI, Spotlight and the widget snapshot. None of that may compete with a running game.
+    if isEmulationActive() {
+      needsPush = true
+      deferredPushWasForced = deferredPushWasForced || forceUpdate
+      deferredPushWasCleanup = deferredPushWasCleanup || cleanup
+      return
+    }
+
+    // No sources and nothing ever pushed: a forced push (a Wi-Fi flap, or the first path callback
+    // at launch) would only repeat a Software-folder walk the launch rescan already did. Removing a
+    // source is the exception: its games may still be in the persisted cache.
+    if forceUpdate, !cleanup, sources.isEmpty, lastItemsBySource.isEmpty, lastPushedURLs.isEmpty {
+      return
+    }
+
     print("DEBUG PUSH: pushCacheUpdate() called")
     print("DEBUG PUSH: lastItemsBySource has \(lastItemsBySource.count) sources")
     for (sourceId, items) in lastItemsBySource {
@@ -415,9 +518,8 @@ class RemoteSourcesCoordinator: ObservableObject {
       "library.remote_sync",
       op: "library.remote_sync",
       tags: ["url_count": "\(allUrls.count)"]) {
-      // Force metadata fetch for remote games to ensure artwork and database lookups work
-      TVLibraryBridge.updateLibrary(withRemotePaths: allUrls, fetchMetadata: true)
-    }
+        pushToLibrary(allUrls)
+      }
 
     if forceUpdate, allUrls.isEmpty {
       print("DEBUG PUSH: *** FORCE UPDATE: Cleaned up library after source deletion ***")
@@ -451,8 +553,47 @@ final class LibraryCoordinator: ObservableObject {
 
   private var cancellables = Set<AnyCancellable>()
   private let reloadSubject = PassthroughSubject<Void, Never>()
+  private let emulationState: EmulationState
+  private let gamesProvider: () -> [TVGameItem]
+  /// A reload was requested while a game was running; it runs when the session ends.
+  private(set) var needsReload = false
+  /// A reload is waiting out the debounce. The end-of-session reload covers it and clears this, so a
+  /// game ending inside the debounce window does not reload twice.
+  private var debouncedReloadPending = false
+  /// Runs the local Software-folder rescan and calls back when it finishes. Injectable for tests.
+  private let localRescan: (@escaping () -> Void) -> Void
+  /// The first-appearance local rescan was requested while a game was running.
+  private(set) var needsLocalRefresh = false
 
-  private init() {
+  private convenience init() {
+    self.init(emulationState: .shared, gamesProvider: { TVLibraryBridge.currentGames() })
+  }
+
+  /// `internal` so tests can build one against their own `EmulationState`; the app uses `shared`.
+  init(
+    emulationState: EmulationState,
+    gamesProvider: @escaping () -> [TVGameItem],
+    localRescan: @escaping (@escaping () -> Void) -> Void = { TVLibraryBridge.rescanLocalAndFetchMetadata($0) }
+  ) {
+    self.emulationState = emulationState
+    self.gamesProvider = gamesProvider
+    self.localRescan = localRescan
+    emulationState.addTransitionHandler { [weak self] active in
+      guard let self, !active else { return }
+      if self.needsLocalRefresh {
+        // The rescan reloads the list itself when it finishes.
+        self.needsLocalRefresh = false
+        self.needsReload = false
+        // The rescan's completion is the one reload; a debounce still pending would load mid-scan.
+        self.debouncedReloadPending = false
+        self.refreshLocal()
+      } else if self.needsReload {
+        self.needsReload = false
+        self.debouncedReloadPending = false
+        self.loadCurrent()
+      }
+    }
+
     NotificationCenter.default.publisher(for: NSNotification.Name("RemoteLibraryUpdated"))
       .sink { [weak self] _ in
         #if DEBUG
@@ -465,7 +606,8 @@ final class LibraryCoordinator: ObservableObject {
     reloadSubject
       .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
       .sink { [weak self] in
-        guard let self else { return }
+        guard let self, self.debouncedReloadPending else { return }
+        self.debouncedReloadPending = false
         #if DEBUG
         print("LibraryCoordinator: Debounced reload executing loadCurrent()")
         #endif
@@ -476,14 +618,24 @@ final class LibraryCoordinator: ObservableObject {
 
   /// Starts the coordinator and loads the current game list immediately
   func start() {
-    loadCurrent()
+    loadCurrent(force: true)
+  }
+
+  /// `refreshLocal` for background-initiated rescans (the library's first appearance): a full
+  /// Software-folder walk must not overlap a boot, so during a session it waits for the session to end.
+  func refreshLocalWhenIdle() {
+    if emulationState.isActive {
+      needsLocalRefresh = true
+    } else {
+      refreshLocal()
+    }
   }
 
   /// Refreshes only local files and metadata, leaving remote streams intact
   func refreshLocal(completion: (() -> Void)? = nil) {
     isUpdating = true
     let trace = SentryTelemetryService.beginTrace("library.rescan", op: "library.rescan", tags: ["source": "local"])
-    TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+    localRescan { [weak self] in
       SentryTelemetryService.finishTrace(trace)
       Task { @MainActor in
         self?.isUpdating = false
@@ -498,7 +650,7 @@ final class LibraryCoordinator: ObservableObject {
     isUpdating = true
     let trace = SentryTelemetryService.beginTrace("library.rescan", op: "library.rescan", tags: ["source": "all"])
     NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
-    TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+    localRescan { [weak self] in
       SentryTelemetryService.finishTrace(trace)
       Task { @MainActor in
         self?.isUpdating = false
@@ -513,11 +665,17 @@ final class LibraryCoordinator: ObservableObject {
     #if DEBUG
     print("LibraryCoordinator.triggerReload(): Triggering reload")
     #endif
+    debouncedReloadPending = true
     reloadSubject.send(())
   }
 
-  private func loadCurrent() {
-    let items = TVLibraryBridge.currentGames()
-    games = items
+  /// Publishing `games` regroups the whole library and re-evaluates the grid, so while a game is
+  /// running a reload is held until it ends. `force` is for the first load, which has nothing to show yet.
+  func loadCurrent(force: Bool = false) {
+    if emulationState.isActive, !force {
+      needsReload = true
+      return
+    }
+    games = gamesProvider()
   }
 }

@@ -10,7 +10,10 @@ import TVServices
 /// actor (TVGameItem is main-thread), encodes and mirrors on a utility task.
 @MainActor
 enum LibrarySnapshotWriter {
-  static func writeNow() {
+  /// `completion` runs on the main actor once the snapshot is saved (`true`) or the save failed
+  /// (`false`), before the ecosystem surfaces are refreshed: the callers that care, the scheduler's
+  /// held-write bookkeeping and its background task, need durability, not the refresh.
+  static func writeNow(completion: (@MainActor @Sendable (Bool) -> Void)? = nil) {
     let items = TVLibraryBridge.currentGames().filter { !$0.isDemoItem }
     let lastPlayed = LastPlayedStore.all()
     var games: [LibrarySnapshotGame] = []
@@ -41,6 +44,7 @@ enum LibrarySnapshotWriter {
       let saved = LibrarySnapshotStore().save(snapshot)
       NSLog("[Snapshot] wrote %d games (%d recent, %d favorites) saved=%d",
             snapshot.byGameID.count, snapshot.recentlyPlayed.count, snapshot.favorites.count, saved ? 1 : 0)
+      if let completion { await completion(saved) }
       guard saved else { return }
       #if os(tvOS)
       TVTopShelfContentProvider.topShelfContentDidChange()

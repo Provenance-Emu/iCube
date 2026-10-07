@@ -6,6 +6,12 @@ import UIKit
 import UniformTypeIdentifiers
 
 class SpotlightIndexService: UIResponder, UIApplicationDelegate {
+  #if !os(tvOS)
+  /// Every Spotlight pass builds an item and PNG-encodes a cover for each game. Requests that arrive
+  /// while a game is running fold into one full pass when it ends.
+  private lazy var fullReindex = EmulationDeferral { SpotlightLibraryIndexer.shared.reindexAll() }
+  #endif
+
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     indexAllGames()
     NotificationCenter.default.addObserver(self, selector: #selector(reindexOnLibraryUpdate), name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
@@ -33,7 +39,9 @@ class SpotlightIndexService: UIResponder, UIApplicationDelegate {
   @objc private func reindexOnMetadataUpdate(_ note: Notification) {
     #if !os(tvOS)
     // Reindex just the one if we have its filePath; otherwise fall back to all
-    if let filePath = note.userInfo?["filePath"] as? String {
+    if EmulationState.shared.isActive {
+      fullReindex.request()
+    } else if let filePath = note.userInfo?["filePath"] as? String {
       SpotlightLibraryIndexer.shared.reindex(filePath: filePath)
     } else {
       SpotlightLibraryIndexer.shared.reindexAll()
@@ -44,7 +52,7 @@ class SpotlightIndexService: UIResponder, UIApplicationDelegate {
   @MainActor
   private func indexAllGames() {
     #if !os(tvOS)
-    SpotlightLibraryIndexer.shared.reindexAll()
+    fullReindex.request()
     #endif
   }
 }

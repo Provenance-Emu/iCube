@@ -121,6 +121,8 @@ struct MenuScreen: View {
   /// which only draws its ring while `pauseMenuControllerNavActive`.
   @State private var focusedID: String?
   @State private var scopeID = UUID()
+  /// Skips every other tick while a game is running (see `PadPollThrottle`).
+  @State private var pollThrottle = PadPollThrottle()
   /// `.grid` only: how many columns `gridBody` is drawing right now, so the d-pad moves through
   /// the grid as drawn (up/down a row, left/right within a row). 1 for `.list`.
   @State private var gridColumnCount = 1
@@ -364,6 +366,7 @@ struct MenuScreen: View {
   }
 
   private func tick() {
+    guard pollThrottle.shouldRun(at: CACurrentMediaTime(), emulating: PadPollThrottle.gameIsRunning) else { return }
     let pads = connectedGamepads()
     guard !pads.isEmpty else { return }
     let padInputs = pads.map { padID, pad in (padID, navInput(pad)) }
