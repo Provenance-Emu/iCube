@@ -23,15 +23,30 @@ static std::atomic<float> s_dsuDeadzone{0.f};
 static std::atomic<float> s_dsuSmoothing{0.f};
 static std::atomic<bool> s_inputDebug{false};
 
+// Refreshes can run concurrently (a defaults write on any thread posts on that thread). Each one
+// takes a generation before reading, and publishes only if no later refresh has published, so a
+// slow refresh that read before a newer write can never overwrite the newer values. The reads stay
+// outside the lock; only the compare-and-store is inside it.
+static std::atomic<uint64_t> s_refreshRequested{0};
+static uint64_t s_refreshPublished = 0;
+static os_unfair_lock s_refreshLock = OS_UNFAIR_LOCK_INIT;
+
 static void TCRefreshInputDefaults(void) {
+  const uint64_t generation = s_refreshRequested.fetch_add(1, std::memory_order_relaxed) + 1;
   NSUserDefaults* defs = NSUserDefaults.standardUserDefaults;
   float gain = (float)[defs floatForKey:kDSUGainKey]; if (gain <= 0.f) gain = 1.f;
   float dead = (float)[defs floatForKey:kDSUDeadzoneKey]; if (dead < 0.f) dead = 0.f; if (dead > 0.49f) dead = 0.49f;
   float alpha = (float)[defs floatForKey:kDSUSmoothingKey]; if (alpha < 0.f) alpha = 0.f; if (alpha > 0.95f) alpha = 0.0f; // 0 = off
-  s_dsuGain.store(gain, std::memory_order_relaxed);
-  s_dsuDeadzone.store(dead, std::memory_order_relaxed);
-  s_dsuSmoothing.store(alpha, std::memory_order_relaxed);
-  s_inputDebug.store([defs boolForKey:kInputDebugKey], std::memory_order_relaxed);
+  const bool inputDebug = [defs boolForKey:kInputDebugKey];
+  os_unfair_lock_lock(&s_refreshLock);
+  if (generation > s_refreshPublished) {
+    s_refreshPublished = generation;
+    s_dsuGain.store(gain, std::memory_order_relaxed);
+    s_dsuDeadzone.store(dead, std::memory_order_relaxed);
+    s_dsuSmoothing.store(alpha, std::memory_order_relaxed);
+    s_inputDebug.store(inputDebug, std::memory_order_relaxed);
+  }
+  os_unfair_lock_unlock(&s_refreshLock);
 }
 
 @implementation TCManagerInterface
