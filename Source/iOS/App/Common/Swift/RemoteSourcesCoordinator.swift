@@ -560,6 +560,8 @@ final class LibraryCoordinator: ObservableObject {
   /// A reload is waiting out the debounce. The end-of-session reload covers it and clears this, so a
   /// game ending inside the debounce window does not reload twice.
   private var debouncedReloadPending = false
+  /// Runs the local Software-folder rescan and calls back when it finishes. Injectable for tests.
+  private let localRescan: (@escaping () -> Void) -> Void
   /// The first-appearance local rescan was requested while a game was running.
   private(set) var needsLocalRefresh = false
 
@@ -568,15 +570,22 @@ final class LibraryCoordinator: ObservableObject {
   }
 
   /// `internal` so tests can build one against their own `EmulationState`; the app uses `shared`.
-  init(emulationState: EmulationState, gamesProvider: @escaping () -> [TVGameItem]) {
+  init(
+    emulationState: EmulationState,
+    gamesProvider: @escaping () -> [TVGameItem],
+    localRescan: @escaping (@escaping () -> Void) -> Void = { TVLibraryBridge.rescanLocalAndFetchMetadata($0) }
+  ) {
     self.emulationState = emulationState
     self.gamesProvider = gamesProvider
+    self.localRescan = localRescan
     emulationState.addTransitionHandler { [weak self] active in
       guard let self, !active else { return }
       if self.needsLocalRefresh {
         // The rescan reloads the list itself when it finishes.
         self.needsLocalRefresh = false
         self.needsReload = false
+        // The rescan's completion is the one reload; a debounce still pending would load mid-scan.
+        self.debouncedReloadPending = false
         self.refreshLocal()
       } else if self.needsReload {
         self.needsReload = false
@@ -626,7 +635,7 @@ final class LibraryCoordinator: ObservableObject {
   func refreshLocal(completion: (() -> Void)? = nil) {
     isUpdating = true
     let trace = SentryTelemetryService.beginTrace("library.rescan", op: "library.rescan", tags: ["source": "local"])
-    TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+    localRescan { [weak self] in
       SentryTelemetryService.finishTrace(trace)
       Task { @MainActor in
         self?.isUpdating = false
@@ -641,7 +650,7 @@ final class LibraryCoordinator: ObservableObject {
     isUpdating = true
     let trace = SentryTelemetryService.beginTrace("library.rescan", op: "library.rescan", tags: ["source": "all"])
     NotificationCenter.default.post(name: NSNotification.Name("RefreshRemoteSources"), object: nil)
-    TVLibraryBridge.rescanLocalAndFetchMetadata { [weak self] in
+    localRescan { [weak self] in
       SentryTelemetryService.finishTrace(trace)
       Task { @MainActor in
         self?.isUpdating = false

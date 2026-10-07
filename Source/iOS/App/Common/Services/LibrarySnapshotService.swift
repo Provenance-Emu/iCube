@@ -95,6 +95,8 @@ final class LibrarySnapshotScheduler {
   private var backgroundTask = UIBackgroundTaskIdentifier.invalid
   /// A write is running (started, not yet reported saved or failed).
   private var inFlight = false
+  /// `owedGeneration` when the running write started; debt at that generation is covered by it.
+  private var inFlightGeneration = 0
   /// Something was owed while a write was in flight, so another follows it.
   private var rewriteAfterInFlight = false
   /// Bumped whenever a write becomes owed; a write that started earlier cannot clear a later debt.
@@ -143,7 +145,10 @@ final class LibrarySnapshotScheduler {
   /// session may have ended a moment ago with its write still scheduled.
   func flushForBackground() {
     guard writeHeldForSession || pending != nil || inFlight else { return }
-    let owedBeyondInFlight = writeHeldForSession || pending != nil
+    // A write already running covers the debt it started with; only newer debt, or a request waiting
+    // in `pending`, needs another pass.
+    let owedBeyondInFlight = pending != nil
+      || (writeHeldForSession && (!inFlight || owedGeneration != inFlightGeneration))
     pending?.cancel()
     pending = nil
     beginBackgroundTaskIfNeeded()
@@ -182,6 +187,7 @@ final class LibrarySnapshotScheduler {
     }
     inFlight = true
     let generation = owedGeneration
+    inFlightGeneration = generation
     write { [weak self] saved in
       guard let self else { return }
       self.inFlight = false

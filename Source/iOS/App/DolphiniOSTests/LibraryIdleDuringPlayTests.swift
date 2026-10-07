@@ -244,6 +244,34 @@ final class LibraryCoordinatorDeferralTests: XCTestCase {
     wait(for: [done], timeout: seconds + 2)
   }
 
+  func test_endingWithALocalRefreshOwedAndADebouncePendingReloadsOnce() {
+    // Its own state and counter: the fixture coordinator also listens for the notifications.
+    let ownState = EmulationState(center: NotificationCenter())
+    var ownLoads = 0
+    var rescanDone: (() -> Void)?
+    let own = LibraryCoordinator(
+      emulationState: ownState,
+      gamesProvider: {
+        ownLoads += 1
+        return []
+      },
+      localRescan: { rescanDone = $0 })
+    ownState.setActive(true)
+    NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+    wait(0.5) // the debounce fires mid-game: held
+    own.refreshLocalWhenIdle()
+    XCTAssertTrue(own.needsLocalRefresh)
+
+    NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
+    ownState.setActive(false) // starts the rescan; a debounce is still pending
+    wait(0.5)
+    XCTAssertEqual(ownLoads, 0, "nothing may reload while the rescan is still scanning")
+
+    rescanDone?()
+    wait(0.6)
+    XCTAssertEqual(ownLoads, 1, "the rescan's completion is the single reload")
+  }
+
   func test_initialRescanWaitsForTheSessionToEnd() {
     state.setActive(true)
     coordinator.refreshLocalWhenIdle()
@@ -460,6 +488,33 @@ final class LibrarySnapshotSchedulerTests: XCTestCase {
 
     finishRunningWrite(saved: true)
     XCTAssertEqual(backgroundTasksEnded, 1)
+  }
+
+  func test_backgroundingDuringTheInFlightPostSessionWriteWithNoNewDebtWritesOnce() {
+    autoComplete = false
+    state.setActive(true)
+    state.setActive(false)
+    runScheduled() // the post-session write is in flight and its debt is still held
+    XCTAssertEqual(writes, 1)
+
+    scheduler.flushForBackground()
+    XCTAssertEqual(backgroundTasksBegun, 1)
+    finishRunningWrite(saved: true)
+
+    XCTAssertEqual(writes, 1, "the running write already covers that debt")
+    XCTAssertFalse(scheduler.writeHeldForSession)
+    XCTAssertEqual(backgroundTasksEnded, 1)
+  }
+
+  func test_backgroundingDuringAnInFlightWriteWithNewDebtWritesAgain() {
+    autoComplete = false
+    state.setActive(true)
+    state.setActive(false)
+    runScheduled()
+    state.setActive(true) // a new session: new debt
+    scheduler.flushForBackground()
+    finishRunningWrite(saved: true)
+    XCTAssertEqual(writes, 2)
   }
 
   func test_failedBackgroundSaveEndsTheTaskAndStaysOwed() {
