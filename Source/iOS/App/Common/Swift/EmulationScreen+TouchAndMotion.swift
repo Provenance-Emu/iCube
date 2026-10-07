@@ -404,7 +404,7 @@ extension EmulationScreen {
       let hasExternal = !GCController.controllers().isEmpty
       if hasExternal && !forceVisible { return false }
       let show = ControllerManager.shared.shouldShowGCPad(wiiSystem: isWii, wiiPadAttached: true, gcPadAttached: true)
-      NSLog("[TOUCH] GameCube pad decision: isWiiState=\(isWii) shouldShow=\(show)")
+      if TCManagerInterface.inputDebugEnabled { NSLog("%@", "[TOUCH] GameCube pad decision: isWiiState=\(isWii) shouldShow=\(show)") }
       return show
     }
 
@@ -412,7 +412,7 @@ extension EmulationScreen {
       let hasExternal = !GCController.controllers().isEmpty
       if hasExternal && !forceVisible { return false }
       let show = ControllerManager.shared.shouldShowWiiOverlay(wiiSystem: isWii, wiiPadAttached: true, gcPadAttached: true)
-      NSLog("[TOUCH] Wii pad decision: isWiiState=\(isWii) shouldShow=\(show)")
+      if TCManagerInterface.inputDebugEnabled { NSLog("%@", "[TOUCH] Wii pad decision: isWiiState=\(isWii) shouldShow=\(show)") }
       return show
     }
 
@@ -427,13 +427,13 @@ extension EmulationScreen {
       let view: TCWiiPad
       if classic {
         view = TCClassicWiiPad()
-        NSLog("[TOUCH] Using TCClassicWiiPad")
+        if TCManagerInterface.inputDebugEnabled { NSLog("[TOUCH] Using TCClassicWiiPad") }
       } else if sideways {
         view = TCSidewaysWiiPad()
-        NSLog("[TOUCH] Using TCSidewaysWiiPad")
+        if TCManagerInterface.inputDebugEnabled { NSLog("[TOUCH] Using TCSidewaysWiiPad") }
       } else {
         view = TCWiiPad()
-        NSLog("[TOUCH] Using TCWiiPad")
+        if TCManagerInterface.inputDebugEnabled { NSLog("[TOUCH] Using TCWiiPad") }
       }
       view.port = ControllerManager.shared.touchscreenControllerId(isWii: true)
       let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
@@ -504,7 +504,9 @@ extension EmulationScreen {
       else if let j = view as? TCJoystick { j.port = port }
       else if let d = view as? TCDirectionalPad { d.port = port }
       for sub in view.subviews { applyPortRecursively(port, to: sub) }
-      NSLog("[TOUCH] Applied port=\(port) recursively to subtree: \(type(of: view))")
+      if TCManagerInterface.inputDebugEnabled {
+        NSLog("[TOUCH] Applied port=%ld recursively to subtree: %@", port, String(describing: type(of: view)))
+      }
     }
   }
 }

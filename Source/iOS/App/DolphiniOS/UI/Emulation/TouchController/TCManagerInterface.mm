@@ -6,7 +6,51 @@
 #import "InputCommon/ControllerInterface/iOS/StateManager.h"
 #import "DSUServerBridge.h"
 
+#include <atomic>
+#include <os/lock.h>
+
+// setAxisValueFor: runs for every analog sample (touch stick moves, the phone's IMU at 200 Hz, a
+// physical controller's motion and touchpad), so it must not read NSUserDefaults each time. These
+// mirror the DSU knobs and `input_debug`, refreshed whenever any user default changes. The
+// notification is posted synchronously on the writing thread, so a write is visible to the very
+// next axis write (TCManagerInterfaceAxisTests sets the knobs and writes immediately).
+static NSString* const kDSUGainKey = @"dsu_gyro_gain";
+static NSString* const kDSUDeadzoneKey = @"dsu_deadzone";
+static NSString* const kDSUSmoothingKey = @"dsu_smoothing";
+static NSString* const kInputDebugKey = @"input_debug";
+static std::atomic<float> s_dsuGain{1.f};
+static std::atomic<float> s_dsuDeadzone{0.f};
+static std::atomic<float> s_dsuSmoothing{0.f};
+static std::atomic<bool> s_inputDebug{false};
+
+static void TCRefreshInputDefaults(void) {
+  NSUserDefaults* defs = NSUserDefaults.standardUserDefaults;
+  float gain = (float)[defs floatForKey:kDSUGainKey]; if (gain <= 0.f) gain = 1.f;
+  float dead = (float)[defs floatForKey:kDSUDeadzoneKey]; if (dead < 0.f) dead = 0.f; if (dead > 0.49f) dead = 0.49f;
+  float alpha = (float)[defs floatForKey:kDSUSmoothingKey]; if (alpha < 0.f) alpha = 0.f; if (alpha > 0.95f) alpha = 0.0f; // 0 = off
+  s_dsuGain.store(gain, std::memory_order_relaxed);
+  s_dsuDeadzone.store(dead, std::memory_order_relaxed);
+  s_dsuSmoothing.store(alpha, std::memory_order_relaxed);
+  s_inputDebug.store([defs boolForKey:kInputDebugKey], std::memory_order_relaxed);
+}
+
 @implementation TCManagerInterface
+
++ (void)initialize {
+  if (self != [TCManagerInterface class]) return;
+  TCRefreshInputDefaults();
+  // queue:nil runs the refresh on the posting thread, before the defaults write returns.
+  [NSNotificationCenter.defaultCenter addObserverForName:NSUserDefaultsDidChangeNotification
+                                                  object:nil
+                                                   queue:nil
+                                              usingBlock:^(NSNotification* _Nonnull note) {
+                                                TCRefreshInputDefaults();
+                                              }];
+}
+
++ (BOOL)inputDebugEnabled {
+  return s_inputDebug.load(std::memory_order_relaxed);
+}
 
 // This class only exists because I don't want to rewrite the touchscreen controller classes
 // in Objective-C. If I did, then I could just call the C++ methods directly.
@@ -109,18 +153,31 @@ static const float kStandardGravity = 9.80665f;
   [DSUServerBridge setTouchPoint:0 controller:controllerId active:NO x:0 y:0];
 }
 
-// Aggregate split stick inputs (Up/Down/Left/Right) into full X/Y for DSU
-static float s_splitAxes[4][256] = {{0}}; // [controller][axisIndex] last values in [-1,1] (size covers up to 255)
+// Per-axis state shared by every writer. setAxisValueFor: runs on the main thread (touch overlay,
+// physical controller handlers) AND on the device-motion queue (IMU axes, the gyro IR pointer), so
+// all of it is guarded by s_axisStateLock. The lock only covers the arithmetic: the StateManager
+// write (its own mutex) and every DSUServerBridge call (which can send a packet) happen after it is
+// released, from copies taken under it.
+static os_unfair_lock s_axisStateLock = OS_UNFAIR_LOCK_INIT;
+static float s_last[4][256] = {{0}};      // [controller][axis] smoothing history (axes below 256)
+static float s_splitAxes[4][256] = {{0}}; // [controller][axisIndex] last split-stick values in [-1,1]
+static float s_irX = 0.0f, s_irY = 0.0f;  // last DSU IR pointer, in [-1,1]
+static float s_dsuAccel[3] = {0.0f, 0.0f, 0.0f};
+static float s_dsuGyro[3] = {0.0f, 0.0f, 0.0f}; // pitch, yaw, roll
 static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); }
 
+// Match TCJoystick: the negative half reports negative, the positive half positive.
+static inline float TCCombineSplitAxes(float negativeValue, float positiveValue) {
+  const float negativeMag = negativeValue < 0.f ? -negativeValue : 0.f; // 0..1
+  const float positiveMag = positiveValue > 0.f ? positiveValue : 0.f;  // 0..1
+  return clamp11(positiveMag - negativeMag);
+}
+
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {
-//  NSLog(@"Set axis value for %i, controller %i, value: %f", axis, controllerId, value);
-  // Apply DSU scaling parameters to analog axes before forwarding
-  static float s_last[4][256] = {{0}}; // simple per-controller/per-axis smoothing
-  NSUserDefaults* defs = NSUserDefaults.standardUserDefaults;
-  float gain = (float)[defs floatForKey:@"dsu_gyro_gain"]; if (gain <= 0.f) gain = 1.f;
-  float dead = (float)[defs floatForKey:@"dsu_deadzone"]; if (dead < 0.f) dead = 0.f; if (dead > 0.49f) dead = 0.49f;
-  float alpha = (float)[defs floatForKey:@"dsu_smoothing"]; if (alpha < 0.f) alpha = 0.f; if (alpha > 0.95f) alpha = 0.0f; // 0 = off
+  // Apply DSU scaling parameters to analog axes before forwarding (cached; see TCRefreshInputDefaults)
+  const float gain = s_dsuGain.load(std::memory_order_relaxed);
+  const float dead = s_dsuDeadzone.load(std::memory_order_relaxed);
+  const float alpha = s_dsuSmoothing.load(std::memory_order_relaxed);
 
   // Axis classification. Classify against the UNCLAMPED `axis`: the IMU ranges (625-636,
   // 900-905) sit above the 256-entry smoothing tables, so testing the clamped index `ai`
@@ -151,124 +208,117 @@ static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f :
 
     // Smoothing (EMA). Disable for split-stick and IR axes.
     const bool allow_smoothing = (alpha > 0.f) && has_smoothing_cell && !(is_split_stick || is_ir_axis);
-    if (allow_smoothing) {
-      v = alpha * s_last[ci][ai] + (1.f - alpha) * v;
+    if (has_smoothing_cell) {
+      os_unfair_lock_lock(&s_axisStateLock);
+      if (allow_smoothing) {
+        v = alpha * s_last[ci][ai] + (1.f - alpha) * v;
+      }
+      s_last[ci][ai] = v;
+      os_unfair_lock_unlock(&s_axisStateLock);
     }
-    if (has_smoothing_cell) s_last[ci][ai] = v;
   }
 
+  // StateManager takes its own mutex per write, shared with the core's input poll. Left as is on
+  // purpose: whether that contention matters is still to be measured (System Trace) before changing it.
   ciface::iOS::StateManager::GetInstance()->SetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis, v);
   // Also forward to DSU server if running
-  if ([DSUServerBridge isRunning]) {
-    // **WIIMOTE IR POINTER** - Forward IR data to DSU touch coordinates
-    // Uses TCButtonType.wiiInfraredUp/Down/Left/Right indices (112-115)
-    if (axis >= 112 && axis <= 115) {
-      static float ir_x = 0.0f, ir_y = 0.0f;
-      if (axis == 112 || axis == 113) { ir_y = v; }
-      if (axis == 114 || axis == 115) { ir_x = v; }
-      int touch_x = (int)((ir_x + 1.0f) * 0.5f * 1920.0f);
-      int touch_y = (int)((ir_y + 1.0f) * 0.5f * 1080.0f);
-      BOOL active = (fabsf(ir_x) > 0.01f || fabsf(ir_y) > 0.01f);
-      [DSUServerBridge setTouchPoint:0 controller:controllerId active:active x:touch_x y:touch_y];
+  if (![DSUServerBridge isRunning]) return;
+
+  // **WIIMOTE IR POINTER** - Forward IR data to DSU touch coordinates
+  // Uses TCButtonType.wiiInfraredUp/Down/Left/Right indices (112-115)
+  if (is_ir_axis) {
+    os_unfair_lock_lock(&s_axisStateLock);
+    if (axis == 112 || axis == 113) { s_irY = v; }
+    if (axis == 114 || axis == 115) { s_irX = v; }
+    const float ir_x = s_irX, ir_y = s_irY;
+    os_unfair_lock_unlock(&s_axisStateLock);
+    int touch_x = (int)((ir_x + 1.0f) * 0.5f * 1920.0f);
+    int touch_y = (int)((ir_y + 1.0f) * 0.5f * 1080.0f);
+    BOOL active = (fabsf(ir_x) > 0.01f || fabsf(ir_y) > 0.01f);
+    [DSUServerBridge setTouchPoint:0 controller:controllerId active:active x:touch_x y:touch_y];
+  }
+
+  // Wii Remote IMU (accel 625-630, gyro 631-636) -> DSU motion. One signed value per axis, in
+  // g and deg/s; see dsuMotionComponentForAxis:value:.
+  const TCDSUMotionComponent motion = [self dsuMotionComponentForAxis:axis value:v];
+  if (motion.kind != TCDSUMotionKindNone) {
+    float sent[3];
+    os_unfair_lock_lock(&s_axisStateLock);
+    float* target = motion.kind == TCDSUMotionKindAccelerometer ? s_dsuAccel : s_dsuGyro;
+    target[motion.index] = motion.value;
+    memcpy(sent, target, sizeof(sent));
+    os_unfair_lock_unlock(&s_axisStateLock);
+    if (motion.kind == TCDSUMotionKindAccelerometer) {
+      [DSUServerBridge setAccelerometer:controllerId x:sent[0] y:sent[1] z:sent[2]];
+    } else {
+      [DSUServerBridge setGyro:controllerId pitch:sent[0] yaw:sent[1] roll:sent[2]];
     }
+  }
+  // GC analog triggers: L(20)->DSU axis 4, R(21)->DSU axis 5, map [0..1] to [-1..1]
+  if (axis == 20 || axis == 21) {
+    float t = (v * 2.f) - 1.f;
+    [DSUServerBridge setAxis:(axis == 20 ? 4 : 5) controller:controllerId value:t];
+    BOOL pressed = v > 0.7f;
+    if (axis == 20) { [DSUServerBridge setShoulderL:controllerId state:pressed]; }
+    if (axis == 21) { [DSUServerBridge setShoulderR:controllerId state:pressed]; }
+  }
 
-    // Wii Remote IMU (accel 625-630, gyro 631-636) -> DSU motion. One signed value per axis, in
-    // g and deg/s; see dsuMotionComponentForAxis:value:.
-    const TCDSUMotionComponent motion = [self dsuMotionComponentForAxis:axis value:v];
-    if (motion.kind != TCDSUMotionKindNone) {
-      static float accel[3] = {0.0f, 0.0f, 0.0f};
-      static float gyro[3] = {0.0f, 0.0f, 0.0f}; // pitch, yaw, roll
-      if (motion.kind == TCDSUMotionKindAccelerometer) {
-        accel[motion.index] = motion.value;
-        [DSUServerBridge setAccelerometer:controllerId x:accel[0] y:accel[1] z:accel[2]];
-      } else {
-        gyro[motion.index] = motion.value;
-        [DSUServerBridge setGyro:controllerId pitch:gyro[0] yaw:gyro[1] roll:gyro[2]];
-      }
+  // Aggregate NIB split sticks to DSU sticks (use magnitude-based signed combination)
+  // Main stick: 11 (Up-), 12 (Down+), 13 (Left-), 14 (Right+)
+  // C-stick:    16 (Up-), 17 (Down+), 18 (Left-), 19 (Right+)
+  // Nunchuk:    203 (Up-), 204 (Down+), 205 (Left-), 206 (Right+)
+  if (!is_split_stick) return;
+  int upIdx, downIdx, leftIdx, rightIdx;
+  if (axis >= 11 && axis <= 14) { upIdx = 11; downIdx = 12; leftIdx = 13; rightIdx = 14; }
+  else if (axis >= 16 && axis <= 19) { upIdx = 16; downIdx = 17; leftIdx = 18; rightIdx = 19; }
+  else { upIdx = 203; downIdx = 204; leftIdx = 205; rightIdx = 206; }
+
+  os_unfair_lock_lock(&s_axisStateLock);
+  s_splitAxes[ci][(int)axis] = clamp11(v);
+  const float upValue = s_splitAxes[ci][upIdx], downValue = s_splitAxes[ci][downIdx];
+  const float leftValue = s_splitAxes[ci][leftIdx], rightValue = s_splitAxes[ci][rightIdx];
+  os_unfair_lock_unlock(&s_axisStateLock);
+
+  float x = TCCombineSplitAxes(leftValue, rightValue); // right positive, left negative
+  float y = TCCombineSplitAxes(upValue, downValue);    // down positive, up negative
+  if (s_inputDebug.load(std::memory_order_relaxed)) {
+    NSLog(@"[DSU] combLR: leftVal=%.3f rightVal=%.3f result=%.3f", leftValue, rightValue, x);
+    NSLog(@"[DSU] combUD: upVal=%.3f downVal=%.3f result=%.3f", upValue, downValue, y);
+  }
+
+  if (axis >= 11 && axis <= 14) {
+    // Snap small residuals to zero to avoid stickiness
+    if (fabsf(x) < 0.02f) x = 0.f; if (fabsf(y) < 0.02f) y = 0.f;
+    [DSUServerBridge setAxis:0 controller:controllerId value:x];
+    [DSUServerBridge setAxis:1 controller:controllerId value:y];
+    // Recenter guard: resend center shortly after release to overcome missed events
+    if (x == 0.f && y == 0.f) {
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
+        [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
+      });
     }
-    // GC analog triggers: L(20)->DSU axis 4, R(21)->DSU axis 5, map [0..1] to [-1..1]
-    if (axis == 20 || axis == 21) {
-      float t = (v * 2.f) - 1.f;
-      [DSUServerBridge setAxis:(axis == 20 ? 4 : 5) controller:controllerId value:t];
-      BOOL pressed = v > 0.7f;
-      if (axis == 20) { [DSUServerBridge setShoulderL:controllerId state:pressed]; }
-      if (axis == 21) { [DSUServerBridge setShoulderR:controllerId state:pressed]; }
+  } else if (axis >= 16 && axis <= 19) {
+    if (fabsf(x) < 0.02f) x = 0.f; if (fabsf(y) < 0.02f) y = 0.f;
+    [DSUServerBridge setAxis:2 controller:controllerId value:x];
+    [DSUServerBridge setAxis:3 controller:controllerId value:y];
+    if (x == 0.f && y == 0.f) {
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        [DSUServerBridge setAxis:2 controller:controllerId value:0.f];
+        [DSUServerBridge setAxis:3 controller:controllerId value:0.f];
+      });
     }
-
-    // Aggregate NIB split sticks to DSU sticks (use magnitude-based signed combination)
-    // Main stick: 11 (Up-), 12 (Down+), 13 (Left-), 14 (Right+)
-    // C-stick:    16 (Up-), 17 (Down+), 18 (Left-), 19 (Right+)
-    // Nunchuk:    203 (Up-), 204 (Down+), 205 (Left-), 206 (Right+)
-    if ((axis >= 11 && axis <= 14) || (axis >= 16 && axis <= 19) || (axis >= 203 && axis <= 206)) {
-      int aidx = (int)axis;
-      s_splitAxes[ci][aidx] = clamp11(v);
-
-      auto combLR = ^(int leftIdx, int rightIdx) {
-        // Match TCJoystick: left axis reports negative, right axis reports positive
-        float leftValue = s_splitAxes[ci][leftIdx];   // negative when left
-        float rightValue = s_splitAxes[ci][rightIdx]; // positive when right, negative when left
-        float leftMag = leftValue < 0.f ? -leftValue : 0.f;    // 0..1
-        float rightMag = rightValue > 0.f ? rightValue : 0.f;  // 0..1
-        float result = clamp11(rightMag - leftMag); // right positive, left negative
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-          NSLog(@"[DSU] combLR: leftVal=%.3f rightVal=%.3f leftMag=%.3f rightMag=%.3f result=%.3f", leftValue, rightValue, leftMag, rightMag, result);
-        }
-        return result;
-      };
-      auto combUD = ^(int upIdx, int downIdx) {
-        // Match TCJoystick: up axis reports negative, down axis reports positive
-        float upValue = s_splitAxes[ci][upIdx];     // negative when up
-        float downValue = s_splitAxes[ci][downIdx]; // positive when down, negative when up
-        float upMag = upValue < 0.f ? -upValue : 0.f;       // 0..1
-        float downMag = downValue > 0.f ? downValue : 0.f;  // 0..1
-        float result = clamp11(downMag - upMag); // down positive, up negative
-        if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-          NSLog(@"[DSU] combUD: upVal=%.3f downVal=%.3f upMag=%.3f downMag=%.3f result=%.3f", upValue, downValue, upMag, downMag, result);
-        }
-        return result;
-      };
-
-      if (axis >= 11 && axis <= 14) {
-        float lx = combLR(13, 14); // Left-, Right+
-        float ly = combUD(11, 12); // Up-, Down+
-        // Snap small residuals to zero to avoid stickiness
-        if (fabsf(lx) < 0.02f) lx = 0.f; if (fabsf(ly) < 0.02f) ly = 0.f;
-        [DSUServerBridge setAxis:0 controller:controllerId value:lx];
-        [DSUServerBridge setAxis:1 controller:controllerId value:ly];
-        // Recenter guard: resend center shortly after release to overcome missed events
-        if (lx == 0.f && ly == 0.f) {
-          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
-            [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
-          });
-        }
-      } else if (axis >= 16 && axis <= 19) {
-        float rx = combLR(18, 19); // Left-, Right+
-        float ry = combUD(16, 17); // Up-, Down+
-        if (fabsf(rx) < 0.02f) rx = 0.f; if (fabsf(ry) < 0.02f) ry = 0.f;
-        [DSUServerBridge setAxis:2 controller:controllerId value:rx];
-        [DSUServerBridge setAxis:3 controller:controllerId value:ry];
-        if (rx == 0.f && ry == 0.f) {
-          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            [DSUServerBridge setAxis:2 controller:controllerId value:0.f];
-            [DSUServerBridge setAxis:3 controller:controllerId value:0.f];
-          });
-        }
-      } else {
-        // Nunchuk stick - only send if there's actual input to avoid overwriting main stick
-        float lx2 = combLR(205, 206); // Left-, Right+
-        float ly2 = combUD(203, 204); // Up-, Down+
-        if (fabsf(lx2) > 0.01f || fabsf(ly2) > 0.01f) {
-          [DSUServerBridge setAxis:0 controller:controllerId value:lx2];
-          [DSUServerBridge setAxis:1 controller:controllerId value:ly2];
-        } else {
-          // If both near zero, ensure main stick recenters as well
-          dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-            [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
-            [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
-          });
-        }
-      }
+  } else {
+    // Nunchuk stick - only send if there's actual input to avoid overwriting main stick
+    if (fabsf(x) > 0.01f || fabsf(y) > 0.01f) {
+      [DSUServerBridge setAxis:0 controller:controllerId value:x];
+      [DSUServerBridge setAxis:1 controller:controllerId value:y];
+    } else {
+      // If both near zero, ensure main stick recenters as well
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+        [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
+        [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
+      });
     }
   }
 }

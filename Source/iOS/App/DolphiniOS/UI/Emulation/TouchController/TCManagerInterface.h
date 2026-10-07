@@ -41,6 +41,10 @@ typedef struct {
 /// that was mid-press cannot leave the emulated pad stuck (audit defect #7).
 + (void)clearAllForController:(NSInteger)controllerId;
 
+/// The `input_debug` user default, cached (refreshed whenever a user default changes) so per-sample
+/// input paths can gate their logging without reading NSUserDefaults each time.
+@property (class, readonly) BOOL inputDebugEnabled;
+
 @end
 
 NS_ASSUME_NONNULL_END
