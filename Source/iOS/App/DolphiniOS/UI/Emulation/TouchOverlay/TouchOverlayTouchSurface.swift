@@ -197,7 +197,7 @@ struct TouchOverlayClusterUpdate<ID: Hashable> {
   var changed: Bool { !pressed.isEmpty || !released.isEmpty }
 
   init<Touches: Sequence>(previous: Set<ID>, touches: Touches, hitTest: (CGPoint) -> Set<ID>)
-  where Touches.Element == TouchOverlaySurface.Touch {
+    where Touches.Element == TouchOverlaySurface.Touch {
     var covered: Set<ID> = []
     for touch in touches { covered.formUnion(hitTest(touch.location)) }
     now = covered

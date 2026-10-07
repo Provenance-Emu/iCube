@@ -181,7 +181,8 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   }
   // Push an immediate frame so clients react without waiting for the tick
   [[self shared] sendPadData];
-  if (TCManagerInterface.inputDebugEnabled) {
+  if (TCManagerInterface.inputDebugEnabled)
+  {
     NSLog(@"[DSU] setButton idx=%ld state=%d -> b1=%02x b2=%02x", (long)button, state, b1, b2);
   }
 }
@@ -204,7 +205,8 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   }
   // Push an immediate frame so clients react without waiting for the tick
   [[self shared] sendPadData];
-  if (TCManagerInterface.inputDebugEnabled) {
+  if (TCManagerInterface.inputDebugEnabled)
+  {
     NSLog(@"[DSU] setAxis idx=%ld value=%.3f -> LX=%u LY=%u RX=%u RY=%u L2=%u R2=%u",
           (long)axis, value, p.left_stick_x, p.left_stick_y_inverted,
           p.right_stick_x, p.right_stick_y_inverted, p.trigger_l2, p.trigger_r2);
@@ -572,7 +574,8 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   ssize_t sent = sendto(_sock, &pd.m_message, sizeof(pd.m_message), 0, (const struct sockaddr*)dst, sizeof(*dst));
   if (sent > 0) { _txCount++; }
   // Debug logging
-  if (TCManagerInterface.inputDebugEnabled) {
+  if (TCManagerInterface.inputDebugEnabled)
+  {
     char ipbuf[INET_ADDRSTRLEN] = {0};
     const char* ip = inet_ntop(AF_INET, &dst->sin_addr, ipbuf, sizeof(ipbuf));
     uint16_t p = ntohs(dst->sin_port);
