@@ -55,6 +55,18 @@ final class LoggerIniMigrationTests: XCTestCase {
     XCTAssertEqual(value("BOOT", in: options), "True")
   }
 
+  func testShutdownAddedFalseKeysStillMigrate() {
+    // LogManager::SaveSettings writes every LogType at shutdown; types the old file never listed come
+    // back as False. That is still the untouched old default.
+    var saved = Dictionary(uniqueKeysWithValues: types.map { ($0, true) })
+    saved["SI_AMBB"] = false
+    saved["NEWTYPE"] = false
+    XCTAssertTrue(LoggerIniMigration.looksLikeOldDefault(ini(types: saved, verbosity: 4, window: true)))
+    // An extra type the user turned on is a customization.
+    saved["NEWTYPE"] = true
+    XCTAssertFalse(LoggerIniMigration.looksLikeOldDefault(ini(types: saved, verbosity: 4, window: true)))
+  }
+
   func testFileLoggingTurnedOnIsKept() {
     // WriteToFile shipped False; turning it on is a deliberate choice the migration must keep.
     let text = oldDefault.replacingOccurrences(of: "WriteToFile = False", with: "WriteToFile = True")
