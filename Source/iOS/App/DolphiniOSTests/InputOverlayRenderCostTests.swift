@@ -12,7 +12,7 @@ import XCTest
 /// one button, or a stick moving, used to re-run the whole cluster's body (and every button's art) at
 /// the touch rate while the game ran underneath. These pin the "only on a change" rules.
 final class TouchOverlayClusterUpdateTests: XCTestCase {
-  private let anchors = (0..<3).map { _ in NSObject() }
+  private let anchors = (0 ..< 3).map { _ in NSObject() }
 
   private func touch(_ index: Int, _ x: CGFloat, _ y: CGFloat) -> TouchOverlaySurface.Touch {
     TouchOverlaySurface.Touch(id: ObjectIdentifier(anchors[index]), location: CGPoint(x: x, y: y), force: 0, maximumPossibleForce: 0)
@@ -130,7 +130,7 @@ final class TouchOverlayRenderCountTests: XCTestCase {
 
     send(surface, .began, CGPoint(x: 30, y: 30))
     TouchOverlayRenderProbe.reset()
-    for step in 0..<20 {
+    for step in 0 ..< 20 {
       send(surface, .moved, CGPoint(x: 10 + CGFloat(step * 2), y: 30))
     }
     XCTAssertEqual(TouchOverlayRenderProbe.count(.cluster), 0)
@@ -149,7 +149,7 @@ final class TouchOverlayRenderCountTests: XCTestCase {
 
     send(surface, .began, CGPoint(x: 75, y: 75))
     TouchOverlayRenderProbe.reset()
-    for step in 0..<20 {
+    for step in 0 ..< 20 {
       send(surface, .moved, CGPoint(x: 75 + CGFloat(step), y: 75 - CGFloat(step)))
     }
     XCTAssertGreaterThan(TouchOverlayRenderProbe.count(.stickKnob), 0, "the knob must follow the finger")

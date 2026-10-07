@@ -43,7 +43,7 @@ typedef struct {
 
 /// The `input_debug` user default, cached (refreshed whenever a user default changes) so per-sample
 /// input paths can gate their logging without reading NSUserDefaults each time.
-@property (class, readonly) BOOL inputDebugEnabled;
+@property(class, readonly) BOOL inputDebugEnabled;
 
 @end
 

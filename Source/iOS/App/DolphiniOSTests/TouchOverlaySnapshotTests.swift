@@ -76,7 +76,10 @@ final class TouchOverlaySnapshotTests: XCTestCase {
 
     func write<V: View>(_ name: String, _ view: V) throws {
       for (suffix, opacity) in [("", 1.0), ("-faded", shippedOpacity)] {
-        let framed = ZStack { Color(white: 0.3); view.opacity(opacity) }.frame(width: canvas.width, height: canvas.height)
+        let framed = ZStack {
+          Color(white: 0.3)
+          view.opacity(opacity)
+        }.frame(width: canvas.width, height: canvas.height)
         let image = render(framed, size: canvas, scene: scene)
         try XCTUnwrap(image.pngData()).write(to: outputDir.appendingPathComponent("\(name)\(suffix).png"))
       }

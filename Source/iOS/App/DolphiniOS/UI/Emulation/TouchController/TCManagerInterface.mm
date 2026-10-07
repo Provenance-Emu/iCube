@@ -31,15 +31,27 @@ static std::atomic<uint64_t> s_refreshRequested{0};
 static uint64_t s_refreshPublished = 0;
 static os_unfair_lock s_refreshLock = OS_UNFAIR_LOCK_INIT;
 
-static void TCRefreshInputDefaults(void) {
+static void TCRefreshInputDefaults(void)
+{
   const uint64_t generation = s_refreshRequested.fetch_add(1, std::memory_order_relaxed) + 1;
   NSUserDefaults* defs = NSUserDefaults.standardUserDefaults;
-  float gain = (float)[defs floatForKey:kDSUGainKey]; if (gain <= 0.f) gain = 1.f;
-  float dead = (float)[defs floatForKey:kDSUDeadzoneKey]; if (dead < 0.f) dead = 0.f; if (dead > 0.49f) dead = 0.49f;
-  float alpha = (float)[defs floatForKey:kDSUSmoothingKey]; if (alpha < 0.f) alpha = 0.f; if (alpha > 0.95f) alpha = 0.0f; // 0 = off
+  float gain = (float)[defs floatForKey:kDSUGainKey];
+  if (gain <= 0.f)
+    gain = 1.f;
+  float dead = (float)[defs floatForKey:kDSUDeadzoneKey];
+  if (dead < 0.f)
+    dead = 0.f;
+  if (dead > 0.49f)
+    dead = 0.49f;
+  float alpha = (float)[defs floatForKey:kDSUSmoothingKey];
+  if (alpha < 0.f)
+    alpha = 0.f;
+  if (alpha > 0.95f)
+    alpha = 0.0f;  // 0 = off
   const bool inputDebug = [defs boolForKey:kInputDebugKey];
   os_unfair_lock_lock(&s_refreshLock);
-  if (generation > s_refreshPublished) {
+  if (generation > s_refreshPublished)
+  {
     s_refreshPublished = generation;
     s_dsuGain.store(gain, std::memory_order_relaxed);
     s_dsuDeadzone.store(dead, std::memory_order_relaxed);
@@ -51,8 +63,10 @@ static void TCRefreshInputDefaults(void) {
 
 @implementation TCManagerInterface
 
-+ (void)initialize {
-  if (self != [TCManagerInterface class]) return;
++ (void)initialize
+{
+  if (self != [TCManagerInterface class])
+    return;
   // Observe first, then read: a write that lands between the two still triggers a refresh, and the
   // generation guard keeps the newer of the overlapping refreshes.
   // queue:nil runs the refresh on the posting thread, before the defaults write returns.
@@ -65,7 +79,8 @@ static void TCRefreshInputDefaults(void) {
   TCRefreshInputDefaults();
 }
 
-+ (BOOL)inputDebugEnabled {
++ (BOOL)inputDebugEnabled
+{
   return s_inputDebug.load(std::memory_order_relaxed);
 }
 
@@ -176,22 +191,25 @@ static const float kStandardGravity = 9.80665f;
 // write (its own mutex) and every DSUServerBridge call (which can send a packet) happen after it is
 // released, from copies taken under it.
 static os_unfair_lock s_axisStateLock = OS_UNFAIR_LOCK_INIT;
-static float s_last[4][256] = {{0}};      // [controller][axis] smoothing history (axes below 256)
-static float s_splitAxes[4][256] = {{0}}; // [controller][axisIndex] last split-stick values in [-1,1]
+static float s_last[4][256] = {{0}};  // [controller][axis] smoothing history (axes below 256)
+static float s_splitAxes[4][256] = {
+    {0}};  // [controller][axisIndex] last split-stick values in [-1,1]
 static float s_irX = 0.0f, s_irY = 0.0f;  // last DSU IR pointer, in [-1,1]
 static float s_dsuAccel[3] = {0.0f, 0.0f, 0.0f};
-static float s_dsuGyro[3] = {0.0f, 0.0f, 0.0f}; // pitch, yaw, roll
+static float s_dsuGyro[3] = {0.0f, 0.0f, 0.0f};  // pitch, yaw, roll
 static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); }
 
 // Match TCJoystick: the negative half reports negative, the positive half positive.
-static inline float TCCombineSplitAxes(float negativeValue, float positiveValue) {
-  const float negativeMag = negativeValue < 0.f ? -negativeValue : 0.f; // 0..1
-  const float positiveMag = positiveValue > 0.f ? positiveValue : 0.f;  // 0..1
+static inline float TCCombineSplitAxes(float negativeValue, float positiveValue)
+{
+  const float negativeMag = negativeValue < 0.f ? -negativeValue : 0.f;  // 0..1
+  const float positiveMag = positiveValue > 0.f ? positiveValue : 0.f;   // 0..1
   return clamp11(positiveMag - negativeMag);
 }
 
 + (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {
-  // Apply DSU scaling parameters to analog axes before forwarding (cached; see TCRefreshInputDefaults)
+  // Apply DSU scaling parameters to analog axes before forwarding (cached; see
+  // TCRefreshInputDefaults)
   const float gain = s_dsuGain.load(std::memory_order_relaxed);
   const float dead = s_dsuDeadzone.load(std::memory_order_relaxed);
   const float alpha = s_dsuSmoothing.load(std::memory_order_relaxed);
@@ -225,9 +243,11 @@ static inline float TCCombineSplitAxes(float negativeValue, float positiveValue)
 
     // Smoothing (EMA). Disable for split-stick and IR axes.
     const bool allow_smoothing = (alpha > 0.f) && has_smoothing_cell && !(is_split_stick || is_ir_axis);
-    if (has_smoothing_cell) {
+    if (has_smoothing_cell)
+    {
       os_unfair_lock_lock(&s_axisStateLock);
-      if (allow_smoothing) {
+      if (allow_smoothing)
+      {
         v = alpha * s_last[ci][ai] + (1.f - alpha) * v;
       }
       s_last[ci][ai] = v;
@@ -236,17 +256,26 @@ static inline float TCCombineSplitAxes(float negativeValue, float positiveValue)
   }
 
   // StateManager takes its own mutex per write, shared with the core's input poll. Left as is on
-  // purpose: whether that contention matters is still to be measured (System Trace) before changing it.
+  // purpose: whether that contention matters is still to be measured (System Trace) before changing
+  // it.
   ciface::iOS::StateManager::GetInstance()->SetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis, v);
   // Also forward to DSU server if running
-  if (![DSUServerBridge isRunning]) return;
+  if (![DSUServerBridge isRunning])
+    return;
 
   // **WIIMOTE IR POINTER** - Forward IR data to DSU touch coordinates
   // Uses TCButtonType.wiiInfraredUp/Down/Left/Right indices (112-115)
-  if (is_ir_axis) {
+  if (is_ir_axis)
+  {
     os_unfair_lock_lock(&s_axisStateLock);
-    if (axis == 112 || axis == 113) { s_irY = v; }
-    if (axis == 114 || axis == 115) { s_irX = v; }
+    if (axis == 112 || axis == 113)
+    {
+      s_irY = v;
+    }
+    if (axis == 114 || axis == 115)
+    {
+      s_irX = v;
+    }
     const float ir_x = s_irX, ir_y = s_irY;
     os_unfair_lock_unlock(&s_axisStateLock);
     int touch_x = (int)((ir_x + 1.0f) * 0.5f * 1920.0f);
@@ -258,37 +287,67 @@ static inline float TCCombineSplitAxes(float negativeValue, float positiveValue)
   // Wii Remote IMU (accel 625-630, gyro 631-636) -> DSU motion. One signed value per axis, in
   // g and deg/s; see dsuMotionComponentForAxis:value:.
   const TCDSUMotionComponent motion = [self dsuMotionComponentForAxis:axis value:v];
-  if (motion.kind != TCDSUMotionKindNone) {
+  if (motion.kind != TCDSUMotionKindNone)
+  {
     float sent[3];
     os_unfair_lock_lock(&s_axisStateLock);
     float* target = motion.kind == TCDSUMotionKindAccelerometer ? s_dsuAccel : s_dsuGyro;
     target[motion.index] = motion.value;
     memcpy(sent, target, sizeof(sent));
     os_unfair_lock_unlock(&s_axisStateLock);
-    if (motion.kind == TCDSUMotionKindAccelerometer) {
+    if (motion.kind == TCDSUMotionKindAccelerometer)
+    {
       [DSUServerBridge setAccelerometer:controllerId x:sent[0] y:sent[1] z:sent[2]];
-    } else {
+    }
+    else
+    {
       [DSUServerBridge setGyro:controllerId pitch:sent[0] yaw:sent[1] roll:sent[2]];
     }
   }
   // GC analog triggers: L(20)->DSU axis 4, R(21)->DSU axis 5, map [0..1] to [-1..1]
-  if (axis == 20 || axis == 21) {
+  if (axis == 20 || axis == 21)
+  {
     float t = (v * 2.f) - 1.f;
     [DSUServerBridge setAxis:(axis == 20 ? 4 : 5) controller:controllerId value:t];
     BOOL pressed = v > 0.7f;
-    if (axis == 20) { [DSUServerBridge setShoulderL:controllerId state:pressed]; }
-    if (axis == 21) { [DSUServerBridge setShoulderR:controllerId state:pressed]; }
+    if (axis == 20)
+    {
+      [DSUServerBridge setShoulderL:controllerId state:pressed];
+    }
+    if (axis == 21)
+    {
+      [DSUServerBridge setShoulderR:controllerId state:pressed];
+    }
   }
 
   // Aggregate NIB split sticks to DSU sticks (use magnitude-based signed combination)
   // Main stick: 11 (Up-), 12 (Down+), 13 (Left-), 14 (Right+)
   // C-stick:    16 (Up-), 17 (Down+), 18 (Left-), 19 (Right+)
   // Nunchuk:    203 (Up-), 204 (Down+), 205 (Left-), 206 (Right+)
-  if (!is_split_stick) return;
+  if (!is_split_stick)
+    return;
   int upIdx, downIdx, leftIdx, rightIdx;
-  if (axis >= 11 && axis <= 14) { upIdx = 11; downIdx = 12; leftIdx = 13; rightIdx = 14; }
-  else if (axis >= 16 && axis <= 19) { upIdx = 16; downIdx = 17; leftIdx = 18; rightIdx = 19; }
-  else { upIdx = 203; downIdx = 204; leftIdx = 205; rightIdx = 206; }
+  if (axis >= 11 && axis <= 14)
+  {
+    upIdx = 11;
+    downIdx = 12;
+    leftIdx = 13;
+    rightIdx = 14;
+  }
+  else if (axis >= 16 && axis <= 19)
+  {
+    upIdx = 16;
+    downIdx = 17;
+    leftIdx = 18;
+    rightIdx = 19;
+  }
+  else
+  {
+    upIdx = 203;
+    downIdx = 204;
+    leftIdx = 205;
+    rightIdx = 206;
+  }
 
   os_unfair_lock_lock(&s_axisStateLock);
   s_splitAxes[ci][(int)axis] = clamp11(v);
@@ -296,46 +355,66 @@ static inline float TCCombineSplitAxes(float negativeValue, float positiveValue)
   const float leftValue = s_splitAxes[ci][leftIdx], rightValue = s_splitAxes[ci][rightIdx];
   os_unfair_lock_unlock(&s_axisStateLock);
 
-  float x = TCCombineSplitAxes(leftValue, rightValue); // right positive, left negative
-  float y = TCCombineSplitAxes(upValue, downValue);    // down positive, up negative
-  if (s_inputDebug.load(std::memory_order_relaxed)) {
+  float x = TCCombineSplitAxes(leftValue, rightValue);  // right positive, left negative
+  float y = TCCombineSplitAxes(upValue, downValue);     // down positive, up negative
+  if (s_inputDebug.load(std::memory_order_relaxed))
+  {
     NSLog(@"[DSU] combLR: leftVal=%.3f rightVal=%.3f result=%.3f", leftValue, rightValue, x);
     NSLog(@"[DSU] combUD: upVal=%.3f downVal=%.3f result=%.3f", upValue, downValue, y);
   }
 
-  if (axis >= 11 && axis <= 14) {
+  if (axis >= 11 && axis <= 14)
+  {
     // Snap small residuals to zero to avoid stickiness
-    if (fabsf(x) < 0.02f) x = 0.f; if (fabsf(y) < 0.02f) y = 0.f;
+    if (fabsf(x) < 0.02f)
+      x = 0.f;
+    if (fabsf(y) < 0.02f)
+      y = 0.f;
     [DSUServerBridge setAxis:0 controller:controllerId value:x];
     [DSUServerBridge setAxis:1 controller:controllerId value:y];
     // Recenter guard: resend center shortly after release to overcome missed events
-    if (x == 0.f && y == 0.f) {
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-        [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
-        [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
-      });
+    if (x == 0.f && y == 0.f)
+    {
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)),
+                     dispatch_get_main_queue(), ^{
+                       [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
+                       [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
+                     });
     }
-  } else if (axis >= 16 && axis <= 19) {
-    if (fabsf(x) < 0.02f) x = 0.f; if (fabsf(y) < 0.02f) y = 0.f;
+  }
+  else if (axis >= 16 && axis <= 19)
+  {
+    if (fabsf(x) < 0.02f)
+      x = 0.f;
+    if (fabsf(y) < 0.02f)
+      y = 0.f;
     [DSUServerBridge setAxis:2 controller:controllerId value:x];
     [DSUServerBridge setAxis:3 controller:controllerId value:y];
-    if (x == 0.f && y == 0.f) {
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-        [DSUServerBridge setAxis:2 controller:controllerId value:0.f];
-        [DSUServerBridge setAxis:3 controller:controllerId value:0.f];
-      });
+    if (x == 0.f && y == 0.f)
+    {
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)),
+                     dispatch_get_main_queue(), ^{
+                       [DSUServerBridge setAxis:2 controller:controllerId value:0.f];
+                       [DSUServerBridge setAxis:3 controller:controllerId value:0.f];
+                     });
     }
-  } else {
+  }
+  else
+  {
     // Nunchuk stick - only send if there's actual input to avoid overwriting main stick
-    if (fabsf(x) > 0.01f || fabsf(y) > 0.01f) {
+    if (fabsf(x) > 0.01f || fabsf(y) > 0.01f)
+    {
       [DSUServerBridge setAxis:0 controller:controllerId value:x];
       [DSUServerBridge setAxis:1 controller:controllerId value:y];
-    } else {
+    }
+    else
+    {
       // If both near zero, ensure main stick recenters as well
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
-        [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
-        [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
-      });
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(20 * NSEC_PER_MSEC)),
+                     dispatch_get_main_queue(), ^{
+                       [DSUServerBridge setAxis:0 controller:controllerId value:0.f];
+                       [DSUServerBridge setAxis:1 controller:controllerId value:0.f];
+                     });
     }
   }
 }
