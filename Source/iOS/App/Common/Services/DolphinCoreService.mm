@@ -125,7 +125,8 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   }
   // The copy above never overwrites, so an install made under the old all-types-on default keeps
   // it. Move it to the quiet default before the rewrite below and LogManager's init read it.
-  [ICubeLoggerIniMigration runAtLaunchWithIniPath:CppToFoundationString(File::GetUserPath(F_LOGGERCONFIG_IDX))];
+  [ICubeLoggerIniMigration
+      runAtLaunchWithIniPath:CppToFoundationString(File::GetUserPath(F_LOGGERCONFIG_IDX))];
 
   // Configure libcurl to use bundled CA bundle for SSL
   NSString* caPath = [[NSBundle mainBundle] pathForResource:@"cacert" ofType:@"pem"];
@@ -136,7 +137,8 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // Apply UI overrides for console logging and verbosity before logging init
   BOOL logsEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"logger_console_enabled"];
   NSInteger verbosity = [[NSUserDefaults standardUserDefaults] integerForKey:@"logger_console_verbosity"];
-  if (verbosity <= 0) verbosity = ICubeLoggerIniMigration.defaultVerbosity;
+  if (verbosity <= 0)
+    verbosity = ICubeLoggerIniMigration.defaultVerbosity;
   {
     std::string iniPath = File::GetUserPath(F_LOGGERCONFIG_IDX);
     std::string content;
@@ -182,8 +184,10 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // Console logging is the diagnostic mode: every log type, at the verbosity chosen above. The
   // file default keeps only the types worth a warning, so widen at runtime (not in the file, which
   // would stay widened once logging is turned off again).
-  if (logsEnabled) {
-    if (auto* logManager = Common::Log::LogManager::GetInstance()) {
+  if (logsEnabled)
+  {
+    if (auto* logManager = Common::Log::LogManager::GetInstance())
+    {
       for (int type = 0; type < static_cast<int>(Common::Log::LogType::NUMBER_OF_LOGS); ++type)
         logManager->SetEnable(static_cast<Common::Log::LogType>(type), true);
     }
@@ -316,10 +320,13 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 
     // UICommon::Shutdown makes LogManager save its live state into Logger.ini. Put back the types
     // the console-logging mode widened at launch, so the file keeps its own list.
-    if (auto* logManager = Common::Log::LogManager::GetInstance()) {
-      for (int type = 0; type < static_cast<int>(Common::Log::LogType::NUMBER_OF_LOGS); ++type) {
+    if (auto* logManager = Common::Log::LogManager::GetInstance())
+    {
+      for (int type = 0; type < static_cast<int>(Common::Log::LogType::NUMBER_OF_LOGS); ++type)
+      {
         const auto logType = static_cast<Common::Log::LogType>(type);
-        const Config::Info<bool> info{{Config::System::Logger, "Logs", logManager->GetShortName(logType)}, false};
+        const Config::Info<bool> info{
+            {Config::System::Logger, "Logs", logManager->GetShortName(logType)}, false};
         logManager->SetEnable(logType, Config::Get(info));
       }
     }

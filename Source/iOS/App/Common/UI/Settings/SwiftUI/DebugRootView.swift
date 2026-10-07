@@ -186,7 +186,8 @@ struct DebugRootView: View {
             Text(L("Verbosity"))
             Spacer()
             Button("\(loggingVerbosity)") {
-              var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = LoggerIniMigration.defaultVerbosity }
+              let stored = UserDefaults.standard.integer(forKey: "logger_console_verbosity")
+              var v = stored > 0 ? stored : LoggerIniMigration.defaultVerbosity
               v = (v % 5) + 1
               UserDefaults.standard.set(v, forKey: "logger_console_verbosity")
               loggingVerbosity = v
@@ -254,7 +255,8 @@ struct DebugRootView: View {
 
   private func syncDebugChunk4() async {
     let logEnabled = UserDefaults.standard.bool(forKey: "logger_console_enabled")
-    var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = LoggerIniMigration.defaultVerbosity }
+    let stored = UserDefaults.standard.integer(forKey: "logger_console_verbosity")
+    let v = stored > 0 ? stored : LoggerIniMigration.defaultVerbosity
     let inputDbg = UserDefaults.standard.bool(forKey: "input_debug")
     let ir = UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled")
     await MainActor.run {
