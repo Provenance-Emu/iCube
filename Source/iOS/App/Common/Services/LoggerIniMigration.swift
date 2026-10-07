@@ -201,8 +201,10 @@ final class LoggerIniMigration: NSObject {
       .components(separatedBy: "\n")
   }
 
-  private static func isTrue(_ value: String) -> Bool {
-    value.trimmingCharacters(in: .whitespaces).lowercased() == "true"
+  /// Dolphin's `TryParse(bool*)` (StringUtil.cpp): "true" in any case, or a number equal to 1 ("1", "1.0").
+  static func isTrue(_ value: String) -> Bool {
+    let trimmed = value.trimmingCharacters(in: .whitespaces)
+    return trimmed.lowercased() == "true" || Float(trimmed) == 1
   }
 
   private static func sectionName(_ line: String) -> String? {

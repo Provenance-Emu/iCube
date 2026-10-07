@@ -67,6 +67,21 @@ final class LoggerIniMigrationTests: XCTestCase {
     XCTAssertFalse(LoggerIniMigration.looksLikeOldDefault(ini(types: saved, verbosity: 4, window: true)))
   }
 
+  func testNumericTrueCountsAsOnLikeDolphin() {
+    XCTAssertTrue(LoggerIniMigration.isTrue("1"))
+    XCTAssertTrue(LoggerIniMigration.isTrue("1.0"))
+    XCTAssertTrue(LoggerIniMigration.isTrue(" TRUE "))
+    XCTAssertFalse(LoggerIniMigration.isTrue("0"))
+    XCTAssertFalse(LoggerIniMigration.isTrue("False"))
+    // File logging turned on as `1`, or an extra type turned on as `1`, is a customization.
+    let fileOn = oldDefault.replacingOccurrences(of: "WriteToFile = False", with: "WriteToFile = 1")
+    XCTAssertFalse(LoggerIniMigration.looksLikeOldDefault(fileOn))
+    var saved = Dictionary(uniqueKeysWithValues: types.map { ($0, true) })
+    saved["SI_CARD"] = false
+    let extraOn = ini(types: saved, verbosity: 4, window: true).replacingOccurrences(of: "SI_CARD = False", with: "SI_CARD = 1")
+    XCTAssertFalse(LoggerIniMigration.looksLikeOldDefault(extraOn))
+  }
+
   func testFileLoggingTurnedOnIsKept() {
     // WriteToFile shipped False; turning it on is a deliberate choice the migration must keep.
     let text = oldDefault.replacingOccurrences(of: "WriteToFile = False", with: "WriteToFile = True")
