@@ -142,7 +142,7 @@ final class TVLibraryViewModel: ObservableObject {
   func kickoffInitialMetadataIfNeeded() {
     guard !didKickoffInitialMetadata, !isRescanning else { return }
     didKickoffInitialMetadata = true
-    LibraryCoordinator.shared.refreshLocal()
+    LibraryCoordinator.shared.refreshLocalWhenIdle()
   }
 
   func loadGameCubeMainMenu() {
@@ -737,7 +737,11 @@ struct TVLibraryView: View {
     case .gradient:
       gradientBackground
     case .animated:
-      animatedBackground
+      // The static gradient while a game runs: the orbs and drifting tiles are perpetual animations
+      // on a layer behind a screen nobody is looking at.
+      EmulationQuiet(
+        idle: LibraryAnimatedBackground(),
+        whileEmulating: gradientBackground)
     }
   }
 
@@ -779,148 +783,6 @@ struct TVLibraryView: View {
       )
       .ignoresSafeArea()
     }
-  }
-
-  @ViewBuilder
-  private var animatedBackground: some View {
-    ZStack {
-      // Premium gradient switches for light/dark
-      if colorScheme == .dark {
-        RadialGradient(
-          colors: [
-            Color(red: 0.12, green: 0.15, blue: 0.28),
-            Color(red: 0.08, green: 0.12, blue: 0.22),
-            Color(red: 0.04, green: 0.06, blue: 0.15),
-            Color.black
-          ],
-          center: .topLeading,
-          startRadius: 100,
-          endRadius: 800
-        )
-        .ignoresSafeArea()
-      } else {
-        RadialGradient(
-          colors: [
-            Color(red: 0.92, green: 0.95, blue: 1.00),
-            Color(red: 0.88, green: 0.93, blue: 1.00),
-            Color(red: 0.98, green: 0.99, blue: 1.00)
-          ],
-          center: .topLeading,
-          startRadius: 100,
-          endRadius: 800
-        )
-        .ignoresSafeArea()
-      }
-
-      // Elegant animated orbs with GameCube/Wii theming
-      ForEach(0..<5, id: \.self) { index in
-        Circle()
-          .fill(
-            RadialGradient(
-              colors: [
-                (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05))
-                 : (index % 2 == 0 ? Color.purple.opacity(0.10) : Color.blue.opacity(0.10))),
-                (colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025))
-                 : Color.white.opacity(0.0)),
-                Color.clear
-              ],
-              center: .center,
-              startRadius: 20,
-              endRadius: 180
-            )
-          )
-          .frame(width: CGFloat.random(in: 200...400), height: CGFloat.random(in: 200...400))
-          .offset(
-            x: CGFloat.random(in: -150...150),
-            y: CGFloat.random(in: -200...200)
-          )
-          .scaleEffect(0.8 + CGFloat(index) * 0.1)
-          .animation(
-            Animation.easeInOut(duration: Double.random(in: 10...18))
-              .repeatForever(autoreverses: true)
-              .delay(Double(index) * 1.5),
-            value: UUID()
-          )
-      }
-
-      // Subtle grid pattern
-      Canvas { context, size in
-        let spacing: CGFloat = 80
-        let lineWidth: CGFloat = 0.5
-        let gradient = Gradient(colors: [
-          (colorScheme == .dark ? .white.opacity(0.08) : .black.opacity(0.06)),
-          .clear,
-          (colorScheme == .dark ? .white.opacity(0.04) : .black.opacity(0.03))
-        ])
-
-        context.stroke(
-          Path { path in
-            for x in stride(from: 0, through: size.width, by: spacing) {
-              path.move(to: CGPoint(x: x, y: 0))
-              path.addLine(to: CGPoint(x: x, y: size.height))
-            }
-            for y in stride(from: 0, through: size.height, by: spacing) {
-              path.move(to: CGPoint(x: 0, y: y))
-              path.addLine(to: CGPoint(x: size.width, y: y))
-            }
-          },
-          with: .linearGradient(
-            gradient,
-            startPoint: CGPoint(x: 0, y: 0),
-            endPoint: CGPoint(x: size.width, y: size.height)
-          ),
-          lineWidth: lineWidth
-        )
-      }
-      .ignoresSafeArea()
-      .opacity(colorScheme == .dark ? 0.6 : 0.25)
-
-      // Minor grid checks (subtle)
-      Canvas { context, size in
-        let spacing: CGFloat = 20
-        let lineWidth: CGFloat = 0.25
-        let strokeColor = (colorScheme == .dark ? Color.white.opacity(0.02) : Color.black.opacity(0.02))
-        context.stroke(
-          Path { path in
-            for x in stride(from: 0, through: size.width, by: spacing) {
-              path.move(to: CGPoint(x: x, y: 0))
-              path.addLine(to: CGPoint(x: x, y: size.height))
-            }
-            for y in stride(from: 0, through: size.height, by: spacing) {
-              path.move(to: CGPoint(x: 0, y: y))
-              path.addLine(to: CGPoint(x: size.width, y: y))
-            }
-          },
-          with: .color(strokeColor),
-          lineWidth: lineWidth
-        )
-      }
-      .ignoresSafeArea()
-      .opacity(colorScheme == .dark ? 0.25 : 0.12)
-
-      // Floating elements
-      ForEach(0..<8, id: \.self) { index in
-        RoundedRectangle(cornerRadius: 4, style: .continuous)
-          .fill(
-            LinearGradient(
-              colors: [
-                (colorScheme == .dark ? Color.white.opacity(0.03) : Color.white.opacity(0.5)),
-                Color.clear
-              ],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
-            )
-          )
-          .frame(width: CGFloat.random(in: 20...40), height: CGFloat.random(in: 20...40))
-          .offset(x: CGFloat.random(in: -200...200), y: CGFloat.random(in: -300...300))
-          .rotationEffect(.degrees(Double.random(in: 0...360)))
-          .animation(Animation.linear(duration: Double.random(in: 20...30)).repeatForever(autoreverses: false).delay(Double(index) * 2), value: UUID())
-      }
-    }
-    // No .clipped(): it cut the whole effect off at the safe area, leaving plain bands behind the
-    // navigation bar and the bottom search bar. The orbs move by .offset, which never affects
-    // layout, and this is the bottom layer, so nothing needs clipping.
-    .ignoresSafeArea()
   }
 
   private enum CheatType { case gecko, ar }
@@ -1352,6 +1214,7 @@ struct TVLibraryView: View {
     .onReceive(
       Timer.publish(every: Self.uploadAddressPollInterval, on: .main, in: .common).autoconnect()
     ) { _ in
+      guard !EmulationState.shared.isActive else { return }
       emptyLibraryWebURL = PVWebServer.shared.urlString ?? ""
     }
   }

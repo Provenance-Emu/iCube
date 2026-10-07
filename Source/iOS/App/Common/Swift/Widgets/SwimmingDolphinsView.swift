@@ -35,7 +35,8 @@ struct SwimmingDolphinsView: View {
     GeometryReader { geo in
       let w = max(geo.size.width, 1)
       let h = max(geo.size.height, 1)
-      TimelineView(.animation) { timeline in
+      // Frozen (no per-frame body evaluation) while a game runs.
+      TimelineView(.animation(paused: EmulationState.shared.isActive)) { timeline in
         let t = timeline.date.timeIntervalSinceReferenceDate
         ZStack {
           ForEach(0 ..< count, id: \.self) { i in

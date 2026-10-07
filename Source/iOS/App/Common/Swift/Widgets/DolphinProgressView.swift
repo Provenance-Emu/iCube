@@ -44,7 +44,6 @@ struct DolphinProgressView: View {
           ))
           .frame(width: width, height: 16)
           .clipShape(RoundedRectangle(cornerRadius: 8))
-          .animation(.linear(duration: 2.0).repeatForever(autoreverses: false), value: waveOffset)
 
         // Progress fill
         RoundedRectangle(cornerRadius: 8)
@@ -68,7 +67,6 @@ struct DolphinProgressView: View {
             .scaleEffect(isAnimating ? 1.1 : 0.9, anchor: .center)
             .rotationEffect(.degrees(isAnimating ? 2 : -2))
             .scaleEffect(x: direction == .leftToRight ? -1 : 1) // Mirror for left-to-right to face right
-            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isAnimating)
             .offset(x: (width - 20) * CGFloat(progress) * (direction == .leftToRight ? 1 : -1))
             .animation(.easeInOut(duration: 0.3), value: progress)
 
@@ -76,10 +74,9 @@ struct DolphinProgressView: View {
         }
         .frame(width: width)
       }
-      .onAppear {
-        isAnimating = true
-        waveOffset = 100
-      }
+      .onAppear { setAnimating(!EmulationState.shared.isActive) }
+      // The wave and the dolphin loop forever; a running game gets those frames instead.
+      .onChange(of: EmulationState.shared.isActive) { _, active in setAnimating(!active) }
 
       // Optional percentage
       if showPercentage {
@@ -88,6 +85,22 @@ struct DolphinProgressView: View {
           .foregroundColor(.secondary)
           .monospacedDigit()
           .frame(minWidth: 32)
+      }
+    }
+  }
+
+  /// Starts or stops the two repeating animations. Stopping sets the values back inside a
+  /// transaction with animations disabled: that is what ends a `repeatForever`.
+  private func setAnimating(_ animating: Bool) {
+    if animating {
+      withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) { isAnimating = true }
+      withAnimation(.linear(duration: 2.0).repeatForever(autoreverses: false)) { waveOffset = 100 }
+    } else {
+      var transaction = Transaction(animation: nil)
+      transaction.disablesAnimations = true
+      withTransaction(transaction) {
+        isAnimating = false
+        waveOffset = 0
       }
     }
   }
@@ -115,8 +128,8 @@ struct CompactDolphinProgress: View {
         .foregroundColor(.blue)
         .scaleEffect(isSwimming ? 1.1 : 0.9)
         .scaleEffect(x: direction == .leftToRight ? -1 : 1)
-        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isSwimming)
-        .onAppear { isSwimming = true }
+        .onAppear { setSwimming(!EmulationState.shared.isActive) }
+        .onChange(of: EmulationState.shared.isActive) { _, active in setSwimming(!active) }
 
       // Mini progress bar
       ProgressView(value: progress)
@@ -128,6 +141,16 @@ struct CompactDolphinProgress: View {
         .font(.caption2)
         .foregroundColor(.secondary)
         .monospacedDigit()
+    }
+  }
+
+  private func setSwimming(_ swimming: Bool) {
+    if swimming {
+      withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) { isSwimming = true }
+    } else {
+      var transaction = Transaction(animation: nil)
+      transaction.disablesAnimations = true
+      withTransaction(transaction) { isSwimming = false }
     }
   }
 }
@@ -197,6 +220,38 @@ struct DolphinCircularSpinner: View {
   }
 
   var body: some View {
+    // While a game runs the spinner holds still: its waves, bobbing and rotation are five
+    // `repeatForever` animations per instance, and swapping the subtree is what ends them.
+    if EmulationState.shared.isActive {
+      frozenBody
+    } else {
+      animatedBody
+    }
+  }
+
+  private var frozenBody: some View {
+    ZStack {
+      Circle()
+        .stroke(Color.cyan.opacity(0.3), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+        .frame(width: size, height: size)
+      if let progress = progress {
+        Circle()
+          .trim(from: 0, to: CGFloat(progress))
+          .stroke(Color.blue, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+          .frame(width: size, height: size)
+          .rotationEffect(.degrees(-90))
+      }
+      Image("DolphinLogo")
+        .resizable()
+        .scaledToFit()
+        .frame(width: dolphinSize, height: dolphinSize)
+        .foregroundColor(.blue)
+        .offset(x: size / 2 - dolphinSize / 2)
+        .rotationEffect(.degrees(progress.map { $0 * 360 - 90 } ?? -90))
+    }
+  }
+
+  private var animatedBody: some View {
     ZStack {
       // Background circle track (water path)
       Circle()

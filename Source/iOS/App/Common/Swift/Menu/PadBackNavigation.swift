@@ -21,6 +21,7 @@ private struct PadBackNavigation: ViewModifier {
   @Environment(\.dismiss) private var dismiss
   @State private var router = MenuFocusRouter()
   @State private var scopeID = UUID()
+  @State private var pollThrottle = PadPollThrottle()
   private static let tick = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
   #endif
 
@@ -36,6 +37,7 @@ private struct PadBackNavigation: ViewModifier {
 
   #if os(iOS)
   private func poll() {
+    guard pollThrottle.shouldRun(at: CACurrentMediaTime(), emulating: PadPollThrottle.gameIsRunning) else { return }
     let pads: [(AnyHashable, MenuControllerNav.Input)] = GCController.controllers().compactMap { controller in
       guard let pad = controller.extendedGamepad else { return nil }
       return (AnyHashable(ObjectIdentifier(controller)), MenuControllerNav.Input(b: pad.buttonB.isPressed))
