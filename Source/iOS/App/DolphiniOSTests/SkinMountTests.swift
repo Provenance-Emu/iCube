@@ -197,5 +197,20 @@ final class SkinMountTests: XCTestCase {
     library.select(try skin("bare"), for: .gameCube, orientation: .landscape)
     XCTAssertFalse(first === SkinAssetRenderer.image(named: "art.png", in: pocket.directory, size: size, scale: 1))
   }
+
+  func testStickKnobArtResolvesAgainForANewLibraryGeneration() throws {
+    let pocket = try skin("pocket")
+    let png = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { _ in }.pngData()!
+    try png.write(to: pocket.directory.appendingPathComponent("knob.png"))
+    let size = CGSize(width: 4, height: 4)
+    let art = SkinKnobArt()
+    let first = try XCTUnwrap(art.image(named: "knob.png", in: pocket.directory, size: size, scale: 1, generation: 0))
+    XCTAssertTrue(first === art.image(named: "knob.png", in: pocket.directory, size: size, scale: 1, generation: 0))
+
+    // A library change (e.g. the skin re-imported) drops the renderer's cache and bumps the
+    // generation, so the knob reads its art again instead of keeping the old image.
+    library.select(try skin("bare"), for: .gameCube, orientation: .landscape)
+    XCTAssertFalse(first === art.image(named: "knob.png", in: pocket.directory, size: size, scale: 1, generation: 1))
+  }
 }
 #endif

@@ -265,6 +265,9 @@ private struct SkinStickView: View, Equatable {
   @State private var knob = TouchOverlayKnobPosition()
   /// The knob image, resolved once per (file, size, scale) instead of on every body evaluation.
   @State private var knobArt = SkinKnobArt()
+  /// Bumped when the skin library changes (an import can replace this skin's files under the same
+  /// name), so the knob art is resolved again once instead of keeping the old image.
+  @State private var libraryGeneration = 0
 
   static func == (lhs: SkinStickView, rhs: SkinStickView) -> Bool {
     lhs.stick == rhs.stick && lhs.directory == rhs.directory && lhs.deviceId == rhs.deviceId
@@ -276,7 +279,8 @@ private struct SkinStickView: View, Equatable {
     let _ = TouchOverlayRenderProbe.body(.skinStick)
     ZStack(alignment: .topLeading) {
       if let name = stick.knobName, let size = stick.thumbSize,
-         let image = knobArt.image(named: name, in: directory, size: size, scale: displayScale) {
+         let image = knobArt.image(named: name, in: directory, size: size, scale: displayScale,
+                                   generation: libraryGeneration) {
         SkinStickKnobView(image: image, size: size, center: stick.center, opacity: controlOpacity, position: knob)
       }
       TouchOverlaySingleTouch { location in
@@ -288,6 +292,9 @@ private struct SkinStickView: View, Equatable {
     }
     .frame(width: stick.hitFrame.width, height: stick.hitFrame.height, alignment: .topLeading)
     .position(x: stick.hitFrame.midX, y: stick.hitFrame.midY)
+    .onReceive(NotificationCenter.default.publisher(for: SkinLibrary.didChangeNotification)) { _ in
+      libraryGeneration &+= 1
+    }
   }
 }
 
@@ -301,13 +308,15 @@ final class SkinKnobArt {
     let directory: URL
     let size: CGSize
     let scale: CGFloat
+    let generation: Int
   }
 
   private var key: Key?
   private var cached: UIImage?
 
-  func image(named name: String, in directory: URL, size: CGSize, scale: CGFloat) -> UIImage? {
-    let wanted = Key(name: name, directory: directory, size: size, scale: scale)
+  /// `generation` changes when the skin library does, so a re-imported skin's art is read again.
+  func image(named name: String, in directory: URL, size: CGSize, scale: CGFloat, generation: Int = 0) -> UIImage? {
+    let wanted = Key(name: name, directory: directory, size: size, scale: scale, generation: generation)
     if wanted == key { return cached }
     TouchOverlayRenderProbe.body(.skinKnobResolve)
     key = wanted

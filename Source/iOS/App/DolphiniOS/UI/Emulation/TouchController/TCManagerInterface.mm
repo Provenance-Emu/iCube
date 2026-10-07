@@ -53,7 +53,8 @@ static void TCRefreshInputDefaults(void) {
 
 + (void)initialize {
   if (self != [TCManagerInterface class]) return;
-  TCRefreshInputDefaults();
+  // Observe first, then read: a write that lands between the two still triggers a refresh, and the
+  // generation guard keeps the newer of the overlapping refreshes.
   // queue:nil runs the refresh on the posting thread, before the defaults write returns.
   [NSNotificationCenter.defaultCenter addObserverForName:NSUserDefaultsDidChangeNotification
                                                   object:nil
@@ -61,6 +62,7 @@ static void TCRefreshInputDefaults(void) {
                                               usingBlock:^(NSNotification* _Nonnull note) {
                                                 TCRefreshInputDefaults();
                                               }];
+  TCRefreshInputDefaults();
 }
 
 + (BOOL)inputDebugEnabled {
