@@ -17,6 +17,7 @@
 #endif
 
 #import "Common/FileUtil.h"
+#import "Common/Logging/LogManager.h"
 #import "Common/MsgHandler.h"
 
 #import "InputCommon/ControllerInterface/ControllerInterface.h"
@@ -122,6 +123,10 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
     std::string loggerIniCppPath = FoundationToCppString([loggerIniPath path]);
     File::Copy(loggerIniCppPath, File::GetUserPath(F_LOGGERCONFIG_IDX));
   }
+  // The copy above never overwrites, so an install made under the old all-types-on default keeps
+  // it. Move it to the quiet default before the rewrite below and LogManager's init read it.
+  [ICubeLoggerIniMigration
+      runAtLaunchWithIniPath:CppToFoundationString(File::GetUserPath(F_LOGGERCONFIG_IDX))];
 
   // Configure libcurl to use bundled CA bundle for SSL
   NSString* caPath = [[NSBundle mainBundle] pathForResource:@"cacert" ofType:@"pem"];
@@ -132,44 +137,32 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // Apply UI overrides for console logging and verbosity before logging init
   BOOL logsEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"logger_console_enabled"];
   NSInteger verbosity = [[NSUserDefaults standardUserDefaults] integerForKey:@"logger_console_verbosity"];
-  if (verbosity <= 0) verbosity = 4;
+  if (verbosity <= 0)
+    verbosity = ICubeLoggerIniMigration.defaultVerbosity;
   {
-    std::string iniPath = File::GetUserPath(F_LOGGERCONFIG_IDX);
-    std::string content;
-    if (File::Exists(iniPath)) {
-      FILE* fp = fopen(iniPath.c_str(), "rb");
-      if (fp) {
-        fseek(fp, 0, SEEK_END);
-        long sz = ftell(fp);
-        fseek(fp, 0, SEEK_SET);
-        if (sz > 0) {
-          content.resize((size_t)sz);
-          fread(content.data(), 1, (size_t)sz, fp);
-        }
-        fclose(fp);
-      }
-    }
-    if (!content.empty()) {
-      auto replaceLine = [&](const std::string& key, const std::string& value) {
-        const std::string prefix = key + " = ";
-        size_t pos = content.find(prefix);
-        if (pos != std::string::npos) {
-          size_t end = content.find('\n', pos);
-          if (end == std::string::npos) end = content.size();
-          content.replace(pos + prefix.size(), end - (pos + prefix.size()), value);
-        }
-      };
-      replaceLine("WriteToConsole", logsEnabled ? "True" : "False");
-      replaceLine("Verbosity", std::to_string((int)verbosity));
-      FILE* out = fopen(iniPath.c_str(), "wb");
-      if (out) {
-        fwrite(content.data(), 1, content.size(), out);
-        fclose(out);
-      }
-    }
+    // [Options] keys only (a comment or another section holding the same text is not touched).
+    // No window listener exists when LogManager initializes; the debug bench registers and enables
+    // its own at runtime, so WriteToWindow stays off: a True here (an old default, or a saved bench
+    // run) would make every enabled log line count as having a listener.
+    [ICubeLoggerIniMigration
+        applyLaunchOptionsToIniPath:CppToFoundationString(File::GetUserPath(F_LOGGERCONFIG_IDX))
+                     consoleEnabled:logsEnabled
+                          verbosity:verbosity];
   }
 
   UICommon::Init();
+
+  // Console logging is the diagnostic mode: every log type, at the verbosity chosen above. The
+  // file default keeps only the types worth a warning, so widen at runtime (not in the file, which
+  // would stay widened once logging is turned off again).
+  if (logsEnabled)
+  {
+    if (auto* logManager = Common::Log::LogManager::GetInstance())
+    {
+      for (int type = 0; type < static_cast<int>(Common::Log::LogType::NUMBER_OF_LOGS); ++type)
+        logManager->SetEnable(static_cast<Common::Log::LogType>(type), true);
+    }
+  }
 
 #if TARGET_OS_IOS
   // Sweep `.importing` files left by an import that iOS killed mid-copy (see DOLImportStaging).
@@ -295,6 +288,20 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
     Core::Shutdown(system);
 
     UICommon::ShutdownControllers();
+
+    // UICommon::Shutdown makes LogManager save its live state into Logger.ini. Put back the types
+    // the console-logging mode widened at launch, so the file keeps its own list.
+    if (auto* logManager = Common::Log::LogManager::GetInstance())
+    {
+      for (int type = 0; type < static_cast<int>(Common::Log::LogType::NUMBER_OF_LOGS); ++type)
+      {
+        const auto logType = static_cast<Common::Log::LogType>(type);
+        const Config::Info<bool> info{
+            {Config::System::Logger, "Logs", logManager->GetShortName(logType)}, false};
+        logManager->SetEnable(logType, Config::Get(info));
+      }
+    }
+
     UICommon::Shutdown();
   });
 }
