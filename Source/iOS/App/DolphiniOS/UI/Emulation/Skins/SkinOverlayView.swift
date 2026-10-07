@@ -183,7 +183,6 @@ private struct SkinTouchLayer: View {
   /// layout change releases exactly those).
   @State private var applied: Set<SkinOverlayInput.Hit> = []
   @State private var held: Set<SkinOverlayInput.Key> = []
-  private let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
 
   var body: some View {
     ZStack(alignment: .topLeading) {
@@ -225,7 +224,7 @@ private struct SkinTouchLayer: View {
       }
     }
     // Like `TouchOverlayDPadView`: once per press, not on every direction or button change while held.
-    if previous.isEmpty, !now.isEmpty { hapticGenerator.impactOccurred() }
+    if previous.isEmpty, !now.isEmpty { TouchOverlayHaptics.impact() }
   }
 }
 
@@ -256,21 +255,18 @@ private struct SkinStickView: View {
   let displayScale: CGFloat
   let controlOpacity: Double
 
-  @State private var knobOffset: CGSize = .zero
+  /// Read only by `SkinStickKnobView`, so a move sample re-renders the knob alone: this body, which
+  /// resolves and decodes the knob's art, runs again only when the stick itself changes.
+  @State private var knob = TouchOverlayKnobPosition()
 
   var body: some View {
     ZStack(alignment: .topLeading) {
       if let name = stick.knobName, let size = stick.thumbSize,
          let image = SkinAssetRenderer.image(named: name, in: directory, size: size, scale: displayScale) {
-        Image(uiImage: image)
-          .resizable()
-          .frame(width: size.width, height: size.height)
-          .position(x: stick.center.x + knobOffset.width, y: stick.center.y + knobOffset.height)
-          .opacity(controlOpacity)
-          .allowsHitTesting(false)
+        SkinStickKnobView(image: image, size: size, center: stick.center, opacity: controlOpacity, position: knob)
       }
       TouchOverlaySingleTouch { location in
-        knobOffset = stick.knobOffset(touch: location)
+        knob.offset = stick.knobOffset(touch: location)
         for write in stick.writes(touch: location) {
           TCManagerInterface.setAxisValueFor(write.id, controller: deviceId, value: write.value)
         }
@@ -278,6 +274,26 @@ private struct SkinStickView: View {
     }
     .frame(width: stick.hitFrame.width, height: stick.hitFrame.height, alignment: .topLeading)
     .position(x: stick.hitFrame.midX, y: stick.hitFrame.midY)
+  }
+}
+
+/// A skin thumbstick's knob image, following `position`.
+private struct SkinStickKnobView: View {
+  let image: UIImage
+  let size: CGSize
+  let center: CGPoint
+  let opacity: Double
+  let position: TouchOverlayKnobPosition
+
+  var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.skinStickKnob)
+    Image(uiImage: image)
+      .resizable()
+      .frame(width: size.width, height: size.height)
+      .position(x: center.x + position.offset.width, y: center.y + position.offset.height)
+      .opacity(opacity)
+      .allowsHitTesting(false)
   }
 }
 #endif
