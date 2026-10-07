@@ -35,7 +35,7 @@ struct DebugRootView: View {
     UserDefaults.standard.string(forKey: "ICubeBenchServerToken") ?? ""
   }
   @State private var approvedClients: [String] = []
-  @State private var loggingVerbosity: Int = 4
+  @State private var loggingVerbosity: Int = LoggerIniMigration.defaultVerbosity
   @State private var inputDebug: Bool = false
   @State private var instantReplay: Bool = false
   @State private var hydrated: Bool = false
@@ -186,7 +186,7 @@ struct DebugRootView: View {
             Text(L("Verbosity"))
             Spacer()
             Button("\(loggingVerbosity)") {
-              var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = 4 }
+              var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = LoggerIniMigration.defaultVerbosity }
               v = (v % 5) + 1
               UserDefaults.standard.set(v, forKey: "logger_console_verbosity")
               loggingVerbosity = v
@@ -254,7 +254,7 @@ struct DebugRootView: View {
 
   private func syncDebugChunk4() async {
     let logEnabled = UserDefaults.standard.bool(forKey: "logger_console_enabled")
-    var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = 4 }
+    var v = UserDefaults.standard.integer(forKey: "logger_console_verbosity"); if v <= 0 { v = LoggerIniMigration.defaultVerbosity }
     let inputDbg = UserDefaults.standard.bool(forKey: "input_debug")
     let ir = UserDefaults.standard.bool(forKey: "replaykit_instant_replay_enabled")
     await MainActor.run {
