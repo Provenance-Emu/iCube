@@ -101,10 +101,16 @@ enum TouchOverlayArt {
         .font(.caption2.weight(.bold))
         .foregroundStyle(variant == .gameCube ? Color.white.opacity(0.9) : Color.black.opacity(0.55))
     }
+    // Only the press scale eases. The fills, rim and both shadows switch straight to their pressed
+    // look: animating them re-blurred both shadows (radius and colour interpolating) on every frame of
+    // every press, which mashing a button turned into a continuous cost while the game ran. The
+    // settled pressed and released looks are unchanged. (The fills opt out with a nil-animation
+    // transaction; the shadows sit outside the animation modifier.)
+    .transaction { $0.animation = nil }
     .scaleEffect(pressed ? 0.92 : 1.0)
+    .animation(.easeOut(duration: 0.08), value: pressed)
     .shadow(color: .black.opacity(0.35), radius: pressed ? 1 : 3, x: 0, y: pressed ? 0 : 2)
     .shadow(color: glow.opacity(pressed ? 0.85 : 0.35), radius: pressed ? 8 : 4)
-    .animation(.easeOut(duration: 0.08), value: pressed)
   }
 
   private static func buttonShape(_ shape: ButtonShape) -> AnyShape {
@@ -162,6 +168,8 @@ enum TouchOverlayArt {
       .frame(width: size, height: size)
       .shadow(color: .black.opacity(0.3), radius: 1, x: 0, y: 1)
       .rotationEffect(.degrees(rotation))
+      // As with the buttons: the colour (and so the shadowed arrow) switches at once, only the scale eases.
+      .transaction { $0.animation = nil }
       .scaleEffect(lit ? 1.1 : 1.0)
       .animation(.easeOut(duration: 0.08), value: lit)
   }

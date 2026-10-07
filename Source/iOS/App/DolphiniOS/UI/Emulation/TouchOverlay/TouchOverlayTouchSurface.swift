@@ -100,17 +100,18 @@ struct TouchOverlayCluster<ID: Hashable>: View {
   /// for a finger that moves in. For things that must act on a fresh touch only (skin menu/quick-save).
   var onBegan: (([CGPoint]) -> Void)?
 
-  @State private var liveTouches: [ObjectIdentifier: TouchOverlaySurface.Touch] = [:]
+  /// The fingers on this surface. A reference box rather than `@State` on purpose: nothing draws from
+  /// it, and a `@State` rewritten on every move sample (120 Hz while a finger is down) re-ran this
+  /// body, its `GeometryReader` and the surface's `updateUIView` for every sample. Only `pressed`,
+  /// which changes once per press or release, may invalidate the view.
+  @State private var liveTouches = TouchOverlayLiveTouches()
 
   var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.cluster)
     GeometryReader { geo in
       TouchOverlaySurface { phase, touches in
-        switch phase {
-        case .began, .moved:
-          for touch in touches { liveTouches[touch.id] = touch }
-        case .ended, .cancelled:
-          for touch in touches { liveTouches.removeValue(forKey: touch.id) }
-        }
+        liveTouches.apply(phase, touches)
         if phase == .began { onBegan?(touches.map(\.location)) }
         recompute(in: geo.size)
       }
@@ -120,12 +121,13 @@ struct TouchOverlayCluster<ID: Hashable>: View {
   }
 
   private func recompute(in size: CGSize) {
-    var now: Set<ID> = []
-    for touch in liveTouches.values { now.formUnion(hitTest(touch.location, size)) }
-    let (pressedNow, releasedNow) = TouchOverlayHitTester.delta(previous: pressed, now: now)
+    let update = TouchOverlayClusterUpdate(previous: pressed, touches: liveTouches.values) { hitTest($0, size) }
+    let (pressedNow, releasedNow) = (update.pressed, update.released)
     for id in releasedNow { onChange(id, false) }
     for id in pressedNow { onChange(id, true) }
-    pressed = now
+    // Only on a real change: assigning an equal set still invalidates every view reading the binding
+    // (the whole button cluster's art), once per move sample.
+    if update.changed { pressed = update.now }
 
     guard let onForce, !pressureIds.isEmpty else { return }
     // Task item 2 (DSU pass): a newly-pressed `pressureIds` member gets EXACTLY ONE analog write
@@ -156,8 +158,50 @@ struct TouchOverlayCluster<ID: Hashable>: View {
   /// mode, so a control can never stick down.
   func releaseAll() {
     for id in pressed { onChange(id, false) }
-    pressed = []
-    liveTouches = [:]
+    if !pressed.isEmpty { pressed = [] }
+    liveTouches.removeAll()
+  }
+}
+
+/// The live touches on one cluster surface, by touch identity. A plain reference type, so updating
+/// it on every move sample never invalidates SwiftUI (see `TouchOverlayCluster.liveTouches`).
+/// Main thread only, like the UIKit touch callbacks that feed it.
+final class TouchOverlayLiveTouches {
+  private var touches: [ObjectIdentifier: TouchOverlaySurface.Touch] = [:]
+
+  var values: Dictionary<ObjectIdentifier, TouchOverlaySurface.Touch>.Values { touches.values }
+
+  /// Records a began/moved touch's latest location and force, and forgets an ended/cancelled one.
+  func apply(_ phase: TouchOverlaySurface.Phase, _ updated: [TouchOverlaySurface.Touch]) {
+    switch phase {
+    case .began, .moved:
+      for touch in updated { touches[touch.id] = touch }
+    case .ended, .cancelled:
+      for touch in updated { touches.removeValue(forKey: touch.id) }
+    }
+  }
+
+  func removeAll() {
+    touches.removeAll()
+  }
+}
+
+/// One cluster recompute: the regions every live touch covers now, and what changed since `previous`.
+/// Pure, so the "fire only the delta, write `pressed` only on a change" rule is unit-testable.
+struct TouchOverlayClusterUpdate<ID: Hashable> {
+  let now: Set<ID>
+  let pressed: Set<ID>
+  let released: Set<ID>
+
+  /// False when every touch still covers exactly what it did: a finger sliding inside one button.
+  var changed: Bool { !pressed.isEmpty || !released.isEmpty }
+
+  init<Touches: Sequence>(previous: Set<ID>, touches: Touches, hitTest: (CGPoint) -> Set<ID>)
+  where Touches.Element == TouchOverlaySurface.Touch {
+    var covered: Set<ID> = []
+    for touch in touches { covered.formUnion(hitTest(touch.location)) }
+    now = covered
+    (pressed, released) = TouchOverlayHitTester.delta(previous: previous, now: covered)
   }
 }
 

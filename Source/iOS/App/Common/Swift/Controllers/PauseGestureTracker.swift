@@ -100,7 +100,7 @@ final class PauseGestureTracker {
   /// Call whenever the current state of the four shoulder buttons changes.
   /// - Parameter allPressed: true if L1, R1, L2, R2 are all currently pressed.
   func updateShoulderState(allPressed: Bool) {
-    NSLog("updateShoulderState: \(allPressed ? "Yes" : "No")")
+    if TCManagerInterface.inputDebugEnabled { NSLog("updateShoulderState: %@", allPressed ? "Yes" : "No") }
     isAllShouldersHeld = allPressed
   }
 

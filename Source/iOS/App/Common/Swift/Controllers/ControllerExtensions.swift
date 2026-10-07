@@ -34,6 +34,10 @@ private final class ShoulderState {
 
 private var shoulderStates: [ObjectIdentifier: ShoulderState] = [:]
 
+/// The chord state last handed to `PauseGestureTracker.updateShoulderState` (nil before the first).
+/// Main thread only, like every GameController handler in this file.
+private var lastPostedShoulderChord: Bool?
+
 /// Drops the per-controller caches this file keeps, keyed by `ObjectIdentifier`.
 ///
 /// They are module-level dictionaries that nothing used to clean up, so a
@@ -62,6 +66,10 @@ func resetAllControllerInputState() {
 /// a controller that was mid-chord releases fast-forward instead of latching it.
 func recomputeShoulderGesture() {
   let anyAll = shoulderStates.values.contains { $0.allPressed }
+  // Every L1/R1/L2/R2 press and release lands here; only a change in the chord needs the main-actor
+  // hop. `PauseGestureTracker.isAllShouldersHeld` is written only from here, so this mirror can't drift.
+  guard anyAll != lastPostedShoulderChord else { return }
+  lastPostedShoulderChord = anyAll
   Task { @MainActor in
     PauseGestureTracker.shared.updateShoulderState(allPressed: anyAll)
   }
@@ -227,73 +235,75 @@ private func installMotionHandler(_ c: GCController) {
     if motion.sensorsRequireManualActivation {
       motion.sensorsActive = true
     }
+    // This handler runs on the main thread for every motion sample of every motion-capable pad
+    // (DualShock 4 / DualSense included, whose sensors the core's MFi backend switches on anyway for
+    // its own Accel/Gyro inputs). Keep the per-sample work to one slot lookup for a pad that is not
+    // a Wii Remote, and do everything else only for a bound one. It stays on the main thread: a
+    // controller's `handlerQueue` moves ALL its handlers, including the shoulder/shake ones that
+    // mutate this file's unsynchronized dictionaries and read the main-confined ControllerManager.
     motion.valueChangedHandler = { m in
+      guard let slot = ControllerManager.shared.wiimoteIndex(for: c) else { return }
+      let controllerId = ControllerManager.touchscreenWiimoteIdBase - 1 + slot
       // Use userAcceleration for shake/tilt impulses and rotationRate for gyro
       let ax = Float(m.userAcceleration.x)
       let ay = Float(m.userAcceleration.y)
       let az = Float(m.userAcceleration.z)
       // Accelerometer -> Wii accel axes. GCMotion reports g; the IMU axes (and the DSU forwarder)
       // take m/s^2, like the phone's own motion. The shake check below stays in g.
-      if let slot = ControllerManager.shared.wiimoteIndex(for: c) {
-        let controllerId = ControllerManager.touchscreenWiimoteIdBase - 1 + slot
-        for (button, value) in physicalControllerAccelWrites(x: ax, y: ay, z: az) {
-          TCManagerInterface.setAxisValueFor(button.rawValue, controller: controllerId, value: value)
-        }
+      for (button, value) in physicalControllerAccelWrites(x: ax, y: ay, z: az) {
+        TCManagerInterface.setAxisValueFor(button.rawValue, controller: controllerId, value: value)
       }
       // Gyro -> Wii gyro axes
       let gx = Float(m.rotationRate.x)
       let gy = Float(m.rotationRate.y)
       let gz = Float(m.rotationRate.z)
-      if let slot = ControllerManager.shared.wiimoteIndex(for: c) {
-        let controllerId = ControllerManager.touchscreenWiimoteIdBase - 1 + slot
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: controllerId, value: gx)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: controllerId, value: gx)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: controllerId, value: gy)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: controllerId, value: gy)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: controllerId, value: gz)
-        TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: controllerId, value: gz)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchUp.rawValue, controller: controllerId, value: gx)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroPitchDown.rawValue, controller: controllerId, value: gx)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollLeft.rawValue, controller: controllerId, value: gy)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroRollRight.rawValue, controller: controllerId, value: gy)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawLeft.rawValue, controller: controllerId, value: gz)
+      TCManagerInterface.setAxisValueFor(TCButtonType.wiiGyroYawRight.rawValue, controller: controllerId, value: gz)
 
-        // Shake synthesis from high acceleration/rotation spikes; small debounce
-        let id = ObjectIdentifier(c)
-        let now = Date().timeIntervalSince1970
-        var state = shakeStates[id] ?? ShakeState()
-        let debounce: TimeInterval = 0.18
-        let hold: TimeInterval = 0.10
-        let accelAxisThresh: Float = 0.80
-        let accelMagThresh: Float = 1.10
-        let rotMagThresh: Float = 4.5
+      // Shake synthesis from high acceleration/rotation spikes; small debounce
+      let id = ObjectIdentifier(c)
+      let now = Date().timeIntervalSince1970
+      var state = shakeStates[id] ?? ShakeState()
+      let debounce: TimeInterval = 0.18
+      let hold: TimeInterval = 0.10
+      let accelAxisThresh: Float = 0.80
+      let accelMagThresh: Float = 1.10
+      let rotMagThresh: Float = 4.5
 
-        func trigger(button: Int, last: inout TimeInterval) {
-          if now - last >= debounce {
-            last = now
-            TCManagerInterface.setButtonStateFor(button, controller: controllerId, state: true)
-            // Mirror to controller 1 to satisfy Physical Controller.ini shake mapping
-            TCManagerInterface.setButtonStateFor(button, controller: 1, state: true)
-            DispatchQueue.main.asyncAfter(deadline: .now() + hold) {
-              TCManagerInterface.setButtonStateFor(button, controller: controllerId, state: false)
-              TCManagerInterface.setButtonStateFor(button, controller: 1, state: false)
-            }
+      func trigger(button: Int, last: inout TimeInterval) {
+        if now - last >= debounce {
+          last = now
+          TCManagerInterface.setButtonStateFor(button, controller: controllerId, state: true)
+          // Mirror to controller 1 to satisfy Physical Controller.ini shake mapping
+          TCManagerInterface.setButtonStateFor(button, controller: 1, state: true)
+          DispatchQueue.main.asyncAfter(deadline: .now() + hold) {
+            TCManagerInterface.setButtonStateFor(button, controller: controllerId, state: false)
+            TCManagerInterface.setButtonStateFor(button, controller: 1, state: false)
           }
         }
-
-        // Axis thresholds
-        if abs(ax) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeX.rawValue, last: &state.lastTriggerX) }
-        if abs(ay) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeY.rawValue, last: &state.lastTriggerY) }
-        if abs(az) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ) }
-
-        // Combined magnitude thresholds (accel and rotation) as fallback
-        let amag = sqrtf(ax * ax + ay * ay + az * az)
-        if amag > accelMagThresh {
-          trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ)
-        } else {
-          let rmag = sqrtf(gx * gx + gy * gy + gz * gz)
-          if rmag > rotMagThresh {
-            trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ)
-          }
-        }
-
-        shakeStates[id] = state
       }
+
+      // Axis thresholds
+      if abs(ax) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeX.rawValue, last: &state.lastTriggerX) }
+      if abs(ay) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeY.rawValue, last: &state.lastTriggerY) }
+      if abs(az) > accelAxisThresh { trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ) }
+
+      // Combined magnitude thresholds (accel and rotation) as fallback
+      let amag = sqrtf(ax * ax + ay * ay + az * az)
+      if amag > accelMagThresh {
+        trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ)
+      } else {
+        let rmag = sqrtf(gx * gx + gy * gy + gz * gz)
+        if rmag > rotMagThresh {
+          trigger(button: TCButtonType.wiiShakeZ.rawValue, last: &state.lastTriggerZ)
+        }
+      }
+
+      shakeStates[id] = state
 //      if UserDefaults.standard.bool(forKey: "input_debug") {
 //        NSLog("[INPUT][Motion] acc(%.2f,%.2f,%.2f) rot(%.2f,%.2f,%.2f)", ax, ay, az, gx, gy, gz)
 //      }
@@ -322,7 +332,9 @@ private func installTouchpadIRHandlers(_ c: GCController, eg: GCExtendedGamepad)
 
   // Internal func
   func mapTouch(_ touchpad: GCControllerDirectionPad?) {
-    NSLog("mapTouch: \(String(describing: touchpad))")
+    // Runs for every touchpad x and y sample: never build the log string unless input_debug is on.
+    let debug = TCManagerInterface.inputDebugEnabled
+    if debug { NSLog("mapTouch: \(String(describing: touchpad))") }
     guard let slot = ControllerManager.shared.wiimoteIndex(for: c) else { return }
     let controllerId = ControllerManager.touchscreenWiimoteIdBase - 1 + slot
 
@@ -340,7 +352,7 @@ private func installTouchpadIRHandlers(_ c: GCController, eg: GCExtendedGamepad)
 
     switch irMode {
     case 0, 1, 2: // absolute mapping for stability
-      NSLog("setIR(controllerId \(controllerId) \(absX) , \(absY)")
+      if debug { NSLog("setIR(controllerId \(controllerId) \(absX) , \(absY)") }
       setIR(controllerId: controllerId, x: absX, y: absY)
 //    case 2: // drag/relative – accumulate deltas
 //      if !state.touching {

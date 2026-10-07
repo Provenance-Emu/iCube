@@ -27,7 +27,6 @@ struct TouchOverlayButtonClusterView: View {
   let isEditing: Bool
 
   @State private var pressed: Set<String> = []
-  private let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
 
   private func scaledFrame(_ frame: CGRect) -> CGRect {
     CGRect(x: frame.minX * scale, y: frame.minY * scale, width: frame.width * scale, height: frame.height * scale)
@@ -44,11 +43,15 @@ struct TouchOverlayButtonClusterView: View {
   }
 
   var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.buttonCluster)
     ZStack {
       ForEach(controls, id: \.id) { control in
         let frame = scaledFrame(control.frame)
-        TouchOverlayArt.button(controlId: control.id, shape: shape(for: control), variant: variant,
-                               pressed: pressed.contains(control.id))
+        // Equatable, so a press re-renders only the button whose state changed, not its neighbours.
+        TouchOverlayButtonArtView(controlId: control.id, shape: shape(for: control), variant: variant,
+                                  pressed: pressed.contains(control.id))
+          .equatable()
           .frame(width: frame.width, height: frame.height)
           .position(x: frame.midX, y: frame.midY)
       }
@@ -59,7 +62,7 @@ struct TouchOverlayButtonClusterView: View {
         },
         onChange: { id, down in
           guard let control = controls.first(where: { $0.id == id }) else { return }
-          if down { hapticGenerator.impactOccurred() }
+          if down { TouchOverlayHaptics.impact() }
           switch control.kind {
           case .button(let raw):
             TCManagerInterface.setButtonStateFor(raw, controller: deviceId, state: down)
@@ -138,9 +141,10 @@ struct TouchOverlayDPadView: View {
   let isEditing: Bool
 
   @State private var pressed: Set<TouchOverlayHitTester.DPadDirection> = []
-  private let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
 
   var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.dpad)
     ZStack {
       TouchOverlayArt.dpad(pressed: pressed, variant: variant)
       TouchOverlayCluster<TouchOverlayHitTester.DPadDirection>(
@@ -164,7 +168,7 @@ struct TouchOverlayDPadView: View {
         TCManagerInterface.setButtonStateFor(write.id, controller: deviceId, state: write.pressed)
       }
       if oldValue.isEmpty, !newValue.isEmpty {
-        hapticGenerator.impactOccurred()
+        TouchOverlayHaptics.impact()
       }
     }
     .onChange(of: isEditing) { _, editing in
@@ -186,27 +190,32 @@ struct TouchOverlayStickView: View {
   let groupSize: CGSize
   let isEditing: Bool
 
-  @State private var knobOffset: CGSize = .zero
+  /// The knob's offset lives in a reference the parent never reads, so a move sample re-renders only
+  /// the knob (`TouchOverlayStickKnobView`), never the base or this container.
+  @State private var knob = TouchOverlayKnobPosition()
+  /// Changes only when a drag starts or ends: it lights the base's rim.
   @State private var dragging = false
 
   private var maxDistance: CGFloat { groupSize.width * TouchOverlayInput.stickTravelFraction }
 
   var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.stick)
     let center = CGPoint(x: groupSize.width / 2, y: groupSize.height / 2)
     ZStack {
-      TouchOverlayArt.stickBase(variant: variant, dragging: dragging)
-      TouchOverlayArt.stickKnob(variant: variant)
-        .frame(width: groupSize.width * 0.4, height: groupSize.height * 0.4)
-        .offset(knobOffset)
+      TouchOverlayStickBaseView(variant: variant, dragging: dragging)
+        .equatable()
+      TouchOverlayStickKnobView(variant: variant, size: CGSize(width: groupSize.width * 0.4, height: groupSize.height * 0.4),
+                                position: knob)
       TouchOverlaySingleTouch { location in
         if let location {
-          dragging = true
+          if !dragging { dragging = true }
           let axes = TouchOverlayInput.stickAxes(touch: location, center: center, maxDistance: maxDistance)
-          knobOffset = CGSize(width: axes.x * maxDistance, height: axes.y * maxDistance)
+          knob.offset = CGSize(width: axes.x * maxDistance, height: axes.y * maxDistance)
           send(x: axes.x, y: axes.y)
         } else {
-          dragging = false
-          knobOffset = .zero
+          if dragging { dragging = false }
+          knob.offset = .zero
           send(x: 0, y: 0)
         }
       }
@@ -216,7 +225,7 @@ struct TouchOverlayStickView: View {
     .onChange(of: isEditing) { _, editing in
       guard editing else { return }
       dragging = false
-      knobOffset = .zero
+      knob.offset = .zero
       send(x: 0, y: 0)
     }
   }
@@ -225,6 +234,73 @@ struct TouchOverlayStickView: View {
     for write in TouchOverlayInput.stickWrites(x: x, y: y, baseId: baseId) {
       TCManagerInterface.setAxisValueFor(write.id, controller: deviceId, value: write.value)
     }
+  }
+}
+
+/// Where a stick's knob sits. Observable per property: only a view that reads `offset` in its body
+/// (the knob) is invalidated when it changes.
+@Observable
+final class TouchOverlayKnobPosition {
+  var offset: CGSize = .zero
+}
+
+/// The stick's static base, re-rendered only when a drag starts or ends.
+struct TouchOverlayStickBaseView: View, Equatable {
+  let variant: TouchOverlayArt.Variant
+  let dragging: Bool
+
+  var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.stickBase)
+    TouchOverlayArt.stickBase(variant: variant, dragging: dragging)
+  }
+}
+
+/// The knob, the one part of a stick that changes on every move sample. Its art is a separate
+/// equatable view, so a move only re-applies the offset rather than rebuilding the gradient and shadow.
+struct TouchOverlayStickKnobView: View {
+  let variant: TouchOverlayArt.Variant
+  let size: CGSize
+  let position: TouchOverlayKnobPosition
+
+  var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.stickKnob)
+    TouchOverlayKnobArtView(variant: variant)
+      .equatable()
+      .frame(width: size.width, height: size.height)
+      .offset(position.offset)
+  }
+}
+
+private struct TouchOverlayKnobArtView: View, Equatable {
+  let variant: TouchOverlayArt.Variant
+
+  var body: some View {
+    TouchOverlayArt.stickKnob(variant: variant)
+  }
+}
+
+/// One button's art, equatable on everything it draws from.
+struct TouchOverlayButtonArtView: View, Equatable {
+  let controlId: String
+  let shape: TouchOverlayArt.ButtonShape
+  let variant: TouchOverlayArt.Variant
+  let pressed: Bool
+
+  var body: some View {
+    TouchOverlayArt.button(controlId: controlId, shape: shape, variant: variant, pressed: pressed)
+  }
+}
+
+/// The overlay's press haptic. One generator for the app, rather than a new
+/// `UIImpactFeedbackGenerator` allocated with every control view struct (each parent re-render).
+@MainActor
+enum TouchOverlayHaptics {
+  private static let generator = UIImpactFeedbackGenerator(style: .medium)
+
+  static func impact() {
+    generator.impactOccurred()
   }
 }
 #endif

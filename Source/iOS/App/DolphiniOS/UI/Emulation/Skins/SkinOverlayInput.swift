@@ -47,7 +47,7 @@ struct SkinOverlayInput {
   }
 
   /// A thumbstick item, in the coordinates of its own `hitFrame` (where the stick's touch surface sits).
-  struct Stick {
+  struct Stick: Equatable {
     let itemIndex: Int
     let baseId: Int
     let drawFrame: CGRect

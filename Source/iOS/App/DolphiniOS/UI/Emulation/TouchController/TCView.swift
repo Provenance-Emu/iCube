@@ -92,9 +92,10 @@ import UIKit
     }
   }
 
-  private func debugLog(_ message: String) {
-    if UserDefaults.standard.bool(forKey: "input_debug") {
-      NSLog(message)
+  /// The message is only built when `input_debug` is on, and is never used as a format string.
+  private func debugLog(_ message: @autoclosure () -> String) {
+    if TCManagerInterface.inputDebugEnabled {
+      NSLog("%@", message())
     }
   }
 }

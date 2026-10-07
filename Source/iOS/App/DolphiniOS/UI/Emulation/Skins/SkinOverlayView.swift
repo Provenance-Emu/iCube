@@ -183,9 +183,10 @@ private struct SkinTouchLayer: View {
   /// layout change releases exactly those).
   @State private var applied: Set<SkinOverlayInput.Hit> = []
   @State private var held: Set<SkinOverlayInput.Key> = []
-  private let hapticGenerator = UIImpactFeedbackGenerator(style: .medium)
 
   var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.skinTouchLayer)
     ZStack(alignment: .topLeading) {
       TouchOverlayCluster<SkinOverlayInput.Hit>(
         hitTest: { location, _ in input.hits(at: location, previous: pressed) },
@@ -203,8 +204,11 @@ private struct SkinTouchLayer: View {
         }
       )
       ForEach(input.sticks, id: \.itemIndex) { stick in
+        // Equatable: a button press re-renders this layer (it owns `pressed`), and without this every
+        // stick re-ran its body, which resolves and stats its knob file on the main thread.
         SkinStickView(stick: stick, directory: directory, deviceId: deviceId,
                       displayScale: displayScale, controlOpacity: controlOpacity)
+          .equatable()
       }
     }
     .onChange(of: pressed) { _, now in apply(now) }
@@ -225,7 +229,7 @@ private struct SkinTouchLayer: View {
       }
     }
     // Like `TouchOverlayDPadView`: once per press, not on every direction or button change while held.
-    if previous.isEmpty, !now.isEmpty { hapticGenerator.impactOccurred() }
+    if previous.isEmpty, !now.isEmpty { TouchOverlayHaptics.impact() }
   }
 }
 
@@ -249,28 +253,38 @@ private struct SkinPointerLayer: View {
 
 /// A thumbstick: the knob follows the finger inside the item and the four half-axes are written
 /// with `TouchOverlayInput.stickWrites`, exactly like the xib stick.
-private struct SkinStickView: View {
+private struct SkinStickView: View, Equatable {
   let stick: SkinOverlayInput.Stick
   let directory: URL
   let deviceId: Int
   let displayScale: CGFloat
   let controlOpacity: Double
 
-  @State private var knobOffset: CGSize = .zero
+  /// Read only by `SkinStickKnobView`, so a move sample re-renders the knob alone: this body, which
+  /// resolves and decodes the knob's art, runs again only when the stick itself changes.
+  @State private var knob = TouchOverlayKnobPosition()
+  /// The knob image, resolved once per (file, size, scale) instead of on every body evaluation.
+  @State private var knobArt = SkinKnobArt()
+  /// Bumped when the skin library changes (an import can replace this skin's files under the same
+  /// name), so the knob art is resolved again once instead of keeping the old image.
+  @State private var libraryGeneration = 0
+
+  static func == (lhs: SkinStickView, rhs: SkinStickView) -> Bool {
+    lhs.stick == rhs.stick && lhs.directory == rhs.directory && lhs.deviceId == rhs.deviceId
+      && lhs.displayScale == rhs.displayScale && lhs.controlOpacity == rhs.controlOpacity
+  }
 
   var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.skinStick)
     ZStack(alignment: .topLeading) {
       if let name = stick.knobName, let size = stick.thumbSize,
-         let image = SkinAssetRenderer.image(named: name, in: directory, size: size, scale: displayScale) {
-        Image(uiImage: image)
-          .resizable()
-          .frame(width: size.width, height: size.height)
-          .position(x: stick.center.x + knobOffset.width, y: stick.center.y + knobOffset.height)
-          .opacity(controlOpacity)
-          .allowsHitTesting(false)
+         let image = knobArt.image(named: name, in: directory, size: size, scale: displayScale,
+                                   generation: libraryGeneration) {
+        SkinStickKnobView(image: image, size: size, center: stick.center, opacity: controlOpacity, position: knob)
       }
       TouchOverlaySingleTouch { location in
-        knobOffset = stick.knobOffset(touch: location)
+        knob.offset = stick.knobOffset(touch: location)
         for write in stick.writes(touch: location) {
           TCManagerInterface.setAxisValueFor(write.id, controller: deviceId, value: write.value)
         }
@@ -278,6 +292,56 @@ private struct SkinStickView: View {
     }
     .frame(width: stick.hitFrame.width, height: stick.hitFrame.height, alignment: .topLeading)
     .position(x: stick.hitFrame.midX, y: stick.hitFrame.midY)
+    .onReceive(NotificationCenter.default.publisher(for: SkinLibrary.didChangeNotification)) { _ in
+      libraryGeneration &+= 1
+    }
+  }
+}
+
+/// Remembers the last knob image a stick resolved. `SkinAssetRenderer.image` resolves symlinks, checks the
+/// file exists and reads its modification date before its own cache lookup, all on the main thread; a
+/// stick's body can run on every skin button press, so the lookup happens here only when its inputs change.
+/// A plain reference held in `@State`, so updating it never invalidates the view.
+final class SkinKnobArt {
+  private struct Key: Equatable {
+    let name: String
+    let directory: URL
+    let size: CGSize
+    let scale: CGFloat
+    let generation: Int
+  }
+
+  private var key: Key?
+  private var cached: UIImage?
+
+  /// `generation` changes when the skin library does, so a re-imported skin's art is read again.
+  func image(named name: String, in directory: URL, size: CGSize, scale: CGFloat, generation: Int = 0) -> UIImage? {
+    let wanted = Key(name: name, directory: directory, size: size, scale: scale, generation: generation)
+    if wanted == key { return cached }
+    TouchOverlayRenderProbe.body(.skinKnobResolve)
+    key = wanted
+    cached = SkinAssetRenderer.image(named: name, in: directory, size: size, scale: scale)
+    return cached
+  }
+}
+
+/// A skin thumbstick's knob image, following `position`.
+private struct SkinStickKnobView: View {
+  let image: UIImage
+  let size: CGSize
+  let center: CGPoint
+  let opacity: Double
+  let position: TouchOverlayKnobPosition
+
+  var body: some View {
+    // swiftlint:disable:next redundant_discardable_let
+    let _ = TouchOverlayRenderProbe.body(.skinStickKnob)
+    Image(uiImage: image)
+      .resizable()
+      .frame(width: size.width, height: size.height)
+      .position(x: center.x + position.offset.width, y: center.y + position.offset.height)
+      .opacity(opacity)
+      .allowsHitTesting(false)
   }
 }
 #endif
