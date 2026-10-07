@@ -10,6 +10,8 @@ import XCTest
 @MainActor
 final class EmulationStateTests: XCTestCase {
   private var center: NotificationCenter!
+  /// Stands in for the EmulationCoordinator, which posts DidEnd with itself as the object.
+  private let coordinator = NSObject()
   private var state: EmulationState!
 
   override func setUp() {
@@ -34,7 +36,21 @@ final class EmulationStateTests: XCTestCase {
     drainMainQueue()
     XCTAssertTrue(state.isActive)
 
+    center.post(name: EmulationState.didEndName, object: coordinator)
+    drainMainQueue()
+    XCTAssertFalse(state.isActive)
+  }
+
+  func test_screenExitPostWithoutObjectKeepsTheSessionActive() {
+    // The in-game screen posts DidEnd with a nil object when it asks to exit; the core may still
+    // be stopping, so only the coordinator's post (with an object) ends the session.
+    center.post(name: EmulationState.willStartName, object: nil)
+    drainMainQueue()
     center.post(name: EmulationState.didEndName, object: nil)
+    drainMainQueue()
+    XCTAssertTrue(state.isActive)
+
+    center.post(name: EmulationState.didEndName, object: coordinator)
     drainMainQueue()
     XCTAssertFalse(state.isActive)
   }

@@ -42,7 +42,12 @@ final class EmulationState {
       center.addObserver(forName: Self.willStartName, object: nil, queue: .main) { [weak self] _ in
         MainActor.assumeIsolated { self?.setActive(true) }
       },
-      center.addObserver(forName: Self.didEndName, object: nil, queue: .main) { [weak self] _ in
+      center.addObserver(forName: Self.didEndName, object: nil, queue: .main) { [weak self] note in
+        // Only the coordinator's own post (object: the coordinator, after the core has torn down)
+        // ends the session. The in-game screen also posts this name with a nil object when it
+        // asks to exit, while the core may still be stopping; flushing deferred work then would
+        // run it during shutdown.
+        guard note.object != nil else { return }
         MainActor.assumeIsolated { self?.setActive(false) }
       }
     ]
@@ -52,8 +57,9 @@ final class EmulationState {
     for token in observers { center.removeObserver(token) }
   }
 
-  /// Applies a state change. Repeats are ignored: `DidEnd` is posted from several places (the core's
-  /// shutdown, the in-game screen's exit, a cancelled JIT prompt that never posted `WillStart`).
+  /// Applies a state change. Repeats are ignored. `DidEnd` is posted from several places (the core's
+  /// shutdown, the in-game screen's exit, a cancelled JIT prompt that never posted `WillStart`);
+  /// only the coordinator's post, which carries an object, reaches here.
   func setActive(_ active: Bool) {
     guard active != isActive else { return }
     isActive = active

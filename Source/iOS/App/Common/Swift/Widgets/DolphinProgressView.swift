@@ -230,6 +230,21 @@ struct DolphinCircularSpinner: View {
   }
 
   private var frozenBody: some View {
+    frozenContent
+      .onAppear {
+        // Return the animated values to their start so `animatedBody.onAppear` changes them again
+        // when play ends; assigning the same values would start no animation.
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+          rotationAngle = 0
+          waveOffset = 0
+          isAnimating = false
+        }
+      }
+  }
+
+  private var frozenContent: some View {
     ZStack {
       Circle()
         .stroke(Color.cyan.opacity(0.3), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
