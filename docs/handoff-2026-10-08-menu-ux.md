@@ -17,9 +17,9 @@ Paste this into the new session, started in `~/Workspace/icube-menu-ux` (or any 
 | PR 2 plan: MenuKit + pause overlay | `docs/superpowers/plans/2026-10-07-menukit-pause-overlay.md` |
 | PR 3 plan: settings on the engine | `docs/superpowers/plans/2026-10-08-settings-on-engine.md` (after PR 2; lists its spec deviations at the top) |
 | PR 4 plan: controller hub reorg | `docs/superpowers/plans/2026-10-08-controller-hub-reorg.md` (after PR 2, independent of PR 3; deviations at the top) |
+| PR 5 plan: remaining settings leaves | `docs/superpowers/plans/2026-10-08-settings-leaves-batches.md` (after PR 3; three batches, one PR each) |
 | Branch holding these docs | `docs/unified-menu-ux` (commits de3cca3cb0, 08cc9d231c), worktree `~/Workspace/icube-menu-ux` |
 | Code PRs not yet started | PR 1 (`fix/pause-arbiter`), PR 2 (`feat/menukit-pause-overlay`) |
-| Later plans not yet written | PR 5 remaining settings leaves in batches (follow the PR 3 leaf pattern) |
 
 Merge the docs branch first or cherry-pick the two commits onto the PR branch, so the plan and spec travel with the code.
 
