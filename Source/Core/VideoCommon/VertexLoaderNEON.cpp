@@ -14,6 +14,7 @@
 
 #include <cstring>
 #include <limits>
+#include <type_traits>
 
 #if defined(_M_ARM_64)
 #include <arm_neon.h>
@@ -252,6 +253,164 @@ void Color_ReadDirect_NEON_32b_8888(VertexLoader* loader)
   SetCol_NEON(loader, DataReadU32Unswapped());
 }
 
+// ---- Indexed (gather) attributes --------------------------------------------
+//
+// The scalar indexed readers (Pos/TexCoord/Color _ReadIndex) dominate index-heavy titles: on
+// Need for Speed: Underground they were ~75 % of the vertex loader's video-thread time (iPhone 16
+// Pro Max Time Profiler, 2026-10-07). The gather itself defeats SIMD; the cost is the stream
+// pointers. Every DataRead/DataWrite goes through the globals g_video_buffer_read_ptr and
+// g_vertex_manager_write_ptr, and because DataWrite is a memcpy through a u8* the compiler must
+// assume each store may alias the pointer itself, so it reloads and re-stores the global around
+// every component. These copies evaluate the scalar expressions verbatim (same index decode,
+// same skip test, same FromBigEndian + scale, same cache writes, same write order) with both
+// pointers held in locals and written back once, so the output is bit-identical by construction
+// (and Compare checks it against the software loader).
+
+template <typename I>
+DOLPHIN_FORCE_INLINE u32 ReadIndexLocal(const u8*& src)
+{
+  I raw;
+  std::memcpy(&raw, src, sizeof(I));
+  src += sizeof(I);
+  return Common::FromBigEndian(raw);
+}
+
+template <typename T>
+DOLPHIN_FORCE_INLINE void WriteLocal(u8*& dst, T value)
+{
+  std::memcpy(dst, &value, sizeof(T));
+  dst += sizeof(T);
+}
+
+template <typename T>
+DOLPHIN_FORCE_INLINE T ReadArrayElement(const u8* data, int i)
+{
+  T raw;
+  std::memcpy(&raw, data + i * sizeof(T), sizeof(T));
+  return Common::FromBigEndian(raw);
+}
+
+// Mirror of VertexLoader_Position.cpp Pos_ReadIndex<I, T, N> (PosScale: float is unscaled).
+template <typename I, typename T, int N>
+void Pos_ReadIndex_Local(VertexLoader* loader)
+{
+  const u8* src = g_video_buffer_read_ptr;
+  u8* dst = g_vertex_manager_write_ptr;
+  const u32 index = ReadIndexLocal<I>(src);
+  const bool skip = index == std::numeric_limits<I>::max();
+  loader->m_vertexSkip = skip;
+  const u8* data = VertexLoaderManager::cached_arraybases[CPArray::Position] +
+                   (index * g_main_cp_state.array_strides[CPArray::Position]);
+  const float scale = loader->m_posScale;
+  const bool cache = loader->m_remaining < 3 && !skip;
+  for (int i = 0; i < N; ++i)
+  {
+    const T raw = ReadArrayElement<T>(data, i);
+    float value;
+    if constexpr (std::is_same_v<T, float>)
+      value = raw;
+    else
+      value = raw * scale;
+    if (cache)
+      VertexLoaderManager::position_cache[loader->m_remaining][i] = value;
+    WriteLocal(dst, value);
+  }
+  g_video_buffer_read_ptr = src;
+  g_vertex_manager_write_ptr = dst;
+}
+
+// Mirror of VertexLoader_TextCoord.cpp TexCoord_ReadIndex<I, T, N> (TCScale: float unscaled).
+template <typename I, typename T, int N>
+void TexCoord_ReadIndex_Local(VertexLoader* loader)
+{
+  const u8* src = g_video_buffer_read_ptr;
+  u8* dst = g_vertex_manager_write_ptr;
+  const u32 index = ReadIndexLocal<I>(src);
+  const u8* data = VertexLoaderManager::cached_arraybases[CPArray::TexCoord0 + loader->m_tcIndex] +
+                   (index * g_main_cp_state.array_strides[CPArray::TexCoord0 + loader->m_tcIndex]);
+  const float scale = loader->m_tcScale[loader->m_tcIndex];
+  for (int i = 0; i != N; ++i)
+  {
+    const T raw = ReadArrayElement<T>(data, i);
+    if constexpr (std::is_same_v<T, float>)
+      WriteLocal(dst, raw);
+    else
+      WriteLocal(dst, static_cast<float>(raw * scale));
+  }
+  ++loader->m_tcIndex;
+  g_video_buffer_read_ptr = src;
+  g_vertex_manager_write_ptr = dst;
+}
+
+// Mirror of VertexLoader_Color.cpp Color_ReadIndex_32b_8888<I> (Read32 = byte-order preserving).
+template <typename I>
+void Color_ReadIndex_Local_32b_8888(VertexLoader* loader)
+{
+  const u8* src = g_video_buffer_read_ptr;
+  u8* dst = g_vertex_manager_write_ptr;
+  const u32 index = ReadIndexLocal<I>(src);
+  const u8* address = VertexLoaderManager::cached_arraybases[CPArray::Color0 + loader->m_colIndex] +
+                      (index * g_main_cp_state.array_strides[CPArray::Color0 + loader->m_colIndex]);
+  u32 value;
+  std::memcpy(&value, address, sizeof(u32));
+  WriteLocal(dst, value);
+  loader->m_colIndex++;
+  g_video_buffer_read_ptr = src;
+  g_vertex_manager_write_ptr = dst;
+}
+
+template <typename I, int N>
+TPipelineFunction PosIndexedFunction(ComponentFormat format)
+{
+  switch (format)
+  {
+  case ComponentFormat::UByte:
+    return Pos_ReadIndex_Local<I, u8, N>;
+  case ComponentFormat::Byte:
+    return Pos_ReadIndex_Local<I, s8, N>;
+  case ComponentFormat::UShort:
+    return Pos_ReadIndex_Local<I, u16, N>;
+  case ComponentFormat::Short:
+    return Pos_ReadIndex_Local<I, s16, N>;
+  default:  // Float and the InvalidFloat5-7 aliases, as in s_table_read_position
+    return Pos_ReadIndex_Local<I, float, N>;
+  }
+}
+
+template <typename I, int N>
+TPipelineFunction TexCoordIndexedFunction(ComponentFormat format)
+{
+  switch (format)
+  {
+  case ComponentFormat::UByte:
+    return TexCoord_ReadIndex_Local<I, u8, N>;
+  case ComponentFormat::Byte:
+    return TexCoord_ReadIndex_Local<I, s8, N>;
+  case ComponentFormat::UShort:
+    return TexCoord_ReadIndex_Local<I, u16, N>;
+  case ComponentFormat::Short:
+    return TexCoord_ReadIndex_Local<I, s16, N>;
+  default:  // Float and the InvalidFloat5-7 aliases, as in s_table_read_tex_coord
+    return TexCoord_ReadIndex_Local<I, float, N>;
+  }
+}
+
+TPipelineFunction PosIndexed(VertexComponentFormat type, ComponentFormat format, int n)
+{
+  if (type == VertexComponentFormat::Index8)
+    return n == 2 ? PosIndexedFunction<u8, 2>(format) : PosIndexedFunction<u8, 3>(format);
+  return n == 2 ? PosIndexedFunction<u16, 2>(format) : PosIndexedFunction<u16, 3>(format);
+}
+
+TPipelineFunction TexCoordIndexed(VertexComponentFormat type, ComponentFormat format,
+                                  TexComponentCount elements)
+{
+  const bool st = elements == TexComponentCount::ST;
+  if (type == VertexComponentFormat::Index8)
+    return st ? TexCoordIndexedFunction<u8, 2>(format) : TexCoordIndexedFunction<u8, 1>(format);
+  return st ? TexCoordIndexedFunction<u16, 2>(format) : TexCoordIndexedFunction<u16, 1>(format);
+}
+
 #endif  // _M_ARM_64
 
 }  // namespace
@@ -273,8 +432,9 @@ VertexLoaderNEON::VertexLoaderNEON(const TVtxDesc& vtx_desc, const VAT& vtx_attr
 // ===========================================================================
 //  Pipeline construction -- replicates CompileVertexTranslator's WriteCall
 //  *sequence* exactly (VertexLoader.cpp:78-249). Where a slot is a supported
-//  DIRECT attribute, we substitute a NEON functor; otherwise we keep the scalar
-//  GetFunction pointer (which is the indexed/gather fallback).
+//  DIRECT attribute, we substitute a NEON functor; indexed position, texcoord and
+//  RGBA8888 color get the local-pointer gather copies; everything else keeps the
+//  scalar GetFunction pointer.
 // ===========================================================================
 void VertexLoaderNEON::BuildPipeline()
 {
@@ -301,7 +461,7 @@ void VertexLoaderNEON::BuildPipeline()
 
     TPipelineFunction fn = nullptr;
 #if defined(_M_ARM_64)
-    if (!IsIndexed(type))  // DIRECT only -> NEON; indexed keeps scalar gather
+    if (!IsIndexed(type))  // DIRECT -> NEON; indexed -> local-pointer gather below
     {
       switch (format)
       {
@@ -321,6 +481,10 @@ void VertexLoaderNEON::BuildPipeline()
         fn = nullptr;
         break;
       }
+    }
+    else
+    {
+      fn = PosIndexed(type, format, n);  // local-pointer gather (bit-identical to scalar)
     }
 #endif
     if (!fn)
@@ -351,6 +515,11 @@ void VertexLoaderNEON::BuildPipeline()
       if (format == ColorFormat::RGBA8888)
         pFunc = Color_ReadDirect_NEON_32b_8888;
     }
+    else if (IsIndexed(type) && format == ColorFormat::RGBA8888)
+    {
+      pFunc = type == VertexComponentFormat::Index8 ? Color_ReadIndex_Local_32b_8888<u8> :
+                                                      Color_ReadIndex_Local_32b_8888<u16>;
+    }
 #endif
     if (!pFunc)
       pFunc = VertexLoader_Color::GetFunction(type, format);
@@ -379,7 +548,13 @@ void VertexLoaderNEON::BuildPipeline()
       // Texcoords are 1-2 components: NEON buys ~nothing at this width, and the 8-byte
       // D-register loads over-read the trailing texcoord of the last vertex (the FIFO
       // guard is only +4B). Delegate to the bounded, bit-exact scalar texcoord reader.
-      TPipelineFunction fn = VertexLoader_TextCoord::GetFunction(tc, format, elements);
+      TPipelineFunction fn = nullptr;
+#if defined(_M_ARM_64)
+      if (IsIndexed(tc))
+        fn = TexCoordIndexed(tc, format, elements);  // local-pointer gather (bit-identical)
+#endif
+      if (!fn)
+        fn = VertexLoader_TextCoord::GetFunction(tc, format, elements);
       WriteCall(fn);
     }
 
