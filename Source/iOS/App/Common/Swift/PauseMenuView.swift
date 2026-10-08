@@ -858,9 +858,12 @@ enum PauseMenuModelBuilder {
 #if DEBUG
 import UIKit
 
-private func makePreviewGame() -> TVGameItem {
-  let clsName = "TVGameItem"
-  if let cls = NSClassFromString(clsName) as? NSObject.Type {
+extension PauseMenuView {
+  /// A stand-in `TVGameItem` for previews and snapshot tests.
+  static func previewGame() -> TVGameItem {
+    guard let cls = NSClassFromString("TVGameItem") as? NSObject.Type else {
+      fatalError("TVGameItem class not found for preview")
+    }
     let obj = cls.init()
     let img = UIImage(systemName: "gamecontroller")?.withTintColor(.white, renderingMode: .alwaysOriginal) ?? UIImage()
     obj.setValue("Preview Game", forKey: "title")
@@ -868,7 +871,6 @@ private func makePreviewGame() -> TVGameItem {
     obj.setValue(img, forKey: "coverImage")
     return unsafeBitCast(obj, to: TVGameItem.self)
   }
-  fatalError("TVGameItem class not found for preview")
 }
 
 #Preview("iPhone Portrait") {
@@ -877,7 +879,7 @@ private func makePreviewGame() -> TVGameItem {
     onClose: {},
     onShowSettings: {},
     platform: .ios,
-    game: makePreviewGame()
+    game: PauseMenuView.previewGame()
   )
 }
 
@@ -887,7 +889,7 @@ private func makePreviewGame() -> TVGameItem {
     onClose: {},
     onShowSettings: {},
     platform: .ios,
-    game: makePreviewGame()
+    game: PauseMenuView.previewGame()
   )
   .previewInterfaceOrientation(.landscapeLeft)
 }
