@@ -575,14 +575,12 @@ struct EmulationTopBar: View {
   }
 
   private func togglePause() {
-    if TVEmulationBridge.isPaused() {
-      TVEmulationBridge.resume()
-      PauseOwnership.pausedFromBar = false
+    if PauseArbiter.shared.holders.contains(PauseArbiter.Reason.user) {
+      PauseArbiter.shared.release(reason: PauseArbiter.Reason.user)
     } else {
       // Same as the pause menu: grab the last live frame first so a save made while paused has a thumbnail.
       SaveStateService.capturePausePreview()
-      TVEmulationBridge.pause()
-      PauseOwnership.pausedFromBar = true
+      PauseArbiter.shared.claim(PauseArbiter.Reason.user)
     }
     isPaused = TVEmulationBridge.isPaused()
   }

@@ -148,7 +148,7 @@ final class ControllerManager: NSObject, ObservableObject {
     }
     overlayVisible = true
     disconnectPause = nil
-    TVEmulationBridge.resume()
+    MainActor.assumeIsolated { PauseArbiter.shared.release(reason: PauseArbiter.Reason.disconnect) }
   }
 
   /// Returns the 0-based slot and Wii-ness for a controller currently assigned as
@@ -197,7 +197,7 @@ final class ControllerManager: NSObject, ObservableObject {
             self.assignmentService.assign(qualifier: pending.qualifier, toPlayer: pending.port, system: pending.isWii ? .wii : .gamecube)
           }
           self.disconnectPause = nil
-          TVEmulationBridge.resume()
+          MainActor.assumeIsolated { PauseArbiter.shared.release(reason: PauseArbiter.Reason.disconnect) }
           self.updateWiimoteEmulationForExternalControllers()
           self.controllerConnectedSubject.send(c)
           self.reconcile()
@@ -236,7 +236,7 @@ final class ControllerManager: NSObject, ObservableObject {
          !TVEmulationBridge.isPaused() {
         let qualifier = TVControllerMappingBridge.qualifiedName(for: dropped) as String
         self.disconnectPause = DisconnectPause(qualifier: qualifier, port: slot.port, isWii: slot.isWii)
-        TVEmulationBridge.pause()
+        MainActor.assumeIsolated { _ = PauseArbiter.shared.claim(PauseArbiter.Reason.disconnect) }
       }
       // Drop this controller's shoulder / shake / touchpad-IR caches. They are
       // keyed by ObjectIdentifier (the object address), so leaving them behind

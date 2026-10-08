@@ -274,7 +274,7 @@ struct EmulationScreen: View {
   @State private var topBarHeight: CGFloat = 0
   /// True when opening controller settings is what paused the game, so closing them may resume it. A pause
   /// the user made from the bar stays.
-  @State private var controllerSettingsOwnsPause = false
+  @State private var controllerSettingsToken: PauseArbiter.Token?
   var showTopBar: Bool { topBar.isVisible }
   @State private var fastForwardEnabled = false
   // iOS observer tokens to avoid leaks. Defect #10: these three used to be
@@ -414,7 +414,8 @@ struct EmulationScreen: View {
       // pause menu is open; the disconnect banner (zIndex 5) sits above it.
       if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
         PausedPill(onResume: {
-          TVEmulationBridge.resume()
+          PauseArbiter.shared.userResume()
+          PauseArbiter.shared.resumeIfUnheld()
           isPaused = false
         })
         .zIndex(3)
@@ -532,6 +533,7 @@ struct EmulationScreen: View {
     // — added explicitly here since this cover doesn't sit inside a NavigationStack.
     .fullScreenCover(isPresented: $showSettings) {
       TVSettingsPage()
+        .pauseClaim("settings")
         .interactiveDismissDisabled(true)
         .onExitCommand { showSettings = false }
     }
@@ -729,9 +731,7 @@ struct EmulationScreen: View {
       GameActivityManager.update(isPaused: visible, elapsedSeconds: elapsedSeconds)
       #endif
     }
-    .onExitCommand { if showPauseMenu { TVEmulationBridge.resume()
-      showPauseMenu = false
-    } }
+    .onExitCommand { if showPauseMenu { showPauseMenu = false } }
     .onPlayPauseCommand {}
     .navigationBarBackButtonHidden(true)
     #else // os(iOS)
@@ -794,7 +794,8 @@ struct EmulationScreen: View {
       // pause menu is open; the disconnect banner (zIndex 5) sits above it.
       if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
         PausedPill(onResume: {
-          TVEmulationBridge.resume()
+          PauseArbiter.shared.userResume()
+          PauseArbiter.shared.resumeIfUnheld()
           isPaused = false
         })
         .zIndex(3)
@@ -1328,7 +1329,6 @@ struct EmulationScreen: View {
     // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
     .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
       isPaused = TVEmulationBridge.isPaused()
-      if !isPaused { PauseOwnership.pausedFromBar = false }
       // Clear a stale disconnect banner if the game resumed via any other path.
       if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
         controllerManager.clearDisconnectPause()
@@ -1400,7 +1400,6 @@ struct EmulationScreen: View {
         NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
       }
       Button("Continue", role: .cancel) {
-        TVEmulationBridge.resume()
         #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
         GameActivityManager.update(isPaused: false, elapsedSeconds: elapsedSeconds)
         #endif
@@ -1480,7 +1479,7 @@ struct EmulationScreen: View {
     case .shaders: showShaderSheet = true
     case .shaderParameters: showShaderParams = true
     case .controllerSettings:
-      controllerSettingsOwnsPause = PauseOwnership.claim(isPaused: TVEmulationBridge.isPaused(), pause: TVEmulationBridge.pause)
+      controllerSettingsToken = PauseArbiter.shared.claim("controller-settings")
       showControllerSettings = true
     case .pauseMenu: showPauseMenu = true
     case .editLayout: beginLayoutEdit()
@@ -1492,8 +1491,10 @@ struct EmulationScreen: View {
   /// The settings sheet paused the game on open (unless it was already paused); resume only what it paused,
   /// and refresh the pause icon without waiting for the 1 s poll.
   private func controllerSettingsDismissed() {
-    PauseOwnership.release(owned: controllerSettingsOwnsPause, resume: TVEmulationBridge.resume)
-    controllerSettingsOwnsPause = false
+    if let token = controllerSettingsToken {
+      PauseArbiter.shared.release(token)
+      controllerSettingsToken = nil
+    }
     isPaused = TVEmulationBridge.isPaused()
   }
 
@@ -1517,15 +1518,10 @@ struct EmulationScreen: View {
     isEditingLayout = true
   }
 
-  /// Done. The menus closed for editing resume only a pause they made, and a pause menu closed with one
-  /// of its own sheets still up does not, so resume here unless the player paused from the bar or a
-  /// controller disconnected.
+  /// Done. The menus closed for editing released their tokens then; a bar pause or a disconnect pause
+  /// still holds, so only refresh the pause icon here.
   private func endLayoutEdit() {
     isEditingLayout = false
-    if TVEmulationBridge.isRunning(), TVEmulationBridge.isPaused(), !PauseOwnership.pausedFromBar,
-       controllerManager.disconnectPause == nil {
-      TVEmulationBridge.resume()
-    }
     isPaused = TVEmulationBridge.isPaused()
   }
   #endif
