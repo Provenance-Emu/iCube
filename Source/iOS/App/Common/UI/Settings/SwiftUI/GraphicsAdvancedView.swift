@@ -41,6 +41,8 @@ struct GraphicsAdvancedView: View {
   // Utility (Custom Textures / Mods / VRAM copy)
   @State private var hiresTextures: Bool = false
   @State private var prefetchTextures: Bool = false
+  /// Total size of the installed custom texture packs (Load/Textures), measured off the main thread.
+  @State private var texturePackBytes: Int64 = 0
   @State private var disableEfbToVRAM: Bool = false
   @State private var graphicsMods: Bool = false
   // Misc
@@ -126,6 +128,13 @@ struct GraphicsAdvancedView: View {
           Toggle(L("Prefetch Custom Textures"), isOn: $prefetchTextures.onSet { DOLConfigBridge.setGfxCacheHiresTextures($0) })
             .disabled(!hiresTextures),
           L("Loads all custom textures into memory up front for smoother play, at higher memory use."))
+        if hiresTextures, prefetchTextures, Self.isTooLargeToPrefetch(texturePackBytes) {
+          Label(String(format: L("Installed texture packs total %@, a large share of this device's memory. Prefetching them can crash the game; turn Prefetch off or remove packs you don't use."),
+                       ByteCountFormatter.string(fromByteCount: texturePackBytes, countStyle: .file)),
+                systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
         settingsCaption(
           Toggle(L("Disable EFB Copy to VRAM"), isOn: $disableEfbToVRAM.onSet { DOLConfigBridge.setGfxHackDisableCopyToVRAM($0) }),
           L("Forces framebuffer copies through RAM instead of VRAM. Slower; only for rare compatibility cases."))
@@ -189,6 +198,34 @@ struct GraphicsAdvancedView: View {
     }
     .navigationTitle(L("Advanced"))
     .configSynced { sync() }
+    .task { texturePackBytes = await Self.installedTexturePackBytes() }
+  }
+
+  /// Prefetch keeps every texture of a pack resident, and the core lets that cache reach half of RAM
+  /// (CustomAssetCache); next to the emulator itself, a pack above a quarter of RAM risks a
+  /// memory kill, so warn from there.
+  private static let prefetchWarningRAMDivisor: UInt64 = 4
+
+  private static func isTooLargeToPrefetch(_ bytes: Int64) -> Bool {
+    bytes > 0 && UInt64(bytes) > ProcessInfo.processInfo.physicalMemory / prefetchWarningRAMDivisor
+  }
+
+  private static func installedTexturePackBytes() async -> Int64 {
+    await Task.detached(priority: .utility) { texturePackBytesOnDisk() }.value
+  }
+
+  /// Synchronous on purpose: the directory enumerator can't be iterated from an async context.
+  private nonisolated static func texturePackBytesOnDisk() -> Int64 {
+    let root = URL(fileURLWithPath: UserFolderUtil.getUserFolder())
+      .appendingPathComponent("Load/Textures", isDirectory: true)
+    guard let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.fileSizeKey]) else {
+      return 0
+    }
+    var total: Int64 = 0
+    for case let url as URL in files {
+      total += Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+    }
+    return total
   }
   private func metalTriStateLabel(_ v: Int) -> String { switch v { case 0: return L("Off"); case 1: return L("On"); default: return L("Auto") } }
   private func sync() {
