@@ -64,8 +64,9 @@ internal struct PauseMenuView: View {
   // trip. Mute is shared with the in-game top bar via `QuickMute`.
   @State private var isMuted: Bool = false
   @State private var fastForwardEnabled: Bool = false
-  /// True when opening this menu is what paused the game (see `PauseOwnership`).
-  @State private var menuOwnsPause = false
+  /// This menu's hold on the pause (spec §4.3). Adopted from the gesture tracker's pending claim when
+  /// there is one, otherwise claimed here. Released only on a real teardown, see `onDisappear`.
+  @State private var pauseToken: PauseArbiter.Token?
   /// D14: drives the iOS speed picker, a `MenuScreen`-backed confirm overlay
   /// (`PauseMenuView.fastForwardConfirmModel`, D18). Declared unconditionally,
   /// like `showControllersSheet`/`showSettingsSheet` above, because
@@ -126,7 +127,7 @@ internal struct PauseMenuView: View {
       _ = TVEmulationBridge.toggleFastForward()
     }
     fastForwardEnabled = true
-    TVEmulationBridge.resume()
+    PauseArbiter.shared.userResume()
     onClose()
   }
 
@@ -184,8 +185,9 @@ internal struct PauseMenuView: View {
       SaveStateService.capturePausePreview()
       // onAppear runs again each time a child sheet closes: keep the first answer, otherwise the menu would
       // see its own pause and claim a pause the user made earlier (from the top bar).
-      if !menuOwnsPause {
-        menuOwnsPause = PauseOwnership.claim(isPaused: TVEmulationBridge.isPaused(), pause: TVEmulationBridge.pause)
+      // onAppear runs again each time a child sheet closes: keep the token we already hold.
+      if pauseToken == nil {
+        pauseToken = PauseArbiter.shared.adoptPending() ?? PauseArbiter.shared.claim(PauseArbiter.Reason.pauseMenu)
       }
       isMuted = QuickMute.isMuted
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
@@ -202,11 +204,9 @@ internal struct PauseMenuView: View {
       // this menu is currently presented — i.e. this is a real teardown (Resume,
       // Exit, or the parent dismissing the whole menu), not a covering child.
       guard !isPauseMenuChildPresented else { return }
-      // Only resume a pause this menu made: a game the user paused from the top bar stays paused.
-      let ownedPause = menuOwnsPause
-      menuOwnsPause = false
-      if TVEmulationBridge.isRunning() && TVEmulationBridge.isPaused() {
-        PauseOwnership.release(owned: ownedPause, resume: TVEmulationBridge.resume)
+      if let token = pauseToken {
+        PauseArbiter.shared.release(token)
+        pauseToken = nil
       }
     }
     #if os(tvOS)
@@ -249,6 +249,7 @@ internal struct PauseMenuView: View {
       NavigationStack {
         ShaderQuickPickerView()
       }
+      .pauseClaim("shaders")
       #if os(tvOS)
       .focusSection()
       #endif
@@ -263,6 +264,7 @@ internal struct PauseMenuView: View {
           .navigationTitle(L("Settings"))
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showSettingsSheet = false } } }
       }
+      .pauseClaim("settings")
       .claimsController()
     }
     .sheet(isPresented: $showControllersSheet) {
@@ -270,6 +272,7 @@ internal struct PauseMenuView: View {
         ControllerHubView(system: .forRunningGame, onBack: { showControllersSheet = false })
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showControllersSheet = false } } }
       }
+      .pauseClaim("controllers")
       .claimsController()
     }
     #endif
@@ -278,6 +281,7 @@ internal struct PauseMenuView: View {
     // to another device.
     .sheet(isPresented: $showContinuitySheet) {
       ContinuityHandoffSheet(game: game)
+        .pauseClaim("continuity")
         .claimsController()
     }
   }
@@ -694,7 +698,8 @@ internal struct PauseMenuView: View {
         // Right side - Menu options
         VStack(alignment: .leading, spacing: 24) {
           // Hero resume button
-          Button(action: { TVEmulationBridge.resume()
+          Button(action: {
+            PauseArbiter.shared.userResume()
             onClose()
           }) {
             HStack(spacing: 16) {
@@ -1114,6 +1119,7 @@ internal struct PauseMenuView: View {
             // else that might still be listening (e.g. a future D18
             // migration of this very list, design doc §6 step 5).
             NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
+              .pauseClaim("filmstrip")
               .claimsController()
           }
         }
@@ -1301,6 +1307,7 @@ internal struct PauseMenuView: View {
         #endif
         .sheet(isPresented: $showFilmstripSheet) {
           NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
+            .pauseClaim("filmstrip")
             .claimsController()
         }
       }
@@ -1321,7 +1328,7 @@ internal struct PauseMenuView: View {
       showsRecenterPointer: Self.showsRecenterPointer
     )
     let actions = PauseMenuActions(
-      resume: { TVEmulationBridge.resume(); onClose() },
+      resume: { PauseArbiter.shared.userResume(); onClose() },
       toggleMute: { toggleMute() },
       openFastForwardPicker: { showFastForwardSpeedPicker = true },
       openSaveStates: { pane = .saves },
@@ -1343,7 +1350,7 @@ internal struct PauseMenuView: View {
         // The baseline is captured on the next motion sample, so resuming right away takes it from
         // how the device is held while playing, not from the pause-menu posture.
         TCDeviceMotion.requestPointerRecenter()
-        TVEmulationBridge.resume()
+        PauseArbiter.shared.userResume()
         onClose()
         #endif
       }
