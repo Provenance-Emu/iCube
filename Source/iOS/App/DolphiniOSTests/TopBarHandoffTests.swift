@@ -105,28 +105,4 @@ final class TopBarHandoffTests: XCTestCase {
     XCTAssertEqual(EmulationToastOverlay.topOffset(barHeight: 0, barVisible: true), EmulationToastOverlay.restingTopOffset)
   }
 
-  func testASurfaceThatPausedTheGameResumesIt() {
-    var paused = false
-    let owned = PauseOwnership.claim(isPaused: false, pausedFromBar: false, pause: { paused = true })
-    XCTAssertTrue(owned)
-    XCTAssertTrue(paused)
-  }
-
-  func testAPauseTheUserMadeFromTheBarIsNotResumedByTheSurface() {
-    var paused = false
-    var resumed = 0
-    let owned = PauseOwnership.claim(isPaused: true, pausedFromBar: true, pause: { paused = true })
-    XCTAssertFalse(owned)
-    XCTAssertFalse(paused)
-    PauseOwnership.release(owned: owned, resume: { resumed += 1 })
-    XCTAssertEqual(resumed, 0)
-  }
-
-  func testSomeOtherPauseIsResumedOnCloseAsBefore() {
-    var resumed = 0
-    let owned = PauseOwnership.claim(isPaused: true, pausedFromBar: false, pause: {})
-    XCTAssertTrue(owned)
-    PauseOwnership.release(owned: owned, resume: { resumed += 1 })
-    XCTAssertEqual(resumed, 1)
-  }
 }

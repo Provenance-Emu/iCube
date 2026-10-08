@@ -272,8 +272,8 @@ struct EmulationScreen: View {
   @State var topBar = TopBarVisibility()
   /// The bar's measured height; the toast sits just under it.
   @State private var topBarHeight: CGFloat = 0
-  /// True when opening controller settings is what paused the game, so closing them may resume it. A pause
-  /// the user made from the bar stays.
+  /// The arbiter claim held while the controller-settings sheet is up; released when it is dismissed. A
+  /// pause the user made from the bar is a separate claim and stays.
   @State private var controllerSettingsToken: PauseArbiter.Token?
   var showTopBar: Bool { topBar.isVisible }
   @State private var fastForwardEnabled = false
@@ -1488,8 +1488,8 @@ struct EmulationScreen: View {
     }
   }
 
-  /// The settings sheet paused the game on open (unless it was already paused); resume only what it paused,
-  /// and refresh the pause icon without waiting for the 1 s poll.
+  /// The settings sheet claimed a pause on open; release that claim (the game resumes only if nothing else
+  /// holds it) and refresh the pause icon without waiting for the 1 s poll.
   private func controllerSettingsDismissed() {
     if let token = controllerSettingsToken {
       PauseArbiter.shared.release(token)
@@ -1514,6 +1514,10 @@ struct EmulationScreen: View {
     showControllerSettings = false
     showPauseMenu = false
     showSettings = false
+    // The covered-root guard in PauseMenuView.onDisappear cannot see this teardown (its Controllers sheet is
+    // still up), so the menu's own tokens go here. User and disconnect pauses stay.
+    PauseArbiter.shared.release(reason: PauseArbiter.Reason.pauseMenu)
+    PauseArbiter.shared.release(reason: PauseArbiter.Reason.pauseMenuRequest)
     topBar.hideNow()
     isEditingLayout = true
   }
@@ -1699,6 +1703,7 @@ private struct SettingsNavigationFallback: ViewModifier {
       content
         .navigationDestination(isPresented: $showSettings) {
           SettingsRootView()
+            .pauseClaim("settings")
           #if !os(tvOS)
             .navigationBarTitleDisplayMode(.inline)
           #endif
