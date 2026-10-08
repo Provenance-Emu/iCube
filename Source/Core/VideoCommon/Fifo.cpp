@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "Common/Assert.h"
+#include "Common/AtomicLSE.h"
 #include "Common/BlockingLoop.h"
 #include "Common/ChunkFile.h"
 #include "Common/Event.h"
@@ -221,10 +222,13 @@ void* FifoManager::PopFifoAuxBuffer(size_t size)
 // Description: RunGpuLoop() sends data through this function.
 void FifoManager::ReadDataFromFifo(u32 read_ptr)
 {
-  if (GPFifo::GATHER_PIPE_SIZE >
-      static_cast<size_t>(m_video_buffer + FIFO_SIZE - m_video_buffer_write_ptr))
+  // iCube: outside deterministic mode only the thread running the GPU writes the write_ptr, so a
+  // relaxed load and a release store replace the seq_cst `+=`, a full-barrier read-modify-write
+  // that ran for every 32-byte chunk (a top video-thread hot spot on device, 2026-10-07).
+  u8* write_ptr = m_video_buffer_write_ptr.load(std::memory_order_relaxed);
+  if (GPFifo::GATHER_PIPE_SIZE > static_cast<size_t>(m_video_buffer + FIFO_SIZE - write_ptr))
   {
-    const size_t existing_len = m_video_buffer_write_ptr - m_video_buffer_read_ptr;
+    const size_t existing_len = write_ptr - m_video_buffer_read_ptr;
     if (GPFifo::GATHER_PIPE_SIZE > static_cast<size_t>(FIFO_SIZE - existing_len))
     {
       PanicAlertFmt("FIFO out of bounds (existing {} + new {} > {})", existing_len,
@@ -232,13 +236,13 @@ void FifoManager::ReadDataFromFifo(u32 read_ptr)
       return;
     }
     memmove(m_video_buffer, m_video_buffer_read_ptr, existing_len);
-    m_video_buffer_write_ptr = m_video_buffer + existing_len;
+    write_ptr = m_video_buffer + existing_len;
     m_video_buffer_read_ptr = m_video_buffer;
   }
   // Copy new video instructions to m_video_buffer for future use in rendering the new picture
   auto& memory = m_system.GetMemory();
-  memory.CopyFromEmu(m_video_buffer_write_ptr, read_ptr, GPFifo::GATHER_PIPE_SIZE);
-  m_video_buffer_write_ptr += GPFifo::GATHER_PIPE_SIZE;
+  memory.CopyFromEmu(write_ptr, read_ptr, GPFifo::GATHER_PIPE_SIZE);
+  m_video_buffer_write_ptr.store(write_ptr + GPFifo::GATHER_PIPE_SIZE, std::memory_order_release);
 }
 
 // The deterministic_gpu_thread version.
@@ -358,12 +362,12 @@ void FifoManager::RunGpuLoop()
                        "instability in the game. Please report it.",
                        distance);
 
-            u8* write_ptr = m_video_buffer_write_ptr;
+            u8* write_ptr = m_video_buffer_write_ptr.load(std::memory_order_relaxed);
             m_video_buffer_read_ptr = OpcodeDecoder::RunFifo(
                 DataReader(m_video_buffer_read_ptr, write_ptr), &cyclesExecuted);
 
             fifo.CPReadPointer.store(readPtr, std::memory_order_relaxed);
-            fifo.CPReadWriteDistance.fetch_sub(GPFifo::GATHER_PIPE_SIZE, std::memory_order_seq_cst);
+            Common::AtomicFetchSub(fifo.CPReadWriteDistance, GPFifo::GATHER_PIPE_SIZE);
             if ((write_ptr - m_video_buffer_read_ptr) == 0)
             {
               fifo.SafeCPReadPointer.store(fifo.CPReadPointer.load(std::memory_order_relaxed),

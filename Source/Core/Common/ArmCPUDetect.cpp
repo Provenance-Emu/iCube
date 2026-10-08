@@ -241,6 +241,14 @@ void CPUInfo::Detect()
   bSHA2 = true;
   bCRC32 = true;
 
+  // iCube: ARMv8.1 LSE atomics. The core targets apple-a10 (iPadOS 17 still runs the A10 iPad
+  // 6th gen, tvOS the A8 Apple TV HD), so the compiler emits LL/SC loops for every atomic RMW;
+  // Common/AtomicLSE.h dispatches the contended ones to ldadd at runtime when this is set.
+  int has_lse = 0;
+  size_t has_lse_len = sizeof(has_lse);
+  if (sysctlbyname("hw.optional.arm.FEAT_LSE", &has_lse, &has_lse_len, nullptr, 0) == 0)
+    bLSE = has_lse != 0;
+
 #ifdef IPHONEOS
   //
   // Check for CRC32 intrinsics support via the device's model. (Apple doesn't provide a better way
@@ -395,6 +403,8 @@ std::string CPUInfo::Summarize()
     sum.push_back("AES");
   if (bCRC32)
     sum.push_back("CRC32");
+  if (bLSE)
+    sum.push_back("LSE");
   if (bSHA1)
     sum.push_back("SHA1");
   if (bSHA2)
