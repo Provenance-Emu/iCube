@@ -18,13 +18,18 @@ enum MenuStyle: Equatable {
   case list
   /// Pause-overlay tiles (unified menu UX spec §5): `columns` per row, an `InfoShelf` beneath, rendered
   /// natively on BOTH platforms (unlike `.grid`/`.list`, which tvOS flattens to a `List`).
-  case tiles(columns: Int)
+  case tiles(columns: Int, compact: Bool = false)
 
   var columns: Int {
     switch self {
-    case .tiles(let columns): return max(1, columns)
+    case .tiles(let columns, _): return max(1, columns)
     case .grid, .list: return 1
     }
+  }
+
+  var isCompactTiles: Bool {
+    if case .tiles(_, let compact) = self { return compact }
+    return false
   }
 
   var navConfig: MenuControllerNav.Config {
@@ -235,7 +240,10 @@ struct MenuScreen: View {
     guard item.isEnabled, let longPress = item.effectiveLongPress else { return }
     suppressActivateFor = item.id
     switch longPress {
-    case .action(let run): run()
+    case .action(let run):
+      run()
+      // The sheet cancels the touch, so the Button action never fires to consume the flag.
+      suppressActivateFor = nil
     case .options(let title, let options, let selection):
       longPressPicker = LongPressPicker(id: item.id, title: title, options: options, selection: selection)
     }
@@ -297,7 +305,7 @@ struct MenuScreen: View {
     return Button { activateFromButton(item) } label: {
       TileFace(
         icon: item.icon, title: item.title, badge: item.currentValueTitle ?? item.badge,
-        tint: item.tint ?? .accentColor, isDestructive: isDestructive, isEnabled: item.isEnabled)
+        tint: item.tint ?? .accentColor, isDestructive: isDestructive, isEnabled: item.isEnabled, isCompact: style.isCompactTiles)
     }
     .buttonStyle(FocusButtonStyle(isFocusedOverride: focused))
     .disabled(!item.isEnabled)
@@ -548,6 +556,8 @@ struct MenuScreen: View {
     case .tiles: columnCount = style.columns
     case .list: columnCount = 1
     }
+    let stepsPickersInGrid: Bool
+    if case .tiles = style { stepsPickersInGrid = false } else { stepsPickersInGrid = true }
 
     if let modal {
       // Rows are frozen; A/B drive the modal instead, through the SAME
@@ -564,7 +574,7 @@ struct MenuScreen: View {
 
     let result = router.update(
       padInputs: padInputs, at: time, model: model, focusedID: focusedID, isActive: isActive,
-      columns: columnCount)
+      columns: columnCount, stepsPickersInGrid: stepsPickersInGrid)
     // Focus only ever appears once a controller is actually present — never
     // seeded in `.onAppear`, so a touch-only session shows no tint. A brand
     // new pad emits no events on its first tick (it gets `resync`ed, see
@@ -623,24 +633,10 @@ struct MenuScreen: View {
 
   private var tvFocusedItem: MenuItem? { tvFocusedID.flatMap { model.item(id: $0) } }
 
-  /// A tile; a `.cycle` tile also steps its value on d-pad left/right (other directions are not
-  /// handled, so the focus engine still moves focus).
-  @ViewBuilder
+  /// A tile. All four directions are left to the focus engine; A cycles a `.cycle` tile and a long-press lists it.
   private func tvTile(_ item: MenuItem) -> some View {
-    let base = tile(item, focused: tvFocusedID == item.id)
+    tile(item, focused: tvFocusedID == item.id)
       .focused($tvFocusedID, equals: item.id)
-    if let stepping = item.role.steppable, case .cycle = item.role {
-      base.onMoveCommand { direction in
-        guard item.isEnabled else { return }
-        switch direction {
-        case .left: stepPicker(stepping.selection, options: stepping.options, by: -1)
-        case .right: stepPicker(stepping.selection, options: stepping.options, by: 1)
-        default: break
-        }
-      }
-    } else {
-      base
-    }
   }
 
   @ViewBuilder

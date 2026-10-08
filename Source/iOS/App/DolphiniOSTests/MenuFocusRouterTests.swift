@@ -433,6 +433,20 @@ final class MenuFocusRouterTests: XCTestCase {
     XCTAssertNil(result.adjust, "in a grid, right moves focus; it does not step the card")
   }
 
+  /// `.tiles`: left/right moves focus even across a cycle tile; nothing is adjusted.
+  func test_tiles_rightMovesFocusOntoAndPastACycleItem_withoutAdjusting() {
+    var router = MenuFocusRouter(config: cfg)
+    let cycle = MenuItem(id: "b", title: "b", role: .cycle(options: [("x", AnyHashable(1)), ("y", AnyHashable(2))], selection: .constant(AnyHashable(1))))
+    let model = MenuModel(sections: [MenuSection(id: "s1", items: [item("a"), cycle, item("c")])])
+    var result = router.update(.init(right: true), at: 0, model: model, focusedID: "a", isActive: true, columns: 3, stepsPickersInGrid: false)
+    XCTAssertEqual(result.focusedID, "b")
+    XCTAssertNil(result.adjust)
+    result = router.update(.init(), at: 0.01, model: model, focusedID: "b", isActive: true, columns: 3, stepsPickersInGrid: false)
+    result = router.update(.init(right: true), at: 0.02, model: model, focusedID: "b", isActive: true, columns: 3, stepsPickersInGrid: false)
+    XCTAssertEqual(result.focusedID, "c")
+    XCTAssertNil(result.adjust)
+  }
+
   /// `MenuScreen` drives the multi-pad path; the column count must reach it too.
   func test_multiPad_grid_downMovesARow() {
     var router = MenuFocusRouter(config: cfg)

@@ -44,13 +44,14 @@ struct MenuFocusRouter {
     model: MenuModel,
     focusedID: String?,
     isActive: Bool,
-    columns: Int = 1
+    columns: Int = 1,
+    stepsPickersInGrid: Bool = true
   ) -> MenuFocusUpdate {
     guard isActive else {
       nav.resync(input, at: time)
       return MenuFocusUpdate(focusedID: focusedID)
     }
-    return MenuFocusRouter.apply(nav.update(input, at: time), model: model, focusedID: focusedID, columns: columns)
+    return MenuFocusRouter.apply(nav.update(input, at: time), model: model, focusedID: focusedID, columns: columns, stepsPickersInGrid: stepsPickersInGrid)
   }
 
   /// Multi-pad variant (D18 gap: "MenuScreen listens only to the first
@@ -85,7 +86,8 @@ struct MenuFocusRouter {
     model: MenuModel,
     focusedID: String?,
     isActive: Bool,
-    columns: Int = 1
+    columns: Int = 1,
+    stepsPickersInGrid: Bool = true
   ) -> MenuFocusUpdate {
     let connected = Set(padInputs.map(\.0))
     navByPad = navByPad.filter { connected.contains($0.key) }
@@ -106,7 +108,7 @@ struct MenuFocusRouter {
       }
       let events = padNav.update(input, at: time)
       navByPad[padID] = padNav
-      let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current, columns: columns)
+      let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current, columns: columns, stepsPickersInGrid: stepsPickersInGrid)
       current = padResult.focusedID
       if activated == nil { activated = padResult.activatedID }
       if longActivated == nil { longActivated = padResult.longActivatedID }
@@ -136,14 +138,16 @@ struct MenuFocusRouter {
   /// the two paths cannot silently drift apart.
   ///
   /// With `columns` > 1 (`MenuStyle.grid`), up/down move one row and d-pad left/right move
-  /// within the row (`gridMove`) instead of stepping a picker; a picker row still steps.
+  /// within the row (`gridMove`) instead of stepping a picker; a picker row still steps unless
+  /// `stepsPickersInGrid` is false (`MenuStyle.tiles`: left/right always moves focus).
   /// With 1 (a list), up/down walk the flat order and left/right only ever step a picker.
   /// Neither direction ever activates: only A does.
   private static func apply(
     _ events: [MenuControllerNav.Event],
     model: MenuModel,
     focusedID: String?,
-    columns: Int = 1
+    columns: Int = 1,
+    stepsPickersInGrid: Bool = true
   ) -> MenuFocusUpdate {
     var current = focusedID
     var activated: String?
@@ -169,7 +173,7 @@ struct MenuFocusRouter {
       case .back:
         didGoBack = true
       case .adjust(let step):
-        if columns > 1, !MenuFocusRouter.isPicker(current, in: model) {
+        if columns > 1, !stepsPickersInGrid || !MenuFocusRouter.isPicker(current, in: model) {
           current = MenuFocusRouter.gridMove(current, rowStep: 0, columnStep: step, columns: columns, in: model)
         } else if let current {
           adjust = (current, step)
