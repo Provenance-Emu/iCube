@@ -180,16 +180,17 @@ final class SettingsWriteBackTests: XCTestCase {
   }
 
   /// "Recommended" deletes every CIR key, so each knob follows its compiled default, including
-  /// Dynamic Links (default ON), which the old hand-kept "recommended" list switched off.
+  /// Dynamic Links and NEON paired-single math (both default ON), which the old hand-kept
+  /// "recommended" list switched off.
   func testResetToRecommendedRestoresCompiledDefaults() {
     DOLConfigBridge.setCirDynLinking(false)
-    DOLConfigBridge.setCirPsNeon(true)
+    DOLConfigBridge.setCirPsNeon(false)
     DOLConfigBridge.setCirSpecializedOpsValidate(true)
 
     DOLConfigBridge.resetCirOptimizationsToDefaults()
 
     XCTAssertTrue(DOLConfigBridge.cirDynLinking())
-    XCTAssertFalse(DOLConfigBridge.cirPsNeon())
+    XCTAssertTrue(DOLConfigBridge.cirPsNeon())
     XCTAssertFalse(DOLConfigBridge.cirSpecializedOpsValidate())
     let leftover = DOLConfigBridge.baseLayerSnapshot().keys.filter { $0.lowercased().hasPrefix("dolphin.core.cir") }
     XCTAssertEqual(leftover, [])

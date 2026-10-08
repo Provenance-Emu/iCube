@@ -16,7 +16,7 @@ import Foundation
 @objc(ICubeSettingsRepair)
 final class SettingsRepair: NSObject {
   /// Raise to run the rules once more on every install.
-  static let currentVersion = 1
+  static let currentVersion = 2
   static let versionKey = "settings_repair_v"
   /// The adaptive clock's own one-time purge (EmulationCoordinator) runs below this schema. The
   /// repair covers what it did, so it marks the schema current instead of letting it run later.
@@ -28,6 +28,8 @@ final class SettingsRepair: NSObject {
     case always
     /// Delete when the stored bool is true.
     case whenTrue
+    /// Delete when the stored bool is false.
+    case whenFalse
     /// Delete when the stored integer is one of these.
     case whenInt(Set<Int>)
     /// Delete when the stored bool is false and this device has fastmem; the launch seed then
@@ -74,6 +76,13 @@ final class SettingsRepair: NSObject {
     ConfigRule(key: "graphics.settings.shadercompilationmode", condition: .whenInt([0, 2]), since: 1),
     ConfigRule(key: "dolphin.core.fastmem", condition: .whenFalseWithFastmem, since: 1),
     ConfigRule(key: "dolphin.core.fastmemarena", condition: .whenFalseWithFastmem, since: 1),
+    // v2 (2026-10-08): these four now default ON. Off was their old default, which the pre-v1 screens
+    // wrote back for anyone who opened them, so a stored False almost always is that leak rather than a
+    // choice and would hide the new default. A stored True is kept.
+    ConfigRule(key: "graphics.settings.hirestextures", condition: .whenFalse, since: 2),
+    ConfigRule(key: "graphics.settings.cachehirestextures", condition: .whenFalse, since: 2),
+    ConfigRule(key: "graphics.settings.enablemods", condition: .whenFalse, since: 2),
+    ConfigRule(key: "dolphin.core.cirpsneon", condition: .whenFalse, since: 2),
   ]
 
   /// (clock, enable) pairs. A clock below 100 % is the adaptive clock's leftover; an enabled clock
@@ -224,6 +233,8 @@ final class SettingsRepair: NSObject {
       return true
     case .whenTrue:
       return parseBool(value) == true
+    case .whenFalse:
+      return parseBool(value) == false
     case let .whenInt(values):
       return parseInt(value).map(values.contains) ?? false
     case .whenFalseWithFastmem:

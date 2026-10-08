@@ -66,8 +66,10 @@ const Info<bool> GFX_DUMP_MIP_TEXTURES{{System::GFX, "Settings", "DumpMipTexture
 const Info<bool> GFX_DUMP_BASE_TEXTURES{{System::GFX, "Settings", "DumpBaseTextures"}, true};
 const Info<int> GFX_TEXTURE_PNG_COMPRESSION_LEVEL{
     {System::GFX, "Settings", "TexturePNGCompressionLevel"}, 6};
-const Info<bool> GFX_HIRES_TEXTURES{{System::GFX, "Settings", "HiresTextures"}, false};
-const Info<bool> GFX_CACHE_HIRES_TEXTURES{{System::GFX, "Settings", "CacheHiresTextures"}, false};
+// iCube: custom textures, their prefetch and graphics mods default ON (upstream: off). Nothing changes
+// for a game with no pack or mod installed; prefetch is capped at half of RAM by CustomAssetCache.
+const Info<bool> GFX_HIRES_TEXTURES{{System::GFX, "Settings", "HiresTextures"}, true};
+const Info<bool> GFX_CACHE_HIRES_TEXTURES{{System::GFX, "Settings", "CacheHiresTextures"}, true};
 const Info<bool> GFX_DUMP_EFB_TARGET{{System::GFX, "Settings", "DumpEFBTarget"}, false};
 const Info<bool> GFX_DUMP_XFB_TARGET{{System::GFX, "Settings", "DumpXFBTarget"}, false};
 const Info<bool> GFX_DUMP_FRAMES_AS_IMAGES{{System::GFX, "Settings", "DumpFramesAsImages"}, false};
@@ -176,7 +178,8 @@ const Info<bool> GFX_SW_DUMP_TEV_TEX_FETCHES{{System::GFX, "Settings", "SWDumpTe
 
 const Info<bool> GFX_PREFER_GLES{{System::GFX, "Settings", "PreferGLES"}, false};
 
-const Info<bool> GFX_MODS_ENABLE{{System::GFX, "Settings", "EnableMods"}, false};
+// iCube: default ON, see GFX_HIRES_TEXTURES.
+const Info<bool> GFX_MODS_ENABLE{{System::GFX, "Settings", "EnableMods"}, true};
 
 const Info<std::string> GFX_DRIVER_LIB_NAME{{System::GFX, "Settings", "DriverLibName"}, ""};
 

@@ -78,6 +78,33 @@ final class SettingsRepairTests: XCTestCase {
     }
   }
 
+  /// v2: keys whose default flipped to on lose a stored False (the old default the screens leaked)
+  /// and keep a stored True.
+  func testFlippedToOnDefaultsAreDeletedOnlyWhenOff() {
+    let keys = [
+      "Graphics.Settings.HiresTextures", "Graphics.Settings.CacheHiresTextures",
+      "Graphics.Settings.EnableMods", "Dolphin.Core.CIRPsNeon",
+    ]
+    for key in keys {
+      XCTAssertEqual(plan([key: "False"]), [key], key)
+      XCTAssertEqual(plan([key: "0"]), [key], key)
+      XCTAssertEqual(plan([key: "True"]), key == "Dolphin.Core.CIRPsNeon" ? [key] : [], key)
+    }
+  }
+
+  /// An install that already ran v1 runs only the v2 rules: the flipped defaults lose a stored False,
+  /// and a CIR key the v1 prefix rule would have deleted is now the user's choice and stays.
+  func testV2RunsOnlyTheFlippedDefaultRulesOnAV1Install() {
+    let base = [
+      "Graphics.Settings.HiresTextures": "False",
+      "Graphics.Settings.EnableMods": "True",
+      "Dolphin.Core.CIRPsNeon": "False",
+      "Dolphin.Core.CIRDynLinking": "False",
+    ]
+    XCTAssertEqual(SettingsRepair.baseKeysToDelete(base, fastmemAvailable: true, afterVersion: 1),
+                   ["Dolphin.Core.CIRPsNeon", "Graphics.Settings.HiresTextures"])
+  }
+
   func testVISkipModeOnIsDeletedOffAndAutoAreKept() {
     let key = "Graphics.Hacks.VISkipMode"
     XCTAssertEqual(plan([key: "1"]), [key])

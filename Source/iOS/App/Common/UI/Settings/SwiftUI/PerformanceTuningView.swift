@@ -173,9 +173,9 @@ struct PerformanceTuningView: View {
           optRow("Dynamic Links", recommended: true, isOn: $cirDynLinking,
                  set: { DOLConfigBridge.setCirDynLinking($0) },
                  caption: "Extends Block Linking to function returns and virtual calls (blr/bctr) and to the not-taken side of conditional branches: each exit remembers the last block it went to and jumps straight there when it repeats. Big win on call-heavy games (Wind Waker, Chibi-Robo). Requires Block Linking. Applies on next game launch.")
-          optRow("NEON Paired-Single Math", isOn: $cirPsNeon,
+          optRow("NEON Paired-Single Math", recommended: true, isOn: $cirPsNeon,
                  set: { DOLConfigBridge.setCirPsNeon($0) },
-                 caption: "Computes GameCube paired-single FP ops (ps_mul/add/madd/…) both lanes at once with ARM NEON instead of two scalar ops — the trick the JIT uses. Only fires for finite/normal values in IEEE mode; otherwise falls back to scalar. Experimental. Measured 2026-09-26 on Wind Waker: no throughput gain (−1 %, worse 1 % low). Applies on next game launch.")
+                 caption: "Computes GameCube paired-single FP ops (ps_mul/add/madd/…) both lanes at once with ARM NEON instead of two scalar ops — the trick the JIT uses. Results are bit-identical to the scalar path; rare values (infinities, NaNs, tiny numbers) fall back to it. Measured 2026-10-08: +4 % on Need for Speed: Underground, neutral on Wind Waker and Chibi-Robo. Applies on next game launch.")
 
           if showCIROpts {
             optRow("FP Load/Store Specialization", isOn: $cirSpecializedFpLs,

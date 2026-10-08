@@ -1375,19 +1375,17 @@ const Info<bool> MAIN_CIR_STORE_LOOP_FF{{System::Main, "Core", "CIRStoreLoopFF"}
 // rB, and CTR match. Trap on mismatch. Slow; on-device correctness passes only. Default OFF.
 const Info<bool> MAIN_CIR_STORE_LOOP_FF_VALIDATE{
     {System::Main, "Core", "CIRStoreLoopFFValidate"}, false};
-// iCube: NEON (ARM64) paired-single ARITHMETIC fast-path. Default OFF. The scalar interpreter emulates each
+// iCube: NEON (ARM64) paired-single ARITHMETIC fast-path. Default ON. The scalar interpreter emulates each
 // ps_* op as TWO independent scalar f64 lanes; on ARM64 both lanes fit in one float64x2 register, so the
 // multiply/add/FMA runs once instead of twice (this is what Dolphin's JitArm64 already does for these ops,
 // but the interpreter — which iCube's App-Store CachedInterpreter and IR engine both fall back to — does
-// not). The flag is consulted once via a function-local static the first time any accelerated ps_* op runs
-// (thread-safe init; toggling requires an emulation restart, same effective semantics as the psq fast-path
-// which reads at CachedInterpreter::Init). When OFF — and on every non-ARM64 build regardless of the flag —
-// the accelerated ops run their UNCHANGED scalar bodies, so behavior is byte-identical to the baseline. The
-// fast path only fires when it can be proven bit-identical to scalar (default round-to-nearest, NI==0, all
-// input AND output lanes finite-and-normal, and for the FMA family no even-tie that the scalar single-round
-// correction would nudge); any failure runs the whole op scalar (never per-lane, to preserve NI_* FPSCR
-// exception ordering). Opt-in A/B + on-device verified before defaulting on.
-const Info<bool> MAIN_CIR_PS_NEON{{System::Main, "Core", "CIRPsNeon"}, false};
+// not). Read at each engine Init (Interpreter::RefreshNeonPairedConfig). When OFF — and on every non-ARM64
+// build regardless of the flag — the accelerated ops run their UNCHANGED scalar bodies. The fast path only
+// fires when it is bit-identical to scalar (round-to-nearest, inputs normal or +/-0, results +/-0 or at least
+// the smallest normal single, no FMA even-tie; see Interpreter_Paired.cpp), else the whole op runs scalar.
+// Defaulted on 2026-10-08 once exact zeros were admitted: 97-99.6 % of ops take the fast path on ten
+// games, NFS Underground +4.3 %, Wind Waker / Chibi-Robo neutral within noise; Tools/psneon-fuzz guards it.
+const Info<bool> MAIN_CIR_PS_NEON{{System::Main, "Core", "CIRPsNeon"}, true};
 // iCube: self-validation for CIRPsNeon. EXACT analogue of the other CIR double-run validators. When ON, for
 // every ps_* op that takes the NEON path, ALSO run the original scalar computation and ASSERT_MSG the two FD
 // lanes are bit-identical (compare the u64 bit-patterns, NOT float ==, so a NaN/sign/precision divergence is
