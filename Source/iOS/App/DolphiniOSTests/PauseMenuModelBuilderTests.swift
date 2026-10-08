@@ -57,11 +57,11 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(with.sections[1].items.map(\.id), ["save-states", "cheats", "shaders", "controllers", "continuity", "recenter-pointer"])
   }
 
-  func test_fastForward_isACycle_offFirst_fiveOptions() {
+  func test_fastForward_isACycle_offFirst_sixOptions() {
     let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     guard case .cycle(let options, _)? = model.item(id: "fast-forward")?.role else { return XCTFail("cycle") }
-    XCTAssertEqual(options.map(\.0), ["Off", "2x", "4x", "8x", "Unlimited"])
-    XCTAssertEqual(options.map(\.1), [AnyHashable(-1), AnyHashable(200), AnyHashable(400), AnyHashable(800), AnyHashable(0)])
+    XCTAssertEqual(options.map(\.0), ["Off", "2x", "3x", "4x", "8x", "Unlimited"])
+    XCTAssertEqual(options.map(\.1), [AnyHashable(-1), AnyHashable(200), AnyHashable(300), AnyHashable(400), AnyHashable(800), AnyHashable(0)])
   }
 
   func test_quickSave_badgeIsSlot_andLongPressOffersTenSlots() {
@@ -93,6 +93,17 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("explicit long press") }
     run()
     XCTAssertEqual(log, ["shaders"])
+  }
+
+  func test_shaders_withNothingToCycle_isAPlainAction() {
+    let lone = PauseMenuState(quickSlot: 3, isMuted: false, activeCheatCount: 0,
+                              shaderOptions: [("None", ShaderQuickApply.noneValue)], showsRecenterPointer: false)
+    let model = PauseMenuModelBuilder.make(state: lone, bindings: bindings(), actions: actions())
+    let item = model.item(id: "shaders")!
+    guard case .action(let run) = item.role else { return XCTFail("action") }
+    run()
+    XCTAssertEqual(log, ["shaders"])
+    XCTAssertEqual(item.description, "Choose a post-processing shader.")
   }
 
   func test_cheatsBadge_showsActiveCount() {

@@ -17,7 +17,7 @@ internal struct PauseMenuView: View {
 
   @FocusState private var focused: FocusField?
   internal enum FocusField: Hashable {
-    case openSaves, back, slot(Int), save, load
+    case back, slot(Int), save, load
     /// D10: the tvOS saves pane's "View All States" button, into the redesigned
     /// grid (`SaveStateFilmstripView`) -- previously iOS-only.
     case filmstrip
@@ -45,6 +45,7 @@ internal struct PauseMenuView: View {
   @State private var shaderOptions: [(String, AnyHashable)] = []
   /// WS-4: "continue this game on another device".
   @State private var showContinuitySheet: Bool = false
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   /// True while any sheet, full-screen cover, or non-main pane owned by this menu is
   /// up. Gates the resume-on-disappear below (B1): every one of these presentations
@@ -61,8 +62,9 @@ internal struct PauseMenuView: View {
 
   // Quick actions: the two things people actually reach for mid-game without
   // wanting to leave the pause menu (mute to take a call, fast-forward past a
-  // cutscene). Kept as plain toggles on the main pane rather than a settings
-  // trip. Mute is shared with the in-game top bar via `QuickMute`.
+  // cutscene). Mute is a toggle tile and fast-forward a cycle tile on the main
+  // pane rather than a settings trip. Mute is shared with the in-game top bar
+  // via `QuickMute`.
   @State private var isMuted: Bool = false
   @State private var fastForwardEnabled: Bool = false
   /// This menu's hold on the pause (spec §4.3). Adopted from the gesture tracker's pending claim when
@@ -168,9 +170,9 @@ internal struct PauseMenuView: View {
     #if os(tvOS)
     .focusSection()
     #endif
-    .onChange(of: pane) { p in
+    .onChange(of: pane) { _, newPane in
       DispatchQueue.main.async {
-        switch p {
+        switch newPane {
         case .main:
           // D15: covers backing out of Cheats (toggled codes should update the
           // badge) as well as the other panes, which is a harmless extra read.
@@ -191,6 +193,11 @@ internal struct PauseMenuView: View {
     .onExitCommand {
       // At .main the tile grid's own onBack closes (coalesced), and the confirm overlays handle theirs.
       if pane != .main { pane = .main }
+    }
+    // Spec §5.3: Play/Pause on the remote resumes, from any pane.
+    .onPlayPauseCommand {
+      PauseArbiter.shared.userResume()
+      onClose()
     }
     #endif
     // D16: the pause menu gets the quick-preview picker (tap a card to apply,
@@ -254,18 +261,19 @@ internal struct PauseMenuView: View {
   private var mainMenu: some View {
     GeometryReader { proxy in
       let isTV = platform == .tvos
-      let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: isTV)
+      let compactHeight = isCompactHeight
+      let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: isTV, isCompactHeight: compactHeight)
       ZStack {
         if isTV {
           HStack(alignment: .top, spacing: 48) {
             coverColumn.frame(width: 220)
-            tiles(columns: columns)
+            tiles(columns: columns, compact: false)
           }
           .padding(60)
         } else {
           VStack(alignment: .leading, spacing: 8) {
-            compactHeader.padding(16)
-            tiles(columns: columns)
+            compactHeader(isCompactHeight: compactHeight).padding(compactHeight ? 12 : 16)
+            tiles(columns: columns, compact: compactHeight)
           }
         }
         // Reset/Exit are in-place `MenuScreen` overlays: each self-claims its own coordinator scope on appear,
@@ -293,11 +301,24 @@ internal struct PauseMenuView: View {
     .environment(\.colorScheme, .dark)
   }
 
-  private func tiles(columns: Int) -> some View {
-    MenuScreen(model: pauseMenuModel, style: .tiles(columns: columns), onBack: {
+  /// True for iPhone landscape; never on tvOS.
+  private var isCompactHeight: Bool {
+    #if os(iOS)
+    return verticalSizeClass == .compact
+    #else
+    return false
+    #endif
+  }
+
+  private func tiles(columns: Int, compact: Bool) -> some View {
+    // Modal while a confirm overlay is up: on tvOS the focus engine can otherwise land back on a tile.
+    let confirmUp = showResetDialog || showExitDialog
+    return MenuScreen(model: pauseMenuModel, style: .tiles(columns: columns, compact: compact), onBack: {
       guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
       onClose()
     })
+    .disabled(confirmUp)
+    .allowsHitTesting(!confirmUp)
   }
 
   private var backdrop: some View {
@@ -322,19 +343,27 @@ internal struct PauseMenuView: View {
     }
   }
 
-  private var compactHeader: some View {
+  @ViewBuilder
+  private func compactHeader(isCompactHeight: Bool) -> some View {
     HStack(alignment: .center, spacing: 12) {
-      Image(uiImage: game.coverImage)
-        .resizable().aspectRatio(2.0 / 3.0, contentMode: .fit).frame(width: 56)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-      VStack(alignment: .leading, spacing: 2) {
+      if !isCompactHeight {
+        Image(uiImage: game.coverImage)
+          .resizable().aspectRatio(2.0 / 3.0, contentMode: .fit).frame(width: 56)
+          .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+      }
+      if isCompactHeight {
         Text(game.title).font(.headline).foregroundStyle(.white).lineLimit(1)
         Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
+      } else {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(game.title).font(.headline).foregroundStyle(.white).lineLimit(1)
+          Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
+        }
       }
       Spacer()
       Button(L("Close")) { onClose() }
         .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-        .padding(.horizontal, 14).padding(.vertical, 8)
+        .padding(.horizontal, 14).padding(.vertical, isCompactHeight ? 4 : 8)
         .background(Capsule().fill(.ultraThinMaterial))
         .buttonStyle(.plain)
     }
@@ -343,7 +372,7 @@ internal struct PauseMenuView: View {
   /// Shared wrapper for the Reset/Exit confirm overlays: a
   /// translucent scrim behind a card with an explicit title/message above
   /// the confirm/cancel row list (the model's own `MenuSection.header` is
-  /// left `nil` for these three models specifically so `MenuScreen`'s grid
+  /// left `nil` for these models specifically so `MenuScreen`'s grid
   /// doesn't render a second, differently-styled title below this one).
   private var confirmWidth: CGFloat { platform == .tvos ? 640 : 380 }
 
@@ -365,8 +394,8 @@ internal struct PauseMenuView: View {
         // padding = 80n + 20 for n rows) instead of letting a 2-button
         // confirm card stretch to the screen's height. `maxHeight`, not a
         // fixed `height`, so it can still shrink (and `MenuScreen.grid`
-        // scroll) in landscape or under Dynamic Type, where the 6-row
-        // Fast-Forward overlay may not fit.
+        // scroll) in landscape or under Dynamic Type, where a long
+        // confirm list may not fit.
         #if os(tvOS)
         MenuScreen(model: model, style: .list, onBack: onBack)
           .frame(maxHeight: CGFloat(model.allItems.count) * 110 + 40)
@@ -797,9 +826,21 @@ struct PauseMenuActions {
 enum PauseMenuModelBuilder {
   static let fastForwardOff: AnyHashable = AnyHashable(-1)
   static let fastForwardOptions: [(String, AnyHashable)] = [
-    (L("Off"), fastForwardOff), ("2x", AnyHashable(200)), ("4x", AnyHashable(400)), ("8x", AnyHashable(800)), (L("Unlimited"), AnyHashable(0)),
+    (L("Off"), fastForwardOff), ("2x", AnyHashable(200)), ("3x", AnyHashable(300)), ("4x", AnyHashable(400)), ("8x", AnyHashable(800)), (L("Unlimited"), AnyHashable(0)),
   ]
   static let slotCount = 10
+
+  /// With nothing to cycle (only "None"), the tile just opens the full picker.
+  private static func shadersItem(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions) -> MenuItem {
+    if state.shaderOptions.count <= 1 {
+      return MenuItem(id: "shaders", title: L("Shaders"), icon: "wand.and.stars", tint: .orange, role: .action(actions.openShaders),
+                      description: L("Choose a post-processing shader."))
+    }
+    return MenuItem(id: "shaders", title: L("Shaders"), icon: "wand.and.stars", tint: .orange,
+                    role: .cycle(options: state.shaderOptions, selection: bindings.shader),
+                    description: L("Tap to cycle recent shaders. Long-press for the full picker."),
+                    longPress: .action(actions.openShaders))
+  }
 
   static func make(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions) -> MenuModel {
     let slotOptions: [(String, AnyHashable)] = (1 ... slotCount).map { (String(format: L("Slot %d"), $0), AnyHashable($0)) }
@@ -828,10 +869,7 @@ enum PauseMenuModelBuilder {
       MenuItem(id: "cheats", title: L("Cheats"), icon: "star.circle", tint: .yellow, role: .action(actions.openCheats),
                badge: state.activeCheatCount > 0 ? "\(state.activeCheatCount)" : nil,
                description: L("Enable Gecko and Action Replay codes for this game.")),
-      MenuItem(id: "shaders", title: L("Shaders"), icon: "wand.and.stars", tint: .orange,
-               role: .cycle(options: state.shaderOptions, selection: bindings.shader),
-               description: L("Tap to cycle recent shaders. Long-press for the full picker."),
-               longPress: .action(actions.openShaders)),
+      shadersItem(state: state, bindings: bindings, actions: actions),
       MenuItem(id: "controllers", title: L("Controllers"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers),
                description: L("Players, devices and what each one plays as.")),
       MenuItem(id: "continuity", title: L("Continue Elsewhere"), icon: "arrow.triangle.branch", tint: .teal, role: .action(actions.openContinuity),
