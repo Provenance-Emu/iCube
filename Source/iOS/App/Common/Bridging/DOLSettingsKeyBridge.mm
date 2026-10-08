@@ -487,6 +487,12 @@ t[@"cirGatherPipeCopyFusion"] = mk(DOLSettingTypeBool, NO,
       ^(id v){ [DOLConfigBridge setCirPsNeon:CoerceBool(v)]; },
       MakeLayerGetter(Config::MAIN_CIR_PS_NEON), MakeResetBlock(Config::MAIN_CIR_PS_NEON.GetLocation()));
 
+    t[@"cirPsNeonValidate"] = mk(DOLSettingTypeBool, NO,
+      ^id{ return @([DOLConfigBridge cirPsNeonValidate]); },
+      ^(id v){ [DOLConfigBridge setCirPsNeonValidate:CoerceBool(v)]; },
+      MakeLayerGetter(Config::MAIN_CIR_PS_NEON_VALIDATE),
+      MakeResetBlock(Config::MAIN_CIR_PS_NEON_VALIDATE.GetLocation()));
+
     t[@"gfxHackNeonTextureDecode"] = mk(DOLSettingTypeBool, YES,
       ^id{ return @([DOLConfigBridge gfxHackNeonTextureDecode]); },
       ^(id v){ [DOLConfigBridge setGfxHackNeonTextureDecode:CoerceBool(v)]; },
