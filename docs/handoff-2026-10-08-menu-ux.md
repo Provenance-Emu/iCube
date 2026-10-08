@@ -6,7 +6,7 @@ Written 2026-10-08 for a fresh session. Everything you need is in the repo; this
 
 Paste this into the new session, started in `~/Workspace/icube-menu-ux` (or any iCube checkout on `develop`):
 
-> Execute `docs/superpowers/plans/2026-10-07-pause-arbiter.md` task by task using superpowers:subagent-driven-development, in a worktree on branch `fix/pause-arbiter` from `develop`. The spec is `docs/superpowers/specs/2026-10-07-unified-menu-ux-design.md`. Read `docs/handoff-2026-10-08-menu-ux.md` first for the traps. Open the PR against `develop` when the device gates in Task 6 are done. Do not start `docs/superpowers/plans/2026-10-07-menukit-pause-overlay.md` until PR 1 is merged.
+> Execute `docs/superpowers/plans/2026-10-07-pause-arbiter.md` task by task using superpowers:subagent-driven-development, in a worktree on branch `fix/pause-arbiter` from `develop`. The spec is `docs/superpowers/specs/2026-10-07-unified-menu-ux-design.md`. Read `docs/handoff-2026-10-08-menu-ux.md` first for the traps. Open the PR against `develop` when the device gates in Task 6 are done. Do not start `docs/superpowers/plans/2026-10-07-menukit-pause-overlay.md` until PR 1 is merged, nor `docs/superpowers/plans/2026-10-08-settings-on-engine.md` until PR 2 is merged.
 
 ## What exists
 
@@ -15,9 +15,10 @@ Paste this into the new session, started in `~/Workspace/icube-menu-ux` (or any 
 | Spec (approved by the owner) | `docs/superpowers/specs/2026-10-07-unified-menu-ux-design.md` |
 | PR 1 plan: PauseArbiter | `docs/superpowers/plans/2026-10-07-pause-arbiter.md` |
 | PR 2 plan: MenuKit + pause overlay | `docs/superpowers/plans/2026-10-07-menukit-pause-overlay.md` |
+| PR 3 plan: settings on the engine | `docs/superpowers/plans/2026-10-08-settings-on-engine.md` (after PR 2; lists its spec deviations at the top) |
 | Branch holding these docs | `docs/unified-menu-ux` (commits de3cca3cb0, 08cc9d231c), worktree `~/Workspace/icube-menu-ux` |
 | Code PRs not yet started | PR 1 (`fix/pause-arbiter`), PR 2 (`feat/menukit-pause-overlay`) |
-| Later plans not yet written | PR 3 settings shell on the engine (spec §6), PR 4 controller hub reorg (spec §7), PR 5 remaining settings leaves |
+| Later plans not yet written | PR 4 controller hub reorg (spec §7), PR 5 remaining settings leaves in batches |
 
 Merge the docs branch first or cherry-pick the two commits onto the PR branch, so the plan and spec travel with the code.
 
