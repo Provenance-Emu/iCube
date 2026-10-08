@@ -215,7 +215,7 @@ struct MenuScreen: View {
       action()
     case .toggle(let binding):
       binding.wrappedValue.toggle()
-    case .picker(let options, let selection):
+    case .picker(let options, let selection), .cycle(let options, let selection):
       if let next = MenuItemRole.cycled(options: options, current: selection.wrappedValue, step: 1) {
         selection.wrappedValue = next
       }
@@ -276,6 +276,11 @@ struct MenuScreen: View {
         NavigationLink { destinationView } label: { rowLabel(item) }
       case .custom(let customView):
         customView
+      case .cycle:
+        Button { performActivate(item) } label: {
+          rowLabel(title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint,
+                   badge: item.currentValueTitle ?? item.badge)
+        }
       case .navigation, .action, .destructive:
         Button { performActivate(item) } label: { rowLabel(item) }
       }
@@ -401,9 +406,9 @@ struct MenuScreen: View {
       performActivate(item)
     }
     if let adjust = result.adjust, let item = model.item(id: adjust.id), item.isEnabled,
-       case .picker(let options, let selection) = item.role,
-       let next = MenuItemRole.cycled(options: options, current: selection.wrappedValue, step: adjust.step) {
-      selection.wrappedValue = next
+       let stepping = item.role.steppable,
+       let next = MenuItemRole.cycled(options: stepping.options, current: stepping.selection.wrappedValue, step: adjust.step) {
+      stepping.selection.wrappedValue = next
     }
     if result.didGoBack {
       onBack?()
@@ -504,6 +509,13 @@ struct MenuScreen: View {
         .focused($tvFocusedID, equals: item.id)
     case .custom(let customView):
       customView
+    case .cycle:
+      Button { performActivate(item) } label: {
+        rowLabel(title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint,
+                 badge: item.currentValueTitle ?? item.badge)
+      }
+      .disabled(!item.isEnabled)
+      .focused($tvFocusedID, equals: item.id)
     case .navigation, .action, .destructive:
       Button { performActivate(item) } label: { rowLabel(item) }
         .disabled(!item.isEnabled)

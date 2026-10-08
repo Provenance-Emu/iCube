@@ -236,8 +236,11 @@ struct MenuFocusRouter {
   }
 
   private static func isPicker(_ id: String?, in model: MenuModel) -> Bool {
-    guard let id, let role = model.item(id: id)?.role, case .picker = role else { return false }
-    return true
+    guard let id, let role = model.item(id: id)?.role else { return false }
+    switch role {
+    case .picker, .cycle: return true
+    default: return false
+    }
   }
 
   /// Reconciles a live `focusedID` against a freshly rebuilt `model`.
