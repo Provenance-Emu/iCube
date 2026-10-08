@@ -285,6 +285,11 @@ let iCube = Target.target(
         // shim must build on both iOS and tvOS (its weak __llvm_profile_* refs no-op on a
         // non-instrumented shipping core, so this never changes normal-build behavior).
         .glob("Common/**/*.c"),
+        // The screen-filter Metal sources (Common/Swift/Shaders/*.metal) build the app's
+        // default.metallib, which FilterChain loads. The old hand-kept pbxproj compiled them; when
+        // release builds moved to this project (126aa2b8ff) nothing globbed *.metal, the library
+        // went missing and every screen filter silently stopped drawing.
+        .glob("Common/**/*.metal"),
         .glob(
             "Common/**/*.{m,mm}",
             excluding: ["Common/UI/Settings/**/*.{m,mm}"]

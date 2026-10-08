@@ -242,6 +242,11 @@ struct ShaderSettingsView: View {
           }
         }
         .disabled(!enabled)
+        if let error = DOLShaderPostProcessor.shared.lastError {
+          Label(error, systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote)
+            .foregroundStyle(.red)
+        }
       }
 
       Section(header: Text(L("Advanced")), footer: Text(L("Compatibility options for specific devices or shaders. Most people never need these."))) {

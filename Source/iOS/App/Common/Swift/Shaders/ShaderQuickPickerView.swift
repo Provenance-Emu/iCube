@@ -64,6 +64,13 @@ struct ShaderQuickPickerView: View {
       VStack(alignment: .leading, spacing: 20) {
         heroSection
 
+        if let error = DOLShaderPostProcessor.shared.lastError {
+          Label(error, systemImage: "exclamationmark.triangle.fill")
+            .font(.footnote)
+            .foregroundStyle(.red)
+            .padding(.horizontal, 16)
+        }
+
         if isLoading {
           ProgressView(L("Loading shaders…"))
             .frame(maxWidth: .infinity)

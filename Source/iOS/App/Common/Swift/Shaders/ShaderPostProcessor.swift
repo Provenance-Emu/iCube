@@ -15,6 +15,29 @@ import MetalKit
   private var cachedPresetPath: String?
   private var lastDrawableSize: CGSize = .zero
   private var needsReload: Bool = false
+  /// Why the screen filter could not be set up or loaded, or nil once one draws. The pickers show it.
+  /// Written on the main queue only.
+  @objc private(set) var lastError: String?
+  /// Messages already logged and announced, so a failure that repeats every frame is reported once.
+  /// Main queue only.
+  private var reportedErrors: Set<String> = []
+
+  /// Records a failure where the user can see it: logged once, announced once in a snackbar, and kept
+  /// in `lastError` for the pickers. Every caller would otherwise fall back to the unfiltered frame
+  /// silently, which is how a missing default.metallib went unnoticed for weeks.
+  private func report(_ message: String) {
+    DispatchQueue.main.async {
+      self.lastError = message
+      guard self.reportedErrors.insert(message).inserted else { return }
+      NSLog("[Shaders] %@", message)
+      NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil,
+                                      userInfo: ["text": message])
+    }
+  }
+
+  private func clearError() {
+    DispatchQueue.main.async { self.lastError = nil }
+  }
   #if DEBUG
   private var debugChecker: MTLTexture?
   #endif
@@ -45,7 +68,12 @@ import MetalKit
   @objc func configureWithDevice(_ device: MTLDevice) {
     if self.device?.registryID != device.registryID {
       self.device = device
-      filter = try? FilterChain(device: device)
+      do {
+        filter = try FilterChain(device: device)
+      } catch {
+        filter = nil
+        report(String(format: L("Screen filters are unavailable: %@"), "\(error)"))
+      }
       library = nil
       cachedPresetPath = nil
       #if DEBUG
@@ -151,7 +179,7 @@ import MetalKit
       filter.hasShader = false
       library = nil
       cachedPresetPath = nil
-      // print("[Shaders] Swift: failed to resolve preset path for current bundle")
+      report(String(format: L("Shader preset not found: %@"), p))
       return
     }
     _ = FileManager.default.fileExists(atPath: url.path)
@@ -166,13 +194,14 @@ import MetalKit
       cachedPresetPath = p
       // Restore persisted parameter values for this preset
       restorePersistedParameters(forPresetPath: p)
+      clearError()
       DispatchQueue.main.async {
         NotificationCenter.default.post(name: Notification.Name("DOLShaderPresetDidLoad"), object: nil)
       }
       // print("[Shaders] Swift: loaded preset OK, hasShader=\(filter.hasShader)")
       return
     } catch {
-      // print("[Shaders] Swift: data decode failed: \(error)")
+      // Fall through to the URL decoder; only its failure is reported.
     }
     do {
       // print("[Shaders] Swift: trying url decode fallback")
@@ -183,6 +212,7 @@ import MetalKit
       cachedPresetPath = p
       // Restore persisted parameter values for this preset
       restorePersistedParameters(forPresetPath: p)
+      clearError()
       DispatchQueue.main.async {
         NotificationCenter.default.post(name: Notification.Name("DOLShaderPresetDidLoad"), object: nil)
       }
@@ -192,7 +222,8 @@ import MetalKit
       filter.hasShader = false
       library = nil
       cachedPresetPath = nil
-      // print("[Shaders] Swift: failed to load preset: \(error)")
+      report(String(format: L("Couldn't load shader %@: %@"),
+                    URL(fileURLWithPath: p).deletingPathExtension().lastPathComponent, "\(error)"))
     }
   }
 
