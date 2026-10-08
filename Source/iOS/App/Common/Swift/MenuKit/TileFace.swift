@@ -13,9 +13,50 @@ struct TileFace: View {
   let tint: Color
   let isDestructive: Bool
   let isEnabled: Bool
+  /// Short variant for compact-height layouts (iPhone landscape): icon and title on one line.
+  var isCompact: Bool = false
   @Environment(\.menuTheme) private var theme
 
-  var body: some View {
+  #if os(tvOS)
+  private static let regularPadding: CGFloat = 14
+  #else
+  private static let regularPadding: CGFloat = 12
+  #endif
+  private static let compactMinHeight: CGFloat = 56
+  private static let compactIconSize: CGFloat = 28
+
+  private var compactContent: some View {
+    HStack(spacing: 8) {
+      if let icon {
+        Image(systemName: icon)
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundStyle(isDestructive ? .red : tint)
+          .frame(width: Self.compactIconSize, height: Self.compactIconSize)
+          .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+              .fill((isDestructive ? Color.red : tint).opacity(0.15))
+          )
+      }
+      VStack(alignment: .leading, spacing: 1) {
+        Text(title)
+          .font(.footnote.weight(.semibold))
+          .foregroundStyle(isDestructive ? .red : .white)
+          // A single word shrinks rather than hyphenating across two lines.
+          .lineLimit(title.contains(" ") ? 2 : 1)
+          .minimumScaleFactor(0.6)
+          .multilineTextAlignment(.leading)
+        if let badge, !badge.isEmpty {
+          Text(badge)
+            .font(.caption2.weight(.medium))
+            .lineLimit(1).minimumScaleFactor(0.7)
+            .foregroundStyle(.white.opacity(0.7))
+        }
+      }
+      Spacer(minLength: 0)
+    }
+  }
+
+  private var regularContent: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(alignment: .top) {
         if let icon {
@@ -42,13 +83,19 @@ struct TileFace: View {
       }
       Spacer(minLength: 0)
       Text(title)
-        .font(.headline)
+        .font(theme.tileTitleFont)
         .foregroundStyle(isDestructive ? .red : .white)
         .lineLimit(2)
         .multilineTextAlignment(.leading)
     }
-    .padding(14)
-    .frame(maxWidth: .infinity, minHeight: theme.tileMinHeight, alignment: .leading)
+  }
+
+  var body: some View {
+    Group {
+      if isCompact { compactContent } else { regularContent }
+    }
+    .padding(isCompact ? 10 : Self.regularPadding)
+    .frame(maxWidth: .infinity, minHeight: isCompact ? Self.compactMinHeight : theme.tileMinHeight, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
         .fill(theme.tileFill)

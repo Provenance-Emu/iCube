@@ -8,8 +8,13 @@ import CoreGraphics
 enum PauseTileLayout {
   static let tvColumns = 6
 
-  static func columns(forWidth width: CGFloat, isTV: Bool) -> Int {
+  /// Width from which a compact-height window (iPhone landscape) gets the wider grid.
+  static let compactHeightWideThreshold: CGFloat = 800
+  static let compactHeightColumns = 6
+
+  static func columns(forWidth width: CGFloat, isTV: Bool, isCompactHeight: Bool = false) -> Int {
     if isTV { return tvColumns }
+    if isCompactHeight, width >= compactHeightWideThreshold { return compactHeightColumns }
     switch width {
     case ..<600: return 3
     case ..<900: return 4

@@ -23,4 +23,9 @@ final class PauseTileLayoutTests: XCTestCase {
     XCTAssertEqual(PauseTileLayout.columns(forWidth: 1024, isTV: false), 5)
     XCTAssertEqual(PauseTileLayout.columns(forWidth: 1366, isTV: false), 6)
   }
+
+  func test_compactHeight_wideWindowGetsSixColumns() {
+    XCTAssertEqual(PauseTileLayout.columns(forWidth: 852, isTV: false, isCompactHeight: true), 6)
+    XCTAssertEqual(PauseTileLayout.columns(forWidth: 852, isTV: false, isCompactHeight: false), 4)
+  }
 }

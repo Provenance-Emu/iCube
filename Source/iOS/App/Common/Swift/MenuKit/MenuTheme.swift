@@ -15,6 +15,7 @@ protocol MenuTheme {
   var focusScale: CGFloat { get }
   var tileMinHeight: CGFloat { get }
   var shelfHeight: CGFloat { get }
+  var tileTitleFont: Font { get }
 }
 
 struct ICubeTheme: MenuTheme {
@@ -26,9 +27,11 @@ struct ICubeTheme: MenuTheme {
   #if os(tvOS)
   var tileMinHeight: CGFloat = 180
   var shelfHeight: CGFloat = 80
+  var tileTitleFont: Font = .headline
   #else
   var tileMinHeight: CGFloat = 96
   var shelfHeight: CGFloat = 56
+  var tileTitleFont: Font = .subheadline.weight(.semibold)
   #endif
 }
 
