@@ -17,15 +17,12 @@ internal struct PauseMenuView: View {
 
   @FocusState private var focused: FocusField?
   internal enum FocusField: Hashable {
-    case resume, openSaves, cheats, mapping, settings, shaders, continuity
-    case exit, back, slot(Int), save, load, mute, fastForward
+    case openSaves, back, slot(Int), save, load
     /// D10: the tvOS saves pane's "View All States" button, into the redesigned
     /// grid (`SaveStateFilmstripView`) -- previously iOS-only.
     case filmstrip
-    /// D14: rows in the tvOS fast-forward speed chooser (`tvFastForwardSpeedMenu`).
-    case fastForwardOff, fastForwardChoice(Int)
   }
-  private enum Pane { case main, saves, cheats, controllers, fastForwardSpeed }
+  private enum Pane { case main, saves, cheats, controllers }
   @State private var pane: Pane = .main
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
@@ -42,6 +39,10 @@ internal struct PauseMenuView: View {
   }
 
   @State private var showFilmstripSheet: Bool = false
+  /// When the menu first appeared; `BackCoalescer` drops the Back press that opened it.
+  @State private var openedAt = Date()
+  /// "None" first, then recent presets; backs the Shaders tile's cycle.
+  @State private var shaderOptions: [(String, AnyHashable)] = []
   /// WS-4: "continue this game on another device".
   @State private var showContinuitySheet: Bool = false
 
@@ -67,29 +68,16 @@ internal struct PauseMenuView: View {
   /// This menu's hold on the pause (spec §4.3). Adopted from the gesture tracker's pending claim when
   /// there is one, otherwise claimed here. Released only on a real teardown, see `onDisappear`.
   @State private var pauseToken: PauseArbiter.Token?
-  /// D14: drives the iOS speed picker, a `MenuScreen`-backed confirm overlay
-  /// (`PauseMenuView.fastForwardConfirmModel`, D18). Declared unconditionally,
-  /// like `showControllersSheet`/`showSettingsSheet` above, because
-  /// `iosMainMenu` is compiled for both platforms even though it is only
-  /// presented on iOS.
-  @State private var showFastForwardSpeedPicker: Bool = false
   /// Same UserDefaults key `TVEmulationBridge` reads when fast-forward is turned on
   /// (also written by the Settings > General fast-forward speed picker) — kept as one
   /// named constant here rather than a literal at each pause-menu call site.
   private static let fastForwardSpeedPercentKey = "fast_forward_speed_percent"
-  /// The choices offered from the pause menu specifically (1.5x/2x/3x/Unlimited).
-  /// Settings > General offers a wider range for the same UserDefaults key.
-  private static let fastForwardSpeedChoices: [Int] = [150, 200, 300, 0]
-
   /// D15: "N active" badge on the Cheats item. Refreshed on appear and whenever the
   /// pane returns to `.main` (including from the Cheats pane itself), so toggling a
   /// cheat and backing out updates the count without needing a manual refresh.
   @State private var activeCheatCount: Int = 0
   private func refreshActiveCheatCount() {
     activeCheatCount = CheatsMenuView.activeCheatCount(forGameId: game.gameID, revision: game.revision)
-  }
-  private var cheatsSubtitle: String {
-    activeCheatCount > 0 ? String(format: L("%d active"), activeCheatCount) : L("Game enhancement codes")
   }
 
   /// Mutes / unmutes through the helper the top bar shares, so both always agree.
@@ -102,33 +90,6 @@ internal struct PauseMenuView: View {
   /// bridge's own default (300 = 3x) before anything has been picked.
   private var configuredFastForwardPercent: Int {
     (UserDefaults.standard.object(forKey: Self.fastForwardSpeedPercentKey) as? Int) ?? 300
-  }
-
-  private static func fastForwardSpeedLabel(percent: Int) -> String {
-    if percent == 0 { return L("Unlimited") }
-    let multiplier = Double(percent) / 100.0
-    return multiplier.truncatingRemainder(dividingBy: 1) == 0
-      ? "\(Int(multiplier))x"
-      : String(format: "%.1fx", multiplier)
-  }
-
-  private var fastForwardSubtitle: String {
-    guard fastForwardEnabled else { return L("Off — choose a speed to start") }
-    return String(format: L("On at %@ — choose to change"), Self.fastForwardSpeedLabel(percent: configuredFastForwardPercent))
-  }
-
-  /// Persists `percent`, turns fast-forward on if it wasn't already (a mid-flight
-  /// speed change re-applies live via `setFastForwardSpeedPercent(_:)` without a
-  /// toggle-off/on blip), then leaves the pause menu immediately so the game runs
-  /// at the new speed right away.
-  private func selectFastForwardSpeed(_ percent: Int) {
-    TVEmulationBridge.setFastForwardSpeedPercent(percent)
-    if !TVEmulationBridge.isFastForwardEnabled() {
-      _ = TVEmulationBridge.toggleFastForward()
-    }
-    fastForwardEnabled = true
-    PauseArbiter.shared.userResume()
-    onClose()
   }
 
   /// Turns fast-forward off without leaving the pause menu, mirroring the old
@@ -164,13 +125,8 @@ internal struct PauseMenuView: View {
           ControllerHubView(system: .forRunningGame, onBack: { pane = .main })
         }
         .onAppear { NSLog("[PAUSE] Controllers hub appeared") }
-      case .fastForwardSpeed:
-        tvFastForwardSpeedMenu
-          .onAppear { NSLog("[PAUSE] Fast forward speed menu appeared") }
       #else
       case .controllers:
-        mainMenu
-      case .fastForwardSpeed:
         mainMenu
       #endif
       }
@@ -186,10 +142,12 @@ internal struct PauseMenuView: View {
       // onAppear runs again each time a child sheet closes: keep the token we already hold.
       if pauseToken == nil {
         pauseToken = PauseArbiter.shared.adoptPending() ?? PauseArbiter.shared.claim(PauseArbiter.Reason.pauseMenu)
+        openedAt = Date()
       }
       isMuted = QuickMute.isMuted
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
       refreshActiveCheatCount()
+      refreshShaderState()
     }
     .onDisappear {
       // `.sheet`/`.fullScreenCover` presentation (Shaders, Settings, Controllers,
@@ -214,7 +172,6 @@ internal struct PauseMenuView: View {
       DispatchQueue.main.async {
         switch p {
         case .main:
-          focused = .resume
           // D15: covers backing out of Cheats (toggled codes should update the
           // badge) as well as the other panes, which is a harmless extra read.
           refreshActiveCheatCount()
@@ -224,21 +181,22 @@ internal struct PauseMenuView: View {
           focused = .back
         case .controllers:
           focused = .back
-        case .fastForwardSpeed:
-          focused = .back
         }
       }
+    }
+    .onChange(of: showShaders) { _, shown in
+      if !shown { refreshShaderState() }
     }
     #if os(tvOS)
     .onExitCommand {
       if pane == .main {
+        guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
         onClose()
       } else {
         pane = .main
       }
     }
     #endif
-    .modifier(DefaultFocusCompat(focused: $focused, value: .resume))
     // D16: the pause menu gets the quick-preview picker (tap a card to apply,
     // long-press or its gear button for parameters) rather than the full
     // Settings-style `ShaderSettingsView` list — that view (and its debug tools)
@@ -295,151 +253,101 @@ internal struct PauseMenuView: View {
   }
   #endif
 
+  /// One tile-grid root for both platforms: cover column beside the tiles on tvOS, a compact header above them on iOS.
   @ViewBuilder
   private var mainMenu: some View {
-    if platform == .ios {
-      iosMainMenu
-    } else {
-      tvMainMenu
-    }
-  }
-
-  // iOS: compact layout, background unchanged; the row list itself is now a
-  // `MenuModel` rendered by `MenuScreen` (D18, design doc §6 step 2) instead
-  // of a hand-built `LazyVGrid` of `menuButtonIOS` rows. `MenuScreen` self-
-  // claims a `ControllerFocusCoordinator` scope and polls `GCController` on
-  // its own timer, so this view no longer installs a raw `valueChangedHandler`
-  // (the deleted `setupPauseControllerNav`/`PauseMenuInputGate` machinery) --
-  // see the design doc's Implementation Status for why `MenuScreen` polls
-  // instead of using a handler.
-  private var iosMainMenu: some View {
-    let backgroundView = ZStack {
-      // Use cover image for iOS (better aspect ratio fit)
-      Image(uiImage: game.coverImage)
-        .resizable()
-        .scaledToFill()
-        .blur(radius: 24)
-        .opacity(0.5)
-        .ignoresSafeArea()
-      LinearGradient(
-        colors: [
-          Color.black.opacity(0.85),
-          Color.black.opacity(0.35),
-          Color.black.opacity(0.85)
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-      .ignoresSafeArea()
-    }
-
-    return ZStack {
-      // `MenuScreen(.grid)` is its own `ScrollView` (design doc §5's card
-      // grid), so the header (Close button, cover, title) sits in a plain
-      // `VStack` above it rather than nesting two scroll views. The header
-      // gets its own `.padding(16)` rather than sharing one with the
-      // `MenuScreen` below -- `gridBody` already applies its own 16pt
-      // padding internally, so wrapping both in one shared padding would
-      // double the grid's inset to 32pt.
-      VStack(alignment: .leading, spacing: 16) {
-        VStack(alignment: .leading, spacing: 16) {
-          HStack {
-            Button(action: { onClose() }) {
-              Text(L("Close"))
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
-                .background(
-                  Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-                )
-                .overlay(
-                  Capsule(style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-            Spacer()
+    GeometryReader { proxy in
+      let isTV = platform == .tvos
+      let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: isTV)
+      ZStack {
+        backdrop
+        if isTV {
+          HStack(alignment: .top, spacing: 48) {
+            coverColumn.frame(width: 220)
+            tiles(columns: columns)
           }
-
-          HStack(alignment: .top, spacing: 12) {
-            Image(uiImage: game.coverImage)
-              .resizable()
-              .aspectRatio(2.0 / 3.0, contentMode: .fit)
-              .frame(width: 96)
-              .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-              Text(game.title)
-                .font(.headline)
-                .foregroundStyle(.white)
-              Text(game.gameID)
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.7))
-            }
-            Spacer(minLength: 0)
+          .padding(60)
+        } else {
+          VStack(alignment: .leading, spacing: 8) {
+            compactHeader.padding(16)
+            tiles(columns: columns)
           }
         }
-        .padding(16)
-
-        MenuScreen(model: pauseMenuModel, style: .grid, onBack: nil)
-      }
-      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-      .background(backgroundView)
-
-      // Reset/Exit/Fast-Forward used to be `.alert`/`.confirmationDialog`,
-      // which a raw `valueChangedHandler` had no way to know about -- A/d-pad
-      // kept driving `iosMenuItems` underneath (the gap this migration closes,
-      // design doc's Implementation Status item 2). As in-place `MenuScreen`
-      // overlays instead, each one self-claims its own coordinator scope on
-      // appear, so the root `MenuScreen` above resyncs (not moves/activates)
-      // for as long as one of these is up -- no extra wiring needed, and
-      // unlike a `.sheet` this never touches `isPauseMenuChildPresented` since
-      // the outer `ZStack` never disappears.
-      if showResetDialog {
-        confirmOverlay(
-          title: L("Reset System"),
-          message: L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."),
-          model: resetConfirmModel,
-          onBack: { showResetDialog = false }
-        )
-      }
-      if showExitDialog {
-        confirmOverlay(
-          title: L("Exit Game"),
-          message: L("Do you want to quit the game? Unsaved progress will be lost."),
-          model: exitConfirmModel,
-          onBack: { showExitDialog = false }
-        )
-      }
-      if showFastForwardSpeedPicker {
-        confirmOverlay(
-          title: L("Fast Forward Speed"),
-          message: L("Starts fast-forward at this speed and closes the pause menu."),
-          model: fastForwardConfirmModel,
-          onBack: { showFastForwardSpeedPicker = false }
-        )
+        // Reset/Exit are in-place `MenuScreen` overlays: each self-claims its own coordinator scope on appear,
+        // so the tiles underneath stop reacting for as long as one is up, and unlike a `.sheet` this never
+        // touches `isPauseMenuChildPresented`.
+        if showResetDialog {
+          confirmOverlay(title: L("Reset System"),
+                         message: L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."),
+                         model: resetConfirmModel, onBack: { showResetDialog = false })
+        }
+        if showExitDialog {
+          confirmOverlay(title: L("Exit Game"), message: L("Do you want to quit the game? Unsaved progress will be lost."),
+                         model: exitConfirmModel, onBack: { showExitDialog = false })
+        }
+        EmulationToastOverlay(barHeight: 0, barVisible: false)
       }
     }
-    // `MenuScreen`'s row `Text`s take no explicit color (design doc's grid
-    // style is otherwise unstyled outside the §5 token constants it does
-    // apply) -- this pins `.primary`/`.secondary` to their dark-mode values so
-    // titles/subtitles stay legible over the always-dark blurred cover
-    // background regardless of system appearance, the same fix already used
-    // for other dark-background screens (`DolphinBlogView`, `SaveStateCardView`).
-    // `.environment(_:_:)`, not `.preferredColorScheme(_:)` -- the latter
-    // applies to the nearest enclosing presentation (this view's whole
-    // `fullScreenCover`), which would also force dark mode on the Settings/
-    // Controllers/Shaders sheets opened from here on a light-mode device.
-    // `.environment` only affects this subtree.
+    // `MenuScreen` row text takes no explicit color; pin the dark-mode values so titles stay legible over the
+    // always-dark backdrop whatever the system appearance. `.environment`, not `.preferredColorScheme`, so the
+    // Settings/Controllers/Shaders sheets opened from here are unaffected.
     .environment(\.colorScheme, .dark)
   }
 
-  /// Shared wrapper for the Reset/Exit/Fast-Forward confirm overlays: a
+  private func tiles(columns: Int) -> some View {
+    MenuScreen(model: pauseMenuModel, style: .tiles(columns: columns), onBack: {
+      guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
+      onClose()
+    })
+  }
+
+  private var backdrop: some View {
+    ZStack {
+      Image(uiImage: game.bannerImage ?? game.coverImage)
+        .resizable().scaledToFill().blur(radius: 24).opacity(0.5).ignoresSafeArea()
+      LinearGradient(colors: [.black.opacity(0.85), .black.opacity(0.35), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
+        .ignoresSafeArea()
+    }
+  }
+
+  private var coverColumn: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Image(uiImage: game.coverImage)
+        .resizable().aspectRatio(2.0 / 3.0, contentMode: .fit).frame(width: 220)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
+      Text(game.title).font(.title3.bold()).foregroundStyle(.white).lineLimit(2)
+      Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
+      Text(L("Paused")).font(.caption.weight(.semibold)).foregroundStyle(.white)
+        .padding(.horizontal, 10).padding(.vertical, 5).background(Capsule().fill(Color.white.opacity(0.18)))
+    }
+  }
+
+  private var compactHeader: some View {
+    HStack(alignment: .center, spacing: 12) {
+      Image(uiImage: game.coverImage)
+        .resizable().aspectRatio(2.0 / 3.0, contentMode: .fit).frame(width: 56)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+      VStack(alignment: .leading, spacing: 2) {
+        Text(game.title).font(.headline).foregroundStyle(.white).lineLimit(1)
+        Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
+      }
+      Spacer()
+      Button(L("Close")) { onClose() }
+        .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+        .padding(.horizontal, 14).padding(.vertical, 8)
+        .background(Capsule().fill(.ultraThinMaterial))
+        .buttonStyle(.plain)
+    }
+  }
+
+  /// Shared wrapper for the Reset/Exit confirm overlays: a
   /// translucent scrim behind a card with an explicit title/message above
   /// the confirm/cancel row list (the model's own `MenuSection.header` is
   /// left `nil` for these three models specifically so `MenuScreen`'s grid
   /// doesn't render a second, differently-styled title below this one).
+  private var confirmWidth: CGFloat { platform == .tvos ? 640 : 380 }
+
   @ViewBuilder
   private func confirmOverlay(title: String, message: String, model: MenuModel, onBack: @escaping () -> Void) -> some View {
     ZStack {
@@ -460,11 +368,17 @@ internal struct PauseMenuView: View {
         // fixed `height`, so it can still shrink (and `MenuScreen.grid`
         // scroll) in landscape or under Dynamic Type, where the 6-row
         // Fast-Forward overlay may not fit.
+        #if os(tvOS)
+        MenuScreen(model: model, style: .list, onBack: onBack)
+          .frame(maxHeight: CGFloat(model.allItems.count) * 110 + 40)
+          .focusSection()
+        #else
         MenuScreen(model: model, style: .grid, onBack: onBack)
           .frame(maxHeight: CGFloat(model.allItems.count) * 80 + 20)
+        #endif
       }
       .padding(16)
-      .frame(maxWidth: 380)
+      .frame(maxWidth: confirmWidth)
       .background(
         RoundedRectangle(cornerRadius: 16, style: .continuous)
           .fill(.ultraThinMaterial)
@@ -476,589 +390,6 @@ internal struct PauseMenuView: View {
       .padding(24)
     }
     .transition(.opacity)
-  }
-
-  /// tvOS pause-menu row for an in-place toggle (mute, fast-forward) rather than a
-  /// pane change — same visual shape as the other rows in `tvMainMenu` so it reads
-  /// as part of the same list, without duplicating that ~25-line HStack per toggle.
-  @ViewBuilder
-  private func tvMenuToggleRow(icon: String, title: String, subtitle: String, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      HStack(spacing: 20) {
-        ZStack {
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(.white.opacity(0.1))
-            .frame(width: 48, height: 48)
-          Image(systemName: icon)
-            .font(.system(size: 20, weight: .medium))
-            .foregroundColor(.white)
-        }
-        VStack(alignment: .leading, spacing: 4) {
-          Text(title)
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundColor(.white)
-          Text(subtitle)
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(.white.opacity(0.7))
-        }
-        Spacer()
-      }
-      .padding(.horizontal, 24)
-      .padding(.vertical, 16)
-      .background(.white.opacity(0.05))
-      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-    .buttonStyle(.plain)
-  }
-
-  /// D14: one focusable row per fast-forward speed choice (or the "Turn Off" row),
-  /// styled like `tvFastForwardSpeedMenu`'s other rows. `selected` shows a checkmark
-  /// for the speed currently configured while fast-forward is on.
-  @ViewBuilder
-  private func tvFastForwardChoiceRow(icon: String, title: String, subtitle: String, selected: Bool, action: @escaping () -> Void) -> some View {
-    Button(action: action) {
-      HStack(spacing: 20) {
-        ZStack {
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(.white.opacity(0.1))
-            .frame(width: 48, height: 48)
-          Image(systemName: selected ? "checkmark.circle.fill" : icon)
-            .font(.system(size: 20, weight: .medium))
-            .foregroundColor(selected ? .green : .white)
-        }
-        VStack(alignment: .leading, spacing: 4) {
-          Text(title)
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundColor(.white)
-          Text(subtitle)
-            .font(.system(size: 14, weight: .medium))
-            .foregroundColor(.white.opacity(0.7))
-        }
-        Spacer()
-      }
-      .padding(.horizontal, 24)
-      .padding(.vertical, 16)
-      .background(.white.opacity(0.05))
-      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-    .buttonStyle(.plain)
-  }
-
-  /// D14: tvOS focusable speed chooser for Fast Forward, opened by navigating to
-  /// `Pane.fastForwardSpeed` instead of the old in-place toggle (picking a speed
-  /// here also starts FF and leaves the pause menu, which a plain toggle can't do).
-  private var tvFastForwardSpeedMenu: some View {
-    ZStack {
-      Image(uiImage: game.bannerImage ?? game.coverImage)
-        .resizable()
-        .scaledToFill()
-        .blur(radius: 25)
-        .opacity(0.8)
-        .ignoresSafeArea()
-
-      LinearGradient(
-        colors: [
-          Color.black.opacity(0.85),
-          Color.black.opacity(0.4),
-          Color.black.opacity(0.85)
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-      .ignoresSafeArea()
-
-      VStack(spacing: 32) {
-        HStack {
-          Button(action: { pane = .main }) {
-            HStack(spacing: 12) {
-              Image(systemName: "chevron.left")
-                .font(.system(size: 16, weight: .semibold))
-              Text(L("Back"))
-                .font(.system(size: 18, weight: .semibold))
-            }
-            .foregroundColor(.white.opacity(0.8))
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
-            .background(.white.opacity(0.1))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-          }
-          .buttonStyle(.plain)
-          .focused($focused, equals: .back)
-
-          Spacer()
-
-          Text(L("Fast Forward Speed"))
-            .font(.system(size: 28, weight: .bold))
-            .foregroundColor(.white)
-
-          Spacer()
-        }
-
-        VStack(spacing: 12) {
-          if fastForwardEnabled {
-            tvFastForwardChoiceRow(
-              icon: "forward.slash",
-              title: L("Turn Off"),
-              subtitle: L("Return to normal speed"),
-              selected: false
-            ) {
-              turnOffFastForward()
-              pane = .main
-            }
-            .focused($focused, equals: .fastForwardOff)
-          }
-          ForEach(Self.fastForwardSpeedChoices, id: \.self) { percent in
-            tvFastForwardChoiceRow(
-              icon: "forward.fill",
-              title: Self.fastForwardSpeedLabel(percent: percent),
-              subtitle: L("Start fast-forward and resume"),
-              selected: fastForwardEnabled && configuredFastForwardPercent == percent
-            ) {
-              selectFastForwardSpeed(percent)
-            }
-            .focused($focused, equals: .fastForwardChoice(percent))
-          }
-        }
-        .frame(maxWidth: 480)
-      }
-      .padding(60)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .zIndex(100)
-    }
-    #if os(tvOS)
-    .onExitCommand { pane = .main }
-    #endif
-  }
-
-  // Platform-specific Settings button row
-  @ViewBuilder
-  private var settingsButtonRow: some View {
-    #if os(tvOS)
-    PauseMenuRow(
-      icon: "gearshape",
-      title: L("Settings"),
-      subtitle: L("Game & system options"),
-      action: { onShowSettings() }
-    )
-    .focused($focused, equals: .settings)
-    #else
-    EmptyView()
-    #endif
-  }
-
-  // tvOS: original layout preserved
-  private var tvMainMenu: some View {
-    ZStack {
-      // Beautiful blurred background - use GameBanner if available
-      Image(uiImage: game.bannerImage ?? game.coverImage)
-        .resizable()
-        .scaledToFill()
-        .blur(radius: 25)
-        .opacity(0.8)
-        .ignoresSafeArea()
-
-      // Elegant gradient overlay
-      LinearGradient(
-        colors: [
-          Color.black.opacity(0.85),
-          Color.black.opacity(0.4),
-          Color.black.opacity(0.85)
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-      .ignoresSafeArea()
-
-      // Netflix-style content overlay
-      HStack(spacing: 80) {
-        // Left side - Game cover and info
-        VStack(alignment: .leading, spacing: 16) {
-          Image(uiImage: game.coverImage)
-            .resizable()
-            .aspectRatio(2.0 / 3.0, contentMode: .fit)
-            .frame(width: 180, height: 270)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
-
-          VStack(alignment: .leading, spacing: 6) {
-            Text(game.title)
-              .font(.system(size: 24, weight: .bold))
-              .foregroundColor(.white)
-              .lineLimit(2)
-
-            Text(game.gameID)
-              .font(.system(size: 14, weight: .medium))
-              .foregroundColor(.white.opacity(0.7))
-          }
-        }
-        .frame(width: 180)
-
-        // Right side - Menu options
-        VStack(alignment: .leading, spacing: 24) {
-          // Hero resume button
-          Button(action: {
-            PauseArbiter.shared.userResume()
-            onClose()
-          }) {
-            HStack(spacing: 16) {
-              Text(L("Resume Game"))
-                .font(.system(size: 20, weight: .bold))
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 40)
-            .padding(.vertical, 18)
-            .background(
-              LinearGradient(
-                colors: [Color(.dolphinTint), Color.purple],
-                startPoint: .leading,
-                endPoint: .trailing
-              )
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: .blue.opacity(0.5), radius: 12, x: 0, y: 6)
-          }
-          .buttonStyle(.plain)
-          .focused($focused, equals: .resume)
-
-          // Menu items with SettingsMenuRow styling. Wrapped in a ScrollView (rather
-          // than a bare VStack) so this list scrolls instead of overflowing off the
-          // bottom of the screen as more cards land here (quick actions above, WS-4's
-          // continuity hand-off card, etc.) — a fixed-height HStack with no scroll
-          // container is exactly how a growing menu silently goes unreachable on tvOS.
-          ScrollView(showsIndicators: false) {
-          VStack(spacing: 12) {
-            // Save States
-            Button(action: { pane = .saves }) {
-              HStack(spacing: 20) {
-                // Icon with background
-                ZStack {
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.white.opacity(0.1))
-                    .frame(width: 48, height: 48)
-
-                  Image(systemName: "square.stack.3d.up")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                }
-
-                // Text content
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(L("Save States"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-
-                  Text("Manage game saves")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.white.opacity(0.5))
-              }
-              .padding(.horizontal, 24)
-              .padding(.vertical, 16)
-              .background(.white.opacity(0.05))
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .openSaves)
-
-            // Quick actions: same row shape as the rest of the list. Mute toggles in
-            // place (mid-call mute without leaving the pause menu); Fast Forward opens
-            // the speed chooser (D14) since picking a speed also starts FF and leaves
-            // the menu right away, which needs its own pane rather than an in-place flip.
-            tvMenuToggleRow(
-              icon: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-              title: isMuted ? L("Unmute") : L("Mute"),
-              subtitle: isMuted ? L("Restore audio volume") : L("Silence audio"),
-              action: { toggleMute() }
-            )
-            .focused($focused, equals: .mute)
-
-            tvMenuToggleRow(
-              icon: fastForwardEnabled ? "forward.fill" : "forward",
-              title: L("Fast Forward"),
-              subtitle: fastForwardSubtitle,
-              action: { pane = .fastForwardSpeed }
-            )
-            .focused($focused, equals: .fastForward)
-
-            // Cheats
-            Button(action: { pane = .cheats }) {
-              HStack(spacing: 20) {
-                // Icon with background
-                ZStack {
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.white.opacity(0.1))
-                    .frame(width: 48, height: 48)
-
-                  Image(systemName: "star.circle")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                }
-
-                // Text content
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(L("Cheats"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-
-                  Text(cheatsSubtitle)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.white.opacity(0.5))
-              }
-              .padding(.horizontal, 24)
-              .padding(.vertical, 16)
-              .background(.white.opacity(0.05))
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .cheats)
-
-            // Controllers
-            Button(action: { pane = .controllers }) {
-              HStack(spacing: 20) {
-                // Icon with background
-                ZStack {
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.white.opacity(0.1))
-                    .frame(width: 48, height: 48)
-
-                  Image(systemName: "gamecontroller")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                }
-
-                // Text content
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(L("Controllers"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-
-                  Text("Input configuration")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.white.opacity(0.5))
-              }
-              .padding(.horizontal, 24)
-              .padding(.vertical, 16)
-              .background(.white.opacity(0.05))
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .mapping)
-
-            // Shaders
-            Button(action: { showShaders = true }) {
-              HStack(spacing: 20) {
-                // Icon with background
-                ZStack {
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.white.opacity(0.1))
-                    .frame(width: 48, height: 48)
-
-                  Image(systemName: "wand.and.stars")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                }
-
-                // Text content
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(L("Shaders"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-
-                  Text(L("Post-processing"))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.white.opacity(0.5))
-              }
-              .padding(.horizontal, 24)
-              .padding(.vertical, 16)
-              .background(.white.opacity(0.05))
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .shaders)
-
-            // Continue Elsewhere (WS-4). Its own Button, and therefore its own
-            // focus target — the surrounding VStack of Buttons is what makes
-            // that work on tvOS, unlike a List row holding several controls.
-            Button(action: { showContinuitySheet = true }) {
-              HStack(spacing: 20) {
-                ZStack {
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.white.opacity(0.1))
-                    .frame(width: 48, height: 48)
-
-                  Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(L("Continue Elsewhere"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-
-                  Text(L("Hand this game to a nearby device"))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.white.opacity(0.5))
-              }
-              .padding(.horizontal, 24)
-              .padding(.vertical, 16)
-              .background(.white.opacity(0.05))
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .continuity)
-
-            // Settings
-            settingsButtonRow
-
-            // Reset System
-            Button(action: { showResetDialog = true }) {
-              HStack(spacing: 20) {
-                ZStack {
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.orange.opacity(0.15))
-                    .frame(width: 48, height: 48)
-
-                  Image(systemName: "arrow.counterclockwise.circle")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.orange)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(L("Reset System"))
-                    .font(.system(size: 18, weight: .semibold))
-
-                  Text(L("Restart the game from power-on"))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.secondary)
-              }
-              .padding(.horizontal, 24)
-              .padding(.vertical, 16)
-              .background(.orange.opacity(0.05))
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-
-            // Exit Game
-            Button(action: { showExitDialog = true }) {
-              HStack(spacing: 20) {
-                // Icon with background
-                ZStack {
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.red.opacity(0.15))
-                    .frame(width: 48, height: 48)
-
-                  Image(systemName: "xmark.circle")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.red)
-                }
-
-                // Text content
-                VStack(alignment: .leading, spacing: 4) {
-                  Text(L("Exit Game"))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.red)
-
-                  Text(L("Return to library"))
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.red.opacity(0.7))
-                }
-
-                Spacer()
-
-                // Chevron
-                Image(systemName: "chevron.right")
-                  .font(.system(size: 14, weight: .medium))
-                  .foregroundColor(.red.opacity(0.5))
-              }
-              .padding(.horizontal, 24)
-              .padding(.vertical, 16)
-              .background(.red.opacity(0.05))
-              .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focused($focused, equals: .exit)
-          }
-          }
-        }
-        .frame(width: 480)
-      }
-      .padding(60)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .zIndex(100)
-      .alert(L("Reset System"), isPresented: $showResetDialog) {
-        Button(L("Cancel"), role: .cancel) { showResetDialog = false }
-        Button(L("Reset"), role: .destructive) {
-          // Same as the console's reset button. It does not reload the auto-resume state, so it is also
-          // the way out of a game that resumed into a bad save.
-          TVEmulationBridge.resetSystem()
-          onClose()
-        }
-      } message: {
-        Text(L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."))
-      }
-      .alert(L("Exit Game"), isPresented: $showExitDialog) {
-        Button(L("Cancel"), role: .cancel) { showExitDialog = false }
-        Button(L("Quit"), role: .destructive) {
-          TVEmulationBridge.stop()
-          NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
-        }
-        Button(L("Save & Quit")) {
-          SaveStateService.saveSlot(selectedSlot)
-          TVEmulationBridge.stop()
-          NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
-        }
-      } message: {
-        Text(L("Do you want to quit the game? Unsaved progress will be lost."))
-      }
-    }
-    .animation(.easeInOut(duration: 0.3), value: focused)
   }
 
   private var savesMenu: some View {
@@ -1312,20 +643,56 @@ internal struct PauseMenuView: View {
     }
   }
 
-  // MARK: - D18 model (iOS root pane only)
+  // MARK: - Pause menu model
 
-  /// The iOS root pane's `MenuModel` (design doc §6 step 2). Pure builder,
-  /// live closures -- no bridge calls inside `PauseMenuModelBuilder` itself,
-  /// mirroring `CheatsMenuView.cheatsMenuModel`/`CheatsMenuModelBuilder`.
+  /// Persists `percent` and turns fast-forward on; the game picks it up when the player resumes.
+  private func selectFastForwardSpeed(_ percent: Int) {
+    TVEmulationBridge.setFastForwardSpeedPercent(percent)
+    if !TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
+    fastForwardEnabled = true
+  }
+
+  private var pauseMenuBindings: PauseMenuBindings {
+    PauseMenuBindings(
+      mute: Binding(get: { isMuted }, set: { _ in toggleMute() }),
+      fastForward: Binding(
+        get: { fastForwardEnabled ? AnyHashable(configuredFastForwardPercent) : PauseMenuModelBuilder.fastForwardOff },
+        set: { value in
+          if let percent = value as? Int, percent >= 0 { selectFastForwardSpeed(percent) } else { turnOffFastForward() }
+        }),
+      quickSlot: Binding(get: { AnyHashable(selectedSlot) }, set: { if let slot = $0 as? Int { selectedSlot = slot } }),
+      shader: Binding(
+        get: { AnyHashable(ShaderQuickApply.currentPath ?? "") },
+        set: { value in
+          let path = value as? String
+          ShaderQuickApply.apply(path: (path?.isEmpty ?? true) ? nil : path)
+          refreshShaderState()
+        }))
+  }
+
+  private func refreshShaderState() {
+    shaderOptions = ShaderQuickApply.options(
+      mru: UserDefaults.standard.stringArray(forKey: ShaderQuickApply.mruKey) ?? [], current: ShaderQuickApply.currentPath)
+  }
+
   private var pauseMenuModel: MenuModel {
-    // Task 7 replaces this
-    let state = PauseMenuState(quickSlot: selectedSlot, isMuted: isMuted, activeCheatCount: activeCheatCount, shaderOptions: [], showsRecenterPointer: Self.showsRecenterPointer)
-    let bindings = PauseMenuBindings(
-      mute: .constant(false), fastForward: .constant(PauseMenuModelBuilder.fastForwardOff),
-      quickSlot: .constant(AnyHashable(selectedSlot)), shader: .constant(ShaderQuickApply.noneValue))
+    let state = PauseMenuState(
+      quickSlot: selectedSlot,
+      isMuted: isMuted,
+      activeCheatCount: activeCheatCount,
+      shaderOptions: shaderOptions,
+      showsRecenterPointer: Self.showsRecenterPointer)
     let actions = PauseMenuActions(
       resume: { PauseArbiter.shared.userResume(); onClose() },
-      quickSave: {}, quickLoad: {}, screenshot: {},
+      quickSave: { _ = QuickSlot.save(slot: selectedSlot) },
+      quickLoad: { QuickSlot.load(slot: selectedSlot) },
+      screenshot: {
+        switch QuickScreenshot.saveFromPausePreview() {
+        case .saved: EmulationToast.post(L("Screenshot saved to ScreenShots"))
+        case .pausedNoFrame: EmulationToast.post(L("No frame to save yet"))
+        case .failed: EmulationToast.post(L("Screenshot failed"))
+        }
+      },
       openSaveStates: { pane = .saves },
       openCheats: { pane = .cheats },
       openControllers: {
@@ -1337,7 +704,13 @@ internal struct PauseMenuView: View {
       },
       openShaders: { showShaders = true },
       openContinuity: { showContinuitySheet = true },
-      openSettings: { showSettingsSheet = true },
+      openSettings: {
+        #if os(iOS)
+        showSettingsSheet = true
+        #else
+        onShowSettings()
+        #endif
+      },
       requestReset: { showResetDialog = true },
       requestExit: { showExitDialog = true },
       recenterPointer: {
@@ -1346,9 +719,8 @@ internal struct PauseMenuView: View {
         PauseArbiter.shared.userResume()
         onClose()
         #endif
-      }
-    )
-    return PauseMenuModelBuilder.make(state: state, bindings: bindings, actions: actions)
+      })
+    return PauseMenuModelBuilder.make(state: state, bindings: pauseMenuBindings, actions: actions)
   }
 
   /// Confirm overlay shown for `showResetDialog` -- Cancel first (the safe,
@@ -1384,36 +756,6 @@ internal struct PauseMenuView: View {
         NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
       }),
     ])])
-  }
-
-  /// Confirm overlay shown for `showFastForwardSpeedPicker` -- Cancel first
-  /// (uniform with the other two overlays above), then "Turn Off" (only while
-  /// FF is already on, matching the original `.confirmationDialog`), then the
-  /// speed choices. `selectFastForwardSpeed(_:)` already resumes and closes
-  /// the pause menu; `turnOffFastForward()` deliberately does not.
-  private var fastForwardConfirmModel: MenuModel {
-    var items: [MenuItem] = [
-      MenuItem(id: "ff-cancel", title: L("Cancel"), icon: "xmark", role: .action { showFastForwardSpeedPicker = false }),
-    ]
-    if fastForwardEnabled {
-      items.append(MenuItem(id: "ff-off", title: L("Turn Off"), icon: "forward.slash", role: .action {
-        showFastForwardSpeedPicker = false
-        turnOffFastForward()
-      }))
-    }
-    items.append(contentsOf: Self.fastForwardSpeedChoices.map { percent in
-      MenuItem(
-        id: "ff-\(percent)",
-        title: Self.fastForwardSpeedLabel(percent: percent),
-        subtitle: L("Start fast-forward and resume"),
-        icon: "forward.fill",
-        role: .action {
-          showFastForwardSpeedPicker = false
-          selectFastForwardSpeed(percent)
-        }
-      )
-    })
-    return MenuModel(sections: [MenuSection(id: "fast-forward-speed", items: items)])
   }
 }
 
@@ -1513,24 +855,6 @@ enum PauseMenuModelBuilder {
   }
 }
 
-/// Card container used in the tvOS pause overlay
-private struct TvOSCard<Content: View>: View {
-  let title: String
-  @ViewBuilder let content: Content
-  var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text(title).font(.headline)
-        Spacer()
-      }
-      content
-    }
-    .padding(16)
-    .background(.ultraThinMaterial)
-    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-  }
-}
-
 #if DEBUG
 import UIKit
 
@@ -1568,15 +892,3 @@ private func makePreviewGame() -> TVGameItem {
   .previewInterfaceOrientation(.landscapeLeft)
 }
 #endif
-
-private struct DefaultFocusCompat<Value: Hashable>: ViewModifier {
-  var focused: FocusState<Value?>.Binding
-  let value: Value
-  func body(content: Content) -> some View {
-    if #available(iOS 17, tvOS 17, *) {
-      content.defaultFocus(focused, value)
-    } else {
-      content
-    }
-  }
-}
