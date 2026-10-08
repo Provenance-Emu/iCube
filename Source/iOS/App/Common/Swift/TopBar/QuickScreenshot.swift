@@ -69,6 +69,32 @@ enum QuickScreenshot {
     return await waitForCompleteFile(at: url) ? .saved : .failed
   }
 
+  /// How old the pause preview may be and still count as "the current frame" (same window
+  /// `SaveStateService` uses for save thumbnails).
+  static let pausePreviewFreshness: TimeInterval = 60
+
+  /// The pause overlay's Screenshot tile: the core writes no frame while paused, but the pause preview
+  /// (`SaveStateService.capturePausePreview`) is the last live one. `.pausedNoFrame` when it is stale.
+  static func copyPausePreview(from preview: URL, to destination: URL, now: Date) -> Outcome {
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: preview.path),
+          let modified = attrs[.modificationDate] as? Date,
+          now.timeIntervalSince(modified) < pausePreviewFreshness else { return .pausedNoFrame }
+    do {
+      try FileManager.default.copyItem(at: preview, to: destination)
+      return .saved
+    } catch {
+      return .failed
+    }
+  }
+
+  @MainActor
+  static func saveFromPausePreview(now: Date = Date()) -> Outcome {
+    guard let gameID = SaveStateService.currentGameID,
+          let userDirectory = DolphinPaths.userDirectoryURL(),
+          let url = destination(gameID: gameID, date: now, userDirectory: userDirectory) else { return .failed }
+    return copyPausePreview(from: SaveStateService.pausePreviewURL, to: url, now: now)
+  }
+
   /// The PNG is encoded on a later frame, so a file is "complete" once it is non-empty and stopped growing.
   private static func waitForCompleteFile(at url: URL) async -> Bool {
     let deadline = Date().addingTimeInterval(captureTimeout)
