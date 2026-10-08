@@ -1318,17 +1318,14 @@ internal struct PauseMenuView: View {
   /// live closures -- no bridge calls inside `PauseMenuModelBuilder` itself,
   /// mirroring `CheatsMenuView.cheatsMenuModel`/`CheatsMenuModelBuilder`.
   private var pauseMenuModel: MenuModel {
-    let state = PauseMenuState(
-      isMuted: isMuted,
-      fastForwardEnabled: fastForwardEnabled,
-      fastForwardSubtitle: fastForwardSubtitle,
-      cheatsSubtitle: cheatsSubtitle,
-      showsRecenterPointer: Self.showsRecenterPointer
-    )
+    // Task 7 replaces this
+    let state = PauseMenuState(quickSlot: selectedSlot, isMuted: isMuted, activeCheatCount: activeCheatCount, shaderOptions: [], showsRecenterPointer: Self.showsRecenterPointer)
+    let bindings = PauseMenuBindings(
+      mute: .constant(false), fastForward: .constant(PauseMenuModelBuilder.fastForwardOff),
+      quickSlot: .constant(AnyHashable(selectedSlot)), shader: .constant(ShaderQuickApply.noneValue))
     let actions = PauseMenuActions(
       resume: { PauseArbiter.shared.userResume(); onClose() },
-      toggleMute: { toggleMute() },
-      openFastForwardPicker: { showFastForwardSpeedPicker = true },
+      quickSave: {}, quickLoad: {}, screenshot: {},
       openSaveStates: { pane = .saves },
       openCheats: { pane = .cheats },
       openControllers: {
@@ -1345,15 +1342,13 @@ internal struct PauseMenuView: View {
       requestExit: { showExitDialog = true },
       recenterPointer: {
         #if os(iOS)
-        // The baseline is captured on the next motion sample, so resuming right away takes it from
-        // how the device is held while playing, not from the pause-menu posture.
         TCDeviceMotion.requestPointerRecenter()
         PauseArbiter.shared.userResume()
         onClose()
         #endif
       }
     )
-    return PauseMenuModelBuilder.make(state: state, actions: actions)
+    return PauseMenuModelBuilder.make(state: state, bindings: bindings, actions: actions)
   }
 
   /// Confirm overlay shown for `showResetDialog` -- Cancel first (the safe,
@@ -1422,22 +1417,30 @@ internal struct PauseMenuView: View {
   }
 }
 
-/// Plain snapshot -- no bridge reads inside `PauseMenuModelBuilder`, mirroring
-/// `CheatsMenuState`'s split (design doc §1).
+/// Plain snapshot — no bridge reads inside the builder.
 struct PauseMenuState {
+  var quickSlot: Int
   var isMuted: Bool
-  var fastForwardEnabled: Bool
-  var fastForwardSubtitle: String
-  var cheatsSubtitle: String
+  var activeCheatCount: Int
+  /// "None" first, then recent presets; the Shaders tile cycles these.
+  var shaderOptions: [(String, AnyHashable)]
   /// Wii title on iOS, where the pointer is driven by touch or the gyro.
   var showsRecenterPointer: Bool
 }
 
-/// Plain closures -- no bridge calls inside `PauseMenuModelBuilder` either.
+/// Live bindings for the in-place tiles. Writing one applies immediately; the host rebuilds the model.
+struct PauseMenuBindings {
+  var mute: Binding<Bool>
+  var fastForward: Binding<AnyHashable>
+  var quickSlot: Binding<AnyHashable>
+  var shader: Binding<AnyHashable>
+}
+
 struct PauseMenuActions {
   var resume: () -> Void
-  var toggleMute: () -> Void
-  var openFastForwardPicker: () -> Void
+  var quickSave: () -> Void
+  var quickLoad: () -> Void
+  var screenshot: () -> Void
   var openSaveStates: () -> Void
   var openCheats: () -> Void
   var openControllers: () -> Void
@@ -1449,55 +1452,64 @@ struct PauseMenuActions {
   var recenterPointer: () -> Void
 }
 
-/// D18 (design doc §6 step 2): builds the iOS pause menu's root `MenuModel`.
-/// Item order matches the pre-migration `iosMenuItems` exactly: Resume, Mute,
-/// Fast Forward, Save States, Cheats, Controllers, Shaders, Continue
-/// Elsewhere, Settings, Reset, Exit. Reset and Exit are both `.destructive`
-/// here (Exit already was a SwiftUI `ButtonRole.destructive`; Reset is newly
-/// marked to match -- both are irreversible and both are now gated by their
-/// own confirm overlay, so treating them the same is more consistent, not a
-/// behavior change: `MenuScreen.performActivate` runs `.action` and
-/// `.destructive` identically). Settings is unconditional here -- this
-/// builder's only caller, `PauseMenuView.iosMainMenu`, never actually runs on
-/// tvOS even though the type must still compile there.
+/// Unified menu UX spec §5: Quick / Game / System. Shared by iOS and tvOS.
 enum PauseMenuModelBuilder {
-  static func make(state: PauseMenuState, actions: PauseMenuActions) -> MenuModel {
-    var items: [MenuItem] = [
-      MenuItem(id: "resume", title: L("Resume Game"), subtitle: L("Return to gameplay"), icon: "play.fill", tint: .blue, role: .action(actions.resume)),
-      MenuItem(
-        id: "mute",
-        title: state.isMuted ? L("Unmute") : L("Mute"),
-        subtitle: state.isMuted ? L("Restore audio volume") : L("Silence audio"),
-        icon: state.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-        tint: .cyan,
-        role: .action(actions.toggleMute)
-      ),
-      MenuItem(
-        id: "fast-forward",
-        title: L("Fast Forward"),
-        subtitle: state.fastForwardSubtitle,
-        icon: state.fastForwardEnabled ? "forward.fill" : "forward",
-        tint: .cyan,
-        role: .action(actions.openFastForwardPicker)
-      ),
-      MenuItem(id: "save-states", title: L("Save States"), subtitle: L("Manage game saves"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates)),
-      MenuItem(id: "cheats", title: L("Cheats"), subtitle: state.cheatsSubtitle, icon: "star.circle", tint: .yellow, role: .action(actions.openCheats)),
-      MenuItem(id: "controllers", title: L("Controllers"), subtitle: L("Input configuration"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers)),
+  static let fastForwardOff: AnyHashable = AnyHashable(-1)
+  static let fastForwardOptions: [(String, AnyHashable)] = [
+    (L("Off"), fastForwardOff), ("2x", AnyHashable(200)), ("4x", AnyHashable(400)), ("8x", AnyHashable(800)), (L("Unlimited"), AnyHashable(0)),
+  ]
+  static let slotCount = 10
+
+  static func make(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions) -> MenuModel {
+    let slotOptions: [(String, AnyHashable)] = (1 ... slotCount).map { (String(format: L("Slot %d"), $0), AnyHashable($0)) }
+    let slotBadge = String(format: L("Slot %d"), state.quickSlot)
+    let slotPicker = MenuLongPress.options(title: L("Quick Slot"), options: slotOptions, selection: bindings.quickSlot)
+
+    let quick = MenuSection(id: "quick", header: L("Quick"), items: [
+      MenuItem(id: "resume", title: L("Resume"), icon: "play.fill", tint: .blue, role: .action(actions.resume),
+               description: L("Return to the game.")),
+      MenuItem(id: "quick-save", title: L("Quick Save"), icon: "square.and.arrow.down", tint: .green, role: .action(actions.quickSave),
+               badge: slotBadge, description: L("Save to the quick slot. Long-press to choose the slot."), longPress: slotPicker),
+      MenuItem(id: "quick-load", title: L("Quick Load"), icon: "square.and.arrow.up", tint: .green, role: .action(actions.quickLoad),
+               badge: slotBadge, description: L("Load the quick slot. Long-press to choose the slot."), longPress: slotPicker),
+      MenuItem(id: "fast-forward", title: L("Fast Forward"), icon: "forward.fill", tint: .cyan,
+               role: .cycle(options: fastForwardOptions, selection: bindings.fastForward),
+               description: L("Tap to cycle the speed. Long-press to pick one. Takes effect on resume.")),
+      MenuItem(id: "mute", title: L("Mute"), icon: state.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", tint: .cyan,
+               role: .toggle(bindings.mute), description: L("Silence the game's audio.")),
+      MenuItem(id: "screenshot", title: L("Screenshot"), icon: "camera", tint: .pink, role: .action(actions.screenshot),
+               description: L("Save the last frame to ScreenShots.")),
+    ])
+
+    var game: [MenuItem] = [
+      MenuItem(id: "save-states", title: L("Save States"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates),
+               description: L("Save, load and browse every slot.")),
+      MenuItem(id: "cheats", title: L("Cheats"), icon: "star.circle", tint: .yellow, role: .action(actions.openCheats),
+               badge: state.activeCheatCount > 0 ? "\(state.activeCheatCount)" : nil,
+               description: L("Enable Gecko and Action Replay codes for this game.")),
+      MenuItem(id: "shaders", title: L("Shaders"), icon: "wand.and.stars", tint: .orange,
+               role: .cycle(options: state.shaderOptions, selection: bindings.shader),
+               description: L("Tap to cycle recent shaders. Long-press for the full picker."),
+               longPress: .action(actions.openShaders)),
+      MenuItem(id: "controllers", title: L("Controllers"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers),
+               description: L("Players, devices and what each one plays as.")),
+      MenuItem(id: "continuity", title: L("Continue Elsewhere"), icon: "arrow.triangle.branch", tint: .teal, role: .action(actions.openContinuity),
+               description: L("Hand this game to a nearby device.")),
     ]
     if state.showsRecenterPointer {
-      items.append(MenuItem(
-        id: "recenter-pointer", title: L("Recenter Pointer"),
-        subtitle: L("Center the Wii pointer on how you hold the device"),
-        icon: "scope", tint: .green, role: .action(actions.recenterPointer)))
+      game.append(MenuItem(id: "recenter-pointer", title: L("Recenter Pointer"), icon: "scope", tint: .green, role: .action(actions.recenterPointer),
+                           description: L("Center the Wii pointer on how you hold the device.")))
     }
-    items += [
-      MenuItem(id: "shaders", title: L("Shaders"), subtitle: L("Post-processing"), icon: "wand.and.stars", tint: .orange, role: .action(actions.openShaders)),
-      MenuItem(id: "continuity", title: L("Continue Elsewhere"), subtitle: L("Hand this game to a nearby device"), icon: "arrow.triangle.branch", tint: .teal, role: .action(actions.openContinuity)),
-      MenuItem(id: "settings", title: L("Settings"), subtitle: L("Game & system options"), icon: "gearshape", tint: .gray, role: .action(actions.openSettings)),
-      MenuItem(id: "reset", title: L("Reset System"), subtitle: L("Restart the game from power-on"), icon: "arrow.counterclockwise.circle", tint: .orange, role: .destructive(actions.requestReset)),
-      MenuItem(id: "exit", title: L("Exit Game"), subtitle: L("Return to library"), icon: "xmark.circle", tint: .red, role: .destructive(actions.requestExit)),
-    ]
-    return MenuModel(sections: [MenuSection(id: "main", items: items)])
+
+    let system = MenuSection(id: "system", header: L("System"), items: [
+      MenuItem(id: "settings", title: L("Settings"), icon: "gearshape", tint: .gray, role: .action(actions.openSettings),
+               description: L("Game and system options.")),
+      MenuItem(id: "reset", title: L("Reset"), icon: "arrow.counterclockwise.circle", tint: .orange, role: .destructive(actions.requestReset),
+               description: L("Restart the game from power-on. Unsaved progress is lost.")),
+      MenuItem(id: "exit", title: L("Exit"), icon: "xmark.circle", tint: .red, role: .destructive(actions.requestExit),
+               description: L("Return to the library. Unsaved progress is lost.")),
+    ])
+    return MenuModel(sections: [quick, MenuSection(id: "game", header: L("Game"), items: game), system])
   }
 }
 

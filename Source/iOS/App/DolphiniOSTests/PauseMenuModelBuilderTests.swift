@@ -1,3 +1,4 @@
+// DolphiniOSTests/PauseMenuModelBuilderTests.swift
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
@@ -6,186 +7,105 @@ import XCTest
 
 @testable import iCube
 
-/// Covers `PauseMenuModelBuilder` (D18, `docs/superpowers/specs/2026-09-24-data-driven-menus-design.md`
-/// §6 step 2): the pure builder behind the iOS pause menu's root pane. No
-/// bridge calls happen inside the builder itself -- every action closure is a
-/// recorded no-op here, matching the "snapshot in, actions in, model out"
-/// shape `CheatsMenuModelBuilder` already established.
+/// `PauseMenuModelBuilder` (unified menu UX spec §5): pure builder, three sections, every tile described.
 final class PauseMenuModelBuilderTests: XCTestCase {
+  private final class Box { var value: AnyHashable; init(_ v: AnyHashable) { value = v } }
 
-  private static let expectedItemOrder = [
-    "resume", "mute", "fast-forward", "save-states", "cheats",
-    "controllers", "shaders", "continuity", "settings", "reset", "exit",
-  ]
+  private func bindings(ff: Box = Box(PauseMenuModelBuilder.fastForwardOff), slot: Box = Box(3), muted: Box = Box(false), shader: Box = Box(ShaderQuickApply.noneValue)) -> PauseMenuBindings {
+    PauseMenuBindings(
+      mute: Binding(get: { muted.value as? Bool ?? false }, set: { muted.value = $0 }),
+      fastForward: Binding(get: { ff.value }, set: { ff.value = $0 }),
+      quickSlot: Binding(get: { slot.value }, set: { slot.value = $0 }),
+      shader: Binding(get: { shader.value }, set: { shader.value = $0 }))
+  }
 
-  private func noopActions() -> PauseMenuActions {
+  private var log: [String] = []
+  private func actions() -> PauseMenuActions {
     PauseMenuActions(
-      resume: {}, toggleMute: {}, openFastForwardPicker: {}, openSaveStates: {},
-      openCheats: {}, openControllers: {}, openShaders: {}, openContinuity: {},
-      openSettings: {}, requestReset: {}, requestExit: {}, recenterPointer: {}
-    )
+      resume: { self.log.append("resume") }, quickSave: { self.log.append("save") }, quickLoad: { self.log.append("load") },
+      screenshot: { self.log.append("shot") }, openSaveStates: {}, openCheats: {}, openControllers: {},
+      openShaders: { self.log.append("shaders") }, openContinuity: {}, openSettings: {}, requestReset: {},
+      requestExit: {}, recenterPointer: {})
   }
 
-  private func makeState(
-    isMuted: Bool = false,
-    fastForwardEnabled: Bool = false,
-    fastForwardSubtitle: String = "Off — choose a speed to start",
-    cheatsSubtitle: String = "Game enhancement codes",
-    showsRecenterPointer: Bool = false
-  ) -> PauseMenuState {
+  private func state(recenter: Bool = false, cheats: Int = 0) -> PauseMenuState {
     PauseMenuState(
-      isMuted: isMuted,
-      fastForwardEnabled: fastForwardEnabled,
-      fastForwardSubtitle: fastForwardSubtitle,
-      cheatsSubtitle: cheatsSubtitle,
-      showsRecenterPointer: showsRecenterPointer
-    )
+      quickSlot: 3, isMuted: false, activeCheatCount: cheats,
+      shaderOptions: [("None", ShaderQuickApply.noneValue), ("crt", AnyHashable("/s/crt.slangp"))],
+      showsRecenterPointer: recenter)
   }
 
-  // MARK: Item order
-
-  /// The root pane has no per-system branching (mirroring `tvMainMenu`, which
-  /// also lists the same rows regardless of GameCube vs Wii) -- this asserts
-  /// that invariance directly, for two states shaped like what a GameCube
-  /// title's vs. a Wii title's live pause-menu state would actually look like
-  /// (a Wii title showing an active cheat and running fast-forward; a
-  /// GameCube title with neither), rather than two identical inputs, which
-  /// would prove nothing.
-  func test_itemOrder_matchesExpectedSequence_forGameCubeAndWiiStates() {
-    let gameCubeState = makeState()
-    let wiiState = makeState(
-      fastForwardEnabled: true,
-      fastForwardSubtitle: "On at 2x — choose to change",
-      cheatsSubtitle: "3 active"
-    )
-
-    let gcModel = PauseMenuModelBuilder.make(state: gameCubeState, actions: noopActions())
-    let wiiModel = PauseMenuModelBuilder.make(state: wiiState, actions: noopActions())
-
-    XCTAssertEqual(gcModel.allItems.map(\.id), Self.expectedItemOrder)
-    XCTAssertEqual(wiiModel.allItems.map(\.id), Self.expectedItemOrder, "root pane item order must not vary by system/state")
+  func test_threeSections_inOrder_withExpectedTiles() {
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    XCTAssertEqual(model.sections.map(\.id), ["quick", "game", "system"])
+    XCTAssertEqual(model.sections[0].items.map(\.id), ["resume", "quick-save", "quick-load", "fast-forward", "mute", "screenshot"])
+    XCTAssertEqual(model.sections[1].items.map(\.id), ["save-states", "cheats", "shaders", "controllers", "continuity"])
+    XCTAssertEqual(model.sections[2].items.map(\.id), ["settings", "reset", "exit"])
   }
 
-  func test_allItemsAreInASingleSection() {
-    let model = PauseMenuModelBuilder.make(state: makeState(), actions: noopActions())
-    XCTAssertEqual(model.sections.count, 1)
-  }
-
-  // MARK: Cheats subtitle ("N active" badge text)
-
-  func test_cheatsSubtitle_reflectsActiveCount() {
-    let model = PauseMenuModelBuilder.make(state: makeState(cheatsSubtitle: "3 active"), actions: noopActions())
-    XCTAssertEqual(model.item(id: "cheats")?.subtitle, "3 active")
-  }
-
-  func test_cheatsSubtitle_fallsBackToGenericText_whenNoActiveCheats() {
-    let model = PauseMenuModelBuilder.make(state: makeState(cheatsSubtitle: "Game enhancement codes"), actions: noopActions())
-    XCTAssertEqual(model.item(id: "cheats")?.subtitle, "Game enhancement codes")
-  }
-
-  // MARK: Fast-forward subtitle
-
-  func test_fastForwardSubtitle_passesThroughVerbatim_whenOff() {
-    let model = PauseMenuModelBuilder.make(state: makeState(fastForwardSubtitle: "Off — choose a speed to start"), actions: noopActions())
-    XCTAssertEqual(model.item(id: "fast-forward")?.subtitle, "Off — choose a speed to start")
-    XCTAssertEqual(model.item(id: "fast-forward")?.icon, "forward")
-  }
-
-  func test_fastForwardSubtitle_passesThroughVerbatim_whenOn() {
-    let model = PauseMenuModelBuilder.make(
-      state: makeState(fastForwardEnabled: true, fastForwardSubtitle: "On at 3x — choose to change"),
-      actions: noopActions()
-    )
-    XCTAssertEqual(model.item(id: "fast-forward")?.subtitle, "On at 3x — choose to change")
-    XCTAssertEqual(model.item(id: "fast-forward")?.icon, "forward.fill")
-  }
-
-  // MARK: Mute title/icon flip
-
-  func test_muteItem_reflectsMutedState() {
-    let muted = PauseMenuModelBuilder.make(state: makeState(isMuted: true), actions: noopActions())
-    XCTAssertEqual(muted.item(id: "mute")?.title, "Unmute")
-    XCTAssertEqual(muted.item(id: "mute")?.icon, "speaker.slash.fill")
-
-    let unmuted = PauseMenuModelBuilder.make(state: makeState(isMuted: false), actions: noopActions())
-    XCTAssertEqual(unmuted.item(id: "mute")?.title, "Mute")
-    XCTAssertEqual(unmuted.item(id: "mute")?.icon, "speaker.wave.2.fill")
-  }
-
-  // MARK: Destructive marking
-
-  func test_resetAndExit_areMarkedDestructive() {
-    let model = PauseMenuModelBuilder.make(state: makeState(), actions: noopActions())
-
-    guard case .destructive = model.item(id: "reset")!.role else {
-      return XCTFail("reset must be .destructive")
-    }
-    guard case .destructive = model.item(id: "exit")!.role else {
-      return XCTFail("exit must be .destructive")
-    }
-  }
-
-  func test_nonDestructiveItems_areNotMarkedDestructive() {
-    let model = PauseMenuModelBuilder.make(state: makeState(), actions: noopActions())
-    for id in ["resume", "mute", "fast-forward", "save-states", "cheats", "controllers", "shaders", "continuity", "settings"] {
-      guard case .action = model.item(id: id)!.role else {
-        XCTFail("\(id) must be .action, not .destructive")
-        continue
-      }
-    }
-  }
-
-  // MARK: Actions wire through, not recomputed
-
-  func test_actionClosures_areInvokedThroughPerformableRoles() {
-    var resumed = false
-    var reset = false
-    var exited = false
-    let actions = PauseMenuActions(
-      resume: { resumed = true }, toggleMute: {}, openFastForwardPicker: {}, openSaveStates: {},
-      openCheats: {}, openControllers: {}, openShaders: {}, openContinuity: {},
-      openSettings: {}, requestReset: { reset = true }, requestExit: { exited = true },
-      recenterPointer: {}
-    )
-    let model = PauseMenuModelBuilder.make(state: makeState(), actions: actions)
-
-    if case .action(let action) = model.item(id: "resume")!.role { action() }
-    if case .destructive(let action) = model.item(id: "reset")!.role { action() }
-    if case .destructive(let action) = model.item(id: "exit")!.role { action() }
-
-    XCTAssertTrue(resumed)
-    XCTAssertTrue(reset)
-    XCTAssertTrue(exited)
-  }
-
-  // MARK: Recenter Pointer (Wii pointer games only)
-
-  func test_recenterPointer_followsControllers_whenShown() {
-    var recentered = false
-    var actions = noopActions()
-    actions.recenterPointer = { recentered = true }
-    let model = PauseMenuModelBuilder.make(state: makeState(showsRecenterPointer: true), actions: actions)
-
-    var expected = Self.expectedItemOrder
-    expected.insert("recenter-pointer", at: expected.firstIndex(of: "controllers")! + 1)
-    XCTAssertEqual(model.allItems.map(\.id), expected)
-
-    if case .action(let action) = model.item(id: "recenter-pointer")!.role { action() }
-    XCTAssertTrue(recentered)
-  }
-
-  func test_recenterPointer_absent_whenNotShown() {
-    let model = PauseMenuModelBuilder.make(state: makeState(showsRecenterPointer: false), actions: noopActions())
-    XCTAssertNil(model.item(id: "recenter-pointer"))
-  }
-
-  // MARK: Every item carries an icon and a non-empty title
-
-  func test_everyItem_hasIconAndTitle() {
-    let model = PauseMenuModelBuilder.make(state: makeState(), actions: noopActions())
+  func test_everyTile_hasADescription() {
+    let model = PauseMenuModelBuilder.make(state: state(recenter: true), bindings: bindings(), actions: actions())
     for item in model.allItems {
-      XCTAssertNotNil(item.icon, "\(item.id) should have an icon")
-      XCTAssertFalse(item.title.isEmpty, "\(item.id) should have a title")
+      XCTAssertFalse((item.description ?? "").isEmpty, "\(item.id) has no description")
+    }
+  }
+
+  func test_recenterPointer_onlyWhenFlagged() {
+    let without = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    XCTAssertNil(without.item(id: "recenter-pointer"))
+    let with = PauseMenuModelBuilder.make(state: state(recenter: true), bindings: bindings(), actions: actions())
+    XCTAssertEqual(with.sections[1].items.map(\.id), ["save-states", "cheats", "shaders", "controllers", "continuity", "recenter-pointer"])
+  }
+
+  func test_fastForward_isACycle_offFirst_fiveOptions() {
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    guard case .cycle(let options, _)? = model.item(id: "fast-forward")?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["Off", "2x", "4x", "8x", "Unlimited"])
+    XCTAssertEqual(options.map(\.1), [AnyHashable(-1), AnyHashable(200), AnyHashable(400), AnyHashable(800), AnyHashable(0)])
+  }
+
+  func test_quickSave_badgeIsSlot_andLongPressOffersTenSlots() {
+    let slot = Box(3)
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(slot: slot), actions: actions())
+    let item = model.item(id: "quick-save")!
+    XCTAssertEqual(item.badge, "Slot 3")
+    guard case .options(_, let options, let selection)? = item.effectiveLongPress else { return XCTFail("slot picker") }
+    XCTAssertEqual(options.count, 10)
+    selection.wrappedValue = AnyHashable(7)
+    XCTAssertEqual(slot.value, AnyHashable(7))
+    if case .action(let run) = item.role { run() }
+    XCTAssertEqual(log, ["save"])
+  }
+
+  func test_mute_isAToggle() {
+    let muted = Box(false)
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(muted: muted), actions: actions())
+    guard case .toggle(let binding)? = model.item(id: "mute")?.role else { return XCTFail("toggle") }
+    binding.wrappedValue = true
+    XCTAssertEqual(muted.value, AnyHashable(true))
+  }
+
+  func test_shaders_cyclesOptions_andLongPressOpensFullPicker() {
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    let item = model.item(id: "shaders")!
+    guard case .cycle(let options, _) = item.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["None", "crt"])
+    guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("explicit long press") }
+    run()
+    XCTAssertEqual(log, ["shaders"])
+  }
+
+  func test_cheatsBadge_showsActiveCount() {
+    let model = PauseMenuModelBuilder.make(state: state(cheats: 3), bindings: bindings(), actions: actions())
+    XCTAssertEqual(model.item(id: "cheats")?.badge, "3")
+    let none = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    XCTAssertNil(none.item(id: "cheats")?.badge)
+  }
+
+  func test_resetAndExit_areDestructive() {
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    for id in ["reset", "exit"] {
+      guard case .destructive = model.item(id: id)!.role else { return XCTFail("\(id) destructive") }
     }
   }
 }
