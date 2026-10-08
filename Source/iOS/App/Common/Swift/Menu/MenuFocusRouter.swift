@@ -92,6 +92,7 @@ struct MenuFocusRouter {
 
     var current = focusedID
     var activated: String?
+    var longActivated: String?
     var didGoBack = false
     var adjust: (id: String, step: Int)?
 
@@ -108,11 +109,12 @@ struct MenuFocusRouter {
       let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current, columns: columns)
       current = padResult.focusedID
       if activated == nil { activated = padResult.activatedID }
+      if longActivated == nil { longActivated = padResult.longActivatedID }
       if adjust == nil { adjust = padResult.adjust }
       if padResult.didGoBack { didGoBack = true }
     }
     if let activated, adjust?.id == activated { adjust = nil }
-    return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack, adjust: adjust)
+    return MenuFocusUpdate(focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust)
   }
 
   /// Adopt the current physical input without emitting anything. `MenuScreen`
@@ -145,6 +147,7 @@ struct MenuFocusRouter {
   ) -> MenuFocusUpdate {
     var current = focusedID
     var activated: String?
+    var longActivated: String?
     var didGoBack = false
     var adjust: (id: String, step: Int)?
     for event in events {
@@ -161,6 +164,8 @@ struct MenuFocusRouter {
         }
       case .activate:
         if let current { activated = current }
+      case .longActivate:
+        if let current { longActivated = current }
       case .back:
         didGoBack = true
       case .adjust(let step):
@@ -175,7 +180,7 @@ struct MenuFocusRouter {
     // The builders' bindings read the snapshot the model was built from, so applying both would
     // write twice from the same stale value.
     if let activated, adjust?.id == activated { adjust = nil }
-    return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack, adjust: adjust)
+    return MenuFocusUpdate(focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust)
   }
 
   /// Move within the flat focusable order, clamped — no wraparound (matches
@@ -272,6 +277,8 @@ struct MenuFocusUpdate {
   var focusedID: String?
   /// Set exactly when an activate edge fired on a currently-focused item.
   var activatedID: String?
+  /// Set when A was held past the long-press threshold on a currently-focused item (tiles only).
+  var longActivatedID: String?
   var didGoBack = false
   /// Set when a left/right edge fired on a currently-focused item.
   var adjust: (id: String, step: Int)?
@@ -279,7 +286,7 @@ struct MenuFocusUpdate {
 
 extension MenuFocusUpdate: Equatable {
   static func == (lhs: MenuFocusUpdate, rhs: MenuFocusUpdate) -> Bool {
-    lhs.focusedID == rhs.focusedID && lhs.activatedID == rhs.activatedID && lhs.didGoBack == rhs.didGoBack
+    lhs.focusedID == rhs.focusedID && lhs.activatedID == rhs.activatedID && lhs.longActivatedID == rhs.longActivatedID && lhs.didGoBack == rhs.didGoBack
       && lhs.adjust?.id == rhs.adjust?.id && lhs.adjust?.step == rhs.adjust?.step
   }
 }
