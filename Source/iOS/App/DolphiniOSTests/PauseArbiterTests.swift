@@ -15,10 +15,12 @@ final class PauseArbiterTests: XCTestCase {
     var paused = false
     var pauseCalls = 0
     var resumeCalls = 0
+    /// A core that is not Running yet ignores a pause.
+    var refusePause = false
     var core: PauseArbiter.Core {
       PauseArbiter.Core(
         isRunning: { self.running }, isPaused: { self.paused },
-        pause: { self.pauseCalls += 1; self.paused = true },
+        pause: { self.pauseCalls += 1; if !self.refusePause { self.paused = true } },
         resume: { self.resumeCalls += 1; self.paused = false })
     }
   }
@@ -152,8 +154,42 @@ final class PauseArbiterTests: XCTestCase {
     XCTAssertEqual(adopted?.reason, "pause-menu-request")
     XCTAssertNil(arbiter.adoptPending(), "adopt hands the token over exactly once")
     arbiter.claimPending("again")
+    XCTAssertEqual(arbiter.holders, ["pause-menu-request"], "ignored while the adopted menu token is held")
+    arbiter.release(adopted!)
+    arbiter.claimPending("again")
     arbiter.claimPending("again-2")
-    XCTAssertEqual(arbiter.holders, ["pause-menu-request", "again-2"], "an unadopted pending claim is replaced, not leaked")
+    XCTAssertEqual(arbiter.holders, ["again-2"], "an unadopted pending claim is replaced, not leaked")
+  }
+
+  func test_userResume_releasesAnUnadoptedPendingToken() {
+    arbiter.claimPending("pause-menu-request")
+    XCTAssertTrue(arbiter.isHeld)
+    arbiter.userResume()
+    runScheduled()
+    XCTAssertFalse(arbiter.isHeld)
+    XCTAssertNil(arbiter.adoptPending())
+    XCTAssertEqual(fake.resumeCalls, 1)
+  }
+
+  func test_claimPending_isIgnoredWhileTheMenuHoldsAToken() {
+    arbiter.claim("pause-menu")
+    arbiter.claimPending("pause-menu-request")
+    XCTAssertEqual(arbiter.holders, ["pause-menu"])
+    XCTAssertNil(arbiter.adoptPending())
+  }
+
+  func test_claimWhileCoreRefusesToPause_isDeferred() {
+    fake.refusePause = true
+    let a = arbiter.claim("menu")
+    XCTAssertEqual(fake.pauseCalls, 1)
+    XCTAssertFalse(fake.paused)
+    fake.refusePause = false              // the core reached Running
+    arbiter.emulationDidStart()
+    XCTAssertTrue(fake.paused)
+    XCTAssertEqual(fake.pauseCalls, 2)
+    arbiter.release(a)
+    runScheduled()
+    XCTAssertEqual(fake.resumeCalls, 1)
   }
 
   func test_claimWhileHeldButCoreRunning_rePauses() {

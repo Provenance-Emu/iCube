@@ -79,7 +79,13 @@ final class PauseArbiter {
     if core.isRunning() {
       if !core.isPaused() {
         core.pause()
-        ownsPause = true
+        // Core::SetState ignores a pause before the core is Running, and RetroAchievements can refuse
+        // one: only own the pause if it took, otherwise apply it again on emulationDidStart().
+        if core.isPaused() {
+          ownsPause = true
+        } else {
+          deferred = true
+        }
       }
     } else {
       deferred = true
@@ -110,9 +116,13 @@ final class PauseArbiter {
     resumeWhenEmpty()
   }
 
-  /// The pause menu's Resume and the exit command: the user wants the game running, so their own bar
-  /// pause and a disconnect pause go too. Presentation tokens are released by their presentations.
+  /// The pause menu's Resume: the user wants the game running, so their own bar pause, a disconnect
+  /// pause and an unadopted pending claim go too. Presentation tokens are released by their presentations.
   func userResume() {
+    if let old = pending {
+      tokens.removeAll { $0 == old }
+      pending = nil
+    }
     tokens.removeAll { $0.reason == Reason.user || $0.reason == Reason.disconnect }
     resumeWhenEmpty()
   }
@@ -130,6 +140,8 @@ final class PauseArbiter {
   /// pending claim nobody adopted is released by the next `claimPending`, so a request that never
   /// presented (the menu was already up) cannot leak.
   func claimPending(_ reason: String) {
+    // The menu is up (or about to be): it already holds the pause and would never adopt a second token.
+    if tokens.contains(where: { $0.reason == Reason.pauseMenu || $0.reason == Reason.pauseMenuRequest }) { return }
     if let old = pending { release(old) }
     pending = claim(reason)
   }
@@ -146,7 +158,7 @@ final class PauseArbiter {
     deferred = false
     if !core.isPaused() {
       core.pause()
-      ownsPause = true
+      if core.isPaused() { ownsPause = true }
     }
   }
 
@@ -162,11 +174,11 @@ final class PauseArbiter {
   func installObservers() {
     guard observers.isEmpty else { return }
     let center = NotificationCenter.default
-    observers.append(center.addObserver(forName: Notification.Name("DOLEmulationDidStartNotification"), object: nil, queue: .main) { [weak self] _ in
-      Task { @MainActor in self?.emulationDidStart() }
+    observers.append(center.addObserver(forName: .DOLEmulationDidStart, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.emulationDidStart() }
     })
-    observers.append(center.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { [weak self] _ in
-      Task { @MainActor in self?.emulationDidStop() }
+    observers.append(center.addObserver(forName: .DOLEmulationDidEnd, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.emulationDidStop() }
     })
   }
 

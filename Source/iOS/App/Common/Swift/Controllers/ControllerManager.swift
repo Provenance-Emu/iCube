@@ -133,6 +133,7 @@ final class ControllerManager: NSObject, ObservableObject {
   /// stuck over a running game.
   func clearDisconnectPause() {
     disconnectPause = nil
+    MainActor.assumeIsolated { PauseArbiter.shared.release(reason: PauseArbiter.Reason.disconnect) }
   }
 
   /// Resolves an active disconnect-pause by handing the vacated slot to the

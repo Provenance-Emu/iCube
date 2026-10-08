@@ -345,6 +345,8 @@ struct EmulationScreen: View {
   @State private var skyLastLoadedSlot: Int = 0
   /// The on-screen controls are being edited: `TouchOverlayLayoutEditorView` covers the game.
   @State private var isEditingLayout = false
+  /// Layout editing pauses the game; held from `beginLayoutEdit()` to `endLayoutEdit()`.
+  @State private var layoutEditToken: PauseArbiter.Token?
   /// The pad being edited: the one on screen when editing began.
   @State private var layoutEditPadKind: TouchOverlayPadKind = .gameCube
 
@@ -1518,14 +1520,18 @@ struct EmulationScreen: View {
     // still up), so the menu's own tokens go here. User and disconnect pauses stay.
     PauseArbiter.shared.release(reason: PauseArbiter.Reason.pauseMenu)
     PauseArbiter.shared.release(reason: PauseArbiter.Reason.pauseMenuRequest)
+    if layoutEditToken == nil { layoutEditToken = PauseArbiter.shared.claim("layout-edit") }
     topBar.hideNow()
     isEditingLayout = true
   }
 
-  /// Done. The menus closed for editing released their tokens then; a bar pause or a disconnect pause
-  /// still holds, so only refresh the pause icon here.
+  /// Done. Releases the editing pause; a bar pause or a disconnect pause still holds. Refreshes the pause icon.
   private func endLayoutEdit() {
     isEditingLayout = false
+    if let token = layoutEditToken {
+      PauseArbiter.shared.release(token)
+      layoutEditToken = nil
+    }
     isPaused = TVEmulationBridge.isPaused()
   }
   #endif

@@ -183,8 +183,6 @@ internal struct PauseMenuView: View {
       // Grab the last live frame for a save thumbnail BEFORE pausing, so a save made
       // from this menu still gets a screenshot even though presenting is about to stop.
       SaveStateService.capturePausePreview()
-      // onAppear runs again each time a child sheet closes: keep the first answer, otherwise the menu would
-      // see its own pause and claim a pause the user made earlier (from the top bar).
       // onAppear runs again each time a child sheet closes: keep the token we already hold.
       if pauseToken == nil {
         pauseToken = PauseArbiter.shared.adoptPending() ?? PauseArbiter.shared.claim(PauseArbiter.Reason.pauseMenu)
