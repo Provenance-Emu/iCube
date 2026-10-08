@@ -9,13 +9,29 @@ import SwiftUI
 /// renders one `List` row per item (design doc §2's tvOS contract) — a
 /// compound row is the one thing that reliably breaks tvOS focus, so the
 /// tvOS renderer is not parameterized by style at all.
-enum MenuStyle {
+enum MenuStyle: Equatable {
   /// Pause-menu card grid — the §5 style-preservation token table
   /// (`menuButtonIOS`/`menuRowIOS`). Visual fidelity is unverified against a
   /// device/screenshot compare; see the design doc's Implementation Status.
   case grid
   /// Plain `List` of rows — the shape Settings/Cheats/Controllers already use.
   case list
+  /// Pause-overlay tiles (unified menu UX spec §5): `columns` per row, an `InfoShelf` beneath, rendered
+  /// natively on BOTH platforms (unlike `.grid`/`.list`, which tvOS flattens to a `List`).
+  case tiles(columns: Int)
+
+  var columns: Int {
+    switch self {
+    case .tiles(let columns): return max(1, columns)
+    case .grid, .list: return 1
+    }
+  }
+
+  var navConfig: MenuControllerNav.Config {
+    var config = MenuControllerNav.Config()
+    if case .tiles = self { config.activateOnRelease = true }
+    return config
+  }
 }
 
 /// D18 engine gap: a generic hook so a native `.alert`/`.confirmationDialog`
@@ -65,19 +81,29 @@ struct MenuModal {
 /// does not fire `onDisappear` for a merely-covered view (design doc §2/§3).
 struct MenuScreen: View {
   let model: MenuModel
-  var style: MenuStyle = .list
+  var style: MenuStyle
   /// Fires on B / tvOS `.onExitCommand`. `nil` for a screen with nothing to
   /// pop to. `MenuScreen` never calls `dismiss()` itself — the caller decides
   /// what "back" means (pop a nav pane, dismiss a sheet, flip a host's own
   /// `@State` pane enum, as `PauseMenuView`'s `CheatsMenuView(onBack:)` does).
   var onBack: (() -> Void)?
 
+  init(model: MenuModel, style: MenuStyle = .list, onBack: (() -> Void)? = nil, modal: MenuModal? = nil) {
+    self.model = model
+    self.style = style
+    self.onBack = onBack
+    self.modal = modal
+    #if os(iOS)
+    _router = State(initialValue: MenuFocusRouter(config: style.navConfig))
+    #endif
+  }
+
   /// D18 engine gap #2 (see `MenuModal`'s doc comment): non-`nil` while a
   /// host-presented modal (e.g. a confirmation alert) must intercept A/B
   /// instead of the underlying rows. Defaulted and declared after `onBack`
   /// so existing `MenuScreen(model:style:onBack:)` call sites keep compiling
   /// unchanged.
-  var modal: MenuModal? = nil
+  var modal: MenuModal?
 
   /// `.navigationDestination(item:)` requires `Hashable`, not just
   /// `Identifiable` — `MenuModel` itself can't be `Hashable` (it holds
@@ -114,7 +140,7 @@ struct MenuScreen: View {
   /// (e.g. the A that pushed this screen from a parent `.navigation` item,
   /// still physically down on this screen's first tick) never reads as a
   /// fresh press. See `MenuFocusRouter.update(padInputs:...)`'s doc comment.
-  @State private var router = MenuFocusRouter()
+  @State private var router: MenuFocusRouter
   /// `nil` until a controller actually moves focus. Kept `nil` for a
   /// touch-only session so `.listRowBackground`'s focus tint never appears
   /// on a device with no controller connected — matching `PauseMenuView`,
@@ -161,16 +187,115 @@ struct MenuScreen: View {
       #endif
   }
 
-  @ViewBuilder
   private var content: some View {
+    ZStack {
+      styleBody
+      longPressOverlay()
+    }
+  }
+
+  @ViewBuilder
+  private var styleBody: some View {
     #if os(iOS)
     switch style {
     case .grid: gridBody
     case .list: listBody
+    case .tiles: tilesBody
     }
     #else
-    tvListBody
+    if case .tiles = style {
+      if let first = model.focusableIDs.first {
+        tvTilesBody.defaultFocus($tvFocusedID, first)
+      } else {
+        tvTilesBody
+      }
+    } else {
+      tvListBody
+    }
     #endif
+  }
+
+  // MARK: Long-press picker (tiles)
+
+  /// A long-press picker up over the tiles. Rows are frozen underneath: the nested `MenuScreen`
+  /// claims the controller scope on iOS; on tvOS it is the focused subtree.
+  private struct LongPressPicker: Identifiable {
+    let id: String   // the item id
+    let title: String
+    let options: [(String, AnyHashable)]
+    let selection: Binding<AnyHashable>
+  }
+  @State private var longPressPicker: LongPressPicker?
+  /// Set by a touch/remote long-press so the Button action that fires on the same release is ignored once.
+  @State private var suppressActivateFor: String?
+
+  private func runLongPress(_ item: MenuItem) {
+    guard item.isEnabled, let longPress = item.effectiveLongPress else { return }
+    suppressActivateFor = item.id
+    switch longPress {
+    case .action(let run): run()
+    case .options(let title, let options, let selection):
+      longPressPicker = LongPressPicker(id: item.id, title: title, options: options, selection: selection)
+    }
+  }
+
+  private func activateFromButton(_ item: MenuItem) {
+    if suppressActivateFor == item.id {
+      suppressActivateFor = nil
+      return
+    }
+    performActivate(item)
+  }
+
+  private var longPressPickerModel: MenuModel {
+    guard let picker = longPressPicker else { return MenuModel() }
+    let items = picker.options.map { option in
+      MenuItem(
+        id: "\(picker.id)#\(option.1)", title: option.0,
+        icon: option.1 == picker.selection.wrappedValue ? "checkmark" : nil,
+        role: .action {
+          picker.selection.wrappedValue = option.1
+          longPressPicker = nil
+        })
+    }
+    return MenuModel(sections: [MenuSection(id: "long-press", items: items)])
+  }
+
+  @ViewBuilder
+  private func longPressOverlay() -> some View {
+    if let picker = longPressPicker {
+      ZStack {
+        Color.black.opacity(0.55).ignoresSafeArea()
+        VStack(alignment: .leading, spacing: 8) {
+          Text(picker.title).font(.headline).foregroundStyle(.white)
+          MenuScreen(model: longPressPickerModel, style: .list, onBack: { longPressPicker = nil })
+            .frame(maxHeight: CGFloat(picker.options.count) * 64 + 24)
+        }
+        .padding(16)
+        .frame(maxWidth: 420)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.ultraThinMaterial))
+        .padding(24)
+        #if os(tvOS)
+        .focusSection()
+        #endif
+      }
+      .transition(.opacity)
+    }
+  }
+
+  // MARK: Tiles (both platforms)
+
+  private func tile(_ item: MenuItem, focused: Bool) -> some View {
+    let isDestructive: Bool = { if case .destructive = item.role { return true } else { return false } }()
+    return Button { activateFromButton(item) } label: {
+      TileFace(
+        icon: item.icon, title: item.title, badge: item.currentValueTitle ?? item.badge,
+        tint: item.tint ?? .accentColor, isDestructive: isDestructive, isEnabled: item.isEnabled)
+    }
+    .buttonStyle(FocusButtonStyle(isFocusedOverride: focused))
+    .disabled(!item.isEnabled)
+    .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in runLongPress(item) })
+    .id(item.id)
   }
 
   // MARK: Shared row content
@@ -290,6 +415,32 @@ struct MenuScreen: View {
     .listRowBackground(focusedID == item.id ? Color.accentColor.opacity(0.22) : nil)
   }
 
+  // MARK: iOS — tiles style
+
+  private var tilesBody: some View {
+    let columns = style.columns
+    return VStack(spacing: 12) {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          ForEach(model.sections) { section in
+            if let header = section.header {
+              Text(header).font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: 12) {
+              ForEach(section.items) { item in tile(item, focused: focusedID == item.id) }
+            }
+          }
+        }
+        .padding(16)
+      }
+      InfoShelf(text: focusedItem?.description, value: focusedItem?.currentValueTitle)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 12)
+    }
+  }
+
+  private var focusedItem: MenuItem? { focusedID.flatMap { model.item(id: $0) } }
+
   // MARK: iOS — grid style (pause-menu card look, §5 token table)
 
   /// Fixed columns from `MenuGridLayout` rather than `GridItem(.adaptive(...))`, so the d-pad
@@ -378,6 +529,12 @@ struct MenuScreen: View {
     let time = CACurrentMediaTime()
 
     let isActive = ControllerFocusCoordinator.isActiveScope(scopeID)
+    let columnCount: Int
+    switch style {
+    case .grid: columnCount = gridColumnCount
+    case .tiles: columnCount = style.columns
+    case .list: columnCount = 1
+    }
 
     if let modal {
       // Rows are frozen; A/B drive the modal instead, through the SAME
@@ -394,7 +551,7 @@ struct MenuScreen: View {
 
     let result = router.update(
       padInputs: padInputs, at: time, model: model, focusedID: focusedID, isActive: isActive,
-      columns: style == .grid ? gridColumnCount : 1)
+      columns: columnCount)
     // Focus only ever appears once a controller is actually present — never
     // seeded in `.onAppear`, so a touch-only session shows no tint. A brand
     // new pad emits no events on its first tick (it gets `resync`ed, see
@@ -402,6 +559,11 @@ struct MenuScreen: View {
     // whatever was passed in; fall back to the model's first item exactly
     // once, the same moment the single-pad path used to seed it.
     focusedID = result.focusedID ?? model.focusableIDs.first
+    if let id = result.longActivatedID, let item = model.item(id: id) {
+      runLongPress(item)
+      // The nav path never fires the Button action, so nothing consumes the suppression.
+      suppressActivateFor = nil
+    }
     if let activatedID = result.activatedID, let item = model.item(id: activatedID) {
       performActivate(item)
     }
@@ -419,6 +581,55 @@ struct MenuScreen: View {
   // MARK: tvOS — native focus only
 
   #if os(tvOS)
+  private var tvTilesBody: some View {
+    let columns = style.columns
+    return VStack(spacing: 20) {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 28) {
+          ForEach(model.sections) { section in
+            if let header = section.header {
+              Text(header).font(.headline).foregroundStyle(.white.opacity(0.7))
+            }
+            ForEach(Array(section.items.chunked(into: columns).enumerated()), id: \.offset) { _, row in
+              HStack(spacing: 24) {
+                ForEach(row) { item in
+                  tvTile(item)
+                }
+                ForEach(0 ..< max(0, columns - row.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity) }
+              }
+            }
+          }
+        }
+        .padding(24)
+      }
+      .focusSection()
+      InfoShelf(text: tvFocusedItem?.description, value: tvFocusedItem?.currentValueTitle)
+        .padding(.horizontal, 24)
+    }
+  }
+
+  private var tvFocusedItem: MenuItem? { tvFocusedID.flatMap { model.item(id: $0) } }
+
+  /// A tile; a `.cycle` tile also steps its value on d-pad left/right (other directions are not
+  /// handled, so the focus engine still moves focus).
+  @ViewBuilder
+  private func tvTile(_ item: MenuItem) -> some View {
+    let base = tile(item, focused: tvFocusedID == item.id)
+      .focused($tvFocusedID, equals: item.id)
+    if let stepping = item.role.steppable, case .cycle = item.role {
+      base.onMoveCommand { direction in
+        guard item.isEnabled else { return }
+        switch direction {
+        case .left: stepPicker(stepping.selection, options: stepping.options, by: -1)
+        case .right: stepPicker(stepping.selection, options: stepping.options, by: 1)
+        default: break
+        }
+      }
+    } else {
+      base
+    }
+  }
+
   @ViewBuilder
   private var tvListBody: some View {
     let list = List {
@@ -562,4 +773,10 @@ struct MenuScreen: View {
     }
   }
   #endif
+}
+
+private extension Array {
+  func chunked(into size: Int) -> [[Element]] {
+    stride(from: 0, to: count, by: Swift.max(1, size)).map { Array(self[$0 ..< Swift.min($0 + size, count)]) }
+  }
 }
