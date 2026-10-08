@@ -190,6 +190,8 @@ struct MenuScreen: View {
   private var content: some View {
     ZStack {
       styleBody
+        .disabled(longPressPicker != nil)
+        .allowsHitTesting(longPressPicker == nil)
       longPressOverlay()
     }
   }
@@ -218,7 +220,7 @@ struct MenuScreen: View {
   // MARK: Long-press picker (tiles)
 
   /// A long-press picker up over the tiles. Rows are frozen underneath: the nested `MenuScreen`
-  /// claims the controller scope on iOS; on tvOS it is the focused subtree.
+  /// claims the controller scope on iOS; on tvOS the tiles are disabled while the picker is up.
   private struct LongPressPicker: Identifiable {
     let id: String   // the item id
     let title: String
@@ -247,6 +249,11 @@ struct MenuScreen: View {
     performActivate(item)
   }
 
+  private func closeLongPressPicker() {
+    longPressPicker = nil
+    suppressActivateFor = nil
+  }
+
   private var longPressPickerModel: MenuModel {
     guard let picker = longPressPicker else { return MenuModel() }
     let items = picker.options.map { option in
@@ -255,7 +262,7 @@ struct MenuScreen: View {
         icon: option.1 == picker.selection.wrappedValue ? "checkmark" : nil,
         role: .action {
           picker.selection.wrappedValue = option.1
-          longPressPicker = nil
+          closeLongPressPicker()
         })
     }
     return MenuModel(sections: [MenuSection(id: "long-press", items: items)])
@@ -268,7 +275,7 @@ struct MenuScreen: View {
         Color.black.opacity(0.55).ignoresSafeArea()
         VStack(alignment: .leading, spacing: 8) {
           Text(picker.title).font(.headline).foregroundStyle(.white)
-          MenuScreen(model: longPressPickerModel, style: .list, onBack: { longPressPicker = nil })
+          MenuScreen(model: longPressPickerModel, style: .list, onBack: { closeLongPressPicker() })
             .frame(maxHeight: CGFloat(picker.options.count) * 64 + 24)
         }
         .padding(16)
@@ -420,18 +427,23 @@ struct MenuScreen: View {
   private var tilesBody: some View {
     let columns = style.columns
     return VStack(spacing: 12) {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-          ForEach(model.sections) { section in
-            if let header = section.header {
-              Text(header).font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
-            }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: 12) {
-              ForEach(section.items) { item in tile(item, focused: focusedID == item.id) }
+      ScrollViewReader { proxy in
+        ScrollView {
+          VStack(alignment: .leading, spacing: 16) {
+            ForEach(model.sections) { section in
+              if let header = section.header {
+                Text(header).font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+              }
+              LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: 12) {
+                ForEach(section.items) { item in tile(item, focused: focusedID == item.id) }
+              }
             }
           }
+          .padding(16)
         }
-        .padding(16)
+        .onChange(of: focusedID) { _, id in
+          if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+        }
       }
       InfoShelf(text: focusedItem?.description, value: focusedItem?.currentValueTitle)
         .padding(.horizontal, 16)
