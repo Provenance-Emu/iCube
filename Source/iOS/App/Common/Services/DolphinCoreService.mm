@@ -62,8 +62,8 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   SetBaseIfUnspecified(Config::MAIN_FASTMEM_ARENA, fastmem);
   SetBaseIfUnspecified(Config::MAIN_FAST_DISC_SPEED, true);
   SetBaseIfUnspecified(Config::MAIN_DSP_THREAD, true);
-  // Dual-core: intentionally NOT set here. iOS already defaults to single-core via upstream
-  // DEFAULT_CPU_THREAD=false (MainSettings.cpp), so no explicit default is needed. An earlier
+  // Dual-core: intentionally NOT set here. DEFAULT_CPU_THREAD (MainSettings.cpp) is the default,
+  // ON since 2026-10-08, so no explicit seed is needed. An earlier
   // SetBaseIfUnspecified(false) was redundant AND made the dual-core toggle appear to force-reset
   // back to off — removing it lets the user's toggle persist normally. (Dual-core ON deadlocks
   // most games on the lean CachedInterpreter, so single-core is the right default — but that IS

@@ -56,8 +56,10 @@ const Info<bool> MAIN_RUSH_FRAME_PRESENTATION{{System::Main, "Core", "RushFrameP
                                               false};
 const Info<bool> MAIN_SMOOTH_EARLY_PRESENTATION{{System::Main, "Core", "SmoothEarlyPresentation"},
                                                 false};
-#if defined(ANDROID)
-// Currently enabled by default on Android because the performance boost is really needed.
+#if defined(ANDROID) || defined(IPHONEOS) || defined(__APPLE__)
+// Enabled by default on Android because the performance boost is really needed. iCube: on by
+// default on iOS/tvOS too (2026-10-08); the old cached-interpreter FIFO-fence hang that kept it off
+// is gone.
 constexpr bool DEFAULT_CPU_THREAD = true;
 #else
 constexpr bool DEFAULT_CPU_THREAD = false;
