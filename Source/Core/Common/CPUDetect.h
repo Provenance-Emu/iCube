@@ -48,6 +48,7 @@ struct CPUInfo
 
   // ARMv8 specific
   bool bAFP = false;  // Alternate floating-point behavior
+  bool bLSE = false;  // iCube: ARMv8.1 Large System Extensions atomics (ldadd/cas)
 
   // Call Detect()
   explicit CPUInfo();

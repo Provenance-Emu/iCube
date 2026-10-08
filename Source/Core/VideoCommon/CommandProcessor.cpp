@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 
 #include "Common/Assert.h"
+#include "Common/AtomicLSE.h"
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
 #include "Common/Flag.h"
@@ -368,7 +369,11 @@ void CommandProcessorManager::GatherPipeBursted()
   }
   else
   {
-    m_fifo.CPWritePointer.fetch_add(GPFifo::GATHER_PIPE_SIZE, std::memory_order_relaxed);
+    // iCube: every CPWritePointer writer (gather pipe, MMIO, savestates) runs on the CPU thread,
+    // so a load + store replaces the read-modify-write loop the apple-a10 target emits here.
+    m_fifo.CPWritePointer.store(m_fifo.CPWritePointer.load(std::memory_order_relaxed) +
+                                    GPFifo::GATHER_PIPE_SIZE,
+                                std::memory_order_relaxed);
   }
 
   if (m_cp_ctrl_reg.GPReadEnable && m_cp_ctrl_reg.GPLinkEnable)
@@ -383,7 +388,7 @@ void CommandProcessorManager::GatherPipeBursted()
   if (m_fifo.bFF_HiWatermark.load(std::memory_order_relaxed) != 0)
     m_system.GetCoreTiming().ForceExceptionCheck(0);
 
-  m_fifo.CPReadWriteDistance.fetch_add(GPFifo::GATHER_PIPE_SIZE, std::memory_order_seq_cst);
+  Common::AtomicFetchAdd(m_fifo.CPReadWriteDistance, GPFifo::GATHER_PIPE_SIZE);
 
   m_system.GetFifo().RunGpu();
 
