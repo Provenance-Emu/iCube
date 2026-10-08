@@ -33,6 +33,7 @@ struct TileFace: View {
           Text(badge)
             .font(.caption.weight(.semibold))
             .monospacedDigit()
+            .lineLimit(1).minimumScaleFactor(0.6)
             .foregroundStyle(.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

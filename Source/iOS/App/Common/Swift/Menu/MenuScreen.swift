@@ -426,8 +426,7 @@ struct MenuScreen: View {
 
   private var tilesBody: some View {
     let columns = style.columns
-    return VStack(spacing: 12) {
-      ScrollViewReader { proxy in
+    return ScrollViewReader { proxy in
         ScrollView {
           VStack(alignment: .leading, spacing: 16) {
             ForEach(model.sections) { section in
@@ -441,13 +440,15 @@ struct MenuScreen: View {
           }
           .padding(16)
         }
+        // Inset, not a sibling: the last row scrolls clear of the shelf instead of sitting under it.
+        .safeAreaInset(edge: .bottom, spacing: 12) {
+          InfoShelf(text: focusedItem?.description, value: focusedItem?.currentValueTitle)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+        }
         .onChange(of: focusedID) { _, id in
           if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
         }
-      }
-      InfoShelf(text: focusedItem?.description, value: focusedItem?.currentValueTitle)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 12)
     }
   }
 

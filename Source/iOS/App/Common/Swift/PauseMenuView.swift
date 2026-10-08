@@ -189,12 +189,8 @@ internal struct PauseMenuView: View {
     }
     #if os(tvOS)
     .onExitCommand {
-      if pane == .main {
-        guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
-        onClose()
-      } else {
-        pane = .main
-      }
+      // At .main the tile grid's own onBack closes (coalesced), and the confirm overlays handle theirs.
+      if pane != .main { pane = .main }
     }
     #endif
     // D16: the pause menu gets the quick-preview picker (tap a card to apply,
@@ -260,7 +256,6 @@ internal struct PauseMenuView: View {
       let isTV = platform == .tvos
       let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: isTV)
       ZStack {
-        backdrop
         if isTV {
           HStack(alignment: .top, spacing: 48) {
             coverColumn.frame(width: 220)
@@ -287,6 +282,10 @@ internal struct PauseMenuView: View {
         }
         EmulationToastOverlay(barHeight: 0, barVisible: false)
       }
+      // A background, not a ZStack sibling: the scaledToFill backdrop would otherwise widen the ZStack to the
+      // image's fill size and push the tile grid several windows wide.
+      .frame(width: proxy.size.width, height: proxy.size.height)
+      .background(backdrop)
     }
     // `MenuScreen` row text takes no explicit color; pin the dark-mode values so titles stay legible over the
     // always-dark backdrop whatever the system appearance. `.environment`, not `.preferredColorScheme`, so the
@@ -304,7 +303,7 @@ internal struct PauseMenuView: View {
   private var backdrop: some View {
     ZStack {
       Image(uiImage: game.bannerImage ?? game.coverImage)
-        .resizable().scaledToFill().blur(radius: 24).opacity(0.5).ignoresSafeArea()
+        .resizable().scaledToFill().blur(radius: 24).opacity(0.5).ignoresSafeArea().clipped()
       LinearGradient(colors: [.black.opacity(0.85), .black.opacity(0.35), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
         .ignoresSafeArea()
     }
