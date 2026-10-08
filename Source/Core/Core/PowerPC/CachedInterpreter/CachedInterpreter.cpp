@@ -1307,6 +1307,7 @@ std::string BuildHotBlocksReport(u32 top_n)
   out << "  gp_fused_emitted=" << s_gp_fused_emitted << " gp_fused_runs=" << s_gp_fused_runs
       << " gp_fused_pairs=" << s_gp_fused_pairs << " gp_fused_fallbacks=" << s_gp_fused_fallbacks
       << " (gather-pipe copy fusion; the %cyc column CANNOT show this — it is static guest cycles)\n";
+  out << Interpreter::BuildPsNeonReport();
 
   // iCube: DISPATCH CLASS DENSITY — the dynamic instruction mix, weighted by each block's run-count, so
   // it reflects what the CPU actually EXECUTES (not static code size). The FP load/store, FP arithmetic,

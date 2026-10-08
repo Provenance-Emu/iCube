@@ -5,6 +5,10 @@
 
 #include <bit>
 #include <cmath>
+#include <cstdio>
+#include <cstring>
+#include <iterator>
+#include <string>
 
 #include "Common/Assert.h"
 #include "Common/CommonTypes.h"
@@ -67,12 +71,83 @@ bool s_ps_neon_validate = false;
 bool PsNeonEnabled() { return s_ps_neon_enabled; }
 bool PsNeonValidate() { return s_ps_neon_validate; }
 
+// iCube: fast-path observability. CIRPsNeon measured +4.3 % on NFS Underground but -1.2 % on Wind
+// Waker and -2.7 % on Chibi-Robo, and a speed number alone cannot say why. A game loses either
+// because most ops bail (pay the guard, then run scalar anyway) or because hits themselves cost
+// more than they save; these counters tell the two apart. Profiler-gated (MAIN_CIR_PROFILE) like
+// the CIR gp_fused_* counters, so a speed leg with the profiler off pays one predicted branch per
+// op. A bail is classified only on the bail path. CPU thread only; the report reads them racily,
+// which is fine for a perf report.
+enum class PsNeonOp : u8
+{
+  Add,
+  Sub,
+  Mul,
+  Muls0,
+  Muls1,
+  Madd,
+  Msub,
+  Nmadd,
+  Nmsub,
+  Madds0,
+  Madds1,
+  Count
+};
+constexpr const char* kPsNeonOpNames[] = {"ps_add",   "ps_sub",    "ps_mul",   "ps_muls0",
+                                          "ps_muls1", "ps_madd",   "ps_msub",  "ps_nmadd",
+                                          "ps_nmsub", "ps_madds0", "ps_madds1"};
+static_assert(std::size(kPsNeonOpNames) == static_cast<size_t>(PsNeonOp::Count));
+
+// Within the input group and within the result group the later reason wins when lanes disagree, so
+// a bail filed as "zero" means EVERY offending lane was an exact (signed) zero — the count that
+// tells whether admitting zeros to the fast path would recover it.
+enum class PsNeonBail : u8
+{
+  Mode,         // fpscr.RN is not round-to-nearest
+  InZero,       // an input lane is +/-0
+  InSubnormal,  // an input lane is a subnormal double
+  InInfNan,     // an input lane is inf or NaN
+  OutZero,      // a result lane is +/-0 (x-x, x+(-x); x*0 already bailed as in_zero)
+  OutBelowNi,   // a result lane is nonzero but below the smallest normal single (NI-mode dependent)
+  OutInfNan,    // a result lane overflowed or is NaN
+  Tie,          // FMA result on the even tie that the scalar single-rounding correction handles
+  Count
+};
+constexpr const char* kPsNeonBailNames[] = {"mode",     "in_zero",   "in_sub",     "in_infnan",
+                                            "out_zero", "out_lowNI", "out_infnan", "tie"};
+static_assert(std::size(kPsNeonBailNames) == static_cast<size_t>(PsNeonBail::Count));
+
+struct PsNeonStats
+{
+  u64 hits;
+  u64 bails[static_cast<size_t>(PsNeonBail::Count)];
+};
+bool s_ps_neon_profile = false;
+PsNeonStats s_ps_neon_stats[static_cast<size_t>(PsNeonOp::Count)] = {};
+
+inline void PsNeonCountHit(PsNeonOp op)
+{
+  if (s_ps_neon_profile) [[unlikely]]
+    ++s_ps_neon_stats[static_cast<size_t>(op)].hits;
+}
+
+inline void PsNeonCountBail(PsNeonOp op, PsNeonBail why)
+{
+  ++s_ps_neon_stats[static_cast<size_t>(op)].bails[static_cast<size_t>(why)];
+}
+
 // The FPSCR-mode gate shared by every accelerated op: flag on, default round-to-nearest. NI is NOT gated
 // here: the fast path runs in BOTH NI==0 and NI==1, with the NI-difference (subnormal-single result flush)
 // excluded per-RESULT-lane by ResultNiIndependent below. Lane-level finite/normal checks are done per-op.
-inline bool PsNeonModeOk(const PowerPC::PowerPCState& ppc_state)
+inline bool PsNeonModeOk(const PowerPC::PowerPCState& ppc_state, PsNeonOp op)
 {
-  return PsNeonEnabled() && ppc_state.fpscr.RN == Common::FPU::ROUND_NEAR;
+  if (!PsNeonEnabled())
+    return false;
+  if (ppc_state.fpscr.RN == Common::FPU::ROUND_NEAR) [[likely]]
+    return true;
+  if (s_ps_neon_profile) [[unlikely]]
+    PsNeonCountBail(op, PsNeonBail::Mode);
+  return false;
 }
 }  // namespace
 
@@ -83,6 +158,54 @@ void Interpreter::RefreshNeonPairedConfig()
 {
   s_ps_neon_enabled = Config::Get(Config::MAIN_CIR_PS_NEON);
   s_ps_neon_validate = Config::Get(Config::MAIN_CIR_PS_NEON_VALIDATE);
+  s_ps_neon_profile = Config::Get(Config::MAIN_CIR_PROFILE);
+  std::memset(s_ps_neon_stats, 0, sizeof(s_ps_neon_stats));
+}
+
+std::string Interpreter::BuildPsNeonReport()
+{
+  std::string out = "  -- PS NEON FAST PATH (CIRPsNeon=";
+  out += s_ps_neon_enabled ? "1" : "0";
+  out += "; bail columns are % of tries, a bail runs the scalar body) --\n";
+  if (!s_ps_neon_profile)
+    return out + "     (counted only while the CIR profiler is on)\n";
+  if (!s_ps_neon_enabled)
+    return out + "     (fast path off: no tries)\n";
+
+  char line[224];
+  int n = std::snprintf(line, sizeof(line), "     %-10s %12s %6s", "op", "tries", "hit%");
+  for (const char* name : kPsNeonBailNames)
+    n += std::snprintf(line + n, sizeof(line) - n, " %10s", name);
+  out += line;
+  out += "\n";
+
+  PsNeonStats total{};
+  const auto append_row = [&out, &line](const char* name, const PsNeonStats& st) {
+    u64 tries = st.hits;
+    for (const u64 b : st.bails)
+      tries += b;
+    if (tries == 0)
+      return;
+    const double denom = static_cast<double>(tries);
+    int len = std::snprintf(line, sizeof(line), "     %-10s %12llu %6.1f", name,
+                            static_cast<unsigned long long>(tries),
+                            100.0 * static_cast<double>(st.hits) / denom);
+    for (const u64 b : st.bails)
+      len += std::snprintf(line + len, sizeof(line) - len, " %10.2f",
+                           100.0 * static_cast<double>(b) / denom);
+    out += line;
+    out += "\n";
+  };
+  for (size_t i = 0; i < static_cast<size_t>(PsNeonOp::Count); ++i)
+  {
+    const PsNeonStats& st = s_ps_neon_stats[i];
+    append_row(kPsNeonOpNames[i], st);
+    total.hits += st.hits;
+    for (size_t b = 0; b < static_cast<size_t>(PsNeonBail::Count); ++b)
+      total.bails[b] += st.bails[b];
+  }
+  append_row("TOTAL", total);
+  return out;
 }
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
@@ -143,6 +266,62 @@ inline bool EitherEvenTie(float64x2_t v)
   return (vgetq_lane_u64(is_tie, 0) | vgetq_lane_u64(is_tie, 1)) != 0;
 }
 
+// Bail classifiers for the profiler (see PsNeonBail). Only ever called on a bail with the profiler
+// on. Each returns the worst reason over both lanes (inf/NaN, then subnormal/below-NI, then exact
+// zero), or `worst` unchanged if both lanes pass.
+inline PsNeonBail ClassifyInputLanes(float64x2_t v, PsNeonBail worst)
+{
+  const uint64x2_t bits = vreinterpretq_u64_f64(v);
+  for (const u64 lane : {vgetq_lane_u64(bits, 0), vgetq_lane_u64(bits, 1)})
+  {
+    const u64 exp = lane & Common::DOUBLE_EXP;
+    if (exp != 0 && exp != Common::DOUBLE_EXP)
+      continue;
+    const PsNeonBail why = exp == Common::DOUBLE_EXP         ? PsNeonBail::InInfNan :
+                           (lane & Common::DOUBLE_FRAC) != 0 ? PsNeonBail::InSubnormal :
+                                                               PsNeonBail::InZero;
+    if (why > worst)
+      worst = why;
+  }
+  return worst;
+}
+
+// Result-side counterpart: mirrors BothFiniteNormal + BothResultNiIndependent. Returns Tie if both
+// lanes pass those (the only remaining result bail, FMA-only).
+inline PsNeonBail ClassifyResultLanes(float64x2_t v)
+{
+  const uint64x2_t bits = vreinterpretq_u64_f64(v);
+  PsNeonBail worst = PsNeonBail::Tie;
+  for (const u64 lane : {vgetq_lane_u64(bits, 0), vgetq_lane_u64(bits, 1)})
+  {
+    const u64 magnitude = lane & (Common::DOUBLE_EXP | Common::DOUBLE_FRAC);
+    PsNeonBail why;
+    if ((lane & Common::DOUBLE_EXP) == Common::DOUBLE_EXP)
+      why = PsNeonBail::OutInfNan;
+    else if (magnitude == 0)
+      why = PsNeonBail::OutZero;
+    else if (magnitude < 0x3810000000000000ULL)
+      why = PsNeonBail::OutBelowNi;
+    else
+      continue;
+    if (worst == PsNeonBail::Tie || why > worst)
+      worst = why;
+  }
+  return worst;
+}
+
+inline void PsNeonCountInputBail(PsNeonOp op, float64x2_t v0, float64x2_t v1)
+{
+  if (s_ps_neon_profile) [[unlikely]]
+    PsNeonCountBail(op, ClassifyInputLanes(v1, ClassifyInputLanes(v0, PsNeonBail::InZero)));
+}
+
+inline void PsNeonCountResultBail(PsNeonOp op, float64x2_t vr)
+{
+  if (s_ps_neon_profile) [[unlikely]]
+    PsNeonCountBail(op, ClassifyResultLanes(vr));
+}
+
 // Load a PairedSingle's two f64 lanes (PS0 in lane 0, PS1 in lane 1) from their u64 bit-patterns.
 inline float64x2_t LoadPS(const PowerPC::PairedSingle& p)
 {
@@ -163,16 +342,29 @@ inline float64x2_t Splat(double d)
 // the scalar single-round correction could nudge. On success `out` holds the pre-ForceSingle f64 result,
 // bit-identical to NI_madd_msub<sub,true>(...).value for these inputs (vfmaq_f64 == std::fma, c is rounded
 // via Force25Bit first, no tie correction needed because we excluded ties).
-inline bool FmaSingle(float64x2_t va, float64x2_t vc, float64x2_t vb, bool sub, float64x2_t* out)
+inline bool FmaSingle(PsNeonOp op, float64x2_t va, float64x2_t vc, float64x2_t vb, bool sub,
+                      float64x2_t* out)
 {
   if (!BothFiniteNormal(va) || !BothFiniteNormal(vc) || !BothFiniteNormal(vb))
+  {
+    if (s_ps_neon_profile) [[unlikely]]
+    {
+      PsNeonCountBail(op,
+                      ClassifyInputLanes(
+                          vb, ClassifyInputLanes(vc, ClassifyInputLanes(va, PsNeonBail::InZero))));
+    }
     return false;
+  }
   const float64x2_t vc25 = Force25BitNormal(vc);
   const float64x2_t b_signed = sub ? vnegq_f64(vb) : vb;
   // vfmaq_f64(acc, x, y) == x*y + acc, single-rounded — matches std::fma(a, c_round, b_sign).
   const float64x2_t vr = vfmaq_f64(b_signed, va, vc25);
   if (!BothFiniteNormal(vr) || !BothResultNiIndependent(vr) || EitherEvenTie(vr))
+  {
+    PsNeonCountResultBail(op, vr);
     return false;
+  }
+  PsNeonCountHit(op);
   *out = vr;
   return true;
 }
@@ -388,7 +580,7 @@ void Interpreter::ps_sub(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& b = ppc_state.ps[inst.FB];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Sub)) [[unlikely]]
   {
     const float64x2_t va = LoadPS(a);
     const float64x2_t vb = LoadPS(b);
@@ -416,8 +608,14 @@ void Interpreter::ps_sub(Interpreter& interpreter, UGeckoInstruction inst)
         ppc_state.UpdateFPRFSingle(ps0);
         if (inst.Rc)
           ppc_state.UpdateCR1();
+        PsNeonCountHit(PsNeonOp::Sub);
         return;
       }
+      PsNeonCountResultBail(PsNeonOp::Sub, vr);
+    }
+    else
+    {
+      PsNeonCountInputBail(PsNeonOp::Sub, va, vb);
     }
   }
 #endif
@@ -441,7 +639,7 @@ void Interpreter::ps_add(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& b = ppc_state.ps[inst.FB];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Add)) [[unlikely]]
   {
     const float64x2_t va = LoadPS(a);
     const float64x2_t vb = LoadPS(b);
@@ -469,8 +667,14 @@ void Interpreter::ps_add(Interpreter& interpreter, UGeckoInstruction inst)
         ppc_state.UpdateFPRFSingle(ps0);
         if (inst.Rc)
           ppc_state.UpdateCR1();
+        PsNeonCountHit(PsNeonOp::Add);
         return;
       }
+      PsNeonCountResultBail(PsNeonOp::Add, vr);
+    }
+    else
+    {
+      PsNeonCountInputBail(PsNeonOp::Add, va, vb);
     }
   }
 #endif
@@ -494,7 +698,7 @@ void Interpreter::ps_mul(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& c = ppc_state.ps[inst.FC];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Mul)) [[unlikely]]
   {
     const float64x2_t va = LoadPS(a);
     const float64x2_t vc = LoadPS(c);
@@ -523,8 +727,14 @@ void Interpreter::ps_mul(Interpreter& interpreter, UGeckoInstruction inst)
         ppc_state.UpdateFPRFSingle(ps0);
         if (inst.Rc)
           ppc_state.UpdateCR1();
+        PsNeonCountHit(PsNeonOp::Mul);
         return;
       }
+      PsNeonCountResultBail(PsNeonOp::Mul, vr);
+    }
+    else
+    {
+      PsNeonCountInputBail(PsNeonOp::Mul, va, vc);
     }
   }
 #endif
@@ -550,10 +760,10 @@ void Interpreter::ps_msub(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& c = ppc_state.ps[inst.FC];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Msub)) [[unlikely]]
   {
     float64x2_t vr;
-    if (FmaSingle(LoadPS(a), LoadPS(c), LoadPS(b), true, &vr))
+    if (FmaSingle(PsNeonOp::Msub, LoadPS(a), LoadPS(c), LoadPS(b), true, &vr))
     {
       float ps0, ps1;
       StoreLanes(vr, &ps0, &ps1);
@@ -603,10 +813,10 @@ void Interpreter::ps_madd(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& c = ppc_state.ps[inst.FC];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Madd)) [[unlikely]]
   {
     float64x2_t vr;
-    if (FmaSingle(LoadPS(a), LoadPS(c), LoadPS(b), false, &vr))
+    if (FmaSingle(PsNeonOp::Madd, LoadPS(a), LoadPS(c), LoadPS(b), false, &vr))
     {
       float ps0, ps1;
       StoreLanes(vr, &ps0, &ps1);
@@ -656,10 +866,10 @@ void Interpreter::ps_nmsub(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& c = ppc_state.ps[inst.FC];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Nmsub)) [[unlikely]]
   {
     float64x2_t vr;
-    if (FmaSingle(LoadPS(a), LoadPS(c), LoadPS(b), true, &vr))
+    if (FmaSingle(PsNeonOp::Nmsub, LoadPS(a), LoadPS(c), LoadPS(b), true, &vr))
     {
       // Result is finite-normal (never NaN), so the scalar `isnan(tmp) ? tmp : -tmp` is always the negate.
       float tmp0, tmp1;
@@ -717,10 +927,10 @@ void Interpreter::ps_nmadd(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& c = ppc_state.ps[inst.FC];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Nmadd)) [[unlikely]]
   {
     float64x2_t vr;
-    if (FmaSingle(LoadPS(a), LoadPS(c), LoadPS(b), false, &vr))
+    if (FmaSingle(PsNeonOp::Nmadd, LoadPS(a), LoadPS(c), LoadPS(b), false, &vr))
     {
       // Result is finite-normal (never NaN), so the scalar `isnan(tmp) ? tmp : -tmp` is always the negate.
       float tmp0, tmp1;
@@ -813,7 +1023,7 @@ void Interpreter::ps_muls0(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& c = ppc_state.ps[inst.FC];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Muls0)) [[unlikely]]
   {
     const float64x2_t va = LoadPS(a);
     const float64x2_t vc = Splat(c.PS0AsDouble());  // broadcast the PS0 multiplier into both lanes
@@ -841,8 +1051,14 @@ void Interpreter::ps_muls0(Interpreter& interpreter, UGeckoInstruction inst)
         ppc_state.UpdateFPRFSingle(ps0);
         if (inst.Rc)
           ppc_state.UpdateCR1();
+        PsNeonCountHit(PsNeonOp::Muls0);
         return;
       }
+      PsNeonCountResultBail(PsNeonOp::Muls0, vr);
+    }
+    else
+    {
+      PsNeonCountInputBail(PsNeonOp::Muls0, va, vc);
     }
   }
 #endif
@@ -865,7 +1081,7 @@ void Interpreter::ps_muls1(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& c = ppc_state.ps[inst.FC];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Muls1)) [[unlikely]]
   {
     const float64x2_t va = LoadPS(a);
     const float64x2_t vc = Splat(c.PS1AsDouble());  // broadcast the PS1 multiplier into both lanes
@@ -893,8 +1109,14 @@ void Interpreter::ps_muls1(Interpreter& interpreter, UGeckoInstruction inst)
         ppc_state.UpdateFPRFSingle(ps0);
         if (inst.Rc)
           ppc_state.UpdateCR1();
+        PsNeonCountHit(PsNeonOp::Muls1);
         return;
       }
+      PsNeonCountResultBail(PsNeonOp::Muls1, vr);
+    }
+    else
+    {
+      PsNeonCountInputBail(PsNeonOp::Muls1, va, vc);
     }
   }
 #endif
@@ -918,10 +1140,11 @@ void Interpreter::ps_madds0(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& c = ppc_state.ps[inst.FC];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Madds0)) [[unlikely]]
   {
     float64x2_t vr;
-    if (FmaSingle(LoadPS(a), Splat(c.PS0AsDouble()), LoadPS(b), false, &vr))  // C broadcast from PS0
+    if (FmaSingle(PsNeonOp::Madds0, LoadPS(a), Splat(c.PS0AsDouble()), LoadPS(b), false,
+                  &vr))  // C broadcast from PS0
     {
       float ps0, ps1;
       StoreLanes(vr, &ps0, &ps1);
@@ -971,10 +1194,11 @@ void Interpreter::ps_madds1(Interpreter& interpreter, UGeckoInstruction inst)
   const auto& c = ppc_state.ps[inst.FC];
 
 #if defined(_M_ARM_64) || defined(__aarch64__)
-  if (PsNeonModeOk(ppc_state)) [[unlikely]]
+  if (PsNeonModeOk(ppc_state, PsNeonOp::Madds1)) [[unlikely]]
   {
     float64x2_t vr;
-    if (FmaSingle(LoadPS(a), Splat(c.PS1AsDouble()), LoadPS(b), false, &vr))  // C broadcast from PS1
+    if (FmaSingle(PsNeonOp::Madds1, LoadPS(a), Splat(c.PS1AsDouble()), LoadPS(b), false,
+                  &vr))  // C broadcast from PS1
     {
       float ps0, ps1;
       StoreLanes(vr, &ps0, &ps1);

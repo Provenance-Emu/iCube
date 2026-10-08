@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <string>
 
 #include "Common/CommonTypes.h"
 #include "Core/PowerPC/CPUCoreBase.h"
@@ -45,6 +46,9 @@ public:
   // Interpreter_Paired.cpp. Called from every CPU engine's Init() so toggling the setting + relaunching
   // the game applies it (previously a process-lifetime static that needed a full app restart).
   static void RefreshNeonPairedConfig();
+  // iCube: per-op hit / bail-reason table for the NEON paired-single fast path, appended to the CIR
+  // hot-blocks report. Counted only while the CIR profiler is on (MAIN_CIR_PROFILE).
+  static std::string BuildPsNeonReport();
 
   static void unknown_instruction(Interpreter& interpreter, UGeckoInstruction inst);
 
