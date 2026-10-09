@@ -24,11 +24,14 @@ struct MenuSection: Identifiable {
   /// Stable, e.g. `"gc-players"` — not `UUID()`. See `MenuItem.id`.
   let id: String
   var header: String?
+  /// Explanatory text under the section (a `List` footer).
+  var footer: String?
   var items: [MenuItem]
 
-  init(id: String, header: String? = nil, items: [MenuItem]) {
+  init(id: String, header: String? = nil, footer: String? = nil, items: [MenuItem]) {
     self.id = id
     self.header = header
+    self.footer = footer
     self.items = items
   }
 }
@@ -63,6 +66,8 @@ struct MenuItem: Identifiable {
   /// One line shown in the info shelf while the item is focused.
   var description: String?
   var longPress: MenuLongPress?
+  /// Draws a trailing chevron in a list row, for a row that opens another screen.
+  var showsChevron: Bool = false
 
   init(
     id: String,
@@ -76,7 +81,8 @@ struct MenuItem: Identifiable {
     onCustomActivate: (() -> Void)? = nil,
     isCompactOnTV: Bool = false,
     description: String? = nil,
-    longPress: MenuLongPress? = nil
+    longPress: MenuLongPress? = nil,
+    showsChevron: Bool = false
   ) {
     self.id = id
     self.title = title
@@ -90,6 +96,29 @@ struct MenuItem: Identifiable {
     self.isCompactOnTV = isCompactOnTV
     self.description = description
     self.longPress = longPress
+    self.showsChevron = showsChevron
+  }
+}
+
+/// A numeric setting: a `Slider` row on iOS, a left/right stepper row on tvOS (spec §6.3).
+/// `Double`-backed on purpose: Int settings round through it, and `stepped` snaps to the grid.
+struct MenuStepper {
+  var value: Binding<Double>
+  var range: ClosedRange<Double>
+  var step: Double
+  var format: (Double) -> String
+
+  /// Digits kept when snapping: enough for any step this app uses (0.1 minimum) and few enough that
+  /// `0.1 * 3` comes back as exactly `0.3`.
+  private static let snapPrecision = 1_000_000.0
+
+  /// `current` moved one `step` in `direction` (+1 / -1), clamped to `range`, then snapped to the
+  /// grid `range.lowerBound + n * step`.
+  func stepped(_ current: Double, by direction: Int) -> Double {
+    let clamped = min(range.upperBound, max(range.lowerBound, current + Double(direction) * step))
+    let onGrid = range.lowerBound + ((clamped - range.lowerBound) / step).rounded() * step
+    let snapped = (onGrid * Self.snapPrecision).rounded() / Self.snapPrecision
+    return min(range.upperBound, max(range.lowerBound, snapped))
   }
 }
 
@@ -112,6 +141,9 @@ enum MenuItemRole {
   /// Activate advances to the next option and wraps; the tile shows the current option as its badge.
   /// A long-press opens the full list. Unlike `.picker`, this never explodes into rows on tvOS.
   case cycle(options: [(String, AnyHashable)], selection: Binding<AnyHashable>)
+  /// A numeric value: a slider on iOS, left/right steps on tvOS. A does nothing; left/right adjust,
+  /// and hold repeats.
+  case stepper(MenuStepper)
 }
 
 /// What a long-press of A (or a touch long-press) on an item does (unified menu UX spec §4.2).
@@ -139,6 +171,8 @@ extension MenuItem {
       return MenuItemRole.selectedTitle(options: options, current: selection.wrappedValue) ?? "—"
     case .toggle(let binding):
       return binding.wrappedValue ? L("On") : L("Off")
+    case .stepper(let stepper):
+      return stepper.format(stepper.value.wrappedValue)
     default:
       return nil
     }

@@ -530,4 +530,55 @@ final class MenuFocusRouterTests: XCTestCase {
     let r = router.update(.init(), at: 0.1, model: model, focusedID: "a", isActive: true)
     XCTAssertNil(r.activatedID, "the press that opened the screen must not activate on its release")
   }
+
+  // MARK: Stepper rows
+
+  private func singleRowModel(_ role: MenuItemRole) -> MenuModel {
+    MenuModel(sections: [MenuSection(id: "s", items: [MenuItem(id: "row", title: "Row", role: role)])])
+  }
+
+  private func stepperRole() -> MenuItemRole {
+    .stepper(MenuStepper(value: .constant(50), range: 0 ... 100, step: 1, format: { "\(Int($0))" }))
+  }
+
+  private func cycleRole() -> MenuItemRole {
+    .cycle(options: [("a", AnyHashable(0)), ("b", AnyHashable(1))], selection: .constant(AnyHashable(0)))
+  }
+
+  /// One tick of a held (or released) d-pad left on the single focused row, through the multi-pad API.
+  private func leftTick(_ router: inout MenuFocusRouter, _ model: MenuModel, at time: TimeInterval, held: Bool) -> MenuFocusUpdate {
+    router.update(padInputs: [("pad", MenuControllerNav.Input(left: held))], at: time, model: model, focusedID: "row", isActive: true)
+  }
+
+  func test_heldLeft_onStepper_repeatsAfterTheInitialDelay() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = singleRowModel(stepperRole())
+    _ = leftTick(&router, model, at: 0, held: false)   // a pad's first tick is a resync
+    XCTAssertEqual(leftTick(&router, model, at: 0.1, held: true).adjust?.step, -1)
+    XCTAssertNil(leftTick(&router, model, at: 0.3, held: true).adjust, "inside the initial delay")
+    XCTAssertEqual(leftTick(&router, model, at: 0.55, held: true).adjust?.step, -1)
+    XCTAssertNil(leftTick(&router, model, at: 0.58, held: true).adjust, "inside the repeat interval")
+    XCTAssertEqual(leftTick(&router, model, at: 0.64, held: true).adjust?.step, -1)
+  }
+
+  func test_heldLeft_onCycle_stepsOncePerPress() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = singleRowModel(cycleRole())
+    _ = leftTick(&router, model, at: 0, held: false)
+    XCTAssertEqual(leftTick(&router, model, at: 0.1, held: true).adjust?.step, -1)
+    XCTAssertNil(leftTick(&router, model, at: 0.55, held: true).adjust, "a cycle row never repeats")
+    XCTAssertNil(leftTick(&router, model, at: 1.2, held: true).adjust)
+  }
+
+  func test_leftRight_onStepper_adjustsInsteadOfMovingFocus() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = MenuModel(sections: [MenuSection(id: "s", items: [
+      MenuItem(id: "row", title: "Row", role: stepperRole()),
+      MenuItem(id: "next", title: "Next", role: .action({})),
+    ])])
+    _ = leftTick(&router, model, at: 0, held: false)
+    let result = leftTick(&router, model, at: 0.1, held: true)
+    XCTAssertEqual(result.focusedID, "row")
+    XCTAssertEqual(result.adjust?.id, "row")
+  }
 }

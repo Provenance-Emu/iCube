@@ -315,7 +315,15 @@ struct MenuScreen: View {
 
   // MARK: Shared row content
 
-  private func rowLabel(title: String, subtitle: String?, icon: String?, tint: Color?, badge: String?) -> some View {
+  @ViewBuilder
+  private func footerView(_ section: MenuSection) -> some View {
+    if let footer = section.footer { Text(footer) }
+  }
+
+  private func rowLabel(
+    title: String, subtitle: String?, icon: String?, tint: Color?, badge: String?,
+    value: String? = nil, description: String? = nil, showsChevron: Bool = false
+  ) -> some View {
     HStack(spacing: 12) {
       if let icon {
         Image(systemName: icon)
@@ -331,16 +339,35 @@ struct MenuScreen: View {
         if let subtitle {
           Text(subtitle).font(.caption).foregroundStyle(.secondary)
         }
+        if let description {
+          Text(description).font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
       Spacer()
+      if let value {
+        Text(value).foregroundStyle(.secondary)
+      }
       if let badge {
         Text(badge).font(.caption).foregroundStyle(.secondary)
+      }
+      if showsChevron {
+        Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
       }
     }
   }
 
   private func rowLabel(_ item: MenuItem) -> some View {
-    rowLabel(title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, badge: item.badge)
+    rowLabel(
+      title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, badge: item.badge,
+      description: item.description, showsChevron: item.showsChevron)
+  }
+
+  /// A `.cycle` row: description, current value and the override badge ("Auto"/"Game") all show.
+  private func cycleRowLabel(_ item: MenuItem) -> some View {
+    rowLabel(
+      title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, badge: item.badge,
+      value: item.currentValueTitle, description: item.description)
   }
 
   /// Shared by every renderer: what happens when an item is activated,
@@ -363,6 +390,8 @@ struct MenuScreen: View {
       pushedChild = PushedMenu(model: makeChild())
     case .destination(let destinationView):
       pushedDestination = PushedDestination(view: destinationView)
+    case .stepper:
+      break   // A does nothing here; left/right adjust.
     case .custom:
       item.onCustomActivate?()
     }
@@ -387,11 +416,11 @@ struct MenuScreen: View {
   @ViewBuilder
   private func listSection(_ section: MenuSection) -> some View {
     if let header = section.header {
-      Section(header: Text(header)) {
+      Section(header: Text(header), footer: footerView(section)) {
         ForEach(section.items) { item in listRow(item) }
       }
     } else {
-      Section {
+      Section(footer: footerView(section)) {
         ForEach(section.items) { item in listRow(item) }
       }
     }
@@ -417,9 +446,12 @@ struct MenuScreen: View {
       case .custom(let customView):
         customView
       case .cycle:
-        Button { performActivate(item) } label: {
-          rowLabel(title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint,
-                   badge: item.currentValueTitle ?? item.badge)
+        Button { activateFromButton(item) } label: { cycleRowLabel(item) }
+          .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in runLongPress(item) })
+      case .stepper(let stepper):
+        VStack(alignment: .leading, spacing: 6) {
+          rowLabel(item)
+          ValueStepper(stepper: stepper, isEnabled: item.isEnabled)
         }
       case .navigation, .action, .destructive:
         Button { performActivate(item) } label: { rowLabel(item) }
@@ -590,10 +622,13 @@ struct MenuScreen: View {
     if let activatedID = result.activatedID, let item = model.item(id: activatedID) {
       performActivate(item)
     }
-    if let adjust = result.adjust, let item = model.item(id: adjust.id), item.isEnabled,
-       let stepping = item.role.steppable,
-       let next = MenuItemRole.cycled(options: stepping.options, current: stepping.selection.wrappedValue, step: adjust.step) {
-      stepping.selection.wrappedValue = next
+    if let adjust = result.adjust, let item = model.item(id: adjust.id), item.isEnabled {
+      if case .stepper(let stepper) = item.role {
+        stepper.value.wrappedValue = stepper.stepped(stepper.value.wrappedValue, by: adjust.step)
+      } else if let stepping = item.role.steppable,
+                let next = MenuItemRole.cycled(options: stepping.options, current: stepping.selection.wrappedValue, step: adjust.step) {
+        stepping.selection.wrappedValue = next
+      }
     }
     if result.didGoBack {
       onBack?()
@@ -671,11 +706,11 @@ struct MenuScreen: View {
   @ViewBuilder
   private func tvSection(_ section: MenuSection) -> some View {
     if let header = section.header {
-      Section(header: Text(header)) {
+      Section(header: Text(header), footer: footerView(section)) {
         ForEach(section.items) { item in tvRow(item) }
       }
     } else {
-      Section {
+      Section(footer: footerView(section)) {
         ForEach(section.items) { item in tvRow(item) }
       }
     }
@@ -729,13 +764,22 @@ struct MenuScreen: View {
         .focused($tvFocusedID, equals: item.id)
     case .custom(let customView):
       customView
-    case .cycle:
-      Button { performActivate(item) } label: {
-        rowLabel(title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint,
-                 badge: item.currentValueTitle ?? item.badge)
+    case .stepper(let stepper):
+      tvSteppedRow(item, valueTitle: stepper.format(stepper.value.wrappedValue)) { direction in
+        stepper.value.wrappedValue = stepper.stepped(stepper.value.wrappedValue, by: direction)
       }
-      .disabled(!item.isEnabled)
-      .focused($tvFocusedID, equals: item.id)
+    case .cycle(let options, let selection):
+      Button { performActivate(item) } label: { cycleRowLabel(item) }
+        .disabled(!item.isEnabled)
+        .focused($tvFocusedID, equals: item.id)
+        .onMoveCommand { direction in   // A still cycles; left/right step without leaving the row
+          guard item.isEnabled else { return }
+          switch direction {
+          case .left: stepPicker(selection, options: options, by: -1)
+          case .right: stepPicker(selection, options: options, by: 1)
+          default: break
+          }
+        }
     case .navigation, .action, .destructive:
       Button { performActivate(item) } label: { rowLabel(item) }
         .disabled(!item.isEnabled)
@@ -743,18 +787,24 @@ struct MenuScreen: View {
     }
   }
 
-  /// A `.picker` flagged `isCompactOnTV`: one focusable row, title then "‹ value ›". Built like
-  /// `TVIntStepper` / `TVFloatStepper` (a `.focusable` HStack with `.onMoveCommand`), not a
-  /// `Button`: left/right step through the options (wrapping, as the iOS d-pad adjust does), up/down
-  /// move focus like any row, and select does nothing.
+  /// A `.picker` flagged `isCompactOnTV`: one focusable row, title then "‹ value ›". Left/right step
+  /// through the options (wrapping, as the iOS d-pad adjust does), up/down move focus like any row,
+  /// and select does nothing.
   private func tvCompactPicker(
     _ item: MenuItem, options: [(String, AnyHashable)], selection: Binding<AnyHashable>
   ) -> some View {
+    tvSteppedRow(item, valueTitle: MenuItemRole.selectedTitle(options: options, current: selection.wrappedValue) ?? "") {
+      stepPicker(selection, options: options, by: $0)
+    }
+  }
+
+  /// A row that left/right steps: title, then "‹ value ›". Built like `tvCompactPicker` always was: a
+  /// `.focusable` HStack with `.onMoveCommand`, not a `Button`, because select does nothing here.
+  private func tvSteppedRow(_ item: MenuItem, valueTitle: String, step: @escaping (Int) -> Void) -> some View {
     HStack {
       rowLabel(item)
       Image(systemName: "chevron.left")
-      Text(MenuItemRole.selectedTitle(options: options, current: selection.wrappedValue) ?? "")
-        .monospacedDigit()
+      Text(valueTitle).monospacedDigit()
       Image(systemName: "chevron.right")
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -769,8 +819,8 @@ struct MenuScreen: View {
     .onMoveCommand { direction in
       guard item.isEnabled else { return }
       switch direction {
-      case .left: stepPicker(selection, options: options, by: -1)
-      case .right: stepPicker(selection, options: options, by: 1)
+      case .left: step(-1)
+      case .right: step(1)
       default: break
       }
     }

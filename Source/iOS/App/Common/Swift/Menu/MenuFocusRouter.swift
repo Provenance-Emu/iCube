@@ -178,6 +178,11 @@ struct MenuFocusRouter {
         } else if let current {
           adjust = (current, step)
         }
+      case .adjustRepeat(let step):
+        // Only a stepper repeats: a 1...400 stepper needs ~400 presses otherwise. A cycle row keeps one step per press.
+        if columns == 1, let current, MenuFocusRouter.isStepper(current, in: model) {
+          adjust = (current, step)
+        }
       }
     }
     // A and d-pad left/right on the same row in one tick: the activate already stepped a picker.
@@ -244,10 +249,15 @@ struct MenuFocusRouter {
     return focusedID
   }
 
+  private static func isStepper(_ id: String, in model: MenuModel) -> Bool {
+    if case .stepper? = model.item(id: id)?.role { return true }
+    return false
+  }
+
   private static func isPicker(_ id: String?, in model: MenuModel) -> Bool {
     guard let id, let role = model.item(id: id)?.role else { return false }
     switch role {
-    case .picker, .cycle: return true
+    case .picker, .cycle, .stepper: return true
     default: return false
     }
   }
