@@ -276,7 +276,7 @@ struct DSUControllerView: View {
         }
       }
       .navigationBarTitleDisplayMode(.inline)
-      .navigationDestination(isPresented: $showStickFeel) { AnalogStickSettingsView() }
+      .navigationDestination(isPresented: $showStickFeel) { AnalogStickSettingsView().clearingSettingsPaneBack() }
       .sheet(isPresented: $showLayoutSheet) { LayoutPickerSheet(selectedRaw: $layoutRaw) }
       .onChange(of: layoutRaw) { _ in reconfigureVirtualControllerIfNeeded() }
       .onChange(of: restrictClient) { newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }

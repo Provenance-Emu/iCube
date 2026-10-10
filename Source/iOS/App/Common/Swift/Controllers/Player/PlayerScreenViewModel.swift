@@ -367,7 +367,7 @@ final class PlayerScreenViewModel {
           save: { [weak self] in self?.saveExpression($0, for: row) ?? false }))
       },
       advancedMotionDestination: { AnyView(EnhancedMotionControlsView()) },
-      stickFeelDestination: { AnyView(AnalogStickSettingsView().padBackNavigation()) })
+      stickFeelDestination: { AnyView(AnalogStickSettingsView()) })
   }
 
   /// A setting that is not part of the port's mapping (pointer, motion): write, then re-read.
