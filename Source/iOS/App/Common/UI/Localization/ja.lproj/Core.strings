@@ -4953,7 +4953,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Import games from a computer on the same Wi-Fi." = "Import games from a computer on the same Wi-Fi.";
 "Internal resolution, anti-aliasing, filtering and colour." = "Internal resolution, anti-aliasing, filtering and colour.";
 "Memory cards, slots and GameCube-only options." = "Memory cards, slots and GameCube-only options.";
-"Metal presentation and buffer upload options." = "Metal presentation and buffer upload options.";
+"Performance overlays, shader threads, textures, rendering and Metal options." = "Performance overlays, shader threads, textures, rendering and Metal options.";
 "On-screen messages, confirmations and panic handling." = "On-screen messages, confirmations and panic handling.";
 "Players, devices, what each plays as, and remapping." = "Players, devices, what each plays as, and remapping.";
 "Post-processing presets and their parameters." = "Post-processing presets and their parameters.";

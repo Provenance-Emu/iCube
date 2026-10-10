@@ -265,8 +265,8 @@ struct TVLibraryView: View {
 
   // MARK: - UI Settings
 
-  @AppStorage("library_background_style") private var backgroundStyle: BackgroundStyle = .gradient
-  @AppStorage("library_show_subtitles") private var showSubtitles: Bool = true
+  @AppStorage(ConfigInterfaceDefaultsKey.backgroundStyle) private var backgroundStyle: BackgroundStyle = .gradient
+  @AppStorage(ConfigInterfaceDefaultsKey.showSubtitles) private var showSubtitles: Bool = true
 
   // MARK: - Sort settings (persisted)
 

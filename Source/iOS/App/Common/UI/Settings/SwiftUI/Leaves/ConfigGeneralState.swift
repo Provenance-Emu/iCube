@@ -5,7 +5,7 @@ import Foundation
 
 /// UserDefaults keys behind the General screen.
 enum ConfigGeneralDefaultsKey {
-  /// PauseMenuView and TVEmulationBridge.mm read this same key (each keeps its own constant). A test pins the literal.
+  /// PauseMenuView reads this constant; TVEmulationBridge.mm keeps its own copy of the literal. A test pins the literal.
   static let fastForwardSpeedPercent = "fast_forward_speed_percent"
   /// Frontend-only: see SaveStateService.
   static let resumeWhereLeftOff = SaveStateService.resumeDefaultsKey

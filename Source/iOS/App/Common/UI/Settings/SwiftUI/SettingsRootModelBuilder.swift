@@ -86,7 +86,7 @@ enum SettingsRootModelBuilder {
                           hostsMenuScreen: true,
                           makeModel: { GraphicsHacksModelBuilder.make(state: GraphicsHacksState(), apply: { _ in }) }) { GraphicsHacksView() },
         SettingsLeafEntry(id: "graphics-advanced", title: L("Graphics Advanced"), icon: "slider.horizontal.3",
-                          description: L("Metal presentation and buffer upload options."),
+                          description: L("Performance overlays, shader threads, textures, rendering and Metal options."),
                           hostsMenuScreen: true,
                           makeModel: { GraphicsAdvancedModelBuilder.make(state: GraphicsAdvancedState(), apply: { _ in }) }) { GraphicsAdvancedView() },
         SettingsLeafEntry(id: "shaders", title: L("Shaders"), icon: "paintbrush", description: L("Post-processing presets and their parameters.")) { ShaderSettingsView() },

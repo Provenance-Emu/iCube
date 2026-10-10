@@ -83,3 +83,27 @@ struct DebugRootView: View {
     }
   }
 }
+
+/// The bench token, with the caption that explains it. A custom row renders only its view, so the view carries the title, the
+/// value and the caption; the token is selectable on iOS so it can be copied into tooling.
+struct DebugBenchTokenRow: View {
+  let token: String
+  let caption: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(L("Bench Token"))
+      Text(token)
+        .font(.caption.monospaced())
+        .foregroundStyle(.secondary)
+        .lineLimit(2)
+#if os(iOS)
+        .textSelection(.enabled)
+#endif
+      Text(caption)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+}
