@@ -51,7 +51,7 @@ struct ConfigOverrideBadge: View {
   let override: DOLConfigOverride
 
   var body: some View {
-    if let title {
+    if let title = Self.title(for: override) {
       Text(title)
         .font(.caption).bold()
         .foregroundStyle(.secondary)
@@ -60,7 +60,7 @@ struct ConfigOverrideBadge: View {
     }
   }
 
-  private var title: String? {
+  static func title(for override: DOLConfigOverride) -> String? {
     switch override {
     case .auto: return L("Auto")
     case .game: return L("Game")
@@ -193,6 +193,80 @@ struct HelpSheetButton: View {
             .navigationTitle(L("Help"))
             .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showing = false } } }
         }
+      }
+  }
+}
+
+/// Shared inline-description helper. Wraps any control with a `.caption` secondary
+/// line directly under it. This is the single canonical row style for the whole
+/// settings surface — every page uses it instead of section footers or tap-to-open
+/// info popovers, so descriptions are always visible inline.
+@ViewBuilder
+func settingsCaption<Content: View>(_ content: Content, _ caption: String) -> some View {
+  VStack(alignment: .leading, spacing: 4) {
+    content
+    Text(caption)
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
+  }
+}
+
+/// NavigationLink row with an inline caption *inside* the link's label, so the row
+/// keeps its disclosure chevron and full-row tap target (wrapping a NavigationLink
+/// in an external VStack would strip both). `label` is the normal row content
+/// (e.g. an HStack with title + trailing value).
+@ViewBuilder
+func settingsNavCaption<Destination: View, Label: View>(
+  destination: Destination,
+  _ caption: String,
+  @ViewBuilder label: () -> Label
+) -> some View {
+  NavigationLink(destination: destination) {
+    VStack(alignment: .leading, spacing: 4) {
+      label()
+      Text(caption)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+  }
+}
+
+/// Reusable Off/On/Auto picker for Metal TriState knobs (present-drawable, manual-upload).
+struct MetalTriStatePicker: View {
+  @Binding var selected: Int
+  let title: String
+  let setter: (Int) -> Void
+  var body: some View {
+    List {
+      SettingsSelectRow(label: L("Off"), checked: selected == 0) { selected = 0; setter(0) }
+      SettingsSelectRow(label: L("On"), checked: selected == 1) { selected = 1; setter(1) }
+      SettingsSelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; setter(2) }
+    }
+    .navigationTitle(title)
+  }
+}
+
+/// Reset All Settings, with its confirmation. One view so the iPhone toolbar and the About leaf share the alert text
+/// (the sidebar shell has no toolbar, so About is where tvOS and iPad reach it).
+struct SettingsResetAllButton<Label: View>: View {
+  var role: ButtonRole?
+  let label: Label
+  @State private var confirming = false
+
+  init(role: ButtonRole? = nil, @ViewBuilder label: () -> Label) {
+    self.role = role
+    self.label = label()
+  }
+
+  var body: some View {
+    Button(role: role) { confirming = true } label: { label }
+      .alert(L("Reset All Settings"), isPresented: $confirming) {
+        Button(L("Cancel"), role: .cancel) {}
+        Button(L("Reset"), role: .destructive) { DOLConfigBridge.resetAllToDefaults() }
+      } message: {
+        Text(L("This will reset all settings to factory defaults. This may require restarting emulation."))
       }
   }
 }

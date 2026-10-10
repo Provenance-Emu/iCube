@@ -523,21 +523,10 @@ struct EmulationScreen: View {
         .zIndex(5)
       }
     }
-    // Was `.sheet(isPresented:)` over a bespoke `isPauseMenuStyle` surface (now deleted
-    // from SettingsRootView.swift) whose content was clamped to a fixed ~740pt-wide
-    // two-column layout on a 1920pt-wide tvOS screen, with the List's default (light)
-    // background never hidden on tvOS — together the small floating panel, the
-    // overlapping title/description text, and the blank white controls box. Switching
-    // to `.fullScreenCover` with the plain `TVSettingsPage()` reuses the same
-    // full-screen, readable presentation the library's own Settings entry already uses
-    // on tvOS (TVLibraryView.swift `.fullScreenCover(isPresented: $showSettings)`),
-    // including its Menu-button exit, which the deleted surface had via `.onExitCommand`
-    // — added explicitly here since this cover doesn't sit inside a NavigationStack.
     .fullScreenCover(isPresented: $showSettings) {
-      TVSettingsPage()
+      SettingsRootView()
         .pauseClaim("settings")
         .interactiveDismissDisabled(true)
-        .onExitCommand { showSettings = false }
     }
     .fullScreenCover(isPresented: $showPauseMenu) {
       ZStack {

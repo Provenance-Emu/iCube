@@ -564,7 +564,7 @@ struct TVLibraryView: View {
 #endif
 #if os(iOS) || targetEnvironment(macCatalyst)
       .navigationDestinationItemCompat(item: settingsBinding) { _ in
-        TVSettingsPage()
+        SettingsRootView()
           .navigationBarTitleDisplayMode(.inline)
       }
       .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
@@ -1854,7 +1854,7 @@ struct TVLibraryView: View {
       removeAllObservers()
     }
 #if os(tvOS)
-    .fullScreenCover(isPresented: $showSettings) { TVSettingsPage().interactiveDismissDisabled(true) }
+    .fullScreenCover(isPresented: $showSettings) { SettingsRootView().interactiveDismissDisabled(true) }
     .sheet(item: $tvToolbarSheet) { tvToolbarSheetBody($0) }
     .sheet(isPresented: $showSearchSheet) {
       NavigationStack {

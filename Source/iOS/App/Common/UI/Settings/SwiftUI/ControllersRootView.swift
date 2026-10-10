@@ -103,8 +103,12 @@ struct AnalogStickSettingsView: View {
 /// the rest of the controller options; "Motion Source (DSU)" (`DSUSettingsView`) is its own row.
 /// Opening it writes nothing: unused ports are under "Show All Ports".
 struct ControllersRootView: View {
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.settingsPaneBack) private var paneBack
+
   var body: some View {
-    ControllerHubView(system: .forSettings)
+    // In the sidebar pane, Back returns to the sidebar rather than closing Settings.
+    ControllerHubView(system: .forSettings, onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }))
   }
 }
 

@@ -175,7 +175,7 @@ struct MenuScreen: View {
         MenuScreen(model: child.model, style: style, onBack: { pushedChild = nil })
       }
       .navigationDestination(item: $pushedDestination) { destination in
-        destination.view
+        destination.view.clearingSettingsPaneBack()
       }
       #if os(iOS)
       .controllerScope(scopeID)
@@ -449,7 +449,7 @@ struct MenuScreen: View {
         }
         .pickerStyle(.menu)
       case .destination(let destinationView):
-        NavigationLink { destinationView } label: { rowLabel(item) }
+        NavigationLink { destinationView.clearingSettingsPaneBack() } label: { rowLabel(item) }
       case .custom(let customView):
         customView
       case .cycle:
@@ -761,7 +761,7 @@ struct MenuScreen: View {
       .disabled(!item.isEnabled)
       .focused($tvFocusedID, equals: item.id)
     case .destination(let destinationView):
-      NavigationLink { destinationView } label: { rowLabel(item) }
+      NavigationLink { destinationView.clearingSettingsPaneBack() } label: { rowLabel(item) }
         .disabled(!item.isEnabled)
         .focused($tvFocusedID, equals: item.id)
     case .custom(let customView):
