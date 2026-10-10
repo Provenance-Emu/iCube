@@ -234,7 +234,7 @@ final class ControllerManager: NSObject, ObservableObject {
          let slot = self.assignedSlot(for: dropped),
          TVEmulationBridge.isRunning(),
          !(TVEmulationBridge.currentGameID() as String).isEmpty,
-         !TVEmulationBridge.isPaused() {
+         MainActor.assumeIsolated({ PauseArbiter.shared.coreWouldRun }) {
         let qualifier = TVControllerMappingBridge.qualifiedName(for: dropped) as String
         self.disconnectPause = DisconnectPause(qualifier: qualifier, port: slot.port, isWii: slot.isWii)
         MainActor.assumeIsolated { _ = PauseArbiter.shared.claim(PauseArbiter.Reason.disconnect) }

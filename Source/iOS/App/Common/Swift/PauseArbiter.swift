@@ -35,6 +35,8 @@ final class PauseArbiter {
     /// while the host queue can be busy). The bridge drops one that a later pause or resume supersedes.
     var pauseAsync: () -> Void = {}
     var resumeAsync: () -> Void = {}
+    /// True while an async pause or resume has not been applied or dropped yet.
+    var hasQueuedRequest: () -> Bool = { false }
 
     static let bridge = Core(
       isRunning: { TVEmulationBridge.isRunning() },
@@ -42,7 +44,8 @@ final class PauseArbiter {
       pause: { TVEmulationBridge.pause() },
       resume: { TVEmulationBridge.resume() },
       pauseAsync: { TVEmulationBridge.pauseAsync() },
-      resumeAsync: { TVEmulationBridge.resumeAsync() })
+      resumeAsync: { TVEmulationBridge.resumeAsync() },
+      hasQueuedRequest: { TVEmulationBridge.hasQueuedPauseRequest() })
   }
 
   static let shared = PauseArbiter(core: .bridge)
@@ -74,9 +77,8 @@ final class PauseArbiter {
   private var inactiveToken: Token?
   /// True when the app-inactive transition (not a claim) paused the core and nobody has taken that over.
   private var inactivePauseOwned = false
-  /// True after `core.resumeAsync()` until a pause or resume the arbiter makes itself: that resume may still
-  /// be queued, so `isPaused()` can read true for a core that is about to run. A claim or a resign in that
-  /// window must pause explicitly, which also cancels the queued resume.
+  /// True after `core.resumeAsync()` until a pause or resume the arbiter makes itself. Read it through
+  /// `resumeMayBeQueued`: once the queued resume has run, a later pause is someone else's (debug API).
   private var asyncResumeIssued = false
   private var observers: [NSObjectProtocol] = []
 
@@ -86,6 +88,19 @@ final class PauseArbiter {
   }
 
   var isHeld: Bool { !tokens.isEmpty }
+
+  /// Our async resume may still be queued, so `isPaused()` can read true for a core that is about to run.
+  /// A claim or a resign in that window must pause explicitly, which also cancels the queued resume.
+  private var resumeMayBeQueued: Bool { asyncResumeIssued && core.hasQueuedRequest() }
+
+  /// Whether the game runs once the app is active and nothing new is claimed: it is running, our resume is
+  /// still on its way, or the pause is ours and only the app-inactive claim (or nothing, before the deferred
+  /// resume) still holds it. A pause that must not be missed (a controller disconnect) gates on this, not on
+  /// `isPaused()`, which reads true in all but the first case.
+  var coreWouldRun: Bool {
+    !core.isPaused() || resumeMayBeQueued
+      || ((inactivePauseOwned || ownsPause) && tokens.allSatisfy { $0.reason == Reason.appInactive })
+  }
   var holders: [String] { tokens.map(\.reason) }
 
   @discardableResult
@@ -101,7 +116,7 @@ final class PauseArbiter {
     if !pausing {
       // flag only
     } else if core.isRunning() {
-      if asyncResumeIssued || !core.isPaused() {
+      if resumeMayBeQueued || !core.isPaused() {
         asyncResumeIssued = false
         core.pause()
         // Core::SetState ignores a pause before the core is Running, and RetroAchievements can refuse
@@ -186,7 +201,7 @@ final class PauseArbiter {
   func appWillResignActive() {
     guard inactiveToken == nil, core.isRunning() else { return }
     inactiveToken = claim(Reason.appInactive, pausing: false)
-    if asyncResumeIssued || !core.isPaused() {
+    if resumeMayBeQueued || !core.isPaused() {
       asyncResumeIssued = false
       core.pauseAsync()
       inactivePauseOwned = true
@@ -223,7 +238,7 @@ final class PauseArbiter {
   func emulationDidStart() {
     guard deferred, isHeld else { deferred = false; return }
     deferred = false
-    if asyncResumeIssued || !core.isPaused() {
+    if resumeMayBeQueued || !core.isPaused() {
       asyncResumeIssued = false
       core.pause()
       if core.isPaused() { ownsPause = true }

@@ -21,6 +21,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)pauseAsync;
 + (void)resumeAsync;
 + (BOOL)isPaused;
+/// True while a `pauseAsync` / `resumeAsync` is still waiting on the host queue or inside its state change.
++ (BOOL)hasQueuedPauseRequest;
 /// The console's reset button: the running game restarts from power-on. Resumes a paused core,
 /// because a reset only takes effect while the CPU runs. No-op when nothing is running.
 + (void)resetSystem;

@@ -20,23 +20,36 @@ final class PauseLifecycleTests: XCTestCase {
     /// Resumes that took effect, from either path.
     var resumeCalls = 0
     var generation = 0
+    /// Newest generation applied or dropped; behind `generation` while an async job is queued.
+    var settled = 0
     /// Async requests queued for the host queue, run in order by `runHost()`.
     var hostJobs: [() -> Void] = []
     var core: PauseArbiter.Core {
       PauseArbiter.Core(
         isRunning: { self.running }, isPaused: { self.paused },
-        pause: { self.generation += 1; self.pauseCalls += 1; self.paused = true },
-        resume: { self.generation += 1; self.resumeCalls += 1; self.paused = false },
+        pause: { self.bumpSync(); self.pauseCalls += 1; self.paused = true },
+        resume: { self.bumpSync(); self.resumeCalls += 1; self.paused = false },
         pauseAsync: {
           self.generation += 1
           let issued = self.generation
-          self.hostJobs.append { if issued == self.generation, self.running, !self.paused { self.paused = true } }
+          self.hostJobs.append {
+            if issued == self.generation, self.running, !self.paused { self.paused = true }
+            self.settled = max(self.settled, issued)
+          }
         },
         resumeAsync: {
           self.generation += 1
           let issued = self.generation
-          self.hostJobs.append { if issued == self.generation, self.paused { self.resumeCalls += 1; self.paused = false } }
-        })
+          self.hostJobs.append {
+            if issued == self.generation, self.paused { self.resumeCalls += 1; self.paused = false }
+            self.settled = max(self.settled, issued)
+          }
+        },
+        hasQueuedRequest: { self.settled < self.generation })
+    }
+    private func bumpSync() {
+      generation += 1
+      settled = generation
     }
     func runHost() {
       let jobs = hostJobs
@@ -339,6 +352,110 @@ final class PauseLifecycleTests: XCTestCase {
     XCTAssertTrue(fake.paused, "booted while inactive: pause it")
     arbiter.appDidBecomeActive()
     fake.runHost()
+    runScheduled()
+    XCTAssertFalse(fake.paused)
+  }
+
+  // A pause made outside the arbiter after its queued resume has landed (N1)
+
+  func test_externalPauseAfterResumeLanded_staysPausedAcrossAppSwitch() {
+    switchAwayAndBack()
+    XCTAssertFalse(fake.paused)
+    fake.paused = true  // the debug API pauses the core directly
+    switchAwayAndBack()
+    XCTAssertTrue(fake.paused, "a landed resume must not let the arbiter take over a foreign pause")
+    XCTAssertEqual(fake.resumeCalls, 1)
+  }
+
+  func test_externalPauseAfterResumeLanded_claimReleaseDoesNotResume() {
+    switchAwayAndBack()
+    fake.paused = true
+    let sheet = arbiter.claim("settings")
+    XCTAssertEqual(fake.pauseCalls, 0, "the core is already paused and no resume of ours is queued")
+    arbiter.release(sheet)
+    runScheduled()
+    XCTAssertTrue(fake.paused)
+    XCTAssertEqual(fake.resumeCalls, 1)
+  }
+
+  // coreWouldRun: the controller-disconnect gate
+
+  func test_coreWouldRun_runningGame() {
+    XCTAssertTrue(arbiter.coreWouldRun)
+  }
+
+  func test_coreWouldRun_whileInactivePauseHolds() {
+    arbiter.appWillResignActive()
+    fake.runHost()
+    XCTAssertTrue(fake.paused)
+    XCTAssertTrue(arbiter.coreWouldRun, "the game resumes on become-active, so a disconnect must still pause")
+  }
+
+  func test_coreWouldRun_whileQueuedResumeIsPending() {
+    arbiter.appWillResignActive()
+    fake.runHost()
+    arbiter.appDidBecomeActive()
+    XCTAssertTrue(fake.paused)
+    XCTAssertTrue(arbiter.coreWouldRun)
+  }
+
+  func test_menuReleasedWhileInactive_disconnectStillPauses() {
+    let menu = arbiter.claim(PauseArbiter.Reason.pauseMenu)
+    arbiter.appWillResignActive()
+    fake.runHost()
+    arbiter.release(menu)
+    runScheduled()
+    XCTAssertTrue(fake.paused, "the inactive claim still holds")
+    XCTAssertTrue(arbiter.coreWouldRun, "the menu's pause resumes on become-active, so a disconnect must claim")
+    arbiter.claim(PauseArbiter.Reason.disconnect)
+    arbiter.appDidBecomeActive()
+    fake.runHost()
+    runScheduled()
+    XCTAssertTrue(fake.paused, "the disconnect keeps the game paused")
+    arbiter.release(reason: PauseArbiter.Reason.disconnect)
+    runScheduled()
+    XCTAssertFalse(fake.paused)
+  }
+
+  func test_coreWouldRun_falseWhileMenuHoldsAcrossResign() {
+    _ = arbiter.claim(PauseArbiter.Reason.pauseMenu)
+    arbiter.appWillResignActive()
+    fake.runHost()
+    XCTAssertFalse(arbiter.coreWouldRun)
+  }
+
+  func test_coreWouldRun_falseForMenuOrExternalPause() {
+    let menu = arbiter.claim(PauseArbiter.Reason.pauseMenu)
+    XCTAssertFalse(arbiter.coreWouldRun)
+    arbiter.release(menu)
+    runScheduled()
+    fake.paused = true
+    XCTAssertFalse(arbiter.coreWouldRun, "a foreign pause keeps the game stopped anyway")
+  }
+
+  func test_disconnectWhileInactive_staysPausedOnReturn_andReconnectResumes() {
+    arbiter.appWillResignActive()
+    fake.runHost()
+    if arbiter.coreWouldRun { arbiter.claim(PauseArbiter.Reason.disconnect) }
+    arbiter.appDidBecomeActive()
+    fake.runHost()
+    runScheduled()
+    XCTAssertTrue(fake.paused, "a pad that dropped while locked must leave the game paused")
+    XCTAssertEqual(arbiter.holders, [PauseArbiter.Reason.disconnect])
+    arbiter.release(reason: PauseArbiter.Reason.disconnect)
+    runScheduled()
+    XCTAssertFalse(fake.paused, "reconnecting resumes the pause the arbiter took over")
+  }
+
+  func test_disconnectRightAfterBecomeActive_cancelsTheQueuedResume() {
+    arbiter.appWillResignActive()
+    fake.runHost()
+    arbiter.appDidBecomeActive()
+    if arbiter.coreWouldRun { arbiter.claim(PauseArbiter.Reason.disconnect) }
+    fake.runHost()
+    runScheduled()
+    XCTAssertTrue(fake.paused)
+    arbiter.release(reason: PauseArbiter.Reason.disconnect)
     runScheduled()
     XCTAssertFalse(fake.paused)
   }

@@ -116,11 +116,21 @@ static bool StateOperationAllowed(Core::System& system, const char* operation)
 // has to answer). The mutex only orders a job's "compare, then SetState" against a SYNC pause/resume's
 // "bump, then SetState", and the sync path already waits on Core's own locks behind an in-flight SetState.
 static std::atomic<uint64_t> s_pauseRequestGeneration{0};
+// Newest generation whose request has been applied or dropped. Behind s_pauseRequestGeneration while an
+// async job is still waiting on the host queue (or inside its SetState).
+static std::atomic<uint64_t> s_pauseSettledGeneration{0};
 static std::mutex s_pauseRequestMutex;
 
+static void SettlePauseGeneration(uint64_t generation) {
+  uint64_t settled = s_pauseSettledGeneration.load();
+  while (settled < generation && !s_pauseSettledGeneration.compare_exchange_weak(settled, generation)) {
+  }
+}
+
+// The caller applies the request itself right after this returns, which supersedes every queued job.
 static void BumpPauseGenerationSync() {
   std::lock_guard<std::mutex> lock(s_pauseRequestMutex);
-  s_pauseRequestGeneration.fetch_add(1);
+  SettlePauseGeneration(s_pauseRequestGeneration.fetch_add(1) + 1);
 }
 
 static void RunPauseRequestAsync(Core::State from, Core::State to) {
@@ -131,6 +141,7 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
     if (generation == s_pauseRequestGeneration.load() && Core::GetState(system) == from) {
       Core::SetState(system, to);
     }
+    SettlePauseGeneration(generation);
   });
 }
 
@@ -166,6 +177,10 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
 
 + (BOOL)isPaused {
   return Core::GetState(Core::System::GetInstance()) == Core::State::Paused;
+}
+
++ (BOOL)hasQueuedPauseRequest {
+  return s_pauseSettledGeneration.load() < s_pauseRequestGeneration.load();
 }
 
 + (void)registerMainDisplayView:(UIView*)view {
