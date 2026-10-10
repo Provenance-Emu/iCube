@@ -6,7 +6,7 @@ import GameController
 import SwiftUI
 
 /// B on a controller pops a pushed screen that is not a `MenuScreen` (iOS). `MenuScreen` handles B
-/// itself; a plain `List`/`Form` pushed from one (More Controller Settings, Motion Source (DSU),
+/// itself; a plain `List`/`Form` pushed from one (Controller Lights, Motion Source (DSU),
 /// Edit Layout) had no pad Back at all, so a pad's A could push it and nothing brought the pad back.
 /// tvOS needs nothing: Menu pops natively.
 ///

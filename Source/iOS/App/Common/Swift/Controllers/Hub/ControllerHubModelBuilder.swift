@@ -163,7 +163,7 @@ enum ControllerHubModelBuilder {
     return MenuSection(id: "touch-controls", header: L("Touch Controls"), items: items)
   }
 
-  // MARK: Setup (was More Controller Settings)
+  // MARK: Setup
 
   private static func setupSection(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuSection {
     var items = [MenuItem(

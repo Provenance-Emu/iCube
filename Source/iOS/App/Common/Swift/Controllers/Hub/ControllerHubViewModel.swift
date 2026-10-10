@@ -304,8 +304,13 @@ final class ControllerHubViewModel {
         self?.writer.resetOverlayLayouts()
         self?.reload()
       },
-      // The real view arrives with the Lights screen.
-      lightsDestination: { AnyView(EmptyView()) })
+      lightsDestination: {
+        #if os(iOS)
+        AnyView(ControllerLightsView().padBackNavigation())
+        #else
+        AnyView(EmptyView())
+        #endif
+      })
   }
 
   private static func skinsDestination(for system: ControllerSetupSystem) -> AnyView {

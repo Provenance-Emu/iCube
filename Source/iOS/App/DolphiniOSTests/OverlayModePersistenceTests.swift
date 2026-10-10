@@ -3,7 +3,7 @@
 import XCTest
 @testable import iCube
 
-/// The hub's Overlay Style survives a relaunch (`controller_overlay_mode`). Exercised through the
+/// The hub's Touch Controls "Layout" survives a relaunch (`controller_overlay_mode`). Exercised through the
 /// static read and write `ControllerManager.overlayMode` uses, against a scratch defaults suite, so
 /// the singleton and its controller side effects stay out of it.
 final class OverlayModePersistenceTests: XCTestCase {

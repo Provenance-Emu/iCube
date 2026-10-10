@@ -6,8 +6,9 @@ import XCTest
 @testable import iCube
 
 /// `LiveControllerHubWriter` itself, against an injected `PlayerScreenIO` and hub reader: what
-/// `assign` reports, what `clear` writes, and the gyro-pointer re-enable. The IO fake follows a
-/// device write into the reader, as the real config does.
+/// `assign` reports, what `clear` writes, the gyro-pointer re-enable, the pointer settings that
+/// go through the IO, and Extension / Sideways, which bypass it for `WiimoteSlotOptions`. The IO
+/// fake follows a device write into the reader, as the real config does.
 final class LiveControllerHubWriterTests: XCTestCase {
 
   private static let xbox = "MFi/0/Xbox Wireless Controller"

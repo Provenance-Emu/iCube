@@ -7,7 +7,7 @@ import XCTest
 @testable import iCube
 
 /// The overlay's button art follows the pad shown (controller hub Phase 4: the separate colour
-/// override is gone; the hub's "Overlay Style" picks the pad).
+/// override is gone; the hub's Touch Controls "Layout" picks the pad).
 final class TouchOverlayArtTests: XCTestCase {
   func testGameCubePadUsesTheGameCubePalette() {
     XCTAssertEqual(TouchOverlayArt.variant(for: .gameCube), .gameCube)

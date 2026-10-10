@@ -14,7 +14,9 @@ import SwiftUI
 /// protocol split).
 struct MenuModel {
   var sections: [MenuSection]
-  /// An id the host wants focused after a rebuild that MOVED the focused row; never overrides a focused id that still exists.
+  /// An id the host wants focused after a rebuild. On iOS it only applies when the rebuild MOVED the focused
+  /// row (`MenuFocusRouter.reconcile`) and never overrides a focused id that still exists. On tvOS the
+  /// `MenuScreen` handler sets `tvFocusedID` to it unconditionally whenever the value changes and the row exists.
   var focusRequest: String?
 
   init(sections: [MenuSection] = [], focusRequest: String? = nil) {
