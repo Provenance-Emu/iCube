@@ -96,11 +96,34 @@ final class ROMUploadServer: @unchecked Sendable {
     /// Stream PROPFIND / file bodies above this size instead of one giant `send`.
     private static let streamBodyThreshold = 256 * 1024
 
-    /// Background enumeration + XML assembly for PROPFIND (never blocks socket I/O).
+    /// File GET/PUT/DELETE. PROPFIND does not use this queue — a mount must not
+    /// wait behind an in-flight upload or a startup directory scan.
     private static let diskIOQueue = DispatchQueue(
         label: "org.dolphin.iCube.uploadserver.disk",
         qos: .utility
     )
+
+    /// Depth-1 PROPFIND enumeration. Capped so Finder's mount storm overlaps
+    /// directory scans instead of queueing them one behind another.
+    private static let propfindQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "org.dolphin.iCube.uploadserver.propfind"
+        queue.maxConcurrentOperationCount = 4
+        queue.qualityOfService = .userInitiated
+        return queue
+    }()
+
+    /// Startup directory warm-up. Kept off the PROPFIND workers.
+    private static let warmupQueue = DispatchQueue(
+        label: "org.dolphin.iCube.uploadserver.warmup",
+        qos: .background
+    )
+
+    /// Finder repeats the same PROPFIND during a mount.
+    private static let propfindCacheTTL: TimeInterval = 2
+
+    /// `ISO8601DateFormatter` is not thread-safe. Depth-1 PROPFINDs run concurrently.
+    private static let webDAVDateLock = NSLock()
 
     private static let webDAVISO8601Formatter: ISO8601DateFormatter = {
         let fmt = ISO8601DateFormatter()
@@ -131,6 +154,10 @@ final class ROMUploadServer: @unchecked Sendable {
     /// answered identically no matter how the connection was classified.
     private var asyncRoutes = WebRouteTable()
     private var cachedIPAddress: String?
+    /// Proactive directory listing scheduled at start. Cancelled on the first PROPFIND.
+    private var directoryWarmup: DispatchWorkItem?
+    /// Short-lived 207 bodies keyed by absolute path and listing depth.
+    private var propfindCache: [PropfindCacheKey: PropfindCacheEntry] = [:]
 
     /// The Bonjour service URL the WebDAV listener advertises (`_webdav._tcp`).
     /// Mirrors the old GCDWebServer `bonjourServerURL`. Derived from the device
@@ -210,12 +237,7 @@ final class ROMUploadServer: @unchecked Sendable {
             do {
                 try await startListener(on: candidate)
                 advertiseWebDAV(on: candidate)
-                let root = romsDirectory
-                Self.diskIOQueue.async {
-                    _ = try? FileManager.default.contentsOfDirectory(
-                        at: root, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
-                        options: [.skipsHiddenFiles])
-                }
+                scheduleDirectoryWarmup()
                 NSLog("[ROMUploadServer] started on :\(candidate)")
                 return
             } catch {
@@ -326,6 +348,7 @@ final class ROMUploadServer: @unchecked Sendable {
     }
 
     func stop() {
+        cancelDirectoryWarmup()
         lock.lock()
         let conns = activeConnections
         let contexts = connectionContexts
@@ -346,6 +369,31 @@ final class ROMUploadServer: @unchecked Sendable {
         port = 0
         cachedIPAddress = nil
         NSLog("[ROMUploadServer] stopped")
+    }
+
+    /// Prime directory metadata without occupying a PROPFIND worker.
+    private func scheduleDirectoryWarmup() {
+        let root = romsDirectory
+        let work = DispatchWorkItem {
+            _ = try? FileManager.default.contentsOfDirectory(
+                at: root,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )
+        }
+        lock.lock()
+        directoryWarmup = work
+        lock.unlock()
+        Self.warmupQueue.async(execute: work)
+    }
+
+    /// Drop the startup scan so a mount's first PROPFIND does not wait on it.
+    private func cancelDirectoryWarmup() {
+        lock.lock()
+        let work = directoryWarmup
+        directoryWarmup = nil
+        lock.unlock()
+        work?.cancel()
     }
 
     // MARK: - Custom Handler Registration
@@ -882,6 +930,7 @@ final class ROMUploadServer: @unchecked Sendable {
                                   request: HTTPRequest,
                                   isWebDAV: Bool,
                                   initial: Data) {
+        invalidatePropfindCache()
         guard let target = resolvePutTarget(on: connection, request: request, isWebDAV: isWebDAV),
               let writer = openPutTarget(target, on: connection, request: request, isWebDAV: isWebDAV)
         else { return }
@@ -1722,6 +1771,7 @@ final class ROMUploadServer: @unchecked Sendable {
     /// Streams a `Content-Length` PUT body straight to disk, for either client mode.
     private func streamPut(on connection: NWConnection, request: HTTPRequest, isWebDAV: Bool,
                            initialBody: Data, remaining: Int) {
+        invalidatePropfindCache()
         guard let target = resolvePutTarget(on: connection, request: request, isWebDAV: isWebDAV),
               let writer = openPutTarget(target, on: connection, request: request, isWebDAV: isWebDAV)
         else { return }
@@ -1931,7 +1981,22 @@ final class ROMUploadServer: @unchecked Sendable {
         sendWebDAVResponse(on: connection, status: 204, statusText: "No Content", request: request)
     }
 
+    /// Absolute path + listing depth. Finder repeats this pair during a mount.
+    private struct PropfindCacheKey: Hashable {
+        let path: String
+        let depth: String
+    }
+
+    /// Cached 207 body. `storedAt` is compared against `propfindCacheTTL`.
+    private struct PropfindCacheEntry {
+        let body: Data
+        let entryCount: Int
+        let storedAt: Date
+    }
+
     private func handlePROPFIND(on connection: NWConnection, request: HTTPRequest, path: String, depth: String) {
+        cancelDirectoryWarmup()
+
         let target: URL
         if path.isEmpty {
             target = romsDirectory
@@ -1945,33 +2010,96 @@ final class ROMUploadServer: @unchecked Sendable {
             target = resolved
         }
 
+        // Finder sends `infinity`. A recursive walk of a ROM library stalls the mount.
+        let listingDepth = depth.lowercased() == "0" ? "0" : "1"
+        let displayPath = path.isEmpty ? "/" : "/" + path
+        let cacheKey = PropfindCacheKey(path: target.path, depth: listingDepth)
+        let started = Date()
+
+        if let cached = cachedPROPFIND(for: cacheKey) {
+            let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+            NSLog("[ROMUploadServer] PROPFIND depth=\(listingDepth) \(displayPath) cache hit \(cached.entryCount) entries in \(elapsed)ms")
+            sendWebDAVMultistatus(on: connection, body: cached.body, request: request)
+            return
+        }
+
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: target.path, isDirectory: &isDir) else {
             sendWebDAVResponse(on: connection, status: 404, statusText: "Not Found", request: request)
             return
         }
 
-        let listingDepth = depth.lowercased()
         let targetPath = target.path
-        let connID = ObjectIdentifier(connection)
-        lock.lock()
-        let ioQueue = connectionContexts[connID]?.ioQueue
-        lock.unlock()
+        let ioQueue = connectionIOQueue(for: connection)
 
-        Self.diskIOQueue.async { [weak self] in
-            guard let self else { return }
+        let finish: (ROMUploadServer, [String]) -> Void = { server, responses in
+            let data = server.webDAVMultistatusData(blocks: responses)
+            server.storePROPFIND(data, entryCount: responses.count, for: cacheKey)
+            let elapsed = Int(Date().timeIntervalSince(started) * 1000)
+            NSLog("[ROMUploadServer] PROPFIND depth=\(listingDepth) \(displayPath) responded in \(elapsed)ms (\(responses.count) entries)")
+            server.sendWebDAVMultistatus(on: connection, body: data, request: request)
+        }
+
+        // Depth 0 is a single stat. Answer it on the socket queue so mount probes
+        // never wait behind a directory walk.
+        if listingDepth == "0" {
+            var responses: [String] = []
+            appendPROPFINDEntries(at: URL(fileURLWithPath: targetPath), depth: listingDepth, into: &responses)
+            finish(self, responses)
+            return
+        }
+
+        guard let ioQueue else {
+            NSLog("[ROMUploadServer] PROPFIND dropped — connection context missing \(displayPath)")
+            connection.cancel()
+            return
+        }
+
+        NSLog("[ROMUploadServer] PROPFIND depth=\(listingDepth) \(displayPath) queued")
+        Self.propfindQueue.addOperation { [weak self] in
+            guard let self else {
+                ioQueue.async { connection.cancel() }
+                return
+            }
             var responses: [String] = []
             self.appendPROPFINDEntries(at: URL(fileURLWithPath: targetPath),
                                        depth: listingDepth, into: &responses)
-            let data = self.webDAVMultistatusData(blocks: responses)
-
-            let deliver = { self.sendWebDAVMultistatus(on: connection, body: data, request: request) }
-            if let ioQueue {
-                ioQueue.async { deliver() }
-            } else {
-                deliver()
+            ioQueue.async { [weak self] in
+                guard let self else {
+                    connection.cancel()
+                    return
+                }
+                finish(self, responses)
             }
         }
+    }
+
+    private func cachedPROPFIND(for key: PropfindCacheKey) -> PropfindCacheEntry? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let entry = propfindCache[key] else { return nil }
+        guard Date().timeIntervalSince(entry.storedAt) < Self.propfindCacheTTL else {
+            propfindCache.removeValue(forKey: key)
+            return nil
+        }
+        return entry
+    }
+
+    private func storePROPFIND(_ body: Data, entryCount: Int, for key: PropfindCacheKey) {
+        let now = Date()
+        lock.lock()
+        propfindCache = propfindCache.filter {
+            now.timeIntervalSince($0.value.storedAt) < Self.propfindCacheTTL
+        }
+        propfindCache[key] = PropfindCacheEntry(body: body, entryCount: entryCount, storedAt: now)
+        lock.unlock()
+    }
+
+    /// Drop cached listings after a write so Finder does not see a stale tree.
+    private func invalidatePropfindCache() {
+        lock.lock()
+        propfindCache.removeAll()
+        lock.unlock()
     }
 
     private func webDAVMultistatusData(blocks: [String]) -> Data {
@@ -1996,7 +2124,9 @@ final class ROMUploadServer: @unchecked Sendable {
         }
     }
 
-    /// Recursively collects PROPFIND responses for `depth` 0, 1, or infinity.
+    /// Collects PROPFIND responses for depth 0 (the item) or 1 (one child level).
+    /// Anything else, including Finder's `infinity`, is one level — a recursive
+    /// walk of a ROM library stalls the mount.
     private func appendPROPFINDEntries(at url: URL, depth: String, into responses: inout [String]) {
         responses.append(propfindEntry(for: url))
         guard depth != "0" else { return }
@@ -2013,11 +2143,7 @@ final class ROMUploadServer: @unchecked Sendable {
         )) ?? []
 
         for child in contents where !child.lastPathComponent.hasPrefix(".") {
-            if depth == "1" {
-                responses.append(propfindEntry(for: child))
-            } else {
-                appendPROPFINDEntries(at: child, depth: depth, into: &responses)
-            }
+            responses.append(propfindEntry(for: child))
         }
     }
 
@@ -2119,6 +2245,7 @@ final class ROMUploadServer: @unchecked Sendable {
     }
 
     private func handleWebDAVDelete(on connection: NWConnection, request: HTTPRequest, path: String) {
+        invalidatePropfindCache()
         guard !path.isEmpty, let resolved = resolvedPath(path, within: romsDirectory) else {
             sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request)
             return
@@ -2138,6 +2265,7 @@ final class ROMUploadServer: @unchecked Sendable {
     }
 
     private func handleMKCOL(on connection: NWConnection, request: HTTPRequest, path: String) {
+        invalidatePropfindCache()
         guard !path.isEmpty, let resolved = resolvedPath(path, within: romsDirectory) else {
             sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request)
             return
@@ -2202,6 +2330,7 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private func performWebDAVTransfer(on connection: NWConnection, request: HTTPRequest,
                                        sourcePath: String, copy: Bool) {
+        invalidatePropfindCache()
         guard !sourcePath.isEmpty, let source = resolvedPath(sourcePath, within: romsDirectory) else {
             sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden", request: request)
             return
@@ -2313,6 +2442,8 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private func webDAVFormattedDate(_ date: Date?) -> String {
         guard let date else { return "" }
+        Self.webDAVDateLock.lock()
+        defer { Self.webDAVDateLock.unlock() }
         return Self.webDAVISO8601Formatter.string(from: date)
     }
 
@@ -2363,6 +2494,7 @@ final class ROMUploadServer: @unchecked Sendable {
 
     private func handleWebDAVPutBuffered(on connection: NWConnection, request: HTTPRequest,
                                          path: String, body: Data) {
+        invalidatePropfindCache()
         guard !path.isEmpty, let target = resolvedPath(path, within: romsDirectory) else {
             sendWebDAVResponse(on: connection, status: 403, statusText: "Forbidden",
                                request: request, forceClose: true)
