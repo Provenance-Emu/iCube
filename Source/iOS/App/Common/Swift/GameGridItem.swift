@@ -427,12 +427,14 @@ struct GameGridItem: View {
     }
     .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height)
     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    // Enhanced 3D perspective
+    #if !os(tvOS)
+    // iOS only: tvOS cards take their tilt from icubeCardFocus.
     .rotation3DEffect(
       .degrees(3),
       axis: (x: 0.1, y: 1.0, z: 0),
       perspective: 0.8
     )
+    #endif
   }
 
   /// Scale font sizes appropriately for tvOS vs iOS
@@ -494,12 +496,6 @@ struct GameGridItem: View {
                 .overlay(
                   RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-                // Add subtle 3D perspective to real covers too
-                .rotation3DEffect(
-                  .degrees(1),
-                  axis: (x: 0.05, y: 1.0, z: 0),
-                  perspective: 1.2
                 )
             }
           }
