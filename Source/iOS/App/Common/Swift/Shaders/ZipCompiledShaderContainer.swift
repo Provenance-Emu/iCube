@@ -36,11 +36,12 @@ public enum ZipCompiledShaderContainer {
   ///
   /// The archive lives in a directory of its own that is removed afterwards, never in the directory it is extracted
   /// into: an entry named like the archive would otherwise overwrite it while minizip is still reading it. A rejected
-  /// archive extracts nothing and surfaces as `.invalidArchive`.
-  private static func extractCheckedArchive(named name: String, writeArchive: (URL) throws -> Void) throws -> URL {
+  /// archive extracts nothing and surfaces as `.invalidArchive`. The archive is always named `archive.zip`: Zip refuses any
+  /// extension but `zip` and `cbz`, so a copy named after a `.oecompiledshader` preset would never extract.
+  private static func extractCheckedArchive(writeArchive: (URL) throws -> Void) throws -> URL {
     let archiveDir = try makeTempDirectory(prefix: "oe_shader_archive")
     defer { try? FileManager.default.removeItem(at: archiveDir) }
-    let archive = archiveDir.appendingPathComponent(name)
+    let archive = archiveDir.appendingPathComponent("archive.zip")
     try writeArchive(archive)
     let dest = try makeTempDirectory(prefix: "oe_shader_decode")
     do {
@@ -107,14 +108,14 @@ public enum ZipCompiledShaderContainer {
         throw Error.pathNotExists
       }
       // Scan and extract a private copy: the file at `url` can be rewritten between the two.
-      let dest = try ZipCompiledShaderContainer.extractCheckedArchive(named: url.lastPathComponent) {
+      let dest = try ZipCompiledShaderContainer.extractCheckedArchive {
         try FileManager.default.copyItem(at: url, to: $0)
       }
       try self.init(extractedDir: dest)
     }
 
     public convenience init(data: Data) throws {
-      let dest = try ZipCompiledShaderContainer.extractCheckedArchive(named: "in.zip") {
+      let dest = try ZipCompiledShaderContainer.extractCheckedArchive {
         try data.write(to: $0)
       }
       try self.init(extractedDir: dest)
