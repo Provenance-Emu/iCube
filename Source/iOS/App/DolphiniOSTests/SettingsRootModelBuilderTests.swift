@@ -19,10 +19,9 @@ final class SettingsRootModelBuilderTests: XCTestCase {
 
   func test_migratedLeaves_exposeTheirModels() {
     let entries = SettingsRootModelBuilder.sections(isIOS: true, achievements: true).flatMap(\.entries)
-    for id in ["graphics-hacks", "graphics-enhancements", "graphics-video", "graphics-advanced", "performance-tuning", "advanced"] {
+    for id in ["graphics-hacks", "graphics-enhancements", "graphics-video", "graphics-advanced", "performance-tuning", "advanced", "debug"] {
       XCTAssertNotNil(entries.first { $0.id == id }?.makeModel, id)
     }
-    XCTAssertNil(entries.first { $0.id == "debug" }?.makeModel, "a hand-built leaf has no model")
   }
 
   func test_model_hasOneChevronActionRowPerEntry_inSectionOrder() {
@@ -49,7 +48,7 @@ final class SettingsRootModelBuilderTests: XCTestCase {
   func test_hostsMenuScreen_isExactlyTheMigratedLeavesAndControllers() {
     let entries = SettingsRootModelBuilder.sections(isIOS: true, achievements: true).flatMap(\.entries)
     let hosting = Set(entries.filter(\.hostsMenuScreen).map(\.id))
-    XCTAssertEqual(hosting, ["graphics-video", "graphics-enhancements", "graphics-hacks", "graphics-advanced", "performance-tuning", "controllers", "advanced"])
+    XCTAssertEqual(hosting, ["graphics-video", "graphics-enhancements", "graphics-hacks", "graphics-advanced", "performance-tuning", "controllers", "advanced", "debug"])
   }
 
   func test_entriesAreHashableByID() {

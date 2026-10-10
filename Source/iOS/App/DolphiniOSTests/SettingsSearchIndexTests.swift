@@ -41,9 +41,14 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "Validate").contains { $0.entryID == "performance-tuning" })
   }
 
-  /// A hand-built leaf has no model, so its keywords still count.
-  func test_keyword_matchesAHandBuiltLeaf() {
-    XCTAssertTrue(index.hits(query: "fastmem").contains(SettingsSearchHit(entryID: "debug", rowTitle: nil)))
+  /// A hand-built leaf has no model, so its title, description and keywords still count.
+  func test_handBuiltLeaf_isFoundByItsDescription() {
+    XCTAssertTrue(index.hits(query: "wi-fi").contains(SettingsSearchHit(entryID: "web-ui", rowTitle: nil)))
+  }
+
+  func test_debugRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "fastmem").contains { $0.entryID == "debug" })
+    XCTAssertTrue(index.hits(query: "wireframe").contains { $0.entryID == "debug" })
   }
 
   /// Punctuation and spacing do not matter: these worked on develop through hand-kept keywords.
