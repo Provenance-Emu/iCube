@@ -65,6 +65,14 @@ jobs:
         working-directory: Source/iOS/App
         run: python3 Project/Scripts/check_button_types.py
 
+      # Blocking ratchet: no file may gain hard-coded fonts, radii, line widths or colours
+      # (design spec §4.3). Lower the baseline with --update when a file improves.
+      - name: Check design-token ratchet
+        working-directory: Source/iOS/App
+        run: |
+          python3 -m unittest Project/Scripts/test_check_design_tokens.py
+          python3 Project/Scripts/check_design_tokens.py --check
+
       # Every L("...") key must exist in en.lproj/Core.strings. Add missing keys as
       # identity entries (`"key" = "key";`) to en and ja Core.strings; the "Update Core
       # Strings" build pre-script preserves them. Shells out to plutil, so macOS-only.
