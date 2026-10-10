@@ -451,7 +451,7 @@ struct MenuScreen: View {
       case .stepper(let stepper):
         VStack(alignment: .leading, spacing: 6) {
           rowLabel(item)
-          ValueStepper(stepper: stepper, isEnabled: item.isEnabled)
+          ValueStepper(stepper: stepper, title: item.title, isEnabled: item.isEnabled)
         }
       case .navigation, .action, .destructive:
         Button { performActivate(item) } label: { rowLabel(item) }
@@ -622,13 +622,8 @@ struct MenuScreen: View {
     if let activatedID = result.activatedID, let item = model.item(id: activatedID) {
       performActivate(item)
     }
-    if let adjust = result.adjust, let item = model.item(id: adjust.id), item.isEnabled {
-      if case .stepper(let stepper) = item.role {
-        stepper.value.wrappedValue = stepper.stepped(stepper.value.wrappedValue, by: adjust.step)
-      } else if let stepping = item.role.steppable,
-                let next = MenuItemRole.cycled(options: stepping.options, current: stepping.selection.wrappedValue, step: adjust.step) {
-        stepping.selection.wrappedValue = next
-      }
+    if let adjust = result.adjust {
+      model.applyAdjust(id: adjust.id, step: adjust.step)
     }
     if result.didGoBack {
       onBack?()

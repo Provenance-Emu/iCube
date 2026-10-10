@@ -42,7 +42,7 @@ struct MenuControllerNav: Equatable {
     var leftShoulder = false
     /// R1 — jumps to the first focusable item of the next `MenuSection`.
     var rightShoulder = false
-    /// D-pad left/right: change the focused picker's value. One step per press; a hold repeats via `.adjustRepeat`.
+    /// D-pad left/right: change the focused picker's value. One step per press; a hold also emits `.adjustRepeat`, which only a stepper row acts on.
     var left = false
     var right = false
   }

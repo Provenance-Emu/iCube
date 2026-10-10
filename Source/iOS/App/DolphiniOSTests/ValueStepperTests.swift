@@ -39,4 +39,29 @@ final class ValueStepperTests: XCTestCase {
     XCTAssertEqual(s.stepped(37, by: 1), 38)
     XCTAssertEqual(s.stepped(37.0000001, by: -1), 36)
   }
+
+  func test_stepped_reachesAnOffGridUpperBound() {
+    let s = stepper(range: 0 ... 100, step: 30)
+    XCTAssertEqual(s.stepped(60, by: 1), 90)
+    XCTAssertEqual(s.stepped(90, by: 1), 100, "the bound is reachable although it is off the grid")
+    XCTAssertEqual(s.stepped(100, by: 1), 100)
+  }
+
+  func test_stepped_leavesAnOffGridUpperBoundOntoTheLastGridPoint() {
+    let s = stepper(range: 0 ... 100, step: 30)
+    XCTAssertEqual(s.stepped(100, by: -1), 90)
+    XCTAssertEqual(s.stepped(90, by: -1), 60)
+  }
+
+  func test_stepped_leavesAnOnGridUpperBoundOneStepDown() {
+    let s = stepper(range: 1 ... 400, step: 1)
+    XCTAssertEqual(s.stepped(400, by: -1), 399)
+    XCTAssertEqual(stepper(range: 0 ... 400, step: 5).stepped(400, by: -1), 395)
+  }
+
+  func test_stepped_aSliderReadOnlyAtItsBounds_stepsBothWays() {
+    let s = stepper(range: 0 ... 30, step: 0.1)
+    XCTAssertEqual(s.stepped(0, by: 1), 0.1)
+    XCTAssertEqual(s.stepped(30, by: -1), 29.9)
+  }
 }

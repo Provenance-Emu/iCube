@@ -114,11 +114,27 @@ struct MenuStepper {
 
   /// `current` moved one `step` in `direction` (+1 / -1), clamped to `range`, then snapped to the
   /// grid `range.lowerBound + n * step`.
+  ///
+  /// A bound that is off the grid (`0 ... 100` step 30) is still reachable: stepping toward it from
+  /// the last grid point lands on the bound, and stepping away from the upper bound lands on the
+  /// last grid point below it.
   func stepped(_ current: Double, by direction: Int) -> Double {
-    let clamped = min(range.upperBound, max(range.lowerBound, current + Double(direction) * step))
-    let onGrid = range.lowerBound + ((clamped - range.lowerBound) / step).rounded() * step
-    let snapped = (onGrid * Self.snapPrecision).rounded() / Self.snapPrecision
-    return min(range.upperBound, max(range.lowerBound, snapped))
+    let raw = current + Double(direction) * step
+    if raw >= range.upperBound { return range.upperBound }
+    if raw <= range.lowerBound { return range.lowerBound }
+    if direction < 0, current >= range.upperBound {
+      let lastGridIndex = ((range.upperBound - range.lowerBound) / step - Self.gridTolerance).rounded(.up) - 1
+      return Self.snap(range.lowerBound + lastGridIndex * step)
+    }
+    let onGrid = range.lowerBound + ((raw - range.lowerBound) / step).rounded() * step
+    return min(range.upperBound, max(range.lowerBound, Self.snap(onGrid)))
+  }
+
+  /// Slack so an upper bound that is exactly on the grid is not mistaken for an off-grid one.
+  private static let gridTolerance = 1e-9
+
+  private static func snap(_ value: Double) -> Double {
+    (value * snapPrecision).rounded() / snapPrecision
   }
 }
 
@@ -175,6 +191,21 @@ extension MenuItem {
       return stepper.format(stepper.value.wrappedValue)
     default:
       return nil
+    }
+  }
+}
+
+extension MenuModel {
+  /// Applies a controller left/right step to the item `id`, resolved from THIS model: a held stepper
+  /// repeats up to ~12 times a second, and every step must read the value as it is now, not as it was
+  /// when the hold began. A stepper moves on its grid; a picker or cycle row wraps through its options.
+  func applyAdjust(id: String, step: Int) {
+    guard let item = item(id: id), item.isEnabled else { return }
+    if case .stepper(let stepper) = item.role {
+      stepper.value.wrappedValue = stepper.stepped(stepper.value.wrappedValue, by: step)
+    } else if let stepping = item.role.steppable,
+              let next = MenuItemRole.cycled(options: stepping.options, current: stepping.selection.wrappedValue, step: step) {
+      stepping.selection.wrappedValue = next
     }
   }
 }
