@@ -17,6 +17,16 @@ final class SettingsRowFactoryTests: XCTestCase {
     XCTAssertEqual(received, [true])
   }
 
+  func test_picker_isADirectChoice_andRoundTripsThroughAnyHashable() {
+    var received: [String] = []
+    let item = SettingsRow.picker("p", "Picker", [("Default", ""), ("Core", "CoreAudio")], "", "d") { received.append($0) }
+    guard case .picker(let options, let selection) = item.role else { return XCTFail("picker") }
+    XCTAssertEqual(options.map(\.0), ["Default", "Core"])
+    XCTAssertEqual(selection.wrappedValue, AnyHashable(""))
+    selection.wrappedValue = AnyHashable("CoreAudio")
+    XCTAssertEqual(received, ["CoreAudio"])
+  }
+
   func test_cycle_withIntValues_roundTripsThroughAnyHashable() {
     var received: [Int] = []
     let item = SettingsRow.cycle("c", "Cycle", [("Safe", 512), ("Default", 128)], 128, "d") { received.append($0) }

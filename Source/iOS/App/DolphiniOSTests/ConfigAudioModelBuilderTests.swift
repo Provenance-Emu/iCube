@@ -108,9 +108,13 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
     XCTAssertEqual(model().item(id: "stretch")?.isEnabled, true)
   }
 
-  func test_backendCycle_emitsTheRawName() {
+  func test_backendRow_isADirectPicker_notACycle() {
+    guard case .picker? = model().item(id: "backend")?.role else { return XCTFail("not a picker") }
+  }
+
+  func test_backendPicker_emitsTheRawName() {
     let m = model(state { $0.backends = ["AVAudioEngine", "CoreAudio"] })
-    guard case .cycle(let options, let selection)? = m.item(id: "backend")?.role else { return XCTFail("not a cycle") }
+    guard case .picker(let options, let selection)? = m.item(id: "backend")?.role else { return XCTFail("not a picker") }
     XCTAssertEqual(options.map(\.0), ["Default Device", "AVAudioEngine", "CoreAudio (Speakers/HDMI)"])
     XCTAssertEqual(options.map { $0.1.base as? String }, ["", "AVAudioEngine", "CoreAudio"])
     changes = []
@@ -145,6 +149,17 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
   func test_needsConfirmation_isTrueOnlyForAVAudioEngine() {
     XCTAssertTrue(ConfigAudioState.needsConfirmation(choosing: "AVAudioEngine"))
     for raw in ["", "CoreAudio", "Cubeb"] { XCTAssertFalse(ConfigAudioState.needsConfirmation(choosing: raw), raw) }
+  }
+
+  func test_choice_table() {
+    let cases: [(String, String, ConfigAudioState.BackendChoice)] = [
+      ("", "CoreAudio", .commit), ("CoreAudio", "", .commit), ("", "AVAudioEngine", .confirm),
+      ("CoreAudio", "AVAudioEngine", .confirm), ("AVAudioEngine", "AVAudioEngine", .ignore),
+      ("CoreAudio", "CoreAudio", .ignore), ("AVAudioEngine", "CoreAudio", .commit),
+    ]
+    for (current, raw, expected) in cases {
+      XCTAssertEqual(state { $0.backend = current }.choice(for: raw), expected, "\(current) -> \(raw)")
+    }
   }
 
   func test_effectsVisibility_followsTheBackend() {

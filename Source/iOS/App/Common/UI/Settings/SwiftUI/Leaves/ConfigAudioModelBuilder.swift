@@ -11,7 +11,7 @@ enum ConfigAudioModelBuilder {
   static func make(state: ConfigAudioState, apply: @escaping (ConfigAudioChange) -> Void) -> MenuModel {
     // The old screen's section header was the row's own label, so it is the row's title here.
     let backend = MenuSection(id: "backend", items: [
-      SettingsRow.cycle("backend", L("Audio Backend"), state.backendOptions, state.backend,
+      SettingsRow.picker("backend", L("Audio Backend"), state.backendOptions, state.backend,
                         L("CoreAudio: Best for TV/HDMI speakers. AVAudioEngine: Enables AUv3 FXs."),
                         set: { apply(.backend($0)) }),
     ])

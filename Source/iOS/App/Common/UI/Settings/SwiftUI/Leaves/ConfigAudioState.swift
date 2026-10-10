@@ -42,6 +42,19 @@ struct ConfigAudioState: Equatable {
   /// AVAudioEngine is in development: choosing it asks first.
   static func needsConfirmation(choosing raw: String) -> Bool { raw == avAudioEngine }
 
+  enum BackendChoice: Equatable {
+    /// Re-picking the current backend: no prompt, no write.
+    case ignore
+    case confirm
+    case commit
+  }
+
+  /// What choosing `raw` does from the current backend.
+  func choice(for raw: String) -> BackendChoice {
+    if raw == backend { return .ignore }
+    return Self.needsConfirmation(choosing: raw) ? .confirm : .commit
+  }
+
   var showsAVAudioEngineEffects: Bool { backend.contains(Self.avAudioEngine) }
   var showsCoreAudioEffects: Bool { !showsAVAudioEngineEffects && backend.contains(Self.coreAudio) }
 }
