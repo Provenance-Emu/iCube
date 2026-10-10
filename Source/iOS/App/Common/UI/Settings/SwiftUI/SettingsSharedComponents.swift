@@ -92,32 +92,6 @@ extension Binding where Value == Int {
   }
 }
 
-// MARK: tvOS-friendly selectable row
-struct SettingsSelectRow: View {
-  let label: String
-  let checked: Bool
-  let action: () -> Void
-  var body: some View {
-    Button(action: action) {
-      HStack {
-        Text(label)
-        Spacer()
-        if checked { Image(systemName: "checkmark") }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .contentShape(Rectangle())
-    }
-#if os(tvOS)
-    .buttonStyle(.automatic)
-#else
-    .buttonStyle(.plain)
-#endif
-#if os(tvOS)
-    .focusable(true)
-#endif
-  }
-}
-
 // MARK: tvOS fallback for sliders
 internal struct TVIntStepper: View {
   @Binding var value: Int
