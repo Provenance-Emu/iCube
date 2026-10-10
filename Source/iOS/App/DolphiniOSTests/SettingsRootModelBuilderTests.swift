@@ -19,7 +19,7 @@ final class SettingsRootModelBuilderTests: XCTestCase {
 
   func test_migratedLeaves_exposeTheirModels() {
     let entries = SettingsRootModelBuilder.sections(isIOS: true, achievements: true).flatMap(\.entries)
-    for id in ["graphics-hacks", "graphics-enhancements", "graphics-video", "performance-tuning", "advanced", "interface"] {
+    for id in ["graphics-hacks", "graphics-enhancements", "graphics-video", "performance-tuning", "advanced", "interface", "general"] {
       XCTAssertNotNil(entries.first { $0.id == id }?.makeModel, id)
     }
     XCTAssertNil(entries.first { $0.id == "debug" }?.makeModel, "a hand-built leaf has no model")
@@ -49,7 +49,7 @@ final class SettingsRootModelBuilderTests: XCTestCase {
   func test_hostsMenuScreen_isExactlyTheMigratedLeavesAndControllers() {
     let entries = SettingsRootModelBuilder.sections(isIOS: true, achievements: true).flatMap(\.entries)
     let hosting = Set(entries.filter(\.hostsMenuScreen).map(\.id))
-    XCTAssertEqual(hosting, ["graphics-video", "graphics-enhancements", "graphics-hacks", "performance-tuning", "controllers", "advanced", "interface"])
+    XCTAssertEqual(hosting, ["graphics-video", "graphics-enhancements", "graphics-hacks", "performance-tuning", "controllers", "advanced", "interface", "general"])
   }
 
   func test_entriesAreHashableByID() {

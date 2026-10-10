@@ -4955,3 +4955,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The emulated console's clock when the game starts." = "The emulated console's clock when the game starts.";
 "Background Style" = "Background Style";
 "Show Game ID Subtitles" = "Show Game ID Subtitles";
+"If unsure, select 100%." = "If unsure, select 100%.";
+"300% (3x) is recommended for most games." = "300% (3x) is recommended for most games.";
+"This setting cannot be changed while emulation is active." = "This setting cannot be changed while emulation is active.";

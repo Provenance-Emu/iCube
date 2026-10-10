@@ -58,7 +58,9 @@ enum SettingsRootModelBuilder {
     #endif
     return [
       SettingsRootSection(id: "general", header: L("General"), entries: [
-        SettingsLeafEntry(id: "general", title: L("General"), icon: "gear", description: L("Dual core, cheats, speed limit and other core options.")) { ConfigGeneralView() },
+        SettingsLeafEntry(id: "general", title: L("General"), icon: "gear", description: L("Dual core, cheats, speed limit and other core options."),
+                          hostsMenuScreen: true,
+                          makeModel: { ConfigGeneralModelBuilder.make(state: ConfigGeneralState(), apply: { _ in }) }) { ConfigGeneralView() },
         SettingsLeafEntry(id: "interface", title: L("Interface"), icon: "menubar.rectangle", description: L("On-screen messages, confirmations and panic handling."),
                           hostsMenuScreen: true,
                           makeModel: { ConfigInterfaceModelBuilder.make(state: ConfigInterfaceState(), apply: { _ in }) }) { ConfigInterfaceView() },
