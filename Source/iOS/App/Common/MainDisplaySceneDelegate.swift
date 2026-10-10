@@ -101,11 +101,9 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     // Consume a game id an App Intent (Siri/Shortcuts) queued while the app was launching.
     PendingGameLaunchStore.consumeAndLaunch()
 
-    // Resume emulation if we auto-paused it when the app was backgrounded/interrupted.
-    // iOS only: tvOS handles backgrounding via the pause menu (EmulationScreen observer).
-    #if !os(tvOS)
-    EmulationCoordinator.shared().resumeFromBackground()
-    #endif
+    // Drop the inactive claim. The arbiter resumes the core only if nothing else (pause menu, Settings,
+    // the user's pause, a disconnect) still holds it.
+    PauseArbiter.shared.appDidBecomeActive()
 
     BootNoticeManager.shared().presentToSceneIfNecessary()
     if let ws = scene as? UIWindowScene { applyFrameCap(to: ws) }
@@ -116,10 +114,8 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     // Pause emulation when another app/overlay takes over so the core stops submitting GPU
     // work from the background (which iOS rejects and floods the log) and to save battery.
-    // iOS only: tvOS handles backgrounding via the pause menu (EmulationScreen observer).
-    #if !os(tvOS)
-    EmulationCoordinator.shared().pauseForBackground()
-    #endif
+    // A PauseArbiter claim, so the matching resume can never override another holder.
+    PauseArbiter.shared.appWillResignActive()
   }
 
   func sceneWillEnterForeground(_ scene: UIScene) {

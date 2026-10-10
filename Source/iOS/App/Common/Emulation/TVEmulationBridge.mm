@@ -9,10 +9,12 @@
 #import "EmulationBootParameter.h"
 #import "EmulationBootType.h"
 #import "iCube-Swift.h"
+#import "HostQueue.h"
 
 #import "TVControllerMappingBridge.h"
 
 // C++ Core host messaging
+#include <mutex>
 #include "Core/HW/ProcessorInterface.h"
 #include "Core/Host.h"
 #include "Core/Core.h"
@@ -105,12 +107,44 @@ static bool StateOperationAllowed(Core::System& system, const char* operation)
   Host_Message(HostMessageID::WMUserStop);
 }
 
+// Generation of the newest pause/resume request. An async job runs only if it is still the newest, so a
+// request made later on the main thread (a claim's pause, a release's resume) supersedes one that is
+// still waiting on a busy host queue. The mutex orders the bump against a job already inside SetState.
+static std::mutex s_pauseRequestMutex;
+static uint64_t s_pauseRequestGeneration = 0;
+
+static uint64_t NextPauseRequestGeneration() {
+  std::lock_guard<std::mutex> lock(s_pauseRequestMutex);
+  return ++s_pauseRequestGeneration;
+}
+
+static void RunPauseRequestAsync(Core::State from, Core::State to) {
+  const uint64_t generation = NextPauseRequestGeneration();
+  DOLHostQueueRunAsync(^{
+    std::lock_guard<std::mutex> lock(s_pauseRequestMutex);
+    auto& system = Core::System::GetInstance();
+    if (generation == s_pauseRequestGeneration && Core::GetState(system) == from) {
+      Core::SetState(system, to);
+    }
+  });
+}
+
 + (void)pause {
+  NextPauseRequestGeneration();
   Core::SetState(Core::System::GetInstance(), Core::State::Paused);
 }
 
 + (void)resume {
+  NextPauseRequestGeneration();
   Core::SetState(Core::System::GetInstance(), Core::State::Running);
+}
+
++ (void)pauseAsync {
+  RunPauseRequestAsync(Core::State::Running, Core::State::Paused);
+}
+
++ (void)resumeAsync {
+  RunPauseRequestAsync(Core::State::Paused, Core::State::Running);
 }
 
 + (void)resetSystem {

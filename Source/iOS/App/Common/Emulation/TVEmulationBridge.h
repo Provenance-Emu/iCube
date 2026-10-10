@@ -15,6 +15,11 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)isRunning;
 + (void)pause;
 + (void)resume;
+/// Non-blocking pause/resume for the app-inactive transition (PauseArbiter only): the SetState runs on the
+/// host queue, so the main thread never waits for the CPU thread there. A pause or resume made after
+/// the request supersedes it if it has not run yet.
++ (void)pauseAsync;
++ (void)resumeAsync;
 + (BOOL)isPaused;
 /// The console's reset button: the running game restarts from power-on. Resumes a paused core,
 /// because a reset only takes effect while the CPU runs. No-op when nothing is running.

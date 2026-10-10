@@ -404,13 +404,7 @@ static const int ACStarveMaxUnconfirmed = 2;     // unconfirmed trips before the
   CGFloat _cachedRenderSurfaceScale;
 }
 
-@synthesize userRequestedPause = _userRequestedPause;
-
 static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
-
-// True only while emulation is paused because WE auto-paused it on app background/interruption
-// (as opposed to a user/manual pause). Singleton, so file-scope is fine.
-static bool s_backgroundAutoPaused = false;
 
 + (EmulationCoordinator*)shared {
   static EmulationCoordinator* sharedInstance = nil;
@@ -1965,67 +1959,6 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification object:self userInfo:nil];
 
   _mainDisplayView = nil;
-}
-
-- (bool)userRequestedPause {
-  return _userRequestedPause;
-}
-
-- (void)setUserRequestedPause:(bool)userRequestedPause {
-  if (userRequestedPause == _userRequestedPause) {
-    return;
-  }
-
-  // Flag first, then an ASYNC hop: the host queue is serial and can be busy for seconds (a queued
-  // State::LoadAs at boot, the adaptive-clock job under thermal pressure). A synchronous hop from
-  // the main thread waited behind that and froze the UI while emulation kept running — Sentry
-  // ICUBE-7D ("App Hang Fully Blocked 4.0-4.8 s", iPad). Nothing here needs the result.
-  _userRequestedPause = userRequestedPause;
-  DOLHostQueueRunAsync(^{
-    Core::SetState(Core::System::GetInstance(), userRequestedPause ? Core::State::Paused : Core::State::Running);
-  });
-}
-
-- (void)pauseForBackground {
-  // Auto-pause a running game when the app is backgrounded/interrupted so the core stops
-  // submitting GPU work — iOS rejects GPU work from the background, which floods the log via
-  // the MTLGfx 0x0-texture guard — and to save battery. Keyed off the actual Core state and
-  // tracked separately from userRequestedPause, so a game the user already paused (or the pause
-  // menu) is left untouched and is NOT auto-resumed on return.
-  //
-  // MUST be async + pre-checked: a synchronous host-queue wait from the scene-lifecycle (main)
-  // thread deadlocks the UI when the host queue is busy emulating (froze Wii games). Async never
-  // blocks the main thread; the cheap flag pre-check avoids dispatching when there's nothing to do.
-  if (s_backgroundAutoPaused) {
-    return;
-  }
-  DOLHostQueueRunAsync(^{
-    Core::System& sys = Core::System::GetInstance();
-    if (Core::GetState(sys) == Core::State::Running) {
-      Core::SetState(sys, Core::State::Paused);
-      s_backgroundAutoPaused = true;
-    }
-  });
-}
-
-- (void)resumeFromBackground {
-  // Resume only if WE auto-paused on background. Pre-check the flag on the calling (main) thread
-  // BEFORE any dispatch: in the common case (game launch / normal activate with no prior
-  // background-pause) this is a true no-op and never touches the host queue — which is what kept
-  // the old synchronous version from deadlocking the main thread on every sceneDidBecomeActive.
-  if (!s_backgroundAutoPaused) {
-    return;
-  }
-  DOLHostQueueRunAsync(^{
-    if (!s_backgroundAutoPaused) {
-      return;
-    }
-    s_backgroundAutoPaused = false;
-    Core::System& sys = Core::System::GetInstance();
-    if (Core::GetState(sys) == Core::State::Paused) {
-      Core::SetState(sys, Core::State::Running);
-    }
-  });
 }
 
 - (void)clearMetalLayer {

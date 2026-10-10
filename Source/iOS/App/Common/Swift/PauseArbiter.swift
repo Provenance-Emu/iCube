@@ -31,12 +31,18 @@ final class PauseArbiter {
     var isPaused: () -> Bool
     var pause: () -> Void
     var resume: () -> Void
+    /// Pause / resume that never block the calling thread (the app-inactive transition runs on main
+    /// while the host queue can be busy). The bridge drops one that a later pause or resume supersedes.
+    var pauseAsync: () -> Void = {}
+    var resumeAsync: () -> Void = {}
 
     static let bridge = Core(
       isRunning: { TVEmulationBridge.isRunning() },
       isPaused: { TVEmulationBridge.isPaused() },
       pause: { TVEmulationBridge.pause() },
-      resume: { TVEmulationBridge.resume() })
+      resume: { TVEmulationBridge.resume() },
+      pauseAsync: { TVEmulationBridge.pauseAsync() },
+      resumeAsync: { TVEmulationBridge.resumeAsync() })
   }
 
   static let shared = PauseArbiter(core: .bridge)
@@ -47,6 +53,8 @@ final class PauseArbiter {
     static let disconnect = "disconnect"
     static let pauseMenu = "pause-menu"
     static let pauseMenuRequest = "pause-menu-request"
+    /// The app is not active (switcher, lock, Control Center, notification pull-down, backgrounded).
+    static let appInactive = "app-inactive"
   }
 
   #if DEBUG
@@ -62,6 +70,10 @@ final class PauseArbiter {
   /// A claim made while no game was running; applied on `emulationDidStart()`.
   private var deferred = false
   private var pending: Token?
+  /// The claim held for as long as the app is inactive; nil while active.
+  private var inactiveToken: Token?
+  /// True when the app-inactive transition (not a claim) paused the core and nobody has taken that over.
+  private var inactivePauseOwned = false
   private var observers: [NSObjectProtocol] = []
 
   init(core: Core, schedule: @escaping (@escaping () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) }) {
@@ -74,9 +86,17 @@ final class PauseArbiter {
 
   @discardableResult
   func claim(_ reason: String) -> Token {
+    claim(reason, pausing: true)
+  }
+
+  /// `pausing: false` records the holder without touching the core, for the one claim whose pause is
+  /// made asynchronously (`appWillResignActive`).
+  private func claim(_ reason: String, pausing: Bool) -> Token {
     let token = Token(id: UUID(), reason: reason)
     tokens.append(token)
-    if core.isRunning() {
+    if !pausing {
+      // flag only
+    } else if core.isRunning() {
       if !core.isPaused() {
         core.pause()
         // Core::SetState ignores a pause before the core is Running, and RetroAchievements can refuse
@@ -152,6 +172,43 @@ final class PauseArbiter {
     return pending
   }
 
+  /// `sceneWillResignActive`: the app is inactive, so a running game must stop emulating, and it must stay
+  /// stopped whatever else changes until the app is active again. The claim is a flag only: the pause
+  /// itself is `pauseAsync`, because this runs on main as the app switches away and a blocking pause
+  /// there (waiting on the CPU thread) is what hung the scene callbacks before (ICUBE-7D). Nothing is
+  /// claimed when no game is running, so a boot while inactive is not paused by a stale claim.
+  func appWillResignActive() {
+    guard inactiveToken == nil, core.isRunning() else { return }
+    inactiveToken = claim(Reason.appInactive, pausing: false)
+    if !core.isPaused() {
+      core.pauseAsync()
+      inactivePauseOwned = true
+    }
+  }
+
+  /// `sceneDidBecomeActive`: drop the inactive claim. The core resumes only if that was the last claim and
+  /// the pause was ours (the app-inactive one, or one a claim made). A pause menu, a Settings cover, the
+  /// user's bar pause or a disconnect pause keeps the game paused and takes over the pause, and one the
+  /// arbiter never made (debug API) is left alone.
+  func appDidBecomeActive() {
+    guard let token = inactiveToken else { return }
+    inactiveToken = nil
+    let ownedInactivePause = inactivePauseOwned
+    inactivePauseOwned = false
+    guard let index = tokens.firstIndex(of: token) else { return }
+    tokens.remove(at: index)
+    if tokens.isEmpty {
+      if ownedInactivePause, !ownsPause {
+        deferred = false
+        core.resumeAsync()
+      } else {
+        resumeWhenEmpty()
+      }
+    } else if ownedInactivePause {
+      ownsPause = true
+    }
+  }
+
   /// `DOLEmulationDidStartNotification`: apply a deferred claim.
   func emulationDidStart() {
     guard deferred, isHeld else { deferred = false; return }
@@ -167,6 +224,8 @@ final class PauseArbiter {
   func emulationDidStop() {
     tokens.removeAll()
     pending = nil
+    inactiveToken = nil
+    inactivePauseOwned = false
     ownsPause = false
     deferred = false
   }

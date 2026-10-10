@@ -233,26 +233,10 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   return YES;
 }
 
-- (void)applicationDidBecomeActive:(UIApplication*)application {
-  // Async: these scene callbacks run on the main thread on every activation (frequent under iPad
-  // multitasking) and must not wait behind a long host job. See ICUBE-7D.
-  DOLHostQueueRunAsync(^{
-    auto& system = Core::System::GetInstance();
-
-    if (Core::IsRunning(system) && ![EmulationCoordinator shared].userRequestedPause) {
-      Core::SetState(system, Core::State::Running);
-    }
-  });
-}
-
+// Pause and resume on resign/become-active belong to PauseArbiter (MainDisplaySceneDelegate): a second
+// resume path here ran the game behind the pause menu or Settings after an app switch.
 - (void)applicationWillResignActive:(UIApplication*)application {
   DOLHostQueueRunAsync(^{
-    auto& system = Core::System::GetInstance();
-
-    if (Core::IsRunning(system) && ![EmulationCoordinator shared].userRequestedPause) {
-      Core::SetState(system, Core::State::Paused);
-    }
-
     // Write out the configuration in case we don't get a chance later
     Config::Save();
   });

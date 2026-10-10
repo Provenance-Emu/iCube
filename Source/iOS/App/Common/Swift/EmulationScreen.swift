@@ -611,6 +611,9 @@ struct EmulationScreen: View {
       // Auto-pause when app goes to background on tvOS
       obsDidEnterBackground = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
         NSLog("[INPUT] tvOS app backgrounded - showing pause menu")
+        // Claim before the menu exists: the app-inactive claim is released on return, and the menu may
+        // not have appeared (and claimed) by then. The menu adopts this token on appear.
+        PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
         showPauseMenu = true
       }
       obsWillEnterForeground = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in

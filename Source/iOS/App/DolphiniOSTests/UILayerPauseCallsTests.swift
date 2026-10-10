@@ -9,7 +9,7 @@ import XCTest
 final class UILayerPauseCallsTests: XCTestCase {
   private static let allowed: Set<String> = ["PauseArbiter.swift"]
   // swiftlint:disable:next force_try
-  private static let pattern = try! NSRegularExpression(pattern: #"TVEmulationBridge\s*\.\s*(pause|resume)\b"#)
+  private static let pattern = try! NSRegularExpression(pattern: #"TVEmulationBridge\s*\.\s*(pause|resume)(Async)?\b"#)
 
   func test_noDirectBridgePauseOrResumeOutsideArbiter() throws {
     let testsDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
