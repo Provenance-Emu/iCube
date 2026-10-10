@@ -51,7 +51,7 @@ struct ConfigOverrideBadge: View {
   let override: DOLConfigOverride
 
   var body: some View {
-    if let title {
+    if let title = Self.title(for: override) {
       Text(title)
         .font(.caption).bold()
         .foregroundStyle(.secondary)
@@ -60,7 +60,7 @@ struct ConfigOverrideBadge: View {
     }
   }
 
-  private var title: String? {
+  static func title(for override: DOLConfigOverride) -> String? {
     switch override {
     case .auto: return L("Auto")
     case .game: return L("Game")
@@ -194,5 +194,41 @@ struct HelpSheetButton: View {
             .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showing = false } } }
         }
       }
+  }
+}
+
+/// Shared inline-description helper. Wraps any control with a `.caption` secondary
+/// line directly under it. This is the single canonical row style for the whole
+/// settings surface — every page uses it instead of section footers or tap-to-open
+/// info popovers, so descriptions are always visible inline.
+@ViewBuilder
+func settingsCaption<Content: View>(_ content: Content, _ caption: String) -> some View {
+  VStack(alignment: .leading, spacing: 4) {
+    content
+    Text(caption)
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .fixedSize(horizontal: false, vertical: true)
+  }
+}
+
+/// NavigationLink row with an inline caption *inside* the link's label, so the row
+/// keeps its disclosure chevron and full-row tap target (wrapping a NavigationLink
+/// in an external VStack would strip both). `label` is the normal row content
+/// (e.g. an HStack with title + trailing value).
+@ViewBuilder
+func settingsNavCaption<Destination: View, Label: View>(
+  destination: Destination,
+  _ caption: String,
+  @ViewBuilder label: () -> Label
+) -> some View {
+  NavigationLink(destination: destination) {
+    VStack(alignment: .leading, spacing: 4) {
+      label()
+      Text(caption)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+    }
   }
 }

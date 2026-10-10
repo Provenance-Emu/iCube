@@ -492,68 +492,6 @@ private struct RecommendedBadge: View {
   }
 }
 
-/// Shared inline-description helper. Wraps any control with a `.caption` secondary
-/// line directly under it. This is the single canonical row style for the whole
-/// settings surface — every page uses it instead of section footers or tap-to-open
-/// info popovers, so descriptions are always visible inline.
-@ViewBuilder
-func settingsCaption<Content: View>(_ content: Content, _ caption: String) -> some View {
-  VStack(alignment: .leading, spacing: 4) {
-    content
-    Text(caption)
-      .font(.caption)
-      .foregroundStyle(.secondary)
-      .fixedSize(horizontal: false, vertical: true)
-  }
-}
-
-/// NavigationLink row with an inline caption *inside* the link's label, so the row
-/// keeps its disclosure chevron and full-row tap target (wrapping a NavigationLink
-/// in an external VStack would strip both). `label` is the normal row content
-/// (e.g. an HStack with title + trailing value).
-@ViewBuilder
-func settingsNavCaption<Destination: View, Label: View>(
-  destination: Destination,
-  _ caption: String,
-  @ViewBuilder label: () -> Label
-) -> some View {
-  NavigationLink(destination: destination) {
-    VStack(alignment: .leading, spacing: 4) {
-      label()
-      Text(caption)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-  }
-}
-
-// Raw values MUST match PowerPC::CPUCore (PowerPC.h): Interpreter=0, JIT64=1,
-// JITARM64=4, CachedInterpreter=5. The enum is gapped (2 and 3 are retired cores),
-// so naive sequential raw values would write/read the wrong core — e.g. a stored
-// Cached Interpreter (5) would read back as JIT, and selecting Cached Interpreter
-// would actually store JIT64. Declaration order (not raw value) drives the picker
-// display order, so the user-facing list is unchanged.
-private enum CpuEngine: Int, CaseIterable {
-  case interpreter = 0
-  case cachedInterpreter = 5
-  case cachedInterpreterIR = 6
-  case jit64 = 1
-  case jitARM64 = 4
-  var label: String {
-    switch self {
-    case .interpreter: return L("Interpreter (slowest)")
-    // "(slower)" was upstream's wording relative to the JIT, which non-jailbroken iOS never gets;
-    // on device this engine measured ~1.7x faster than the IR one (2026-09-16 A/B).
-    case .cachedInterpreter: return L("Cached Interpreter (recommended)")
-    case .cachedInterpreterIR: return L("Cached Interpreter IR (experimental, usually slower)")
-    case .jit64: return L("JIT Recompiler for x86-64 (recommended)")
-    case .jitARM64: return L("JIT Recompiler for ARM64 (recommended)")
-    }
-  }
-  static func from(raw: Int) -> CpuEngine { CpuEngine(rawValue: raw) ?? .jitARM64 }
-}
-
 private struct CpuEnginePicker: View {
   @Binding var selected: CpuEngine
   /// When false (App Store / jitless build), JIT engine choices are hidden
