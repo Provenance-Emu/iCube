@@ -95,30 +95,27 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
     XCTAssertEqual(model().item(id: "clip-length")?.currentValueTitle, "15s")
   }
 
-  // MARK: Normalisers (display only; the host's sync() calls them and writes nothing)
+  // MARK: Stored values (display only; the host's sync() reads them and writes nothing)
 
-  func test_clipSeconds_unsetIsTheDefault_andOffLadderSnapsDown() {
-    for (stored, shown) in [(-5, 15), (0, 15), (1, 5), (5, 5), (7, 5), (10, 10), (20, 15), (30, 30), (60, 30)] {
-      XCTAssertEqual(GraphicsGeneralState.normalizedClipSeconds(stored), shown, "stored \(stored)")
+  func test_clipSeconds_unsetIsTheDefault_otherwiseShownAsStored() {
+    for (stored, shown) in [(-5, 15), (0, 15), (1, 1), (7, 7), (10, 10), (20, 20), (60, 60)] {
+      XCTAssertEqual(GraphicsGeneralState.storedClipSeconds(stored), shown, "stored \(stored)")
     }
   }
 
-  func test_frameCap_offLadderSnapsDown() {
-    for (stored, shown) in [(-1, 0), (0, 0), (29, 0), (30, 30), (45, 30), (60, 60), (100, 90), (240, 120)] {
-      XCTAssertEqual(GraphicsGeneralState.normalizedFrameCap(stored), shown, "stored \(stored)")
-    }
+  func test_offLadderStoredValues_getTheirOwnOption_soTheRowNeverShowsADash() {
+    let clip = model(state { $0.clipSeconds = 7 }).item(id: "clip-length")
+    XCTAssertEqual(clip?.currentValueTitle, "7s")
+    let cap = model(state { $0.frameCap = 45 }).item(id: "frame-cap")
+    XCTAssertEqual(cap?.currentValueTitle, "45")
+    XCTAssertEqual(GraphicsGeneralState.options([0, 30, 60], including: 45), [0, 30, 45, 60])
+    XCTAssertEqual(GraphicsGeneralState.options([0, 30, 60], including: 30), [0, 30, 60])
   }
 
   func test_effectiveBackendKey_prefersASavedChoice() {
     XCTAssertEqual(GraphicsGeneralState.effectiveBackendKey(defaults: "Vulkan", config: "Metal"), "Vulkan")
     XCTAssertEqual(GraphicsGeneralState.effectiveBackendKey(defaults: "", config: "OGL"), "OGL")
     XCTAssertEqual(GraphicsGeneralState.effectiveBackendKey(defaults: nil, config: "Metal"), "Metal")
-  }
-
-  func test_tripleBuffering_unsetMeansOn_storedWins() {
-    XCTAssertTrue(GraphicsGeneralState.storedTripleBuffering(nil))
-    XCTAssertTrue(GraphicsGeneralState.storedTripleBuffering(true))
-    XCTAssertFalse(GraphicsGeneralState.storedTripleBuffering(false))
   }
 
   func test_backendKeys_roundTripThroughTheEnum() {

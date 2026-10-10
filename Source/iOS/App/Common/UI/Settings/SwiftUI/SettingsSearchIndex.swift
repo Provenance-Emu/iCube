@@ -15,6 +15,7 @@ struct SettingsSearchHit: Hashable {
 struct SettingsSearchIndex {
   private struct Row {
     let hit: SettingsSearchHit
+    /// Already folded (see `fold`).
     let terms: [String]
   }
 
@@ -23,19 +24,24 @@ struct SettingsSearchIndex {
   init(sections: [SettingsRootSection]) {
     var rows: [Row] = []
     for entry in sections.flatMap(\.entries) {
-      rows.append(Row(hit: SettingsSearchHit(entryID: entry.id, rowTitle: nil), terms: [entry.title, entry.description] + entry.keywords))
+      rows.append(Row(hit: SettingsSearchHit(entryID: entry.id, rowTitle: nil), terms: ([entry.title, entry.description] + entry.keywords).map(Self.fold)))
       guard let model = entry.makeModel?() else { continue }
       for item in model.allItems {
-        rows.append(Row(hit: SettingsSearchHit(entryID: entry.id, rowTitle: item.title), terms: [item.title, item.description ?? ""]))
+        rows.append(Row(hit: SettingsSearchHit(entryID: entry.id, rowTitle: item.title), terms: [item.title, item.description ?? ""].map(Self.fold)))
       }
     }
     self.rows = rows
   }
 
+  /// Lowercased letters and digits only, so "vsync" finds "V-Sync" and "fast forward" finds "Fast-Forward".
+  static func fold(_ text: String) -> String {
+    String(text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).filter { $0.isLetter || $0.isNumber })
+  }
+
   func hits(query: String) -> [SettingsSearchHit] {
-    let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    let q = Self.fold(query)
     guard !q.isEmpty else { return [] }
-    return rows.filter { row in row.terms.contains { $0.localizedCaseInsensitiveContains(q) } }.map(\.hit)
+    return rows.filter { row in row.terms.contains { $0.contains(q) } }.map(\.hit)
   }
 }
 

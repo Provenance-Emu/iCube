@@ -194,7 +194,7 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
   private func applyFrameCap(to scene: UIWindowScene) {
     #if os(iOS)
-    _ = UserDefaults.standard.integer(forKey: "ui_frame_cap")
+    _ = UserDefaults.standard.integer(forKey: GraphicsGeneralDefaultsKey.frameCap)
     #endif
   }
 }

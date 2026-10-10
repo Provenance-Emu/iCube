@@ -8,7 +8,7 @@ struct GraphicsGeneralView: View {
   @State private var state = GraphicsGeneralState()
 
   var body: some View {
-    SettingsLeafScreen(model: GraphicsGeneralModelBuilder.make(state: state, apply: apply), title: L("General"), sync: sync)
+    SettingsLeafScreen(model: GraphicsGeneralModelBuilder.make(state: state, apply: apply), title: L("Video"), sync: sync)
   }
 
   private func sync() {
@@ -29,14 +29,14 @@ struct GraphicsGeneralView: View {
     s.maxScale = InternalScale.from(value: DOLConfigBridge.gfxAutoIRMaxScale())
     s.shaderType = ShaderCompileType.from(raw: DOLConfigBridge.gfxShaderCompilationMode())
     s.compileBeforeStart = DOLConfigBridge.gfxWaitForShadersBeforeStarting()
-    s.tripleBuffering = GraphicsGeneralState.storedTripleBuffering(defaults.object(forKey: GraphicsGeneralDefaultsKey.tripleBuffering) == nil ? nil : defaults.bool(forKey: GraphicsGeneralDefaultsKey.tripleBuffering))
+    s.tripleBuffering = defaults.object(forKey: GraphicsGeneralDefaultsKey.tripleBuffering) as? Bool ?? true
     s.forceScaleOneNonProMotion = defaults.bool(forKey: GraphicsGeneralDefaultsKey.forceScaleOne)
     s.overscanFullscreen = defaults.bool(forKey: GraphicsGeneralDefaultsKey.overscanFullscreen)
-    s.frameCap = GraphicsGeneralState.normalizedFrameCap(defaults.integer(forKey: GraphicsGeneralDefaultsKey.frameCap))
+    s.frameCap = defaults.integer(forKey: GraphicsGeneralDefaultsKey.frameCap)
     s.instantReplay = defaults.bool(forKey: GraphicsGeneralDefaultsKey.instantReplay)
     s.saveClipsToPhotos = defaults.bool(forKey: GraphicsGeneralDefaultsKey.saveToPhotos)
     s.saveOnlyToPhotos = defaults.bool(forKey: GraphicsGeneralDefaultsKey.saveOnlyPhotos)
-    s.clipSeconds = GraphicsGeneralState.normalizedClipSeconds(defaults.integer(forKey: GraphicsGeneralDefaultsKey.clipSeconds))
+    s.clipSeconds = GraphicsGeneralState.storedClipSeconds(defaults.integer(forKey: GraphicsGeneralDefaultsKey.clipSeconds))
     state = s
   }
 

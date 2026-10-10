@@ -86,7 +86,7 @@ enum PerfAB {
       name: name, bools: bools, cpuEngine: DOLConfigBridge.mainCpuCore(),
       overclockEnable: DOLConfigBridge.mainOverclockEnableBase(), overclockPercent: DOLConfigBridge.mainOverclockPercentBase(),
       viOverclockEnable: DOLConfigBridge.mainViOverclockEnableBase(), viOverclockPercent: DOLConfigBridge.mainViOverclockPercentBase(),
-      adaptiveClock: UserDefaults.standard.bool(forKey: "adaptive_clock_enable"))
+      adaptiveClock: UserDefaults.standard.bool(forKey: PerformanceTuningDefaultsKey.adaptiveClock))
   }
 
   static func apply(_ s: PerfSnapshot) {
@@ -96,14 +96,14 @@ enum PerfAB {
     DOLConfigBridge.setMainOverclockPercent(s.overclockPercent)
     DOLConfigBridge.setMainViOverclockEnable(s.viOverclockEnable)
     DOLConfigBridge.setMainViOverclockPercent(s.viOverclockPercent)
-    UserDefaults.standard.set(s.adaptiveClock, forKey: "adaptive_clock_enable")
+    UserDefaults.standard.set(s.adaptiveClock, forKey: PerformanceTuningDefaultsKey.adaptiveClock)
     DOLConfigBridge.flushSettingsToDisk()
   }
 
   // Preset: honest benchmark base — adaptive clock OFF, 100% CPU + VI clocks, so speed% reflects raw
   // interpreter throughput instead of the adaptive controller's fixed-speed illusion.
   static func applyBenchmarkBase() {
-    UserDefaults.standard.set(false, forKey: "adaptive_clock_enable")
+    UserDefaults.standard.set(false, forKey: PerformanceTuningDefaultsKey.adaptiveClock)
     DOLConfigBridge.setMainOverclockEnable(false)
     DOLConfigBridge.setMainOverclockPercent(100)
     DOLConfigBridge.setMainViOverclockEnable(false)

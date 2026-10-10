@@ -46,7 +46,7 @@ enum GraphicsGeneralModelBuilder {
     ]
     if state.isIOS {
       general.append(
-        SettingsRow.cycle("frame-cap", L("Frame Rate Cap"), GraphicsGeneralState.frameCapLadder.map { (frameCapTitle($0), $0) }, state.frameCap,
+        SettingsRow.cycle("frame-cap", L("Frame Rate Cap"), GraphicsGeneralState.options(GraphicsGeneralState.frameCapLadder, including: state.frameCap).map { (frameCapTitle($0), $0) }, state.frameCap,
               L("Caps the display refresh the app requests. System Default lets the OS decide; lower caps can save power on the CPU-bound path."),
               set: { apply(.frameCap($0)) }))
     }
@@ -63,7 +63,7 @@ enum GraphicsGeneralModelBuilder {
         SettingsRow.toggle("save-only-photos", L("Save Only to Photos"), state.saveOnlyToPhotos,
                L("Save clips to Photos only, skipping the app's own storage."),
                set: { apply(.saveOnlyToPhotos($0)) }),
-        SettingsRow.cycle("clip-length", L("Clip Length"), GraphicsGeneralState.clipSecondsLadder.map { (seconds($0), $0) }, state.clipSeconds,
+        SettingsRow.cycle("clip-length", L("Clip Length"), GraphicsGeneralState.options(GraphicsGeneralState.clipSecondsLadder, including: state.clipSeconds).map { (seconds($0), $0) }, state.clipSeconds,
               L("How many seconds of gameplay each instant-replay clip captures."),
               set: { apply(.clipSeconds($0)) }),
       ]))
