@@ -32,6 +32,10 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "memory size").contains { $0.entryID == "advanced" && ($0.rowTitle ?? "").contains("Memory Size") })
   }
 
+  func test_interfaceRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "panic handlers").contains { $0.entryID == "interface" })
+  }
+
   func test_validatorRows_areSearchable() {
     XCTAssertTrue(index.hits(query: "Validate").contains { $0.entryID == "performance-tuning" })
   }
