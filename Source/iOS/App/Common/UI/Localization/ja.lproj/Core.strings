@@ -4186,6 +4186,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "NEON Texture Decoder" = "NEON Texture Decoder";
 "Native" = "Native";
 "Native-Metal compute acceleration for EFB/XFB.\n\nRoutes EFB color/depth resolve, RGBA8 blit/scale/gamma, and mipmap generation through Metal compute kernels instead of the stock raster path. This is an experimental GPU performance knob and is OFF by default.\n\nFalls back to the stock path automatically for any case it doesn't handle, so it is safe to leave on, but on untested hardware it can produce visual glitches (shimmer, wrong depth) — benchmark and visually verify GPU-bound titles before relying on it.\n\nApplies on next launch." = "Native-Metal compute acceleration for EFB/XFB.\n\nRoutes EFB color/depth resolve, RGBA8 blit/scale/gamma, and mipmap generation through Metal compute kernels instead of the stock raster path. This is an experimental GPU performance knob and is OFF by default.\n\nFalls back to the stock path automatically for any case it doesn't handle, so it is safe to leave on, but on untested hardware it can produce visual glitches (shimmer, wrong depth) — benchmark and visually verify GPU-bound titles before relying on it.\n\nApplies on next launch.";
+"Emulated CPU Clock" = "Emulated CPU Clock";
 "Native-Metal compute acceleration for EFB/XFB. Experimental GPU perf knob; OFF by default. Applies on next launch." = "Native-Metal compute acceleration for EFB/XFB. Experimental GPU perf knob; OFF by default. Applies on next launch.";
 "Nearby" = "Nearby";
 "Nearby Devices" = "Nearby Devices";
@@ -4322,6 +4323,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Restart the game as if the console's reset button was pressed? Unsaved progress will be lost." = "Restart the game as if the console's reset button was pressed? Unsaved progress will be lost.";
 "Restart the game from power-on" = "Restart the game from power-on";
 "Restore audio volume" = "Restore audio volume";
+"Restores every optimization below to its shipping default, so the recommended ones are back on. Applies on next game launch." = "Restores every optimization below to its shipping default, so the recommended ones are back on. Applies on next game launch.";
 "Resume Game" = "Resume Game";
 "Resume Points" = "Resume Points";
 "Resume Where I Left Off" = "Resume Where I Left Off";
@@ -4377,6 +4379,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Select Region" = "Select Region";
 "Select Save Slot" = "Select Save Slot";
 "Select Source" = "Select Source";
+"Select a Cached Interpreter engine" = "Select a Cached Interpreter engine";
 "Select which receiver to send input to" = "Select which receiver to send input to";
 "Send DSU Gyro/Accel" = "Send DSU Gyro/Accel";
 "Send Test Frame" = "Send Test Frame";
@@ -4410,9 +4413,11 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Show Graphs" = "Show Graphs";
 "Show Progress Popups" = "Show Progress Popups";
 "Show Speed" = "Show Speed";
+"Show Validation Options" = "Show Validation Options";
 "Show checkerboard" = "Show checkerboard";
 "Shows a dialog when the core hits an internal error instead of failing silently." = "Shows a dialog when the core hits an internal error instead of failing silently.";
 "Shows each game's disc ID under its title in the library." = "Shows each game's disc ID under its title in the library.";
+"Shows the developer validation toggles. Each one re-runs an optimization against the reference interpreter and asserts bit-identical results, which is much slower." = "Shows the developer validation toggles. Each one re-runs an optimization against the reference interpreter and asserts bit-identical results, which is much slower.";
 "Shows the resolution Auto Internal Resolution picks each frame as an on-screen overlay. Diagnostic only." = "Shows the resolution Auto Internal Resolution picks each frame as an on-screen overlay. Diagnostic only.";
 "Shows your current game and achievements in your Discord status." = "Shows your current game and achievements in your Discord status.";
 "Sideways" = "Sideways";
@@ -4490,6 +4495,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The cached file was removed." = "The cached file was removed.";
 "The copy arrived damaged and was discarded. Try again." = "The copy arrived damaged and was discarded. Try again.";
 "The current graphics backend does not support bounding box emulation on this device." = "The current graphics backend does not support bounding box emulation on this device.";
+"The emulated CPU's clock as a percentage of normal. Only used while the override above is enabled." = "The emulated CPU's clock as a percentage of normal. Only used while the override above is enabled.";
+"The emulated video-interface frequency as a percentage of normal. Only used while the override above is enabled." = "The emulated video-interface frequency as a percentage of normal. Only used while the override above is enabled.";
 "The file has been downloaded to cache." = "The file has been downloaded to cache.";
 "The other device declined the copy." = "The other device declined the copy.";
 "The profile file could not be written." = "The profile file could not be written.";
@@ -4541,6 +4548,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Uses a faster, less accurate texture-sampling path.\n\nCan help on some GPUs but may cause banding, seams, or vertical lines in FMVs.\n\niOS note: GPU-side; rarely changes the CPU-bound framerate. Disable if you see texture artifacts. Default ON.\n\nIf unsure, leave this enabled." = "Uses a faster, less accurate texture-sampling path.\n\nCan help on some GPUs but may cause banding, seams, or vertical lines in FMVs.\n\niOS note: GPU-side; rarely changes the CPU-bound framerate. Disable if you see texture artifacts. Default ON.\n\nIf unsure, leave this enabled.";
 "Uses a faster, less precise depth formula. Small speed win; can cause depth glitches in a few games. Recommended on." = "Uses a faster, less precise depth formula. Small speed win; can cause depth glitches in a few games. Recommended on.";
 "Uses faster, less precise texture sampling. Small speed win; rarely causes minor texture artifacts. Recommended on." = "Uses faster, less precise texture sampling. Small speed win; rarely causes minor texture artifacts. Recommended on.";
+"VBI Frequency" = "VBI Frequency";
 "VI Skip Mode" = "VI Skip Mode";
 "Vertex Loader" = "Vertex Loader";
 "Vertex positions at buffer index 0" = "Vertex positions at buffer index 0";
