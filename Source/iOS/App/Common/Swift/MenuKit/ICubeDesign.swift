@@ -88,6 +88,34 @@ struct ICubeDesign {
       #endif
     }
   }
+
+  // MARK: Spacing, radii, lines (spec §2.2–2.4)
+
+  enum Spacing: CGFloat, CaseIterable {
+    case xxs = 4, xs = 8, s = 12, m = 16, l = 24, xl = 40, xxl = 80
+  }
+
+  /// Card art, tile and panel use `large`; row surface, icon badge and rail highlight use `small`.
+  /// The third radius is `Capsule()`.
+  enum Radius: CGFloat, CaseIterable {
+    case large = 16, small = 10
+  }
+
+  /// `hairline` in the hairline colour; `focus` in the focus gradient. Selection is fill, never stroke.
+  enum Line: CGFloat, CaseIterable {
+    case hairline = 1, focus = 4
+  }
+
+  // MARK: Motion (spec §2.7)
+
+  enum Motion {
+    static let focusSpring = Animation.spring(response: 0.4, dampingFraction: 0.8)
+    static let selection = Animation.easeInOut(duration: 0.2)
+    static let rowFocusScale: CGFloat = 1.04
+    static let tileFocusScale: CGFloat = 1.06
+    static let railCollapsedWidth: CGFloat = 88
+    static let railExpandedWidth: CGFloat = 320
+  }
 }
 
 extension EnvironmentValues {
