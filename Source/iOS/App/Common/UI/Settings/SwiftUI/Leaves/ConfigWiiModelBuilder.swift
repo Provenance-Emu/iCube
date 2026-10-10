@@ -17,9 +17,10 @@ enum ConfigWiiModelBuilder {
     withStored(value, in: [(L("Mono"), 0), (L("Stereo"), 1), (L("Surround"), 2)])
   }
 
-  static func sensorBarPositionOptions(including value: Int) -> [(String, Int)] {
-    withStored(value, in: [(L("Bottom"), 0), (L("Top"), 1)])
-  }
+  static let sensorBarPositionOptions = [(L("Bottom"), 0), (L("Top"), 1)]
+
+  /// The old label read "Top" for any non-zero stored value, so the row selects Top rather than inserting an option.
+  static func displayedSensorBarPosition(_ stored: Int) -> Int { stored == 0 ? 0 : 1 }
 
   /// A stored value no option names is added (as the old pickers' "Error" label) so the row never shows a dash.
   private static func withStored(_ value: Int, in options: [(String, Int)]) -> [(String, Int)] {
@@ -54,7 +55,7 @@ enum ConfigWiiModelBuilder {
     ])
 
     let remotes = MenuSection(id: "wii-remotes", header: L("Wii Remotes"), items: [
-      SettingsRow.cycle("sensor-bar-position", L("Sensor Bar Position"), sensorBarPositionOptions(including: state.sensorBarPosition), state.sensorBarPosition,
+      SettingsRow.cycle("sensor-bar-position", L("Sensor Bar Position"), sensorBarPositionOptions, displayedSensorBarPosition(state.sensorBarPosition),
                         L("Must match where the game thinks the sensor bar sits (Top/Bottom) or the pointer inverts. On iCube the pointer is touch-driven, so set it to the game's expectation."),
                         set: { apply(.sensorBarPosition($0)) }),
       SettingsRow.stepper("sensor-bar-sensitivity", L("Sensor Bar Sensitivity"), Double(state.sensorBarSensitivity),
@@ -86,6 +87,12 @@ enum ConfigWiiModelBuilder {
         SettingsRow.toggle("wiilink", L("Enable WiiConnect24 via WiiLink"), state.wiilink,
                            L("Enables fan-revived WiiConnect24 online channels through WiiLink."),
                            set: { apply(.wiilink($0)) }),
+        SettingsRow.toggle("sd-card", L("Insert SD Card"), state.sdCard,
+                           L("Exposes a virtual SD card to games and the System Menu."),
+                           set: { apply(.sdCard($0)) }),
+        SettingsRow.toggle("sd-writes", L("Allow Writes to SD Card"), state.sdWrites,
+                           L("Lets titles modify the virtual SD card. Off keeps it read-only."),
+                           set: { apply(.sdWrites($0)) }),
         SettingsRow.toggle("sd-folder-sync", L("Synchronize SD Card Folder on Start/Stop"), state.sdFolderSync,
                            L("Mirrors a host folder to/from the card image when emulation starts and stops."),
                            set: { apply(.sdFolderSync($0)) }),

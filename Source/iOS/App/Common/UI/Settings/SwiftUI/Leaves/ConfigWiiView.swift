@@ -26,6 +26,8 @@ struct ConfigWiiView: View {
     s.skylanderPortal = DOLConfigBridge.mainEmulateSkylanderPortal()
     s.keyboard = DOLConfigBridge.mainWiiKeyboard()
     s.wiilink = DOLConfigBridge.mainWiiWiiLinkEnable()
+    s.sdCard = DOLConfigBridge.mainWiiSDCard()
+    s.sdWrites = DOLConfigBridge.mainAllowSDWrites()
     s.sdFolderSync = DOLConfigBridge.mainWiiSDCardEnableFolderSync()
     state = s
   }
@@ -47,6 +49,8 @@ struct ConfigWiiView: View {
     case .skylanderPortal(let v): state.skylanderPortal = v; DOLConfigBridge.setMainEmulateSkylanderPortal(v)
     case .keyboard(let v): state.keyboard = v; DOLConfigBridge.setMainWiiKeyboard(v)
     case .wiilink(let v): state.wiilink = v; DOLConfigBridge.setMainWiiWiiLinkEnable(v)
+    case .sdCard(let v): state.sdCard = v; DOLConfigBridge.setMainWiiSDCard(v)
+    case .sdWrites(let v): state.sdWrites = v; DOLConfigBridge.setMainAllowSDWrites(v)
     case .sdFolderSync(let v): state.sdFolderSync = v; DOLConfigBridge.setMainWiiSDCardEnableFolderSync(v)
     }
   }

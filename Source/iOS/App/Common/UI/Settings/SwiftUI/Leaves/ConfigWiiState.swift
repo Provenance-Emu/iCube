@@ -27,6 +27,8 @@ struct ConfigWiiState: Equatable {
   var skylanderPortal = false
   var keyboard = false
   var wiilink = false
+  var sdCard = false
+  var sdWrites = false
   var sdFolderSync = false
 }
 
@@ -50,5 +52,7 @@ enum ConfigWiiChange: Equatable {
   case skylanderPortal(Bool)
   case keyboard(Bool)
   case wiilink(Bool)
+  case sdCard(Bool)
+  case sdWrites(Bool)
   case sdFolderSync(Bool)
 }

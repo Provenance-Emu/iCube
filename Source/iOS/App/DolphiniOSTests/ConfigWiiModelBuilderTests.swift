@@ -22,7 +22,7 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
       "pal60", "aspect-ratio",
       "screensaver", "language", "sound-mode",
       "sensor-bar-position", "sensor-bar-sensitivity", "speaker-volume", "rumble", "touchpad-ir-follow",
-      "skylander-portal", "usb-keyboard", "wiilink", "sd-folder-sync",
+      "skylander-portal", "usb-keyboard", "wiilink", "sd-card", "sd-writes", "sd-folder-sync",
     ])
     XCTAssertEqual(model().sections.map(\.id), ["video", "general", "wii-remotes", "usb-sd"])
     XCTAssertEqual(model().sections.map(\.header), ["Video", "General", "Wii Remotes", "USB / SD"])
@@ -37,16 +37,12 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     for item in model().allItems { XCTAssertFalse((item.description ?? "").isEmpty, item.id) }
   }
 
-  func test_noSDCardToggles_theOldViewNeverShowedThem() {
-    XCTAssertNil(model().item(id: "sd-card"))
-    XCTAssertNil(model().item(id: "sd-writes"))
-  }
-
   func test_everyToggleRow_emitsItsOwnChange() {
     let expected: [(String, (Bool) -> ConfigWiiChange)] = [
       ("pal60", { .pal60($0) }), ("screensaver", { .screensaver($0) }), ("rumble", { .wiimoteRumble($0) }),
       ("touchpad-ir-follow", { .touchpadIRFollowWithoutClick($0) }), ("skylander-portal", { .skylanderPortal($0) }),
-      ("usb-keyboard", { .keyboard($0) }), ("wiilink", { .wiilink($0) }), ("sd-folder-sync", { .sdFolderSync($0) }),
+      ("usb-keyboard", { .keyboard($0) }), ("wiilink", { .wiilink($0) }),
+      ("sd-card", { .sdCard($0) }), ("sd-writes", { .sdWrites($0) }), ("sd-folder-sync", { .sdFolderSync($0) }),
     ]
     let m = model()
     for (id, change) in expected {
@@ -61,10 +57,10 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
 
   func test_toggleRows_reflectTheState() {
     let on = state { $0.pal60 = true; $0.screensaver = true; $0.wiimoteRumble = false; $0.touchpadIRFollowWithoutClick = true
-      $0.skylanderPortal = true; $0.keyboard = true; $0.wiilink = true; $0.sdFolderSync = true }
+      $0.skylanderPortal = true; $0.keyboard = true; $0.wiilink = true; $0.sdCard = true; $0.sdWrites = true; $0.sdFolderSync = true }
     let expected: [(String, Bool)] = [
       ("pal60", true), ("screensaver", true), ("rumble", false), ("touchpad-ir-follow", true),
-      ("skylander-portal", true), ("usb-keyboard", true), ("wiilink", true), ("sd-folder-sync", true),
+      ("skylander-portal", true), ("usb-keyboard", true), ("wiilink", true), ("sd-card", true), ("sd-writes", true), ("sd-folder-sync", true),
     ]
     for (id, value) in expected {
       guard case .toggle(let binding)? = model(on).item(id: id)?.role else { XCTFail(id); continue }
@@ -133,7 +129,6 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     let cases: [(String, (inout ConfigWiiState) -> Void, Int, Int)] = [
       ("language", { $0.language = 12 }, 12, 11),
       ("sound-mode", { $0.soundMode = 5 }, 5, 4),
-      ("sensor-bar-position", { $0.sensorBarPosition = 3 }, 3, 3),
     ]
     for (id, edit, value, count) in cases {
       guard case .cycle(let options, _)? = model(state(edit)).item(id: id)?.role else { XCTFail(id); continue }
@@ -141,6 +136,16 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
       XCTAssertEqual(options.last?.1.base as? Int, value, id)
       XCTAssertEqual(options.last?.0, "Error", id)
     }
+  }
+
+  func test_sensorBarPosition_anyNonZeroStoredValueShowsTop_asTheOldLabelDid() {
+    for stored in [1, 2, 3, -1] {
+      let item = model(state { $0.sensorBarPosition = stored }).item(id: "sensor-bar-position")
+      XCTAssertEqual(item?.currentValueTitle, "Top", "\(stored)")
+      guard case .cycle(let options, _)? = item?.role else { XCTFail("not a cycle"); continue }
+      XCTAssertEqual(options.count, 2, "\(stored)")
+    }
+    XCTAssertEqual(model(state { $0.sensorBarPosition = 0 }).item(id: "sensor-bar-position")?.currentValueTitle, "Bottom")
   }
 
   func test_defaults_matchTheOldViewsState() {
@@ -151,6 +156,6 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     XCTAssertEqual(s.sensorBarSensitivity, 2)
     XCTAssertEqual(s.speakerVolume, 4)
     XCTAssertTrue(s.wiimoteRumble)
-    XCTAssertEqual([s.pal60, s.widescreen, s.screensaver, s.touchpadIRFollowWithoutClick, s.skylanderPortal, s.keyboard, s.wiilink, s.sdFolderSync], Array(repeating: false, count: 8))
+    XCTAssertEqual([s.pal60, s.widescreen, s.screensaver, s.touchpadIRFollowWithoutClick, s.skylanderPortal, s.keyboard, s.wiilink, s.sdCard, s.sdWrites, s.sdFolderSync], Array(repeating: false, count: 10))
   }
 }
