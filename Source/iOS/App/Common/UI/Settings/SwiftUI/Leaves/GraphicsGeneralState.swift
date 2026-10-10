@@ -3,7 +3,8 @@
 
 import Foundation
 
-/// UserDefaults keys behind the Video screen; each is read or written by more than one place, so they are named once here.
+/// UserDefaults keys behind the Video screen, named once for the Swift readers and writers (this screen, ReplayKitManager,
+/// MainDisplaySceneDelegate). EmulationCoordinator.mm and DOLConfigBridge.mm repeat the same strings in Objective-C++.
 enum GraphicsGeneralDefaultsKey {
   static let backend = "ui_gfx_backend"
   static let tripleBuffering = "gfx_triple_buffering"
@@ -17,7 +18,7 @@ enum GraphicsGeneralDefaultsKey {
 }
 
 /// Snapshot of Config and UserDefaults for the Video screen. Defaults match the old view's `@State` defaults, except
-/// `tripleBuffering`, which is ON until the user turns it off (the old sync treated an unset key as ON).
+/// `tripleBuffering`, which is ON until the user turns it off (an unset key means ON).
 struct GraphicsGeneralState: Equatable {
   var backend = GraphicsBackend.metal
   var aspect = AspectRatio.auto
@@ -48,15 +49,14 @@ struct GraphicsGeneralState: Equatable {
   static let clipSecondsLadder = [5, 10, 15, 30]
   static let defaultClipSeconds = 15
 
-  /// A stored cap off the ladder shows as the step below it (System Default under 30), never a dash. Display only.
-  static func normalizedFrameCap(_ stored: Int) -> Int {
-    frameCapLadder.last { $0 <= stored } ?? systemDefaultFrameCap
+  /// Unset (0) or negative is the default length, as ReplayKitManager reads it; any other stored length is shown as stored.
+  static func storedClipSeconds(_ stored: Int) -> Int {
+    stored > 0 ? stored : defaultClipSeconds
   }
 
-  /// Unset (0) or negative is the default length; a length off the ladder shows as the step below it. Display only.
-  static func normalizedClipSeconds(_ stored: Int) -> Int {
-    guard stored > 0 else { return defaultClipSeconds }
-    return clipSecondsLadder.last { $0 <= stored } ?? clipSecondsLadder[0]
+  /// The ladder, plus the stored value when it is not on it, so the row shows the raw value instead of a dash.
+  static func options(_ ladder: [Int], including value: Int) -> [Int] {
+    ladder.contains(value) ? ladder : (ladder + [value]).sorted()
   }
 
   /// The Metal/OGL/Vulkan key the screen shows: the user's saved choice when there is one, else what Config holds.
@@ -64,9 +64,6 @@ struct GraphicsGeneralState: Equatable {
     guard let defaults, !defaults.isEmpty else { return config }
     return defaults
   }
-
-  /// An unset key means ON; only an explicit stored value turns it off.
-  static func storedTripleBuffering(_ stored: Bool?) -> Bool { stored ?? true }
 }
 
 /// One user edit. The host applies it to its snapshot AND to Config / UserDefaults; the builder only emits it.

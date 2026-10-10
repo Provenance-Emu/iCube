@@ -24,8 +24,8 @@ final class ZipCompiledShaderContainerTests: XCTestCase {
     return (name, url)
   }
 
-  private func archiveFile(_ data: Data) throws -> URL {
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("ZipCompiledShaderContainerTests-\(UUID().uuidString).zip")
+  private func archiveFile(_ data: Data, pathExtension: String = "zip") throws -> URL {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent("ZipCompiledShaderContainerTests-\(UUID().uuidString).\(pathExtension)")
     try data.write(to: url)
     cleanup.append(url)
     return url
@@ -41,6 +41,12 @@ final class ZipCompiledShaderContainerTests: XCTestCase {
     let archive = TestZipBuilder.build([.init(name: "shader.json", contents: Self.shaderJSON)])
     XCTAssertEqual(try Decoder(data: archive).shader.historyCount, 3)
     XCTAssertEqual(try Decoder(url: try archiveFile(archive)).shader.historyCount, 3)
+  }
+
+  /// Zip only extracts files named `.zip` or `.cbz`; a preset keeps its `.oecompiledshader` name on disk.
+  func testDecodesAShaderArchiveWithThePresetExtension() throws {
+    let archive = TestZipBuilder.build([.init(name: "shader.json", contents: Self.shaderJSON)])
+    XCTAssertEqual(try Decoder(url: try archiveFile(archive, pathExtension: "oecompiledshader")).shader.historyCount, 3)
   }
 
   /// The archive was written beside its extraction, so an entry named `in.zip` truncated it while minizip was still reading

@@ -17,7 +17,7 @@ import Foundation
 // MARK: - On-Screen Stick Feel (dsu_* keys, applied in TCManagerInterface.setAxisValueFor:)
 
 /// Gain, deadzone and smoothing for the on-screen sticks and triggers. The keys keep their old
-/// `dsu_` names; physical controllers and motion are never scaled. More Controller Settings and
+/// `dsu_` names; physical controllers and motion are never scaled. The player screen and
 /// the DSU controller both push this one screen.
 struct AnalogStickSettingsView: View {
   @State private var gain: Double = UserDefaults.standard.object(forKey: "dsu_gyro_gain") as? Double ?? 1.0
@@ -99,8 +99,8 @@ struct AnalogStickSettingsView: View {
 // MARK: - Controllers (Settings → Controllers)
 
 /// Settings → Controllers is the Controllers hub, the same screen the pause menu and the top bar
-/// open (controller hub spec, Phase 2). What the hub does not cover is behind its "More Controller
-/// Settings" row (`ControllerMoreSettingsView`) and "Motion Source (DSU)" row (`DSUSettingsView`).
+/// open (controller hub spec, Phase 2). The hub's Setup section and the player screens cover
+/// the rest of the controller options; "Motion Source (DSU)" (`DSUSettingsView`) is its own row.
 /// Opening it writes nothing: unused ports are under "Show All Ports".
 struct ControllersRootView: View {
   @Environment(\.dismiss) private var dismiss
@@ -121,7 +121,7 @@ struct ControllersRootView: View {
 /// of that smaller rectangle moved (and sizes grew) when the game resumed.
 ///
 /// Presented full screen: by the game screen over the running game (Edit Layout… in a game, a
-/// long-press on the overlay), and by the Controllers hub and More Controller Settings outside one.
+/// long-press on the overlay), and by the Controllers hub outside one.
 /// `TouchOverlayView.init(initialEditMode:)` suppresses every group's input while editing, so the
 /// placeholder `deviceId: 0` is never written; `irMode: .gyro` because `TouchOverlayIRPadView`'s
 /// `mode`/`isEditingFlag` `didSet`s both call `forceReleaseAndCenter()` on mount, and `.gyro` makes

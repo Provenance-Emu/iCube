@@ -5,129 +5,6 @@ import XCTest
 
 @testable import iCube
 
-@MainActor
-private final class FakeHubReader: ControllerHubReading {
-  var gameCube: [Int: String] = [:]
-  var wii: [Int: String] = [:]
-  var extensions: [Int: Int] = [:]
-  var pads: [ConnectedPadState] = []
-
-  func boundQualifier(forGCPort port: Int) -> String { gameCube[port] ?? "" }
-  func boundQualifier(forWiimote index: Int) -> String { wii[index] ?? "" }
-  func wiiExtension(forWiimote index: Int) -> Int { extensions[index] ?? 0 }
-  func isSideways(forWiimote index: Int) -> Bool { false }
-  func connectedPads() -> [ConnectedPadState] { pads }
-  func isGameRunning() -> Bool { false }
-  func overlayVisible() -> Bool { false }
-  func overlayMode() -> ControllerManager.OverlayMode { .auto }
-  func overlayOpacity() -> Float { 1 }
-  func dsuClientEnabled() -> Bool { false }
-  func dsuServerCount() -> Int { 0 }
-}
-
-@MainActor
-private final class FakeIO: PlayerScreenIO {
-  /// "owner-group" for each `controlRows` read, in order.
-  var groupReads: [String] = []
-  /// Every write, as "kind:detail".
-  var writes: [String] = []
-  var deviceInputs = ["Button A", "Button B"]
-  var inputValues: [Float] = [0, 0]
-  /// What `ControllerAssignmentService.assign` does to the port on a pad bind: true loads the pad's
-  /// default profile over the mapping (the old mapping bound nothing on the pad), false keeps it.
-  var assignmentReplacesMapping = false
-  private var boundExpression = "`Button A`"
-  var saveSucceeds = true
-  var existingProfiles = ["Physical Controller", "Mine"]
-  /// Saved profiles the list hides for the bound device (a pad profile on a touchscreen slot).
-  var hiddenProfiles: [String] = []
-  var parsable: Set<String> = ["`Button B`", ""]
-  /// Lets a test make the reader follow a device change, as the real config does.
-  var onSetDevice: ((PlayerDeviceChoice) -> Void)?
-
-  func controlRows(owner: RemapGroupOwner, group: Int, port: Int) -> [RemapControlRow] {
-    groupReads.append("\(owner)-\(group)")
-    return [RemapControlRow(owner: owner, groupId: group, index: 0, name: "Control", expression: boundExpression)]
-  }
-
-  func numericSettings(owner: RemapGroupOwner, group: Int, port: Int) -> [NumericSettingState] { [] }
-  func profiles(for slot: PlayerSlot) -> [String] { existingProfiles }
-  func allProfileNames(for slot: PlayerSlot) -> [String] { existingProfiles + hiddenProfiles }
-  /// The user's own profiles; the rest of `existingProfiles` are bundled.
-  var userProfiles = ["Mine"]
-  var deleteSucceeds = true
-  func userProfileNames(for slot: PlayerSlot) -> [String] { userProfiles }
-
-  func deleteProfile(_ name: String, slot: PlayerSlot) -> Bool {
-    writes.append("delete:\(name)")
-    guard deleteSucceeds, userProfiles.contains(name) else { return false }
-    userProfiles.removeAll { $0 == name }
-    existingProfiles.removeAll { $0 == name }
-    return true
-  }
-
-  func defaultProfileName(forQualifier qualifier: String) -> String? {
-    qualifier.hasPrefix("iOS/") ? "Touchscreen" : "Physical Controller"
-  }
-
-  /// What each profile gives the control rows (every row reads the same here); a missing profile
-  /// cannot be read.
-  var profileExpressions: [String: String] = ["Physical Controller": "`Button B`", "Touchscreen": "`Button 0`"]
-  /// Every `expression(inProfile:)` read, as "profile:row".
-  var profileReads: [String] = []
-
-  func expression(inProfile profile: String, for row: RemapControlRow, port: Int) -> String? {
-    profileReads.append("\(profile):\(row.id)")
-    return profileExpressions[profile]
-  }
-
-  func isMotionPointerEnabled(wiimote: Int) -> Bool { true }
-  func pointerMotion() -> PointerMotionState { .standard }
-  func inputNames(forQualifier qualifier: String) -> [String] { deviceInputs }
-  func inputStates(forQualifier qualifier: String) -> [Float] { inputValues }
-
-  func check(_ expression: String) -> ExpressionCheck {
-    parsable.contains(expression)
-      ? ExpressionCheck(status: .valid, message: "ok")
-      : ExpressionCheck(status: .invalid, message: "bad")
-  }
-
-  /// Whether the port is pinned; picking Auto unpins it.
-  var pinned = false
-  func isPinned(_ slot: PlayerSlot) -> Bool { pinned }
-  func isSensorBarOnTop() -> Bool { false }
-
-  func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
-    writes.append("device:\(choice)")
-    if choice == .automatic { pinned = false }
-    if assignmentReplacesMapping, case .pad = choice { boundExpression = "`Button 0`" }
-    onSetDevice?(choice)
-  }
-
-  func loadProfile(_ name: String, slot: PlayerSlot) -> Bool {
-    writes.append("load:\(name)")
-    return true
-  }
-
-  func saveProfile(_ name: String, slot: PlayerSlot) -> Bool {
-    writes.append("save:\(name)")
-    return saveSucceeds
-  }
-
-  func setExtension(_ value: Int, wiimote: Int) { writes.append("extension:\(value)") }
-  func setSideways(_ enabled: Bool, wiimote: Int) { writes.append("sideways:\(enabled)") }
-  func setExpression(_ expression: String, for row: RemapControlRow, port: Int) { writes.append("expression:\(row.id)=\(expression)") }
-  func setNumericSetting(_ setting: NumericSettingState, value: Double, port: Int) { writes.append("setting:\(setting.id)=\(value)") }
-  func setMotionPointerEnabled(_ enabled: Bool, wiimote: Int) { writes.append("motion-pointer:\(enabled)") }
-  func setPointerMode(_ mode: PointerMode) { writes.append("pointer:\(mode)") }
-  func recenterPointer() { writes.append("recenter") }
-  func setInvertX(_ enabled: Bool) { writes.append("invert-x:\(enabled)") }
-  func setInvertY(_ enabled: Bool) { writes.append("invert-y:\(enabled)") }
-  func setShakeToWiggle(_ enabled: Bool) { writes.append("shake:\(enabled)") }
-  func setDragGain(_ gain: Double) { writes.append("gain:\(gain)") }
-  func setGyroSensitivity(_ gain: Double) { writes.append("gyro-sensitivity:\(gain)") }
-}
-
 /// `PlayerScreenViewModel` against fakes: what it reads in which order, the capture session, the
 /// spec's edge cases (disconnect while armed, timeout, a broken expression), the signed-off
 /// decisions 5, 9, 10, 11 and 12, and the first-render read.
@@ -143,7 +20,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
 
   @MainActor
   private func make(
-    _ reader: FakeHubReader, _ io: FakeIO,
+    _ reader: FakePlayerHubReader, _ io: FakePlayerScreenIO,
     slot: PlayerSlot = PlayerSlot(kind: .gameCube, port: 1),
     memory: PlayerProfileMemory = PlayerProfileMemory(),
     center: NotificationCenter = NotificationCenter(),
@@ -162,11 +39,11 @@ final class PlayerScreenViewModelTests: XCTestCase {
 
   /// GameCube port 1 bound to a connected Xbox pad.
   @MainActor
-  private func boundGameCube() -> (FakeHubReader, FakeIO) {
-    let reader = FakeHubReader()
+  private func boundGameCube() -> (FakePlayerHubReader, FakePlayerScreenIO) {
+    let reader = FakePlayerHubReader()
     reader.gameCube[1] = Self.xbox
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
-    return (reader, FakeIO())
+    return (reader, FakePlayerScreenIO())
   }
 
   /// Lets the "a turn later" prompt task run.
@@ -189,10 +66,10 @@ final class PlayerScreenViewModelTests: XCTestCase {
 
   @MainActor
   func test_reload_wiiRemoteWithClassic_readsTheClassicGroups() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.wii[2] = Self.xbox
     reader.extensions[2] = 2
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     let model = make(reader, io, slot: PlayerSlot(kind: .wiiRemote, port: 2))
     model.reload()
     XCTAssertEqual(io.groupReads, [
@@ -274,7 +151,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// Binds input 0 (Button A) on `model`, leaving it HELD (`io.inputValues == [1, 0]`), as a player
   /// who is still holding the button does. Returns the armed row.
   @MainActor
-  private func bindAndKeepHolding(_ model: PlayerScreenViewModel, _ io: FakeIO) -> RemapControlRow {
+  private func bindAndKeepHolding(_ model: PlayerScreenViewModel, _ io: FakePlayerScreenIO) -> RemapControlRow {
     let row = model.state.controls[0]
     model.toggleCapture(row)
     model.pollCapture()  // nothing was held at arm time: listening starts
@@ -406,11 +283,11 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// cancels, or the builder's lock would leave no enabled row.
   @MainActor
   func test_capture_armedRowLeavingTheList_cancelsTheCapture() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.wii[2] = Self.xbox
     reader.extensions[2] = 2
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     let model = make(reader, io, slot: PlayerSlot(kind: .wiiRemote, port: 2))
     model.reload()
     let classicRow = model.state.controls.last { $0.owner == .classic }
@@ -428,9 +305,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// Decision 11: a DSU-bound port captures, and a reload never cancels it for "not in the pad list".
   @MainActor
   func test_capture_dsuPort_armsAndSurvivesAReload() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.gameCube[1] = Self.dsu
-    let model = make(reader, FakeIO())
+    let model = make(reader, FakePlayerScreenIO())
     model.reload()
     let row = model.state.controls[0]
     model.toggleCapture(row)
@@ -440,9 +317,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
 
   @MainActor
   func test_capture_needsAConnectedPad() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.gameCube[1] = Self.xbox
-    let model = make(reader, FakeIO())
+    let model = make(reader, FakePlayerScreenIO())
     model.reload()
     model.toggleCapture(model.state.controls[0])
     XCTAssertNil(model.state.armedControlID)
@@ -476,9 +353,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// cannot be rebound there, so unbinding one would strand the user.
   @MainActor
   func test_clear_onATouchscreenPort_writesNothing() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.gameCube[1] = "iOS/4/Touchscreen"
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     let model = make(reader, io)
     model.reload()
     XCTAssertFalse(model.state.canCapture)
@@ -489,8 +366,8 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// Clear on a disconnected pad's port, and on No Device, writes nothing either.
   @MainActor
   func test_clear_onNoDeviceOrADisconnectedPad_writesNothing() {
-    let reader = FakeHubReader()
-    let io = FakeIO()
+    let reader = FakePlayerHubReader()
+    let io = FakePlayerScreenIO()
     let model = make(reader, io)
     model.reload()
     model.clear(model.state.controls[0])
@@ -542,9 +419,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
 
   @MainActor
   func test_setDevice_firstBindRemembersTheDefaultProfile() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     io.assignmentReplacesMapping = true
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.gameCube[1] = qualifier }
@@ -560,9 +437,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// the name stays: the port's controls are the same after the assignment.
   @MainActor
   func test_setDevice_rebindKeepsTheRememberedName() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     io.assignmentReplacesMapping = false
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.gameCube[1] = qualifier }
@@ -579,10 +456,10 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// assignment loads the pad's default profile over it and the remembered name must follow.
   @MainActor
   func test_setDevice_touchscreenToAPad_remembersThePadsDefaultProfile() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.gameCube[1] = "iOS/4/Touchscreen"
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     io.assignmentReplacesMapping = true
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.gameCube[1] = qualifier }
@@ -599,10 +476,10 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// (GameCube always; a Wii Remote's BindTouchscreen whenever the bound device changes).
   @MainActor
   func test_setDevice_touchscreenOnAWiiRemote_remembersTheTouchscreenProfile() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.wii[1] = Self.xbox
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     io.assignmentReplacesMapping = false  // the touchscreen reloads its profile whatever the mapping
     io.onSetDevice = { choice in
       if choice == .touchscreen { reader.wii[1] = "iOS/4/Touchscreen" }
@@ -619,10 +496,10 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// keeps the mapping, so binding a gyro pad turns it back on.
   @MainActor
   func test_setDevice_gyroPadOnAWiiRemote_turnsTheMotionPointerOn() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.wii[1] = "iOS/4/Touchscreen"
     reader.pads = [pad(Self.dualSense, "DualSense", gyro: true), pad(Self.xbox, "Xbox")]
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.wii[1] = qualifier }
     }
@@ -649,9 +526,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// seen, i.e. `setDevice` must not act on the pads it saw at push time.
   @MainActor
   func test_deviceList_aPadConnectingWhileOpen_isListedAndPicked() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.wii[1] = "iOS/4/Touchscreen"
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.wii[1] = qualifier }
     }
@@ -669,9 +546,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// Even without the list's refresh, `setDevice` reads a fresh snapshot first.
   @MainActor
   func test_setDevice_readsAFreshSnapshot() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.wii[1] = "iOS/4/Touchscreen"
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     io.onSetDevice = { choice in
       if case .pad(let qualifier) = choice { reader.wii[1] = qualifier }
     }
@@ -734,10 +611,10 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// open on a name that cannot be saved, and a blank typed name writes nothing.
   @MainActor
   func test_openSavePrompt_aBlankPadName_fallsBackToThePlayerTitle() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.gameCube[1] = Self.xbox
     reader.pads = [pad(Self.xbox, "   ")]
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     let model = make(reader, io)
     model.reload()
     model.openSavePrompt()
@@ -752,10 +629,10 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// prompt must not prefill it.
   @MainActor
   func test_openSavePrompt_aPaddedBuiltInPadName_fallsBackToThePlayerTitle() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.gameCube[1] = Self.xbox
     reader.pads = [pad(Self.xbox, "Touchscreen ")]
-    let model = make(reader, FakeIO())
+    let model = make(reader, FakePlayerScreenIO())
     model.reload()
     model.openSavePrompt()
     XCTAssertEqual(model.saveName, "Player 1")
@@ -922,9 +799,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// Like a row's Clear: a port that cannot capture could not bind anything again.
   @MainActor
   func test_clearAll_notOfferedWhereCaptureIsImpossible() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.gameCube[1] = "iOS/0/Touchscreen"
-    let model = make(reader, FakeIO())
+    let model = make(reader, FakePlayerScreenIO())
     model.reload()
     model.requestClearAll()
     XCTAssertNil(model.prompt)
@@ -1112,9 +989,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// The same guards as Clear: not where capture is impossible, not while another row is armed.
   @MainActor
   func test_resetToDefault_followsClearsGuards() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.gameCube[1] = "iOS/0/Touchscreen"
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     let model = make(reader, io)
     model.reload()
     model.resetToDefault(model.state.controls[0])
@@ -1132,7 +1009,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
   /// No device: no default profile, so nothing to read.
   @MainActor
   func test_defaultExpression_needsADevice() {
-    let model = make(FakeHubReader(), FakeIO())
+    let model = make(FakePlayerHubReader(), FakePlayerScreenIO())
     model.reload()
     XCTAssertNil(model.defaultExpression(for: model.state.controls[0]))
   }
@@ -1149,9 +1026,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
 
   @MainActor
   func test_pointerSettingsWriteThroughTheSeam() {
-    let reader = FakeHubReader()
+    let reader = FakePlayerHubReader()
     reader.wii[1] = "iOS/4/Touchscreen"
-    let io = FakeIO()
+    let io = FakePlayerScreenIO()
     let model = make(reader, io, slot: PlayerSlot(kind: .wiiRemote, port: 1))
     model.reload()
     model.actions.setPointerMode(.gyro)

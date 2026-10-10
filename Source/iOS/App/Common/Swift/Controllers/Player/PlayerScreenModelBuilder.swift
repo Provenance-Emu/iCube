@@ -5,13 +5,13 @@ import SwiftUI
 
 /// Builds one player's screen (controller hub spec, "Player screen"):
 /// - Device (a pushed list), then Profile.
-/// - Wii Remote (Wii ports): Extension, Sideways.
 /// - Buttons: capture rows under Face / D-Pad / Sticks / Triggers / System / Motion.
 /// - Pointer & Motion: iOS, Wii ports bound to the touchscreen or a gyro pad.
+/// - On-Screen Stick Feel: a port bound to the touchscreen.
 /// - Advanced, collapsed: numeric settings and raw expressions.
 ///
 /// Help (`PlayerScreenHelp`): each Buttons category and Raw Bindings opens with a caption row, and
-/// each Device / Profile / Wii Remote row has a caption as its subtitle (its value, if any, is the
+/// each Device / Profile row has a caption as its subtitle (its value, if any, is the
 /// badge). Numeric settings carry the core's own explanation.
 ///
 /// Pure: state and actions in, `MenuModel` out, no bridge calls, like `ControllerHubModelBuilder`.
@@ -19,12 +19,15 @@ import SwiftUI
 enum PlayerScreenModelBuilder {
   static func make(state: PlayerScreenState, actions: PlayerScreenActions, platform: PlatformKind) -> MenuModel {
     var sections = [deviceSection(state: state, actions: actions), profileSection(state: state, actions: actions)]
-    if state.player.kind == .wiiRemote {
-      sections.append(wiiSection(state: state, actions: actions, platform: platform))
-    }
     sections += buttonSections(state: state, actions: actions)
     if showsPointerAndMotion(state: state, platform: platform) {
       sections.append(pointerSection(state: state, actions: actions))
+    }
+    if state.isTouchscreen {
+      sections.append(MenuSection(id: "stick-feel", items: [MenuItem(
+        id: "stick-feel", title: L("On-Screen Stick Feel…"), icon: "l.joystick",
+        role: .destination(actions.stickFeelDestination()),
+        description: L("Gain, dead zone and smoothing of the on-screen sticks and triggers."))]))
     }
     sections += advancedSections(state: state, actions: actions)
     return lockedToTheArmedRow(MenuModel(sections: sections), armedControlID: state.armedControlID)
@@ -62,23 +65,28 @@ enum PlayerScreenModelBuilder {
     }
   }
 
+  /// The Wii pointer modes a touchscreen Wii Remote offers, in row order. The hub's Pointer row uses this list too.
+  static let pointerModes: [PointerMode] = [.touchFollow, .touchDrag, .gyro]
+
   /// The Device list: Auto on a pinned port, None, Touchscreen (iOS), each connected pad, and the
-  /// bound device when it is none of those (a disconnected pad, a DSU device), so the list can mark
-  /// it current.
-  static func deviceOptions(state: PlayerScreenState, platform: PlatformKind) -> [DeviceOption] {
+  /// current device when it is a pad that is not connected (a disconnected pad, a DSU device), so the
+  /// list can mark it current. The player screen and the hub both build their lists here.
+  static func deviceOptions(isPinned: Bool, current: PlayerDeviceChoice, pads: [ConnectedPadState],
+                            currentTitle: String, platform: PlatformKind) -> [DeviceOption] {
     var options: [DeviceOption] = []
-    if state.isPinned {
-      options.append(DeviceOption(choice: .automatic, title: L("Auto")))
-    }
+    if isPinned { options.append(DeviceOption(choice: .automatic, title: L("Auto"))) }
     options.append(DeviceOption(choice: .noDevice, title: L("None")))
-    if platform == .ios {
-      options.append(DeviceOption(choice: .touchscreen, title: L("Touchscreen")))
-    }
-    options += state.pads.map { DeviceOption(choice: .pad($0.qualifier), title: $0.name) }
-    if case .pad = state.deviceChoice, state.boundPad == nil {
-      options.append(DeviceOption(choice: state.deviceChoice, title: deviceSummary(state)))
+    if platform == .ios { options.append(DeviceOption(choice: .touchscreen, title: L("Touchscreen"))) }
+    options += pads.map { DeviceOption(choice: .pad($0.qualifier), title: $0.name) }
+    if case .pad(let qualifier) = current, !pads.contains(where: { $0.qualifier == qualifier }) {
+      options.append(DeviceOption(choice: current, title: currentTitle))
     }
     return options
+  }
+
+  static func deviceOptions(state: PlayerScreenState, platform: PlatformKind) -> [DeviceOption] {
+    deviceOptions(isPinned: state.isPinned, current: state.deviceChoice, pads: state.pads,
+                  currentTitle: deviceSummary(state), platform: platform)
   }
 
   /// "Xbox Wireless Controller" from `MFi/0/Xbox Wireless Controller`, as the hub shows it.
@@ -114,26 +122,6 @@ enum PlayerScreenModelBuilder {
       MenuItem(
         id: "profile-clear-all", title: L("Clear All Buttons"), subtitle: PlayerScreenHelp.clearAll, icon: "xmark.circle",
         role: .destructive(actions.clearAll), isEnabled: state.canCapture),
-    ])
-  }
-
-  // MARK: Wii Remote
-
-  private static func wiiSection(state: PlayerScreenState, actions: PlayerScreenActions, platform: PlatformKind) -> MenuSection {
-    let extensions = (0 ..< WiimoteSlotOptions.extensionCount).map { value -> (String, AnyHashable) in
-      let name = WiimoteSlotOptions.extensionName(value)
-      // tvOS shows only the option titles, so they say what they are.
-      return (platform == .tvos ? String(format: L("Extension: %@"), name) : name, AnyHashable(value))
-    }
-    return MenuSection(id: "wii", header: L("Wii Remote"), items: [
-      MenuItem(
-        id: "wii-extension", title: L("Extension"), subtitle: PlayerScreenHelp.extensionCaption, icon: "puzzlepiece.extension",
-        role: .picker(options: extensions, selection: Binding(
-          get: { AnyHashable(state.player.wiiExtension) },
-          set: { if let value = $0.base as? Int { actions.setExtension(value) } }))),
-      MenuItem(
-        id: "wii-sideways", title: L("Sideways"), subtitle: PlayerScreenHelp.sideways, icon: "rotate.right",
-        role: .toggle(Binding(get: { state.player.isSideways }, set: { actions.setSideways($0) }))),
     ])
   }
 
@@ -199,12 +187,11 @@ enum PlayerScreenModelBuilder {
       ])
     }
     let motion = state.pointerMotion
-    let modes: [PointerMode] = [.touchFollow, .touchDrag, .gyro]
     var items = [
       MenuItem(
         id: "pointer-mode", title: L("Pointer"), subtitle: motion.pointerIsThisGameOnly ? L("This game only") : nil,
         icon: motion.pointerMode.systemImage,
-        role: .picker(options: modes.map { ($0.title, AnyHashable($0)) }, selection: Binding(
+        role: .picker(options: Self.pointerModes.map { ($0.title, AnyHashable($0)) }, selection: Binding(
           get: { AnyHashable(motion.pointerMode) },
           set: { if let mode = $0.base as? PointerMode { actions.setPointerMode(mode) } }))),
       MenuItem(id: "pointer-recenter", title: L("Recenter Pointer"), icon: "scope", role: .action(actions.recenterPointer)),
@@ -231,6 +218,10 @@ enum PlayerScreenModelBuilder {
       id: "pointer-shake", title: L("Shake to Wiggle"), subtitle: L("Shaking the device shakes the Wii Remote."),
       icon: "iphone.radiowaves.left.and.right",
       role: .toggle(Binding(get: { motion.shakeToWiggle }, set: { actions.setShakeToWiggle($0) }))))
+    items.append(MenuItem(
+      id: "pointer-advanced", title: L("Advanced Motion…"), icon: "gyroscope",
+      role: .destination(actions.advancedMotionDestination()),
+      description: L("Smoothing, dead zones and the motion sensor's own options.")))
     return MenuSection(id: "pointer", header: L("Pointer & Motion"), items: items)
   }
 

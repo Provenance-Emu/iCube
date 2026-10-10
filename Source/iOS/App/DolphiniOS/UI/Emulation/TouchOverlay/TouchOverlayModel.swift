@@ -13,7 +13,7 @@ import Foundation
 // Data/Sys/Profiles/{GCPad,Wiimote}/Touchscreen.ini keep matching.
 
 /// The "draw the on-screen controller with `TouchOverlayView` instead of the xib pads" switch,
-/// set from More Controller Settings and the in-game controller menu. On by default: only a
+/// set from Touch Controls → Editable Controls and the in-game controller menu. On by default: only a
 /// player who explicitly turned it off gets the xib pads.
 enum TouchOverlayFlag {
   static let programmaticKey = "touch_overlay_programmatic"

@@ -19,7 +19,7 @@ enum TouchOverlayArt {
 
   /// The palette for a pad kind: GameCube art for the GameCube pad, Wii art for every Wii pad.
   /// The Settings colour override that could force one palette everywhere was removed in
-  /// controller hub Phase 4; the hub's "Overlay Style" picks the pad instead.
+  /// controller hub Phase 4; the hub's Touch Controls "Layout" picks the pad instead.
   static func variant(for padKind: TouchOverlayPadKind) -> Variant {
     padKind == .gameCube ? .gameCube : .wii
   }

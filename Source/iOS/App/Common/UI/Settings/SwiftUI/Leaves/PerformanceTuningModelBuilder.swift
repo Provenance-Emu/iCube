@@ -92,7 +92,7 @@ enum PerformanceTuningModelBuilder {
     var items = [
       SettingsRow.destination("performance-ab", L("Performance A/B & Snapshots"),
                               L("Snapshots + an honest benchmark preset (adaptive clock off, 100% clocks) for one-variable A/B testing."),
-                              view: AnyView(PerformanceABView())),
+                              view: AnyView(PerformanceABView().padBackNavigation())),
       SettingsRow.action("reset-optimizations", L("Reset Optimizations to Recommended"),
                          L("Restores every optimization below to its shipping default, so the recommended ones are back on. Applies on next game launch."),
                          run: { apply(.resetOptimizationsToRecommended) }),

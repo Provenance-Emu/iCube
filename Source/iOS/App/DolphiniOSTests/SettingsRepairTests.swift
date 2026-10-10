@@ -83,7 +83,7 @@ final class SettingsRepairTests: XCTestCase {
   func testFlippedToOnDefaultsAreDeletedOnlyWhenOff() {
     let keys = [
       "Graphics.Settings.HiresTextures", "Graphics.Settings.CacheHiresTextures",
-      "Graphics.Settings.EnableMods", "Dolphin.Core.CIRPsNeon",
+      "Graphics.Settings.EnableMods", "Dolphin.Core.CIRPsNeon", "Dolphin.Core.CPUThread",
     ]
     for key in keys {
       XCTAssertEqual(plan([key: "False"]), [key], key)

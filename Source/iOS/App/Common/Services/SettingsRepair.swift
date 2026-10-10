@@ -10,7 +10,7 @@ import Foundation
 /// underclock, Performance A/B experiments and since-changed defaults were saved in Dolphin.ini and
 /// GFX.ini as if the user had picked them, and no later default change reached those installs.
 /// These rules delete such keys from the Base layer so each one falls back to its compiled default
-/// (or to the launch seed). Deliberate choices are kept: a CPU overclock above 100 %, dual core, CPU
+/// (or to the launch seed). Deliberate choices are kept: a CPU overclock above 100 %, dual core on, CPU
 /// engine, backend, internal resolution, aspect, V-Sync, audio, speed, SYSCONF, RetroAchievements,
 /// region and language, cheats, SD card, controllers and touch layouts.
 @objc(ICubeSettingsRepair)
@@ -76,13 +76,14 @@ final class SettingsRepair: NSObject {
     ConfigRule(key: "graphics.settings.shadercompilationmode", condition: .whenInt([0, 2]), since: 1),
     ConfigRule(key: "dolphin.core.fastmem", condition: .whenFalseWithFastmem, since: 1),
     ConfigRule(key: "dolphin.core.fastmemarena", condition: .whenFalseWithFastmem, since: 1),
-    // v2 (2026-10-08): these four now default ON. Off was their old default, which the pre-v1 screens
+    // v2 (2026-10-08): these five now default ON. Off was their old default, which the pre-v1 screens
     // wrote back for anyone who opened them, so a stored False almost always is that leak rather than a
     // choice and would hide the new default. A stored True is kept.
     ConfigRule(key: "graphics.settings.hirestextures", condition: .whenFalse, since: 2),
     ConfigRule(key: "graphics.settings.cachehirestextures", condition: .whenFalse, since: 2),
     ConfigRule(key: "graphics.settings.enablemods", condition: .whenFalse, since: 2),
     ConfigRule(key: "dolphin.core.cirpsneon", condition: .whenFalse, since: 2),
+    ConfigRule(key: "dolphin.core.cputhread", condition: .whenFalse, since: 2),
   ]
 
   /// (clock, enable) pairs. A clock below 100 % is the adaptive clock's leftover; an enabled clock

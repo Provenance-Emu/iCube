@@ -8,6 +8,7 @@ creating a universal XCFramework that can be used in Provenance.
 
 import os
 import sys
+import re
 import subprocess
 import shutil
 import signal
@@ -58,6 +59,30 @@ CONFIG = {
     }
 }
 
+
+# Mangled-name prefixes of third-party C++ namespaces whose *weak* definitions (template
+# instantiations, inline functions, guard variables) must not be exported from the dylib.
+# dyld coalesces exported weak definitions across every loaded image, so another core
+# framework that static-links a different glslang/fmt would bind to ours (Provenance's
+# PVAzahar crashed inside glslang's parser after calling our addSwizzle<>). Dolphin's own
+# namespaces stay exported: the PVDolphin bridge imports some of those instantiations.
+THIRD_PARTY_WEAK_PREFIX = re.compile(
+    r"^__Z(?:GV|TV|TI|TS|TT|TH|TW)?Z?N?K?"
+    r"(?:3fmt|7glslang|3spv|11spirv_cross|5SPIRV|6ImPlot|5ImGui|8picojson|8tinygltf|St3__1)"
+)
+
+
+def third_party_weak_symbols(dylib: str) -> list[str]:
+    """Exported weak symbols of `dylib` that belong to a third-party namespace."""
+    out = subprocess.check_output(["xcrun", "nm", "-m", dylib], text=True)
+    symbols = set()
+    for line in out.splitlines():
+        if "weak external" not in line:
+            continue
+        name = line.rsplit(" ", 1)[-1]
+        if THIRD_PARTY_WEAK_PREFIX.match(name):
+            symbols.add(name)
+    return sorted(symbols)
 
 def _safe_job_count():
     """Parallel-job count capped by available RAM (~4 GB/job), not just core count.
@@ -607,6 +632,7 @@ class DolphinBuilder:
             # Don't set _M_X86_64 for generic builds to avoid x86_64-specific code compilation
             pass  # ARM64 context will be used instead of generic
 
+        cmake_cmd.append("-UDOLPHIN_UNEXPORTED_SYMBOLS_LIST")  # second pass sets it (see below)
         # Execute CMake configure
         self._log(f"Configuring CMake for {platform}...", "build")
         os.chdir(cmake_build_dir)
@@ -659,6 +685,20 @@ class DolphinBuilder:
             found.sort(key=lambda p: os.path.getmtime(p), reverse=True)
             chosen = found[0]
             self._log(f"Found dylib for {platform}: {os.path.basename(chosen)}", "debug")
+            # Second pass: relink with the third-party weak definitions unexported. The list can
+            # only be known after a link, and LTO is off by default so the relink is cheap.
+            hidden = third_party_weak_symbols(chosen)
+            if hidden:
+                list_path = cmake_build_dir / "unexported_weak_symbols.txt"
+                list_path.write_text("\n".join(hidden) + "\n")
+                self._log(f"Relinking {platform} with {len(hidden)} third-party weak symbols hidden", "build")
+                # Source/iOS/Library/CMakeLists.txt turns this into target_link_options; the
+                # global CMAKE_*_LINKER_FLAGS are overridden inside Dolphin's CMake.
+                subprocess.check_call(cmake_cmd + [f"-DDOLPHIN_UNEXPORTED_SYMBOLS_LIST={list_path}"])
+                subprocess.check_call(build_cmd)
+                left = third_party_weak_symbols(chosen)
+                if left:
+                    raise BuildError(f"{len(left)} third-party weak symbols still exported from {chosen}")
 
             # iCube: build the .dSYM beside the dylib. dsymutil resolves the debug map left by -g
             # into a standalone bundle, which is what Sentry needs; the dylib itself stays as-is.

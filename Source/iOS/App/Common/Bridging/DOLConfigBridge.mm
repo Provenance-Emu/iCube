@@ -1002,14 +1002,12 @@ static bool HasCurrentRunLayer()
   // Force performant values whose compiled default is CONSERVATIVE on iOS, so "reset to optimal"
   // actually lands on the fast configuration instead of the slow upstream default.
   //
-  // MAIN_CPU_THREAD (dual-core): force OFF (single-core). It was previously forced ON here as a
-  // "~2x perf" default, but on device dual-core HARD-HANGS most games a few seconds into boot
-  // (CPU<->GPU FIFO-fence deadlock on the lean CachedInterpreter — see DolphinCoreService revert
-  // 6af4263ec3). Reset-to-defaults must land on the safe single-core config, matching the startup
-  // default. (fastmem, EFB-to-texture/XFB-to-texture on, 1x IR, MMU/accurate-cache off all DO
+  // MAIN_CPU_THREAD (dual-core): back to its compiled default, ON since 2026-10-08. It used to be
+  // forced OFF here because dual-core hung most games on the CachedInterpreter (6af4263ec3); that
+  // hang is gone. (fastmem, EFB-to-texture/XFB-to-texture on, 1x IR, MMU/accurate-cache off all DO
   // compile to the optimal default, so deleting those is correct — but fast-disc, DSP-thread, and
   // immediate-XFB do NOT compile to iCube's value; they're forced just below.)
-  Config::SetBase(Config::MAIN_CPU_THREAD, false);
+  del(Config::MAIN_CPU_THREAD);
 
   // GFX_WAIT_FOR_SHADERS_BEFORE_STARTING defaults FALSE upstream, which gives the awful combo of
   // Synchronous shader compilation WITHOUT precompiling = mid-gameplay stutter. iCube precompiles

@@ -45,13 +45,13 @@ final class ReplayKitManager {
       NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Instant Replay is disabled")])
       return
     }
-    let preferred = UserDefaults.standard.integer(forKey: "replaykit_clip_seconds")
+    let preferred = UserDefaults.standard.integer(forKey: GraphicsGeneralDefaultsKey.clipSeconds)
     let secs = preferred > 0 ? TimeInterval(preferred) : seconds
     let fm = FileManager.default
     let docs = URL(fileURLWithPath: UserFolderUtil.getUserFolder())
     let clips = docs.appendingPathComponent("Clips", isDirectory: true)
-    let saveToPhotos = UserDefaults.standard.bool(forKey: "replaykit_save_to_photos")
-    let onlyPhotos = UserDefaults.standard.bool(forKey: "replaykit_save_only_photos")
+    let saveToPhotos = UserDefaults.standard.bool(forKey: GraphicsGeneralDefaultsKey.saveToPhotos)
+    let onlyPhotos = UserDefaults.standard.bool(forKey: GraphicsGeneralDefaultsKey.saveOnlyPhotos)
     if !onlyPhotos { try? fm.createDirectory(at: clips, withIntermediateDirectories: true) }
     let filename = "Clip_\(Int(Date().timeIntervalSince1970)).mov"
     let baseDir = onlyPhotos ? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true) : clips

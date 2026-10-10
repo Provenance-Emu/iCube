@@ -41,6 +41,17 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "fastmem").contains(SettingsSearchHit(entryID: "debug", rowTitle: nil)))
   }
 
+  /// Punctuation and spacing do not matter: these worked on develop through hand-kept keywords.
+  func test_query_ignoresPunctuationAndSpacing() {
+    XCTAssertTrue(index.hits(query: "vsync").contains { $0.entryID == "graphics-video" && $0.rowTitle == "V-Sync" })
+    XCTAssertTrue(index.hits(query: "fast forward").contains { $0.entryID == "performance-tuning" && ($0.rowTitle ?? "").contains("Fast-Forward") })
+    XCTAssertEqual(SettingsSearchIndex.fold(" Fast-Forward CTR "), "fastforwardctr")
+  }
+
+  func test_punctuationOnlyQuery_hasNoHits() {
+    XCTAssertTrue(index.hits(query: "- -").isEmpty)
+  }
+
   func test_emptyQuery_hasNoHits() {
     XCTAssertTrue(index.hits(query: "  ").isEmpty)
   }

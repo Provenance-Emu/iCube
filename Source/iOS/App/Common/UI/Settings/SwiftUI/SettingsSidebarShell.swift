@@ -31,6 +31,12 @@ struct SettingsSidebarShell: View {
     static let rowRadius: CGFloat = 10
     static let selectedOpacity = 0.25
     static let headerTopPadding: CGFloat = 18
+    static let rowStackSpacing: CGFloat = 6
+    static let rowContentSpacing: CGFloat = 12
+    static let rowHorizontalPadding: CGFloat = 12
+    static let rowVerticalPadding: CGFloat = 10
+    static let listHorizontalPadding: CGFloat = 20
+    static let listVerticalPadding: CGFloat = 24
   }
 
   private var entries: [SettingsLeafEntry] { sections.flatMap(\.entries) }
@@ -62,7 +68,7 @@ struct SettingsSidebarShell: View {
       .focusSection()
       #endif
     }
-    .defaultFocus($sidebarFocus, sections.first?.entries.first?.id)
+    .defaultFocus($sidebarFocus, selectedID ?? sections.first?.entries.first?.id)
     .onAppear {
       #if os(tvOS)
       openedAt = Date()
@@ -78,6 +84,7 @@ struct SettingsSidebarShell: View {
   /// The DSU deep link lands on the Controllers leaf.
   private func selectControllers() {
     selectedID = Self.controllersID
+    sidebarFocus = Self.controllersID
     jumpToControllers = false
   }
 
@@ -118,22 +125,22 @@ struct SettingsSidebarShell: View {
 
   private var sidebarList: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 6) {
+      VStack(alignment: .leading, spacing: Layout.rowStackSpacing) {
         ForEach(sections) { section in
           Text(section.header)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .padding(.top, Layout.headerTopPadding)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, Layout.rowHorizontalPadding)
           ForEach(section.entries) { entry in
             Button { selectedID = entry.id } label: {
-              HStack(spacing: 12) {
+              HStack(spacing: Layout.rowContentSpacing) {
                 Image(systemName: entry.icon).frame(width: Layout.iconWidth)
                 Text(entry.title).lineLimit(1)
                 Spacer(minLength: 0)
               }
-              .padding(.horizontal, 12)
-              .padding(.vertical, 10)
+              .padding(.horizontal, Layout.rowHorizontalPadding)
+              .padding(.vertical, Layout.rowVerticalPadding)
               .frame(maxWidth: .infinity, alignment: .leading)
               .background(
                 RoundedRectangle(cornerRadius: Layout.rowRadius, style: .continuous)
@@ -144,8 +151,8 @@ struct SettingsSidebarShell: View {
           }
         }
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 24)
+      .padding(.horizontal, Layout.listHorizontalPadding)
+      .padding(.vertical, Layout.listVerticalPadding)
     }
   }
 

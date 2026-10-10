@@ -59,9 +59,49 @@ struct PlayerState: Equatable {
   /// 0 None, 1 Nunchuk, 2 Classic (`WiimoteSlotOptions`). 0 for GameCube ports.
   let wiiExtension: Int
   let isSideways: Bool
+  /// The user picked this port's device, so auto-assignment leaves it alone.
+  var isPinned = false
+  /// The Wii Remote's IMU pointer is on (`PlayerScreenIO.isMotionPointerEnabled`). Always false for
+  /// GameCube ports.
+  var motionPointerEnabled = false
 
   var id: String { (kind == .gameCube ? "gc-" : "wii-") + String(port) }
+  /// "Player 1" / "Wii Remote 1".
+  var title: String { PlayerSlot(kind: kind, port: port).title }
   var isBound: Bool { !deviceQualifier.isEmpty }
+}
+
+/// Where a game's rumble goes. The raw values are stored under `defaultsKey` and read natively by
+/// `Source/Core/InputCommon/ControllerInterface/iOS/Motor.mm`: do not renumber.
+enum RumbleDestination: Int, CaseIterable {
+  case deviceHaptics = 0
+  case controller = 1
+  case both = 2
+
+  static let defaultsKey = "rumble_destination"
+  static let `default`: RumbleDestination = .controller
+
+  var title: String {
+    switch self {
+    case .deviceHaptics: return L("Device Haptics")
+    case .controller: return L("Controller")
+    case .both: return L("Both")
+    }
+  }
+
+  static func stored(in defaults: UserDefaults = .standard) -> RumbleDestination {
+    (defaults.object(forKey: defaultsKey) as? Int).flatMap(RumbleDestination.init(rawValue:)) ?? .default
+  }
+}
+
+/// Choices the player made that the view model has not written yet (ruling H4). The builder shows
+/// them in place of the stored values; the view model commits them after the settle delay.
+struct PendingHubChanges: Equatable {
+  var devices: [String: PlayerDeviceChoice] = [:]
+  var playsAs: [String: PlaysAs] = [:]
+  var overlayMode: ControllerManager.OverlayMode?
+
+  var isEmpty: Bool { devices.isEmpty && playsAs.isEmpty && overlayMode == nil }
 }
 
 struct PlayerSlot: Equatable {
@@ -83,6 +123,8 @@ struct ConnectedPadState: Equatable {
   /// backend expose its `Gyro …` inputs (MFiController.mm:189-198), so only then can it drive the
   /// Wii pointer. Defaulted so existing memberwise inits compile.
   var hasGyro: Bool = false
+  /// The pad has an LED light bar (`GCController.light`).
+  var hasLight: Bool = false
 }
 
 /// Plain snapshot of everything the hub shows. No bridge reads happen after it is built;
@@ -100,12 +142,26 @@ struct ControllerHubState {
   var overlayOpacityPercent: Int
   var dsuClientEnabled: Bool
   var dsuServerCount: Int
+  var pointerMode: PointerMode
+  /// The running title has its own pointer mode, so a change lasts for this game only.
+  var pointerIsThisGameOnly: Bool
+  var backgroundInput: Bool
+  var rumbleDestination: RumbleDestination
+  var connectTakesPlayer1: Bool
+  var touchOverlayProgrammatic: Bool
+  /// Device, Plays as and Layout choices waiting out the settle delay; the builder shows them.
+  var pending = PendingHubChanges()
+  /// The id of a row the view should move focus to once, after its list changed (a Plays as change
+  /// that moved a player between Wii and GameCube re-ids the row). One-shot: the next reload drops it.
+  var focusRequest: String?
 
   static func empty(system: ControllerSetupSystem) -> ControllerHubState {
     ControllerHubState(
       system: system, players: [], showAllPorts: false, pads: [], isGameRunning: false,
       overlayVisible: false, overlayMode: .auto, overlayOpacityPercent: 50,
-      dsuClientEnabled: false, dsuServerCount: 0)
+      dsuClientEnabled: false, dsuServerCount: 0,
+      pointerMode: .touchFollow, pointerIsThisGameOnly: false, backgroundInput: false,
+      rumbleDestination: .default, connectTakesPlayer1: true, touchOverlayProgrammatic: true)
   }
 
   /// Ports in on-screen order: a running Wii title lists its Wii Remotes first.
@@ -148,5 +204,17 @@ struct ControllerHubActions {
   /// The pad's qualifier.
   var identifyPad: (String) -> Void
   var dsuDestination: () -> AnyView
-  var moreSettingsDestination: () -> AnyView
+  /// Device choice for a row; settles before it is written (ruling H4).
+  var setDevice: (PlayerState, PlayerDeviceChoice) -> Void
+  /// Plays as choice for a row; settles before it is written.
+  var setPlaysAs: (PlayerState, PlaysAs) -> Void
+  var setPointerMode: (PointerMode) -> Void
+  var setMotionPointer: (PlayerState, Bool) -> Void
+  var setBackgroundInput: (Bool) -> Void
+  var setRumbleDestination: (RumbleDestination) -> Void
+  var setConnectTakesPlayer1: (Bool) -> Void
+  var testRumble: () -> Void
+  var setTouchOverlayProgrammatic: (Bool) -> Void
+  var resetOverlayLayouts: () -> Void
+  var lightsDestination: () -> AnyView
 }

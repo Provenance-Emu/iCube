@@ -29,8 +29,20 @@ struct ControllerHubView: View {
     MenuScreen(
       model: ControllerHubModelBuilder.make(state: viewModel.state, actions: viewModel.actions, platform: .current),
       style: .list,
-      onBack: onBack ?? { dismiss() }
+      // Flush first: the host releases its pause claim right after this returns, and a change made
+      // within the settle delay must land before the game resumes. `onDisappear` stays the backstop
+      // for Done, Close and swipe-to-dismiss.
+      onBack: {
+        viewModel.flushPending()
+        (onBack ?? { dismiss() })()
+      }
     )
+    // The menu has the request once this render is out; carrying it until then (not dropping it on
+    // the next reload) is what lets a later reload in the same turn not lose it.
+    .onChange(of: viewModel.state.focusRequest) { _, request in
+      guard request != nil else { return }
+      DispatchQueue.main.async { viewModel.consumeFocusRequest() }
+    }
     .navigationTitle(L("Controllers"))
     // A pushed player screen covers this one: stop on disappear, reload on the way back.
     .onAppear { viewModel.start() }

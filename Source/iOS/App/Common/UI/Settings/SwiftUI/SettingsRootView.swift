@@ -9,15 +9,14 @@ struct SettingsRootView: View {
   @Environment(\.horizontalSizeClass) private var sizeClass
   @Environment(\.dismiss) private var dismiss
   @State private var jumpToControllersRequested = false
-  @State private var searchIndex: SettingsSearchIndex?
   /// Built once: the entries' closures are stable across body evaluations, and `pushed` compares by id.
   @State private var sections = SettingsRootView.makeSections()
   #if os(iOS)
   @State private var searchText = ""
   @State private var pushed: SettingsLeafEntry?
+  /// Search exists on iOS only, so tvOS never builds the index.
+  @State private var searchIndex: SettingsSearchIndex?
   #endif
-
-  private static let selectControllersNotification = Notification.Name("DOLSettingsSelectControllers")
 
   private static func makeSections() -> [SettingsRootSection] {
     #if os(iOS)
@@ -44,7 +43,7 @@ struct SettingsRootView: View {
   var body: some View {
     Group {
       #if os(tvOS)
-      SettingsSidebarShell(sections: sections, searchIndex: searchIndex, jumpToControllers: $jumpToControllersRequested)
+      SettingsSidebarShell(sections: sections, searchIndex: nil, jumpToControllers: $jumpToControllersRequested)
       #else
       if usesSidebar {
         SettingsSidebarShell(sections: sections, searchIndex: searchIndex, jumpToControllers: $jumpToControllersRequested)
@@ -56,8 +55,10 @@ struct SettingsRootView: View {
     #if os(tvOS)
     .background(Color.black.ignoresSafeArea())
     #endif
-    .onReceive(NotificationCenter.default.publisher(for: Self.selectControllersNotification)) { _ in jumpToControllersRequested = true }
+    .onReceive(NotificationCenter.default.publisher(for: .dolSettingsSelectControllers)) { _ in jumpToControllersRequested = true }
+    #if os(iOS)
     .task { if searchIndex == nil { searchIndex = SettingsSearchIndex(sections: sections) } }   // once per appearance
+    #endif
   }
 
   #if os(iOS)
@@ -84,4 +85,9 @@ struct SettingsRootView: View {
     }
   }
   #endif
+}
+
+extension Notification.Name {
+  /// Posted by the URL router for the DSU deep link; Settings jumps to Controllers (the DSU server list on iPhone).
+  static let dolSettingsSelectControllers = Notification.Name("DOLSettingsSelectControllers")
 }
