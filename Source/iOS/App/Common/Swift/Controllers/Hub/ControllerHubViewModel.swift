@@ -345,6 +345,7 @@ final class ControllerHubViewModel {
   // MARK: Settling choices (ruling H4)
 
   func chooseDevice(_ player: PlayerState, _ choice: PlayerDeviceChoice) {
+    state.focusRequest = nil
     state.pending.devices[player.id] = choice == PlayerDeviceChoice(qualifier: player.deviceQualifier) ? nil : choice
     settle()
   }
@@ -364,6 +365,7 @@ final class ControllerHubViewModel {
   }
 
   func chooseOverlayMode(_ mode: ControllerManager.OverlayMode) {
+    state.focusRequest = nil
     state.pending.overlayMode = mode == state.overlayMode ? nil : mode
     settle()
   }
@@ -458,12 +460,16 @@ final class ControllerHubViewModel {
     // and would leave a moved touchscreen with no working controls (ruling H26, narrowed). Layout
     // Wii Remote runs `ensureWiimote1EmulatedTouchscreen`, which takes Wii Remote 1 for the
     // touchscreen: harmless when the touchscreen moves TO Wii Remote 1, but it would steal another
-    // player's slot for Wii Remote 2-4, so those moves leave Layout alone.
+    // player's slot for Wii Remote 2-4, so those moves never write Wii. They still must not leave
+    // a GameCube Layout behind (a Wii game's overlay would have no working input): that goes to
+    // Auto, which only stores the mode.
     if movedTouchscreen {
       if target.kind == .gameCube {
         setOverlayMode(.gamecube)
       } else if player.port == 1 {
         setOverlayMode(.wii)
+      } else if state.overlayMode == .gamecube {
+        setOverlayMode(.auto)
       }
     }
     reload()

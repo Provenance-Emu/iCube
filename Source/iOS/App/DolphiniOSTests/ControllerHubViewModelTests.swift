@@ -18,6 +18,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     var sideways: Set<Int> = []
     var pads: [ConnectedPadState] = []
     var gameRunning = true
+    var overlayModeValue: ControllerManager.OverlayMode = .wii
     /// Counts snapshots: `reload()` asks for the pads exactly once.
     var padReads = 0
     var onPadRead: (() -> Void)?
@@ -44,7 +45,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     }
     func isGameRunning() -> Bool { gameRunning }
     func overlayVisible() -> Bool { true }
-    func overlayMode() -> ControllerManager.OverlayMode { .wii }
+    func overlayMode() -> ControllerManager.OverlayMode { overlayModeValue }
     func overlayOpacity() -> Float { 0.62 }
     func dsuClientEnabled() -> Bool { true }
     func dsuServerCount() -> Int { 3 }
@@ -352,6 +353,21 @@ final class ControllerHubViewModelTests: XCTestCase {
   }
 
   @MainActor
+  func test_chooseDeviceAndLayout_dropAnUnconsumedFocusRequest() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    let model = makeModel(reader: reader, writer: FakeWriter(reader: reader))
+    model.setPlaysAs(model.state.players[0], .gameCube)
+    XCTAssertNotNil(model.state.focusRequest)
+    model.chooseDevice(model.state.players.first { $0.id == "gc-1" }!, .noDevice)
+    XCTAssertNil(model.state.focusRequest, "chooseDevice")
+    model.setPlaysAs(model.state.players.first { $0.id == "gc-1" }!, .wiiRemote)
+    XCTAssertNotNil(model.state.focusRequest)
+    model.chooseOverlayMode(.gamecube)
+    XCTAssertNil(model.state.focusRequest, "chooseOverlayMode")
+  }
+
+  @MainActor
   func test_setPlaysAs_wiiToWii_requestsNoFocusMove() {
     let reader = FakeReader()
     reader.wii[1] = Self.xbox
@@ -469,13 +485,47 @@ final class ControllerHubViewModelTests: XCTestCase {
       let reader = FakeReader()
       reader.gameCube[port] = "iOS/\(port - 1)/Touchscreen"
       reader.wii[1] = Self.xbox
+      reader.overlayModeValue = .auto
       let writer = FakeWriter(reader: reader)
       writer.resolvesTouchscreenPerKind = true
       let model = makeModel(reader: reader, writer: writer)
       model.setPlaysAs(model.state.players.first { $0.id == "gc-\(port)" }!, .wiiNunchuk)
+      XCTAssertEqual(reader.wii[port], "iOS/\(port + 3)/Touchscreen", "port \(port): the touchscreen moved to the Wii slot")
+      XCTAssertEqual(reader.gameCube[port], "", "port \(port): and left the GameCube slot")
       XCTAssertFalse(writer.log.contains { $0.hasPrefix("layout") }, "port \(port): no overlay-mode write")
+      XCTAssertFalse(writer.log.contains("layout wii"), "port \(port): no Wii overlay write")
       XCTAssertEqual(reader.wii[1], Self.xbox, "Wii Remote 1 keeps its pad")
     }
+  }
+
+  /// Wii to GameCube left Layout at GameCube; moving on to Wii Remote 2-4 must not strand it there.
+  @MainActor
+  func test_setPlaysAs_touchscreenGameCubeToWiiRemote2to4_resetsAGameCubeLayoutToAuto() {
+    for port in 2 ... 4 {
+      let reader = FakeReader()
+      reader.gameCube[port] = "iOS/\(port - 1)/Touchscreen"
+      reader.wii[1] = Self.xbox
+      reader.overlayModeValue = .gamecube
+      let writer = FakeWriter(reader: reader)
+      writer.resolvesTouchscreenPerKind = true
+      let model = makeModel(reader: reader, writer: writer)
+      model.setPlaysAs(model.state.players.first { $0.id == "gc-\(port)" }!, .wiiNunchuk)
+      XCTAssertEqual(writer.log.filter { $0.hasPrefix("layout") }, ["layout auto"], "port \(port): Auto, never Wii")
+      XCTAssertEqual(reader.wii[port], "iOS/\(port + 3)/Touchscreen", "port \(port): the touchscreen moved")
+      XCTAssertEqual(reader.wii[1], Self.xbox, "Wii Remote 1 keeps its pad")
+    }
+  }
+
+  @MainActor
+  func test_setPlaysAs_touchscreenGameCubeToWiiRemote2to4_leavesAWiiLayoutAlone() {
+    let reader = FakeReader()
+    reader.gameCube[2] = "iOS/1/Touchscreen"
+    reader.overlayModeValue = .wii
+    let writer = FakeWriter(reader: reader)
+    writer.resolvesTouchscreenPerKind = true
+    let model = makeModel(reader: reader, writer: writer)
+    model.setPlaysAs(model.state.players.first { $0.id == "gc-2" }!, .wiiNunchuk)
+    XCTAssertFalse(writer.log.contains { $0.hasPrefix("layout") })
   }
 
   @MainActor
