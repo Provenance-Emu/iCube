@@ -110,12 +110,13 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
   }
 
   func sceneWillResignActive(_ scene: UIScene) {
-    ServiceManager.shared.applicationWillResignActive()
-
     // Pause emulation when another app/overlay takes over so the core stops submitting GPU
     // work from the background (which iOS rejects and floods the log) and to save battery.
-    // A PauseArbiter claim, so the matching resume can never override another holder.
+    // A PauseArbiter claim, so the matching resume can never override another holder. First, so the
+    // pause is queued ahead of the services' config write on the host queue.
     PauseArbiter.shared.appWillResignActive()
+
+    ServiceManager.shared.applicationWillResignActive()
   }
 
   func sceneWillEnterForeground(_ scene: UIScene) {

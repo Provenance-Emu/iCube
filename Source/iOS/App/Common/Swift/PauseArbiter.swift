@@ -74,6 +74,10 @@ final class PauseArbiter {
   private var inactiveToken: Token?
   /// True when the app-inactive transition (not a claim) paused the core and nobody has taken that over.
   private var inactivePauseOwned = false
+  /// True after `core.resumeAsync()` until a pause or resume the arbiter makes itself: that resume may still
+  /// be queued, so `isPaused()` can read true for a core that is about to run. A claim or a resign in that
+  /// window must pause explicitly, which also cancels the queued resume.
+  private var asyncResumeIssued = false
   private var observers: [NSObjectProtocol] = []
 
   init(core: Core, schedule: @escaping (@escaping () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) }) {
@@ -97,7 +101,8 @@ final class PauseArbiter {
     if !pausing {
       // flag only
     } else if core.isRunning() {
-      if !core.isPaused() {
+      if asyncResumeIssued || !core.isPaused() {
+        asyncResumeIssued = false
         core.pause()
         // Core::SetState ignores a pause before the core is Running, and RetroAchievements can refuse
         // one: only own the pause if it took, otherwise apply it again on emulationDidStart().
@@ -151,6 +156,7 @@ final class PauseArbiter {
   /// outside this object paused it (the debug API); the pill is the user's way out of that.
   func resumeIfUnheld() {
     guard tokens.isEmpty, core.isRunning(), core.isPaused() else { return }
+    asyncResumeIssued = false
     core.resume()
     ownsPause = false
   }
@@ -180,9 +186,12 @@ final class PauseArbiter {
   func appWillResignActive() {
     guard inactiveToken == nil, core.isRunning() else { return }
     inactiveToken = claim(Reason.appInactive, pausing: false)
-    if !core.isPaused() {
+    if asyncResumeIssued || !core.isPaused() {
+      asyncResumeIssued = false
       core.pauseAsync()
       inactivePauseOwned = true
+      // A core still booting ignores the pause (it needs State::Running): apply it on emulationDidStart().
+      deferred = true
     }
   }
 
@@ -200,6 +209,7 @@ final class PauseArbiter {
     if tokens.isEmpty {
       if ownedInactivePause, !ownsPause {
         deferred = false
+        asyncResumeIssued = true
         core.resumeAsync()
       } else {
         resumeWhenEmpty()
@@ -213,7 +223,8 @@ final class PauseArbiter {
   func emulationDidStart() {
     guard deferred, isHeld else { deferred = false; return }
     deferred = false
-    if !core.isPaused() {
+    if asyncResumeIssued || !core.isPaused() {
+      asyncResumeIssued = false
       core.pause()
       if core.isPaused() { ownsPause = true }
     }
@@ -226,6 +237,7 @@ final class PauseArbiter {
     pending = nil
     inactiveToken = nil
     inactivePauseOwned = false
+    asyncResumeIssued = false
     ownsPause = false
     deferred = false
   }
@@ -246,6 +258,7 @@ final class PauseArbiter {
     schedule { [weak self] in
       guard let self, self.tokens.isEmpty else { return }
       if self.ownsPause, self.core.isRunning(), self.core.isPaused() {
+        self.asyncResumeIssued = false
         self.core.resume()
       }
       self.ownsPause = false

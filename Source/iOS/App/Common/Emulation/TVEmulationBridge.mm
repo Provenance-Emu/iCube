@@ -14,6 +14,7 @@
 #import "TVControllerMappingBridge.h"
 
 // C++ Core host messaging
+#include <atomic>
 #include <mutex>
 #include "Core/HW/ProcessorInterface.h"
 #include "Core/Host.h"
@@ -108,34 +109,38 @@ static bool StateOperationAllowed(Core::System& system, const char* operation)
 }
 
 // Generation of the newest pause/resume request. An async job runs only if it is still the newest, so a
-// request made later on the main thread (a claim's pause, a release's resume) supersedes one that is
-// still waiting on a busy host queue. The mutex orders the bump against a job already inside SetState.
+// request made later (a claim's pause, a release's resume) supersedes one still waiting on a busy host queue.
+//
+// The async entry points bump the generation lock-free: they run on main at resign/become-active and must
+// never wait behind a job that is inside SetState (which waits for the CPU thread, and for an alert main
+// has to answer). The mutex only orders a job's "compare, then SetState" against a SYNC pause/resume's
+// "bump, then SetState", and the sync path already waits on Core's own locks behind an in-flight SetState.
+static std::atomic<uint64_t> s_pauseRequestGeneration{0};
 static std::mutex s_pauseRequestMutex;
-static uint64_t s_pauseRequestGeneration = 0;
 
-static uint64_t NextPauseRequestGeneration() {
+static void BumpPauseGenerationSync() {
   std::lock_guard<std::mutex> lock(s_pauseRequestMutex);
-  return ++s_pauseRequestGeneration;
+  s_pauseRequestGeneration.fetch_add(1);
 }
 
 static void RunPauseRequestAsync(Core::State from, Core::State to) {
-  const uint64_t generation = NextPauseRequestGeneration();
+  const uint64_t generation = s_pauseRequestGeneration.fetch_add(1) + 1;
   DOLHostQueueRunAsync(^{
     std::lock_guard<std::mutex> lock(s_pauseRequestMutex);
     auto& system = Core::System::GetInstance();
-    if (generation == s_pauseRequestGeneration && Core::GetState(system) == from) {
+    if (generation == s_pauseRequestGeneration.load() && Core::GetState(system) == from) {
       Core::SetState(system, to);
     }
   });
 }
 
 + (void)pause {
-  NextPauseRequestGeneration();
+  BumpPauseGenerationSync();
   Core::SetState(Core::System::GetInstance(), Core::State::Paused);
 }
 
 + (void)resume {
-  NextPauseRequestGeneration();
+  BumpPauseGenerationSync();
   Core::SetState(Core::System::GetInstance(), Core::State::Running);
 }
 
@@ -155,6 +160,7 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   if (Core::IsUninitialized(system))
     return;
   system.GetProcessorInterface().ResetButton_Tap();
+  BumpPauseGenerationSync();
   Core::SetState(system, Core::State::Running);
 }
 

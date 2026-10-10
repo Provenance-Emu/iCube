@@ -10,6 +10,8 @@ import XCTest
 /// and must never resume one that another holder (pause menu, Settings, the user's pause) keeps paused.
 @MainActor
 final class PauseLifecycleTests: XCTestCase {
+  /// Models TVEmulationBridge: every pause or resume, sync or async, bumps a generation at call time; a queued
+  /// async job runs only if it is still the newest and the core is in the state it expects.
   private final class FakeCore {
     var running = true
     var paused = false
@@ -17,15 +19,24 @@ final class PauseLifecycleTests: XCTestCase {
     var pauseCalls = 0
     /// Resumes that took effect, from either path.
     var resumeCalls = 0
+    var generation = 0
     /// Async requests queued for the host queue, run in order by `runHost()`.
     var hostJobs: [() -> Void] = []
     var core: PauseArbiter.Core {
       PauseArbiter.Core(
         isRunning: { self.running }, isPaused: { self.paused },
-        pause: { self.pauseCalls += 1; self.paused = true },
-        resume: { self.resumeCalls += 1; self.paused = false },
-        pauseAsync: { self.hostJobs.append { if self.running, !self.paused { self.paused = true } } },
-        resumeAsync: { self.hostJobs.append { if self.paused { self.resumeCalls += 1; self.paused = false } } })
+        pause: { self.generation += 1; self.pauseCalls += 1; self.paused = true },
+        resume: { self.generation += 1; self.resumeCalls += 1; self.paused = false },
+        pauseAsync: {
+          self.generation += 1
+          let issued = self.generation
+          self.hostJobs.append { if issued == self.generation, self.running, !self.paused { self.paused = true } }
+        },
+        resumeAsync: {
+          self.generation += 1
+          let issued = self.generation
+          self.hostJobs.append { if issued == self.generation, self.paused { self.resumeCalls += 1; self.paused = false } }
+        })
     }
     func runHost() {
       let jobs = hostJobs
@@ -247,5 +258,88 @@ final class PauseLifecycleTests: XCTestCase {
     arbiter.release(adopted)
     runScheduled()
     XCTAssertEqual(fake.resumeCalls, 1)
+  }
+
+  // A resume still queued on the host queue (isPaused() reads true until it runs)
+
+  func test_claimAfterBecomeActive_beforeQueuedResumeRuns_staysPaused() {
+    arbiter.appWillResignActive()
+    fake.runHost()
+    arbiter.appDidBecomeActive()
+    XCTAssertTrue(fake.paused, "the queued resume has not run yet")
+    let sheet = arbiter.claim("settings")
+    fake.runHost()
+    runScheduled()
+    XCTAssertTrue(fake.paused, "the claim cancelled the queued resume")
+    XCTAssertEqual(fake.resumeCalls, 0)
+    arbiter.release(sheet)
+    runScheduled()
+    XCTAssertFalse(fake.paused, "and owns the pause, so its release resumes")
+    XCTAssertEqual(fake.resumeCalls, 1)
+  }
+
+  func test_resignActiveResign_beforeQueuedResumeRuns_staysPausedWhileInactive() {
+    arbiter.appWillResignActive()
+    fake.runHost()
+    arbiter.appDidBecomeActive()
+    arbiter.appWillResignActive()
+    fake.runHost()
+    runScheduled()
+    XCTAssertTrue(fake.paused, "the second inactive period must not run the game")
+    XCTAssertEqual(fake.resumeCalls, 0)
+    arbiter.appDidBecomeActive()
+    fake.runHost()
+    runScheduled()
+    XCTAssertFalse(fake.paused)
+    XCTAssertEqual(fake.resumeCalls, 1)
+  }
+
+  func test_resignActiveResign_resumeLandedFirst_pausesAgain() {
+    arbiter.appWillResignActive()
+    fake.runHost()
+    arbiter.appDidBecomeActive()
+    fake.runHost()
+    XCTAssertFalse(fake.paused)
+    arbiter.appWillResignActive()
+    fake.runHost()
+    XCTAssertTrue(fake.paused)
+    arbiter.appDidBecomeActive()
+    fake.runHost()
+    XCTAssertFalse(fake.paused)
+  }
+
+  func test_becomeActive_claim_resign_beforeAnyJobRuns() {
+    arbiter.appWillResignActive()
+    fake.runHost()
+    arbiter.appDidBecomeActive()
+    let sheet = arbiter.claim("settings")
+    arbiter.appWillResignActive()
+    fake.runHost()
+    arbiter.appDidBecomeActive()
+    fake.runHost()
+    runScheduled()
+    XCTAssertTrue(fake.paused)
+    arbiter.release(sheet)
+    runScheduled()
+    XCTAssertFalse(fake.paused)
+  }
+
+  // Resign while the game is still booting
+
+  func test_resignWhileStarting_pausesOnceBootCompletes() {
+    fake.running = true
+    fake.paused = false
+    arbiter.appWillResignActive()
+    // Starting: the async pause finds a core that is not Running yet and does nothing.
+    fake.running = false
+    fake.runHost()
+    XCTAssertFalse(fake.paused)
+    fake.running = true
+    arbiter.emulationDidStart()
+    XCTAssertTrue(fake.paused, "booted while inactive: pause it")
+    arbiter.appDidBecomeActive()
+    fake.runHost()
+    runScheduled()
+    XCTAssertFalse(fake.paused)
   }
 }
