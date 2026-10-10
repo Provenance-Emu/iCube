@@ -247,3 +247,26 @@ struct MetalTriStatePicker: View {
     .navigationTitle(title)
   }
 }
+
+/// Reset All Settings, with its confirmation. One view so the iPhone toolbar and the About leaf share the alert text
+/// (the sidebar shell has no toolbar, so About is where tvOS and iPad reach it).
+struct SettingsResetAllButton<Label: View>: View {
+  var role: ButtonRole?
+  let label: Label
+  @State private var confirming = false
+
+  init(role: ButtonRole? = nil, @ViewBuilder label: () -> Label) {
+    self.role = role
+    self.label = label()
+  }
+
+  var body: some View {
+    Button(role: role) { confirming = true } label: { label }
+      .alert(L("Reset All Settings"), isPresented: $confirming) {
+        Button(L("Cancel"), role: .cancel) {}
+        Button(L("Reset"), role: .destructive) { DOLConfigBridge.resetAllToDefaults() }
+      } message: {
+        Text(L("This will reset all settings to factory defaults. This may require restarting emulation."))
+      }
+  }
+}

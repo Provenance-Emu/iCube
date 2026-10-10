@@ -18,6 +18,15 @@ extension EnvironmentValues {
   }
 }
 
+extension View {
+  /// For a screen pushed from inside a sidebar pane. `settingsPaneBack` is inherited through the
+  /// environment, so without this Back on a pushed sub-leaf would jump to the sidebar and leave the
+  /// sub-leaf on the stack instead of popping it.
+  func clearingSettingsPaneBack() -> some View {
+    environment(\.settingsPaneBack, nil)
+  }
+}
+
 /// What every engine-backed settings leaf needs around its `MenuScreen`: a title, the help sheet
 /// button, and the same resync points the hand-built leaves had (`configSynced`, emulation start/
 /// end, foreground). `sync` assigns the host's snapshot only; it never writes Config.
