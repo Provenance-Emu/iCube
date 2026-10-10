@@ -155,6 +155,11 @@
 			</array>
 		</dict>
 	</dict>
+	<key>UIAppFonts</key>
+	<array>
+		<string>RoundedMplus1c-Medium.ttf</string>
+		<string>RoundedMplus1c-Bold.ttf</string>
+	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>TVTopShelfImage</key>
