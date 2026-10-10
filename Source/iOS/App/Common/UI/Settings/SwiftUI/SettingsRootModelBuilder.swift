@@ -60,7 +60,9 @@ enum SettingsRootModelBuilder {
       SettingsRootSection(id: "general", header: L("General"), entries: [
         SettingsLeafEntry(id: "general", title: L("General"), icon: "gear", description: L("Dual core, cheats, speed limit and other core options.")) { ConfigGeneralView() },
         SettingsLeafEntry(id: "interface", title: L("Interface"), icon: "menubar.rectangle", description: L("On-screen messages, confirmations and panic handling.")) { ConfigInterfaceView() },
-        SettingsLeafEntry(id: "advanced", title: L("Advanced"), icon: "cpu", description: L("Clock overrides and other expert options.")) { ConfigAdvancedView() },
+        SettingsLeafEntry(id: "advanced", title: L("Advanced"), icon: "cpu", description: L("Clock overrides and other expert options."),
+                          hostsMenuScreen: true,
+                          makeModel: { ConfigAdvancedModelBuilder.make(state: ConfigAdvancedState(), apply: { _ in }) }) { ConfigAdvancedView() },
       ]),
       SettingsRootSection(id: "graphics", header: L("Graphics"), entries: [
         SettingsLeafEntry(id: "graphics-video", title: L("Video"), icon: "display",

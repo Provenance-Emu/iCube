@@ -4945,3 +4945,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Clean" = "Clean";
 "GameCube Gradient" = "GameCube Gradient";
 "Animated (Full Effects)" = "Animated (Full Effects)";
+"MEM1" = "MEM1";
+"MEM2" = "MEM2";
+"%1$ld MB" = "%1$ld MB";
+"Date and Time" = "Date and Time";
+"Main memory. The real console has 24 MB." = "Main memory. The real console has 24 MB.";
+"Wii extended memory. The real console has 64 MB." = "Wii extended memory. The real console has 64 MB.";
+"The emulated console's clock when the game starts." = "The emulated console's clock when the game starts.";
