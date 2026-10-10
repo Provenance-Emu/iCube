@@ -50,7 +50,9 @@ enum SettingsRootModelBuilder {
       SettingsLeafEntry(id: "console-gamecube", title: L("GameCube"), icon: "cube", description: L("Memory cards, slots and GameCube-only options."),
                         hostsMenuScreen: true,
                         makeModel: { ConfigGameCubeModelBuilder.make(state: ConfigGameCubeState(), apply: { _ in }) }) { ConfigGameCubeView() },
-      SettingsLeafEntry(id: "console-wii", title: L("Wii"), icon: "tv.and.hifispeaker.fill", description: L("System language, aspect, SD card and Wii-only options.")) { ConfigWiiView() },
+      SettingsLeafEntry(id: "console-wii", title: L("Wii"), icon: "tv.and.hifispeaker.fill", description: L("System language, aspect, SD card and Wii-only options."),
+                        hostsMenuScreen: true,
+                        makeModel: { ConfigWiiModelBuilder.make(state: ConfigWiiState(), apply: { _ in }) }) { ConfigWiiView() },
     ]
     // ConfigAchievementsView only exists under this flag; the `achievements` argument alone would not compile without it.
     #if USE_RETRO_ACHIEVEMENTS

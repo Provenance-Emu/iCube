@@ -36,6 +36,10 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "main menu").contains { $0.entryID == "console-gamecube" })
   }
 
+  func test_wiiRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "sensor bar").contains { $0.entryID == "console-wii" })
+  }
+
   func test_validatorRows_areSearchable() {
     XCTAssertTrue(index.hits(query: "Validate").contains { $0.entryID == "performance-tuning" })
   }
