@@ -257,9 +257,7 @@ final class PlayerScreenViewModel {
       pads: reader.connectedPads(),
       profileName: remembered?.name,
       profileEdited: remembered?.edited ?? false,
-      controls: RemapGroup.groups(for: system, attachment: player.wiiExtension).flatMap {
-        io.controlRows(owner: $0.owner, group: $0.id, port: slot.port)
-      },
+      controls: io.controlRows(for: slot, attachment: player.wiiExtension),
       armedControlID: capture?.row.id,
       pointerMotion: io.pointerMotion(),
       motionPointerEnabled: player.motionPointerEnabled,
@@ -386,35 +384,14 @@ final class PlayerScreenViewModel {
     reload()
     guard choice != state.deviceChoice else { return }
     endCapture()
-    let controlsBefore = state.controls
-    let nameBefore = memory.entry(for: slot.playerID, qualifier: state.player.deviceQualifier)
+    let note = PlayerDeviceChangeNote.begin(slot: slot, reader: reader, io: io, memory: memory)
     var bindsGyroPad = false
     if case .pad(let qualifier) = choice {
       bindsGyroPad = state.pads.first { $0.qualifier == qualifier }?.hasGyro == true
     }
     io.setDevice(choice, slot: slot)
-    // Which profile the port holds now, as far as the app can know (Dolphin does not record it):
-    // - Touchscreen: both kinds reload the "Touchscreen" profile whenever the bound device changes
-    //   (`assignTouchscreen(toGCPort:)`, the coordinator's BindTouchscreen), and it always changes here.
-    // - A pad: the assignment loads the pad's default profile unless the port's mapping binds
-    //   something on that pad (ControllerAssignmentService.assign), and the bridge's answer to that
-    //   cannot be read after the fact (the profile is already loaded). What can: the port's control
-    //   rows (each carries its expression). Changed means the default was loaded; unchanged means
-    //   the mapping was kept and the remembered name stays.
-    // - No Device unbinds the device only; the mapping and its name stay.
-    reload()
-    let reloadedDefault = choice == .touchscreen || (choice != .noDevice && state.controls != controlsBefore)
-    let qualifier = state.player.deviceQualifier
-    if reloadedDefault, !qualifier.isEmpty {
-      // A pad that got its own mapping back (the assignment's mapping stash) keeps the name it
-      // had on this port; otherwise its default profile was loaded.
-      let restoredName = choice == .touchscreen ? nil : memory.storedName(for: slot.playerID, qualifier: qualifier)
-      if let name = restoredName ?? io.defaultProfileName(forQualifier: qualifier) {
-        memory.remember(name, for: slot.playerID, qualifier: qualifier)
-      }
-    } else if !reloadedDefault, let nameBefore {
-      memory.adopt(nameBefore, for: slot.playerID, qualifier: qualifier)
-    }
+    // The shared profile bookkeeping (what the port holds now, by decision 5).
+    note.finish(choice: choice)
     // Decision 12: the app turns the IMU pointer off on every touchscreen-bound Wii Remote
     // (EmulationCoordinator.mm:1501-1525), and a re-bind keeps the mapping, so a gyro pad taking
     // over would leave its pointer off.

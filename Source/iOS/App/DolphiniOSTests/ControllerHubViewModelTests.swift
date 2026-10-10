@@ -27,8 +27,8 @@ final class ControllerHubViewModelTests: XCTestCase {
     var rumble: RumbleDestination = .controller
     var connectTakesPlayer1Value = true
     var touchOverlayProgrammaticValue = true
-    // The `...Value` names avoid clashing with the protocol's same-named methods.
-  /// Player ids (`gc-1`) the user pinned.
+    /// Player ids (`gc-1`) the user pinned. (The `...Value` names above avoid clashing with the
+    /// protocol's same-named methods.)
     var pinned: Set<String> = []
     /// Wii Remote ports with the IMU pointer on.
     var motion: Set<Int> = []
@@ -196,6 +196,8 @@ final class ControllerHubViewModelTests: XCTestCase {
     private let reader: FakeReader
     var log: [String] = []
     var refuseAssign = false
+    /// Runs after every bind (set or assign), as the assignment loading a profile would.
+    var onBind: (() -> Void)?
     /// The real binding picks the Touchscreen instance for the slot's kind (GameCube 0-3, Wii 4-7).
     var resolvesTouchscreenPerKind = false
     init(reader: FakeReader) { self.reader = reader }
@@ -206,6 +208,7 @@ final class ControllerHubViewModelTests: XCTestCase {
         bound = slot.kind == .gameCube ? "iOS/\(slot.port - 1)/Touchscreen" : "iOS/\(slot.port + 3)/Touchscreen"
       }
       if slot.kind == .gameCube { reader.gameCube[slot.port] = bound } else { reader.wii[slot.port] = bound }
+      onBind?()
     }
     func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
       log.append("setDevice \(choice) \(slot.playerID)")
@@ -242,10 +245,11 @@ final class ControllerHubViewModelTests: XCTestCase {
   @MainActor
   private func makeModel(
     system: ControllerSetupSystem = .wiiAndGameCube, reader: FakeReader, writer: FakeWriter, scheduler: FakeScheduler? = nil,
-    memory: PlayerProfileMemory = PlayerProfileMemory()
+    io: FakePlayerScreenIO? = nil, memory: PlayerProfileMemory = PlayerProfileMemory()
   ) -> ControllerHubViewModel {
     let model = ControllerHubViewModel(
-      system: system, reader: reader, writer: writer, scheduler: scheduler ?? FakeScheduler(), memory: memory, notificationCenter: NotificationCenter())
+      system: system, reader: reader, writer: writer, scheduler: scheduler ?? FakeScheduler(), io: io ?? FakePlayerScreenIO(), memory: memory,
+      notificationCenter: NotificationCenter())
     model.reload()
     return model
   }
@@ -276,23 +280,22 @@ final class ControllerHubViewModelTests: XCTestCase {
     XCTAssertEqual(model.state.players.first { $0.id == "wii-1" }?.deviceQualifier, "")
   }
 
-  /// The move step carries the SOURCE qualifier, but Touchscreen instance ids are per kind
-  /// (GameCube 0-3, Wii 4-7): the writer must bind the destination kind's instance.
+  /// "(edited)" lands on the key the Wii slot reads AFTER a cross-kind move: a Touchscreen is
+  /// `iOS/5/…` on a Wii slot, not the GameCube port's `iOS/1/…`.
   @MainActor
-  func test_setPlaysAs_touchscreenMovingBetweenWiiAndGameCube_takesTheDestinationKindsInstance() {
+  func test_setPlaysAs_gameCubeTouchscreenToWiiWithAnExtension_marksTheTargetKeyEdited() {
     let reader = FakeReader()
-    reader.wii[1] = "iOS/4/Touchscreen"
+    reader.gameCube[2] = "iOS/1/Touchscreen"
     let writer = FakeWriter(reader: reader)
     writer.resolvesTouchscreenPerKind = true
-    let model = makeModel(reader: reader, writer: writer)
-    model.setPlaysAs(model.state.players[0], .gameCube)
-    XCTAssertEqual(writer.log, ["assign iOS/4/Touchscreen gc-1", "clear wii-1"])
-    XCTAssertEqual(model.state.players.first { $0.id == "gc-1" }?.deviceQualifier, "iOS/0/Touchscreen", "GameCube instance, not the Wii one")
-
-    reader.gameCube[2] = "iOS/1/Touchscreen"
-    model.reload()
-    model.setPlaysAs(model.state.players.first { $0.id == "gc-2" }!, .wiiRemote)
-    XCTAssertEqual(model.state.players.first { $0.id == "wii-2" }?.deviceQualifier, "iOS/5/Touchscreen", "Wii instance, not the GameCube one")
+    let memory = PlayerProfileMemory()
+    let model = makeModel(reader: reader, writer: writer, memory: memory)
+    model.setPlaysAs(model.state.players.first { $0.id == "gc-2" }!, .wiiNunchuk)
+    XCTAssertEqual(writer.log, ["assign iOS/1/Touchscreen wii-2", "clear gc-2", "ext 2 1", "side 2 false"])
+    XCTAssertEqual(
+      memory.entry(for: "wii-2", qualifier: "iOS/5/Touchscreen"), PlayerProfileMemory.Entry(name: "Touchscreen", edited: true),
+      "the Wii slot's device key")
+    XCTAssertNil(memory.entry(for: "wii-2", qualifier: "iOS/1/Touchscreen"), "not the source's key")
   }
 
   /// The live writer judges "did the binding take" by device, not by string: the instance id changes
@@ -532,6 +535,83 @@ final class ControllerHubViewModelTests: XCTestCase {
     model.actions.testRumble()
     model.actions.resetOverlayLayouts()
     XCTAssertEqual(writer.log, ["pointer gyro", "motion 2 true", "bg true", "rumble both", "takes false", "programmatic false", "testRumble", "resetLayouts"])
+  }
+
+  // MARK: Profile memory (the player screen's bookkeeping, shared)
+
+  private static let dualSense = "MFi/1/DualSense Wireless Controller"
+
+  /// Device and Plays as picks run the same remember/adopt as the player screen's Device list.
+  @MainActor
+  func test_chooseDevice_touchscreen_remembersTheTouchscreenProfile() {
+    let reader = FakeReader()
+    reader.gameCube[1] = Self.xbox
+    let scheduler = FakeScheduler()
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "gc-1", qualifier: Self.xbox)
+    let model = makeModel(reader: reader, writer: FakeWriter(reader: reader), scheduler: scheduler, memory: memory)
+    model.chooseDevice(model.state.players.first { $0.id == "gc-1" }!, .touchscreen)
+    scheduler.fire()
+    XCTAssertEqual(memory.entry(for: "gc-1", qualifier: Self.touch)?.name, "Touchscreen")
+  }
+
+  @MainActor
+  func test_chooseDevice_padKeepingTheMapping_carriesTheNameAndEdited() {
+    let reader = FakeReader()
+    reader.gameCube[1] = Self.xbox
+    let scheduler = FakeScheduler()
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "gc-1", qualifier: Self.xbox)
+    memory.markEdited("gc-1", qualifier: Self.xbox)
+    let model = makeModel(reader: reader, writer: FakeWriter(reader: reader), scheduler: scheduler, memory: memory)
+    model.chooseDevice(model.state.players.first { $0.id == "gc-1" }!, .pad(Self.dualSense))
+    scheduler.fire()
+    XCTAssertEqual(memory.entry(for: "gc-1", qualifier: Self.dualSense), PlayerProfileMemory.Entry(name: "Mine", edited: true))
+  }
+
+  @MainActor
+  func test_chooseDevice_padThatReplacedTheMapping_remembersItsDefaultProfile() {
+    let reader = FakeReader()
+    reader.gameCube[1] = Self.xbox
+    let scheduler = FakeScheduler()
+    let writer = FakeWriter(reader: reader)
+    let io = FakePlayerScreenIO()
+    writer.onBind = { io.boundExpression = "`Button 0`" }
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "gc-1", qualifier: Self.xbox)
+    let model = makeModel(reader: reader, writer: writer, scheduler: scheduler, io: io, memory: memory)
+    model.chooseDevice(model.state.players.first { $0.id == "gc-1" }!, .pad(Self.dualSense))
+    scheduler.fire()
+    XCTAssertEqual(memory.entry(for: "gc-1", qualifier: Self.dualSense), PlayerProfileMemory.Entry(name: "Physical Controller", edited: false))
+  }
+
+  @MainActor
+  func test_setPlaysAs_move_notesBothSlots() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    let writer = FakeWriter(reader: reader)
+    let io = FakePlayerScreenIO()
+    writer.onBind = { io.boundExpression = "`Button 0`" }
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "wii-1", qualifier: Self.xbox)
+    let model = makeModel(reader: reader, writer: writer, io: io, memory: memory)
+    model.setPlaysAs(model.state.players[0], .gameCube)
+    XCTAssertEqual(memory.entry(for: "gc-1", qualifier: Self.xbox)?.name, "Physical Controller", "the destination got the pad's default profile")
+    XCTAssertEqual(memory.entry(for: "wii-1", qualifier: "")?.name, "Mine", "the emptied slot keeps its mapping's name, as No Device does")
+  }
+
+  /// The occupied check reads fresh state: a caller's `PlayerState` can predate a bind.
+  @MainActor
+  func test_setPlaysAs_staleCallerCopy_stillRefusesAnOccupiedDestination() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    let stale = model.state.players[0]
+    reader.gameCube[1] = Self.dualSense
+    let posted = toasts { model.setPlaysAs(stale, .gameCube) }
+    XCTAssertEqual(posted, ["Player 1 is in use"])
+    XCTAssertEqual(writer.log, [])
   }
 
   func test_rumbleDestination_defaultsToController_andReadsTheStoredValue() throws {

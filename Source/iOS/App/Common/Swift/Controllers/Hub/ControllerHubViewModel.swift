@@ -103,7 +103,7 @@ protocol ControllerHubScheduling {
   func schedule(after delay: TimeInterval, _ work: @escaping @MainActor () -> Void) -> () -> Void
 }
 
-struct MainQueueHubScheduler: ControllerHubScheduling {
+struct TaskHubScheduler: ControllerHubScheduling {
   nonisolated init() {} // swiftlint:disable:this unneeded_synthesized_initializer
 
   func schedule(after delay: TimeInterval, _ work: @escaping @MainActor () -> Void) -> () -> Void {
@@ -134,10 +134,15 @@ final class ControllerHubViewModel {
   /// How long a Device, Plays as or Layout choice must stand unchanged before it is written
   /// (ruling H4): tap-cycling otherwise writes every value it passes through.
   static let settleDelay: TimeInterval = 0.6
+  /// A player's Plays as row id is its player id plus this.
+  static let playsAsRowSuffix = "-plays-as"
 
   private let reader: any ControllerHubReading
   private let writer: any ControllerHubWriting
   private let scheduler: any ControllerHubScheduling
+  /// Only for the profile bookkeeping around a device change (`PlayerDeviceChangeNote`): the
+  /// control rows the port holds before and after.
+  private let io: any PlayerScreenIO
   private let memory: PlayerProfileMemory
   @ObservationIgnored private var cancelSettle: (() -> Void)?
   private let notificationCenter: NotificationCenter
@@ -149,7 +154,8 @@ final class ControllerHubViewModel {
     system: ControllerSetupSystem,
     reader: any ControllerHubReading = LiveControllerHubReader(),
     writer: any ControllerHubWriting = LiveControllerHubWriter(),
-    scheduler: any ControllerHubScheduling = MainQueueHubScheduler(),
+    scheduler: any ControllerHubScheduling = TaskHubScheduler(),
+    io: any PlayerScreenIO = LivePlayerScreenIO(),
     memory: PlayerProfileMemory = .shared,
     notificationCenter: NotificationCenter = .default
   ) {
@@ -157,6 +163,7 @@ final class ControllerHubViewModel {
     self.reader = reader
     self.writer = writer
     self.scheduler = scheduler
+    self.io = io
     self.memory = memory
     self.notificationCenter = notificationCenter
     self.state = .empty(system: system)
@@ -381,7 +388,10 @@ final class ControllerHubViewModel {
   // MARK: Committing writes
 
   func setDevice(_ player: PlayerState, _ choice: PlayerDeviceChoice) {
-    writer.setDevice(choice, slot: PlayerSlot(kind: player.kind, port: player.port))
+    let slot = PlayerSlot(kind: player.kind, port: player.port)
+    let note = PlayerDeviceChangeNote.begin(slot: slot, reader: reader, io: io, memory: memory)
+    writer.setDevice(choice, slot: slot)
+    note.finish(choice: choice)
     reload()
   }
 
@@ -393,14 +403,16 @@ final class ControllerHubViewModel {
   /// Runs `PlaysAsTransition.plan` in order. On a failing step the view model stops, re-reads state
   /// and toasts; it does not replay inverse steps (ruling H15), so a half-applied change is visible.
   func setPlaysAs(_ player: PlayerState, _ target: PlaysAs) {
+    // The occupied-destination check below reads `state.players`: a caller's copy may be stale.
+    reload()
     for step in PlaysAsTransition.plan(from: player, to: target) {
       switch step {
       case .setExtension(let wiimote, let value):
         writer.setExtension(value, wiimote: wiimote)
-        if value != player.wiiExtension { markEdited(wiimote: wiimote, qualifier: player.deviceQualifier) }
+        if value != player.wiiExtension { markEdited(wiimote: wiimote) }
       case .setSideways(let wiimote, let enabled):
         writer.setSideways(enabled, wiimote: wiimote)
-        if enabled != player.isSideways { markEdited(wiimote: wiimote, qualifier: player.deviceQualifier) }
+        if enabled != player.isSideways { markEdited(wiimote: wiimote) }
       case .clearSlot(let slot):
         writer.clear(slot: slot)
       case .moveDevice(let qualifier, let from, let to):
@@ -410,25 +422,31 @@ final class ControllerHubViewModel {
           reload()
           return
         }
+        let toNote = PlayerDeviceChangeNote.begin(slot: to, reader: reader, io: io, memory: memory)
         guard writer.assign(qualifier: qualifier, slot: to) else {
           EmulationToast.post(L("Couldn't move the controller"))
           reload()
           return
         }
+        toNote.finish(choice: PlayerDeviceChoice(qualifier: qualifier))
+        let fromNote = PlayerDeviceChangeNote.begin(slot: from, reader: reader, io: io, memory: memory)
         writer.clear(slot: from)
+        fromNote.finish(choice: .noDevice)
       }
     }
     reload()
     if target.kind != player.kind {
-      state.focusRequest = "\(target.kind == .gameCube ? "gc" : "wii")-\(player.port)-plays-as"
+      state.focusRequest = PlayerSlot(kind: target.kind, port: player.port).playerID + Self.playsAsRowSuffix
     }
   }
 
   /// The player screen's `setExtension`/`setSideways` mark the remembered profile edited; the hub
-  /// does the same. Any capture is already over: `PlayerScreenViewModel.stop()` ends it when the
-  /// player screen leaves, and the hub is only visible then.
-  private func markEdited(wiimote: Int, qualifier: String) {
-    memory.markEdited(PlayerSlot(kind: .wiiRemote, port: wiimote).playerID, qualifier: qualifier)
+  /// does the same, on the device the Wii slot holds NOW: after a cross-kind move that is the
+  /// target's (a Touchscreen is `iOS/5/…` there, not the GameCube port's `iOS/1/…`). Any capture is
+  /// already over: `PlayerScreenViewModel.stop()` ends it when the player screen leaves, and the hub
+  /// is only visible then.
+  private func markEdited(wiimote: Int) {
+    memory.markEdited(PlayerSlot(kind: .wiiRemote, port: wiimote).playerID, qualifier: reader.boundQualifier(forWiimote: wiimote))
   }
 
   // MARK: Identify

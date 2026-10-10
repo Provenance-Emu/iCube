@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import Foundation
-import GameController
 
 /// Everything the hub writes, behind one seam (the mirror of `ControllerHubReading`).
 @MainActor
@@ -29,21 +28,28 @@ protocol ControllerHubWriting {
 }
 
 struct LiveControllerHubWriter: ControllerHubWriting {
-  /// Explicit and `nonisolated`, as its siblings' are, so it can be a default argument of the
-  /// main-actor view model's `init`. (No `unneeded_synthesized_initializer` disable: the stored
-  /// properties below keep SwiftLint from flagging it.)
-  nonisolated init() {}
+  private let io: any PlayerScreenIO
+  private let reader: any ControllerHubReading
 
-  private let io = LivePlayerScreenIO()
-  private let reader = LiveControllerHubReader()
+  /// The production seam: the live player-screen IO and hub reader. Explicit and `nonisolated`, as
+  /// its siblings' are, so it can be a default argument of the main-actor view model's `init`.
+  nonisolated init() {
+    io = LivePlayerScreenIO()
+    reader = LiveControllerHubReader()
+  }
+
+  /// Tests inject fakes for both.
+  init(io: any PlayerScreenIO, reader: any ControllerHubReading) {
+    self.io = io
+    self.reader = reader
+  }
 
   func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
     io.setDevice(choice, slot: slot)
     // Decision 12 (the player screen does the same): the app turns the IMU pointer off on every
     // touchscreen-bound Wii Remote, so a gyro pad taking over would leave its pointer off.
     if slot.kind == .wiiRemote, case .pad(let qualifier) = choice,
-       GCController.controllers().first(where: { (TVControllerMappingBridge.qualifiedName(for: $0) as String) == qualifier })?
-         .motion?.hasRotationRate == true {
+       reader.connectedPads().first(where: { $0.qualifier == qualifier })?.hasGyro == true {
       io.setMotionPointerEnabled(true, wiimote: slot.port)
     }
   }
