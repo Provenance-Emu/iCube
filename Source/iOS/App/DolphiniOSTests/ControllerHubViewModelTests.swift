@@ -291,7 +291,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     let memory = PlayerProfileMemory()
     let model = makeModel(reader: reader, writer: writer, memory: memory)
     model.setPlaysAs(model.state.players.first { $0.id == "gc-2" }!, .wiiNunchuk)
-    XCTAssertEqual(writer.log, ["assign iOS/1/Touchscreen wii-2", "clear gc-2", "ext 2 1", "side 2 false", "layout wii"])
+    XCTAssertEqual(writer.log, ["assign iOS/1/Touchscreen wii-2", "clear gc-2", "ext 2 1", "side 2 false"])
     XCTAssertEqual(
       memory.entry(for: "wii-2", qualifier: "iOS/5/Touchscreen"), PlayerProfileMemory.Entry(name: "Touchscreen", edited: true),
       "the Wii slot's device key")
@@ -395,7 +395,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     let model = makeModel(reader: reader, writer: writer)
     let gc2 = model.state.players.first { $0.id == "gc-2" }!
     model.setPlaysAs(gc2, .wiiNunchuk)
-    XCTAssertEqual(writer.log, ["assign \(Self.touch) wii-2", "clear gc-2", "ext 2 1", "side 2 false", "layout wii"])
+    XCTAssertEqual(writer.log, ["assign \(Self.touch) wii-2", "clear gc-2", "ext 2 1", "side 2 false"])
   }
 
   /// Ruling H9: the profile shows "(edited)" after an extension change, as on the player screen.
@@ -449,6 +449,33 @@ final class ControllerHubViewModelTests: XCTestCase {
     model.setPlaysAs(model.state.players[0], .gameCube)
     XCTAssertEqual(writer.log, ["assign \(Self.touch) gc-1", "clear wii-1", "layout gamecube"])
     XCTAssertEqual(model.state.focusRequest, "gc-1-plays-as", "the layout reload must not lose the focus request")
+  }
+
+  @MainActor
+  func test_setPlaysAs_touchscreenGameCubeToWiiRemote1_setsLayoutToWiiRemote() {
+    let reader = FakeReader()
+    reader.gameCube[1] = "iOS/0/Touchscreen"
+    let writer = FakeWriter(reader: reader)
+    writer.resolvesTouchscreenPerKind = true
+    let model = makeModel(reader: reader, writer: writer)
+    model.setPlaysAs(model.state.players.first { $0.id == "gc-1" }!, .wiiRemote)
+    XCTAssertEqual(writer.log, ["assign iOS/0/Touchscreen wii-1", "clear gc-1", "ext 1 0", "side 1 false", "layout wii"])
+  }
+
+  /// Layout Wii Remote would rebind Wii Remote 1 to the touchscreen and steal another player's slot.
+  @MainActor
+  func test_setPlaysAs_touchscreenGameCubeToWiiRemote2to4_writesNoLayout() {
+    for port in 2 ... 4 {
+      let reader = FakeReader()
+      reader.gameCube[port] = "iOS/\(port - 1)/Touchscreen"
+      reader.wii[1] = Self.xbox
+      let writer = FakeWriter(reader: reader)
+      writer.resolvesTouchscreenPerKind = true
+      let model = makeModel(reader: reader, writer: writer)
+      model.setPlaysAs(model.state.players.first { $0.id == "gc-\(port)" }!, .wiiNunchuk)
+      XCTAssertFalse(writer.log.contains { $0.hasPrefix("layout") }, "port \(port): no overlay-mode write")
+      XCTAssertEqual(reader.wii[1], Self.xbox, "Wii Remote 1 keeps its pad")
+    }
   }
 
   @MainActor

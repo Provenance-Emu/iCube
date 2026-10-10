@@ -1730,6 +1730,7 @@ Rulings that apply here (restated): **H4** a change takes effect 0.6 s after the
 6. Setup: Rumble Output cycles; Test Rumble pulses; Background Input toggles and survives leaving the hub. Cycle Device on a player and immediately push the player's title row: the device change is already committed on the player screen.
 7. The Player 1 title row still opens the detail screen; it has no Extension or Sideways rows and does have Advanced Motion… (touchscreen Wii) and On-Screen Stick Feel… (touchscreen) rows. Changing Plays as in the hub shows "(edited)" on the player screen's profile row.
 8. Move a touchscreen player from Wii to GameCube during a Wii game: the overlay switches to the GameCube layout and its touches drive the GameCube port; Layout now reads GameCube.
+9. Move a touchscreen player from GameCube to Wii Remote 1: Layout reads Wii Remote. Move one to Wii Remote 2, 3 or 4: Layout is unchanged and another player's pad on Wii Remote 1 stays on it.
 
 - [ ] **Step 2: Apple TV, Wii title (Xbox pad)**
 

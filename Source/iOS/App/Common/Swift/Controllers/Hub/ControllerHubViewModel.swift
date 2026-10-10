@@ -455,8 +455,17 @@ final class ControllerHubViewModel {
       }
     }
     // The overlay is drawn for the slot the touchscreen is bound to; Auto follows the game's system
-    // and would leave a moved touchscreen with no working controls (ruling H26).
-    if movedTouchscreen { setOverlayMode(target.kind == .gameCube ? .gamecube : .wii) }
+    // and would leave a moved touchscreen with no working controls (ruling H26, narrowed). Layout
+    // Wii Remote runs `ensureWiimote1EmulatedTouchscreen`, which takes Wii Remote 1 for the
+    // touchscreen: harmless when the touchscreen moves TO Wii Remote 1, but it would steal another
+    // player's slot for Wii Remote 2-4, so those moves leave Layout alone.
+    if movedTouchscreen {
+      if target.kind == .gameCube {
+        setOverlayMode(.gamecube)
+      } else if player.port == 1 {
+        setOverlayMode(.wii)
+      }
+    }
     reload()
     if target.kind != player.kind {
       state.focusRequest = PlayerSlot(kind: target.kind, port: player.port).playerID + Self.playsAsRowSuffix
