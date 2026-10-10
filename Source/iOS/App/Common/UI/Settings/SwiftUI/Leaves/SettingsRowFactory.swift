@@ -43,8 +43,8 @@ enum SettingsRow {
     MenuItem(id: id, title: title, icon: icon, role: .action(run), badge: badge, isEnabled: enabled, description: description)
   }
 
-  static func destination(_ id: String, _ title: String, _ description: String, view: AnyView) -> MenuItem {
-    MenuItem(id: id, title: title, role: .destination(view), description: description, showsChevron: true)
+  static func destination(_ id: String, _ title: String, _ description: String, icon: String? = nil, view: AnyView) -> MenuItem {
+    MenuItem(id: id, title: title, icon: icon, role: .destination(view), description: description, showsChevron: true)
   }
 
   /// A row the engine has no role for. A `.custom` row renders only its view, so the view carries its own title.

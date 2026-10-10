@@ -92,32 +92,6 @@ extension Binding where Value == Int {
   }
 }
 
-// MARK: tvOS-friendly selectable row
-struct SettingsSelectRow: View {
-  let label: String
-  let checked: Bool
-  let action: () -> Void
-  var body: some View {
-    Button(action: action) {
-      HStack {
-        Text(label)
-        Spacer()
-        if checked { Image(systemName: "checkmark") }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .contentShape(Rectangle())
-    }
-#if os(tvOS)
-    .buttonStyle(.automatic)
-#else
-    .buttonStyle(.plain)
-#endif
-#if os(tvOS)
-    .focusable(true)
-#endif
-  }
-}
-
 // MARK: tvOS fallback for sliders
 internal struct TVIntStepper: View {
   @Binding var value: Int
@@ -230,21 +204,6 @@ func settingsNavCaption<Destination: View, Label: View>(
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
     }
-  }
-}
-
-/// Reusable Off/On/Auto picker for Metal TriState knobs (present-drawable, manual-upload).
-struct MetalTriStatePicker: View {
-  @Binding var selected: Int
-  let title: String
-  let setter: (Int) -> Void
-  var body: some View {
-    List {
-      SettingsSelectRow(label: L("Off"), checked: selected == 0) { selected = 0; setter(0) }
-      SettingsSelectRow(label: L("On"), checked: selected == 1) { selected = 1; setter(1) }
-      SettingsSelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; setter(2) }
-    }
-    .navigationTitle(title)
   }
 }
 

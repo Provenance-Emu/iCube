@@ -32,6 +32,11 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "memory size").contains { $0.entryID == "advanced" && ($0.rowTitle ?? "").contains("Memory Size") })
   }
 
+  func test_graphicsAdvancedRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "present drawable").contains { $0.entryID == "graphics-advanced" && ($0.rowTitle ?? "").contains("Present Drawable") })
+    XCTAssertTrue(index.hits(query: "prefetch").contains { $0.entryID == "graphics-advanced" && ($0.rowTitle ?? "").contains("Prefetch") })
+  }
+
   func test_gameCubeRows_areFoundByTheirOwnTitles() {
     XCTAssertTrue(index.hits(query: "main menu").contains { $0.entryID == "console-gamecube" })
   }
@@ -56,9 +61,14 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "Validate").contains { $0.entryID == "performance-tuning" })
   }
 
-  /// A hand-built leaf has no model, so its keywords still count.
-  func test_keyword_matchesAHandBuiltLeaf() {
-    XCTAssertTrue(index.hits(query: "fastmem").contains(SettingsSearchHit(entryID: "debug", rowTitle: nil)))
+  /// A hand-built leaf has no model, so its title, description and keywords still count.
+  func test_handBuiltLeaf_isFoundByItsDescription() {
+    XCTAssertTrue(index.hits(query: "wi-fi").contains(SettingsSearchHit(entryID: "web-ui", rowTitle: nil)))
+  }
+
+  func test_debugRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "fastmem").contains { $0.entryID == "debug" })
+    XCTAssertTrue(index.hits(query: "wireframe").contains { $0.entryID == "debug" })
   }
 
   /// Punctuation and spacing do not matter: these worked on develop through hand-kept keywords.

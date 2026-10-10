@@ -70,10 +70,6 @@ internal struct PauseMenuView: View {
   /// This menu's hold on the pause (spec §4.3). Adopted from the gesture tracker's pending claim when
   /// there is one, otherwise claimed here. Released only on a real teardown, see `onDisappear`.
   @State private var pauseToken: PauseArbiter.Token?
-  /// Same UserDefaults key `TVEmulationBridge` reads when fast-forward is turned on
-  /// (also written by the Settings > General fast-forward speed picker) — kept as one
-  /// named constant here rather than a literal at each pause-menu call site.
-  private static let fastForwardSpeedPercentKey = "fast_forward_speed_percent"
   /// D15: "N active" badge on the Cheats item. Refreshed on appear and whenever the
   /// pane returns to `.main` (including from the Cheats pane itself), so toggling a
   /// cheat and backing out updates the count without needing a manual refresh.
@@ -88,10 +84,10 @@ internal struct PauseMenuView: View {
   }
 
   /// Currently configured fast-forward speed, read from the same UserDefaults key
-  /// `TVEmulationBridge.setFastForwardSpeedPercent(_:)` writes. Falls back to the
+  /// `TVEmulationBridge.setFastForwardSpeedPercent(_:)` writes (`ConfigGeneralDefaultsKey`). Falls back to the
   /// bridge's own default (300 = 3x) before anything has been picked.
   private var configuredFastForwardPercent: Int {
-    (UserDefaults.standard.object(forKey: Self.fastForwardSpeedPercentKey) as? Int) ?? 300
+    ConfigGeneralState.storedFastForward(UserDefaults.standard.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int)
   }
 
   /// Turns fast-forward off without leaving the pause menu, mirroring the old

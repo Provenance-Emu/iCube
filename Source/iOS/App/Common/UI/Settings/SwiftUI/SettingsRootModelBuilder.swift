@@ -86,8 +86,9 @@ enum SettingsRootModelBuilder {
                           hostsMenuScreen: true,
                           makeModel: { GraphicsHacksModelBuilder.make(state: GraphicsHacksState(), apply: { _ in }) }) { GraphicsHacksView() },
         SettingsLeafEntry(id: "graphics-advanced", title: L("Graphics Advanced"), icon: "slider.horizontal.3",
-                          description: L("Metal presentation and buffer upload options."),
-                          keywords: ["present drawable", "manually upload buffers", "metal"]) { GraphicsAdvancedView() },
+                          description: L("Performance overlays, shader threads, textures, rendering and Metal options."),
+                          hostsMenuScreen: true,
+                          makeModel: { GraphicsAdvancedModelBuilder.make(state: GraphicsAdvancedState(), apply: { _ in }) }) { GraphicsAdvancedView() },
         SettingsLeafEntry(id: "shaders", title: L("Shaders"), icon: "paintbrush", description: L("Post-processing presets and their parameters.")) { ShaderSettingsView() },
       ]),
       SettingsRootSection(id: "audio", header: L("Audio"), entries: [
@@ -109,7 +110,8 @@ enum SettingsRootModelBuilder {
                           // showValidation: true so the correctness-validation rows are searchable.
                           makeModel: { PerformanceTuningModelBuilder.make(state: PerformanceTuningState(), showValidation: true, apply: { _ in }) }) { PerformanceTuningView() },
         SettingsLeafEntry(id: "debug", title: L("Debug"), icon: "ladybug", description: L("Developer switches: fastmem, JIT, logging, stall metrics."),
-                          keywords: ["fastmem", "jit", "logging", "stall metrics", "wireframe", "haptics"]) { DebugRootView() },
+                          hostsMenuScreen: true,
+                          makeModel: { DebugRootModelBuilder.make(state: DebugRootState(isIOS: isIOS), apply: { _ in }) }) { DebugRootView() },
       ]),
       SettingsRootSection(id: "sync-network", header: L("Sync & Network"), entries: [
         SettingsLeafEntry(id: "web-ui", title: L("Web UI & WebDAV"), icon: "network", description: L("Import games from a computer on the same Wi-Fi.")) { WebUISettingsView() },
