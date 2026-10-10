@@ -134,11 +134,6 @@ struct ConfigGeneralView: View {
   }
 }
 
-private enum Region: Int, CaseIterable { case ntscJ = 0, ntscU = 1, pal = 2, unknown = 3, ntscK = 4
-  var label: String { switch self { case .ntscJ: return "NTSC-J"; case .ntscU: return "NTSC-U"; case .pal: return "PAL"; case .ntscK: return "NTSC-K"; case .unknown: return "Error" } }
-  static func from(raw: Int) -> Region { Region(rawValue: raw) ?? .unknown }
-}
-
 private struct SpeedLimitPicker: View {
   @Binding var selectedPercent: Int
   @State private var showHelp = false

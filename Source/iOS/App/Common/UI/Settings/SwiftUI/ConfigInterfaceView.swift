@@ -32,20 +32,6 @@ struct ConfigInterfaceView: View {
   @AppStorage("library_background_style") private var backgroundStyle: LibraryBackgroundStyle = .gradient
   @AppStorage("library_show_subtitles") private var showSubtitles: Bool = true
 
-  enum LibraryBackgroundStyle: String, CaseIterable {
-    case clean = "clean"
-    case gradient = "gradient"
-    case animated = "animated"
-
-    var displayName: String {
-      switch self {
-      case .clean: return "Clean"
-      case .gradient: return "GameCube Gradient"
-      case .animated: return "Animated (Full Effects)"
-      }
-    }
-  }
-
   /// Picker style that works across tvOS versions
   private var pickerStyleForPlatform: some PickerStyle {
     #if os(tvOS)
@@ -77,7 +63,7 @@ struct ConfigInterfaceView: View {
             Spacer()
             Picker("Background Style", selection: $backgroundStyle) {
               ForEach(LibraryBackgroundStyle.allCases, id: \.self) { style in
-                Text(style.displayName).tag(style)
+                Text(style.label).tag(style)
               }
             }
             .pickerStyle(pickerStyleForPlatform)
