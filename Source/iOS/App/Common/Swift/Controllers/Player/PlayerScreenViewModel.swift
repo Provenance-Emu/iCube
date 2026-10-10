@@ -366,7 +366,7 @@ final class PlayerScreenViewModel {
           check: { [weak self] in self?.io.check($0) ?? ExpressionCheck(status: .invalid, message: "") },
           save: { [weak self] in self?.saveExpression($0, for: row) ?? false }))
       },
-      advancedMotionDestination: { AnyView(EnhancedMotionControlsView().padBackNavigation()) },
+      advancedMotionDestination: { AnyView(EnhancedMotionControlsView()) },
       stickFeelDestination: { AnyView(AnalogStickSettingsView().padBackNavigation()) })
   }
 
