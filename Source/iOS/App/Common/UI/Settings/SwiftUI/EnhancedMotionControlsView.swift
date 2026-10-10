@@ -29,22 +29,6 @@ struct EnhancedMotionControlsView: View {
 
   @State private var horizontalMotionMode: HorizontalMotionMode = .roll
 
-  enum HorizontalMotionMode: Int, CaseIterable {
-    case roll = 0, yaw = 1
-    var label: String {
-      switch self {
-      case .roll: return L("Roll (Tilt Left/Right)")
-      case .yaw: return L("Yaw (Turn Left/Right)")
-      }
-    }
-    var description: String {
-      switch self {
-      case .roll: return L("Tilt device left/right to move cursor")
-      case .yaw: return L("Rotate device left/right to move cursor")
-      }
-    }
-  }
-
   var body: some View {
     List {
       Section(header: Text(L("Gyro Pointer"))) {
@@ -113,11 +97,11 @@ struct EnhancedMotionControlsView: View {
 }
 
 private struct HorizontalMotionPicker: View {
-  @Binding var selected: EnhancedMotionControlsView.HorizontalMotionMode
+  @Binding var selected: HorizontalMotionMode
 
   var body: some View {
     List {
-      ForEach(EnhancedMotionControlsView.HorizontalMotionMode.allCases, id: \.rawValue) { mode in
+      ForEach(HorizontalMotionMode.allCases, id: \.rawValue) { mode in
         Button(action: { selected = mode }) {
           HStack {
             VStack(alignment: .leading, spacing: 4) {

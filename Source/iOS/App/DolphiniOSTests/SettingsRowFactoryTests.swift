@@ -81,4 +81,35 @@ final class SettingsRowFactoryTests: XCTestCase {
     XCTAssertTrue(item.showsChevron)
     guard case .destination = item.role else { return XCTFail("destination") }
   }
+
+  func test_custom_isACustomRow_withDescription_andEnabledFlag() {
+    let item = SettingsRow.custom("c", "Custom", AnyView(EmptyView()), "Describes it.", enabled: false)
+    XCTAssertEqual(item.title, "Custom")
+    XCTAssertEqual(item.description, "Describes it.")
+    XCTAssertFalse(item.isEnabled)
+    guard case .custom = item.role else { return XCTFail("custom") }
+  }
+
+  func test_destructive_runsItsClosure_andKeepsDescriptionAndIcon() {
+    var runs = 0
+    let item = SettingsRow.destructive("d", "Forget", "Forgets them.", icon: "trash") { runs += 1 }
+    XCTAssertEqual(item.description, "Forgets them.")
+    XCTAssertEqual(item.icon, "trash")
+    guard case .destructive(let run) = item.role else { return XCTFail("destructive") }
+    run()
+    XCTAssertEqual(runs, 1)
+  }
+
+  func test_caption_isADisabledTextRow_whoseDescriptionIsItsText() {
+    let item = SettingsRow.caption("hint", "Do the thing first.")
+    XCTAssertFalse(item.isEnabled, "a caption is never focused")
+    XCTAssertEqual(item.description, "Do the thing first.")
+    guard case .custom = item.role else { return XCTFail("custom") }
+  }
+
+  func test_icon_isForwardedByToggleCycleAndStepper() {
+    XCTAssertEqual(SettingsRow.toggle("t", "T", true, "d", icon: "star") { _ in }.icon, "star")
+    XCTAssertEqual(SettingsRow.cycle("c", "C", [("A", 1)], 1, "d", icon: "star") { _ in }.icon, "star")
+    XCTAssertEqual(SettingsRow.stepper("s", "S", 1, range: 0 ... 2, step: 1, format: { "\($0)" }, "d", icon: "star") { _ in }.icon, "star")
+  }
 }

@@ -28,6 +28,18 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "adaptive clock").contains { $0.entryID == "performance-tuning" })
   }
 
+  func test_advancedRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "memory size").contains { $0.entryID == "advanced" && ($0.rowTitle ?? "").contains("Memory Size") })
+  }
+
+  func test_interfaceRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "panic handlers").contains { $0.entryID == "interface" })
+  }
+
+  func test_generalRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "dual core").contains { $0.entryID == "general" })
+  }
+
   func test_validatorRows_areSearchable() {
     XCTAssertTrue(index.hits(query: "Validate").contains { $0.entryID == "performance-tuning" })
   }

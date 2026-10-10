@@ -79,3 +79,26 @@ enum CpuEngine: Int, CaseIterable {
   }
   static func from(raw: Int) -> CpuEngine { CpuEngine(rawValue: raw) ?? .jitARM64 }
 }
+
+// MARK: - General / Interface / Motion
+
+/// Mirrors Dolphin's DiscIO::Region. Raw values are what `mainFallbackRegion()` stores; `unknown` is the core's Error value.
+enum Region: Int, CaseIterable { case ntscJ = 0, ntscU = 1, pal = 2, unknown = 3, ntscK = 4
+  var label: String { switch self { case .ntscJ: return "NTSC-J"; case .ntscU: return "NTSC-U"; case .pal: return "PAL"; case .ntscK: return "NTSC-K"; case .unknown: return "Error" } }
+  static func from(raw: Int) -> Region { Region(rawValue: raw) ?? .unknown }
+  /// What a picker offers: every region except the Error placeholder.
+  static let selectable = allCases.filter { $0 != .unknown }
+}
+
+/// Library backdrop. Raw values are what `@AppStorage("library_background_style")` stores (TVLibraryView keeps its own identical enum).
+enum LibraryBackgroundStyle: String, CaseIterable { case clean, gradient, animated
+  var label: String { switch self { case .clean: return L("Clean"); case .gradient: return L("GameCube Gradient"); case .animated: return L("Animated (Full Effects)") } }
+  /// AppStorage fell back to `.gradient` for an unset or unknown raw value; so does this.
+  static func from(stored: String?) -> LibraryBackgroundStyle { stored.flatMap(LibraryBackgroundStyle.init(rawValue:)) ?? .gradient }
+}
+
+/// Which gesture moves the gyro pointer sideways.
+enum HorizontalMotionMode: Int, CaseIterable { case roll = 0, yaw = 1
+  var label: String { switch self { case .roll: return L("Roll (Tilt Left/Right)"); case .yaw: return L("Yaw (Turn Left/Right)") } }
+  var description: String { switch self { case .roll: return L("Tilt device left/right to move cursor"); case .yaw: return L("Rotate device left/right to move cursor") } }
+}
