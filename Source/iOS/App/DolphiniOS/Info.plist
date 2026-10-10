@@ -234,6 +234,11 @@
 			<string>dios.quick.settings</string>
 		</dict>
 	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>RoundedMplus1c-Medium.ttf</string>
+		<string>RoundedMplus1c-Bold.ttf</string>
+	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>UTExportedTypeDeclarations</key>
