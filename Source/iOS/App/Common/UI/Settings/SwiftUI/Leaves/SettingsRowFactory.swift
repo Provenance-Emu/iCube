@@ -29,11 +29,11 @@ enum SettingsRow {
   }
 
   static func action(_ id: String, _ title: String, _ description: String, icon: String? = nil,
-                     enabled: Bool = true, run: @escaping () -> Void) -> MenuItem {
-    MenuItem(id: id, title: title, icon: icon, role: .action(run), isEnabled: enabled, description: description)
+                     enabled: Bool = true, badge: String? = nil, run: @escaping () -> Void) -> MenuItem {
+    MenuItem(id: id, title: title, icon: icon, role: .action(run), badge: badge, isEnabled: enabled, description: description)
   }
 
   static func destination(_ id: String, _ title: String, _ description: String, view: AnyView) -> MenuItem {
-    MenuItem(id: id, title: title, role: .destination(view), description: description)
+    MenuItem(id: id, title: title, role: .destination(view), description: description, showsChevron: true)
   }
 }

@@ -13,6 +13,7 @@ struct GraphicsHacksView: View {
 
   private func sync() {
     var s = GraphicsHacksState()
+    // A stored value off the ladder (e.g. 64) must show as Default, never "—"; the other leaves normalise stored values the same way.
     s.textureCacheSamples = GraphicsHacksState.normalizedTextureCacheSamples(DOLConfigBridge.gfxSafeTextureCacheColorSamples())
     s.bboxEnabled = DOLConfigBridge.gfxHackBboxEnable()
     s.bboxSyncMode = DOLConfigBridge.gfxBboxSyncMode()

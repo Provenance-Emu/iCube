@@ -62,4 +62,23 @@ final class SettingsRowFactoryTests: XCTestCase {
     XCTAssertFalse(item.isEnabled)
     XCTAssertEqual(item.badge, "Auto")
   }
+
+  func test_action_runsItsClosure_andForwardsBadgeAndEnabled() {
+    var runs = 0
+    let item = SettingsRow.action("a", "Do it", "Does it.", icon: "star", enabled: false, badge: "3") { runs += 1 }
+    XCTAssertEqual(item.description, "Does it.")
+    XCTAssertEqual(item.icon, "star")
+    XCTAssertEqual(item.badge, "3")
+    XCTAssertFalse(item.isEnabled)
+    guard case .action(let run) = item.role else { return XCTFail("action") }
+    run()
+    XCTAssertEqual(runs, 1)
+  }
+
+  func test_destination_isADestinationRow_withAChevron() {
+    let item = SettingsRow.destination("d", "Open", "Opens a screen.", view: AnyView(EmptyView()))
+    XCTAssertEqual(item.description, "Opens a screen.")
+    XCTAssertTrue(item.showsChevron)
+    guard case .destination = item.role else { return XCTFail("destination") }
+  }
 }

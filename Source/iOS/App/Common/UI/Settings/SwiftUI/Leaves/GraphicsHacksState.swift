@@ -3,11 +3,31 @@
 
 import Foundation
 
+/// The Safe/Default/Fast texture-cache ladder; raw values are what Config stores.
+enum TextureCacheSamples: Int, CaseIterable {
+  case safe = 512
+  case standard = 128
+  case fast = 0
+}
+
+/// VI Skip mode; raw values are what Config stores (TriState: Off, On, Auto).
+enum ViSkipMode: Int, CaseIterable {
+  case off = 0
+  case on = 1
+  case auto = 2
+}
+
+/// How bounding-box values are delivered; raw values are what Config stores.
+enum BboxSyncMode: Int, CaseIterable {
+  case latched = 0
+  case forceSync = 1
+}
+
 /// Snapshot of Config for the Hacks screen. Defaults match the old view's `@State` defaults.
 struct GraphicsHacksState: Equatable {
-  var textureCacheSamples = 128
+  var textureCacheSamples = TextureCacheSamples.standard.rawValue
   var bboxEnabled = false
-  var bboxSyncMode = 0
+  var bboxSyncMode = BboxSyncMode.latched.rawValue
   var backendSupportsBbox = true
   var efbAccess = false
   var skipEfbToRam = true
@@ -20,7 +40,7 @@ struct GraphicsHacksState: Equatable {
   var vertexRounding = false
   var forceProgressive = true
   var deferEfbCopies = true
-  var viSkipMode = 2
+  var viSkipMode = ViSkipMode.auto.rawValue
   var fastTextureSampling = true
   var fastMath = true
   var useComputeEfbXfb = false
@@ -31,9 +51,9 @@ struct GraphicsHacksState: Equatable {
 
   /// The Safe/Default/Fast ladder: any stored value other than 512 or 0 shows as Default (128), never a dash.
   static func normalizedTextureCacheSamples(_ samples: Int) -> Int {
-    switch samples {
-    case 512, 0: return samples
-    default: return 128
+    switch TextureCacheSamples(rawValue: samples) {
+    case .safe, .fast: return samples
+    case .standard, nil: return TextureCacheSamples.standard.rawValue
     }
   }
 }

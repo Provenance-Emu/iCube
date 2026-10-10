@@ -86,4 +86,46 @@ final class GraphicsHacksModelBuilderTests: XCTestCase {
     state.skipXfbToRam = false
     XCTAssertEqual(model(state).item(id: "defer-efb-copies")?.isEnabled, true)
   }
+
+  /// Every toggle row emits its OWN change with the value written; a mapping slip in any closure fails here.
+  func test_everyToggleRow_emitsItsOwnChange() {
+    let expected: [(String, (Bool) -> GraphicsHacksChange)] = [
+      ("bbox", { .bboxEnabled($0) }), ("efb-access", { .efbAccess($0) }), ("skip-efb-ram", { .skipEfbToRam($0) }),
+      ("skip-xfb-ram", { .skipXfbToRam($0) }), ("immediate-xfb", { .immediateXfb($0) }),
+      ("copy-efb-scaled", { .copyEfbScaled($0) }), ("early-xfb", { .earlyXfbOutput($0) }),
+      ("skip-duplicate-xfb", { .skipDuplicateXFBs($0) }), ("efb-format-changes", { .efbFormatChanges($0) }),
+      ("vertex-rounding", { .vertexRounding($0) }), ("force-progressive", { .forceProgressive($0) }),
+      ("defer-efb-copies", { .deferEfbCopies($0) }), ("fast-texture-sampling", { .fastTextureSampling($0) }),
+      ("fast-math", { .fastMath($0) }), ("compute-efb-xfb", { .useComputeEfbXfb($0) }),
+      ("compute-vertex-decode", { .useComputeVertexDecode($0) }), ("no-mipmapping", { .noMipmapping($0) }),
+      ("gpu-efb-peek", { .gpuEfbPeekResolve($0) }), ("vi-decimate-interlace", { .viDecimateInterlace($0) }),
+    ]
+    let m = model()
+    for (id, change) in expected {
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      changes = []
+      binding.wrappedValue = true
+      XCTAssertEqual(changes, [change(true)], id)
+      changes = []
+      binding.wrappedValue = false
+      XCTAssertEqual(changes, [change(false)], id)
+    }
+  }
+
+  func test_cycleRows_emitTheirOwnChange() {
+    guard case .cycle(_, let viSkip)? = model().item(id: "vi-skip")?.role,
+          case .cycle(_, let bbox)? = model().item(id: "bbox-sync")?.role else { return XCTFail("cycle") }
+    viSkip.wrappedValue = AnyHashable(ViSkipMode.on.rawValue)
+    bbox.wrappedValue = AnyHashable(BboxSyncMode.forceSync.rawValue)
+    XCTAssertEqual(changes, [.viSkipMode(1), .bboxSyncMode(1)])
+  }
+
+  func test_cycleOptions_useTheConfigRawValues() {
+    guard case .cycle(let viSkip, _)? = model().item(id: "vi-skip")?.role,
+          case .cycle(let bbox, _)? = model().item(id: "bbox-sync")?.role,
+          case .cycle(let cache, _)? = model().item(id: "texture-cache")?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(viSkip.map { $0.1 }, [AnyHashable(0), AnyHashable(1), AnyHashable(2)])
+    XCTAssertEqual(bbox.map { $0.1 }, [AnyHashable(0), AnyHashable(1)])
+    XCTAssertEqual(cache.map { $0.1 }, [AnyHashable(512), AnyHashable(128), AnyHashable(0)])
+  }
 }

@@ -6,18 +6,18 @@ import SwiftUI
 /// Pure: snapshot in, changes out (it cannot write). Descriptions are the captions the hand-built screen showed.
 enum GraphicsHacksModelBuilder {
   static func make(state: GraphicsHacksState, apply: @escaping (GraphicsHacksChange) -> Void) -> MenuModel {
-    let skipDuplicateEnabled = !state.immediateXfb && state.viSkipMode == 0
+    let skipDuplicateEnabled = !state.immediateXfb && state.viSkipMode == ViSkipMode.off.rawValue
     let deferEfbEnabled = !(state.skipEfbToRam && state.skipXfbToRam)
     let bbox = state.backendSupportsBbox
 
     let general = MenuSection(id: "general-hacks", header: L("General Hacks"), items: [
-      SettingsRow.cycle("texture-cache", L("Texture Cache Accuracy"), [(L("Safe"), 512), (L("Default"), 128), (L("Fast"), 0)], state.textureCacheSamples,
+      SettingsRow.cycle("texture-cache", L("Texture Cache Accuracy"), [(L("Safe"), TextureCacheSamples.safe.rawValue), (L("Default"), TextureCacheSamples.standard.rawValue), (L("Fast"), TextureCacheSamples.fast.rawValue)], state.textureCacheSamples,
             L("Adjusts how strictly the GPU tracks texture updates from RAM. Safer is slower but avoids garbled text in some games."), set: { apply(.textureCacheSamples($0)) }),
       SettingsRow.toggle("bbox", L("Bounding Box Emulation"), state.bboxEnabled,
              bbox ? L("Emulates GameCube/Wii bounding-box tests on the GPU. Required by some games; leave off unless needed.")
                   : L("The current graphics backend does not support bounding box emulation on this device."),
              enabled: bbox, set: { apply(.bboxEnabled($0)) }),
-      SettingsRow.cycle("bbox-sync", L("Bounding Box Sync"), [(L("Latched"), 0), (L("Force Sync"), 1)], state.bboxSyncMode,
+      SettingsRow.cycle("bbox-sync", L("Bounding Box Sync"), [(L("Latched"), BboxSyncMode.latched.rawValue), (L("Force Sync"), BboxSyncMode.forceSync.rawValue)], state.bboxSyncMode,
             L("How iCube delivers bounding-box values. Latched serves a 1-frame-stale snapshot with no CPU stall (faster). Force Sync blocks for exact same-frame values — try it if a game's bbox-driven effects (some 2D/UI culling) look wrong."),
             enabled: state.bboxEnabled && bbox, set: { apply(.bboxSyncMode($0)) }),
       SettingsRow.toggle("efb-access", L("Enable EFB Access"), state.efbAccess,
@@ -46,7 +46,7 @@ enum GraphicsHacksModelBuilder {
              deferEfbEnabled ? L("Batches framebuffer copies to reduce overhead. Faster in most games; recommended on.")
                              : L("Unavailable while both EFB and XFB copies stay on the GPU — there is no RAM copy to defer."),
              enabled: deferEfbEnabled, set: { apply(.deferEfbCopies($0)) }),
-      SettingsRow.cycle("vi-skip", L("VI Skip Mode"), [(L("Off"), 0), (L("On"), 1), (L("Auto"), 2)], state.viSkipMode,
+      SettingsRow.cycle("vi-skip", L("VI Skip Mode"), [(L("Off"), ViSkipMode.off.rawValue), (L("On"), ViSkipMode.on.rawValue), (L("Auto"), ViSkipMode.auto.rawValue)], state.viSkipMode,
             L("Skips video-interrupt frames to gain speed. Auto is the safe choice; On is more aggressive but can cause flicker."), set: { apply(.viSkipMode($0)) }),
       SettingsRow.toggle("fast-texture-sampling", L("Fast Texture Sampling"), state.fastTextureSampling,
              L("Uses faster, less precise texture sampling. Small speed win; rarely causes minor texture artifacts. Recommended on."), set: { apply(.fastTextureSampling($0)) }),
