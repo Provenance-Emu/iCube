@@ -74,3 +74,92 @@ extension View {
   /// ButtonStyle: the card keeps its own tap, long-press, play/pause and context menu.
   func icubeCardFocus(isFocused: Bool) -> some View { modifier(ICubeCardFocus(isFocused: isFocused)) }
 }
+
+/// Shared focus treatment for rows, tiles and rail items (spec §2.4, §2.6, §3): a 4 pt focus-gradient
+/// ring, a cyan glow, a scale, and no system focus capsule. `@Environment(\.isFocused)` is only
+/// correct when read inside `makeBody`; iOS has no focus engine for a pad, so the router's polled
+/// focus comes in as `isFocusedOverride`.
+private struct ICubeFocusChrome: ViewModifier {
+  let focused: Bool
+  let pressed: Bool
+  let radius: CGFloat
+  let scale: CGFloat
+
+  func body(content: Content) -> some View {
+    content
+      .overlay(
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+          .stroke(ICubeDesign.focusGradient, lineWidth: focused ? ICubeDesign.Line.focus.rawValue : 0)
+      )
+      .shadow(color: Color(uiColor: .systemCyan).opacity(focused ? 0.5 : 0), radius: focused ? 20 : 0, x: 0, y: 0)
+      .scaleEffect(focused ? scale : 1)
+      .zIndex(focused ? 1 : 0)
+      .opacity(pressed ? 0.85 : 1)
+      .animation(ICubeDesign.Motion.focusSpring, value: focused)
+      .focusEffectDisabled()
+  }
+}
+
+/// Settings, hub, list and sheet rows (spec §3 Row).
+struct ICubeRowButtonStyle: ButtonStyle {
+  var isFocusedOverride: Bool? = nil
+  @Environment(\.isFocused) private var isFocused
+
+  #if os(tvOS)
+  private static let minHeight: CGFloat = 72
+  #else
+  private static let minHeight: CGFloat = 44
+  #endif
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
+      .padding(.vertical, ICubeDesign.Spacing.s.rawValue)
+      .frame(maxWidth: .infinity, minHeight: Self.minHeight, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+          .fill(ICubeDesign.color(.rowSurface))
+      )
+      .modifier(ICubeFocusChrome(focused: isFocusedOverride ?? isFocused, pressed: configuration.isPressed,
+                                 radius: ICubeDesign.Radius.small.rawValue, scale: ICubeDesign.Motion.rowFocusScale))
+  }
+}
+
+/// Pause and hub tiles (spec §3 Tile).
+struct ICubeTileButtonStyle: ButtonStyle {
+  var isFocusedOverride: Bool? = nil
+  @Environment(\.isFocused) private var isFocused
+
+  #if os(tvOS)
+  private static let minHeight: CGFloat = 180
+  #else
+  private static let minHeight: CGFloat = 96
+  #endif
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .padding(ICubeDesign.Spacing.m.rawValue)
+      .frame(maxWidth: .infinity, minHeight: Self.minHeight, alignment: .topLeading)
+      .background(
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
+          .fill(ICubeDesign.color(.rowSurface))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
+          .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
+      )
+      .modifier(ICubeFocusChrome(focused: isFocusedOverride ?? isFocused, pressed: configuration.isPressed,
+                                 radius: ICubeDesign.Radius.large.rawValue, scale: ICubeDesign.Motion.tileFocusScale))
+  }
+}
+
+extension View {
+  /// The one blur layer (spec §2.6): rail, sheets, info shelf, pause scrim. Never nest panels.
+  func icubePanel() -> some View {
+    background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous))
+      .overlay(
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
+          .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
+      )
+  }
+}
