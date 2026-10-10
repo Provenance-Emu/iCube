@@ -77,25 +77,3 @@ struct TopBarToggles: Equatable {
     TopBarToggles(isMuted: QuickMute.isMuted, fastForwardEnabled: TVEmulationBridge.isFastForwardEnabled())
   }
 }
-
-/// Who paused the game. A surface that pauses (controller settings, the pause menu) resumes on close, as
-/// it always did, except when the user paused from the top bar: that pause is theirs and survives it.
-enum PauseOwnership {
-  /// Set by the top bar's pause button while its pause is in force; cleared when it resumes, and by the
-  /// screen's pause poll once the game is running again. Main thread only.
-  static var pausedFromBar = false
-
-  /// Pauses unless already paused. True when the caller should resume on close: it paused the game itself,
-  /// or the game was paused by something other than the user's bar pause.
-  static func claim(isPaused: Bool, pausedFromBar: Bool = PauseOwnership.pausedFromBar, pause: () -> Void) -> Bool {
-    guard isPaused else {
-      pause()
-      return true
-    }
-    return !pausedFromBar
-  }
-
-  static func release(owned: Bool, resume: () -> Void) {
-    if owned { resume() }
-  }
-}

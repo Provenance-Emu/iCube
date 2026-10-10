@@ -30,6 +30,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // once, here, instead of per-`EmulationScreen`-appearance so a navigation transition can
     // never leave two observers racing to consume the one-shot "Start Fresh" flag.
     SaveStateService.installDidStartObserver()
+    PauseArbiter.shared.installObservers()
 
     return ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

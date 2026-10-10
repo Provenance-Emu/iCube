@@ -184,7 +184,8 @@ final class PauseGestureTracker {
       #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
       GameActivityManager.update(isPaused: true, elapsedSeconds: 0)
       #endif
-      TVEmulationBridge.pause()
+      // Pause the instant Menu is pressed; `PauseMenuView.onAppear` adopts this token a few frames later.
+      MainActor.assumeIsolated { PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest) }
       NotificationCenter.default.post(name: Notification.Name("DOLShowPauseMenu"), object: nil)
     }
   }
