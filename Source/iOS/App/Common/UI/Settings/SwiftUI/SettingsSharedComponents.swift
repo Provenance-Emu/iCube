@@ -233,21 +233,6 @@ func settingsNavCaption<Destination: View, Label: View>(
   }
 }
 
-/// Reusable Off/On/Auto picker for Metal TriState knobs (present-drawable, manual-upload).
-struct MetalTriStatePicker: View {
-  @Binding var selected: Int
-  let title: String
-  let setter: (Int) -> Void
-  var body: some View {
-    List {
-      SettingsSelectRow(label: L("Off"), checked: selected == 0) { selected = 0; setter(0) }
-      SettingsSelectRow(label: L("On"), checked: selected == 1) { selected = 1; setter(1) }
-      SettingsSelectRow(label: L("Auto"), checked: selected == 2) { selected = 2; setter(2) }
-    }
-    .navigationTitle(title)
-  }
-}
-
 /// Reset All Settings, with its confirmation. One view so the iPhone toolbar and the About leaf share the alert text
 /// (the sidebar shell has no toolbar, so About is where tvOS and iPad reach it).
 struct SettingsResetAllButton<Label: View>: View {

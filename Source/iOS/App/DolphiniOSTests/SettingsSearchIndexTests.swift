@@ -32,6 +32,11 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "memory size").contains { $0.entryID == "advanced" && ($0.rowTitle ?? "").contains("Memory Size") })
   }
 
+  func test_graphicsAdvancedRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "present drawable").contains { $0.entryID == "graphics-advanced" && ($0.rowTitle ?? "").contains("Present Drawable") })
+    XCTAssertTrue(index.hits(query: "prefetch").contains { $0.entryID == "graphics-advanced" && ($0.rowTitle ?? "").contains("Prefetch") })
+  }
+
   func test_validatorRows_areSearchable() {
     XCTAssertTrue(index.hits(query: "Validate").contains { $0.entryID == "performance-tuning" })
   }
