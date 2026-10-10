@@ -40,6 +40,10 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "sensor bar").contains { $0.entryID == "console-wii" })
   }
 
+  func test_audioRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "audio stretching").contains { $0.entryID == "audio" })
+  }
+
   func test_validatorRows_areSearchable() {
     XCTAssertTrue(index.hits(query: "Validate").contains { $0.entryID == "performance-tuning" })
   }

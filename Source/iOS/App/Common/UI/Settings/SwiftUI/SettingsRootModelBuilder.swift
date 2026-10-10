@@ -87,7 +87,9 @@ enum SettingsRootModelBuilder {
         SettingsLeafEntry(id: "shaders", title: L("Shaders"), icon: "paintbrush", description: L("Post-processing presets and their parameters.")) { ShaderSettingsView() },
       ]),
       SettingsRootSection(id: "audio", header: L("Audio"), entries: [
-        SettingsLeafEntry(id: "audio", title: L("Audio"), icon: "speaker.wave.3", description: L("Volume, DSP engine, stretching and effects.")) { ConfigAudioView() },
+        SettingsLeafEntry(id: "audio", title: L("Audio"), icon: "speaker.wave.3", description: L("Volume, DSP engine, stretching and effects."),
+                          hostsMenuScreen: true,
+                          makeModel: { ConfigAudioModelBuilder.make(state: ConfigAudioState(), apply: { _ in }) }) { ConfigAudioView() },
       ]),
       SettingsRootSection(id: "consoles", header: L("GameCube & Wii"), entries: consoles),
       SettingsRootSection(id: "controllers", header: L("Controllers"), entries: [
