@@ -4966,3 +4966,15 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Whether the emulator can generate native code on this device right now." = "Whether the emulator can generate native code on this device right now.";
 "Whether this device can provide the fast memory-access path." = "Whether this device can provide the fast memory-access path.";
 "Whether this device's JIT memory region has been authorized for iCube." = "Whether this device's JIT memory region has been authorized for iCube.";
+"Audio buffered before it is played while stretching. Higher values sound smoother but lag further behind the picture." = "Audio buffered before it is played while stretching. Higher values sound smoother but lag further behind the picture.";
+"CoreAudio (Speakers/HDMI)" = "CoreAudio (Speakers/HDMI)";
+"Follows the device's silent switch: game audio is muted while it is on." = "Follows the device's silent switch: game audio is muted while it is on.";
+"Output level of the emulated console. The pause menu's Mute badge reflects this value." = "Output level of the emulated console. The pause menu's Mute badge reflects this value.";
+"Silences audio while the speed limit is off (fast-forward), when it would otherwise play sped up." = "Silences audio while the speed limit is off (fast-forward), when it would otherwise play sped up.";
+"Stretch Latency" = "Stretch Latency";
+"Stretches audio to follow the emulation speed instead of letting it crackle or drop out when the game runs slower than full speed." = "Stretches audio to follow the emulation speed instead of letting it crackle or drop out when the game runs slower than full speed.";
+"Background Style" = "Background Style";
+"Show Game ID Subtitles" = "Show Game ID Subtitles";
+"If unsure, select 100%." = "If unsure, select 100%.";
+"300% (3x) is recommended for most games." = "300% (3x) is recommended for most games.";
+"This setting cannot be changed while emulation is active." = "This setting cannot be changed while emulation is active.";

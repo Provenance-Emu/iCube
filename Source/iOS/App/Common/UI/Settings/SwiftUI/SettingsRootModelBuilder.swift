@@ -47,8 +47,12 @@ struct SettingsRootSection: Identifiable {
 enum SettingsRootModelBuilder {
   static func sections(isIOS: Bool, achievements: Bool) -> [SettingsRootSection] {
     var consoles = [
-      SettingsLeafEntry(id: "console-gamecube", title: L("GameCube"), icon: "cube", description: L("Memory cards, slots and GameCube-only options.")) { ConfigGameCubeView() },
-      SettingsLeafEntry(id: "console-wii", title: L("Wii"), icon: "tv.and.hifispeaker.fill", description: L("System language, aspect, SD card and Wii-only options.")) { ConfigWiiView() },
+      SettingsLeafEntry(id: "console-gamecube", title: L("GameCube"), icon: "cube", description: L("Memory cards, slots and GameCube-only options."),
+                        hostsMenuScreen: true,
+                        makeModel: { ConfigGameCubeModelBuilder.make(state: ConfigGameCubeState(), apply: { _ in }) }) { ConfigGameCubeView() },
+      SettingsLeafEntry(id: "console-wii", title: L("Wii"), icon: "tv.and.hifispeaker.fill", description: L("System language, aspect, SD card and Wii-only options."),
+                        hostsMenuScreen: true,
+                        makeModel: { ConfigWiiModelBuilder.make(state: ConfigWiiState(), apply: { _ in }) }) { ConfigWiiView() },
     ]
     // ConfigAchievementsView only exists under this flag; the `achievements` argument alone would not compile without it.
     #if USE_RETRO_ACHIEVEMENTS
@@ -58,8 +62,12 @@ enum SettingsRootModelBuilder {
     #endif
     return [
       SettingsRootSection(id: "general", header: L("General"), entries: [
-        SettingsLeafEntry(id: "general", title: L("General"), icon: "gear", description: L("Dual core, cheats, speed limit and other core options.")) { ConfigGeneralView() },
-        SettingsLeafEntry(id: "interface", title: L("Interface"), icon: "menubar.rectangle", description: L("On-screen messages, confirmations and panic handling.")) { ConfigInterfaceView() },
+        SettingsLeafEntry(id: "general", title: L("General"), icon: "gear", description: L("Dual core, cheats, speed limit and other core options."),
+                          hostsMenuScreen: true,
+                          makeModel: { ConfigGeneralModelBuilder.make(state: ConfigGeneralState(), apply: { _ in }) }) { ConfigGeneralView() },
+        SettingsLeafEntry(id: "interface", title: L("Interface"), icon: "menubar.rectangle", description: L("On-screen messages, confirmations and panic handling."),
+                          hostsMenuScreen: true,
+                          makeModel: { ConfigInterfaceModelBuilder.make(state: ConfigInterfaceState(), apply: { _ in }) }) { ConfigInterfaceView() },
         SettingsLeafEntry(id: "advanced", title: L("Advanced"), icon: "cpu", description: L("Clock overrides and other expert options."),
                           hostsMenuScreen: true,
                           makeModel: { ConfigAdvancedModelBuilder.make(state: ConfigAdvancedState(), apply: { _ in }) }) { ConfigAdvancedView() },
@@ -84,7 +92,9 @@ enum SettingsRootModelBuilder {
         SettingsLeafEntry(id: "shaders", title: L("Shaders"), icon: "paintbrush", description: L("Post-processing presets and their parameters.")) { ShaderSettingsView() },
       ]),
       SettingsRootSection(id: "audio", header: L("Audio"), entries: [
-        SettingsLeafEntry(id: "audio", title: L("Audio"), icon: "speaker.wave.3", description: L("Volume, DSP engine, stretching and effects.")) { ConfigAudioView() },
+        SettingsLeafEntry(id: "audio", title: L("Audio"), icon: "speaker.wave.3", description: L("Volume, DSP engine, stretching and effects."),
+                          hostsMenuScreen: true,
+                          makeModel: { ConfigAudioModelBuilder.make(state: ConfigAudioState(), apply: { _ in }) }) { ConfigAudioView() },
       ]),
       SettingsRootSection(id: "consoles", header: L("GameCube & Wii"), entries: consoles),
       SettingsRootSection(id: "controllers", header: L("Controllers"), entries: [

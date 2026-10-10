@@ -20,6 +20,16 @@ enum SettingsRow {
              badge: badge, isEnabled: enabled, description: description)
   }
 
+  /// A direct choice: iOS shows a menu, tvOS one row per option. Unlike `cycle`, no value is committed
+  /// on the way to the one the user wants.
+  static func picker<V: Hashable>(_ id: String, _ title: String, _ options: [(String, V)], _ value: V, _ description: String,
+                                  enabled: Bool = true, badge: String? = nil, icon: String? = nil, set: @escaping (V) -> Void) -> MenuItem {
+    MenuItem(id: id, title: title, icon: icon,
+             role: .picker(options: options.map { ($0.0, AnyHashable($0.1)) },
+                           selection: Binding(get: { AnyHashable(value) }, set: { if let v = $0.base as? V { set(v) } })),
+             badge: badge, isEnabled: enabled, description: description)
+  }
+
   static func stepper(_ id: String, _ title: String, _ value: Double, range: ClosedRange<Double>, step: Double,
                       format: @escaping (Double) -> String, _ description: String,
                       enabled: Bool = true, badge: String? = nil, icon: String? = nil, set: @escaping (Double) -> Void) -> MenuItem {
