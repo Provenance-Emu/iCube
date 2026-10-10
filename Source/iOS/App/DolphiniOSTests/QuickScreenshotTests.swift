@@ -66,4 +66,23 @@ final class QuickScreenshotTests: XCTestCase {
     let third = try XCTUnwrap(QuickScreenshot.destination(gameID: "RSBE01", date: date, userDirectory: user))
     XCTAssertTrue(third.lastPathComponent.hasSuffix("-3.png"), third.lastPathComponent)
   }
+
+  func test_copyPausePreview_freshFileIsCopied() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let preview = dir.appendingPathComponent("preview.png")
+    try Data([1, 2, 3]).write(to: preview)
+    let dest = dir.appendingPathComponent("shot.png")
+    XCTAssertEqual(QuickScreenshot.copyPausePreview(from: preview, to: dest, now: Date()), .saved)
+    XCTAssertEqual(try Data(contentsOf: dest), Data([1, 2, 3]))
+  }
+
+  func test_copyPausePreview_staleFileIsRefused() throws {
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let preview = dir.appendingPathComponent("preview.png")
+    try Data([1]).write(to: preview)
+    let later = Date().addingTimeInterval(QuickScreenshot.pausePreviewFreshness + 1)
+    XCTAssertEqual(QuickScreenshot.copyPausePreview(from: preview, to: dir.appendingPathComponent("x.png"), now: later), .pausedNoFrame)
+  }
 }

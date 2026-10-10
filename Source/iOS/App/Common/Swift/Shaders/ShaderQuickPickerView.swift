@@ -344,23 +344,14 @@ struct ShaderQuickPickerView: View {
   private func apply(_ preset: ShaderPreset?) {
     guard let preset else {
       currentPath = nil
-      UserDefaults.standard.removeObject(forKey: "shader_preset_path")
-      NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-      DOLShaderPostProcessor.shared.applyPresetPath(nil)
+      ShaderQuickApply.apply(path: nil)
       return
     }
     let normalized = ShaderLibrary.normalizedPath(preset.id.path)
     currentPath = normalized
     enabled = true
-    UserDefaults.standard.set(true, forKey: "shader_enabled")
-    UserDefaults.standard.set(normalized, forKey: "shader_preset_path")
-    NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
-    // Immediate apply to the LIVE pipeline — takes visual effect in the actual
-    // game view once it resumes and a frame actually renders, since the render
-    // loop is stopped while paused. This is separate from (and does not touch)
-    // the offscreen preview rendering the cards use — see `ShaderPreviewRenderer`.
-    DOLShaderPostProcessor.shared.applyPresetPath(normalized)
-    pushMRU(normalized)
+    ShaderQuickApply.apply(path: normalized)
+    mru = UserDefaults.standard.stringArray(forKey: ShaderQuickApply.mruKey) ?? []
   }
 
   private func toggleFavorite(_ preset: ShaderPreset) {
@@ -371,14 +362,6 @@ struct ShaderQuickPickerView: View {
       favorites.insert(normalized)
     }
     UserDefaults.standard.set(Array(favorites), forKey: "shader_favorites")
-  }
-
-  private func pushMRU(_ normalized: String) {
-    var list = mru.filter { $0 != normalized }
-    list.insert(normalized, at: 0)
-    if list.count > 10 { list = Array(list.prefix(10)) }
-    mru = list
-    UserDefaults.standard.set(mru, forKey: "shader_mru")
   }
 
   /// "None" has no parameters to tune. For a real preset, this is safe to call

@@ -134,4 +134,48 @@ final class MenuModelTests: XCTestCase {
     XCTAssertFalse(MenuItem(id: "p", title: "P", role: .action({})).isCompactOnTV)
     XCTAssertTrue(MenuItem(id: "q", title: "Q", role: .action({}), isCompactOnTV: true).isCompactOnTV)
   }
+
+  // MARK: Cycle / long-press (unified menu UX spec §4.2)
+
+  private final class Box { var value: AnyHashable = AnyHashable(200) }
+
+  private func cycleItem(_ box: Box, longPress: MenuLongPress? = nil) -> MenuItem {
+    let options: [(String, AnyHashable)] = [("Off", -1), ("2x", 200), ("4x", 400)]
+    return MenuItem(
+      id: "ff", title: "Fast Forward",
+      role: .cycle(options: options, selection: Binding(get: { box.value }, set: { box.value = $0 })),
+      description: "Tap to cycle", longPress: longPress)
+  }
+
+  func test_cycleItem_derivesLongPressFromItsOptions() {
+    let box = Box()
+    guard case .options(let title, let options, _)? = cycleItem(box).effectiveLongPress else {
+      return XCTFail("a .cycle item with no explicit longPress offers its own options")
+    }
+    XCTAssertEqual(title, "Fast Forward")
+    XCTAssertEqual(options.map(\.0), ["Off", "2x", "4x"])
+  }
+
+  func test_explicitLongPress_winsOverDerived() {
+    let box = Box()
+    var ran = false
+    let item = cycleItem(box, longPress: .action { ran = true })
+    if case .action(let run)? = item.effectiveLongPress { run() } else { XCTFail("explicit long press kept") }
+    XCTAssertTrue(ran)
+  }
+
+  func test_currentValueTitle_forCycleToggleAndAction() {
+    let box = Box()
+    XCTAssertEqual(cycleItem(box).currentValueTitle, "2x")
+    box.value = AnyHashable(999)
+    XCTAssertEqual(cycleItem(box).currentValueTitle, "—", "an unknown value renders as a dash (spec §8)")
+    let on = MenuItem(id: "m", title: "Mute", role: .toggle(.constant(true)))
+    XCTAssertEqual(on.currentValueTitle, "On")
+    XCTAssertNil(MenuItem(id: "a", title: "A", role: .action {}).currentValueTitle)
+  }
+
+  func test_cycled_unknownCurrent_landsOnFirstOption() {
+    let options: [(String, AnyHashable)] = [("Off", -1), ("2x", 200)]
+    XCTAssertEqual(MenuItemRole.cycled(options: options, current: AnyHashable(999), step: 1), AnyHashable(-1))
+  }
 }

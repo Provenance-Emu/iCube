@@ -44,13 +44,14 @@ struct MenuFocusRouter {
     model: MenuModel,
     focusedID: String?,
     isActive: Bool,
-    columns: Int = 1
+    columns: Int = 1,
+    stepsPickersInGrid: Bool = true
   ) -> MenuFocusUpdate {
     guard isActive else {
       nav.resync(input, at: time)
       return MenuFocusUpdate(focusedID: focusedID)
     }
-    return MenuFocusRouter.apply(nav.update(input, at: time), model: model, focusedID: focusedID, columns: columns)
+    return MenuFocusRouter.apply(nav.update(input, at: time), model: model, focusedID: focusedID, columns: columns, stepsPickersInGrid: stepsPickersInGrid)
   }
 
   /// Multi-pad variant (D18 gap: "MenuScreen listens only to the first
@@ -85,13 +86,15 @@ struct MenuFocusRouter {
     model: MenuModel,
     focusedID: String?,
     isActive: Bool,
-    columns: Int = 1
+    columns: Int = 1,
+    stepsPickersInGrid: Bool = true
   ) -> MenuFocusUpdate {
     let connected = Set(padInputs.map(\.0))
     navByPad = navByPad.filter { connected.contains($0.key) }
 
     var current = focusedID
     var activated: String?
+    var longActivated: String?
     var didGoBack = false
     var adjust: (id: String, step: Int)?
 
@@ -105,14 +108,15 @@ struct MenuFocusRouter {
       }
       let events = padNav.update(input, at: time)
       navByPad[padID] = padNav
-      let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current, columns: columns)
+      let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current, columns: columns, stepsPickersInGrid: stepsPickersInGrid)
       current = padResult.focusedID
       if activated == nil { activated = padResult.activatedID }
+      if longActivated == nil { longActivated = padResult.longActivatedID }
       if adjust == nil { adjust = padResult.adjust }
       if padResult.didGoBack { didGoBack = true }
     }
     if let activated, adjust?.id == activated { adjust = nil }
-    return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack, adjust: adjust)
+    return MenuFocusUpdate(focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust)
   }
 
   /// Adopt the current physical input without emitting anything. `MenuScreen`
@@ -134,17 +138,20 @@ struct MenuFocusRouter {
   /// the two paths cannot silently drift apart.
   ///
   /// With `columns` > 1 (`MenuStyle.grid`), up/down move one row and d-pad left/right move
-  /// within the row (`gridMove`) instead of stepping a picker; a picker row still steps.
+  /// within the row (`gridMove`) instead of stepping a picker; a picker row still steps unless
+  /// `stepsPickersInGrid` is false (`MenuStyle.tiles`: left/right always moves focus).
   /// With 1 (a list), up/down walk the flat order and left/right only ever step a picker.
   /// Neither direction ever activates: only A does.
   private static func apply(
     _ events: [MenuControllerNav.Event],
     model: MenuModel,
     focusedID: String?,
-    columns: Int = 1
+    columns: Int = 1,
+    stepsPickersInGrid: Bool = true
   ) -> MenuFocusUpdate {
     var current = focusedID
     var activated: String?
+    var longActivated: String?
     var didGoBack = false
     var adjust: (id: String, step: Int)?
     for event in events {
@@ -161,10 +168,12 @@ struct MenuFocusRouter {
         }
       case .activate:
         if let current { activated = current }
+      case .longActivate:
+        if let current { longActivated = current }
       case .back:
         didGoBack = true
       case .adjust(let step):
-        if columns > 1, !MenuFocusRouter.isPicker(current, in: model) {
+        if columns > 1, !stepsPickersInGrid || !MenuFocusRouter.isPicker(current, in: model) {
           current = MenuFocusRouter.gridMove(current, rowStep: 0, columnStep: step, columns: columns, in: model)
         } else if let current {
           adjust = (current, step)
@@ -175,7 +184,7 @@ struct MenuFocusRouter {
     // The builders' bindings read the snapshot the model was built from, so applying both would
     // write twice from the same stale value.
     if let activated, adjust?.id == activated { adjust = nil }
-    return MenuFocusUpdate(focusedID: current, activatedID: activated, didGoBack: didGoBack, adjust: adjust)
+    return MenuFocusUpdate(focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust)
   }
 
   /// Move within the flat focusable order, clamped — no wraparound (matches
@@ -236,8 +245,11 @@ struct MenuFocusRouter {
   }
 
   private static func isPicker(_ id: String?, in model: MenuModel) -> Bool {
-    guard let id, let role = model.item(id: id)?.role, case .picker = role else { return false }
-    return true
+    guard let id, let role = model.item(id: id)?.role else { return false }
+    switch role {
+    case .picker, .cycle: return true
+    default: return false
+    }
   }
 
   /// Reconciles a live `focusedID` against a freshly rebuilt `model`.
@@ -269,6 +281,8 @@ struct MenuFocusUpdate {
   var focusedID: String?
   /// Set exactly when an activate edge fired on a currently-focused item.
   var activatedID: String?
+  /// Set when A was held past the long-press threshold on a currently-focused item (tiles only).
+  var longActivatedID: String?
   var didGoBack = false
   /// Set when a left/right edge fired on a currently-focused item.
   var adjust: (id: String, step: Int)?
@@ -276,7 +290,7 @@ struct MenuFocusUpdate {
 
 extension MenuFocusUpdate: Equatable {
   static func == (lhs: MenuFocusUpdate, rhs: MenuFocusUpdate) -> Bool {
-    lhs.focusedID == rhs.focusedID && lhs.activatedID == rhs.activatedID && lhs.didGoBack == rhs.didGoBack
+    lhs.focusedID == rhs.focusedID && lhs.activatedID == rhs.activatedID && lhs.longActivatedID == rhs.longActivatedID && lhs.didGoBack == rhs.didGoBack
       && lhs.adjust?.id == rhs.adjust?.id && lhs.adjust?.step == rhs.adjust?.step
   }
 }

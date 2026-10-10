@@ -25,6 +25,10 @@ struct MenuControllerNav: Equatable {
     var repeatInterval: TimeInterval = 0.08
     var stickEngage: Float = 0.6
     var stickRelease: Float = 0.3
+    /// Tiles: A activates on RELEASE (if shorter than `longPressDuration`) so a hold can mean
+    /// something else. Lists keep the press-edge activate.
+    var activateOnRelease = false
+    var longPressDuration: TimeInterval = 0.5
   }
 
   struct Input: Equatable {
@@ -52,6 +56,8 @@ struct MenuControllerNav: Equatable {
     case jumpSection(Int)
     /// -1 = previous option, +1 = next option, on the focused picker row.
     case adjust(Int)
+    /// A held past `Config.longPressDuration` (only with `activateOnRelease`); fires once per hold.
+    case longActivate
   }
 
   let config: Config
@@ -60,6 +66,8 @@ struct MenuControllerNav: Equatable {
   private var lastRepeat: TimeInterval = 0
   private var stickEngaged = false
   private var aLatched = false
+  private var aDownAt: TimeInterval = 0
+  private var aLongFired = false
   private var bLatched = false
   private var leftShoulderLatched = false
   private var rightShoulderLatched = false
@@ -93,10 +101,17 @@ struct MenuControllerNav: Equatable {
     if input.a {
       if !aLatched {
         aLatched = true
-        events.append(.activate)
+        aDownAt = time
+        aLongFired = false
+        if !config.activateOnRelease { events.append(.activate) }
+      } else if config.activateOnRelease, !aLongFired, time - aDownAt >= config.longPressDuration {
+        aLongFired = true
+        events.append(.longActivate)
       }
     } else {
+      if aLatched, config.activateOnRelease, !aLongFired { events.append(.activate) }
       aLatched = false
+      aLongFired = false
     }
 
     if input.b {
@@ -169,6 +184,7 @@ struct MenuControllerNav: Equatable {
     lastRepeat = time
     suppressRepeatUntilRelease = heldDirection != 0
     aLatched = input.a
+    aLongFired = input.a
     bLatched = input.b
     leftShoulderLatched = input.leftShoulder
     rightShoulderLatched = input.rightShoulder

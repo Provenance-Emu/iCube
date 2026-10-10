@@ -60,6 +60,9 @@ struct MenuItem: Identifiable {
   /// left/right steps through, instead of one row per option. For long value lists (the player
   /// screen's numeric settings), which would otherwise explode into ~20 rows each.
   var isCompactOnTV: Bool = false
+  /// One line shown in the info shelf while the item is focused.
+  var description: String?
+  var longPress: MenuLongPress?
 
   init(
     id: String,
@@ -71,7 +74,9 @@ struct MenuItem: Identifiable {
     badge: String? = nil,
     isEnabled: Bool = true,
     onCustomActivate: (() -> Void)? = nil,
-    isCompactOnTV: Bool = false
+    isCompactOnTV: Bool = false,
+    description: String? = nil,
+    longPress: MenuLongPress? = nil
   ) {
     self.id = id
     self.title = title
@@ -83,6 +88,8 @@ struct MenuItem: Identifiable {
     self.isEnabled = isEnabled
     self.onCustomActivate = onCustomActivate
     self.isCompactOnTV = isCompactOnTV
+    self.description = description
+    self.longPress = longPress
   }
 }
 
@@ -102,9 +109,51 @@ enum MenuItemRole {
   /// item's `onCustomActivate`.
   case custom(AnyView)
   case destructive(() -> Void)
+  /// Activate advances to the next option and wraps; the tile shows the current option as its badge.
+  /// A long-press opens the full list. Unlike `.picker`, this never explodes into rows on tvOS.
+  case cycle(options: [(String, AnyHashable)], selection: Binding<AnyHashable>)
+}
+
+/// What a long-press of A (or a touch long-press) on an item does (unified menu UX spec §4.2).
+enum MenuLongPress {
+  /// A picker of every value; the `.cycle` role derives this from its own options.
+  case options(title: String, options: [(String, AnyHashable)], selection: Binding<AnyHashable>)
+  /// Something else, e.g. the Shaders tile opening the full picker.
+  case action(() -> Void)
+}
+
+extension MenuItem {
+  /// The explicit long-press, else the one a `.cycle` role implies.
+  var effectiveLongPress: MenuLongPress? {
+    if let longPress { return longPress }
+    if case .cycle(let options, let selection) = role {
+      return .options(title: title, options: options, selection: selection)
+    }
+    return nil
+  }
+
+  /// The value a tile badge shows. `"—"` for a cycle/picker whose value matches no option (spec §8).
+  var currentValueTitle: String? {
+    switch role {
+    case .cycle(let options, let selection), .picker(let options, let selection):
+      return MenuItemRole.selectedTitle(options: options, current: selection.wrappedValue) ?? "—"
+    case .toggle(let binding):
+      return binding.wrappedValue ? L("On") : L("Off")
+    default:
+      return nil
+    }
+  }
 }
 
 extension MenuItemRole {
+  /// The options and selection of a role d-pad left/right steps through (`.picker`, `.cycle`).
+  var steppable: (options: [(String, AnyHashable)], selection: Binding<AnyHashable>)? {
+    switch self {
+    case .picker(let options, let selection), .cycle(let options, let selection): return (options, selection)
+    default: return nil
+    }
+  }
+
   /// The option `step` places after `current`, wrapping both ways. An unknown `current` starts
   /// from before the first option, so +1 lands on the first. `nil` when there are no options.
   static func cycled(options: [(String, AnyHashable)], current: AnyHashable, step: Int) -> AnyHashable? {
