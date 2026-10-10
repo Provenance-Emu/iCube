@@ -1,7 +1,6 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import CoreHaptics
 import GameController
 import SwiftUI
 import UIKit
@@ -11,7 +10,7 @@ import UIKit
 struct ControllerMoreSettingsView: View {
   /// Rumble destination, honored by the core rumble path (`Motor`): 0 device haptics, 1 controller,
   /// 2 both. tvOS has no device to hold, so the option is hidden there.
-  @AppStorage("rumble_destination") private var rumbleDestination = 1
+  @AppStorage(RumbleDestination.defaultsKey) private var rumbleDestination = RumbleDestination.default.rawValue
   @State private var backgroundInput = false
   #if os(iOS)
   @AppStorage(ControllerManager.connectTakesPlayer1DefaultsKey) private var connectTakesPlayer1 = true
@@ -29,14 +28,12 @@ struct ControllerMoreSettingsView: View {
           Toggle(L("Controllers Take Player 1"), isOn: $connectTakesPlayer1),
           L("A controller that connects while the on-screen controls are Player 1 becomes Player 1, even if you chose the on-screen controls there."))
         Picker(L("Rumble Output"), selection: $rumbleDestination) {
-          Text(L("Device Haptics")).tag(0)
-          Text(L("Controller")).tag(1)
-          Text(L("Both")).tag(2)
+          ForEach(RumbleDestination.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
         }
         #endif
         #if os(iOS)
         Button {
-          Self.testRumble()
+          RumbleTest.run()
         } label: {
           Label(L("Test Rumble"), systemImage: "waveform")
         }
@@ -102,53 +99,6 @@ struct ControllerMoreSettingsView: View {
   }
 
   #if os(iOS)
-  /// Pulses every connected controller's haptics and the device's, then reports what fired.
-  private static func testRumble() {
-    var controllersTestedCount = 0
-    var deviceTested = false
-    for controller in GCController.controllers() {
-      guard let haptics = controller.haptics, let engine = haptics.createEngine(withLocality: .default) else { continue }
-      do {
-        try engine.start()
-        let pattern = try CHHapticPattern(events: [
-          CHHapticEvent(eventType: .hapticTransient, parameters: [
-            CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.9),
-            CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.8),
-          ], relativeTime: 0),
-        ], parameters: [])
-        let player = try engine.makePlayer(with: pattern)
-        try player.start(atTime: 0)
-        controllersTestedCount += 1
-      } catch {}
-    }
-    if CHHapticEngine.capabilitiesForHardware().supportsHaptics {
-      do {
-        let engine = try CHHapticEngine()
-        try engine.start()
-        let pattern = try CHHapticPattern(events: [
-          CHHapticEvent(eventType: .hapticTransient, parameters: [
-            CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0),
-            CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0),
-          ], relativeTime: 0),
-        ], parameters: [])
-        let player = try engine.makePlayer(with: pattern)
-        try player.start(atTime: 0)
-        deviceTested = true
-      } catch {}
-    }
-    let message: String
-    if controllersTestedCount > 0 && deviceTested {
-      message = String(format: L("Tested %d controller(s) + device rumble"), controllersTestedCount)
-    } else if controllersTestedCount > 0 {
-      message = String(format: L("Tested %d controller(s) rumble"), controllersTestedCount)
-    } else if deviceTested {
-      message = L("Tested device rumble")
-    } else {
-      message = L("No haptic feedback available")
-    }
-    NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": message])
-  }
-
   private func reloadLitControllers() {
     litControllers = GCController.controllers().filter { $0.light != nil }
   }

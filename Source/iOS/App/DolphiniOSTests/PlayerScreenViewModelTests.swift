@@ -23,6 +23,14 @@ private final class FakeHubReader: ControllerHubReading {
   func overlayOpacity() -> Float { 1 }
   func dsuClientEnabled() -> Bool { false }
   func dsuServerCount() -> Int { 0 }
+  func isPinned(_ slot: PlayerSlot) -> Bool { false }
+  func isMotionPointerEnabled(wiimote: Int) -> Bool { false }
+  func pointerMode() -> PointerMode { .touchFollow }
+  func pointerIsThisGameOnly() -> Bool { false }
+  func backgroundInput() -> Bool { false }
+  func rumbleDestination() -> RumbleDestination { .controller }
+  func connectTakesPlayer1() -> Bool { true }
+  func touchOverlayProgrammatic() -> Bool { true }
 }
 
 @MainActor

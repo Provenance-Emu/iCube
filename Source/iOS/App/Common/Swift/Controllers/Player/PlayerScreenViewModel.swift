@@ -262,29 +262,33 @@ final class PlayerScreenViewModel {
       },
       armedControlID: capture?.row.id,
       pointerMotion: io.pointerMotion(),
-      motionPointerEnabled: slot.kind == .wiiRemote && io.isMotionPointerEnabled(wiimote: slot.port),
+      motionPointerEnabled: player.motionPointerEnabled,
       showsAdvanced: state.showsAdvanced,
       advanced: AdvancedSettingGroups.entries(for: system, attachment: player.wiiExtension).map { entry in
         AdvancedGroupState(
           owner: entry.owner, groupId: entry.groupId, title: entry.title,
           settings: io.numericSettings(owner: entry.owner, group: entry.groupId, port: slot.port))
       },
-      isPinned: io.isPinned(slot),
+      isPinned: player.isPinned,
       isSensorBarOnTop: io.isSensorBarOnTop())
   }
 
   /// The same reads, in the same shape, as `ControllerHubViewModel.reload()` makes for this port.
   private func readPlayer() -> PlayerState {
+    var player: PlayerState
     switch slot.kind {
     case .gameCube:
-      return PlayerState(
+      player = PlayerState(
         kind: .gameCube, port: slot.port, deviceQualifier: reader.boundQualifier(forGCPort: slot.port),
         wiiExtension: 0, isSideways: false)
     case .wiiRemote:
-      return PlayerState(
+      player = PlayerState(
         kind: .wiiRemote, port: slot.port, deviceQualifier: reader.boundQualifier(forWiimote: slot.port),
         wiiExtension: reader.wiiExtension(forWiimote: slot.port), isSideways: reader.isSideways(forWiimote: slot.port))
+      player.motionPointerEnabled = io.isMotionPointerEnabled(wiimote: slot.port)
     }
+    player.isPinned = io.isPinned(slot)
+    return player
   }
 
   /// Takes a snapshot and follows assignment and device changes until `stop()`. Idempotent.

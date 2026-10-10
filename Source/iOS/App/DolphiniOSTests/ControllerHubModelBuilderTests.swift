@@ -34,7 +34,18 @@ final class ControllerHubModelBuilderTests: XCTestCase {
       skinsDestination: { AnyView(EmptyView()) },
       identifyPad: identifyPad,
       dsuDestination: { AnyView(EmptyView()) },
-      moreSettingsDestination: { AnyView(EmptyView()) })
+      moreSettingsDestination: { AnyView(EmptyView()) },
+      setDevice: { _, _ in },
+      setPlaysAs: { _, _ in },
+      setPointerMode: { _ in },
+      setMotionPointer: { _, _ in },
+      setBackgroundInput: { _ in },
+      setRumbleDestination: { _ in },
+      setConnectTakesPlayer1: { _ in },
+      testRumble: {},
+      setTouchOverlayProgrammatic: { _ in },
+      resetOverlayLayouts: {},
+      lightsDestination: { AnyView(EmptyView()) })
   }
 
   /// Every port of `system`; `bound` maps a player id ("gc-1", "wii-2") to its device qualifier.
