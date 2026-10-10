@@ -17,8 +17,8 @@ enum PlaysAs: Int, CaseIterable, Hashable {
     case .gameCube: return L("GameCube Controller")
     case .wiiRemote: return L("Wii Remote")
     case .wiiNunchuk: return L("Wii Remote + Nunchuk")
-    case .wiiClassic: return L("Wii Classic Controller")
-    case .wiiSideways: return L("Wii Remote Sideways")
+    case .wiiClassic: return L("Wii Remote + Classic Controller")
+    case .wiiSideways: return L("Sideways Wii Remote")
     }
   }
 

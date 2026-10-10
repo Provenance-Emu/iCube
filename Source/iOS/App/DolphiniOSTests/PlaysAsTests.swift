@@ -13,6 +13,11 @@ final class PlaysAsTests: XCTestCase {
     }
   }
 
+  func test_titles_arePairwiseDistinct() {
+    let titles = PlaysAs.allCases.map(\.title)
+    XCTAssertEqual(Set(titles).count, PlaysAs.allCases.count, "titles: \(titles)")
+  }
+
   func test_decompose() {
     XCTAssertEqual(PlaysAs.gameCube.kind, .gameCube)
     XCTAssertEqual(PlaysAs.wiiNunchuk.wiiExtension, 1)
