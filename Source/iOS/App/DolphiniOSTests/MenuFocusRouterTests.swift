@@ -727,4 +727,20 @@ final class MenuFocusRouterTests: XCTestCase {
     model.applyAdjust(id: "missing", step: 1)
     XCTAssertEqual(value, 5)
   }
+
+  func test_reconcile_prefersTheRequestedID_whenTheFocusedRowMoved() {
+    // "b-old" vanished and "b-new" appeared elsewhere: focus follows the request, not index 1.
+    let model = MenuModel(sections: [MenuSection(id: "s", items: [item("a"), item("c"), item("b-new")])])
+    XCTAssertEqual(MenuFocusRouter.reconcile(focusedID: "b-old", previousOrder: ["a", "b-old", "c"], model: model, requestedID: "b-new"), "b-new")
+  }
+
+  func test_reconcile_keepsAFocusedIDThatStillExists_evenWithARequest() {
+    let model = MenuModel(sections: [MenuSection(id: "s", items: [item("a"), item("b")])])
+    XCTAssertEqual(MenuFocusRouter.reconcile(focusedID: "a", previousOrder: ["a", "b"], model: model, requestedID: "b"), "a")
+  }
+
+  func test_reconcile_ignoresARequestThatIsNotInTheModel() {
+    let model = MenuModel(sections: [MenuSection(id: "s", items: [item("a"), item("c")])])
+    XCTAssertEqual(MenuFocusRouter.reconcile(focusedID: "b", previousOrder: ["a", "b", "c"], model: model, requestedID: "nope"), "c", "falls back to the same-index rule")
+  }
 }

@@ -21,7 +21,17 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     setOverlayOpacity: @escaping (Float) -> Void = { _ in },
     editLayout: @escaping () -> Void = {},
     editIRArea: @escaping () -> Void = {},
-    identifyPad: @escaping (String) -> Void = { _ in }
+    identifyPad: @escaping (String) -> Void = { _ in },
+    setDevice: @escaping (PlayerState, PlayerDeviceChoice) -> Void = { _, _ in },
+    setPlaysAs: @escaping (PlayerState, PlaysAs) -> Void = { _, _ in },
+    setPointerMode: @escaping (PointerMode) -> Void = { _ in },
+    setMotionPointer: @escaping (PlayerState, Bool) -> Void = { _, _ in },
+    setBackgroundInput: @escaping (Bool) -> Void = { _ in },
+    setRumbleDestination: @escaping (RumbleDestination) -> Void = { _ in },
+    setConnectTakesPlayer1: @escaping (Bool) -> Void = { _ in },
+    testRumble: @escaping () -> Void = {},
+    setTouchOverlayProgrammatic: @escaping (Bool) -> Void = { _ in },
+    resetOverlayLayouts: @escaping () -> Void = {}
   ) -> ControllerHubActions {
     ControllerHubActions(
       playerDestination: { _ in AnyView(EmptyView()) },
@@ -34,17 +44,16 @@ final class ControllerHubModelBuilderTests: XCTestCase {
       skinsDestination: { AnyView(EmptyView()) },
       identifyPad: identifyPad,
       dsuDestination: { AnyView(EmptyView()) },
-      moreSettingsDestination: { AnyView(EmptyView()) },
-      setDevice: { _, _ in },
-      setPlaysAs: { _, _ in },
-      setPointerMode: { _ in },
-      setMotionPointer: { _, _ in },
-      setBackgroundInput: { _ in },
-      setRumbleDestination: { _ in },
-      setConnectTakesPlayer1: { _ in },
-      testRumble: {},
-      setTouchOverlayProgrammatic: { _ in },
-      resetOverlayLayouts: {},
+      setDevice: setDevice,
+      setPlaysAs: setPlaysAs,
+      setPointerMode: setPointerMode,
+      setMotionPointer: setMotionPointer,
+      setBackgroundInput: setBackgroundInput,
+      setRumbleDestination: setRumbleDestination,
+      setConnectTakesPlayer1: setConnectTakesPlayer1,
+      testRumble: testRumble,
+      setTouchOverlayProgrammatic: setTouchOverlayProgrammatic,
+      resetOverlayLayouts: resetOverlayLayouts,
       lightsDestination: { AnyView(EmptyView()) })
   }
 
@@ -55,18 +64,22 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     wiiExtension: [Int: Int] = [:],
     showAllPorts: Bool = false,
     pads: [ConnectedPadState] = [],
-    isGameRunning: Bool = true
+    isGameRunning: Bool = true,
+    isPinned: Set<String> = [],
+    pending: PendingHubChanges = PendingHubChanges()
   ) -> ControllerHubState {
     var hub = ControllerHubState.empty(system: system)
     hub.players = ControllerHubState.slots(for: system).map { slot in
       let id = (slot.kind == .gameCube ? "gc-" : "wii-") + String(slot.port)
       return PlayerState(
         kind: slot.kind, port: slot.port, deviceQualifier: bound[id] ?? "",
-        wiiExtension: slot.kind == .wiiRemote ? (wiiExtension[slot.port] ?? 0) : 0, isSideways: false)
+        wiiExtension: slot.kind == .wiiRemote ? (wiiExtension[slot.port] ?? 0) : 0, isSideways: false,
+        isPinned: isPinned.contains(id))
     }
     hub.showAllPorts = showAllPorts
     hub.pads = pads
     hub.isGameRunning = isGameRunning
+    hub.pending = pending
     return hub
   }
 
@@ -86,11 +99,11 @@ final class ControllerHubModelBuilderTests: XCTestCase {
   // MARK: Sections per platform
 
   func test_iOS_sectionOrder() {
-    XCTAssertEqual(make(state(system: .gamecube)).sections.map(\.id), ["players", "on-screen", "devices", "more", "help"])
+    XCTAssertEqual(make(state(system: .gamecube)).sections.map(\.id), ["players", "touch-controls", "devices", "setup", "help"])
   }
 
-  func test_tvOS_hasNoOnScreenControls() {
-    XCTAssertEqual(make(state(system: .gamecube), platform: .tvos).sections.map(\.id), ["players", "devices", "more", "help"])
+  func test_tvOS_hasNoTouchControls() {
+    XCTAssertEqual(make(state(system: .gamecube), platform: .tvos).sections.map(\.id), ["players", "devices", "setup", "help"])
   }
 
   // MARK: Players
@@ -107,7 +120,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
 
   func test_unboundPorts_collapseUnderShowAllPorts() {
     let model = make(state(system: .gamecube, bound: ["gc-1": Self.xbox]))
-    XCTAssertEqual(ids(model, section: "players"), ["gc-1", "show-all-ports"])
+    XCTAssertEqual(ids(model, section: "players"), ["gc-1", "gc-1-device", "show-all-ports"])
     XCTAssertEqual(model.item(id: "show-all-ports")?.title, "Show All Ports")
     XCTAssertEqual(model.item(id: "show-all-ports")?.badge, "3")
   }
@@ -116,14 +129,18 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     let model = make(state(system: .wiiAndGameCube, bound: ["wii-1": Self.touch], showAllPorts: true))
     XCTAssertEqual(
       ids(model, section: "players"),
-      ["wii-1", "wii-2", "wii-3", "wii-4", "gc-1", "gc-2", "gc-3", "gc-4", "show-all-ports"])
+      ["wii-1", "wii-1-device", "wii-1-plays-as", "wii-1-pointer",
+       "wii-2", "wii-2-device", "wii-3", "wii-3-device", "wii-4", "wii-4-device",
+       "gc-1", "gc-1-device", "gc-2", "gc-2-device", "gc-3", "gc-3-device", "gc-4", "gc-4-device", "show-all-ports"])
     XCTAssertEqual(model.item(id: "show-all-ports")?.title, "Hide Unused Ports")
     XCTAssertNil(model.item(id: "show-all-ports")?.badge)
   }
 
   func test_everyPortBound_hasNoShowAllRow() {
     let all = Dictionary(uniqueKeysWithValues: (1 ... 4).map { ("gc-\($0)", Self.xbox) })
-    XCTAssertEqual(ids(make(state(system: .gamecube, bound: all)), section: "players"), ["gc-1", "gc-2", "gc-3", "gc-4"])
+    XCTAssertEqual(
+      ids(make(state(system: .gamecube, bound: all)), section: "players"),
+      (1 ... 4).flatMap { ["gc-\($0)", "gc-\($0)-device"] }, "a GameCube title has no Plays as row, and no Show All Ports")
   }
 
   func test_nothingBound_leavesOnlyShowAllPorts() {
@@ -137,25 +154,16 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     XCTAssertTrue(toggled)
   }
 
-  func test_playerRow_namesThePortTheDeviceAndTheEmulatedController() {
-    let pad = ConnectedPadState(qualifier: Self.xbox, name: "Xbox Wireless Controller", batteryPercent: nil, isCharging: false, playerLabel: "P1")
-    let model = make(state(system: .wiiAndGameCube, bound: ["gc-1": Self.xbox, "wii-1": Self.touch], wiiExtension: [1: 1], pads: [pad]))
-    XCTAssertEqual(model.item(id: "gc-1")?.title, "Player 1")
-    XCTAssertEqual(model.item(id: "gc-1")?.subtitle, "Xbox Wireless Controller · GameCube Controller")
-    XCTAssertEqual(model.item(id: "wii-1")?.title, "Wii Remote 1")
-    XCTAssertEqual(model.item(id: "wii-1")?.subtitle, "Touchscreen · Wii Remote + Nunchuk")
-  }
-
   func test_playerRow_boundToAPadThatIsGone_saysDisconnected() {
     let model = make(state(system: .gamecube, bound: ["gc-2": "MFi/1/DualSense Wireless Controller"]))
-    XCTAssertEqual(model.item(id: "gc-2")?.subtitle, "DualSense Wireless Controller (Disconnected) · GameCube Controller")
+    XCTAssertEqual(model.item(id: "gc-2-device")?.currentValueTitle, "DualSense Wireless Controller (Disconnected)")
   }
 
   /// A DSU device is never a GCController, so it is never in the pad list; the hub must name it,
   /// not call it disconnected (the player screen's rule, decision 11).
   func test_playerRow_boundToADSUDevice_namesIt() {
     let model = make(state(system: .gamecube, bound: ["gc-2": "DSUClient/0/Pad C"]))
-    XCTAssertEqual(model.item(id: "gc-2")?.subtitle, "Pad C · GameCube Controller")
+    XCTAssertEqual(model.item(id: "gc-2-device")?.currentValueTitle, "Pad C")
   }
 
   func test_playerRow_pushesThePlayerScreen() {
@@ -163,40 +171,205 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     guard case .destination = model.item(id: "gc-1")?.role else { return XCTFail("a player row must push") }
   }
 
-  // MARK: On-Screen Controls (iOS)
+  // MARK: Player groups
 
-  func test_showHideAndStyleRows_onlyWhileAGameRuns() {
-    let running = ids(make(state(system: .gamecube, isGameRunning: true)), section: "on-screen")
-    XCTAssertTrue(running.contains("osc-visible"))
-    XCTAssertTrue(running.contains("osc-style"))
+  func test_playerGroup_titleDevicePlaysAs_andPointerOnATouchscreenWiiRow() {
+    let model = make(state(system: .wiiAndGameCube, bound: ["wii-1": Self.touch, "gc-2": Self.xbox], wiiExtension: [1: 1],
+                           pads: [ConnectedPadState(qualifier: Self.xbox, name: "Xbox", batteryPercent: nil, isCharging: false, playerLabel: nil)]))
+    XCTAssertEqual(ids(model, section: "players"), ["wii-1", "wii-1-device", "wii-1-plays-as", "wii-1-pointer", "gc-2", "gc-2-device", "gc-2-plays-as", "show-all-ports"])
+    XCTAssertEqual(model.item(id: "wii-1")?.title, "Wii Remote 1")
+    XCTAssertEqual(model.item(id: "wii-1")?.badge, "Wii Remote + Nunchuk", "the title row's badge mirrors Plays as (spec 7.1)")
+    XCTAssertEqual(model.item(id: "gc-2")?.badge, "GameCube Controller")
+    XCTAssertEqual(model.item(id: "wii-1-plays-as")?.currentValueTitle, "Wii Remote + Nunchuk")
+    XCTAssertEqual(model.item(id: "wii-1-device")?.currentValueTitle, "Touchscreen")
+    XCTAssertEqual(model.item(id: "gc-2-device")?.currentValueTitle, "Xbox")
+    XCTAssertEqual(model.item(id: "gc-2-plays-as")?.currentValueTitle, "GameCube Controller")
+  }
+
+  func test_unboundPorts_underShowAllPorts_getOnlyTitleAndDevice() {
+    let model = make(state(system: .wiiAndGameCube, bound: ["wii-1": Self.touch], showAllPorts: true))
+    let players = ids(model, section: "players")
+    for unbound in ["wii-2", "wii-3", "wii-4", "gc-1", "gc-2", "gc-3", "gc-4"] {
+      XCTAssertTrue(players.contains(unbound))
+      XCTAssertTrue(players.contains("\(unbound)-device"))
+      XCTAssertFalse(players.contains("\(unbound)-plays-as"), unbound)
+      XCTAssertFalse(players.contains("\(unbound)-pointer"), unbound)
+      XCTAssertNil(model.item(id: unbound)?.badge, "an unbound port plays as nothing")
+    }
+    XCTAssertEqual(model.item(id: "wii-2-device")?.currentValueTitle, "None")
+  }
+
+  func test_playsAs_gameCubeTitle_hasNoPlaysAsRow() {
+    let model = make(state(system: .gamecube, bound: ["gc-1": Self.xbox]))
+    XCTAssertEqual(ids(model, section: "players"), ["gc-1", "gc-1-device", "show-all-ports"])
+  }
+
+  func test_playsAs_wiiOnlyTitle_hasNoGameCubeOption() {
+    guard case .cycle(let options, _)? = make(state(system: .wii, bound: ["wii-1": Self.touch])).item(id: "wii-1-plays-as")?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["Wii Remote", "Wii Remote + Nunchuk", "Wii Remote + Classic Controller", "Sideways Wii Remote"])
+  }
+
+  func test_playsAs_cycleWritesThroughTheAction() {
+    var chosen: (String, PlaysAs)?
+    let model = make(state(system: .wiiAndGameCube, bound: ["wii-1": Self.touch]), actions(setPlaysAs: { chosen = ($0.id, $1) }))
+    guard case .cycle(let options, let selection)? = model.item(id: "wii-1-plays-as")?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["Wii Remote", "Wii Remote + Nunchuk", "Wii Remote + Classic Controller", "Sideways Wii Remote", "GameCube Controller"])
+    selection.wrappedValue = AnyHashable(PlaysAs.gameCube)
+    XCTAssertEqual(chosen?.0, "wii-1")
+    XCTAssertEqual(chosen?.1, .gameCube)
+  }
+
+  func test_pendingChoices_areShownAtOnce_whileTheGroupStaysPut() {
+    var pending = PendingHubChanges()
+    pending.playsAs["wii-1"] = .gameCube
+    pending.devices["wii-1"] = .noDevice
+    let model = make(state(system: .wiiAndGameCube, bound: ["wii-1": Self.touch], pending: pending))
+    XCTAssertEqual(model.item(id: "wii-1-plays-as")?.currentValueTitle, "GameCube Controller")
+    XCTAssertEqual(model.item(id: "wii-1-device")?.currentValueTitle, "None")
+    XCTAssertEqual(model.item(id: "wii-1")?.badge, "GameCube Controller")
+    XCTAssertNotNil(model.item(id: "wii-1-plays-as"), "the row keeps its id until the change is committed")
+  }
+
+  func test_device_cycleOffersNoneTouchscreenAndPads_andAutoOnAPinnedPort_andWritesTheChoice() {
+    var chosen: (String, PlayerDeviceChoice)?
+    let pads = [ConnectedPadState(qualifier: Self.xbox, name: "Xbox", batteryPercent: nil, isCharging: false, playerLabel: nil)]
+    let hub = state(system: .gamecube, bound: ["gc-1": Self.xbox], pads: pads, isPinned: ["gc-1"])
+    let model = make(hub, actions(setDevice: { chosen = ($0.id, $1) }))
+    guard case .cycle(let options, let selection)? = model.item(id: "gc-1-device")?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["Auto", "None", "Touchscreen", "Xbox"])
+    selection.wrappedValue = AnyHashable(PlayerDeviceChoice.touchscreen)
+    XCTAssertEqual(chosen?.0, "gc-1")
+    XCTAssertEqual(chosen?.1, .touchscreen)
+    guard case .cycle(let tvOptions, _)? = make(hub, platform: .tvos).item(id: "gc-1-device")?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(tvOptions.map(\.0), ["Auto", "None", "Xbox"], "no touchscreen on tvOS")
+    XCTAssertEqual(model.item(id: "gc-1-device")?.description, PlayerScreenHelp.devicePinned, "a pinned port explains itself")
+  }
+
+  func test_pointerRow_touchscreenWii_cyclesPointerMode_gyroPad_togglesMotion_padWithoutGyro_none() {
+    var mode: PointerMode?
+    var motion: (String, Bool)?
+    var hub = state(system: .wiiAndGameCube, bound: ["wii-1": Self.touch, "wii-2": Self.xbox, "wii-3": "MFi/1/Plain Pad"],
+                    pads: [ConnectedPadState(qualifier: Self.xbox, name: "Xbox", batteryPercent: nil, isCharging: false, playerLabel: nil, hasGyro: true),
+                           ConnectedPadState(qualifier: "MFi/1/Plain Pad", name: "Plain", batteryPercent: nil, isCharging: false, playerLabel: nil)])
+    hub.pointerMode = .gyro
+    hub.pointerIsThisGameOnly = true
+    let model = make(hub, actions(setPointerMode: { mode = $0 }, setMotionPointer: { motion = ($0.id, $1) }))
+    guard case .cycle(let options, let selection)? = model.item(id: "wii-1-pointer")?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["Touch – Follow", "Touch – Drag", "Gyro"])
+    XCTAssertEqual(model.item(id: "wii-1-pointer")?.badge, "This game", "a per-game override shows on the cycle row")
+    selection.wrappedValue = AnyHashable(PointerMode.touchDrag)
+    XCTAssertEqual(mode, .touchDrag)
+    guard case .toggle(let binding)? = model.item(id: "wii-2-pointer")?.role else { return XCTFail("toggle") }
+    binding.wrappedValue = true
+    XCTAssertEqual(motion?.0, "wii-2")
+    XCTAssertEqual(motion?.1, true)
+    XCTAssertNil(model.item(id: "wii-3-pointer"))
+    XCTAssertNil(make(hub, platform: .tvos).item(id: "wii-1-pointer"), "no touchscreen pointer on tvOS")
+  }
+
+  func test_touchControls_layoutRow_isNamedLayout_withAutoGameCubeWiiRemote_andTheRightDescription() throws {
+    let model = make(state(system: .wii))
+    XCTAssertEqual(ids(model, section: "touch-controls"), ["touch-visible", "touch-layout", "touch-opacity", "touch-editable", "touch-edit-layout", "touch-edit-ir-area", "touch-skins", "touch-reset-layouts"])
+    let layout = try XCTUnwrap(model.item(id: "touch-layout"))
+    XCTAssertEqual(layout.title, "Layout")
+    guard case .cycle(let options, _) = layout.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["Auto", "GameCube", "Wii Remote"])
+    let description = try XCTUnwrap(layout.description)
+    XCTAssertTrue(description.contains("running game's system"))
+    XCTAssertFalse(description.contains("Player 1"), "Auto follows the game, not Player 1's Plays as (EmulationScreen.isWiiSystem)")
+  }
+
+  func test_pendingLayout_isShownAtOnce() {
+    var pending = PendingHubChanges()
+    pending.overlayMode = .gamecube
+    XCTAssertEqual(make(state(system: .gamecube, pending: pending)).item(id: "touch-layout")?.currentValueTitle, "GameCube")
+  }
+
+  func test_touchControls_toggles_and_resetRun_theirActions() {
+    var programmatic: Bool?
+    var resets = 0
+    let model = make(state(system: .gamecube), actions(setTouchOverlayProgrammatic: { programmatic = $0 }, resetOverlayLayouts: { resets += 1 }))
+    guard case .toggle(let binding)? = model.item(id: "touch-editable")?.role else { return XCTFail("toggle") }
+    binding.wrappedValue = false
+    XCTAssertEqual(programmatic, false)
+    guard case .destructive(let reset)? = model.item(id: "touch-reset-layouts")?.role else { return XCTFail("destructive") }
+    reset()
+    XCTAssertEqual(resets, 1)
+  }
+
+  // MARK: Setup and lights
+
+  func test_setup_rows_iOS_and_tvOS() {
+    XCTAssertEqual(ids(make(state(system: .gamecube)), section: "setup"), ["background-input", "takes-player-1", "rumble", "rumble-test", "dsu"])
+    XCTAssertEqual(ids(make(state(system: .gamecube), platform: .tvos), section: "setup"), ["background-input", "dsu"])
+  }
+
+  func test_setup_rowsWriteThroughTheirActions() {
+    var log: [String] = []
+    let model = make(state(system: .gamecube), actions(
+      setBackgroundInput: { log.append("bg \($0)") }, setRumbleDestination: { log.append("rumble \($0)") },
+      setConnectTakesPlayer1: { log.append("takes \($0)") }, testRumble: { log.append("test") }))
+    guard case .toggle(let background)? = model.item(id: "background-input")?.role,
+          case .toggle(let takes)? = model.item(id: "takes-player-1")?.role,
+          case .cycle(let options, let rumble)? = model.item(id: "rumble")?.role else { return XCTFail("roles") }
+    background.wrappedValue = true
+    takes.wrappedValue = false
+    XCTAssertEqual(options.map(\.0), ["Device Haptics", "Controller", "Both"])
+    XCTAssertEqual(rumble.wrappedValue, AnyHashable(RumbleDestination.controller))
+    rumble.wrappedValue = AnyHashable(RumbleDestination.both)
+    run(model.item(id: "rumble-test"))
+    XCTAssertEqual(log, ["bg true", "takes false", "rumble both", "test"])
+  }
+
+  func test_lightsRow_onlyWithALitPad() {
+    var pad = ConnectedPadState(qualifier: Self.xbox, name: "Xbox", batteryPercent: nil, isCharging: false, playerLabel: nil)
+    XCTAssertFalse(ids(make(state(system: .gamecube, pads: [pad])), section: "devices").contains("lights"))
+    pad.hasLight = true
+    XCTAssertTrue(ids(make(state(system: .gamecube, pads: [pad])), section: "devices").contains("lights"))
+    XCTAssertFalse(ids(make(state(system: .gamecube, pads: [pad]), platform: .tvos), section: "devices").contains("lights"))
+  }
+
+  func test_focusRequest_isPassedToTheModel() {
+    var hub = state(system: .wiiAndGameCube, bound: ["gc-1": Self.xbox])
+    hub.focusRequest = "gc-1-plays-as"
+    XCTAssertEqual(make(hub).focusRequest, "gc-1-plays-as")
+    XCTAssertNil(make(state(system: .gamecube)).focusRequest)
+  }
+
+  // MARK: Touch Controls (iOS)
+
+  func test_showHideAndLayoutRows_onlyWhileAGameRuns() {
+    let running = ids(make(state(system: .gamecube, isGameRunning: true)), section: "touch-controls")
+    XCTAssertTrue(running.contains("touch-visible"))
+    XCTAssertTrue(running.contains("touch-layout"))
     XCTAssertEqual(
-      ids(make(state(system: .gamecube, isGameRunning: false)), section: "on-screen"),
-      ["osc-opacity", "osc-edit-layout", "osc-skins"])
+      ids(make(state(system: .gamecube, isGameRunning: false)), section: "touch-controls"),
+      ["touch-opacity", "touch-editable", "touch-edit-layout", "touch-skins", "touch-reset-layouts"])
   }
 
   func test_showHideToggle_writesThroughTheAction() {
     var written: Bool?
     let model = make(state(system: .gamecube), actions(setOverlayVisible: { written = $0 }))
-    guard case .toggle(let binding)? = model.item(id: "osc-visible")?.role else { return XCTFail("not a toggle") }
+    guard case .toggle(let binding)? = model.item(id: "touch-visible")?.role else { return XCTFail("not a toggle") }
     binding.wrappedValue = true
     XCTAssertEqual(written, true)
   }
 
-  func test_stylePicker_offersAutoGameCubeWii_andWritesThroughTheAction() {
+  func test_layoutCycle_offersAutoGameCubeWiiRemote_andWritesThroughTheAction() {
     var written: ControllerManager.OverlayMode?
     let model = make(state(system: .gamecube), actions(setOverlayMode: { written = $0 }))
-    guard case .picker(let options, let selection)? = model.item(id: "osc-style")?.role else { return XCTFail("not a picker") }
-    XCTAssertEqual(model.item(id: "osc-style")?.title, "Overlay Style")
-    XCTAssertEqual(options.map { $0.0 }, ["Auto", "GameCube", "Wii"])
+    guard case .cycle(let options, let selection)? = model.item(id: "touch-layout")?.role else { return XCTFail("not a cycle") }
+    XCTAssertEqual(model.item(id: "touch-layout")?.title, "Layout")
+    XCTAssertEqual(options.map { $0.0 }, ["Auto", "GameCube", "Wii Remote"])
     XCTAssertEqual(selection.wrappedValue, AnyHashable(ControllerManager.OverlayMode.auto))
     selection.wrappedValue = AnyHashable(ControllerManager.OverlayMode.wii)
     XCTAssertEqual(written, .wii)
   }
 
-  func test_opacityPicker_offersQuarterSteps_andWritesAFraction() {
+  func test_opacityCycle_offersQuarterSteps_andWritesAFraction() {
     var written: Float?
     let model = make(state(system: .gamecube), actions(setOverlayOpacity: { written = $0 }))
-    guard case .picker(let options, let selection)? = model.item(id: "osc-opacity")?.role else { return XCTFail("not a picker") }
+    guard case .cycle(let options, let selection)? = model.item(id: "touch-opacity")?.role else { return XCTFail("not a cycle") }
     XCTAssertEqual(options.map { $0.0 }, ["25%", "50%", "75%", "100%"])
     selection.wrappedValue = AnyHashable(75)
     XCTAssertEqual(written, 0.75)
@@ -215,42 +388,45 @@ final class ControllerHubModelBuilderTests: XCTestCase {
   func test_editLayout_runsAnAction() {
     for running in [true, false] {
       var asked = 0
-      run(make(state(system: .gamecube, isGameRunning: running), actions(editLayout: { asked += 1 })).item(id: "osc-edit-layout"))
+      run(make(state(system: .gamecube, isGameRunning: running), actions(editLayout: { asked += 1 })).item(id: "touch-edit-layout"))
       XCTAssertEqual(asked, 1, "game running: \(running)")
     }
   }
 
   func test_skins_pushes_nextToEditLayout() {
     let model = make(state(system: .gamecube))
-    guard case .destination = model.item(id: "osc-skins")?.role else {
+    guard case .destination = model.item(id: "touch-skins")?.role else {
       return XCTFail("Skins must push, not present")
     }
-    let ids = model.sections.first { $0.id == "on-screen" }?.items.map(\.id) ?? []
-    let editLayout = ids.firstIndex(of: "osc-edit-layout")
+    let ids = model.sections.first { $0.id == "touch-controls" }?.items.map(\.id) ?? []
+    let editLayout = ids.firstIndex(of: "touch-edit-layout")
     XCTAssertNotNil(editLayout)
-    XCTAssertEqual(ids.firstIndex(of: "osc-skins"), editLayout.map { $0 + 1 }, "Skins sits right after Edit Layout")
+    XCTAssertEqual(ids.firstIndex(of: "touch-skins"), editLayout.map { $0 + 1 }, "Skins sits right after Edit Layout")
   }
 
   func test_editIRArea_runsAnAction_rightAfterEditLayout_whenTheSystemHasAPointer() {
     var asked = 0
     let model = make(state(system: .wiiAndGameCube), actions(editIRArea: { asked += 1 }))
     XCTAssertEqual(
-      Array(ids(model, section: "on-screen").suffix(3)), ["osc-edit-layout", "osc-edit-ir-area", "osc-skins"])
-    run(model.item(id: "osc-edit-ir-area"))
+      Array(ids(model, section: "touch-controls").suffix(4)),
+      ["touch-edit-layout", "touch-edit-ir-area", "touch-skins", "touch-reset-layouts"])
+    run(model.item(id: "touch-edit-ir-area"))
     XCTAssertEqual(asked, 1)
-    XCTAssertNotNil(make(state(system: .both, isGameRunning: false)).item(id: "osc-edit-ir-area"))
+    XCTAssertNotNil(make(state(system: .both, isGameRunning: false)).item(id: "touch-edit-ir-area"))
   }
 
   func test_editIRArea_hiddenInAGameCubeGame() {
-    XCTAssertNil(make(state(system: .gamecube)).item(id: "osc-edit-ir-area"))
+    XCTAssertNil(make(state(system: .gamecube)).item(id: "touch-edit-ir-area"))
   }
 
-  func test_skins_hiddenOnTvOS() {
-    XCTAssertNil(make(state(system: .gamecube), platform: .tvos).item(id: "osc-skins"))
+  func test_skins_hiddenOnTvOS_andSoIsTheWholeSection() {
+    let model = make(state(system: .gamecube), platform: .tvos)
+    XCTAssertNil(model.item(id: "touch-skins"))
+    XCTAssertNil(model.sections.first { $0.id == "touch-controls" })
   }
 
   func test_skins_listedWhenNoGameRuns() {
-    XCTAssertNotNil(make(state(system: .both, isGameRunning: false)).item(id: "osc-skins"))
+    XCTAssertNotNil(make(state(system: .both, isGameRunning: false)).item(id: "touch-skins"))
   }
 
   // MARK: Connected Devices
@@ -300,13 +476,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     XCTAssertEqual(make(hub).item(id: "dsu")?.subtitle, "On · 1 server")
   }
 
-  // MARK: More and Help
-
-  func test_moreSettings_pushes() {
-    guard case .destination = make(state(system: .gamecube)).item(id: "more-settings")?.role else {
-      return XCTFail("More Controller Settings must push")
-    }
-  }
+  // MARK: Help
 
   /// A tvOS List scrolls only by moving focus, and a disabled row takes no focus, so Help rows are
   /// enabled no-op actions, or they would be unreachable below the fold.

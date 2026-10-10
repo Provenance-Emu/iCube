@@ -62,23 +62,28 @@ enum PlayerScreenModelBuilder {
     }
   }
 
+  /// The Wii pointer modes a touchscreen Wii Remote offers, in row order. The hub's Pointer row uses this list too.
+  static let pointerModes: [PointerMode] = [.touchFollow, .touchDrag, .gyro]
+
   /// The Device list: Auto on a pinned port, None, Touchscreen (iOS), each connected pad, and the
-  /// bound device when it is none of those (a disconnected pad, a DSU device), so the list can mark
-  /// it current.
-  static func deviceOptions(state: PlayerScreenState, platform: PlatformKind) -> [DeviceOption] {
+  /// current device when it is a pad that is not connected (a disconnected pad, a DSU device), so the
+  /// list can mark it current. The player screen and the hub both build their lists here.
+  static func deviceOptions(isPinned: Bool, current: PlayerDeviceChoice, pads: [ConnectedPadState],
+                            currentTitle: String, platform: PlatformKind) -> [DeviceOption] {
     var options: [DeviceOption] = []
-    if state.isPinned {
-      options.append(DeviceOption(choice: .automatic, title: L("Auto")))
-    }
+    if isPinned { options.append(DeviceOption(choice: .automatic, title: L("Auto"))) }
     options.append(DeviceOption(choice: .noDevice, title: L("None")))
-    if platform == .ios {
-      options.append(DeviceOption(choice: .touchscreen, title: L("Touchscreen")))
-    }
-    options += state.pads.map { DeviceOption(choice: .pad($0.qualifier), title: $0.name) }
-    if case .pad = state.deviceChoice, state.boundPad == nil {
-      options.append(DeviceOption(choice: state.deviceChoice, title: deviceSummary(state)))
+    if platform == .ios { options.append(DeviceOption(choice: .touchscreen, title: L("Touchscreen"))) }
+    options += pads.map { DeviceOption(choice: .pad($0.qualifier), title: $0.name) }
+    if case .pad(let qualifier) = current, !pads.contains(where: { $0.qualifier == qualifier }) {
+      options.append(DeviceOption(choice: current, title: currentTitle))
     }
     return options
+  }
+
+  static func deviceOptions(state: PlayerScreenState, platform: PlatformKind) -> [DeviceOption] {
+    deviceOptions(isPinned: state.isPinned, current: state.deviceChoice, pads: state.pads,
+                  currentTitle: deviceSummary(state), platform: platform)
   }
 
   /// "Xbox Wireless Controller" from `MFi/0/Xbox Wireless Controller`, as the hub shows it.
@@ -199,12 +204,11 @@ enum PlayerScreenModelBuilder {
       ])
     }
     let motion = state.pointerMotion
-    let modes: [PointerMode] = [.touchFollow, .touchDrag, .gyro]
     var items = [
       MenuItem(
         id: "pointer-mode", title: L("Pointer"), subtitle: motion.pointerIsThisGameOnly ? L("This game only") : nil,
         icon: motion.pointerMode.systemImage,
-        role: .picker(options: modes.map { ($0.title, AnyHashable($0)) }, selection: Binding(
+        role: .picker(options: Self.pointerModes.map { ($0.title, AnyHashable($0)) }, selection: Binding(
           get: { AnyHashable(motion.pointerMode) },
           set: { if let mode = $0.base as? PointerMode { actions.setPointerMode(mode) } }))),
       MenuItem(id: "pointer-recenter", title: L("Recenter Pointer"), icon: "scope", role: .action(actions.recenterPointer)),

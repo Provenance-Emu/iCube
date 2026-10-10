@@ -14,9 +14,12 @@ import SwiftUI
 /// protocol split).
 struct MenuModel {
   var sections: [MenuSection]
+  /// An id the host wants focused after a rebuild that MOVED the focused row; never overrides a focused id that still exists.
+  var focusRequest: String?
 
-  init(sections: [MenuSection] = []) {
+  init(sections: [MenuSection] = [], focusRequest: String? = nil) {
     self.sections = sections
+    self.focusRequest = focusRequest
   }
 }
 

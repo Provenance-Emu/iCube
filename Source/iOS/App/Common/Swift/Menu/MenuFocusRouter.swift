@@ -289,12 +289,15 @@ struct MenuFocusRouter {
   /// used to occupy (from `previousOrder`, captured before the rebuild),
   /// clamped to the new order, and only falls back to the first item when
   /// even that can't be resolved (e.g. `focusedID` was never in
-  /// `previousOrder` either).
-  static func reconcile(focusedID: String?, previousOrder: [String], model: MenuModel) -> String? {
+  /// `previousOrder` either). A vanished id the host MOVED (the hub re-ids a
+  /// player row across Wii and GameCube) follows `requestedID` first, when
+  /// the model has it; a focused id that still exists is never overridden.
+  static func reconcile(focusedID: String?, previousOrder: [String], model: MenuModel, requestedID: String? = nil) -> String? {
     let order = model.focusableIDs
     guard !order.isEmpty else { return nil }
     guard let focusedID else { return order.first }
     if order.contains(focusedID) { return focusedID }
+    if let requestedID, order.contains(requestedID) { return requestedID }
     if let oldIndex = previousOrder.firstIndex(of: focusedID) {
       return order[min(oldIndex, order.count - 1)]
     }

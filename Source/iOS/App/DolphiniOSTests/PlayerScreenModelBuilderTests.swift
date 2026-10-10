@@ -180,6 +180,16 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(dsu.last, DeviceOption(choice: .pad(Self.dsu), title: "Pad C"))
   }
 
+  /// The shared overload the hub uses: a pinned port offers Auto, and the current pad is listed even
+  /// when it is not connected.
+  func test_deviceOptions_sharedOverload_listsAutoFirstAndTheCurrentPadLast() {
+    let options = PlayerScreenModelBuilder.deviceOptions(
+      isPinned: true, current: .pad(Self.dualSense), pads: [pad(Self.xbox, "Xbox")],
+      currentTitle: "DualSense (Disconnected)", platform: .ios)
+    XCTAssertEqual(options.first, DeviceOption(choice: .automatic, title: "Auto"))
+    XCTAssertEqual(options.last, DeviceOption(choice: .pad(Self.dualSense), title: "DualSense (Disconnected)"))
+  }
+
   // MARK: Pointer & Motion only where it applies (decisions 2, 4, 7)
 
   func test_tvOS_hasNoPointerAndMotion() {

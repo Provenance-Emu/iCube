@@ -185,10 +185,14 @@ struct MenuScreen: View {
         // (focusedID still nil) must not be given one just because the model
         // was rebuilt.
         guard focusedID != nil else { return }
-        focusedID = MenuFocusRouter.reconcile(focusedID: focusedID, previousOrder: oldOrder, model: model)
+        focusedID = MenuFocusRouter.reconcile(focusedID: focusedID, previousOrder: oldOrder, model: model, requestedID: model.focusRequest)
       }
       #else
       .onExitCommand { onBack?() }
+      // tvOS native focus has no router: move it to the host's requested row once the list changed.
+      .onChange(of: model.focusRequest) { _, id in
+        if let id, model.focusableIDs.contains(id) { tvFocusedID = id }
+      }
       #endif
   }
 

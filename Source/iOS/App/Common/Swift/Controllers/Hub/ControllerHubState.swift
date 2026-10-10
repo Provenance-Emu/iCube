@@ -204,7 +204,6 @@ struct ControllerHubActions {
   /// The pad's qualifier.
   var identifyPad: (String) -> Void
   var dsuDestination: () -> AnyView
-  var moreSettingsDestination: () -> AnyView
   /// Device choice for a row; settles before it is written (ruling H4).
   var setDevice: (PlayerState, PlayerDeviceChoice) -> Void
   /// Plays as choice for a row; settles before it is written.

@@ -267,7 +267,6 @@ final class ControllerHubViewModel {
       },
       // Plain lists, not menus: they get pad Back from the modifier (Phase 2 left them touch-only).
       dsuDestination: { AnyView(DSUSettingsView().padBackNavigation()) },
-      moreSettingsDestination: { AnyView(ControllerMoreSettingsView().padBackNavigation()) },
       setDevice: { [weak self] player, choice in
         self?.chooseDevice(player, choice)
       },
