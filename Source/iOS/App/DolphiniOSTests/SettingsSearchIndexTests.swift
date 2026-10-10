@@ -44,6 +44,14 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "audio stretching").contains { $0.entryID == "audio" })
   }
 
+  func test_interfaceRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "panic handlers").contains { $0.entryID == "interface" })
+  }
+
+  func test_generalRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "dual core").contains { $0.entryID == "general" })
+  }
+
   func test_validatorRows_areSearchable() {
     XCTAssertTrue(index.hits(query: "Validate").contains { $0.entryID == "performance-tuning" })
   }

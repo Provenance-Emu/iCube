@@ -4960,3 +4960,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Silences audio while the speed limit is off (fast-forward), when it would otherwise play sped up." = "Silences audio while the speed limit is off (fast-forward), when it would otherwise play sped up.";
 "Stretch Latency" = "Stretch Latency";
 "Stretches audio to follow the emulation speed instead of letting it crackle or drop out when the game runs slower than full speed." = "Stretches audio to follow the emulation speed instead of letting it crackle or drop out when the game runs slower than full speed.";
+"Background Style" = "Background Style";
+"Show Game ID Subtitles" = "Show Game ID Subtitles";
+"If unsure, select 100%." = "If unsure, select 100%.";
+"300% (3x) is recommended for most games." = "300% (3x) is recommended for most games.";
+"This setting cannot be changed while emulation is active." = "This setting cannot be changed while emulation is active.";
