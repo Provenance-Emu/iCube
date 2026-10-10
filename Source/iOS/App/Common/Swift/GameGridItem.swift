@@ -504,52 +504,7 @@ struct GameGridItem: View {
             }
           }
         }
-        .overlay(
-          // Award-winning focus glow with GameCube/Wii theming
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(
-              LinearGradient(
-                colors: isFocused ? [
-                  Color.cyan.opacity(0.95),
-                  Color(.dolphinTint).opacity(0.9),
-                  Color.purple.opacity(0.95),
-                  Color.cyan.opacity(0.95)
-                ] : [Color.clear],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              ),
-              lineWidth: isFocused ? 8 : 0
-            )
-            .shadow(color: .cyan.opacity(isFocused ? 0.8 : 0), radius: isFocused ? 25 : 0)
-            .shadow(color: .blue.opacity(isFocused ? 0.6 : 0), radius: isFocused ? 35 : 0)
-            .shadow(color: .purple.opacity(isFocused ? 0.7 : 0), radius: isFocused ? 45 : 0)
-            .animation(.easeInOut(duration: 0.6), value: isFocused)
-        )
-        .overlay(
-          // Inner highlight for premium feel
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .stroke(
-              Color.white.opacity(isFocused ? 0.4 : 0),
-              lineWidth: isFocused ? 2 : 0
-            )
-            .padding(4)
-            .animation(.easeInOut(duration: 0.4), value: isFocused)
-        )
-        .shadow(
-          color: Color.black.opacity(isFocused ? 0.4 : 0.2),
-          radius: isFocused ? 20 : 8,
-          x: 0,
-          y: isFocused ? 12 : 6
-        )
-
-        if isFocused {
-          VStack { LinearGradient(colors: [Color.white.opacity(0.2), .clear], startPoint: .top, endPoint: .center)
-            Spacer()
-          }
-          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-          .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height)
-          .allowsHitTesting(false)
-        }
+        .icubeCardArtFocus(isFocused: isFocused)
 
         if let icon = remoteIconName {
           ZStack {
@@ -657,19 +612,7 @@ struct GameGridItem: View {
       }
     }
     .frame(width: LibraryLayout.cardSize.width)
-    .scaleEffect(isFocused ? 1.08 : 1.0)
-    .rotation3DEffect(
-      .degrees(isFocused ? 5 : 2),
-      axis: (x: 0.1, y: 1.0, z: 0),
-      perspective: isFocused ? 0.8 : 1.0
-    )
-    .shadow(
-      color: .black.opacity(isFocused ? 0.4 : 0.2),
-      radius: isFocused ? 20 : 8,
-      x: 0,
-      y: isFocused ? 12 : 4
-    )
-    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isFocused)
+    .icubeCardFocus(isFocused: isFocused)
     .focusable(true) { focused in
       withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
         isFocused = focused
