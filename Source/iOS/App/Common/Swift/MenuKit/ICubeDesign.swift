@@ -13,6 +13,24 @@ import UIKit
 struct ICubeDesign {
   static let standard = ICubeDesign()
 
+  // MARK: Menu kit (carried over from MenuTheme; step 2 moves these onto the roles below)
+
+  /// The app's AccentColor asset (#8EC5F9 in both appearances), not the adaptive `accent` role.
+  var tileAccent: Color = .accentColor
+  var tileFill: Material = .ultraThinMaterial
+  var cornerRadius: CGFloat = Radius.large.rawValue
+  var focusRingWidth: CGFloat = Line.focus.rawValue
+  var focusScale: CGFloat = Motion.tileFocusScale
+  #if os(tvOS)
+  var tileMinHeight: CGFloat = 180
+  var shelfHeight: CGFloat = 80
+  var tileTitleFont: Font = .headline
+  #else
+  var tileMinHeight: CGFloat = 96
+  var shelfHeight: CGFloat = 56
+  var tileTitleFont: Font = .subheadline.weight(.semibold)
+  #endif
+
   // MARK: Type
 
   /// The six type roles (spec §2.1). There are no other text sizes.

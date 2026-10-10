@@ -12,14 +12,14 @@ import SwiftUI
 struct FocusButtonStyle: ButtonStyle {
   var isFocusedOverride: Bool? = nil
   @Environment(\.isFocused) private var isFocused
-  @Environment(\.menuTheme) private var theme
+  @Environment(\.icube) private var theme
 
   func makeBody(configuration: Configuration) -> some View {
     let focused = isFocusedOverride ?? isFocused
     configuration.label
       .overlay(
         RoundedRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
-          .stroke(theme.accent, lineWidth: focused ? theme.focusRingWidth : 0)
+          .stroke(theme.tileAccent, lineWidth: focused ? theme.focusRingWidth : 0)
       )
       .scaleEffect(focused ? theme.focusScale : 1)
       .zIndex(focused ? 1 : 0)

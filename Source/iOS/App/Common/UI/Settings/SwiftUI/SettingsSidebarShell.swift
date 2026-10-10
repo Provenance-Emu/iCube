@@ -14,7 +14,7 @@ struct SettingsSidebarShell: View {
 
   @State private var selectedID: String?
   @FocusState private var sidebarFocus: String?
-  @Environment(\.menuTheme) private var theme
+  @Environment(\.icube) private var theme
   #if os(tvOS)
   @State private var openedAt = Date()
   @Environment(\.dismiss) private var dismiss
@@ -144,7 +144,7 @@ struct SettingsSidebarShell: View {
               .frame(maxWidth: .infinity, alignment: .leading)
               .background(
                 RoundedRectangle(cornerRadius: Layout.rowRadius, style: .continuous)
-                  .fill(selectedID == entry.id ? theme.accent.opacity(Layout.selectedOpacity) : .clear))
+                  .fill(selectedID == entry.id ? theme.tileAccent.opacity(Layout.selectedOpacity) : .clear))
             }
             .buttonStyle(FocusButtonStyle())
             .focused($sidebarFocus, equals: entry.id)

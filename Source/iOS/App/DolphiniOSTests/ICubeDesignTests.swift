@@ -45,6 +45,16 @@ final class ICubeDesignTests: XCTestCase {
     XCTAssertEqual(ICubeDesign.Line.allCases.map(\.rawValue), [1, 4])
   }
 
+  /// The menu kit's values carried over unchanged from MenuTheme; step 2 restyles them.
+  func test_menuKitValues_unchangedFromMenuTheme() {
+    let icube = ICubeDesign.standard
+    XCTAssertEqual(icube.cornerRadius, 16)
+    XCTAssertEqual(icube.focusRingWidth, 4)
+    XCTAssertEqual(icube.focusScale, 1.06)
+    XCTAssertEqual(icube.tileMinHeight, 96) // iOS column; tvOS is 180
+    XCTAssertEqual(icube.shelfHeight, 56) // iOS column; tvOS is 80
+  }
+
   func test_colorRoles_matchSpecHex() {
     let light = UITraitCollection(userInterfaceStyle: .light)
     let dark = UITraitCollection(userInterfaceStyle: .dark)

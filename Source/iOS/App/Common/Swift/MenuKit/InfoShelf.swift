@@ -9,7 +9,7 @@ import SwiftUI
 struct InfoShelf: View {
   let text: String?
   let value: String?
-  @Environment(\.menuTheme) private var theme
+  @Environment(\.icube) private var theme
 
   var body: some View {
     HStack(spacing: 10) {

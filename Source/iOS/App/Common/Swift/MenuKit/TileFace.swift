@@ -15,7 +15,7 @@ struct TileFace: View {
   let isEnabled: Bool
   /// Short variant for compact-height layouts (iPhone landscape): icon and title on one line.
   var isCompact: Bool = false
-  @Environment(\.menuTheme) private var theme
+  @Environment(\.icube) private var theme
 
   #if os(tvOS)
   private static let regularPadding: CGFloat = 14
