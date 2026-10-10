@@ -11,6 +11,7 @@ struct ConfigGeneralView: View {
   var body: some View {
     SettingsLeafScreen(model: ConfigGeneralModelBuilder.make(state: state, apply: apply), title: L("General"), sync: sync)
       .onAppear(perform: seedFallbackRegion)
+      .onReceive(NotificationCenter.default.publisher(for: .DOLConfigChanged)) { _ in seedFallbackRegion() }
   }
 
   private func sync() {
@@ -29,8 +30,9 @@ struct ConfigGeneralView: View {
     state = s
   }
 
-  /// The one write outside `apply`: Config holding the Error region is replaced with NTSC-U, as the old `syncFromConfig`
-  /// did. `sync()` itself only displays NTSC-U in that case, so the order of the two appear hooks does not matter.
+  /// The one write outside `apply`: Config holding the Error region is replaced with NTSC-U, on appear and on every Config change
+  /// (a reset or game-INI load), as the old `syncFromConfig` did on each sync. The write re-posts the change once; the second
+  /// pass sees a valid region, `fallbackRegionSeed` returns nil, and it stops. `sync()` itself only displays NTSC-U in that case.
   private func seedFallbackRegion() {
     if let region = ConfigGeneralState.fallbackRegionSeed(configRaw: DOLConfigBridge.mainFallbackRegion()) {
       DOLConfigBridge.setMainFallbackRegion(region.rawValue)
