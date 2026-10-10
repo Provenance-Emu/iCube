@@ -63,6 +63,13 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
     XCTAssertEqual(options.map { $0.1 }, [0, 1, 2, 3, 4].map { AnyHashable($0) })
   }
 
+  func test_efbScale_storedAboveMax_keepsItsRealLabel() {
+    let m = model(state { $0.efbMaxScale = 4; $0.efbScale = 6 })
+    guard case .cycle(let options, _)? = m.item(id: "efb-scale")?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map { $0.0 }.suffix(3), ["4x", "5x", "6x"])
+    XCTAssertEqual(m.item(id: "efb-scale")?.currentValueTitle, "6x")
+  }
+
   func test_efbScale_options_atMaxScaleOne_areAutoAndNativeOnly() {
     guard case .cycle(let options, _)? = model(state { $0.efbMaxScale = 1 }).item(id: "efb-scale")?.role else { return XCTFail("cycle") }
     XCTAssertEqual(options.map { $0.0 }, ["Auto (fit window)", "1x (Native)"])

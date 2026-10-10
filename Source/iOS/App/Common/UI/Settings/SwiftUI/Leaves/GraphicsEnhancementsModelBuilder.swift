@@ -10,14 +10,14 @@ enum GraphicsEnhancementsModelBuilder {
 
     // Resolver step #3: while an auto controller or the game drives the key, the manual choice would not apply until the override clears.
     let resolution = MenuSection(id: "internal-resolution", header: L("Internal Resolution"), items: [
-      SettingsRow.cycle("efb-scale", L("Internal Resolution"), efbScaleOptions(maxScale: state.efbMaxScale), state.efbScale,
+      SettingsRow.cycle("efb-scale", L("Internal Resolution"), efbScaleOptions(maxScale: max(state.efbMaxScale, state.efbScale)), state.efbScale,
             L("Renders the game above native resolution for a sharper image. Higher costs more GPU; on the CPU-bound path 1x–2x is usually plenty."),
             enabled: state.efbOverride == .none, badge: ConfigOverrideBadge.title(for: state.efbOverride), set: { apply(.efbScale($0)) }),
     ])
     let filtering = MenuSection(id: "texture-filtering", header: L("Texture Filtering"), items: [
-      SettingsRow.cycle("anisotropy", L("Anisotropic Filtering"), GraphicsEnhancementsState.anisotropyLadder.map { ("\($0)x", $0) }, state.anisotropy,
+      SettingsRow.cycle("anisotropy", L("Anisotropic Filtering"), GraphicsEnhancementsState.anisotropyLadder.map { (multiplier($0), $0) }, state.anisotropy,
             L("Sharpens textures viewed at steep angles (floors, walls). Cheap on modern GPUs; 4x–16x is a safe quality win."), set: { apply(.anisotropy($0)) }),
-      SettingsRow.cycle("msaa", L("Anti-Aliasing (MSAA)"), MsaaSamples.allCases.map { ($0 == .none ? L("None") : "\($0.rawValue)x", $0.rawValue) }, state.msaa,
+      SettingsRow.cycle("msaa", L("Anti-Aliasing (MSAA)"), MsaaSamples.allCases.map { ($0 == .none ? L("None") : multiplier($0.rawValue), $0.rawValue) }, state.msaa,
             L("Multisample anti-aliasing smooths jagged polygon edges. Higher costs more GPU. The Metal backend clamps unsupported sample counts automatically."),
             set: { apply(.msaa($0)) }),
       SettingsRow.toggle("ssaa", L("Supersampling (SSAA)"), state.ssaa,
@@ -68,11 +68,14 @@ enum GraphicsEnhancementsModelBuilder {
     return MenuModel(sections: [resolution, filtering, enhancements, compatibility])
   }
 
-  /// Auto, 1x (Native), then 2x ... maxScale. Empty-safe for a maxScale below 2.
+  /// "2x"; the one place a scale or sample count becomes a label.
+  private static func multiplier(_ value: Int) -> String { "\(value)x" }
+
+  /// Auto, 1x (Native), then 2x ... maxScale. Empty-safe for a maxScale below 2. The caller passes at least the stored scale, so a value above the current max keeps its real label.
   private static func efbScaleOptions(maxScale: Int) -> [(String, Int)] {
     let first = EfbScaleChoice.native.rawValue + 1
-    return [(L("Auto (fit window)"), EfbScaleChoice.auto.rawValue), ("1x (\(L("Native")))", EfbScaleChoice.native.rawValue)]
-      + stride(from: first, through: maxScale, by: 1).map { ("\($0)x", $0) }
+    return [(L("Auto (fit window)"), EfbScaleChoice.auto.rawValue), ("\(multiplier(EfbScaleChoice.native.rawValue)) (\(L("Native")))", EfbScaleChoice.native.rawValue)]
+      + stride(from: first, through: maxScale, by: 1).map { (multiplier($0), $0) }
   }
 }
 
