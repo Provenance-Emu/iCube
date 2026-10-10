@@ -21,7 +21,7 @@ struct PerformanceTuningView: View {
     s.engine = CpuEngine.from(raw: DOLConfigBridge.mainCpuCore())
     s.mmu = DOLConfigBridge.mainMMU()
     s.adaptiveClock = defaults.bool(forKey: PerformanceTuningDefaultsKey.adaptiveClock)
-    s.vertexLoaderMode = VertexLoaderMode.storedRawValue(defaults.object(forKey: PerformanceTuningDefaultsKey.vertexLoaderMode) == nil ? nil : defaults.integer(forKey: PerformanceTuningDefaultsKey.vertexLoaderMode))
+    s.vertexLoaderMode = VertexLoaderMode.storedRawValue(defaults.object(forKey: PerformanceTuningDefaultsKey.vertexLoaderMode) as? Int)
     s.pauseOnPanic = DOLConfigBridge.mainPauseOnPanic()
     s.writeBackCache = DOLConfigBridge.mainAccurateCpuCache()
     s.disableICache = DOLConfigBridge.mainDisableICache()
