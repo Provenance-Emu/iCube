@@ -4853,3 +4853,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Where a touch moves the Wii pointer." = "Where a touch moves the Wii pointer.";
 "Which on-screen controller is drawn. Auto follows the running game's system and the attached controllers, not any player's Plays as." = "Which on-screen controller is drawn. Auto follows the running game's system and the attached controllers, not any player's Plays as.";
 "%@ is in use. Change that player's device first." = "%@ is in use. Change that player's device first.";
+"Installed texture packs total %@, a large share of this device's memory. Prefetching them can crash the game; turn Prefetch off or remove packs you don't use." = "Installed texture packs total %@, a large share of this device's memory. Prefetching them can crash the game; turn Prefetch off or remove packs you don't use.";
