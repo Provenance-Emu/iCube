@@ -160,8 +160,6 @@ struct PlayerScreenActions {
   var resetProfile: () -> Void
   /// Asks to unbind every control (the host's confirmation does it).
   var clearAll: () -> Void
-  var setExtension: (Int) -> Void
-  var setSideways: (Bool) -> Void
   /// Arms the row's capture, or cancels it when that row is the armed one.
   var toggleCapture: (RemapControlRow) -> Void
   var clearBinding: (RemapControlRow) -> Void
@@ -179,4 +177,8 @@ struct PlayerScreenActions {
   var toggleAdvanced: () -> Void
   var setNumericSetting: (NumericSettingState, Double) -> Void
   var expressionDestination: (RemapControlRow) -> AnyView
+  /// Pushes Advanced Motion (the motion sensor's own options), from Pointer & Motion.
+  var advancedMotionDestination: () -> AnyView
+  /// Pushes On-Screen Stick Feel, for a port bound to the touchscreen.
+  var stickFeelDestination: () -> AnyView
 }

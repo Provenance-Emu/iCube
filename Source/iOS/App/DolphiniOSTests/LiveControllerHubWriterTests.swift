@@ -123,12 +123,32 @@ final class LiveControllerHubWriterTests: XCTestCase {
   // MARK: Passthrough
 
   @MainActor
-  func test_wiimoteAndPointerSettings_goThroughTheIO() {
+  func test_pointerSettings_goThroughTheIO() {
     let (writer, _, io) = make()
-    writer.setExtension(2, wiimote: 1)
-    writer.setSideways(true, wiimote: 1)
     writer.setPointerMode(.gyro)
     writer.setMotionPointer(false, wiimote: 3)
-    XCTAssertEqual(io.writes, ["extension:2", "sideways:true", "pointer:gyro", "motion-pointer:false"])
+    XCTAssertEqual(io.writes, ["pointer:gyro", "motion-pointer:false"])
+  }
+
+  /// Extension and Sideways go straight to `WiimoteSlotOptions`, which is the bridge; the fake IO
+  /// sees nothing, and the real setting reads back.
+  @MainActor
+  func test_extensionAndSideways_goToWiimoteSlotOptions_notTheIO() {
+    let (writer, _, io) = make()
+    let wiimote = 4
+    let extensionBefore = WiimoteSlotOptions.selectedExtension(forWiimote: wiimote)
+    let sidewaysBefore = WiimoteSlotOptions.isSideways(forWiimote: wiimote)
+    defer {
+      WiimoteSlotOptions.setExtension(extensionBefore, forWiimote: wiimote)
+      WiimoteSlotOptions.setSideways(sidewaysBefore, forWiimote: wiimote)
+    }
+    let extensionAfter = extensionBefore == 2 ? 1 : 2
+
+    writer.setExtension(extensionAfter, wiimote: wiimote)
+    writer.setSideways(!sidewaysBefore, wiimote: wiimote)
+
+    XCTAssertEqual(WiimoteSlotOptions.selectedExtension(forWiimote: wiimote), extensionAfter)
+    XCTAssertEqual(WiimoteSlotOptions.isSideways(forWiimote: wiimote), !sidewaysBefore)
+    XCTAssertEqual(io.writes, [])
   }
 }

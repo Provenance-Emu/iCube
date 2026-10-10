@@ -127,8 +127,6 @@ final class FakePlayerScreenIO: PlayerScreenIO {
     return saveSucceeds
   }
 
-  func setExtension(_ value: Int, wiimote: Int) { writes.append("extension:\(value)") }
-  func setSideways(_ enabled: Bool, wiimote: Int) { writes.append("sideways:\(enabled)") }
   func setExpression(_ expression: String, for row: RemapControlRow, port: Int) { writes.append("expression:\(row.id)=\(expression)") }
   func setNumericSetting(_ setting: NumericSettingState, value: Double, port: Int) { writes.append("setting:\(setting.id)=\(value)") }
   func setMotionPointerEnabled(_ enabled: Bool, wiimote: Int) { writes.append("motion-pointer:\(enabled)") }

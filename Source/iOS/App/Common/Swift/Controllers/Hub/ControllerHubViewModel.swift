@@ -439,8 +439,8 @@ final class ControllerHubViewModel {
     }
   }
 
-  /// The player screen's `setExtension`/`setSideways` mark the remembered profile edited; the hub
-  /// does the same, on the device the Wii slot holds NOW: after a cross-kind move that is the
+  /// Extension and Sideways mark the remembered profile edited (they used to be player-screen rows);
+  /// the hub does it on the device the Wii slot holds NOW: after a cross-kind move that is the
   /// target's (a Touchscreen is `iOS/5/…` there, not the GameCube port's `iOS/1/…`). Any capture is
   /// already over: `PlayerScreenViewModel.stop()` ends it when the player screen leaves, and the hub
   /// is only visible then.

@@ -71,8 +71,8 @@ struct LiveControllerHubWriter: ControllerHubWriting {
 
   func clear(slot: PlayerSlot) { io.setDevice(.noDevice, slot: slot) }
 
-  func setExtension(_ value: Int, wiimote: Int) { io.setExtension(value, wiimote: wiimote) }
-  func setSideways(_ enabled: Bool, wiimote: Int) { io.setSideways(enabled, wiimote: wiimote) }
+  func setExtension(_ value: Int, wiimote: Int) { WiimoteSlotOptions.setExtension(value, forWiimote: wiimote) }
+  func setSideways(_ enabled: Bool, wiimote: Int) { WiimoteSlotOptions.setSideways(enabled, forWiimote: wiimote) }
   func setPointerMode(_ mode: PointerMode) { io.setPointerMode(mode) }
   func setMotionPointer(_ enabled: Bool, wiimote: Int) { io.setMotionPointerEnabled(enabled, wiimote: wiimote) }
 

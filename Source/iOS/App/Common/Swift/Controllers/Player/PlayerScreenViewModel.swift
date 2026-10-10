@@ -339,8 +339,6 @@ final class PlayerScreenViewModel {
       saveProfileAs: { [weak self] in self?.openSavePrompt() },
       resetProfile: { [weak self] in self?.requestReset() },
       clearAll: { [weak self] in self?.requestClearAll() },
-      setExtension: { [weak self] in self?.setExtension($0) },
-      setSideways: { [weak self] in self?.setSideways($0) },
       toggleCapture: { [weak self] in self?.toggleCapture($0) },
       clearBinding: { [weak self] in self?.clear($0) },
       resetBinding: { [weak self] in self?.resetToDefault($0) },
@@ -367,7 +365,9 @@ final class PlayerScreenViewModel {
           readInputStates: { [weak self] in self?.io.inputStates(forQualifier: qualifier) ?? [] },
           check: { [weak self] in self?.io.check($0) ?? ExpressionCheck(status: .invalid, message: "") },
           save: { [weak self] in self?.saveExpression($0, for: row) ?? false }))
-      })
+      },
+      advancedMotionDestination: { AnyView(EnhancedMotionControlsView().padBackNavigation()) },
+      stickFeelDestination: { AnyView(AnalogStickSettingsView().padBackNavigation()) })
   }
 
   /// A setting that is not part of the port's mapping (pointer, motion): write, then re-read.
@@ -512,21 +512,6 @@ final class PlayerScreenViewModel {
   }
 
   // MARK: Wii Remote and settings
-
-  func setExtension(_ value: Int) {
-    guard slot.kind == .wiiRemote, value != state.player.wiiExtension else { return }
-    endCapture()
-    io.setExtension(value, wiimote: slot.port)
-    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
-    reload()
-  }
-
-  func setSideways(_ enabled: Bool) {
-    guard slot.kind == .wiiRemote else { return }
-    io.setSideways(enabled, wiimote: slot.port)
-    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
-    reload()
-  }
 
   func setMotionPointer(_ enabled: Bool) {
     guard slot.kind == .wiiRemote else { return }

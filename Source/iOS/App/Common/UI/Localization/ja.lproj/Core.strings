@@ -3996,7 +3996,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Experimental: resolves EFB peek reads on the GPU instead of a CPU readback. May reduce CPU-thread stalls for games that read the framebuffer; OFF by default. Verify visuals per game." = "Experimental: resolves EFB peek reads on the GPU instead of a CPU readback. May reduce CPU-thread stalls for games that read the framebuffer; OFF by default. Verify visuals per game.";
 "Exposes a virtual SD card to games and the System Menu." = "Exposes a virtual SD card to games and the System Menu.";
 "Exposes a virtual Skylanders portal to games that support it." = "Exposes a virtual Skylanders portal to games that support it.";
-"Extension: %@" = "Extension: %@";
 "Extra graphics-API error checking. For debugging only — reduces performance. Leave off." = "Extra graphics-API error checking. For debugging only — reduces performance. Leave off.";
 "Failed to add AR code" = "Failed to add AR code";
 "Failed to add Gecko code" = "Failed to add Gecko code";
@@ -4776,8 +4775,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Replaces this player's buttons with a saved profile." = "Replaces this player's buttons with a saved profile.";
 "Keeps this player's buttons as a profile to load later, on any port." = "Keeps this player's buttons as a profile to load later, on any port.";
 "Loads the built-in profile for the bound controller." = "Loads the built-in profile for the bound controller.";
-"What is plugged into the Wii Remote: the Nunchuk adds a stick, C and Z." = "What is plugged into the Wii Remote: the Nunchuk adds a stick, C and Z.";
-"For games played with the Wii Remote held sideways. The D-Pad and motion turn with it." = "For games played with the Wii Remote held sideways. The D-Pad and motion turn with it.";
+"On-Screen Stick Feel…" = "On-Screen Stick Feel…";
+"Gain, dead zone and smoothing of the on-screen sticks and triggers." = "Gain, dead zone and smoothing of the on-screen sticks and triggers.";
+"Advanced Motion…" = "Advanced Motion…";
+"Smoothing, dead zones and the motion sensor's own options." = "Smoothing, dead zones and the motion sensor's own options.";
 "Each control's Dolphin expression. Select one to edit it, combine inputs, or bind an output such as Rumble." = "Each control's Dolphin expression. Select one to edit it, combine inputs, or bind an output such as Rumble.";
 "Accelerometer %@" = "Accelerometer %@";
 "Gyroscope %@" = "Gyroscope %@";

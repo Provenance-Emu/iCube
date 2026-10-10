@@ -40,8 +40,6 @@ protocol PlayerScreenIO {
   func saveProfile(_ name: String, slot: PlayerSlot) -> Bool
   /// Deletes a user profile's file; never a bundled one. The port's mapping is not changed.
   func deleteProfile(_ name: String, slot: PlayerSlot) -> Bool
-  func setExtension(_ value: Int, wiimote: Int)
-  func setSideways(_ enabled: Bool, wiimote: Int)
   func setExpression(_ expression: String, for row: RemapControlRow, port: Int)
   func setNumericSetting(_ setting: NumericSettingState, value: Double, port: Int)
   func setMotionPointerEnabled(_ enabled: Bool, wiimote: Int)
@@ -237,10 +235,6 @@ struct LivePlayerScreenIO: PlayerScreenIO {
       ? TVControllerMappingBridge.deleteProfile(name, forGCPort: slot.port)
       : TVControllerMappingBridge.deleteProfile(name, forWiimote: slot.port)
   }
-
-  /// `WiimoteSlotOptions` already ends in `reconcile(autoAssign: false)`.
-  func setExtension(_ value: Int, wiimote: Int) { WiimoteSlotOptions.setExtension(value, forWiimote: wiimote) }
-  func setSideways(_ enabled: Bool, wiimote: Int) { WiimoteSlotOptions.setSideways(enabled, forWiimote: wiimote) }
 
   func setExpression(_ expression: String, for row: RemapControlRow, port: Int) {
     switch row.owner {
