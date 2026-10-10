@@ -1,6 +1,7 @@
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import Combine
 import SwiftUI
 import UIKit
 
@@ -25,12 +26,18 @@ private struct SettingsLeafHost: ViewModifier {
   let helpKey: String?
   let sync: () -> Void
 
+  /// Emulation start/end are posted from the emulation thread; `sync` writes host @State, which must
+  /// happen on main.
+  private static func onMain(_ name: Notification.Name) -> some Publisher<Notification, Never> {
+    NotificationCenter.default.publisher(for: name).receive(on: DispatchQueue.main)
+  }
+
   func body(content: Content) -> some View {
     content
       .navigationTitle(title)
       .configSynced(sync)
-      .onReceive(NotificationCenter.default.publisher(for: .DOLEmulationDidStart)) { _ in sync() }
-      .onReceive(NotificationCenter.default.publisher(for: EmulationState.didEndName)) { _ in sync() }
+      .onReceive(Self.onMain(.DOLEmulationDidStart)) { _ in sync() }
+      .onReceive(Self.onMain(EmulationState.didEndName)) { _ in sync() }
       #if os(iOS)
       .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in sync() }
       #endif
@@ -55,7 +62,7 @@ extension View {
 struct SettingsLeafScreen: View {
   let model: MenuModel
   let title: String
-  var helpKey: String?
+  let helpKey: String?
   let sync: () -> Void
   @Environment(\.dismiss) private var dismiss
   @Environment(\.settingsPaneBack) private var paneBack
@@ -67,8 +74,13 @@ struct SettingsLeafScreen: View {
     self.sync = sync
   }
 
+  /// What Back does: the shell's pane action when there is one, the environment dismiss otherwise.
+  static func backAction(paneBack: (() -> Void)?, dismiss: @escaping () -> Void) -> () -> Void {
+    paneBack ?? dismiss
+  }
+
   var body: some View {
-    MenuScreen(model: model, style: .list, onBack: { if let paneBack { paneBack() } else { dismiss() } })
+    MenuScreen(model: model, style: .list, onBack: Self.backAction(paneBack: paneBack, dismiss: { dismiss() }))
       .settingsLeaf(title: title, helpKey: helpKey, sync: sync)
   }
 }
