@@ -4953,6 +4953,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Main memory. The real console has 24 MB." = "Main memory. The real console has 24 MB.";
 "Wii extended memory. The real console has 64 MB." = "Wii extended memory. The real console has 64 MB.";
 "The emulated console's clock when the game starts." = "The emulated console's clock when the game starts.";
+"Audio buffered before it is played while stretching. Higher values sound smoother but lag further behind the picture." = "Audio buffered before it is played while stretching. Higher values sound smoother but lag further behind the picture.";
+"CoreAudio (Speakers/HDMI)" = "CoreAudio (Speakers/HDMI)";
+"Follows the device's silent switch: game audio is muted while it is on." = "Follows the device's silent switch: game audio is muted while it is on.";
+"Output level of the emulated console. The pause menu's Mute badge reflects this value." = "Output level of the emulated console. The pause menu's Mute badge reflects this value.";
+"Silences audio while the speed limit is off (fast-forward), when it would otherwise play sped up." = "Silences audio while the speed limit is off (fast-forward), when it would otherwise play sped up.";
+"Stretch Latency" = "Stretch Latency";
+"Stretches audio to follow the emulation speed instead of letting it crackle or drop out when the game runs slower than full speed." = "Stretches audio to follow the emulation speed instead of letting it crackle or drop out when the game runs slower than full speed.";
 "Background Style" = "Background Style";
 "Show Game ID Subtitles" = "Show Game ID Subtitles";
 "If unsure, select 100%." = "If unsure, select 100%.";

@@ -32,6 +32,18 @@ final class SettingsSearchIndexTests: XCTestCase {
     XCTAssertTrue(index.hits(query: "memory size").contains { $0.entryID == "advanced" && ($0.rowTitle ?? "").contains("Memory Size") })
   }
 
+  func test_gameCubeRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "main menu").contains { $0.entryID == "console-gamecube" })
+  }
+
+  func test_wiiRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "sensor bar").contains { $0.entryID == "console-wii" })
+  }
+
+  func test_audioRows_areFoundByTheirOwnTitles() {
+    XCTAssertTrue(index.hits(query: "audio stretching").contains { $0.entryID == "audio" })
+  }
+
   func test_interfaceRows_areFoundByTheirOwnTitles() {
     XCTAssertTrue(index.hits(query: "panic handlers").contains { $0.entryID == "interface" })
   }
