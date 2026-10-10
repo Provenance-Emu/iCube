@@ -58,8 +58,8 @@ enum TouchOverlayInput {
   }
 
   /// The overlay's rendered opacity (task item 1's "Overlay Opacity" setting): REUSES
-  /// `DOLConfigBridge.mainTouchPadOpacity()`/`setMainTouchPadOpacity` — the same key and Settings
-  /// row (`ControllersRootView`'s "Alternate Input Sources > Opacity" slider, already unconditional
+  /// `DOLConfigBridge.mainTouchPadOpacity()`/`setMainTouchPadOpacity` — the same key as the Controllers
+  /// hub's Touch Controls > Opacity row (already unconditional
   /// on both the legacy xib pads and this overlay) rather than adding a second, overlay-specific
   /// opacity control. Full opacity while any edit mode is active, so the editor's own chrome
   /// (highlight border, resize handles) is always clearly visible regardless of how transparent

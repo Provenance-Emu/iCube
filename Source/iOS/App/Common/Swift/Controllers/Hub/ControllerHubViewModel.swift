@@ -205,7 +205,8 @@ final class ControllerHubViewModel {
       rumbleDestination: reader.rumbleDestination(),
       connectTakesPlayer1: reader.connectTakesPlayer1(),
       touchOverlayProgrammatic: reader.touchOverlayProgrammatic(),
-      pending: state.pending)
+      pending: state.pending,
+      focusRequest: state.focusRequest)
   }
 
   /// Takes a snapshot and follows assignment and device changes until `stop()`. Idempotent.
@@ -278,8 +279,7 @@ final class ControllerHubViewModel {
         self?.reload()
       },
       setMotionPointer: { [weak self] player, enabled in
-        self?.writer.setMotionPointer(enabled, wiimote: player.port)
-        self?.reload()
+        self?.setMotionPointer(enabled, player: player)
       },
       setBackgroundInput: { [weak self] enabled in
         self?.writer.setBackgroundInput(enabled)
@@ -349,9 +349,18 @@ final class ControllerHubViewModel {
     settle()
   }
 
+  /// Keeps the value whenever the transition has work to do, not only when it differs from the
+  /// current one: a stored Nunchuk + Sideways reads as Nunchuk, and choosing Nunchuk again must still
+  /// clear the hidden flag (ruling H27).
   func choosePlaysAs(_ player: PlayerState, _ target: PlaysAs) {
-    state.pending.playsAs[player.id] = target == PlaysAs.current(of: player) ? nil : target
+    state.focusRequest = nil
+    state.pending.playsAs[player.id] = PlaysAsTransition.plan(from: player, to: target).isEmpty ? nil : target
     settle()
+  }
+
+  /// The view calls this once it has handed `focusRequest` to the menu.
+  func consumeFocusRequest() {
+    state.focusRequest = nil
   }
 
   func chooseOverlayMode(_ mode: ControllerManager.OverlayMode) {
@@ -406,23 +415,29 @@ final class ControllerHubViewModel {
 
   /// Runs `PlaysAsTransition.plan` in order. On a failing step the view model stops, re-reads state
   /// and toasts; it does not replay inverse steps (ruling H15), so a half-applied change is visible.
-  func setPlaysAs(_ player: PlayerState, _ target: PlaysAs) {
-    // The occupied-destination check below reads `state.players`: a caller's copy may be stale.
+  func setPlaysAs(_ staleCopy: PlayerState, _ target: PlaysAs) {
+    // The plan and the occupied-destination check below read the live state: a caller's copy may be stale.
     reload()
+    let player = state.players.first { $0.id == staleCopy.id } ?? staleCopy
+    var movedTouchscreen = false
     for step in PlaysAsTransition.plan(from: player, to: target) {
       switch step {
       case .setExtension(let wiimote, let value):
+        // "(edited)" is decided against what the Wii slot stores, which after a cross-kind move is
+        // not the source's value.
+        let changed = value != reader.wiiExtension(forWiimote: wiimote)
         writer.setExtension(value, wiimote: wiimote)
-        if value != player.wiiExtension { markEdited(wiimote: wiimote) }
+        if changed { markEdited(wiimote: wiimote) }
       case .setSideways(let wiimote, let enabled):
+        let changed = enabled != reader.isSideways(forWiimote: wiimote)
         writer.setSideways(enabled, wiimote: wiimote)
-        if enabled != player.isSideways { markEdited(wiimote: wiimote) }
+        if changed { markEdited(wiimote: wiimote) }
       case .clearSlot(let slot):
         writer.clear(slot: slot)
       case .moveDevice(let qualifier, let from, let to):
         // Moving into a port that has a device would overwrite it: refuse before writing anything.
         if let destination = state.players.first(where: { $0.kind == to.kind && $0.port == to.port }), destination.isBound {
-          EmulationToast.post(String(format: L("%@ is in use"), destination.title))
+          EmulationToast.post(String(format: L("%@ is in use. Change that player's device first."), destination.title))
           reload()
           return
         }
@@ -436,8 +451,12 @@ final class ControllerHubViewModel {
         let fromNote = PlayerDeviceChangeNote.begin(slot: from, reader: reader, io: io, memory: memory)
         writer.clear(slot: from)
         fromNote.finish(choice: .noDevice)
+        movedTouchscreen = movedTouchscreen || PlayerDeviceChoice(qualifier: qualifier) == .touchscreen
       }
     }
+    // The overlay is drawn for the slot the touchscreen is bound to; Auto follows the game's system
+    // and would leave a moved touchscreen with no working controls (ruling H26).
+    if movedTouchscreen { setOverlayMode(target.kind == .gameCube ? .gamecube : .wii) }
     reload()
     if target.kind != player.kind {
       state.focusRequest = PlayerSlot(kind: target.kind, port: player.port).playerID + Self.playsAsRowSuffix
@@ -451,6 +470,13 @@ final class ControllerHubViewModel {
   /// is only visible then.
   private func markEdited(wiimote: Int) {
     memory.markEdited(PlayerSlot(kind: .wiiRemote, port: wiimote).playerID, qualifier: reader.boundQualifier(forWiimote: wiimote))
+  }
+
+  /// Marks the remembered profile edited, as the player screen's pointer toggle does.
+  private func setMotionPointer(_ enabled: Bool, player: PlayerState) {
+    writer.setMotionPointer(enabled, wiimote: player.port)
+    markEdited(wiimote: player.port)
+    reload()
   }
 
   // MARK: Identify

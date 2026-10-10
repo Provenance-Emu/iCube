@@ -291,7 +291,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     let memory = PlayerProfileMemory()
     let model = makeModel(reader: reader, writer: writer, memory: memory)
     model.setPlaysAs(model.state.players.first { $0.id == "gc-2" }!, .wiiNunchuk)
-    XCTAssertEqual(writer.log, ["assign iOS/1/Touchscreen wii-2", "clear gc-2", "ext 2 1", "side 2 false"])
+    XCTAssertEqual(writer.log, ["assign iOS/1/Touchscreen wii-2", "clear gc-2", "ext 2 1", "side 2 false", "layout wii"])
     XCTAssertEqual(
       memory.entry(for: "wii-2", qualifier: "iOS/5/Touchscreen"), PlayerProfileMemory.Entry(name: "Touchscreen", edited: true),
       "the Wii slot's device key")
@@ -322,7 +322,33 @@ final class ControllerHubViewModelTests: XCTestCase {
     model.setPlaysAs(moved, .wiiClassic)
     XCTAssertEqual(model.state.focusRequest, "wii-1-plays-as")
     model.reload()
-    XCTAssertNil(model.state.focusRequest, "a request is one-shot: the next reload drops it")
+    XCTAssertEqual(model.state.focusRequest, "wii-1-plays-as", "a reload before the view rendered it must not drop the request")
+    model.consumeFocusRequest()
+    XCTAssertNil(model.state.focusRequest, "the view consumed it")
+  }
+
+  /// M1: the Layout commit that follows a Plays as commit in one batch reloads again.
+  @MainActor
+  func test_focusRequest_survivesTheLayoutCommitOfTheSameBatch() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    let scheduler = FakeScheduler()
+    let model = makeModel(reader: reader, writer: FakeWriter(reader: reader), scheduler: scheduler)
+    model.choosePlaysAs(model.state.players[0], .gameCube)
+    model.chooseOverlayMode(.gamecube)
+    scheduler.fire()
+    XCTAssertEqual(model.state.focusRequest, "gc-1-plays-as")
+  }
+
+  @MainActor
+  func test_choosingAgain_dropsAnUnconsumedFocusRequest() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    let model = makeModel(reader: reader, writer: FakeWriter(reader: reader))
+    model.setPlaysAs(model.state.players[0], .gameCube)
+    XCTAssertNotNil(model.state.focusRequest)
+    model.choosePlaysAs(model.state.players.first { $0.id == "gc-1" }!, .wiiRemote)
+    XCTAssertNil(model.state.focusRequest)
   }
 
   @MainActor
@@ -357,7 +383,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     let model = makeModel(reader: reader, writer: writer)
     let seen = toasts { model.setPlaysAs(model.state.players[0], .gameCube) }
     XCTAssertEqual(writer.log, [], "moving would overwrite Player 1's device")
-    XCTAssertEqual(seen, ["Player 1 is in use"])
+    XCTAssertEqual(seen, ["Player 1 is in use. Change that player's device first."])
     XCTAssertEqual(model.state.players.first { $0.id == "gc-1" }?.deviceQualifier, "MFi/1/DualSense Wireless Controller")
   }
 
@@ -369,7 +395,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     let model = makeModel(reader: reader, writer: writer)
     let gc2 = model.state.players.first { $0.id == "gc-2" }!
     model.setPlaysAs(gc2, .wiiNunchuk)
-    XCTAssertEqual(writer.log, ["assign \(Self.touch) wii-2", "clear gc-2", "ext 2 1", "side 2 false"])
+    XCTAssertEqual(writer.log, ["assign \(Self.touch) wii-2", "clear gc-2", "ext 2 1", "side 2 false", "layout wii"])
   }
 
   /// Ruling H9: the profile shows "(edited)" after an extension change, as on the player screen.
@@ -382,6 +408,106 @@ final class ControllerHubViewModelTests: XCTestCase {
     let model = makeModel(reader: reader, writer: FakeWriter(reader: reader), memory: memory)
     model.setPlaysAs(model.state.players[0], .wiiNunchuk)
     XCTAssertEqual(memory.entry(for: "wii-1", qualifier: Self.xbox)?.edited, true)
+  }
+
+  /// I1 (ruling H27): a stored Nunchuk + Sideways reads as Nunchuk; choosing Nunchuk again must still
+  /// clear the hidden flag.
+  @MainActor
+  func test_choosePlaysAs_theValueThePlayerReadsAs_stillClearsAHiddenSidewaysFlag() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    reader.extensions[1] = 1
+    reader.sideways = [1]
+    let writer = FakeWriter(reader: reader)
+    let scheduler = FakeScheduler()
+    let model = makeModel(reader: reader, writer: writer, scheduler: scheduler)
+    model.choosePlaysAs(model.state.players[0], .wiiNunchuk)
+    XCTAssertEqual(model.state.pending.playsAs["wii-1"], .wiiNunchuk, "work to do, so the value stays pending")
+    scheduler.fire()
+    XCTAssertEqual(writer.log, ["ext 1 1", "side 1 false"])
+  }
+
+  @MainActor
+  func test_choosePlaysAs_theCurrentValue_withNothingToDo_isNotPending() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    let scheduler = FakeScheduler()
+    let model = makeModel(reader: reader, writer: FakeWriter(reader: reader), scheduler: scheduler)
+    model.choosePlaysAs(model.state.players[0], .wiiRemote)
+    XCTAssertTrue(model.state.pending.isEmpty)
+    XCTAssertEqual(scheduler.liveDelays, [])
+  }
+
+  /// I2 (ruling H26): the move that carries the touchscreen also sets Layout to the target kind.
+  @MainActor
+  func test_setPlaysAs_touchscreenWiiToGameCube_setsLayoutToGameCube() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.touch
+    let writer = FakeWriter(reader: reader)
+    writer.resolvesTouchscreenPerKind = true
+    let model = makeModel(reader: reader, writer: writer)
+    model.setPlaysAs(model.state.players[0], .gameCube)
+    XCTAssertEqual(writer.log, ["assign \(Self.touch) gc-1", "clear wii-1", "layout gamecube"])
+    XCTAssertEqual(model.state.focusRequest, "gc-1-plays-as", "the layout reload must not lose the focus request")
+  }
+
+  @MainActor
+  func test_setPlaysAs_padMove_leavesLayoutAlone() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    model.setPlaysAs(model.state.players[0], .gameCube)
+    XCTAssertEqual(writer.log, ["assign \(Self.xbox) gc-1", "clear wii-1"])
+  }
+
+  @MainActor
+  func test_setPlaysAs_refusedTouchscreenMove_doesNotTouchLayout() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.touch
+    let writer = FakeWriter(reader: reader)
+    writer.refuseAssign = true
+    let model = makeModel(reader: reader, writer: writer)
+    _ = toasts { model.setPlaysAs(model.state.players[0], .gameCube) }
+    XCTAssertEqual(writer.log, ["assign \(Self.touch) gc-1"])
+  }
+
+  /// M4: "(edited)" is decided against what the destination slot already stores.
+  @MainActor
+  func test_setPlaysAs_crossKind_sameExtensionAsTheDestinationStores_isNotEdited() {
+    let reader = FakeReader()
+    reader.gameCube[1] = Self.xbox
+    reader.extensions[1] = 1
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "wii-1", qualifier: Self.xbox)
+    let model = makeModel(reader: reader, writer: FakeWriter(reader: reader), memory: memory)
+    model.setPlaysAs(model.state.players.first { $0.id == "gc-1" }!, .wiiNunchuk)
+    XCTAssertEqual(memory.entry(for: "wii-1", qualifier: Self.xbox)?.edited, false, "the Wii slot already stored a Nunchuk")
+  }
+
+  @MainActor
+  func test_setPlaysAs_crossKind_differentExtensionThanTheDestinationStores_isEdited() {
+    let reader = FakeReader()
+    reader.gameCube[1] = Self.xbox
+    reader.extensions[1] = 1
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "wii-1", qualifier: Self.xbox)
+    let model = makeModel(reader: reader, writer: FakeWriter(reader: reader), memory: memory)
+    model.setPlaysAs(model.state.players.first { $0.id == "gc-1" }!, .wiiRemote)
+    XCTAssertEqual(memory.entry(for: "wii-1", qualifier: Self.xbox)?.edited, true)
+  }
+
+  /// The plan comes from live state: a caller's copy can predate a write.
+  @MainActor
+  func test_setPlaysAs_staleCallerCopy_isReplannedFromLiveState() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    let stale = model.state.players[0]
+    reader.extensions[1] = 1
+    model.setPlaysAs(stale, .wiiNunchuk)
+    XCTAssertEqual(writer.log, [], "the player already plays as Nunchuk")
   }
 
   // MARK: Settle (ruling H4)
@@ -473,7 +599,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     model.chooseDevice(player, .touchscreen)
     model.choosePlaysAs(player, .gameCube)
     scheduler.fire()
-    XCTAssertEqual(writer.log, ["setDevice touchscreen wii-1", "assign \(Self.touch) gc-1", "clear wii-1"])
+    XCTAssertEqual(writer.log, ["setDevice touchscreen wii-1", "assign \(Self.touch) gc-1", "clear wii-1", "layout gamecube"])
   }
 
   @MainActor
@@ -535,6 +661,18 @@ final class ControllerHubViewModelTests: XCTestCase {
     model.actions.testRumble()
     model.actions.resetOverlayLayouts()
     XCTAssertEqual(writer.log, ["pointer gyro", "motion 2 true", "bg true", "rumble both", "takes false", "programmatic false", "testRumble", "resetLayouts"])
+  }
+
+  /// M3: the hub's gyro Pointer toggle marks the profile edited, as the player screen's does.
+  @MainActor
+  func test_setMotionPointer_marksTheProfileEdited() {
+    let reader = FakeReader()
+    reader.wii[2] = Self.xbox
+    let memory = PlayerProfileMemory()
+    memory.remember("Mine", for: "wii-2", qualifier: Self.xbox)
+    let model = makeModel(reader: reader, writer: FakeWriter(reader: reader), memory: memory)
+    model.actions.setMotionPointer(model.state.players.first { $0.id == "wii-2" }!, true)
+    XCTAssertEqual(memory.entry(for: "wii-2", qualifier: Self.xbox)?.edited, true)
   }
 
   // MARK: Profile memory (the player screen's bookkeeping, shared)
@@ -610,7 +748,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     let stale = model.state.players[0]
     reader.gameCube[1] = Self.dualSense
     let posted = toasts { model.setPlaysAs(stale, .gameCube) }
-    XCTAssertEqual(posted, ["Player 1 is in use"])
+    XCTAssertEqual(posted, ["Player 1 is in use. Change that player's device first."])
     XCTAssertEqual(writer.log, [])
   }
 

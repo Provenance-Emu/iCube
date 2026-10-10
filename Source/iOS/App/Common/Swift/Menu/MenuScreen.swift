@@ -189,9 +189,12 @@ struct MenuScreen: View {
       }
       #else
       .onExitCommand { onBack?() }
-      // tvOS native focus has no router: move it to the host's requested row once the list changed.
+      // tvOS native focus has no router: move it to the host's requested row once the list changed,
+      // but never off a focused row that still exists (the iOS reconcile rule).
       .onChange(of: model.focusRequest) { _, id in
-        if let id, model.focusableIDs.contains(id) { tvFocusedID = id }
+        guard let id, model.focusableIDs.contains(id) else { return }
+        if let focused = tvFocusedID, model.focusableIDs.contains(focused) { return }
+        tvFocusedID = id
       }
       #endif
   }

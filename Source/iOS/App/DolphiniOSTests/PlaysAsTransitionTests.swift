@@ -35,6 +35,22 @@ final class PlaysAsTransitionTests: XCTestCase {
     XCTAssertEqual(PlaysAsTransition.plan(from: hidden, to: .wiiRemote), [.setExtension(wiimote: 1, value: 0), .setSideways(wiimote: 1, enabled: false)])
   }
 
+  func test_noOp_forEveryCurrentValue() {
+    XCTAssertEqual(PlaysAsTransition.plan(from: wii(1), to: .wiiRemote), [])
+    XCTAssertEqual(PlaysAsTransition.plan(from: wii(1, ext: 2), to: .wiiClassic), [])
+    XCTAssertEqual(PlaysAsTransition.plan(from: gc(1), to: .gameCube), [])
+  }
+
+  /// Moving to GameCube does not touch the Wii slot's flag: the slot goes off, so the flag is inert.
+  func test_hiddenSideways_toGameCube_movesTheDeviceAndLeavesTheFlag() {
+    XCTAssertEqual(PlaysAsTransition.plan(from: wii(1, ext: 1, sideways: true), to: .gameCube), [
+      .moveDevice(qualifier: pad, from: PlayerSlot(kind: .wiiRemote, port: 1), to: PlayerSlot(kind: .gameCube, port: 1)),
+    ])
+    XCTAssertEqual(PlaysAsTransition.plan(from: wii(1, ext: 2, sideways: true, device: ""), to: .gameCube), [
+      .clearSlot(PlayerSlot(kind: .wiiRemote, port: 1)),
+    ])
+  }
+
   func test_wiiToGameCube_movesTheDeviceToTheSamePortNumber() {
     XCTAssertEqual(PlaysAsTransition.plan(from: wii(3, ext: 1), to: .gameCube), [
       .moveDevice(qualifier: pad, from: PlayerSlot(kind: .wiiRemote, port: 3), to: PlayerSlot(kind: .gameCube, port: 3)),
@@ -46,6 +62,14 @@ final class PlaysAsTransitionTests: XCTestCase {
       .moveDevice(qualifier: pad, from: PlayerSlot(kind: .gameCube, port: 1), to: PlayerSlot(kind: .wiiRemote, port: 1)),
       .setExtension(wiimote: 1, value: 1),
       .setSideways(wiimote: 1, enabled: false),
+    ])
+  }
+
+  func test_unboundGameCubePort_toWii_clearsTheOldSlotThenSetsExtensionAndSideways() {
+    XCTAssertEqual(PlaysAsTransition.plan(from: gc(2, device: ""), to: .wiiSideways), [
+      .clearSlot(PlayerSlot(kind: .gameCube, port: 2)),
+      .setExtension(wiimote: 2, value: 0),
+      .setSideways(wiimote: 2, enabled: true),
     ])
   }
 

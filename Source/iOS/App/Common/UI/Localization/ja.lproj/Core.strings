@@ -4239,7 +4239,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Outputs the XFB earlier in the pipeline.\n\nReduces display latency, but may cause jitter or timing issues in VI-sensitive titles.\n\niOS note: latency/pacing tweak; negligible framerate effect. Default ON.\n\nIf unsure, leave this enabled." = "Outputs the XFB earlier in the pipeline.\n\nReduces display latency, but may cause jitter or timing issues in VI-sensitive titles.\n\niOS note: latency/pacing tweak; negligible framerate effect. Default ON.\n\nIf unsure, leave this enabled.";
 "Outputs the frame earlier in the pipeline for lower latency. Recommended on; turn off if a game shows glitches." = "Outputs the frame earlier in the pipeline for lower latency. Recommended on; turn off if a game shows glitches.";
 "Overlay Stats" = "Overlay Stats";
-"Overlay Style" = "Overlay Style";
 "Override Region Mismatch" = "Override Region Mismatch";
 "Override VBI Frequency" = "Override VBI Frequency";
 "Pair" = "Pair";
@@ -4851,7 +4850,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Tap to cycle recent shaders. Long-press for the full picker." = "Tap to cycle recent shaders. Long-press for the full picker.";
 "Tap to cycle the speed. Long-press to pick one. Takes effect on resume." = "Tap to cycle the speed. Long-press to pick one. Takes effect on resume.";
 "Couldn't move the controller" = "Couldn't move the controller";
-"%@ is in use" = "%@ is in use";
 "A short pulse on the chosen output." = "A short pulse on the chosen output.";
 "Aim with the controller's gyro." = "Aim with the controller's gyro.";
 "Artwork for the on-screen controller." = "Artwork for the on-screen controller.";
@@ -4876,3 +4874,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Where a game's rumble goes." = "Where a game's rumble goes.";
 "Where a touch moves the Wii pointer." = "Where a touch moves the Wii pointer.";
 "Which on-screen controller is drawn. Auto follows the running game's system and the attached controllers, not any player's Plays as." = "Which on-screen controller is drawn. Auto follows the running game's system and the attached controllers, not any player's Plays as.";
+"%@ is in use. Change that player's device first." = "%@ is in use. Change that player's device first.";

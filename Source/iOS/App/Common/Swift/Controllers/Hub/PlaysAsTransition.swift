@@ -17,10 +17,11 @@ enum PlaysAsStep: Equatable {
 enum PlaysAsTransition {
   static func plan(from player: PlayerState, to target: PlaysAs) -> [PlaysAsStep] {
     let current = PlaysAs.current(of: player)
-    // A stored Nunchuk/Classic + Sideways reads as the extension (`PlaysAs.init`); a Wii target
-    // still clears the hidden flag, even when it equals what the player reads as.
+    // A stored Nunchuk/Classic + Sideways reads as the extension (`PlaysAs.init`); choosing what the
+    // player reads as still clears the hidden flag. (That case is always a Wii target.) Moving to
+    // GameCube leaves the flag on the Wii slot, which is inert while the slot is off.
     let hasHiddenSideways = player.kind == .wiiRemote && player.isSideways && !current.isSideways
-    guard current != target || (hasHiddenSideways && target.kind == .wiiRemote) else { return [] }
+    guard current != target || hasHiddenSideways else { return [] }
     var steps: [PlaysAsStep] = []
     let from = PlayerSlot(kind: player.kind, port: player.port)
     let to = PlayerSlot(kind: target.kind, port: player.port)

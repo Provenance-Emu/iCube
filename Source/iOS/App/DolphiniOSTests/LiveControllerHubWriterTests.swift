@@ -81,14 +81,11 @@ final class LiveControllerHubWriterTests: XCTestCase {
   // MARK: clear
 
   @MainActor
-  func test_clear_unbindsAndUnpinsTheSlot() {
+  func test_clear_writesNoDeviceToTheSlot() {
     let (writer, reader, io) = make(connected: [Self.xbox])
     reader.wii[3] = Self.xbox
-    io.pinned = true
     writer.clear(slot: PlayerSlot(kind: .wiiRemote, port: 3))
-    XCTAssertEqual(io.writes, ["device:noDevice"])
-    XCTAssertEqual(reader.wii[3], "")
-    XCTAssertFalse(io.pinned)
+    XCTAssertEqual(io.writes, ["device:noDevice"], "unpinning lives in ControllerManager.clearDefaultDevice")
   }
 
   // MARK: Gyro pointer (decision 12)
