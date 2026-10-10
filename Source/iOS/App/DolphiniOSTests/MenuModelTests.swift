@@ -178,4 +178,20 @@ final class MenuModelTests: XCTestCase {
     let options: [(String, AnyHashable)] = [("Off", -1), ("2x", 200)]
     XCTAssertEqual(MenuItemRole.cycled(options: options, current: AnyHashable(999), step: 1), AnyHashable(-1))
   }
+
+  func test_stepper_currentValueTitle_usesTheFormat() {
+    let stepper = MenuStepper(value: .constant(100), range: 1 ... 400, step: 5, format: { "\(Int($0))%" })
+    XCTAssertEqual(MenuItem(id: "clock", title: "CPU Clock", role: .stepper(stepper)).currentValueTitle, "100%")
+  }
+
+  func test_section_keepsItsFooter() {
+    let section = MenuSection(id: "s", header: "H", footer: "F", items: [])
+    XCTAssertEqual(section.footer, "F")
+    XCTAssertNil(MenuSection(id: "t", items: []).footer)
+  }
+
+  func test_item_showsChevron_defaultsOff() {
+    XCTAssertFalse(MenuItem(id: "a", title: "A", role: .action({})).showsChevron)
+    XCTAssertTrue(MenuItem(id: "b", title: "B", role: .action({}), showsChevron: true).showsChevron)
+  }
 }

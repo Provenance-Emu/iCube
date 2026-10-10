@@ -18,6 +18,10 @@ struct MenuFocusRouter {
   /// existing single-pad API/tests are untouched by the multi-pad addition.
   private var navByPad: [AnyHashable: MenuControllerNav] = [:]
   private let config: MenuControllerNav.Config
+  /// The row a left/right press edge landed on, so a hold repeats only on that row: a hold that began
+  /// elsewhere and slid onto a stepper needs a fresh press. One per pad for the multi-pad path.
+  private var adjustOrigin: String?
+  private var adjustOriginByPad: [AnyHashable: String] = [:]
 
   init(config: MenuControllerNav.Config = MenuControllerNav.Config()) {
     self.config = config
@@ -51,7 +55,9 @@ struct MenuFocusRouter {
       nav.resync(input, at: time)
       return MenuFocusUpdate(focusedID: focusedID)
     }
-    return MenuFocusRouter.apply(nav.update(input, at: time), model: model, focusedID: focusedID, columns: columns, stepsPickersInGrid: stepsPickersInGrid)
+    return MenuFocusRouter.apply(
+      nav.update(input, at: time), model: model, focusedID: focusedID, columns: columns, stepsPickersInGrid: stepsPickersInGrid,
+      adjustOrigin: &adjustOrigin)
   }
 
   /// Multi-pad variant (D18 gap: "MenuScreen listens only to the first
@@ -91,6 +97,7 @@ struct MenuFocusRouter {
   ) -> MenuFocusUpdate {
     let connected = Set(padInputs.map(\.0))
     navByPad = navByPad.filter { connected.contains($0.key) }
+    adjustOriginByPad = adjustOriginByPad.filter { connected.contains($0.key) }
 
     var current = focusedID
     var activated: String?
@@ -104,18 +111,22 @@ struct MenuFocusRouter {
       guard isActive, !isNewPad else {
         padNav.resync(input, at: time)
         navByPad[padID] = padNav
+        adjustOriginByPad[padID] = nil
         continue
       }
       let events = padNav.update(input, at: time)
       navByPad[padID] = padNav
-      let padResult = MenuFocusRouter.apply(events, model: model, focusedID: current, columns: columns, stepsPickersInGrid: stepsPickersInGrid)
+      var origin = adjustOriginByPad[padID]
+      let padResult = MenuFocusRouter.apply(
+        events, model: model, focusedID: current, columns: columns, stepsPickersInGrid: stepsPickersInGrid, adjustOrigin: &origin)
+      adjustOriginByPad[padID] = origin
       current = padResult.focusedID
       if activated == nil { activated = padResult.activatedID }
       if longActivated == nil { longActivated = padResult.longActivatedID }
       if adjust == nil { adjust = padResult.adjust }
       if padResult.didGoBack { didGoBack = true }
     }
-    if let activated, adjust?.id == activated { adjust = nil }
+    if let activated, adjust?.id == activated, !MenuFocusRouter.isStepper(activated, in: model) { adjust = nil }
     return MenuFocusUpdate(focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust)
   }
 
@@ -131,6 +142,7 @@ struct MenuFocusRouter {
   /// interactive counts.
   mutating func resync(_ input: MenuControllerNav.Input, at time: TimeInterval) {
     nav.resync(input, at: time)
+    adjustOrigin = nil
   }
 
   /// Shared event-application core for both the single-pad `update` above
@@ -147,7 +159,8 @@ struct MenuFocusRouter {
     model: MenuModel,
     focusedID: String?,
     columns: Int = 1,
-    stepsPickersInGrid: Bool = true
+    stepsPickersInGrid: Bool = true,
+    adjustOrigin: inout String?
   ) -> MenuFocusUpdate {
     var current = focusedID
     var activated: String?
@@ -177,13 +190,21 @@ struct MenuFocusRouter {
           current = MenuFocusRouter.gridMove(current, rowStep: 0, columnStep: step, columns: columns, in: model)
         } else if let current {
           adjust = (current, step)
+          adjustOrigin = current
+        }
+      case .adjustRepeat(let step):
+        // Only a stepper repeats: a 1...400 stepper needs ~400 presses otherwise. A cycle row keeps one step per press.
+        // And only on the row the press landed on: a hold that slid onto a stepper needs a fresh press.
+        if columns == 1, let current, current == adjustOrigin, MenuFocusRouter.isStepper(current, in: model) {
+          adjust = (current, step)
         }
       }
     }
     // A and d-pad left/right on the same row in one tick: the activate already stepped a picker.
     // The builders' bindings read the snapshot the model was built from, so applying both would
     // write twice from the same stale value.
-    if let activated, adjust?.id == activated { adjust = nil }
+    // A stepper is the exception: A does nothing on it, so its adjust is not a second write.
+    if let activated, adjust?.id == activated, !MenuFocusRouter.isStepper(activated, in: model) { adjust = nil }
     return MenuFocusUpdate(focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust)
   }
 
@@ -244,10 +265,15 @@ struct MenuFocusRouter {
     return focusedID
   }
 
+  private static func isStepper(_ id: String, in model: MenuModel) -> Bool {
+    if case .stepper? = model.item(id: id)?.role { return true }
+    return false
+  }
+
   private static func isPicker(_ id: String?, in model: MenuModel) -> Bool {
     guard let id, let role = model.item(id: id)?.role else { return false }
     switch role {
-    case .picker, .cycle: return true
+    case .picker, .cycle, .stepper: return true
     default: return false
     }
   }
@@ -263,12 +289,15 @@ struct MenuFocusRouter {
   /// used to occupy (from `previousOrder`, captured before the rebuild),
   /// clamped to the new order, and only falls back to the first item when
   /// even that can't be resolved (e.g. `focusedID` was never in
-  /// `previousOrder` either).
-  static func reconcile(focusedID: String?, previousOrder: [String], model: MenuModel) -> String? {
+  /// `previousOrder` either). A vanished id the host MOVED (the hub re-ids a
+  /// player row across Wii and GameCube) follows `requestedID` first, when
+  /// the model has it; a focused id that still exists is never overridden.
+  static func reconcile(focusedID: String?, previousOrder: [String], model: MenuModel, requestedID: String? = nil) -> String? {
     let order = model.focusableIDs
     guard !order.isEmpty else { return nil }
     guard let focusedID else { return order.first }
     if order.contains(focusedID) { return focusedID }
+    if let requestedID, order.contains(requestedID) { return requestedID }
     if let oldIndex = previousOrder.firstIndex(of: focusedID) {
       return order[min(oldIndex, order.count - 1)]
     }

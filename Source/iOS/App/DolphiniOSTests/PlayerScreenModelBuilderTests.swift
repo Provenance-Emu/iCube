@@ -28,8 +28,6 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
       saveProfileAs: { recorder.calls.append("save-as") },
       resetProfile: { recorder.calls.append("reset") },
       clearAll: { recorder.calls.append("clear-all") },
-      setExtension: { recorder.calls.append("extension:\($0)") },
-      setSideways: { recorder.calls.append("sideways:\($0)") },
       toggleCapture: { recorder.calls.append("capture:\($0.id)") },
       clearBinding: { recorder.calls.append("clear:\($0.id)") },
       resetBinding: { recorder.calls.append("reset:\($0.id)") },
@@ -43,7 +41,9 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
       setMotionPointer: { recorder.calls.append("motion-pointer:\($0)") },
       toggleAdvanced: { recorder.calls.append("advanced") },
       setNumericSetting: { recorder.calls.append("setting:\($0.id)=\($1)") },
-      expressionDestination: { _ in AnyView(EmptyView()) })
+      expressionDestination: { _ in AnyView(EmptyView()) },
+      advancedMotionDestination: { AnyView(EmptyView()) },
+      stickFeelDestination: { AnyView(EmptyView()) })
   }
 
   private func pad(_ qualifier: String, _ name: String, gyro: Bool = false) -> ConnectedPadState {
@@ -113,14 +113,41 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
 
   func test_gameCubePort_neverShowsWiiSections_evenOnTheTouchscreen() {
     let ids = sectionIDs(make(state(.gameCube, device: "iOS/0/Touchscreen")))
-    XCTAssertFalse(ids.contains("wii"))
     XCTAssertFalse(ids.contains("pointer"))
+    XCTAssertTrue(ids.contains("stick-feel"))
   }
 
   func test_wiiPort_onTheTouchscreen_iOS() {
     XCTAssertEqual(
       sectionIDs(make(state(.wiiRemote, device: Self.touch))),
-      ["device", "profile", "wii", "buttons-hint", "pointer", "advanced"])
+      ["device", "profile", "buttons-hint", "pointer", "stick-feel", "advanced"])
+  }
+
+  func test_wiiPort_hasNoWiiRemoteSection_playsAsLivesInTheHub() {
+    let model = make(state(.wiiRemote, device: Self.touch))
+    XCTAssertFalse(sectionIDs(model).contains("wii"))
+    XCTAssertNil(model.item(id: "wii-extension"))
+    XCTAssertNil(model.item(id: "wii-sideways"))
+  }
+
+  func test_pointerSection_endsWithAdvancedMotion_onTheTouchscreen() {
+    let model = make(state(.wiiRemote, device: Self.touch))
+    XCTAssertEqual(model.sections.first { $0.id == "pointer" }?.items.last?.id, "pointer-advanced")
+    guard case .destination? = model.item(id: "pointer-advanced")?.role else { return XCTFail("pushes") }
+  }
+
+  func test_gyroPad_pointerSection_hasNoAdvancedMotion() {
+    let model = make(state(.wiiRemote, device: Self.xbox, pads: [pad(Self.xbox, "Xbox Wireless Controller", gyro: true)]))
+    XCTAssertEqual(ids(model, section: "pointer"), ["pointer-motion"])
+    XCTAssertNil(model.item(id: "pointer-advanced"))
+  }
+
+  func test_touchscreenPort_offersStickFeel_afterThePointerSection_padDoesNot() {
+    let touch = make(state(.wiiRemote, device: Self.touch))
+    XCTAssertNotNil(touch.item(id: "stick-feel"))
+    let order = sectionIDs(touch)
+    XCTAssertEqual(order.firstIndex(of: "stick-feel"), order.firstIndex(of: "pointer").map { $0 + 1 })
+    XCTAssertNil(make(boundGameCube).item(id: "stick-feel"))
   }
 
   // MARK: Device (decision 9)
@@ -180,6 +207,16 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(dsu.last, DeviceOption(choice: .pad(Self.dsu), title: "Pad C"))
   }
 
+  /// The shared overload the hub uses: a pinned port offers Auto, and the current pad is listed even
+  /// when it is not connected.
+  func test_deviceOptions_sharedOverload_listsAutoFirstAndTheCurrentPadLast() {
+    let options = PlayerScreenModelBuilder.deviceOptions(
+      isPinned: true, current: .pad(Self.dualSense), pads: [pad(Self.xbox, "Xbox")],
+      currentTitle: "DualSense (Disconnected)", platform: .ios)
+    XCTAssertEqual(options.first, DeviceOption(choice: .automatic, title: "Auto"))
+    XCTAssertEqual(options.last, DeviceOption(choice: .pad(Self.dualSense), title: "DualSense (Disconnected)"))
+  }
+
   // MARK: Pointer & Motion only where it applies (decisions 2, 4, 7)
 
   func test_tvOS_hasNoPointerAndMotion() {
@@ -201,7 +238,7 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
   func test_pointer_follow_showsModeRecenterAndShake() {
     XCTAssertEqual(
       ids(make(state(.wiiRemote, device: Self.touch)), section: "pointer"),
-      ["pointer-mode", "pointer-recenter", "pointer-shake"])
+      ["pointer-mode", "pointer-recenter", "pointer-shake", "pointer-advanced"])
   }
 
   func test_pointer_gyro_addsGyroSensitivityAndInvert() {
@@ -211,7 +248,8 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     let model = make(screen, recorder)
     XCTAssertEqual(
       ids(model, section: "pointer"),
-      ["pointer-mode", "pointer-recenter", "pointer-sensitivity", "pointer-invert-x", "pointer-invert-y", "pointer-shake"])
+      ["pointer-mode", "pointer-recenter", "pointer-sensitivity", "pointer-invert-x", "pointer-invert-y", "pointer-shake",
+       "pointer-advanced"])
     XCTAssertTrue(model.item(id: "pointer-sensitivity")?.isCompactOnTV == true)
     XCTAssertEqual(optionTitles(model.item(id: "pointer-sensitivity")).count, PointerMotionState.gyroSensitivityChoices.count)
     select(AnyHashable(1.5), on: model.item(id: "pointer-sensitivity"))
@@ -222,10 +260,11 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     let recorder = Recorder()
     var screen = state(.wiiRemote, device: Self.touch)
     screen.pointerMotion.pointerMode = .touchDrag
-    XCTAssertEqual(ids(make(screen), section: "pointer"), ["pointer-mode", "pointer-recenter", "pointer-shake"])
+    XCTAssertEqual(ids(make(screen), section: "pointer"), ["pointer-mode", "pointer-recenter", "pointer-shake", "pointer-advanced"])
     screen.pointerMotion.usesProgrammaticOverlay = true
     let model = make(screen, recorder)
-    XCTAssertEqual(ids(model, section: "pointer"), ["pointer-mode", "pointer-recenter", "pointer-sensitivity", "pointer-shake"])
+    XCTAssertEqual(
+      ids(model, section: "pointer"), ["pointer-mode", "pointer-recenter", "pointer-sensitivity", "pointer-shake", "pointer-advanced"])
     select(AnyHashable(2.0), on: model.item(id: "pointer-sensitivity"))
     XCTAssertEqual(recorder.calls, ["gain:2.0"])
   }
@@ -457,13 +496,6 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(make(state(.gameCube)).item(id: "profile-clear-all")?.isEnabled, false)
   }
 
-  func test_extensionOptions_sayExtensionOnTVOS() {
-    XCTAssertEqual(optionTitles(make(state(.wiiRemote)).item(id: "wii-extension")), ["None", "Nunchuk", "Classic"])
-    XCTAssertEqual(
-      optionTitles(make(state(.wiiRemote), platform: .tvos).item(id: "wii-extension")),
-      ["Extension: None", "Extension: Nunchuk", "Extension: Classic"])
-  }
-
   // MARK: Help
 
   /// Every Buttons category opens with its help line: a caption row that is never focused, so a pad
@@ -504,9 +536,6 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(gameCube.item(id: "profile-load")?.subtitle, PlayerScreenHelp.loadProfile)
     XCTAssertEqual(gameCube.item(id: "profile-save")?.subtitle, PlayerScreenHelp.saveProfile)
     XCTAssertEqual(gameCube.item(id: "profile-reset")?.subtitle, PlayerScreenHelp.resetProfile)
-    let wii = make(state(.wiiRemote))
-    XCTAssertEqual(wii.item(id: "wii-extension")?.subtitle, PlayerScreenHelp.extensionCaption)
-    XCTAssertEqual(wii.item(id: "wii-sideways")?.subtitle, PlayerScreenHelp.sideways)
   }
 
   /// Raw Bindings rows read like the capture rows; the editor they push keeps the raw expression.

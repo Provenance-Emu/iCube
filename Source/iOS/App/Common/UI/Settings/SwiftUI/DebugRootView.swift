@@ -120,6 +120,9 @@ struct DebugRootView: View {
           Label(L("Motion Debug"), systemImage: "sensor.tag.radiowaves.forward")
         }
         #endif // DEBUG && canImport(CoreMotion)
+        #if os(iOS) && DEBUG
+        NavigationLink("Gallery") { TouchOverlayGalleryView() }
+        #endif
         // Stall instrumentation is engine-agnostic (VideoCommon), so it lives in this
         // always-visible Diagnostics group rather than the CIR-gated one. Config-backed
         // (MAIN_STALL_METRICS), so bind read-through to the bridge — no @State — to avoid

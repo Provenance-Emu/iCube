@@ -257,34 +257,36 @@ final class PlayerScreenViewModel {
       pads: reader.connectedPads(),
       profileName: remembered?.name,
       profileEdited: remembered?.edited ?? false,
-      controls: RemapGroup.groups(for: system, attachment: player.wiiExtension).flatMap {
-        io.controlRows(owner: $0.owner, group: $0.id, port: slot.port)
-      },
+      controls: io.controlRows(for: slot, attachment: player.wiiExtension),
       armedControlID: capture?.row.id,
       pointerMotion: io.pointerMotion(),
-      motionPointerEnabled: slot.kind == .wiiRemote && io.isMotionPointerEnabled(wiimote: slot.port),
+      motionPointerEnabled: player.motionPointerEnabled,
       showsAdvanced: state.showsAdvanced,
       advanced: AdvancedSettingGroups.entries(for: system, attachment: player.wiiExtension).map { entry in
         AdvancedGroupState(
           owner: entry.owner, groupId: entry.groupId, title: entry.title,
           settings: io.numericSettings(owner: entry.owner, group: entry.groupId, port: slot.port))
       },
-      isPinned: io.isPinned(slot),
+      isPinned: player.isPinned,
       isSensorBarOnTop: io.isSensorBarOnTop())
   }
 
   /// The same reads, in the same shape, as `ControllerHubViewModel.reload()` makes for this port.
   private func readPlayer() -> PlayerState {
+    var player: PlayerState
     switch slot.kind {
     case .gameCube:
-      return PlayerState(
+      player = PlayerState(
         kind: .gameCube, port: slot.port, deviceQualifier: reader.boundQualifier(forGCPort: slot.port),
         wiiExtension: 0, isSideways: false)
     case .wiiRemote:
-      return PlayerState(
+      player = PlayerState(
         kind: .wiiRemote, port: slot.port, deviceQualifier: reader.boundQualifier(forWiimote: slot.port),
         wiiExtension: reader.wiiExtension(forWiimote: slot.port), isSideways: reader.isSideways(forWiimote: slot.port))
+      player.motionPointerEnabled = io.isMotionPointerEnabled(wiimote: slot.port)
     }
+    player.isPinned = io.isPinned(slot)
+    return player
   }
 
   /// Takes a snapshot and follows assignment and device changes until `stop()`. Idempotent.
@@ -337,8 +339,6 @@ final class PlayerScreenViewModel {
       saveProfileAs: { [weak self] in self?.openSavePrompt() },
       resetProfile: { [weak self] in self?.requestReset() },
       clearAll: { [weak self] in self?.requestClearAll() },
-      setExtension: { [weak self] in self?.setExtension($0) },
-      setSideways: { [weak self] in self?.setSideways($0) },
       toggleCapture: { [weak self] in self?.toggleCapture($0) },
       clearBinding: { [weak self] in self?.clear($0) },
       resetBinding: { [weak self] in self?.resetToDefault($0) },
@@ -365,7 +365,9 @@ final class PlayerScreenViewModel {
           readInputStates: { [weak self] in self?.io.inputStates(forQualifier: qualifier) ?? [] },
           check: { [weak self] in self?.io.check($0) ?? ExpressionCheck(status: .invalid, message: "") },
           save: { [weak self] in self?.saveExpression($0, for: row) ?? false }))
-      })
+      },
+      advancedMotionDestination: { AnyView(EnhancedMotionControlsView().padBackNavigation()) },
+      stickFeelDestination: { AnyView(AnalogStickSettingsView().padBackNavigation()) })
   }
 
   /// A setting that is not part of the port's mapping (pointer, motion): write, then re-read.
@@ -382,35 +384,14 @@ final class PlayerScreenViewModel {
     reload()
     guard choice != state.deviceChoice else { return }
     endCapture()
-    let controlsBefore = state.controls
-    let nameBefore = memory.entry(for: slot.playerID, qualifier: state.player.deviceQualifier)
+    let note = PlayerDeviceChangeNote.begin(slot: slot, reader: reader, io: io, memory: memory)
     var bindsGyroPad = false
     if case .pad(let qualifier) = choice {
       bindsGyroPad = state.pads.first { $0.qualifier == qualifier }?.hasGyro == true
     }
     io.setDevice(choice, slot: slot)
-    // Which profile the port holds now, as far as the app can know (Dolphin does not record it):
-    // - Touchscreen: both kinds reload the "Touchscreen" profile whenever the bound device changes
-    //   (`assignTouchscreen(toGCPort:)`, the coordinator's BindTouchscreen), and it always changes here.
-    // - A pad: the assignment loads the pad's default profile unless the port's mapping binds
-    //   something on that pad (ControllerAssignmentService.assign), and the bridge's answer to that
-    //   cannot be read after the fact (the profile is already loaded). What can: the port's control
-    //   rows (each carries its expression). Changed means the default was loaded; unchanged means
-    //   the mapping was kept and the remembered name stays.
-    // - No Device unbinds the device only; the mapping and its name stay.
-    reload()
-    let reloadedDefault = choice == .touchscreen || (choice != .noDevice && state.controls != controlsBefore)
-    let qualifier = state.player.deviceQualifier
-    if reloadedDefault, !qualifier.isEmpty {
-      // A pad that got its own mapping back (the assignment's mapping stash) keeps the name it
-      // had on this port; otherwise its default profile was loaded.
-      let restoredName = choice == .touchscreen ? nil : memory.storedName(for: slot.playerID, qualifier: qualifier)
-      if let name = restoredName ?? io.defaultProfileName(forQualifier: qualifier) {
-        memory.remember(name, for: slot.playerID, qualifier: qualifier)
-      }
-    } else if !reloadedDefault, let nameBefore {
-      memory.adopt(nameBefore, for: slot.playerID, qualifier: qualifier)
-    }
+    // The shared profile bookkeeping (what the port holds now, by decision 5).
+    note.finish(choice: choice)
     // Decision 12: the app turns the IMU pointer off on every touchscreen-bound Wii Remote
     // (EmulationCoordinator.mm:1501-1525), and a re-bind keeps the mapping, so a gyro pad taking
     // over would leave its pointer off.
@@ -531,21 +512,6 @@ final class PlayerScreenViewModel {
   }
 
   // MARK: Wii Remote and settings
-
-  func setExtension(_ value: Int) {
-    guard slot.kind == .wiiRemote, value != state.player.wiiExtension else { return }
-    endCapture()
-    io.setExtension(value, wiimote: slot.port)
-    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
-    reload()
-  }
-
-  func setSideways(_ enabled: Bool) {
-    guard slot.kind == .wiiRemote else { return }
-    io.setSideways(enabled, wiimote: slot.port)
-    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
-    reload()
-  }
 
   func setMotionPointer(_ enabled: Bool) {
     guard slot.kind == .wiiRemote else { return }

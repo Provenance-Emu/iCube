@@ -42,7 +42,7 @@ struct MenuControllerNav: Equatable {
     var leftShoulder = false
     /// R1 — jumps to the first focusable item of the next `MenuSection`.
     var rightShoulder = false
-    /// D-pad left/right: change the focused picker's value. One step per press, no repeat.
+    /// D-pad left/right: change the focused picker's value. One step per press; a hold also emits `.adjustRepeat`, which only a stepper row acts on.
     var left = false
     var right = false
   }
@@ -56,6 +56,9 @@ struct MenuControllerNav: Equatable {
     case jumpSection(Int)
     /// -1 = previous option, +1 = next option, on the focused picker row.
     case adjust(Int)
+    /// Left/right still held after `Config.initialRepeatDelay`: one per `Config.repeatInterval`.
+    /// Only a stepper row acts on it (`MenuFocusRouter`).
+    case adjustRepeat(Int)
     /// A held past `Config.longPressDuration` (only with `activateOnRelease`); fires once per hold.
     case longActivate
   }
@@ -75,6 +78,11 @@ struct MenuControllerNav: Equatable {
   private var rightLatched = false
   /// Set by `resync`: the current hold produces no repeats until released.
   private var suppressRepeatUntilRelease = false
+  private var heldAdjust = 0
+  private var adjustHoldStart: TimeInterval = 0
+  private var lastAdjustRepeat: TimeInterval = 0
+  /// Set by `resync`: the current left/right hold produces no `.adjustRepeat` until released.
+  private var suppressAdjustRepeatUntilRelease = false
 
   init(config: Config = Config()) {
     self.config = config
@@ -159,6 +167,19 @@ struct MenuControllerNav: Equatable {
       rightLatched = false
     }
 
+    let adjustDirection = Self.adjustDirection(input)
+    if adjustDirection != heldAdjust {
+      heldAdjust = adjustDirection
+      suppressAdjustRepeatUntilRelease = false
+      adjustHoldStart = time
+      lastAdjustRepeat = time
+    } else if adjustDirection != 0, !suppressAdjustRepeatUntilRelease,
+              time - adjustHoldStart >= config.initialRepeatDelay,
+              time - lastAdjustRepeat >= config.repeatInterval {
+      lastAdjustRepeat = time
+      events.append(.adjustRepeat(adjustDirection))
+    }
+
     return events
   }
 
@@ -190,6 +211,15 @@ struct MenuControllerNav: Equatable {
     rightShoulderLatched = input.rightShoulder
     leftLatched = input.left
     rightLatched = input.right
+    heldAdjust = Self.adjustDirection(input)
+    adjustHoldStart = time
+    lastAdjustRepeat = time
+    suppressAdjustRepeatUntilRelease = heldAdjust != 0
+  }
+
+  /// -1 left, +1 right, 0 for neither or both.
+  private static func adjustDirection(_ input: Input) -> Int {
+    input.left == input.right ? 0 : (input.left ? -1 : 1)
   }
 
   private mutating func resolveDirection(_ input: Input) -> Int {

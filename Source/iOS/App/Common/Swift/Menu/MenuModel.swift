@@ -14,9 +14,14 @@ import SwiftUI
 /// protocol split).
 struct MenuModel {
   var sections: [MenuSection]
+  /// An id the host wants focused after a rebuild. On iOS it only applies when the rebuild MOVED the focused
+  /// row (`MenuFocusRouter.reconcile`) and never overrides a focused id that still exists. On tvOS the
+  /// `MenuScreen` handler applies it under the same rule: only when the focused row is gone and the requested one exists.
+  var focusRequest: String?
 
-  init(sections: [MenuSection] = []) {
+  init(sections: [MenuSection] = [], focusRequest: String? = nil) {
     self.sections = sections
+    self.focusRequest = focusRequest
   }
 }
 
@@ -24,11 +29,14 @@ struct MenuSection: Identifiable {
   /// Stable, e.g. `"gc-players"` — not `UUID()`. See `MenuItem.id`.
   let id: String
   var header: String?
+  /// Explanatory text under the section (a `List` footer).
+  var footer: String?
   var items: [MenuItem]
 
-  init(id: String, header: String? = nil, items: [MenuItem]) {
+  init(id: String, header: String? = nil, footer: String? = nil, items: [MenuItem]) {
     self.id = id
     self.header = header
+    self.footer = footer
     self.items = items
   }
 }
@@ -63,6 +71,8 @@ struct MenuItem: Identifiable {
   /// One line shown in the info shelf while the item is focused.
   var description: String?
   var longPress: MenuLongPress?
+  /// Draws a trailing chevron in a list row, for a row that opens another screen.
+  var showsChevron: Bool = false
 
   init(
     id: String,
@@ -76,7 +86,8 @@ struct MenuItem: Identifiable {
     onCustomActivate: (() -> Void)? = nil,
     isCompactOnTV: Bool = false,
     description: String? = nil,
-    longPress: MenuLongPress? = nil
+    longPress: MenuLongPress? = nil,
+    showsChevron: Bool = false
   ) {
     self.id = id
     self.title = title
@@ -90,6 +101,45 @@ struct MenuItem: Identifiable {
     self.isCompactOnTV = isCompactOnTV
     self.description = description
     self.longPress = longPress
+    self.showsChevron = showsChevron
+  }
+}
+
+/// A numeric setting: a `Slider` row on iOS, a left/right stepper row on tvOS (spec §6.3).
+/// `Double`-backed on purpose: Int settings round through it, and `stepped` snaps to the grid.
+struct MenuStepper {
+  var value: Binding<Double>
+  var range: ClosedRange<Double>
+  var step: Double
+  var format: (Double) -> String
+
+  /// Digits kept when snapping: enough for any step this app uses (0.1 minimum) and few enough that
+  /// `0.1 * 3` comes back as exactly `0.3`.
+  private static let snapPrecision = 1_000_000.0
+
+  /// `current` moved one `step` in `direction` (+1 / -1), clamped to `range`, then snapped to the
+  /// grid `range.lowerBound + n * step`.
+  ///
+  /// A bound that is off the grid (`0 ... 100` step 30) is still reachable: stepping toward it from
+  /// the last grid point lands on the bound, and stepping away from the upper bound lands on the
+  /// last grid point below it.
+  func stepped(_ current: Double, by direction: Int) -> Double {
+    let raw = current + Double(direction) * step
+    if raw >= range.upperBound { return range.upperBound }
+    if raw <= range.lowerBound { return range.lowerBound }
+    if direction < 0, current >= range.upperBound {
+      let lastGridIndex = ((range.upperBound - range.lowerBound) / step - Self.gridTolerance).rounded(.up) - 1
+      return Self.snap(range.lowerBound + lastGridIndex * step)
+    }
+    let onGrid = range.lowerBound + ((raw - range.lowerBound) / step).rounded() * step
+    return min(range.upperBound, max(range.lowerBound, Self.snap(onGrid)))
+  }
+
+  /// Slack so an upper bound that is exactly on the grid is not mistaken for an off-grid one.
+  private static let gridTolerance = 1e-9
+
+  private static func snap(_ value: Double) -> Double {
+    (value * snapPrecision).rounded() / snapPrecision
   }
 }
 
@@ -112,6 +162,9 @@ enum MenuItemRole {
   /// Activate advances to the next option and wraps; the tile shows the current option as its badge.
   /// A long-press opens the full list. Unlike `.picker`, this never explodes into rows on tvOS.
   case cycle(options: [(String, AnyHashable)], selection: Binding<AnyHashable>)
+  /// A numeric value: a slider on iOS, left/right steps on tvOS. A does nothing; left/right adjust,
+  /// and hold repeats.
+  case stepper(MenuStepper)
 }
 
 /// What a long-press of A (or a touch long-press) on an item does (unified menu UX spec §4.2).
@@ -139,8 +192,25 @@ extension MenuItem {
       return MenuItemRole.selectedTitle(options: options, current: selection.wrappedValue) ?? "—"
     case .toggle(let binding):
       return binding.wrappedValue ? L("On") : L("Off")
+    case .stepper(let stepper):
+      return stepper.format(stepper.value.wrappedValue)
     default:
       return nil
+    }
+  }
+}
+
+extension MenuModel {
+  /// Applies a controller left/right step to the item `id`, resolved from THIS model: a held stepper
+  /// repeats up to ~12 times a second, and every step must read the value as it is now, not as it was
+  /// when the hold began. A stepper moves on its grid; a picker or cycle row wraps through its options.
+  func applyAdjust(id: String, step: Int) {
+    guard let item = item(id: id), item.isEnabled else { return }
+    if case .stepper(let stepper) = item.role {
+      stepper.value.wrappedValue = stepper.stepped(stepper.value.wrappedValue, by: step)
+    } else if let stepping = item.role.steppable,
+              let next = MenuItemRole.cycled(options: stepping.options, current: stepping.selection.wrappedValue, step: step) {
+      stepping.selection.wrappedValue = next
     }
   }
 }

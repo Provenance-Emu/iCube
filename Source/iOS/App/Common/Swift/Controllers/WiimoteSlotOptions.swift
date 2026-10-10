@@ -3,9 +3,10 @@
 
 import Foundation
 
-/// The per-Wii-Remote Extension / Sideways setters shared by
-/// the hub and the player screen, so a change made on either
-/// goes through exactly the same path. `DOLWiimoteBridge` itself posts
+/// The per-Wii-Remote Extension / Sideways accessors. The Controllers hub's writer
+/// (`LiveControllerHubWriter`) and its view model read and write through them, and
+/// `ControllersRootView` reads them to pick the editor's pad family, so every path
+/// into the bridge is the same one. `DOLWiimoteBridge` itself posts
 /// `DOLWiiOverlayLayoutChangedNotification` after each write, so the touch
 /// overlay re-lays-out without any Swift-side re-post.
 enum WiimoteSlotOptions {

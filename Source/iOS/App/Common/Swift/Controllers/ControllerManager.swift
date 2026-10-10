@@ -9,7 +9,7 @@ final class ControllerManager: NSObject, ObservableObject {
 
   enum OverlayMode: Int { case auto, gamecube, wii }
   @Published var overlayVisible: Bool = true
-  /// The hub's Overlay Style, kept across launches (`overlayModeDefaultsKey`, registered default Auto).
+  /// The hub's Touch Controls → Layout, kept across launches (`overlayModeDefaultsKey`, registered default Auto).
   @Published var overlayMode: OverlayMode = ControllerManager.storedOverlayMode() {
     didSet {
       Self.storeOverlayMode(overlayMode)
@@ -19,7 +19,7 @@ final class ControllerManager: NSObject, ObservableObject {
 
   static let overlayModeDefaultsKey = "controller_overlay_mode"
 
-  /// "Controllers Take Player 1" (More Controller Settings), on unless turned off:
+  /// "Controllers Take Player 1" (the hub's Setup section), on unless turned off:
   /// `AssignmentEngine.player1Takeover`.
   static let connectTakesPlayer1DefaultsKey = "controller_connect_takes_player1"
 
@@ -28,7 +28,7 @@ final class ControllerManager: NSObject, ObservableObject {
     return defaults.bool(forKey: connectTakesPlayer1DefaultsKey)
   }
 
-  /// The Overlay Style kept across launches; Auto when none was kept or the value is unknown.
+  /// The Touch Controls → Layout choice kept across launches; Auto when none was kept or the value is unknown.
   static func storedOverlayMode(in defaults: UserDefaults = .standard) -> OverlayMode {
     defaults.register(defaults: [overlayModeDefaultsKey: OverlayMode.auto.rawValue])
     return OverlayMode(rawValue: defaults.integer(forKey: overlayModeDefaultsKey)) ?? .auto
