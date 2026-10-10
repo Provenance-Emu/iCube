@@ -261,8 +261,6 @@ enum TVToolbarSheet: String, Identifiable, CaseIterable {
 
 struct TVLibraryView: View {
 
-  @Environment(\.colorScheme) private var colorScheme
-
   // MARK: - UI Settings
 
   @AppStorage(ConfigInterfaceDefaultsKey.backgroundStyle) private var backgroundStyle: BackgroundStyle = .gradient
@@ -728,63 +726,6 @@ struct TVLibraryView: View {
     return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
   }
 
-  /// Customizable background based on user preference
-  @ViewBuilder
-  private var backgroundGradient: some View {
-    switch backgroundStyle {
-    case .clean:
-      cleanBackground
-    case .gradient:
-      gradientBackground
-    case .animated:
-      // The static gradient while a game runs: the orbs and drifting tiles are perpetual animations
-      // on a layer behind a screen nobody is looking at.
-      EmulationQuiet(
-        idle: LibraryAnimatedBackground(),
-        whileEmulating: gradientBackground)
-    }
-  }
-
-  /// Follows the appearance: a fixed black here put light-mode (black) titles on black.
-  @ViewBuilder
-  private var cleanBackground: some View {
-#if os(tvOS)
-    // tvOS has no .systemBackground; this is what it resolves to on iOS.
-    Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? .black : .white })
-      .ignoresSafeArea()
-#else
-    Color(uiColor: .systemBackground)
-      .ignoresSafeArea()
-#endif
-  }
-
-  @ViewBuilder
-  private var gradientBackground: some View {
-    if colorScheme == .dark {
-      LinearGradient(
-        colors: [
-          Color(red: 0.08, green: 0.12, blue: 0.22),
-          Color(red: 0.04, green: 0.06, blue: 0.15),
-          Color.black
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-      .ignoresSafeArea()
-    } else {
-      LinearGradient(
-        colors: [
-          Color(red: 0.90, green: 0.93, blue: 0.98), // light top
-          Color(red: 0.84, green: 0.89, blue: 0.98), // mid
-          Color(red: 0.96, green: 0.97, blue: 1.00)  // near white
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-      .ignoresSafeArea()
-    }
-  }
-
   private enum CheatType { case gecko, ar }
 
   /// Helper function to check if a URL is a remote URL (HTTP/HTTPS/WebDAV)
@@ -839,7 +780,7 @@ struct TVLibraryView: View {
   private var mainContent: some View {
     ZStack {
       // Beautiful GameCube/Wii inspired background
-      backgroundGradient
+      ICubeRoom(style: LibraryBackgroundStyle(rawValue: backgroundStyle.rawValue) ?? .gradient)
 
       if model.games.isEmpty {
         emptyLibraryView
