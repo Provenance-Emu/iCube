@@ -87,9 +87,11 @@ static const double kPreferredSampleRate = 48000.0;
   AVAudioSession* session = [AVAudioSession sharedInstance];
   NSError* error = nil;
 
+#if !TARGET_OS_TV
   if (_microphoneActive) {
     // Recording: Bluetooth stays on A2DP for output (built-in microphone for input) rather than
-    // dropping to the low-quality HFP profile, and the speaker stays the default output.
+    // dropping to the low-quality HFP profile, and the speaker stays the default output. tvOS has
+    // no app-accessible microphone, so the core never asks for this there.
     AVAudioSessionCategoryOptions options = AVAudioSessionCategoryOptionAllowBluetoothA2DP |
                                             AVAudioSessionCategoryOptionDefaultToSpeaker |
                                             AVAudioSessionCategoryOptionAllowAirPlay;
@@ -99,7 +101,9 @@ static const double kPreferredSampleRate = 48000.0;
                         error:&error]) {
       NSLog(@"[Audio] setCategory(PlayAndRecord) failed: %@", error);
     }
-  } else {
+  } else
+#endif
+  {
     AudioMuteSwitchMode mode = (AudioMuteSwitchMode)Config::Get(Config::MAIN_MUTE_SWITCH_MODE);
     NSString* category = AVAudioSessionCategoryPlayback;
 #if !TARGET_OS_TV
