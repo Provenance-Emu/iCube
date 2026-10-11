@@ -28,6 +28,7 @@
 #include "Common/IOFile.h"
 #include "Core/IOS/USB/Emulated/Skylanders/Skylander.h"
 #include "Core/IOS/USB/Emulated/Skylanders/SkylanderFigure.h"
+#include <algorithm>
 #include <atomic>
 #import "Swift.h"
 #import "EmulationCoordinator.h"
