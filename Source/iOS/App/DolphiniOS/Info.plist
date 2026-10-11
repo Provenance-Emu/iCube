@@ -597,5 +597,9 @@
 			</dict>
 		</dict>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The microphone stands in for the GameCube Microphone and Wii Speak in games that support them.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Headphone motion keeps spatial game audio anchored while you turn your head.</string>
 </dict>
 </plist>

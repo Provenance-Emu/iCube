@@ -5,12 +5,23 @@
 
 #import <AVFoundation/AVFoundation.h>
 
+#ifndef IPHONEOS
+#define IPHONEOS 1
+#endif
+#include "AudioCommon/IOSAudioSession.h"
 #import "Core/Config/iOSSettings.h"
 
 #import "Swift.h"
 
+/// 10.7 ms at 48 kHz: half the callbacks of the old 5 ms request for a difference the game's own
+/// 80 ms mixer buffer makes inaudible.
+static const NSTimeInterval kPreferredIOBufferDuration = 512.0 / 48000.0;
+static const double kPreferredSampleRate = 48000.0;
+
 @implementation AudioSessionManager {
   id _routeChangeObserver;
+  BOOL _hookRegistered;
+  BOOL _microphoneActive;
 }
 
 /// "HDMI:Living Room TV, BluetoothA2DP:AirPods Pro" — the output ports the session is actually
@@ -39,6 +50,23 @@
               }];
 }
 
+- (void)registerMicrophoneHookOnce {
+  if (_hookRegistered) {
+    return;
+  }
+  _hookRegistered = YES;
+  __weak AudioSessionManager* weakSelf = self;
+  AudioCommon::IOSAudioSession::SetMicrophoneSessionHook([weakSelf](bool active) {
+    AudioSessionManager* strongSelf = weakSelf;
+    if (!strongSelf) {
+      return;
+    }
+    strongSelf->_microphoneActive = active ? YES : NO;
+    NSLog(@"[Audio] microphone %@", active ? @"opened" : @"closed");
+    [strongSelf setSessionCategory];
+  });
+}
+
 + (AudioSessionManager*)shared {
   static AudioSessionManager* sharedInstance = nil;
   static dispatch_once_t onceToken;
@@ -50,68 +78,54 @@
   return sharedInstance;
 }
 
+- (BOOL)microphoneActive {
+  return _microphoneActive;
+}
+
 - (void)setSessionCategory {
+  [self registerMicrophoneHookOnce];
   AVAudioSession* session = [AVAudioSession sharedInstance];
-
-  AudioMuteSwitchMode mode = (AudioMuteSwitchMode)Config::Get(Config::MAIN_MUTE_SWITCH_MODE);
-
   NSError* error = nil;
-  AVAudioSessionCategoryOptions options = AVAudioSessionCategoryOptionAllowBluetoothA2DP | AVAudioSessionCategoryOptionAllowAirPlay;
 
-#if TARGET_OS_TV
-  // tvOS uses playback only. The error used to be ignored here with no fallback: if the OS rejects
-  // one of the options the session silently stays in its default (ambient) category, and an ambient
-  // session is not what the user's AirPods / AirPlay output selection applies to. Retry like iOS.
-  if (![session setCategory:AVAudioSessionCategoryPlayback withOptions:options error:&error]) {
-    NSLog(@"[Audio] setCategory(Playback, options 0x%lx) failed: %@ — retrying without options",
-          (unsigned long)options, error);
-    error = nil;
-    [session setCategory:AVAudioSessionCategoryPlayback error:&error];
-  }
-  [session setMode:AVAudioSessionModeMoviePlayback error:nil];
-#else
-  if (mode == AudioMuteSwitchModeObey) {
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 100000
-    [session setCategory:AVAudioSessionCategorySoloAmbient withOptions:options error:&error];
-#else
-    [session setCategory:AVAudioSessionCategorySoloAmbient error:&error];
-#endif
+  if (_microphoneActive) {
+    // Recording: Bluetooth stays on A2DP for output (built-in microphone for input) rather than
+    // dropping to the low-quality HFP profile, and the speaker stays the default output.
+    AVAudioSessionCategoryOptions options = AVAudioSessionCategoryOptionAllowBluetoothA2DP |
+                                            AVAudioSessionCategoryOptionDefaultToSpeaker |
+                                            AVAudioSessionCategoryOptionAllowAirPlay;
+    if (![session setCategory:AVAudioSessionCategoryPlayAndRecord
+                         mode:AVAudioSessionModeDefault
+                      options:options
+                        error:&error]) {
+      NSLog(@"[Audio] setCategory(PlayAndRecord) failed: %@", error);
+    }
   } else {
-#if __IPHONE_OS_VERSION_MAX_ALLOWED >= 100000
-    [session setCategory:AVAudioSessionCategoryPlayback withOptions:options error:&error];
+    AudioMuteSwitchMode mode = (AudioMuteSwitchMode)Config::Get(Config::MAIN_MUTE_SWITCH_MODE);
+    NSString* category = AVAudioSessionCategoryPlayback;
+#if !TARGET_OS_TV
+    if (mode == AudioMuteSwitchModeObey) {
+      category = AVAudioSessionCategorySoloAmbient;
+    }
 #else
-    [session setCategory:AVAudioSessionCategoryPlayback error:&error];
+    (void)mode;
 #endif
+    // Playback categories route to Bluetooth and AirPlay on their own; the AllowBluetoothA2DP /
+    // AllowAirPlay options are PlayAndRecord-only and tvOS rejects them.
+    if (![session setCategory:category mode:AVAudioSessionModeMoviePlayback options:0 error:&error]) {
+      NSLog(@"[Audio] setCategory(%@) failed: %@", category, error);
+    }
   }
-  [session setMode:AVAudioSessionModeMoviePlayback error:nil];
-#endif
 
-  if (error) {
-    NSLog(@"[Audio] setCategory failed: %@", error);
-  }
-  [session setPreferredSampleRate:48000 error:nil];
-  [session setPreferredIOBufferDuration:0.005 error:nil];
+  [session setPreferredSampleRate:kPreferredSampleRate error:nil];
+  [session setPreferredIOBufferDuration:kPreferredIOBufferDuration error:nil];
   NSError* activateError = nil;
   if (![session setActive:YES error:&activateError]) {
     NSLog(@"[Audio] setActive failed: %@", activateError);
   }
-  NSLog(@"[Audio] session category=%@ mode=%@ options=0x%lx route=%@",
-        session.category, session.mode, (unsigned long)session.categoryOptions,
+  NSLog(@"[Audio] session category=%@ mode=%@ options=0x%lx mic=%d route=%@", session.category,
+        session.mode, (unsigned long)session.categoryOptions, (int)_microphoneActive,
         [AudioSessionManager describeRoute:session.currentRoute]);
   [self observeRouteChangesOnce];
-
-#if TARGET_OS_TV
-  // Advisory: post a notification to suggest backend based on route
-  AVAudioSessionRouteDescription* route = session.currentRoute;
-  BOOL hasHDMI = NO; BOOL headphones = NO;
-  for (AVAudioSessionPortDescription* out in route.outputs) {
-    if ([out.portType isEqualToString:AVAudioSessionPortHDMI]) hasHDMI = YES;
-    if ([out.portType isEqualToString:AVAudioSessionPortHeadphones]) headphones = YES;
-  }
-  NSString* backend = hasHDMI ? @"CoreAudio" : @"AVAudioEngine";
-  NSDictionary* info = @{ @"backend": backend };
-  [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLSuggestAudioBackend" object:nil userInfo:info];
-#endif
 }
 
 @end

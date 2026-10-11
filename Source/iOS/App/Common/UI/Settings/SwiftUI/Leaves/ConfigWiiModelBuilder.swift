@@ -98,6 +98,30 @@ enum ConfigWiiModelBuilder {
                            set: { apply(.sdFolderSync($0)) }),
       ])
 
-    return MenuModel(sections: [video, general, remotes, peripherals])
+    return MenuModel(sections: [video, general, remotes, peripherals] + wiiSpeakSections(state, apply: apply))
   }
+
+  /// Wii Speak captures from this device's microphone. iOS only: tvOS exposes no microphone to apps.
+  private static func wiiSpeakSections(_ state: ConfigWiiState, apply: @escaping (ConfigWiiChange) -> Void) -> [MenuSection] {
+    #if os(iOS)
+    return [MenuSection(id: "wii-speak", header: L("Wii Speak"),
+                        footer: L("Takes effect when a game starts. iCube asks for microphone access the first time a game opens it."),
+                        items: [
+                          SettingsRow.toggle("wii-speak", L("Emulate Wii Speak"), state.wiiSpeak,
+                                             L("Presents a Wii Speak on the USB port and captures from this device's microphone, for Monster Hunter Tri, Animal Crossing: City Folk and The Conduit."),
+                                             set: { apply(.wiiSpeak($0)) }),
+                          SettingsRow.toggle("wii-speak-muted", L("Mute Wii Speak"), state.wiiSpeakMuted,
+                                             L("Keeps the emulated microphone silent. Dolphin ships it muted; turn this off to be heard."),
+                                             enabled: state.wiiSpeak, set: { apply(.wiiSpeakMuted($0)) }),
+                          SettingsRow.stepper("wii-speak-volume", L("Wii Speak Volume"), Double(state.wiiSpeakVolumeDb),
+                                              range: ConfigWiiLimits.wiiSpeakVolumeDb, step: 1, format: decibels,
+                                              L("Gain applied to captured speech before the game hears it."),
+                                              enabled: state.wiiSpeak && !state.wiiSpeakMuted, set: { apply(.wiiSpeakVolumeDb(Int($0))) }),
+                        ])]
+    #else
+    return []
+    #endif
+  }
+
+  private static func decibels(_ value: Double) -> String { String(format: "%+.0f dB", value) }
 }

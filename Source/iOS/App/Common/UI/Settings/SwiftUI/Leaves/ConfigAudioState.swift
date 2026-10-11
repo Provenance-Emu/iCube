@@ -5,29 +5,85 @@ import Foundation
 
 enum ConfigAudioLimits {
   static let volume: ClosedRange<Double> = 0 ... 100
-  static let stretchLatencyMs: ClosedRange<Double> = 5 ... 200
+  /// MAIN_AUDIO_BUFFER_SIZE; Dolphin's own slider range.
+  static let bufferMs: ClosedRange<Double> = 16 ... 200
+  static let echoMs: ClosedRange<Double> = 10 ... 2000
+  static let echoFeedback: ClosedRange<Double> = 0 ... 0.95
+  static let crushBits: ClosedRange<Double> = 4 ... 16
+  static let crushDownsample: ClosedRange<Double> = 1 ... 16
+  static let eqDb: ClosedRange<Double> = -24 ... 24
 }
 
-/// Snapshot of Config for the Audio screen. Defaults match the old view's `@State` defaults.
+/// The shared filter chain both backends run (MAIN_AUDIO_FX_*). Defaults match the compiled Config defaults.
+struct AudioEffectsState: Equatable {
+  var echoEnabled = false
+  var echoMs = 200
+  var echoFeedback = 0.35
+  var eqEnabled = false
+  var eqLowDb = 0.0
+  var eqMidDb = 0.0
+  var eqHighDb = 0.0
+  var crushEnabled = false
+  var crushBits = 16
+  var crushDownsample = 1
+}
+
+enum AudioEffectsChange: Equatable {
+  case echoEnabled(Bool)
+  case echoMs(Int)
+  case echoFeedback(Double)
+  case eqEnabled(Bool)
+  case eqLowDb(Double)
+  case eqMidDb(Double)
+  case eqHighDb(Double)
+  case crushEnabled(Bool)
+  case crushBits(Int)
+  case crushDownsample(Int)
+}
+
+/// What the running stream reports; read-only on the screen.
+struct AudioLiveState: Equatable {
+  /// "HDMI:Living Room TV", or "" when unknown.
+  var routeDescription = ""
+  var routeMaxChannels = 2
+  var routeIsHeadphones = false
+  /// "stereo", "spatial", "discrete" or "" when no stream is running.
+  var outputMode = ""
+  var microphoneSupported = false
+  /// 0 undetermined, 1 denied, 2 granted (AudioFXBridge.microphonePermission).
+  var microphonePermission = 0
+}
+
+/// Snapshot of Config for the Audio screen. Defaults match the compiled Config defaults.
 struct ConfigAudioState: Equatable {
-  /// Raw Config value; "" is the default device.
+  /// Raw Config value; "" means the compiled default, CoreAudio.
   var backend = ""
   /// Raw names from `DOLConfigBridge.audioBackends()`. The host reads them, the builder never does.
   var backends: [String] = []
   var volume = 100
-  var stretch = false
-  var stretchLatencyMs = 30
+  var surround = false
+  /// AudioCommon::DPL2Quality, 0 Lowest ... 3 Highest.
+  var surroundQuality = 2
+  var spatial = true
+  var headTracking = true
+  var bufferMs = 80
+  var fillGaps = true
+  var preservePitch = false
   var muteOnNoSpeedLimit = false
   var obeyMuteSwitch = true
+  var effects = AudioEffectsState()
+  var live = AudioLiveState()
 
   static let avAudioEngine = "AVAudioEngine"
   static let coreAudio = "CoreAudio"
+  static let surroundQualityOptions: [(String, Int)] = [(L("Lowest"), 0), (L("Low"), 1), (L("High"), 2), (L("Highest"), 3)]
 
   /// What the backend row shows for a raw backend name.
   static func label(forBackend raw: String) -> String {
     switch raw {
-    case "": return L("Default Device")
-    case coreAudio: return L("CoreAudio (Speakers/HDMI)")
+    case "": return L("Automatic (CoreAudio)")
+    case coreAudio: return L("CoreAudio (Low Latency)")
+    case avAudioEngine: return L("AVAudioEngine (Spatial & Plug-ins)")
     default: return raw
     }
   }
@@ -39,32 +95,61 @@ struct ConfigAudioState: Equatable {
     return raws.map { (Self.label(forBackend: $0), $0) }
   }
 
-  /// AVAudioEngine is in development: choosing it asks first.
-  static func needsConfirmation(choosing raw: String) -> Bool { raw == avAudioEngine }
+  var isAVAudioEngine: Bool { backend == Self.avAudioEngine }
+  /// Spatial rendering and Audio Unit plug-ins exist on the AVAudioEngine graph only.
+  var spatialRowsEnabled: Bool { surround && isAVAudioEngine }
+  var headTrackingRowEnabled: Bool { spatialRowsEnabled && spatial }
 
-  enum BackendChoice: Equatable {
-    /// Re-picking the current backend: no prompt, no write.
-    case ignore
-    case confirm
-    case commit
+  /// The caption under the surround rows: what the current route can carry and what the stream is doing with it.
+  static func outputCaption(live: AudioLiveState, surround: Bool) -> String {
+    let route = live.routeDescription.isEmpty ? L("Unknown output") : live.routeDescription
+    let channels = live.routeMaxChannels >= 6 ? L("up to 6 channels") : L("2 channels")
+    let mode: String
+    switch live.outputMode {
+    case "discrete": mode = L("playing discrete 5.1")
+    case "spatial": mode = L("playing spatial audio")
+    case "stereo": mode = surround ? L("playing stereo (surround needs a 5.1 route or headphones on AVAudioEngine)") : L("playing stereo")
+    default: mode = L("no game running")
+    }
+    return "\(route) · \(channels) · \(mode)"
   }
 
-  /// What choosing `raw` does from the current backend.
-  func choice(for raw: String) -> BackendChoice {
-    if raw == backend { return .ignore }
-    return Self.needsConfirmation(choosing: raw) ? .confirm : .commit
+  var outputCaption: String { Self.outputCaption(live: live, surround: surround) }
+
+  /// What the microphone section says and offers for a permission state.
+  enum MicrophoneAccess: Equatable {
+    case unsupported
+    case ask
+    case denied
+    case granted
   }
 
-  var showsAVAudioEngineEffects: Bool { backend.contains(Self.avAudioEngine) }
-  var showsCoreAudioEffects: Bool { !showsAVAudioEngineEffects && backend.contains(Self.coreAudio) }
+  static func microphoneAccess(supported: Bool, permission: Int) -> MicrophoneAccess {
+    guard supported else { return .unsupported }
+    switch permission {
+    case 1: return .denied
+    case 2: return .granted
+    default: return .ask
+    }
+  }
+
+  var microphoneAccess: MicrophoneAccess { Self.microphoneAccess(supported: live.microphoneSupported, permission: live.microphonePermission) }
 }
 
 /// One user edit. The host applies it to its snapshot AND to Config; the builder only emits it.
 enum ConfigAudioChange: Equatable {
   case backend(String)
   case volume(Int)
-  case stretch(Bool)
-  case stretchLatencyMs(Int)
+  case surround(Bool)
+  case surroundQuality(Int)
+  case spatial(Bool)
+  case headTracking(Bool)
+  case bufferMs(Int)
+  case fillGaps(Bool)
+  case preservePitch(Bool)
   case muteOnNoSpeedLimit(Bool)
   case obeyMuteSwitch(Bool)
+  case effect(AudioEffectsChange)
+  case requestMicrophoneAccess
+  case openSystemSettings
 }

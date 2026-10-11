@@ -13,10 +13,33 @@ final class ConfigGameCubeModelBuilderTests: XCTestCase {
   }
 
   func test_rowOrder_andSections() {
+    #if os(iOS)
+    XCTAssertEqual(model().allItems.map(\.id), ["load-main-menu", "language", "slot-b-microphone"])
+    XCTAssertEqual(model().sections.map(\.id), ["general", "system-language", "peripherals"])
+    XCTAssertEqual(model().sections.map(\.header), ["General", nil, "Peripherals"])
+    XCTAssertEqual(model().allItems.map(\.title), ["Load GameCube Main Menu", "System Language", "Microphone in Slot B"])
+    #else
     XCTAssertEqual(model().allItems.map(\.id), ["load-main-menu", "language"])
     XCTAssertEqual(model().sections.map(\.id), ["general", "system-language"])
     XCTAssertEqual(model().sections.map(\.header), ["General", nil])
     XCTAssertEqual(model().allItems.map(\.title), ["Load GameCube Main Menu", "System Language"])
+    #endif
+  }
+
+  func test_slotBMicrophone_reflectsTheState_andEmitsItsOwnChange_iOSOnly() {
+    #if os(iOS)
+    for shown in [true, false] {
+      var s = ConfigGameCubeState()
+      s.slotBMicrophone = shown
+      guard case .toggle(let binding)? = model(s).item(id: "slot-b-microphone")?.role else { return XCTFail("not a toggle") }
+      XCTAssertEqual(binding.wrappedValue, shown)
+      changes = []
+      binding.wrappedValue = !shown
+      XCTAssertEqual(changes, [.slotBMicrophone(!shown)])
+    }
+    #else
+    XCTAssertNil(model().item(id: "slot-b-microphone"))
+    #endif
   }
 
   func test_everyRow_hasADescription() {

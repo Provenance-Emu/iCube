@@ -282,14 +282,50 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (void)setAudioBackend:(NSString *)backend;
 + (NSInteger)audioVolume;
 + (void)setAudioVolume:(NSInteger)percent;
-+ (BOOL)audioStretch;
-+ (void)setAudioStretch:(BOOL)enabled;
-+ (NSInteger)audioStretchLatencyMs;
-+ (void)setAudioStretchLatencyMs:(NSInteger)ms;
+// Mixer timing (MAIN_AUDIO_BUFFER_SIZE / FILL_GAPS / PRESERVE_PITCH; the Mixer reads these live).
++ (NSInteger)audioBufferSizeMs;
++ (void)setAudioBufferSizeMs:(NSInteger)ms;
++ (BOOL)audioFillGaps;
++ (void)setAudioFillGaps:(BOOL)enabled;
++ (BOOL)audioPreservePitch;
++ (void)setAudioPreservePitch:(BOOL)enabled;
 + (BOOL)audioMuteOnDisabledSpeedLimit;
 + (void)setAudioMuteOnDisabledSpeedLimit:(BOOL)enabled;
+// Also re-applies the AVAudioSession category, so the change is live.
 + (BOOL)audioMuteSwitchObey;
 + (void)setAudioMuteSwitchObey:(BOOL)obey;
+// Surround (MAIN_DPL2_DECODER / MAIN_DPL2_QUALITY 0...3) and the AVAudioEngine spatial options.
++ (BOOL)audioSurround;
++ (void)setAudioSurround:(BOOL)enabled;
++ (NSInteger)audioSurroundQuality;
++ (void)setAudioSurroundQuality:(NSInteger)quality;
++ (BOOL)audioSpatial;
++ (void)setAudioSpatial:(BOOL)enabled;
++ (BOOL)audioSpatialHeadTracking;
++ (void)setAudioSpatialHeadTracking:(BOOL)enabled;
+// Shared filter chain (MAIN_AUDIO_FX_*), read live by both backends.
++ (BOOL)audioFXDelayEnabled;
++ (void)setAudioFXDelayEnabled:(BOOL)enabled;
++ (NSInteger)audioFXDelayMs;
++ (void)setAudioFXDelayMs:(NSInteger)ms;
++ (double)audioFXDelayFeedback;
++ (void)setAudioFXDelayFeedback:(double)feedback;
++ (BOOL)audioFXCrushEnabled;
++ (void)setAudioFXCrushEnabled:(BOOL)enabled;
++ (NSInteger)audioFXCrushBits;
++ (void)setAudioFXCrushBits:(NSInteger)bits;
++ (NSInteger)audioFXCrushDownsample;
++ (void)setAudioFXCrushDownsample:(NSInteger)factor;
++ (BOOL)audioFXEQEnabled;
++ (void)setAudioFXEQEnabled:(BOOL)enabled;
++ (double)audioFXEQLowDb;
++ (void)setAudioFXEQLowDb:(double)db;
++ (double)audioFXEQMidDb;
++ (void)setAudioFXEQMidDb:(double)db;
++ (double)audioFXEQHighDb;
++ (void)setAudioFXEQHighDb:(double)db;
+// One-time: moves the old ca_fx_* UserDefaults into the MAIN_AUDIO_FX_* keys and deletes them.
++ (void)migrateLegacyAudioEffectDefaults;
 
 // Config > GameCube
 + (BOOL)mainSkipIPL;
@@ -300,6 +336,9 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 // (i.e. the user picked a language). NO means the value is still the compiled
 // default and the UI may derive a locale-based default instead. (Bug 6)
 + (BOOL)mainGCLanguageIsSet;
+// MAIN_SLOT_B is the Microphone (YES) or None (NO). Boot-time: the EXI device is created at start.
++ (BOOL)mainSlotBMicrophone;
++ (void)setMainSlotBMicrophone:(BOOL)enabled;
 
 // Config > Wii (SYSCONF and MAIN)
 + (BOOL)sysconfPAL60;
@@ -568,6 +607,13 @@ extern NSNotificationName const DOLConfigChangedNotification;
 // Main.EmulatedUSBDevices (subset for iOS)
 + (BOOL)mainEmulateSkylanderPortal;
 + (void)setMainEmulateSkylanderPortal:(BOOL)enabled;
++ (BOOL)mainEmulateWiiSpeak;
++ (void)setMainEmulateWiiSpeak:(BOOL)enabled;
++ (BOOL)mainWiiSpeakMuted;
++ (void)setMainWiiSpeakMuted:(BOOL)muted;
+// -50...50 dB gain applied to captured samples.
++ (NSInteger)mainWiiSpeakVolumeModifier;
++ (void)setMainWiiSpeakVolumeModifier:(NSInteger)db;
 + (NSInteger)skylanderLoadFromPath:(NSString*)path;
 + (BOOL)skylanderRemoveAtSlot:(NSInteger)slot;
 + (void)skylanderClearAll;

@@ -9,6 +9,8 @@ struct ConfigGameCubeState: Equatable {
   var loadMainMenu = true
   /// English; `sync` derives the real value.
   var language = 0
+  /// MAIN_SLOT_B holds the Microphone (true) or nothing (false).
+  var slotBMicrophone = false
 
   /// MAIN_GC_LANGUAGE is a 0-based GameCube index (DiscIO::FromGameCubeLanguage maps N to Language(N+1)),
   /// and the GameCube IPL has no Japanese entry.
@@ -40,4 +42,5 @@ struct ConfigGameCubeState: Equatable {
 enum ConfigGameCubeChange: Equatable {
   case loadMainMenu(Bool)
   case language(Int)
+  case slotBMicrophone(Bool)
 }

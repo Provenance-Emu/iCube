@@ -46,6 +46,7 @@ struct RemapGroup: Identifiable, Equatable {
     RemapGroup(owner: .gcPad, id: 2, title: L("C-Stick")),
     RemapGroup(owner: .gcPad, id: 4, title: L("Triggers")),
     RemapGroup(owner: .gcPad, id: 5, title: L("Rumble")),
+    RemapGroup(owner: .gcPad, id: 6, title: L("Microphone")),
     RemapGroup(owner: .gcPad, id: 7, title: L("Options")),
   ]
 
