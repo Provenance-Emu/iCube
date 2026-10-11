@@ -52,15 +52,15 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
   var body: some View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
       searchRow
-      libraryRow(icon: "house.fill", title: L("My Library"), item: .library, selected: destination == .home) {
+      libraryRow(icon: .symbol("house.fill"), title: L("My Library"), item: .library, selected: destination == .home) {
         destination = .home
       }
-      libraryRow(icon: "square.grid.2x2", title: L("All Games"), item: .all, selected: destination == .all) {
+      libraryRow(icon: .symbol("square.grid.2x2"), title: L("All Games"), item: .all, selected: destination == .all) {
         destination = .all
       }
       ForEach(platforms) { platform in
         libraryRow(
-          icon: platform.systemImage,
+          icon: .platform(platform),
           title: platform.displayName,
           item: .platform(platform),
           selected: destination == .platform(platform)
@@ -70,16 +70,16 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
       }
       Spacer(minLength: ICubeDesign.Spacing.l.rawValue)
       libraryRow(
-        icon: isSelecting ? "checkmark.circle.fill" : "checkmark.circle",
+        icon: .symbol(isSelecting ? "checkmark.circle.fill" : "checkmark.circle"),
         title: isSelecting ? L("Done") : L("Select"),
         item: .select,
         selected: isSelecting,
         action: onToggleSelect
       )
-      menuRow(icon: "square.and.arrow.down", title: L("Import"), item: .importGames, menu: importMenu)
-      menuRow(icon: "slider.horizontal.3", title: L("View"), item: .view, menu: viewMenu)
-      menuRow(icon: "arrow.up.arrow.down", title: L("Sort"), item: .sort, menu: sortMenu)
-      libraryRow(icon: "gearshape.fill", title: L("Settings"), item: .settings, selected: false, action: onSettings)
+      menuRow(icon: .symbol("square.and.arrow.down"), title: L("Import"), item: .importGames, menu: importMenu)
+      menuRow(icon: .symbol("slider.horizontal.3"), title: L("View"), item: .view, menu: viewMenu)
+      menuRow(icon: .symbol("arrow.up.arrow.down"), title: L("Sort"), item: .sort, menu: sortMenu)
+      libraryRow(icon: .symbol("gearshape.fill"), title: L("Settings"), item: .settings, selected: false, action: onSettings)
     }
     .padding(.vertical, ICubeDesign.Spacing.l.rawValue)
     .padding(.trailing, ICubeDesign.Spacing.s.rawValue)
@@ -109,12 +109,11 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
   private var searchRow: some View {
     if isExpanded, showSearchField {
       HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
-        Image(systemName: "magnifyingglass")
-          .font(ICubeDesign.symbolFont(.shelf))
-          .frame(width: ICubeDesign.Spacing.xl.rawValue)
+        railIcon(.symbol("magnifyingglass"))
         TextField(L("Search"), text: $searchText)
           .focused($searchFieldFocused)
           .icubeText(.nav)
+          .multilineTextAlignment(.trailing)
           .onSubmit { searchFieldFocused = false }
           .onAppear { searchFieldFocused = true }
       }
@@ -122,7 +121,7 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
       .focused($focusedItem, equals: .search)
     } else {
       libraryRow(
-        icon: "magnifyingglass",
+        icon: .symbol("magnifyingglass"),
         title: searchText.isEmpty ? L("Search") : searchText,
         item: .search,
         selected: !searchText.isEmpty
@@ -134,7 +133,7 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
   }
 
   private func libraryRow(
-    icon: String,
+    icon: RailIcon,
     title: String,
     item: Item,
     selected: Bool,
@@ -148,7 +147,7 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
   }
 
   private func menuRow<MenuContent: View>(
-    icon: String,
+    icon: RailIcon,
     title: String,
     item: Item,
     @ViewBuilder menu: () -> MenuContent
@@ -161,18 +160,120 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
     .focused($focusedItem, equals: item)
   }
 
-  private func rowLabel(icon: String, title: String) -> some View {
+  /// Icon in a fixed left column; the label ends on the row's trailing edge.
+  private func rowLabel(icon: RailIcon, title: String) -> some View {
     HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
-      Image(systemName: icon)
-        .font(ICubeDesign.symbolFont(.shelf))
-        .frame(width: ICubeDesign.Spacing.xl.rawValue)
+      railIcon(icon)
       if isExpanded {
         Text(title)
           .icubeText(.nav)
           .lineLimit(1)
+          .frame(maxWidth: .infinity, alignment: .trailing)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func railIcon(_ icon: RailIcon) -> some View {
+    Group {
+      switch icon {
+      case .symbol(let name):
+        Image(systemName: name)
+          .font(ICubeDesign.symbolFont(.rail))
+      case .platform(let platform):
+        LibraryConsoleGlyph(platform: platform)
+          .frame(width: ICubeDesign.Symbol.rail.rawValue, height: ICubeDesign.Symbol.rail.rawValue)
+          .foregroundStyle(ICubeDesign.color(.accent))
+      }
+    }
+    .frame(width: ICubeDesign.Symbol.railColumn, height: ICubeDesign.Symbol.railColumn)
+  }
+}
+
+/// What a rail row draws in the icon column.
+private enum RailIcon {
+  case symbol(String)
+  case platform(LibraryPlatformCategory)
+}
+
+/// Original console silhouettes for the rail. Not manufacturer logos.
+private struct LibraryConsoleGlyph: View {
+  let platform: LibraryPlatformCategory
+
+  var body: some View {
+    switch platform {
+    case .gameCube: CubeGlyph().stroke(style: glyphStroke)
+    case .wii: RemoteGlyph().fill(style: FillStyle(eoFill: true))
+    case .wiiWare: ChannelGlyph().fill(style: FillStyle(eoFill: true))
+    case .all: EmptyView()
+    }
+  }
+
+  /// Edge weight from the hairline token, doubled so a 22pt glyph still reads.
+  private var glyphStroke: StrokeStyle {
+    StrokeStyle(
+      lineWidth: ICubeDesign.Line.hairline.rawValue + ICubeDesign.Line.hairline.rawValue,
+      lineJoin: .round,
+      lineCap: .round
+    )
+  }
+}
+
+/// Isometric cube: outer shell plus the three edges that meet at the front corner.
+private struct CubeGlyph: Shape {
+  func path(in rect: CGRect) -> Path {
+    let s = min(rect.width, rect.height)
+    let origin = CGPoint(x: rect.midX - s / 2, y: rect.midY - s / 2)
+    func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+      CGPoint(x: origin.x + x * s, y: origin.y + y * s)
+    }
+    var path = Path()
+    path.move(to: point(0.50, 0.08))
+    path.addLine(to: point(0.92, 0.30))
+    path.addLine(to: point(0.92, 0.70))
+    path.addLine(to: point(0.50, 0.92))
+    path.addLine(to: point(0.08, 0.70))
+    path.addLine(to: point(0.08, 0.30))
+    path.closeSubpath()
+    path.move(to: point(0.50, 0.08))
+    path.addLine(to: point(0.50, 0.50))
+    path.move(to: point(0.08, 0.30))
+    path.addLine(to: point(0.50, 0.50))
+    path.addLine(to: point(0.92, 0.30))
+    return path
+  }
+}
+
+/// A remote wand: body with the pointer, cross, and button cut out.
+private struct RemoteGlyph: Shape {
+  func path(in rect: CGRect) -> Path {
+    let s = min(rect.width, rect.height)
+    let origin = CGPoint(x: rect.midX - s / 2, y: rect.midY - s / 2)
+    func box(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect {
+      CGRect(x: origin.x + x * s, y: origin.y + y * s, width: w * s, height: h * s)
+    }
+    var path = Path()
+    path.addRoundedRect(in: box(0.32, 0.04, 0.36, 0.92), cornerRadius: s * 0.16)
+    path.addEllipse(in: box(0.42, 0.12, 0.16, 0.10))
+    path.addRect(box(0.44, 0.32, 0.12, 0.22))
+    path.addRect(box(0.36, 0.37, 0.28, 0.12))
+    path.addEllipse(in: box(0.40, 0.64, 0.20, 0.14))
+    return path
+  }
+}
+
+/// A channel tile: rounded screen with a smaller picture cut out of it.
+private struct ChannelGlyph: Shape {
+  func path(in rect: CGRect) -> Path {
+    let s = min(rect.width, rect.height)
+    let origin = CGPoint(x: rect.midX - s / 2, y: rect.midY - s / 2)
+    func box(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect {
+      CGRect(x: origin.x + x * s, y: origin.y + y * s, width: w * s, height: h * s)
+    }
+    var path = Path()
+    path.addRoundedRect(in: box(0.10, 0.16, 0.80, 0.68), cornerRadius: s * 0.14)
+    path.addRoundedRect(in: box(0.24, 0.30, 0.52, 0.40), cornerRadius: s * 0.06)
+    return path
   }
 }
 

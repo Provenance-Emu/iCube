@@ -164,8 +164,11 @@ extension View {
 
 extension ICubeDesign {
   /// SF Symbol glyph sizes for tiles and shelves (tvOS points).
+  /// `rail` sits in `railColumn` so the glyph and the nav label share one optical center.
   enum Symbol: CGFloat {
-    case tilePrimary = 40, tile = 30, shelf = 28
+    case tilePrimary = 40, tile = 30, shelf = 28, rail = 22
+    /// Fixed left column for a rail icon. The glyph is centered inside it.
+    static let railColumn: CGFloat = 32
   }
 
   static func symbolFont(_ size: Symbol) -> Font {

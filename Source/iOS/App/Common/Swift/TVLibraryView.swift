@@ -785,8 +785,13 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var mainContent: some View {
     ZStack {
-      // Beautiful GameCube/Wii inspired background
+      // Beautiful GameCube/Wii inspired background. tvOS always uses the animated room
+      // (orbs and gradient); the plain gradient reads as an empty void behind the rail.
+#if os(tvOS)
+      ICubeRoom(style: .animated)
+#else
       ICubeRoom(style: LibraryBackgroundStyle(rawValue: backgroundStyle.rawValue) ?? .gradient)
+#endif
 
       if model.games.isEmpty {
         emptyLibraryView
@@ -902,6 +907,7 @@ struct TVLibraryView: View {
               libraryHomeShelves()
             }
           }
+          .scrollContentBackground(.hidden)
           .focusSection()
           libraryBottomChrome
         }
