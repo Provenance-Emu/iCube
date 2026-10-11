@@ -15,6 +15,8 @@ struct TileFace: View {
   let isEnabled: Bool
   /// Short variant for compact-height layouts (iPhone landscape): icon and title on one line.
   var isCompact: Bool = false
+  /// tvOS primary-row tile: a larger glyph.
+  var isProminent: Bool = false
   @Environment(\.icube) private var theme
 
   #if os(tvOS)
@@ -94,30 +96,24 @@ struct TileFace: View {
   /// tvOS face (design spec §3, laid out like iFly's pause tiles): a centred glyph over an uppercase `nav` title,
   /// with the value as a `tag` underneath. `ICubeTileButtonStyle` draws the surface, hairline and focus.
   private var tvContent: some View {
-    let tone = isDestructive ? ICubeDesign.color(.destructive) : tint
+    // Monochrome glyphs (iFly): colour is kept for destructive tiles and for focus.
+    let tone = isDestructive ? ICubeDesign.color(.destructive) : ICubeDesign.color(.textPrimary)
+    let hasValue = !(badge ?? "").isEmpty
     return VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
       if let icon {
         Image(systemName: icon)
-          .font(ICubeDesign.symbolFont(.tile))
+          .font(ICubeDesign.symbolFont(isProminent ? .tilePrimary : .tile))
           .foregroundStyle(tone)
       }
-      Text(title)
+      // The value rides inline in accent, "SPEED: OFF" style.
+      (Text(title).foregroundStyle(tone)
+        + Text(hasValue ? ": \(badge ?? "")" : "").foregroundStyle(ICubeDesign.color(.accent)))
         .icubeText(.nav)
-        .foregroundStyle(isDestructive ? ICubeDesign.color(.destructive) : ICubeDesign.color(.textPrimary))
         // One word never wraps mid-word ("CONTROLLER/S"): it shrinks to fit on one line instead.
-        .lineLimit(title.contains(" ") ? 2 : 1)
+        .lineLimit(title.contains(" ") || hasValue ? 2 : 1)
+        .truncationMode(.middle)
         .multilineTextAlignment(.center)
         .minimumScaleFactor(0.7)
-      if let badge, !badge.isEmpty {
-        Text(badge)
-          .icubeText(.tag)
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .foregroundStyle(ICubeDesign.color(.textSecondary))
-          .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
-          .padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
-          .background(Capsule().fill(ICubeDesign.color(.rowSurface)))
-      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .opacity(isEnabled ? 1 : 0.45)

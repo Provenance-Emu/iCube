@@ -163,7 +163,7 @@ extension View {
 extension ICubeDesign {
   /// SF Symbol glyph sizes for tiles and shelves (tvOS points).
   enum Symbol: CGFloat {
-    case tile = 32, shelf = 26
+    case tilePrimary = 40, tile = 30, shelf = 28
   }
 
   static func symbolFont(_ size: Symbol) -> Font {

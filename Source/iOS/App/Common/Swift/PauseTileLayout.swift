@@ -6,7 +6,7 @@ import CoreGraphics
 
 /// Spec §5.1 column rule for the pause overlay's tile grid.
 enum PauseTileLayout {
-  static let tvColumns = 6
+  static let tvColumns = 4
 
   /// Width from which a compact-height window (iPhone landscape) gets the wider grid.
   static let compactHeightWideThreshold: CGFloat = 800

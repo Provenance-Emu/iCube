@@ -9,8 +9,8 @@ import XCTest
 /// Spec §5.1: 6 columns on tvOS, 3 on an iPhone in portrait, 4 in landscape, 4–6 on iPad by width.
 final class PauseTileLayoutTests: XCTestCase {
   func test_tv_isAlwaysSix() {
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 1920, isTV: true), 6)
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 100, isTV: true), 6)
+    XCTAssertEqual(PauseTileLayout.columns(forWidth: 1920, isTV: true), 4)
+    XCTAssertEqual(PauseTileLayout.columns(forWidth: 100, isTV: true), 4)
   }
 
   func test_phonePortrait_three_landscape_four() {

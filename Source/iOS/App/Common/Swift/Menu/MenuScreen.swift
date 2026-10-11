@@ -307,15 +307,16 @@ struct MenuScreen: View {
 
   // MARK: Tiles (both platforms)
 
-  private func tile(_ item: MenuItem, focused: Bool) -> some View {
+  private func tile(_ item: MenuItem, focused: Bool, prominent: Bool = false) -> some View {
     let isDestructive: Bool = { if case .destructive = item.role { return true } else { return false } }()
     return Button { activateFromButton(item) } label: {
       TileFace(
         icon: item.icon, title: item.title, badge: item.currentValueTitle ?? item.badge,
-        tint: item.tint ?? .accentColor, isDestructive: isDestructive, isEnabled: item.isEnabled, isCompact: style.isCompactTiles)
+        tint: item.tint ?? .accentColor, isDestructive: isDestructive, isEnabled: item.isEnabled, isCompact: style.isCompactTiles,
+        isProminent: prominent)
     }
     #if os(tvOS)
-    .buttonStyle(ICubeTileButtonStyle(isFocusedOverride: focused, minHeight: Self.tvTileHeight))
+    .buttonStyle(ICubeTileButtonStyle(isFocusedOverride: focused, minHeight: prominent ? Self.tvPrimaryTileHeight : Self.tvTileHeight))
     #else
     .buttonStyle(FocusButtonStyle(isFocusedOverride: focused))
     #endif
@@ -645,8 +646,10 @@ struct MenuScreen: View {
   // MARK: tvOS — native focus only
 
   #if os(tvOS)
-  /// Short enough that the pause menu's three sections fit on one screen with the help shelf below.
-  private static let tvTileHeight: CGFloat = 140
+  /// A headerless section is the primary row (the pause menu's Resume/Save States/Reset/Quit) and draws taller.
+  private static let tvPrimaryTileHeight: CGFloat = 150
+  /// Short enough that the pause menu's options grid fits on one screen with the help shelf below.
+  private static let tvTileHeight: CGFloat = 118
 
   private var tvTilesBody: some View {
     let columns = style.columns
@@ -660,7 +663,7 @@ struct MenuScreen: View {
             ForEach(Array(section.items.chunked(into: columns).enumerated()), id: \.offset) { _, row in
               HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
                 ForEach(row) { item in
-                  tvTile(item)
+                  tvTile(item, prominent: section.header == nil)
                 }
                 ForEach(0 ..< max(0, columns - row.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity) }
               }
@@ -670,7 +673,8 @@ struct MenuScreen: View {
         .padding(ICubeDesign.Spacing.l.rawValue)
       }
       .focusSection()
-      InfoShelf(text: tvFocusedItem?.description, value: tvFocusedItem?.currentValueTitle)
+      InfoShelf(text: tvFocusedItem?.description, value: tvFocusedItem?.currentValueTitle,
+                title: tvFocusedItem?.title, icon: tvFocusedItem?.icon)
         .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
     }
   }
@@ -691,8 +695,8 @@ struct MenuScreen: View {
   private var tvFocusedItem: MenuItem? { tvFocusedID.flatMap { model.item(id: $0) } }
 
   /// A tile. All four directions are left to the focus engine; A cycles a `.cycle` tile and a long-press lists it.
-  private func tvTile(_ item: MenuItem) -> some View {
-    tile(item, focused: tvFocusedID == item.id)
+  private func tvTile(_ item: MenuItem, prominent: Bool = false) -> some View {
+    tile(item, focused: tvFocusedID == item.id, prominent: prominent)
       .focused($tvFocusedID, equals: item.id)
   }
 

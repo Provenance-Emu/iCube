@@ -261,7 +261,7 @@ internal struct PauseMenuView: View {
       let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: isTV, isCompactHeight: compactHeight)
       ZStack {
         if isTV {
-          HStack(alignment: .top, spacing: 64) {
+          HStack(alignment: .center, spacing: 64) {
             coverColumn.frame(width: 300, alignment: .leading)
             tiles(columns: columns, compact: false)
           }
@@ -291,7 +291,7 @@ internal struct PauseMenuView: View {
       // A background, not a ZStack sibling: the scaledToFill backdrop would otherwise widen the ZStack to the
       // image's fill size and push the tile grid several windows wide.
       .frame(width: proxy.size.width, height: proxy.size.height)
-      .background(backdrop)
+      .background { if isTV { tvBackdrop } else { backdrop } }
     }
     // `MenuScreen` row text takes no explicit color; pin the dark-mode values so titles stay legible over the
     // always-dark backdrop whatever the system appearance. `.environment`, not `.preferredColorScheme`, so the
@@ -311,12 +311,24 @@ internal struct PauseMenuView: View {
   private func tiles(columns: Int, compact: Bool) -> some View {
     // Modal while a confirm overlay is up: on tvOS the focus engine can otherwise land back on a tile.
     let confirmUp = showResetDialog || showExitDialog
-    return MenuScreen(model: pauseMenuModel, style: .tiles(columns: columns, compact: compact), onBack: {
+    let model = platform == .tvos ? PauseMenuModelBuilder.tvLayout(pauseMenuModel) : pauseMenuModel
+    return MenuScreen(model: model, style: .tiles(columns: columns, compact: compact), onBack: {
       guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
       onClose()
     })
     .disabled(confirmUp)
     .allowsHitTesting(!confirmUp)
+  }
+
+  /// tvOS: the dark room with the game's art as a faint wash and a vignette, not a black screen.
+  private var tvBackdrop: some View {
+    ZStack {
+      ICubeRoom(style: .gradient)
+      Image(uiImage: game.bannerImage ?? game.coverImage)
+        .resizable().scaledToFill().blur(radius: 60).opacity(0.3).ignoresSafeArea().clipped()
+      LinearGradient(colors: [.black.opacity(0.55), .clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
+        .ignoresSafeArea()
+    }
   }
 
   private var backdrop: some View {
@@ -342,8 +354,11 @@ internal struct PauseMenuView: View {
         .padding(.bottom, ICubeDesign.Spacing.xs.rawValue)
       Label(L("Paused"), systemImage: "pause.fill")
         .icubeText(.nav)
+        .tracking(ICubeDesign.Spacing.xxs.rawValue)
         .foregroundStyle(ICubeDesign.color(.accent))
       Text(game.title)
+        // Before `icubeText`: the role's own `textCase(nil)` would otherwise sit closer to the text and win.
+        .textCase(.uppercase)
         .icubeText(.title)
         .foregroundStyle(ICubeDesign.titleGradient)
         .lineLimit(3)
@@ -836,6 +851,21 @@ struct PauseMenuActions {
 
 /// Unified menu UX spec §5: Quick / Game / System. Shared by iOS and tvOS.
 enum PauseMenuModelBuilder {
+  /// The tvOS session row, in order (iFly layout): big tiles above the Options grid.
+  static let tvPrimaryIDs = ["resume", "save-states", "reset", "exit"]
+
+  /// tvOS regroup of `make`'s tiles: one headerless primary row, then every other tile, in order, under Options.
+  /// A headerless section is what `MenuScreen` draws as the tall primary row.
+  static func tvLayout(_ model: MenuModel) -> MenuModel {
+    let all = model.sections.flatMap(\.items)
+    let primary = tvPrimaryIDs.compactMap { id in all.first { $0.id == id } }
+    let options = all.filter { !tvPrimaryIDs.contains($0.id) }
+    return MenuModel(sections: [
+      MenuSection(id: "primary", items: primary),
+      MenuSection(id: "options", header: L("Options"), items: options),
+    ])
+  }
+
   static let fastForwardOff: AnyHashable = AnyHashable(-1)
   static let fastForwardOptions: [(String, AnyHashable)] = [
     (L("Off"), fastForwardOff), ("2x", AnyHashable(200)), ("3x", AnyHashable(300)), ("4x", AnyHashable(400)), ("8x", AnyHashable(800)), (L("Unlimited"), AnyHashable(0)),

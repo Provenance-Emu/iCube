@@ -9,6 +9,9 @@ import SwiftUI
 struct InfoShelf: View {
   let text: String?
   let value: String?
+  /// tvOS: the focused item's name and glyph, shown above the description.
+  var title: String? = nil
+  var icon: String? = nil
   @Environment(\.icube) private var theme
 
   var body: some View {
@@ -23,13 +26,21 @@ struct InfoShelf: View {
   /// tvOS help bar under the pause grid: accent glyph, `body` description, the value as an accent `tag`, on a panel.
   private var tvBody: some View {
     HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
-      Image(systemName: "info.circle")
+      Image(systemName: icon ?? "info.circle")
         .font(ICubeDesign.symbolFont(.shelf))
         .foregroundStyle(ICubeDesign.color(.accent))
-      Text(text ?? " ")
-        .icubeText(.body)
-        .foregroundStyle(ICubeDesign.color(.textPrimary))
-        .lineLimit(2)
+        .frame(width: ICubeDesign.Spacing.xl.rawValue)
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+        if let title {
+          Text(title)
+            .icubeText(.nav)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+        }
+        Text(text ?? " ")
+          .icubeText(.body)
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
+          .lineLimit(2)
+      }
       Spacer(minLength: 0)
       if let value, !value.isEmpty {
         Text(value)
@@ -38,6 +49,7 @@ struct InfoShelf: View {
       }
     }
     .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
+    .padding(.vertical, ICubeDesign.Spacing.m.rawValue)
     .frame(maxWidth: .infinity, minHeight: theme.shelfHeight, alignment: .leading)
     .icubePanel()
   }
