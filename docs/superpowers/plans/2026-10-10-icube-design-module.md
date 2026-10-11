@@ -1666,6 +1666,17 @@
 - [ ] **Step 6: Report.** For each task, give the SHA, the test counts and the snapshot PNG paths.
 
   The owner's device checks for this step are:
-  1. On Apple TV, library cards rest visibly flatter. The cover and the placeholder both rest at 2°, and the focus lift, tilt and glow look exactly as before.
+  1. On Apple TV, library cards rest visibly flatter. Cards rest at 2°, and focused cards tilt to 5°, slightly less than before, most visibly on placeholders. The inner tilts were constant in both states, so removing them lowers the focused angle too: real covers go from about 6° to 5° focused and about 3° to 2° at rest, placeholders from about 8° to 5° focused and about 5° to 2° at rest. The lift, glow and ring are unchanged.
   2. Pause tiles, settings sidebar, controller hub and info shelf look unchanged.
   3. All three Background Styles look unchanged in light and dark. With Animated selected, start a game and confirm the background goes static.
+
+## Execution notes (2026-10-10)
+
+Corrections and rulings made while executing this plan. The task text above is left as written.
+
+- **Ruling 4: tvOS Info.plist.** tvOS reads `DolphiniOS/Info-TV.plist` (Project.swift:397), so `UIAppFonts` went into both plists (commit 08880498a2).
+- **Ruling 5: placeholder tilt.** `templatedCoverView` is shared with the iOS card, which has no container tilt. The placeholder's 3° stays on iOS only, behind `#if !os(tvOS)` (commit 741bb4d570). This contradicts Task 5 Step 2's "acceptable" alternative.
+- **Ruling 6: ratchet patterns.** The ratchet's `.font(` patterns use a `(?<!\w)` lookbehind so `icube.font(.body)` is not counted (commit 6b03332585).
+- **Tooling.** `/usr/local/bin/tuist` is a broken shim; use `/opt/homebrew/bin/tuist`.
+- **Fix 1: non-vacuity guards (commit 6ac4795ea0).** `ICubeCardFocusTests` now asserts that each legacy render is not a single colour and that, per style, the focused render differs from the rest render. Blank `drawHierarchy` captures can no longer pass the pixel-identity check. A temporary blank `render` made it fail on the new assertions; the reverted test passes.
+- **Task 9 device check 1** was corrected: the inner tilts were constant in both states, so removing them lowers the focused angle as well.
