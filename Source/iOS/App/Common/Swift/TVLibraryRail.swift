@@ -271,10 +271,20 @@ private struct ChannelGlyph: Shape {
       CGRect(x: origin.x + x * s, y: origin.y + y * s, width: w * s, height: h * s)
     }
     var path = Path()
-    path.addRoundedRect(in: box(0.10, 0.16, 0.80, 0.68), cornerSize: CGSize(width: s * 0.14, height: s * 0.14))
-    path.addRoundedRect(in: box(0.24, 0.30, 0.52, 0.40), cornerSize: CGSize(width: s * 0.06, height: s * 0.06))
+    path.addRoundedRect(in: box(0.10, 0.16, 0.80, 0.68), cornerRadii: equalRadii(s * 0.14))
+    path.addRoundedRect(in: box(0.24, 0.30, 0.52, 0.40), cornerRadii: equalRadii(s * 0.06))
     return path
   }
+}
+
+/// Same radius on every corner. `Path` on this SDK takes `RectangleCornerRadii`, not a `CGFloat`.
+private func equalRadii(_ radius: CGFloat) -> RectangleCornerRadii {
+  RectangleCornerRadii(
+    topLeading: radius,
+    bottomLeading: radius,
+    bottomTrailing: radius,
+    topTrailing: radius
+  )
 }
 
 #endif
