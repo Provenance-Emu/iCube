@@ -53,6 +53,9 @@ Written 2026-10-11 on branch `claude/icube-audio-engine-809825`. Spec:
 
 ## Verification done / still owed
 
+- Done: an independent review of the backends (threading, ARC, Core Audio use); its two crash
+  findings (feeder completions capturing the stack, a microphone open/close race) and the medium
+  ones are fixed in `fix(audio): review fixes for the iOS backends`.
 - Done: `AudioDSPChainTest` (7 tests) compiled and run standalone against the main checkout's gtest;
   every changed core TU syntax-checked against the simulator compile database (with `-fobjc-arc` for
   the `.mm` files); `check_localized_keys.py --check` and `icube_config_lint.py` show no new findings.
