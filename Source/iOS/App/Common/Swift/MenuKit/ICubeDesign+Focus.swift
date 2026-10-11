@@ -125,6 +125,38 @@ struct ICubeRowButtonStyle: ButtonStyle {
   }
 }
 
+/// tvOS library rail rows. Focus is read in a nested view: a struct-level
+/// `@Environment(\.isFocused)` does not update on tvOS.
+struct ICubeRailButtonStyle: ButtonStyle {
+  var isSelected: Bool = false
+
+  func makeBody(configuration: Configuration) -> some View {
+    ICubeRailButtonChrome(label: configuration.label, isPressed: configuration.isPressed, isSelected: isSelected)
+  }
+}
+
+private struct ICubeRailButtonChrome<Label: View>: View {
+  let label: Label
+  let isPressed: Bool
+  let isSelected: Bool
+  @Environment(\.isFocused) private var isFocused
+
+  var body: some View {
+    label
+      .padding(.horizontal, ICubeDesign.Spacing.s.rawValue)
+      .padding(.vertical, ICubeDesign.Spacing.xs.rawValue)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background {
+        if isFocused || isSelected {
+          RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+            .fill(isFocused ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface))
+        }
+      }
+      .modifier(ICubeFocusChrome(focused: isFocused, pressed: isPressed,
+                                 radius: ICubeDesign.Radius.small.rawValue, scale: ICubeDesign.Motion.rowFocusScale))
+  }
+}
+
 /// Pause and hub tiles (spec §3 Tile).
 struct ICubeTileButtonStyle: ButtonStyle {
   var isFocusedOverride: Bool? = nil

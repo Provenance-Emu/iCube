@@ -277,6 +277,10 @@ struct TVLibraryView: View {
 
   @AppStorage("library_platform_filter") private var platformFilter: LibraryPlatformCategory = .all
   @AppStorage("library_grid_column_offset") private var gridColumnOffset: Int = 0
+#if os(tvOS)
+  /// Home, all games, or one platform. The left rail writes this; the grid reads it.
+  @State private var tvLibraryDestination: TVLibraryRailDestination = .home
+#endif
 
   // MARK: - Multi-select state
 
@@ -555,9 +559,11 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var navigationConfiguration: some View {
     navigationContent
+#if os(tvOS)
+      .toolbar(.hidden, for: .navigationBar)
+#else
       .navigationTitle(storeForBanner.isScanning ? "" : "iCube Library")
       .toolbar { libraryToolbar }
-#if !os(tvOS)
       .navigationBarTitleDisplayMode(.large)
 #endif
 #if os(iOS) || targetEnvironment(macCatalyst)
@@ -585,9 +591,11 @@ struct TVLibraryView: View {
         }
       }
 #endif
+#if !os(tvOS)
       .safeAreaInset(edge: .bottom, spacing: 8) {
         libraryBottomChrome
       }
+#endif
 #if !os(tvOS)
       .modifier(LibraryNavigationSubtitleModifier(subtitle: libraryNavigationSubtitle))
 #endif
@@ -853,11 +861,97 @@ struct TVLibraryView: View {
   }
 
   #if os(tvOS)
+  /// Platforms that have at least one game, in filter-bar order.
+  private var tvRailPlatforms: [LibraryPlatformCategory] {
+    let available = LibraryPlatformMapper.availableCategories(in: model.games, overrides: platformOverrides)
+    return LibraryPlatformCategory.filterCases.filter { available.contains($0) }
+  }
+
+  private func applyTVLibraryDestination(_ destination: TVLibraryRailDestination) {
+    switch destination {
+    case .home, .all:
+      platformFilter = .all
+    case .platform(let category):
+      platformFilter = category
+    }
+  }
+
   private func libraryView_tvOS(_ displayGames: [TVGameItem]) -> some View {
-    ScrollView {
-      libraryToolbar_tvOS_favorites
-      libraryToolbar_tvOS_main(displayGames)
-        .padding(.bottom, libraryBottomInsetPadding)
+    HStack(alignment: .top, spacing: ICubeDesign.Spacing.l.rawValue) {
+      TVLibraryRail(
+        destination: $tvLibraryDestination,
+        searchText: $searchText,
+        platforms: tvRailPlatforms,
+        isSelecting: isSelectionMode,
+        onToggleSelect: {
+          if isSelectionMode {
+            exitSelectionMode()
+          } else {
+            isSelectionMode = true
+          }
+        },
+        onSettings: { showSettings = true },
+        importMenu: { libraryImportMenuSection },
+        viewMenu: { libraryViewMenuSection },
+        sortMenu: { sortMenuItems }
+      )
+      VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+        ScrollView {
+          if isSearching || tvLibraryDestination != .home {
+            libraryToolbar_tvOS_main(displayGames)
+          } else {
+            libraryHomeShelves()
+          }
+        }
+        .focusSection()
+        libraryBottomChrome
+      }
+    }
+    .padding(ICubeDesign.Spacing.l.rawValue)
+    .onAppear {
+      if platformFilter != .all {
+        tvLibraryDestination = .platform(platformFilter)
+      }
+    }
+    .onChange(of: tvLibraryDestination) { _, destination in
+      applyTVLibraryDestination(destination)
+    }
+  }
+
+  /// Home column: Recently Played, Favorites, All Games, then one shelf per platform.
+  private func libraryHomeShelves() -> some View {
+    let overrides = platformOverrides
+    let refs = model.games.map { item in
+      LibraryGameRef(
+        id: item.gameID,
+        platform: LibraryPlatformMapper.category(for: item, override: overrides[item.filePath])
+      )
+    }
+    let favDict = SharedDefaults.suite.dictionary(forKey: "favorites_by_gameid") ?? [:]
+    let favoriteIDs = Set(favDict.compactMap { (key, value) in (value as? Bool) == true ? key : nil })
+    let shelves = LibrarySectionBuilder.homeShelves(
+      games: refs,
+      favoriteIDs: favoriteIDs,
+      lastPlayed: LastPlayedStore.all()
+    )
+    let byID = Dictionary(model.games.map { ($0.gameID, $0) }, uniquingKeysWith: { first, _ in first })
+    return VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+      ForEach(shelves) { shelf in
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+          Text(L(shelf.titleKey))
+            .icubeText(.section)
+            .padding(.horizontal, Constants.gridHorizontalPadding)
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Constants.gridHorizontalSpacing) {
+              ForEach(shelf.gameIDs, id: \.self) { gameID in
+                if let item = byID[gameID] {
+                  gameGridItem(for: item)
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -1639,13 +1733,7 @@ struct TVLibraryView: View {
         )
       }
 #else
-      if showPlatformFilterBar {
-        LibraryPlatformFilterBar(
-          selection: $platformFilter,
-          games: model.games,
-          overrides: platformOverrides
-        )
-      }
+      // tvOS platform pills are a sibling under the grid in `libraryView_tvOS`.
 #endif
     }
   }
@@ -1669,9 +1757,11 @@ struct TVLibraryView: View {
     // `libraryBottomChrome`), not just when the platform pills apply.
     if !model.games.isEmpty { pad += 56 }
 #else
-    if showPlatformFilterBar { pad += 56 }
+    // Platform pills and the selection bar sit under the scroller.
 #endif
+#if os(iOS) || targetEnvironment(macCatalyst)
     if isSelectionMode && !selectedFilePaths.isEmpty { pad += 92 }
+#endif
     return pad
   }
 

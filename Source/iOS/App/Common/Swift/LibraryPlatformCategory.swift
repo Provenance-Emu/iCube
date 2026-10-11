@@ -238,6 +238,8 @@ struct LibraryPlatformFilterBar: View {
   let games: [TVGameItem]
   let overrides: [String: LibraryPlatformCategory]
   var onSelectionChange: (() -> Void)?
+  /// Remote focus for the pills. Set when Down leaves the last grid row.
+  var pillFocus: FocusState<LibraryPlatformCategory?>.Binding
 
   private var visibleCategories: [LibraryPlatformCategory] {
     let available = LibraryPlatformMapper.availableCategories(in: games, overrides: overrides)
@@ -271,6 +273,7 @@ struct LibraryPlatformFilterBar: View {
       #endif
       onSelectionChange?()
     }
+    .focused(pillFocus, equals: cat)
   }
 }
 

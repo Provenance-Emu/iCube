@@ -4129,6 +4129,9 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Lets the Metal video backend record/submit draw commands on a worker thread (host-side rendering optimization; unrelated to emulation threading)." = "Lets the Metal video backend record/submit draw commands on a worker thread (host-side rendering optimization; unrelated to emulation threading).";
 "Lets titles modify the virtual SD card. Off keeps it read-only." = "Lets titles modify the virtual SD card. Off keeps it read-only.";
 "Library" = "Library";
+"My Library" = "マイライブラリ";
+"All Games" = "すべてのゲーム";
+"Recently Played" = "最近プレイした";
 "Library Empty" = "Library Empty";
 "Library UI" = "Library UI";
 "Library refreshed" = "Library refreshed";
