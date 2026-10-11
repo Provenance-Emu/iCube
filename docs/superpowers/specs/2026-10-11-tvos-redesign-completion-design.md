@@ -61,7 +61,7 @@ simulator exactly as `docs/HANDOFF.md` describes. Capture, with `xcrun simctl io
 
 - library: My Library, All Games, GameCube, Wii; rail collapsed and expanded; the View, Sort and
   Import menus open; the empty state (a fresh simulator has no games, so the empty state is the
-  first capture and the others need a stand-in library; see 3.3)
+  first capture and the others need a stand-in library; see below)
 - settings: the sidebar and every leaf, each scrolled to the top
 - pause (`-ICubePausePreview`): the grid, Save States, Cheats, Shaders, Reset and Exit confirms
 - light and dark for the library, one settings leaf and the pause grid
