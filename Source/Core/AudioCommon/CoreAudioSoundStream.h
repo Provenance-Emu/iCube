@@ -50,6 +50,8 @@ private:
   /// Close and reopen the unit for the current route and settings. Caller holds m_guard->mutex.
   void RebuildLocked();
   bool WantsSurround() const;
+  /// Surround that the current settings and route call for (what a build would try).
+  bool SurroundIntended() const;
   void RegisterObservers();
   void UnregisterObservers();
   void RefreshFromConfig();
@@ -66,6 +68,9 @@ private:
   std::atomic<bool> m_should_run{false};
   std::atomic<bool> m_unit_running{false};
   std::atomic<bool> m_surround{false};
+  /// What the last build tried for; compared against SurroundIntended() so a 5.1 request the
+  /// route turned down does not trigger a rebuild on every notification.
+  std::atomic<bool> m_surround_intended{false};
   u32 m_channels = 2;
   int m_volume = 100;
 

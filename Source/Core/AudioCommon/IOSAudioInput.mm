@@ -32,8 +32,9 @@ struct IOSAudioInput::Impl
   static constexpr UInt32 kOutputBus = 0;
   static constexpr UInt32 kMaxFramesPerSlice = 4096;
 
-  bool OpenUnit();
-  void CloseUnit();
+  // *Locked variants expect `mutex` held.
+  bool OpenUnitLocked();
+  void CloseUnitLocked();
   void Shutdown();
   void HandleRouteChange();
   OSStatus RenderInput(AudioUnitRenderActionFlags* flags, const AudioTimeStamp* ts, UInt32 bus,
@@ -107,10 +108,11 @@ OSStatus InputProc(void* ref_con, AudioUnitRenderActionFlags* flags, const Audio
 
 // MARK: - Impl
 
-bool IOSAudioInput::Impl::OpenUnit()
+bool IOSAudioInput::Impl::OpenUnitLocked()
 {
-  std::lock_guard lock(mutex);
-  if (dead || unit)
+  // want_running is re-checked here, under the lock, so an open that was queued before Stop() or
+  // Shutdown() ran cannot bring a unit back to life behind them.
+  if (dead || !want_running.load() || unit)
     return unit != nullptr;
 
   // Ask the app for a recording category first. The hook runs synchronously on the main queue,
@@ -202,9 +204,8 @@ bool IOSAudioInput::Impl::OpenUnit()
   return true;
 }
 
-void IOSAudioInput::Impl::CloseUnit()
+void IOSAudioInput::Impl::CloseUnitLocked()
 {
-  std::lock_guard lock(mutex);
   running.store(false);
   if (unit)
   {
@@ -223,23 +224,26 @@ void IOSAudioInput::Impl::CloseUnit()
 
 void IOSAudioInput::Impl::Shutdown()
 {
-  want_running.store(false);
-  CloseUnit();
+  // One critical section: nothing queued on the main queue can open a unit between the close and
+  // the dead flag, so once this returns no callback will ever run again.
   std::lock_guard lock(mutex);
+  want_running.store(false);
   dead = true;
+  CloseUnitLocked();
   observer = nil;
 }
 
 void IOSAudioInput::Impl::HandleRouteChange()
 {
-  if (!want_running.load() || !running.load())
+  std::lock_guard lock(mutex);
+  if (dead || !want_running.load() || !running.load())
     return;
   const double rate = [AVAudioSession sharedInstance].sampleRate;
   if (rate > 0 && std::fabs(rate - hardware_rate) < 1.0)
     return;
   INFO_LOG_FMT(AUDIO, "{}: hardware rate changed {} -> {}, reopening", name, hardware_rate, rate);
-  CloseUnit();
-  OpenUnit();
+  CloseUnitLocked();
+  OpenUnitLocked();
 }
 
 OSStatus IOSAudioInput::Impl::RenderInput(AudioUnitRenderActionFlags* flags,
@@ -352,8 +356,11 @@ bool IOSAudioInput::Start(u32 sample_rate)
     WARN_LOG_FMT(AUDIO, "{}: no microphone available on this device", impl.name);
     return false;
   }
-  impl.target_rate = std::max<u32>(1, sample_rate);
-  impl.want_running.store(true);
+  {
+    std::lock_guard lock(impl.mutex);
+    impl.target_rate = std::max<u32>(1, sample_rate);
+    impl.want_running.store(true);
+  }
 
   const Permission permission = GetPermission();
   if (permission == Permission::Denied)
@@ -370,17 +377,12 @@ bool IOSAudioInput::Start(u32 sample_rate)
       auto impl = weak.lock();
       if (!impl)
         return;
-      if (impl->want_running.load() && !impl->running.load())
-      {
-        {
-          std::lock_guard lock(impl->mutex);
-          if (impl->dead)
-            return;
-          if (!impl->observer)
-            impl->observer = [[IOSAudioInputObserver alloc] initWithImpl:impl];
-        }
-        impl->OpenUnit();
-      }
+      std::lock_guard lock(impl->mutex);
+      if (impl->dead || !impl->want_running.load() || impl->running.load())
+        return;
+      if (!impl->observer)
+        impl->observer = [[IOSAudioInputObserver alloc] initWithImpl:impl];
+      impl->OpenUnitLocked();
     });
   };
 
@@ -400,8 +402,9 @@ bool IOSAudioInput::Start(u32 sample_rate)
 
 void IOSAudioInput::Stop()
 {
+  std::lock_guard lock(m_impl->mutex);
   m_impl->want_running.store(false);
-  m_impl->CloseUnit();
+  m_impl->CloseUnitLocked();
 }
 
 #endif  // IPHONEOS

@@ -76,6 +76,14 @@ bool CoreAudioSound::WantsSurround() const
   return Config::Get(Config::MAIN_DPL2_DECODER);
 }
 
+bool CoreAudioSound::SurroundIntended() const
+{
+  if (!WantsSurround())
+    return false;
+  const auto route = AudioCommon::IOSAudioSession::QueryRoute();
+  return route.max_output_channels >= static_cast<int>(kSurroundChannels);
+}
+
 bool CoreAudioSound::OpenUnitLocked()
 {
   if (m_unit)
@@ -84,8 +92,10 @@ bool CoreAudioSound::OpenUnitLocked()
   const u32 sample_rate = m_mixer->GetSampleRate();
   const bool wants_surround = WantsSurround();
   const auto route = AudioCommon::IOSAudioSession::QueryRoute();
+  const bool intended = wants_surround && route.max_output_channels >= static_cast<int>(kSurroundChannels);
+  m_surround_intended.store(intended);
   u32 channels = 2;
-  if (wants_surround && route.max_output_channels >= static_cast<int>(kSurroundChannels))
+  if (intended)
   {
     const int granted = AudioCommon::IOSAudioSession::RequestOutputChannels(kSurroundChannels);
     if (granted >= static_cast<int>(kSurroundChannels))
@@ -215,20 +225,17 @@ void CoreAudioSound::RebuildLocked()
 void CoreAudioSound::RefreshFromConfig()
 {
   m_dsp.LoadFromConfig();
-  // Surround on/off needs a different unit format; everything else is live.
-  const bool wants_surround = WantsSurround();
-  const auto route = AudioCommon::IOSAudioSession::QueryRoute();
-  const bool can_surround = route.max_output_channels >= static_cast<int>(kSurroundChannels);
-  if ((wants_surround && can_surround) != m_surround.load())
-  {
-    std::shared_ptr<Guard> guard = m_guard;
-    CoreAudioSound* self_ptr = this;
-    dispatch_async(dispatch_get_main_queue(), ^{
-      std::lock_guard lock(guard->mutex);
-      if (guard->alive)
-        self_ptr->RebuildLocked();
-    });
-  }
+  // Surround on/off needs a different unit format; everything else is live. The condition is
+  // re-checked inside the block: several queued Config changes must not mean several rebuilds.
+  if (SurroundIntended() == m_surround_intended.load())
+    return;
+  std::shared_ptr<Guard> guard = m_guard;
+  CoreAudioSound* self_ptr = this;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    std::lock_guard lock(guard->mutex);
+    if (guard->alive && self_ptr->SurroundIntended() != self_ptr->m_surround_intended.load())
+      self_ptr->RebuildLocked();
+  });
 }
 
 void CoreAudioSound::RegisterObservers()
@@ -259,6 +266,8 @@ void CoreAudioSound::RegisterObservers()
                 INFO_LOG_FMT(AUDIO, "CoreAudio: interruption ended (should resume: {})",
                              (options & AVAudioSessionInterruptionOptionShouldResume) != 0);
                 [session setActive:YES error:nil];
+                if (!self_ptr->m_unit)
+                  self_ptr->OpenUnitLocked();
                 if (self_ptr->m_should_run.load())
                   self_ptr->StartUnitLocked();
               }];
@@ -274,11 +283,7 @@ void CoreAudioSound::RegisterObservers()
                   return;
                 // RemoteIO follows the route by itself; only a change in how many channels the
                 // route can carry needs a new unit.
-                const auto route = AudioCommon::IOSAudioSession::QueryRoute();
-                const bool can_surround =
-                    route.max_output_channels >= static_cast<int>(kSurroundChannels);
-                const bool want = self_ptr->WantsSurround() && can_surround;
-                if (want != self_ptr->m_surround.load())
+                if (self_ptr->SurroundIntended() != self_ptr->m_surround_intended.load())
                   self_ptr->RebuildLocked();
               }];
 
@@ -333,7 +338,13 @@ bool CoreAudioSound::SetRunning(bool running)
   m_should_run.store(running);
   std::lock_guard lock(m_guard->mutex);
   if (running)
+  {
+    // A rebuild that failed (session not yet active after a media-services reset) leaves no
+    // unit; the next resume is the moment to try again.
+    if (!m_unit && !OpenUnitLocked())
+      return false;
     return StartUnitLocked();
+  }
   StopUnitLocked();
   return true;
 }
@@ -342,9 +353,8 @@ void CoreAudioSound::SetVolume(int volume)
 {
   // RemoteIO has no output volume parameter on iOS: apply the gain in the render callback.
   m_volume = std::clamp(volume, 0, 100);
-  auto params = m_dsp.GetParameters();
-  params.gain = m_volume / 100.0f;
-  m_dsp.SetParameters(params);
+  const float gain = m_volume / 100.0f;
+  m_dsp.Update([gain](AudioCommon::AudioDSPChain::Parameters& p) { p.gain = gain; });
 }
 
 #endif  // IPHONEOS

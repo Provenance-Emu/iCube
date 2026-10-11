@@ -74,6 +74,7 @@ public:
         m_index(index)
   {
   }
+  ~MicrophoneLogitech() override { StreamTerminate(); }
 
 private:
 #if defined(HAVE_CUBEB) || defined(IPHONEOS)

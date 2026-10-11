@@ -71,9 +71,15 @@ private:
   void UpdateLoudness(SampleType sample);
 
   void StreamInit();
-  void StreamTerminate();
   void StreamStart(u32 sampling_rate);
   void StreamStop();
+
+protected:
+  /// The capture callback calls virtuals of the derived class, so the most-derived destructor must
+  /// stop the stream before those overrides disappear. ~Microphone calls it again harmlessly.
+  void StreamTerminate();
+
+private:
 
   virtual u32 GetStreamSize() const = 0;
   std::vector<SampleType> m_stream_buffer{};

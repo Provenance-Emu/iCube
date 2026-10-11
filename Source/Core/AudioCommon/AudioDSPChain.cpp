@@ -159,6 +159,17 @@ void AudioDSPChain::SetParameters(const Parameters& params)
   PublishLocked(clamped);
 }
 
+void AudioDSPChain::Update(const std::function<void(Parameters&)>& edit)
+{
+  std::lock_guard lock(m_shared_mutex);
+  Parameters next = m_shared.params;
+  edit(next);
+  next = Clamp(next);
+  if (next == m_shared.params)
+    return;
+  PublishLocked(next);
+}
+
 AudioDSPChain::Parameters AudioDSPChain::GetParameters() const
 {
   std::lock_guard lock(m_shared_mutex);
@@ -168,7 +179,7 @@ AudioDSPChain::Parameters AudioDSPChain::GetParameters() const
 #ifdef IPHONEOS
 void AudioDSPChain::LoadFromConfig()
 {
-  Parameters p = GetParameters();
+  Update([](Parameters& p) {
   p.delay_enabled = Config::Get(Config::MAIN_AUDIO_FX_DELAY_ENABLED);
   p.delay_ms = Config::Get(Config::MAIN_AUDIO_FX_DELAY_MS);
   p.delay_feedback = Config::Get(Config::MAIN_AUDIO_FX_DELAY_FEEDBACK);
@@ -179,7 +190,7 @@ void AudioDSPChain::LoadFromConfig()
   p.eq_low_db = Config::Get(Config::MAIN_AUDIO_FX_EQ_LOW_DB);
   p.eq_mid_db = Config::Get(Config::MAIN_AUDIO_FX_EQ_MID_DB);
   p.eq_high_db = Config::Get(Config::MAIN_AUDIO_FX_EQ_HIGH_DB);
-  SetParameters(p);
+  });
 }
 #endif
 

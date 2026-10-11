@@ -150,6 +150,7 @@ bool AVAudioEngineSound::buildGraphLocked()
 
   const double sample_rate = static_cast<double>(m_mixer->GetSampleRate());
   Mode mode = chooseMode();
+  m_intended_mode.store(mode);
   m_surround_decoding = mode != Mode::Stereo;
   if (mode == Mode::Discrete51)
   {
@@ -314,6 +315,10 @@ void AVAudioEngineSound::teardownGraphLocked()
 
 void AVAudioEngineSound::rebuildLocked()
 {
+  // Parameter edits made inside a plug-in's view since the last save would otherwise be lost
+  // with the units the teardown discards.
+  if (!m_fx_units.empty())
+    saveEffectChainLocked();
   if (!buildGraphLocked())
     ERROR_LOG_FMT(AUDIO, "AVAudioEngine: rebuild failed; output is silent until the next change");
 }
@@ -330,10 +335,25 @@ void AVAudioEngineSound::reconnectGraphLocked()
   for (AVAudioUnit* unit : m_fx_units)
     [m_engine disconnectNodeOutput:unit];
   AVAudioNode* tail = head;
-  for (AVAudioUnit* unit : m_fx_units)
+  for (size_t i = 0; i < m_fx_units.size();)
   {
-    [m_engine connect:tail to:unit format:m_chain_format];
+    AVAudioUnit* unit = m_fx_units[i];
+    @try
+    {
+      [m_engine connect:tail to:unit format:m_chain_format];
+    }
+    @catch (NSException* e)
+    {
+      // A plug-in that rejects this format (6 channels, say) raises here rather than failing the
+      // start. Drop it from the live graph; the chain in Config still has it for a stereo route.
+      WARN_LOG_FMT(AUDIO, "AVAudioEngine: {} rejected the graph format ({}); skipping it",
+                   unit.name.UTF8String ?: "effect", e.reason.UTF8String ?: "");
+      [m_engine detachNode:unit];
+      m_fx_units.erase(m_fx_units.begin() + i);
+      continue;
+    }
     tail = unit;
+    ++i;
   }
   [m_engine connect:tail to:m_engine.mainMixerNode format:m_chain_format];
 }
@@ -414,7 +434,7 @@ void AVAudioEngineSound::registerObservers()
                                     std::lock_guard lock(guard->mutex);
                                     if (!guard->alive || !self_ptr->m_engine)
                                       return;
-                                    if (self_ptr->chooseMode() != self_ptr->m_mode.load())
+                                    if (self_ptr->modeChangedLocked())
                                       self_ptr->rebuildLocked();
                                   }];
 
@@ -428,7 +448,7 @@ void AVAudioEngineSound::registerObservers()
                 if (!guard->alive || !self_ptr->m_engine || note.object != self_ptr->m_engine)
                   return;
                 INFO_LOG_FMT(AUDIO, "AVAudioEngine: configuration change");
-                if (self_ptr->chooseMode() != self_ptr->m_mode.load())
+                if (self_ptr->modeChangedLocked())
                   self_ptr->rebuildLocked();
                 else if (self_ptr->m_should_run.load())
                   self_ptr->startEngineLocked();
@@ -493,7 +513,7 @@ void AVAudioEngineSound::refreshFromConfig()
     std::lock_guard lock(guard->mutex);
     if (!guard->alive || !self_ptr->m_engine)
       return;
-    if (self_ptr->chooseMode() != self_ptr->m_mode.load())
+    if (self_ptr->modeChangedLocked())
       self_ptr->rebuildLocked();
     else
       self_ptr->applyHeadTrackingLocked();
@@ -577,11 +597,16 @@ void AVAudioEngineSound::audioThreadMain()
   pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
   // Completion-driven backpressure: feed a group (one buffer per player), then block until a
-  // group drains. The completion blocks capture these stack objects, so the thread waits for
-  // every in-flight group before returning.
-  std::atomic<int> groups_in_flight{0};
-  std::mutex drain_mutex;
-  std::condition_variable drain_cv;
+  // group drains. The completion blocks hold the drain state by shared_ptr, so a completion that
+  // fires after this thread has returned (a paused engine releases buffers late) touches live
+  // memory, never this frame.
+  struct DrainState
+  {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::atomic<int> groups_in_flight{0};
+  };
+  auto drain = std::make_shared<DrainState>();
   int pool_cursor = 0;
 
   auto fill_and_schedule = [&]() {
@@ -616,7 +641,7 @@ void AVAudioEngineSound::audioThreadMain()
 
     const int slot = pool_cursor;
     pool_cursor = (pool_cursor + 1) % kPoolSize;
-    groups_in_flight.fetch_add(1);
+    drain->groups_in_flight.fetch_add(1);
     const NSUInteger player_count = m_players.count;
     for (NSUInteger p = 0; p < player_count; ++p)
     {
@@ -643,12 +668,13 @@ void AVAudioEngineSound::audioThreadMain()
       void (^completion)(void) = nil;
       if (p == 0)
       {
+        std::shared_ptr<DrainState> shared = drain;
         completion = ^{
           {
-            std::lock_guard l(drain_mutex);
-            groups_in_flight.fetch_sub(1);
+            std::lock_guard l(shared->mutex);
+            shared->groups_in_flight.fetch_sub(1);
           }
-          drain_cv.notify_one();
+          shared->cv.notify_one();
         };
       }
       [node scheduleBuffer:buf completionHandler:completion];
@@ -658,11 +684,11 @@ void AVAudioEngineSound::audioThreadMain()
 
   while (m_feeder_running.load())
   {
-    if (groups_in_flight.load() >= kTargetGroups)
+    if (drain->groups_in_flight.load() >= kTargetGroups)
     {
-      std::unique_lock l(drain_mutex);
-      drain_cv.wait_for(l, std::chrono::milliseconds(50), [&] {
-        return groups_in_flight.load() < kTargetGroups || !m_feeder_running.load();
+      std::unique_lock l(drain->mutex);
+      drain->cv.wait_for(l, std::chrono::milliseconds(50), [&] {
+        return drain->groups_in_flight.load() < kTargetGroups || !m_feeder_running.load();
       });
       continue;
     }
@@ -678,16 +704,16 @@ void AVAudioEngineSound::audioThreadMain()
     }
   }
 
-  // Flush scheduled buffers so their completions fire, then wait for them: the blocks reference
-  // this frame.
+  // Flush scheduled buffers so their completions fire. Waiting for them is best effort: the pooled
+  // buffers are owned by the graph and the drain state by the blocks, so a late completion is safe.
   {
     std::lock_guard lock(m_guard->mutex);
     for (AVAudioPlayerNode* node in m_players)
       [node stop];
   }
-  std::unique_lock l(drain_mutex);
-  drain_cv.wait_for(l, std::chrono::milliseconds(500),
-                    [&] { return groups_in_flight.load() <= 0; });
+  std::unique_lock l(drain->mutex);
+  drain->cv.wait_for(l, std::chrono::milliseconds(200),
+                     [&] { return drain->groups_in_flight.load() <= 0; });
 }
 
 // MARK: - Audio Unit effect chain
@@ -807,14 +833,17 @@ void AVAudioEngineSound::restoreEffectChainLocked()
   }
 }
 
+void AVAudioEngineSound::saveEffectChainLocked()
+{
+  const std::string chain = serializeEffectChainLocked();
+  if (chain != Config::Get(Config::MAIN_AUDIO_AU_CHAIN))
+    Config::SetBaseOrCurrent(Config::MAIN_AUDIO_AU_CHAIN, chain);
+}
+
 void AVAudioEngineSound::saveEffectChain()
 {
-  std::string chain;
-  {
-    std::lock_guard lock(m_guard->mutex);
-    chain = serializeEffectChainLocked();
-  }
-  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_AU_CHAIN, chain);
+  std::lock_guard lock(m_guard->mutex);
+  saveEffectChainLocked();
 }
 
 bool AVAudioEngineSound::addEffectWithIdentifier(const char* identifier)

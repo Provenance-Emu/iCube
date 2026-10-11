@@ -35,6 +35,7 @@ public:
       : Microphone(sampler, "Wii Speak Worker")
   {
   }
+  ~MicrophoneWiiSpeak() override { StreamTerminate(); }
 
 private:
 #if defined(HAVE_CUBEB) || defined(IPHONEOS)

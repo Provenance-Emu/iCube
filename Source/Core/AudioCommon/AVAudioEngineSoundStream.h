@@ -93,7 +93,10 @@ private:
   void teardownGraphLocked();
   bool startEngineLocked();
   void rebuildLocked();
+  bool modeChangedLocked() const { return chooseMode() != m_intended_mode.load(); }
   void reconnectGraphLocked();
+  /// Persists the live chain (including parameter edits) to Config without taking the lock again.
+  void saveEffectChainLocked();
   void applyHeadTrackingLocked();
   void stopHeadTrackingLocked();
 
@@ -116,6 +119,9 @@ private:
   std::vector<AVAudioUnit*> m_fx_units;
 
   std::atomic<Mode> m_mode{Mode::Stereo};
+  /// chooseMode()'s answer when the graph was built. Compared against a fresh chooseMode() so a
+  /// 5.1 request the route turned down (built as stereo) does not rebuild on every notification.
+  std::atomic<Mode> m_intended_mode{Mode::Stereo};
   int m_output_channels = 2;
   bool m_surround_decoding = false;
   std::unique_ptr<AudioCommon::SurroundDecoder> m_surround;

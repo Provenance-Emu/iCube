@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <functional>
 #include <mutex>
 #include <vector>
 
@@ -60,6 +61,9 @@ public:
 
   /// Any thread. Values are clamped to the ranges above.
   void SetParameters(const Parameters& params);
+  /// Read-modify-write under the parameter lock, so two writers (volume and a Config reload) can
+  /// never overwrite each other's field with a stale copy.
+  void Update(const std::function<void(Parameters&)>& edit);
   Parameters GetParameters() const;
 
   /// True when Process() would change the samples (an effect is on or gain is not unity).
