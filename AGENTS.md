@@ -2,6 +2,8 @@
 
 This repository is a Dolphin emulator fork with an iOS/tvOS app (**iCube**). Most agent work happens in `Source/iOS/App/` (Swift/ObjC UI) or `Source/Core/` (C++ emulator).
 
+**Start with [`docs/HANDOFF.md`](docs/HANDOFF.md)**: current state, the owner's priorities (tvOS library), the design system, and the traps.
+
 ## Quick orientation
 
 | Area | Path |
