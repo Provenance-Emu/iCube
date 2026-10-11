@@ -218,7 +218,7 @@ struct MenuScreen: View {
     }
     #else
     if case .tiles = style {
-      if let first = model.focusableIDs.first {
+      if let first = tvInitialFocusID {
         tvTilesBody.defaultFocus($tvFocusedID, first)
       } else {
         tvTilesBody
@@ -651,32 +651,65 @@ struct MenuScreen: View {
   /// Short enough that the pause menu's options grid fits on one screen with the help shelf below.
   private static let tvTileHeight: CGFloat = 118
 
+  /// Exit stays in a footer so a tall options grid cannot scroll it off the TV.
+  private var tvPinnedExit: MenuItem? {
+    guard var item = model.item(id: "exit") else { return nil }
+    item.title = L("Exit Game")
+    return item
+  }
+
+  /// First real action. Exit is pinned, so it is not the default.
+  private var tvInitialFocusID: String? {
+    model.focusableIDs.first { $0 != "exit" } ?? model.focusableIDs.first
+  }
+
   private var tvTilesBody: some View {
     let columns = style.columns
     return VStack(spacing: ICubeDesign.Spacing.l.rawValue) {
-      ScrollView {
-        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
-          ForEach(model.sections) { section in
-            if let header = section.header {
-              tvTileSectionHeader(header)
-            }
-            ForEach(Array(section.items.chunked(into: columns).enumerated()), id: \.offset) { _, row in
-              HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
-                ForEach(row) { item in
-                  tvTile(item, prominent: section.header == nil)
+      ScrollViewReader { proxy in
+        ScrollView {
+          VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
+            ForEach(model.sections) { section in
+              let items = section.items.filter { $0.id != "exit" }
+              if !items.isEmpty {
+                if let header = section.header {
+                  tvTileSectionHeader(header)
                 }
-                ForEach(0 ..< max(0, columns - row.count), id: \.self) { _ in Color.clear.frame(maxWidth: .infinity) }
+                ForEach(Array(items.chunked(into: columns).enumerated()), id: \.offset) { _, row in
+                  HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
+                    ForEach(row) { item in
+                      tvTile(item, prominent: section.header == nil)
+                    }
+                    ForEach(0 ..< max(0, columns - row.count), id: \.self) { _ in
+                      Color.clear.frame(maxWidth: .infinity).focusable(false)
+                    }
+                  }
+                }
               }
             }
           }
+          .padding(ICubeDesign.Spacing.l.rawValue)
         }
-        .padding(ICubeDesign.Spacing.l.rawValue)
+        .frame(maxHeight: .infinity)
+        .onAppear {
+          if tvFocusedID == nil {
+            tvFocusedID = tvInitialFocusID
+          }
+          if let id = tvFocusedID, id != "exit" {
+            proxy.scrollTo(id, anchor: .top)
+          }
+        }
       }
-      .focusSection()
+      if let exit = tvPinnedExit {
+        tvTile(exit, prominent: true)
+          .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
+      }
       InfoShelf(text: tvFocusedItem?.description, value: tvFocusedItem?.currentValueTitle,
                 title: tvFocusedItem?.title, icon: tvFocusedItem?.icon)
         .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
     }
+    .frame(maxHeight: .infinity)
+    .focusSection()
   }
 
   /// Spec §3 section header at pause scale: accent bar plus an uppercase `nav` label.
