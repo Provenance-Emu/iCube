@@ -907,7 +907,6 @@ struct TVLibraryView: View {
               libraryHomeShelves()
             }
           }
-          .scrollContentBackground(.hidden)
           .focusSection()
           libraryBottomChrome
         }
