@@ -42,7 +42,19 @@ public enum CloudSyncConstants {
         public static let fileSize = "fileSize"
         public static let deviceIdentifier = "deviceIdentifier"
         public static let appVersion = "appVersion"
+        /// `Int64` 1 on a tombstone, absent or 0 on a live file. A tombstone
+        /// keeps `fileName`, `checksum` (of the deleted content), `fileType`
+        /// and `deviceIdentifier`, and has no `fileData`.
+        public static let deleted = "deleted"
+        public static let deletedAt = "deletedAt"
     }
+
+    /// How long a tombstone stays on the remote before any device may remove
+    /// it. A device offline longer than this re-uploads the file.
+    public static let tombstoneRetention: TimeInterval = 90 * 24 * 60 * 60
+
+    /// How long a locally trashed file is kept before the trash purges it.
+    public static let trashRetention: TimeInterval = 30 * 24 * 60 * 60
 
     /// How often the background timer fires a sync (30 minutes, matching iFly).
     public static let backgroundSyncInterval: TimeInterval = 30 * 60

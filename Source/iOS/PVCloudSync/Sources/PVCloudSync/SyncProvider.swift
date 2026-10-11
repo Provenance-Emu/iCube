@@ -65,9 +65,14 @@ public enum SyncProviderError: LocalizedError, Equatable {
 /// A sync backend. CloudKit is the only real implementation; `InertSyncProvider`
 /// stands in whenever CloudKit cannot be used, so the coordinator never has to
 /// branch on availability.
+///
+/// This is the seam for every future backend (`SyncProviderKind`): the content
+/// server, a shared iCloud Drive folder, a nearby device. The planner and the
+/// coordinator never learn which one they are talking to.
 public protocol SyncProvider: Actor {
     /// For logging and the settings pane.
     nonisolated var providerName: String { get }
+    nonisolated var kind: SyncProviderKind { get }
 
     /// `nil` when the provider is ready, otherwise why it is not.
     func unavailableReason() async -> SyncUnavailableReason?
@@ -76,14 +81,32 @@ public protocol SyncProvider: Actor {
     /// `SyncProviderError.unavailable` when it cannot.
     func initialize() async throws
 
+    /// Something stable that identifies the account or library the bytes go
+    /// to, so an index built against one is never reused against another.
+    /// `nil` when the backend has no such notion.
+    func accountIdentity() async -> String?
+
     func upload(metadata: SyncableFileMetadata, data: Data) async throws
     func download(metadata: SyncableFileMetadata) async throws -> Data
 
-    /// Every record currently in the zone.
-    func fetchRemoteMetadata() async throws -> [SyncableFileMetadata]
+    /// Every live record and every tombstone currently on the remote.
+    func fetchRemoteSnapshot() async throws -> RemoteSyncSnapshot
+
+    /// Replace the record for this path with a tombstone (or create one).
+    func writeTombstone(_ tombstone: SyncTombstone) async throws
+
+    /// Remove tombstones older than `cutoff`. Any device may do this.
+    func purgeExpiredTombstones(olderThan cutoff: Date) async throws
 
     /// Remove every remote record. Local files are never touched.
     func purgeAllData() async throws
+}
+
+public extension SyncProvider {
+    /// Live files only. Implemented on top of `fetchRemoteSnapshot`.
+    func fetchRemoteMetadata() async throws -> [SyncableFileMetadata] {
+        try await fetchRemoteSnapshot().files
+    }
 }
 
 /// The provider used when CloudKit is unusable: unprovisioned container, missing
@@ -96,10 +119,12 @@ public protocol SyncProvider: Actor {
 /// nothing to do, and the settings pane shows why.
 public actor InertSyncProvider: SyncProvider {
     public nonisolated let providerName = "Unavailable"
+    public nonisolated let kind: SyncProviderKind
     private let reason: SyncUnavailableReason
 
-    public init(reason: SyncUnavailableReason) {
+    public init(reason: SyncUnavailableReason, kind: SyncProviderKind = .iCloud) {
         self.reason = reason
+        self.kind = kind
     }
 
     public func unavailableReason() async -> SyncUnavailableReason? { reason }
@@ -107,6 +132,8 @@ public actor InertSyncProvider: SyncProvider {
     public func initialize() async throws {
         throw SyncProviderError.unavailable(reason)
     }
+
+    public func accountIdentity() async -> String? { nil }
 
     public func upload(metadata: SyncableFileMetadata, data: Data) async throws {
         throw SyncProviderError.unavailable(reason)
@@ -117,8 +144,14 @@ public actor InertSyncProvider: SyncProvider {
     }
 
     /// Empty, not an error: an empty remote is a legitimate state and the
-    /// additive merge never deletes on the strength of it.
-    public func fetchRemoteMetadata() async throws -> [SyncableFileMetadata] { [] }
+    /// planner never deletes on the strength of it.
+    public func fetchRemoteSnapshot() async throws -> RemoteSyncSnapshot { .empty }
+
+    public func writeTombstone(_ tombstone: SyncTombstone) async throws {
+        throw SyncProviderError.unavailable(reason)
+    }
+
+    public func purgeExpiredTombstones(olderThan cutoff: Date) async throws {}
 
     public func purgeAllData() async throws {}
 }
