@@ -3238,6 +3238,7 @@ Read the Terms of Service at: https://www.wiilink24.com/tos";
 "Whitelisted USB Passthrough Devices" = "Whitelisted USB Passthrough Devices";
 "Wii Remote Settings" = "Wii Remote Settings";
 "Sensor Bar Position" = "Sensor Bar Position";
+"IR Sensitivity" = "IR Sensitivity";
 "Speaker Volume" = "Speaker Volume";
 "Add New USB Device" = "Add New USB Device";
 "USB Whitelist Error" = "USB Whitelist Error";
