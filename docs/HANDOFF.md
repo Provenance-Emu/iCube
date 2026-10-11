@@ -75,3 +75,56 @@ All commands run from `Source/iOS/App`.
   - A `List` row is one focus target, and `Menu` / `Picker` have no tvOS presentation.
   - Buttons need `.focusEffectDisabled()` and a custom style, or you get the white system capsule.
 - **Process.** No PRs: reviewed work lands directly on `develop`. Commit messages have no AI/LLM trailers. The owner tests on device.
+
+## Update: tvOS pause menu redone (develop 0e49340a2b)
+
+This screen is done and done the way the owner wants. Use it as the reference for the look.
+- **Layout (iFly's):**
+  - Hero column: cover, PAUSED, display-face title, game ID.
+  - Primary row: Resume / Save States / Reset / Quit.
+  - A 4-column Options grid, then a help bar.
+  - Grouping comes from `PauseMenuModelBuilder.tvLayout`.
+  - `MenuScreen.tvTilesBody` draws a **headerless section as the tall primary row**.
+- **Style:**
+  - Monochrome glyphs. Only destructive tiles are red, via `ICubeDesign.color(.destructive)`.
+  - Values are inline in accent: "MUTE: OFF".
+  - Labels use the `nav` role, uppercase.
+  - Single-word labels shrink instead of wrapping mid-word.
+- **New pieces you can reuse:**
+  - `ICubeDesign.symbolFont(.tilePrimary / .tile / .shelf)` for SF Symbol sizes, which keeps the lint happy.
+  - `ICubeTileButtonStyle(isFocusedOverride:minHeight:)`.
+  - `InfoShelf(text:value:title:icon:)`.
+- **Everything above is tvOS-only.** iPhone and iPad pause are unchanged.
+
+### Fast visual check without a game
+Debug builds launched with `-ICubePausePreview` open the pause menu on a stand-in game (`TVRootView.swift`). Copy the pattern for other screens, e.g. a library preview.
+
+```sh
+xcodebuild build -workspace iCube.xcworkspace -scheme "iCube (NJB)" -configuration "Debug (Non-Jailbroken)" \
+  -destination "platform=tvOS Simulator,id=<udid>" -derivedDataPath build-Xcode-tvsim \
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=""
+xcrun simctl install <udid> build-Xcode-tvsim/Build/Products/*appletvsimulator/iCube*.app
+xcrun simctl launch <udid> com.joemattiello.iCube-debug -ICubePausePreview
+xcrun simctl io <udid> screenshot /tmp/shot.png
+```
+
+- Use the "Apple TV 4K (3rd generation) (at 1080p)" simulator; it matches the owner's 1920×1080 screenshots.
+- `-derivedDataPath build-Xcode-tvsim` is not in `.gitignore` yet. Don't commit it; add it to the ignore file.
+
+### Still on the old look (pause area)
+These are the next things to restyle, in this style:
+- **Pause → Save States pane:** the tvOS hand-built part of `PauseMenuView.swift` is ~:479-666, with ~28 hard-coded fonts and colours.
+- **Pause → Cheats:** `CheatsMenuView.swift`, tvOS layout ~:104-187.
+- **Pause → Reset / Exit confirm overlays:** `PauseMenuView.confirmOverlay`. They use a tvOS `MenuScreen(.list)` with a `count*110+40` height that must track the row height.
+- **Every tvOS `List` screen** (settings leaves, controller hub) still shows the white system focus capsule. The tvOS row code is `MenuScreen.tvRow` / `tvSteppedRow`. The full map is in `docs/superpowers/notes/2026-10-10-step2-surface-map.md`.
+  - **Rule from the map:** keep iPhone and iPad touch pixel-identical. Gate the new look on tvOS, or later on a `controllerDriven` environment flag for iPad with a pad.
+
+### Unverified
+- `PauseMenuModelBuilderTests.test_tvLayout_primaryRowThenOptions_keepsEveryTileOnce` (new) and the updated `PauseTileLayoutTests` (tv columns 6 → 4) have not been run. Run:
+
+  ```sh
+  make test TEST_ARGS="-only-testing:iCubeTests/PauseMenuModelBuilderTests -only-testing:iCubeTests/PauseTileLayoutTests"
+  ```
+
+- The uppercase-title fix in the pause hero is in the last commit. It compiled for iOS but was not screenshotted on tvOS.
+- `"IR Sensitivity"` is now in Core.strings (8c440ddc1a), so builds no longer leave that diff behind.
