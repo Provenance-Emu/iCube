@@ -366,8 +366,6 @@ struct TVLibraryView: View {
 #endif
   }
 
-  private static func tvOSBaseColumns() -> Int { 5 }
-
   /// Full library pipeline: platform filter → search → sort.
   private func filteredGames(from games: [TVGameItem]) -> [TVGameItem] {
     let overrides = platformOverrides
@@ -895,16 +893,19 @@ struct TVLibraryView: View {
         viewMenu: { libraryViewMenuSection },
         sortMenu: { sortMenuItems }
       )
-      VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
-        ScrollView {
-          if isSearching || tvLibraryDestination != .home {
-            libraryToolbar_tvOS_main(displayGames)
-          } else {
-            libraryHomeShelves()
+      GeometryReader { proxy in
+        VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+          ScrollView {
+            if isSearching || tvLibraryDestination != .home {
+              libraryToolbar_tvOS_main(displayGames, columnWidth: proxy.size.width)
+            } else {
+              libraryHomeShelves()
+            }
           }
+          .focusSection()
+          libraryBottomChrome
         }
-        .focusSection()
-        libraryBottomChrome
+        .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
       }
     }
     .padding(ICubeDesign.Spacing.l.rawValue)
@@ -972,10 +973,23 @@ struct TVLibraryView: View {
     }
   }
 
+  /// How many library cards fit across the content column beside the rail.
+  private func tvOSColumnCount(forWidth width: CGFloat) -> Int {
+    let paddingH = Constants.gridHorizontalPadding
+    let spacingH = Constants.gridHorizontalSpacing
+    let cardW = LibraryLayout.cardSize.width
+    let available = max(0, width - (paddingH * 2))
+    let auto = max(1, Int((available + spacingH) / (cardW + spacingH)))
+    return effectiveColumnCount(autoFit: auto)
+  }
+
   @ViewBuilder
-  private func libraryToolbar_tvOS_main(_ displayGames: [TVGameItem]) -> some View {
-    let count = effectiveColumnCount(autoFit: Self.tvOSBaseColumns())
-    let columns = Array(repeating: GridItem(.flexible(), spacing: Constants.gridHorizontalSpacing), count: count)
+  private func libraryToolbar_tvOS_main(_ displayGames: [TVGameItem], columnWidth: CGFloat) -> some View {
+    let count = tvOSColumnCount(forWidth: columnWidth)
+    let columns = Array(
+      repeating: GridItem(.flexible(minimum: LibraryLayout.cardSize.width), spacing: Constants.gridHorizontalSpacing),
+      count: count
+    )
     LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
       ForEach(displayGames, id: \.filePath) { item in
         gameGridItem(for: item)
