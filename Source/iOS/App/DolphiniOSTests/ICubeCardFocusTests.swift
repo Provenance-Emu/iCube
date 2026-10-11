@@ -18,14 +18,28 @@ final class ICubeCardFocusTests: XCTestCase {
   func test_extractedEffect_isPixelIdenticalToLegacy() throws {
     let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     for style in [UIUserInterfaceStyle.light, .dark] {
+      var legacyByFocus: [Bool: [UInt8]] = [:]
       for focused in [false, true] {
         let before = try pixels(render(Self.legacy(isFocused: focused), style: style, scene: scene))
         let after = try pixels(render(Self.extracted(isFocused: focused), style: style, scene: scene))
         XCTAssertEqual(before.count, after.count)
         let diffs = zip(before, after).filter { $0 != $1 }.count
         XCTAssertEqual(diffs, 0, "focused=\(focused) style=\(style.rawValue): \(diffs) bytes differ")
+        // Non-vacuity: blank captures would be identical on both sides and pass the check above.
+        XCTAssertGreaterThan(distinctColours(before), 1, "focused=\(focused) style=\(style.rawValue): blank capture")
+        legacyByFocus[focused] = before
       }
+      XCTAssertNotEqual(legacyByFocus[true], legacyByFocus[false], "style=\(style.rawValue): focused render equals rest render")
     }
+  }
+
+  private func distinctColours(_ bytes: [UInt8]) -> Int {
+    var seen = Set<UInt32>()
+    for i in stride(from: 0, to: bytes.count - 3, by: 4) {
+      seen.insert(UInt32(bytes[i]) | UInt32(bytes[i + 1]) << 8 | UInt32(bytes[i + 2]) << 16 | UInt32(bytes[i + 3]) << 24)
+      if seen.count > 1 { break }
+    }
+    return seen.count
   }
 
   // MARK: The card stand-in: flat art plus a one-line title, the same structure as GameGridItem's tvOS body.
