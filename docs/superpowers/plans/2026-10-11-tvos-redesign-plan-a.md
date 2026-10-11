@@ -1118,7 +1118,7 @@ enum WebUIModelBuilder {
 }
 ```
 
-In `WebUISettingsView`, under `#if os(tvOS)` the body becomes a `MenuScreen` with `tvHeader: SettingsLeafScreen.header(title: L("Web UI & WebDAV"), parentTitle: parentTitle)`, `tvInset: .xl`, keeping `.task { await refresh() }`. iOS branch unchanged.
+In `WebUISettingsView`, under `#if os(tvOS)` the body becomes a `MenuScreen` with `tvHeader: SettingsLeafScreen.header(title: L("Web UI & WebDAV"), parentTitle: parentTitle)`, `tvInset: .xxl`, keeping `.task { await refresh() }`. iOS branch unchanged.
 
 - [ ] **Step 4: Strings, tests, gates, screenshot, commit** (as Task 9, with `settings-web-ui-dark.png`)
 
