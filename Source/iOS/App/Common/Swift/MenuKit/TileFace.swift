@@ -90,7 +90,49 @@ struct TileFace: View {
     }
   }
 
+  #if os(tvOS)
+  /// tvOS face (design spec §3, laid out like iFly's pause tiles): a centred glyph over an uppercase `nav` title,
+  /// with the value as a `tag` underneath. `ICubeTileButtonStyle` draws the surface, hairline and focus.
+  private var tvContent: some View {
+    let tone = isDestructive ? ICubeDesign.color(.destructive) : tint
+    return VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+      if let icon {
+        Image(systemName: icon)
+          .font(ICubeDesign.symbolFont(.tile))
+          .foregroundStyle(tone)
+      }
+      Text(title)
+        .icubeText(.nav)
+        .foregroundStyle(isDestructive ? ICubeDesign.color(.destructive) : ICubeDesign.color(.textPrimary))
+        // One word never wraps mid-word ("CONTROLLER/S"): it shrinks to fit on one line instead.
+        .lineLimit(title.contains(" ") ? 2 : 1)
+        .multilineTextAlignment(.center)
+        .minimumScaleFactor(0.7)
+      if let badge, !badge.isEmpty {
+        Text(badge)
+          .icubeText(.tag)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .foregroundStyle(ICubeDesign.color(.textSecondary))
+          .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
+          .padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
+          .background(Capsule().fill(ICubeDesign.color(.rowSurface)))
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .opacity(isEnabled ? 1 : 0.45)
+  }
+  #endif
+
   var body: some View {
+    #if os(tvOS)
+    tvContent
+    #else
+    touchBody
+    #endif
+  }
+
+  private var touchBody: some View {
     Group {
       if isCompact { compactContent } else { regularContent }
     }

@@ -314,7 +314,11 @@ struct MenuScreen: View {
         icon: item.icon, title: item.title, badge: item.currentValueTitle ?? item.badge,
         tint: item.tint ?? .accentColor, isDestructive: isDestructive, isEnabled: item.isEnabled, isCompact: style.isCompactTiles)
     }
+    #if os(tvOS)
+    .buttonStyle(ICubeTileButtonStyle(isFocusedOverride: focused, minHeight: Self.tvTileHeight))
+    #else
     .buttonStyle(FocusButtonStyle(isFocusedOverride: focused))
+    #endif
     .disabled(!item.isEnabled)
     .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in runLongPress(item) })
     .id(item.id)
@@ -641,17 +645,20 @@ struct MenuScreen: View {
   // MARK: tvOS — native focus only
 
   #if os(tvOS)
+  /// Short enough that the pause menu's three sections fit on one screen with the help shelf below.
+  private static let tvTileHeight: CGFloat = 140
+
   private var tvTilesBody: some View {
     let columns = style.columns
-    return VStack(spacing: 20) {
+    return VStack(spacing: ICubeDesign.Spacing.l.rawValue) {
       ScrollView {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
           ForEach(model.sections) { section in
             if let header = section.header {
-              Text(header).font(.headline).foregroundStyle(.white.opacity(0.7))
+              tvTileSectionHeader(header)
             }
             ForEach(Array(section.items.chunked(into: columns).enumerated()), id: \.offset) { _, row in
-              HStack(spacing: 24) {
+              HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
                 ForEach(row) { item in
                   tvTile(item)
                 }
@@ -660,12 +667,25 @@ struct MenuScreen: View {
             }
           }
         }
-        .padding(24)
+        .padding(ICubeDesign.Spacing.l.rawValue)
       }
       .focusSection()
       InfoShelf(text: tvFocusedItem?.description, value: tvFocusedItem?.currentValueTitle)
-        .padding(.horizontal, 24)
+        .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
     }
+  }
+
+  /// Spec §3 section header at pause scale: accent bar plus an uppercase `nav` label.
+  private func tvTileSectionHeader(_ header: String) -> some View {
+    HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+      Capsule()
+        .fill(ICubeDesign.color(.accent))
+        .frame(width: 6, height: 24)
+      Text(header)
+        .icubeText(.nav)
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
+    }
+    .padding(.top, ICubeDesign.Spacing.xs.rawValue)
   }
 
   private var tvFocusedItem: MenuItem? { tvFocusedID.flatMap { model.item(id: $0) } }

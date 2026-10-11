@@ -128,6 +128,8 @@ struct ICubeRowButtonStyle: ButtonStyle {
 /// Pause and hub tiles (spec §3 Tile).
 struct ICubeTileButtonStyle: ButtonStyle {
   var isFocusedOverride: Bool? = nil
+  /// Overrides the spec's tile height where a screen must fit a fixed number of rows (the tvOS pause grid).
+  var minHeight: CGFloat? = nil
   @Environment(\.isFocused) private var isFocused
 
   #if os(tvOS)
@@ -139,7 +141,7 @@ struct ICubeTileButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
       .padding(ICubeDesign.Spacing.m.rawValue)
-      .frame(maxWidth: .infinity, minHeight: Self.minHeight, alignment: .topLeading)
+      .frame(maxWidth: .infinity, minHeight: minHeight ?? Self.minHeight, alignment: .topLeading)
       .background(
         RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
           .fill(ICubeDesign.color(.rowSurface))

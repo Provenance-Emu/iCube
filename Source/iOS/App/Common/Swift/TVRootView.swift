@@ -2,6 +2,20 @@ import SwiftUI
 
 struct TVRootView: View {
   var body: some View {
+    #if DEBUG
+    // `-ICubePausePreview` opens the pause menu on a stand-in game, for simulator screenshots of the pause UI.
+    if ProcessInfo.processInfo.arguments.contains("-ICubePausePreview") {
+      PauseMenuView(selectedSlot: .constant(1), onClose: {}, onShowSettings: {}, platform: .tvos,
+                    game: PauseMenuView.previewGame())
+    } else {
+      library
+    }
+    #else
+    library
+    #endif
+  }
+
+  private var library: some View {
     TVLibraryView()
       .tint(Color("DolphinTint"))
       .background(Color.black)

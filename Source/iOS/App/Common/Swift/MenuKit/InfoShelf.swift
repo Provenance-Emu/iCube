@@ -12,6 +12,38 @@ struct InfoShelf: View {
   @Environment(\.icube) private var theme
 
   var body: some View {
+    #if os(tvOS)
+    tvBody
+    #else
+    touchBody
+    #endif
+  }
+
+  #if os(tvOS)
+  /// tvOS help bar under the pause grid: accent glyph, `body` description, the value as an accent `tag`, on a panel.
+  private var tvBody: some View {
+    HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
+      Image(systemName: "info.circle")
+        .font(ICubeDesign.symbolFont(.shelf))
+        .foregroundStyle(ICubeDesign.color(.accent))
+      Text(text ?? " ")
+        .icubeText(.body)
+        .foregroundStyle(ICubeDesign.color(.textPrimary))
+        .lineLimit(2)
+      Spacer(minLength: 0)
+      if let value, !value.isEmpty {
+        Text(value)
+          .icubeText(.tag)
+          .foregroundStyle(ICubeDesign.color(.accent))
+      }
+    }
+    .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
+    .frame(maxWidth: .infinity, minHeight: theme.shelfHeight, alignment: .leading)
+    .icubePanel()
+  }
+  #endif
+
+  private var touchBody: some View {
     HStack(spacing: 10) {
       Image(systemName: "info.circle")
         .foregroundStyle(.white.opacity(0.7))

@@ -261,11 +261,13 @@ internal struct PauseMenuView: View {
       let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: isTV, isCompactHeight: compactHeight)
       ZStack {
         if isTV {
-          HStack(alignment: .top, spacing: 48) {
-            coverColumn.frame(width: 220)
+          HStack(alignment: .top, spacing: 64) {
+            coverColumn.frame(width: 300, alignment: .leading)
             tiles(columns: columns, compact: false)
           }
-          .padding(60)
+          .padding(.horizontal, 90)
+          .padding(.top, 70)
+          .padding(.bottom, 44)
         } else {
           VStack(alignment: .leading, spacing: 8) {
             compactHeader(isCompactHeight: compactHeight).padding(compactHeight ? 12 : 16)
@@ -326,16 +328,30 @@ internal struct PauseMenuView: View {
     }
   }
 
+  /// tvOS hero (iFly layout, iCube tokens): cover, PAUSED in accent, the game title in the display face, its ID.
   private var coverColumn: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
       Image(uiImage: game.coverImage)
-        .resizable().aspectRatio(2.0 / 3.0, contentMode: .fit).frame(width: 220)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
-      Text(game.title).font(.title3.bold()).foregroundStyle(.white).lineLimit(2)
-      Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
-      Text(L("Paused")).font(.caption.weight(.semibold)).foregroundStyle(.white)
-        .padding(.horizontal, 10).padding(.vertical, 5).background(Capsule().fill(Color.white.opacity(0.18)))
+        .resizable().aspectRatio(2.0 / 3.0, contentMode: .fit).frame(width: 260)
+        .clipShape(RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous))
+        .overlay(
+          RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
+            .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
+        )
+        .shadow(color: .black.opacity(0.5), radius: 24, x: 0, y: 14)
+        .padding(.bottom, ICubeDesign.Spacing.xs.rawValue)
+      Label(L("Paused"), systemImage: "pause.fill")
+        .icubeText(.nav)
+        .foregroundStyle(ICubeDesign.color(.accent))
+      Text(game.title)
+        .icubeText(.title)
+        .foregroundStyle(ICubeDesign.titleGradient)
+        .lineLimit(3)
+        .minimumScaleFactor(0.6)
+        .fixedSize(horizontal: false, vertical: true)
+      Text(game.gameID)
+        .icubeText(.tag)
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
     }
   }
 
