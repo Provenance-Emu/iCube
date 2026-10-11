@@ -14,7 +14,9 @@ struct SettingsSidebarShell: View {
 
   @State private var selectedID: String?
   @FocusState private var sidebarFocus: String?
+  #if !os(tvOS)
   @Environment(\.icube) private var theme
+  #endif
   #if os(tvOS)
   @State private var openedAt = Date()
   @Environment(\.dismiss) private var dismiss
@@ -59,9 +61,19 @@ struct SettingsSidebarShell: View {
             .onExitCommand(perform: backToSidebar)
             #endif
         } else {
+          #if os(tvOS)
+          Text(L("Choose a page"))
+            .icubeText(.nav)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+          #else
           Text(L("Choose a page")).foregroundStyle(.secondary)
+          #endif
         }
       }
+      #if os(tvOS)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background { ICubeRoom(style: .gradient) }
+      #endif
       // A leaf in the pane is the root of this stack: its Back must return to the sidebar, not dismiss Settings.
       .environment(\.settingsPaneBack, { sidebarFocus = selectedID })
       #if os(tvOS)
@@ -124,6 +136,54 @@ struct SettingsSidebarShell: View {
   }
 
   private var sidebarList: some View {
+    #if os(tvOS)
+    tvSidebarList
+    #else
+    padSidebarList
+    #endif
+  }
+
+  #if os(tvOS)
+  /// Token sidebar: accent section headers, nav labels, selected fill, focus ring. Not the stock list.
+  private var tvSidebarList: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
+        ForEach(sections) { section in
+          HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+            Capsule()
+              .fill(ICubeDesign.color(.accent))
+              .frame(width: ICubeDesign.Line.focus.rawValue, height: ICubeDesign.Spacing.l.rawValue)
+            Text(section.header)
+              .icubeText(.section)
+              .foregroundStyle(ICubeDesign.color(.textSecondary))
+          }
+          .padding(.top, ICubeDesign.Spacing.m.rawValue)
+          ForEach(section.entries) { entry in
+            Button { selectedID = entry.id } label: {
+              HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+                Image(systemName: entry.icon)
+                  .frame(width: ICubeDesign.Spacing.xl.rawValue)
+                Text(entry.title)
+                  .icubeText(.nav)
+                  .foregroundStyle(ICubeDesign.color(.textPrimary))
+                  .lineLimit(1)
+                Spacer(minLength: 0)
+              }
+            }
+            .buttonStyle(ICubeRowButtonStyle(isSelected: selectedID == entry.id))
+            .focused($sidebarFocus, equals: entry.id)
+          }
+        }
+      }
+      .padding(ICubeDesign.Spacing.l.rawValue)
+    }
+    .icubePanel()
+  }
+  #endif
+
+  #if !os(tvOS)
+  /// iPad touch sidebar. Unchanged from the stock row treatment.
+  private var padSidebarList: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Layout.rowStackSpacing) {
         ForEach(sections) { section in
@@ -155,6 +215,7 @@ struct SettingsSidebarShell: View {
       .padding(.vertical, Layout.listVerticalPadding)
     }
   }
+  #endif
 
   private var sidebarWidth: CGFloat {
     #if os(tvOS)

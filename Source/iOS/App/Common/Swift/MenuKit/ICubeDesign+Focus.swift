@@ -103,24 +103,40 @@ private struct ICubeFocusChrome: ViewModifier {
 /// Settings, hub, list and sheet rows (spec §3 Row).
 struct ICubeRowButtonStyle: ButtonStyle {
   var isFocusedOverride: Bool? = nil
-  @Environment(\.isFocused) private var isFocused
+  /// Sidebar selection. Drawn with `selectedFill` even when the row is not focused.
+  var isSelected: Bool = false
 
   #if os(tvOS)
-  private static let minHeight: CGFloat = 72
+  fileprivate static let minHeight: CGFloat = 72
   #else
-  private static let minHeight: CGFloat = 44
+  fileprivate static let minHeight: CGFloat = 44
   #endif
 
   func makeBody(configuration: Configuration) -> some View {
-    configuration.label
+    ICubeRowButtonChrome(label: configuration.label, isPressed: configuration.isPressed,
+                         isFocusedOverride: isFocusedOverride, isSelected: isSelected)
+  }
+}
+
+/// Focus is read here: a `ButtonStyle` property's `@Environment(\.isFocused)` does not update on tvOS.
+private struct ICubeRowButtonChrome<Label: View>: View {
+  let label: Label
+  let isPressed: Bool
+  let isFocusedOverride: Bool?
+  let isSelected: Bool
+  @Environment(\.isFocused) private var isFocused
+
+  var body: some View {
+    let focused = isFocusedOverride ?? isFocused
+    label
       .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
       .padding(.vertical, ICubeDesign.Spacing.s.rawValue)
-      .frame(maxWidth: .infinity, minHeight: Self.minHeight, alignment: .leading)
+      .frame(maxWidth: .infinity, minHeight: ICubeRowButtonStyle.minHeight, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
-          .fill(ICubeDesign.color(.rowSurface))
+          .fill(focused || isSelected ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface))
       )
-      .modifier(ICubeFocusChrome(focused: isFocusedOverride ?? isFocused, pressed: configuration.isPressed,
+      .modifier(ICubeFocusChrome(focused: focused, pressed: isPressed,
                                  radius: ICubeDesign.Radius.small.rawValue, scale: ICubeDesign.Motion.rowFocusScale))
   }
 }

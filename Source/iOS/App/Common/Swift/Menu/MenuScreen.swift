@@ -336,6 +336,68 @@ struct MenuScreen: View {
     title: String, subtitle: String?, icon: String?, tint: Color?, badge: String?,
     value: String? = nil, description: String? = nil, showsChevron: Bool = false
   ) -> some View {
+    #if os(tvOS)
+    tvRowLabel(title: title, subtitle: subtitle, icon: icon, tint: tint, badge: badge,
+               value: value, description: description, showsChevron: showsChevron)
+    #else
+    touchRowLabel(title: title, subtitle: subtitle, icon: icon, tint: tint, badge: badge,
+                  value: value, description: description, showsChevron: showsChevron)
+    #endif
+  }
+
+  #if os(tvOS)
+  /// Settings and list rows on the type ramp: nav title, detail value (On/Off), tag badge.
+  private func tvRowLabel(
+    title: String, subtitle: String?, icon: String?, tint: Color?, badge: String?,
+    value: String?, description: String?, showsChevron: Bool
+  ) -> some View {
+    HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+      if let icon {
+        Image(systemName: icon)
+          .font(ICubeDesign.symbolFont(.shelf))
+          .foregroundStyle(tint ?? ICubeDesign.color(.accent))
+          .frame(width: ICubeDesign.Spacing.xl.rawValue)
+      }
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+        Text(title)
+          .icubeText(.nav)
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
+        if let subtitle {
+          Text(subtitle)
+            .icubeText(.detail)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+        }
+        if let description {
+          Text(description)
+            .icubeText(.detail)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+            .lineLimit(2)
+        }
+      }
+      Spacer(minLength: 0)
+      if let value {
+        Text(value)
+          .icubeText(.detail)
+          .foregroundStyle(ICubeDesign.color(.textSecondary))
+      }
+      if let badge {
+        Text(badge)
+          .icubeText(.tag)
+          .foregroundStyle(ICubeDesign.color(.textSecondary))
+      }
+      if showsChevron {
+        Image(systemName: "chevron.right")
+          .foregroundStyle(ICubeDesign.color(.textTertiary))
+      }
+    }
+  }
+  #endif
+
+  #if !os(tvOS)
+  private func touchRowLabel(
+    title: String, subtitle: String?, icon: String?, tint: Color?, badge: String?,
+    value: String? = nil, description: String? = nil, showsChevron: Bool = false
+  ) -> some View {
     HStack(spacing: 12) {
       if let icon {
         Image(systemName: icon)
@@ -368,6 +430,7 @@ struct MenuScreen: View {
       }
     }
   }
+  #endif
 
   private func rowLabel(_ item: MenuItem) -> some View {
     rowLabel(
@@ -735,16 +798,46 @@ struct MenuScreen: View {
 
   @ViewBuilder
   private var tvListBody: some View {
-    let list = List {
-      ForEach(model.sections) { section in
-        tvSection(section)
+    let list = ScrollView {
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+        ForEach(model.sections) { section in
+          if let header = section.header {
+            tvListSectionHeader(header)
+          }
+          tvSectionRows(section)
+          if let footer = section.footer {
+            Text(footer)
+              .icubeText(.detail)
+              .foregroundStyle(ICubeDesign.color(.textTertiary))
+          }
+        }
       }
+      .padding(ICubeDesign.Spacing.l.rawValue)
     }
+    .buttonStyle(ICubeRowButtonStyle())
     if let first = defaultTVFocusID {
       list.defaultFocus($tvFocusedID, first)
     } else {
       list
     }
+  }
+
+  /// Group header for settings rows: accent bar plus the section role.
+  private func tvListSectionHeader(_ header: String) -> some View {
+    HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+      Capsule()
+        .fill(ICubeDesign.color(.accent))
+        .frame(width: ICubeDesign.Line.focus.rawValue, height: ICubeDesign.Spacing.l.rawValue)
+      Text(header)
+        .icubeText(.section)
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
+    }
+    .padding(.top, ICubeDesign.Spacing.s.rawValue)
+  }
+
+  @ViewBuilder
+  private func tvSectionRows(_ section: MenuSection) -> some View {
+    ForEach(section.items) { item in tvRow(item) }
   }
 
   /// `.defaultFocus` needs a ROW id, not necessarily `MenuItem.id` — a
@@ -807,13 +900,11 @@ struct MenuScreen: View {
       Button {
         binding.wrappedValue.toggle()
       } label: {
-        HStack {
-          rowLabel(item)
-          Spacer()
-          if binding.wrappedValue {
-            Image(systemName: "checkmark")
-          }
-        }
+        rowLabel(
+          title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, badge: item.badge,
+          value: binding.wrappedValue ? L("On") : L("Off"), description: item.description,
+          showsChevron: item.showsChevron
+        )
       }
       .disabled(!item.isEnabled)
       .focused($tvFocusedID, equals: item.id)

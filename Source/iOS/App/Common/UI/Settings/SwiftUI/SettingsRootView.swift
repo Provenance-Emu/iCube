@@ -53,7 +53,7 @@ struct SettingsRootView: View {
       #endif
     }
     #if os(tvOS)
-    .background(Color.black.ignoresSafeArea())
+    .background { ICubeRoom(style: .gradient) }
     #endif
     .onReceive(NotificationCenter.default.publisher(for: .dolSettingsSelectControllers)) { _ in jumpToControllersRequested = true }
     #if os(iOS)
