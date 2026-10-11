@@ -12,7 +12,6 @@
 
 class Mixer;
 
-namespace Config { struct InfoBase; template<typename T> struct Info; extern const Info<bool> MAIN_AUDIO_USE_COMPUTE_MIXER; }
 
 namespace Core
 {

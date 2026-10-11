@@ -160,6 +160,11 @@ std::vector<std::string> GetSoundBackends()
 
 bool SupportsDPL2Decoder(std::string_view backend)
 {
+#ifdef IPHONEOS
+  // Both iOS backends decode to 5.1 (discrete on a six-channel route, binaural on headphones).
+  if (backend == BACKEND_COREAUDIO || backend == "AVAudioEngine")
+    return true;
+#endif
 #ifndef __APPLE__
   if (backend == BACKEND_OPENAL)
     return true;
@@ -181,6 +186,10 @@ bool SupportsVolumeChanges(std::string_view backend)
   // FIXME: this one should ask the backend whether it supports it.
   //       but getting the backend from string etc. is probably
   //       too much just to enable/disable a stupid slider...
+#ifdef IPHONEOS
+  if (backend == BACKEND_COREAUDIO || backend == "AVAudioEngine")
+    return true;
+#endif
   return backend == BACKEND_CUBEB || backend == BACKEND_OPENAL || backend == BACKEND_WASAPI;
 }
 

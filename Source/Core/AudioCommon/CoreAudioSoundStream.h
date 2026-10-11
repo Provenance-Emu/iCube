@@ -5,84 +5,83 @@
 
 #ifdef IPHONEOS
 #include <AudioUnit/AudioUnit.h>
+
+#include <atomic>
+#include <memory>
+#include <mutex>
+
+#include "AudioCommon/AudioDSPChain.h"
+#include "Common/Config/Config.h"
 #endif
 
 #include "AudioCommon/SoundStream.h"
 
+/// RemoteIO output. Stereo 16-bit by default; 5.1 float when surround decoding is on and the route
+/// (HDMI, a multichannel adapter) can carry six channels. Runs the shared AudioDSPChain and a
+/// software master volume in the render callback, and survives interruptions, route changes and a
+/// media-services reset.
 class CoreAudioSound final : public SoundStream
 {
 #ifdef IPHONEOS
 public:
+  CoreAudioSound();
+  ~CoreAudioSound() override;
+
   bool Init() override;
   bool SetRunning(bool running) override;
   void SetVolume(int volume) override;
 
   static bool IsValid() { return true; }
 
-  /// Built-in DSP controls (no AUv3; CoreAudio backend only)
-  void setDelayEnabled(bool enabled);
-  void setDelayMs(int ms);
-  void setDelayFeedback(float fb); // 0.0 - 0.95
-
-  void setBitcrushEnabled(bool enabled);
-  void setBitcrushBits(int bits); // 4 - 16
-  void setBitcrushDownsample(int factor); // 1 - 16
-
-  void setEQEnabled(bool enabled);
-  void setEQLowGainDb(float db);   // bass shelf gain in dB
-  void setEQMidGainDb(float db);   // mid peak gain in dB
-  void setEQHighGainDb(float db);  // treble shelf gain in dB
-
-  // Getters for UI sync
-  bool getDelayEnabled() const { return m_delay_enabled; }
-  int getDelayMs() const { return m_delay_ms; }
-  float getDelayFeedback() const { return m_delay_feedback; }
-  bool getBitcrushEnabled() const { return m_bitcrush_enabled; }
-  int getBitcrushBits() const { return m_bitcrush_bits; }
-  int getBitcrushDownsample() const { return m_bitcrush_downsample; }
-  bool getEQEnabled() const { return m_eq_enabled; }
-  float getEQLowGainDb() const { return m_eq_low_db; }
-  float getEQMidGainDb() const { return m_eq_mid_db; }
-  float getEQHighGainDb() const { return m_eq_high_db; }
+  AudioCommon::AudioDSPChain& GetDSPChain() { return m_dsp; }
+  /// True while the unit renders six discrete channels.
+  bool IsSurroundOutput() const { return m_surround.load(); }
 
 private:
-  AudioUnit audio_unit;
-  int m_volume;
+  static OSStatus RenderCallback(void* ref_con, AudioUnitRenderActionFlags* action_flags,
+                                 const AudioTimeStamp* timestamp, UInt32 bus_number,
+                                 UInt32 number_frames, AudioBufferList* io_data);
+  OSStatus Render(UInt32 number_frames, AudioBufferList* io_data);
 
-  static OSStatus callback(void* ref_con, AudioUnitRenderActionFlags* action_flags,
-                           const AudioTimeStamp* timestamp, UInt32 bus_number, UInt32 number_frames,
-                           AudioBufferList* io_data);
+  bool OpenUnitLocked();
+  void CloseUnitLocked();
+  bool StartUnitLocked();
+  void StopUnitLocked();
+  /// Close and reopen the unit for the current route and settings. Caller holds m_guard->mutex.
+  void RebuildLocked();
+  bool WantsSurround() const;
+  void RegisterObservers();
+  void UnregisterObservers();
+  void RefreshFromConfig();
 
-  // DSP state
-  bool m_delay_enabled = false;
-  int m_delay_ms = 200;
-  float m_delay_feedback = 0.35f;
-  std::vector<float> m_delayL;
-  std::vector<float> m_delayR;
-  size_t m_delay_index = 0;
+  /// Serializes the unit against the session observers' main-queue blocks. Shared with those
+  /// blocks so a block that fires after the stream is destroyed finds `alive` false.
+  struct Guard
+  {
+    std::mutex mutex;
+    bool alive = true;
+  };
+  std::shared_ptr<Guard> m_guard = std::make_shared<Guard>();
+  AudioUnit m_unit = nullptr;
+  std::atomic<bool> m_should_run{false};
+  std::atomic<bool> m_unit_running{false};
+  std::atomic<bool> m_surround{false};
+  u32 m_channels = 2;
+  int m_volume = 100;
 
-  bool m_bitcrush_enabled = false;
-  int m_bitcrush_bits = 16;
-  int m_bitcrush_downsample = 1;
-  int m_bitcrush_hold = 0;
-  float m_last_crush_L = 0.0f;
-  float m_last_crush_R = 0.0f;
+  AudioCommon::AudioDSPChain m_dsp;
 
-  bool m_eq_enabled = false;
-  float m_eq_low_db = 0.0f;
-  float m_eq_mid_db = 0.0f;
-  float m_eq_high_db = 0.0f;
-
-  struct Biquad { float b0=1, b1=0, b2=0, a1=0, a2=0, s1L=0, s2L=0, s1R=0, s2R=0; };
-  Biquad m_low_shelf;
-  Biquad m_mid_peak;
-  Biquad m_high_shelf;
-
-  void updateDelayBuffers(unsigned sample_rate);
-  void updateEQ(unsigned sample_rate);
-  static void computeLowShelf(Biquad& q, float sr, float freq, float gain_db);
-  static void computeHighShelf(Biquad& q, float sr, float freq, float gain_db);
-  static void computePeak(Biquad& q, float sr, float freq, float qfac, float gain_db);
-  inline void processEQFrame(float& l, float& r);
+  // ARC-managed in CoreAudioSoundStream.mm; opaque elsewhere.
+#ifdef __OBJC__
+  id m_route_token = nil;
+  id m_interrupt_token = nil;
+  id m_reset_token = nil;
+#else
+  void* m_route_token = nullptr;
+  void* m_interrupt_token = nullptr;
+  void* m_reset_token = nullptr;
+#endif
+  Config::ConfigChangedCallbackID m_config_callback;
+  bool m_has_config_callback = false;
 #endif
 };

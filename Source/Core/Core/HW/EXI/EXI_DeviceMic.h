@@ -3,14 +3,20 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 
 #include "Common/CommonTypes.h"
 #include "Common/WorkQueueThread.h"
 #include "Core/HW/EXI/EXI_Device.h"
 
+#ifdef HAVE_CUBEB
 struct cubeb;
 struct cubeb_stream;
+#endif
+#ifdef IPHONEOS
+class IOSAudioInput;
+#endif
 
 namespace ExpansionInterface
 {
@@ -60,8 +66,12 @@ private:
     };
   };
 
+#ifdef HAVE_CUBEB
   static long DataCallback(cubeb_stream* stream, void* user_data, const void* input_buffer,
                            void* output_buffer, long nframes);
+#endif
+  // Copies captured samples into the stream ring buffer. Called from the capture thread.
+  void PushSamples(const s16* buff_in, long nframes);
 
   void TransferByte(u8& byte) override;
 
@@ -81,8 +91,13 @@ private:
   void UpdateNextInterruptTicks();
 
   // Streaming input interface
+#ifdef HAVE_CUBEB
   std::shared_ptr<cubeb> m_cubeb_ctx = nullptr;
   cubeb_stream* m_cubeb_stream = nullptr;
+#endif
+#ifdef IPHONEOS
+  std::unique_ptr<IOSAudioInput> m_ios_input;
+#endif
 
   UStatus status;
 

@@ -1,6 +1,8 @@
 add_library(audiocommon
   AudioCommon.cpp
   AudioCommon.h
+  AudioDSPChain.cpp
+  AudioDSPChain.h
   CubebStream.h
   Enums.h
   Mixer.cpp
@@ -89,10 +91,23 @@ if(IOS)
     find_library(COREMOTION_LIBRARY CoreMotion)
   endif()
   target_sources(audiocommon PRIVATE
-    CoreAudioSoundStream.cpp
+    CoreAudioSoundStream.mm
     CoreAudioSoundStream.h
     AVAudioEngineSoundStream.mm
     AVAudioEngineSoundStream.h
+    IOSAudioInput.mm
+    IOSAudioInput.h
+    IOSAudioSession.mm
+    IOSAudioSession.h
+  )
+  # The core is otherwise built without ARC. These files own AVFoundation objects and are written
+  # for ARC; their constructors and destructors live in the .mm so member lifetimes are managed.
+  set_source_files_properties(
+    CoreAudioSoundStream.mm
+    AVAudioEngineSoundStream.mm
+    IOSAudioInput.mm
+    IOSAudioSession.mm
+    PROPERTIES COMPILE_OPTIONS "-fobjc-arc"
   )
 
   if(COREMOTION_LIBRARY)

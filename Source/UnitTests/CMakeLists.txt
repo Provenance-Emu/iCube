@@ -20,6 +20,7 @@ macro(add_dolphin_test target)
   target_link_libraries(tests PRIVATE ${target})
 endmacro()
 
+add_subdirectory(AudioCommon)
 add_subdirectory(Common)
 add_subdirectory(Core)
 add_subdirectory(VideoCommon)
