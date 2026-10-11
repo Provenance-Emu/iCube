@@ -938,9 +938,7 @@ struct TVLibraryView: View {
     return VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
       ForEach(shelves) { shelf in
         VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
-          Text(L(shelf.titleKey))
-            .icubeText(.section)
-            .padding(.horizontal, Constants.gridHorizontalPadding)
+          TVLibrarySectionHeader(title: L(shelf.titleKey))
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Constants.gridHorizontalSpacing) {
               ForEach(shelf.gameIDs, id: \.self) { gameID in
@@ -955,62 +953,22 @@ struct TVLibraryView: View {
     }
   }
 
-  @ViewBuilder
-  private var libraryToolbar_tvOS_favorites: some View {
-    if !isSearching, let favs = favorites(), !favs.isEmpty {
-      VStack(alignment: .leading, spacing: 16) {
-        // Stunning tvOS favorites header
-        HStack {
-          VStack(alignment: .leading, spacing: 6) {
-            Text("⭐ Favorites")
-              .font(enhancedLargeTitleFont)
-              .foregroundStyle(
-                LinearGradient(
-                  colors: [Color.primary, Color.primary.opacity(0.8)],
-                  startPoint: .leading,
-                  endPoint: .trailing
-                )
-              )
+  /// Shelf title for the tvOS library: accent capsule plus the section type role.
+  private struct TVLibrarySectionHeader: View {
+    /// Already-localized shelf title.
+    let title: String
 
-            Text("Your championship collection")
-              .font(enhancedTitle3Font)
-              .foregroundColor(.secondary)
-          }
-          Spacer()
-
-          // Elegant floating elements
-          HStack(spacing: 8) {
-            Image(systemName: "sparkles")
-              .font(.system(size: 24, weight: .light))
-              .foregroundColor(.yellow.opacity(0.8))
-            Image("DolphinLogo")
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 32, height: 32)
-              .opacity(0.7)
-          }
-        }
-        .padding(.horizontal, Constants.gridHorizontalPadding)
-
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: Constants.gridHorizontalSpacing) {
-            ForEach(favs, id: \.filePath) { fav in
-              gameGridItem(for: fav)
-            }
-          }
-          .background(
-            // Elegant material backdrop for tvOS favorites with proper clipping
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-              .fill(.ultraThinMaterial.opacity(0.15))
-              .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                  .stroke(.white.opacity(0.08), lineWidth: 1.5)
-              )
-              .padding(.horizontal, 20)
-              .clipped()
-          )
-        }
+    var body: some View {
+      HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+        Capsule()
+          .fill(ICubeDesign.color(.accent))
+          .frame(width: ICubeDesign.Line.focus.rawValue, height: ICubeDesign.Spacing.l.rawValue)
+        Text(title)
+          .icubeText(.section)
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
+        Spacer(minLength: 0)
       }
+      .padding(.horizontal, Constants.gridHorizontalPadding)
     }
   }
 

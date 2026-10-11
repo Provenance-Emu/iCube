@@ -89,6 +89,12 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
       @"RECE01": @YES,
       @"GNCE01": @YES,
     } forKey:@"favorites_by_gameid"];
+    // Newest first: Emberfall, Starfall Rally, Pixel Pilots.
+    [DOLSharedUserDefaults() setObject:@{
+      @"RECE01": @1700000003.0,
+      @"GSRE01": @1700000002.0,
+      @"WPPE01": @1700000001.0,
+    } forKey:@"last_played_v1"];
 
     NSLog(@"[ScreenshotMode] seeded %zu demo library entries", count);
   });
