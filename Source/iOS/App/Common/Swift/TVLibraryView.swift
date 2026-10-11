@@ -1430,12 +1430,16 @@ struct TVLibraryView: View {
   }
 #endif
 
-  /// Runs a library-menu action. On tvOS the menu is a sheet, so an action that presents
-  /// something else has to dismiss it first; on iOS the `Menu` dismisses itself.
+  /// Runs a library-menu action. On tvOS a toolbar sheet has to dismiss before the
+  /// next presentation; a rail `Menu` dismisses itself, so the action runs immediately.
   private func libraryMenuAction(_ action: @escaping () -> Void) {
 #if os(tvOS)
-    tvToolbarSheet = nil
-    DispatchQueue.main.asyncAfter(deadline: .now() + Self.tvToolbarSheetDismissDelay, execute: action)
+    if tvToolbarSheet != nil {
+      tvToolbarSheet = nil
+      DispatchQueue.main.asyncAfter(deadline: .now() + Self.tvToolbarSheetDismissDelay, execute: action)
+    } else {
+      action()
+    }
 #else
     action()
 #endif
@@ -1460,11 +1464,6 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var libraryViewMenuSection: some View {
     Section(L("View")) {
-#if os(tvOS)
-      Button(action: { libraryMenuAction { showSearchSheet = true } }) {
-        Label(L("Search"), systemImage: "magnifyingglass")
-      }
-#endif
       Button(action: {
         libraryMenuAction {
           if isSelectionMode {
@@ -1480,19 +1479,9 @@ struct TVLibraryView: View {
         )
       }
 #if os(tvOS)
-      // The toolbar sheet is inside a NavigationStack, so these push instead of opening a Menu.
-      NavigationLink {
-        List { sortMenuItems }
-          .navigationTitle(L("Sort"))
-      } label: {
-        Label(L("Sort"), systemImage: "arrow.up.arrow.down")
-      }
-      NavigationLink {
-        List { gridZoomMenuItems }
-          .navigationTitle(L("Grid Size"))
-      } label: {
-        Label(L("Grid Size"), systemImage: "square.grid.3x3")
-      }
+      // Search and Sort are their own rail rows. Grid size stays in this menu as buttons,
+      // because a NavigationLink only pushes inside the old toolbar sheet.
+      gridZoomMenuItems
 #else
       Menu {
         sortMenuItems
@@ -1510,6 +1499,9 @@ struct TVLibraryView: View {
       }
       .disabled(model.isRescanning)
     }
+#if os(tvOS)
+    librarySystemMenuSection
+#endif
   }
 
   /// Tappable dolphin logo for the library toolbar leading slot.
