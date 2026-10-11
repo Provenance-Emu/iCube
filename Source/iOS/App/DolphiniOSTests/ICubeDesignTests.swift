@@ -21,9 +21,9 @@ final class ICubeDesignTests: XCTestCase {
   }
 
   func test_typeTable_matchesSpec() {
-    // (tvOS pt, iPad pt) per spec §2.1.
+    // (tvOS pt, iPad pt). tvOS is the quieter ramp; iPad stays on spec §2.1.
     let expected: [ICubeDesign.TypeRole: (CGFloat, CGFloat)] = [
-      .title: (48, 34), .section: (30, 20), .nav: (24, 17), .body: (29, 17), .detail: (23, 13), .tag: (20, 12),
+      .title: (34, 34), .section: (24, 20), .nav: (22, 17), .body: (21, 17), .detail: (17, 13), .tag: (16, 12),
     ]
     for role in ICubeDesign.TypeRole.allCases {
       let spec = ICubeDesign.TypeSpec.of(role)

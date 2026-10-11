@@ -50,12 +50,14 @@ struct ICubeDesign {
 
     static func of(_ role: TypeRole) -> TypeSpec {
       switch role {
-      case .title: TypeSpec(face: .displayBold, tvSize: 48, padSize: 34, relativeTo: .largeTitle, uppercase: false, tracking: 0)
-      case .section: TypeSpec(face: .displayBold, tvSize: 30, padSize: 20, relativeTo: .title3, uppercase: true, tracking: 1.5)
-      case .nav: TypeSpec(face: .displayMedium, tvSize: 24, padSize: 17, relativeTo: .headline, uppercase: true, tracking: 1.2)
-      case .body: TypeSpec(face: .system, tvSize: 29, padSize: 17, relativeTo: .body, uppercase: false, tracking: 0)
-      case .detail: TypeSpec(face: .system, tvSize: 23, padSize: 13, relativeTo: .footnote, uppercase: false, tracking: 0)
-      case .tag: TypeSpec(face: .mono, tvSize: 20, padSize: 12, relativeTo: .caption, uppercase: true, tracking: 0.5)
+      // tvOS sizes are the quieter ramp (screen title ~34, section ~24, card/body ~21, tag ~16).
+      // The iPad column stays on the spec so touch UI does not change.
+      case .title: TypeSpec(face: .displayBold, tvSize: 34, padSize: 34, relativeTo: .largeTitle, uppercase: false, tracking: 0)
+      case .section: TypeSpec(face: .displayBold, tvSize: 24, padSize: 20, relativeTo: .title3, uppercase: true, tracking: 1.5)
+      case .nav: TypeSpec(face: .displayMedium, tvSize: 22, padSize: 17, relativeTo: .headline, uppercase: true, tracking: 1.2)
+      case .body: TypeSpec(face: .system, tvSize: 21, padSize: 17, relativeTo: .body, uppercase: false, tracking: 0)
+      case .detail: TypeSpec(face: .system, tvSize: 17, padSize: 13, relativeTo: .footnote, uppercase: false, tracking: 0)
+      case .tag: TypeSpec(face: .mono, tvSize: 16, padSize: 12, relativeTo: .caption, uppercase: true, tracking: 0.5)
       }
     }
   }

@@ -347,8 +347,14 @@ struct GameGridItem: View {
       VStack(spacing: screenScaledPadding(base: 10)) {
         Spacer()
 
-        // Title with stunning effect
+        // Title. tvOS uses the body role (about 21pt) with no gradient or shadow.
         Text(item.title.isEmpty ? "Unknown Game" : item.title)
+          #if os(tvOS)
+          .icubeText(.body)
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
+          .multilineTextAlignment(.center)
+          .lineLimit(2)
+          #else
           .font(.system(
             size: screenScaledFontSize(base: 18),
             weight: .black,
@@ -371,10 +377,15 @@ struct GameGridItem: View {
           .shadow(color: .black.opacity(0.9), radius: 3, x: 0, y: 2)
           .shadow(color: gameSystem == .gameCube ? .purple.opacity(0.5) : .blue.opacity(0.5),
                   radius: 8, x: 0, y: 0)
+          #endif
 
-        // Enhanced Game ID with authentic styling
+        // Game ID. tvOS uses the monospaced tag role.
         if !item.gameID.isEmpty && showSubtitles {
           Text(item.gameID)
+            #if os(tvOS)
+            .icubeText(.tag)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+            #else
             .font(.system(
               size: screenScaledFontSize(base: 11),
               weight: .bold,
@@ -407,6 +418,7 @@ struct GameGridItem: View {
                 )
                 .shadow(color: .black.opacity(0.5), radius: 2, x: 0, y: 1)
             )
+            #endif
         }
       }
       .padding(.horizontal, screenScaledPadding(base: 12))
@@ -544,43 +556,18 @@ struct GameGridItem: View {
         }
       }
 
-      VStack(alignment: .leading, spacing: 6) {
-        // Enhanced title with better typography
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
         Text(item.title)
-          .font(.system(.headline, design: .rounded, weight: .semibold))
-          .lineLimit(1)
-          .minimumScaleFactor(0.75)
-          .foregroundStyle(
-            LinearGradient(
-              colors: [Color.primary, Color.primary.opacity(0.8)],
-              startPoint: .top,
-              endPoint: .bottom
-            )
-          )
-          .shadow(color: .black.opacity(0.1), radius: 1, x: 0, y: 1)
+          .icubeText(.body)
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
+          .lineLimit(2)
+          .multilineTextAlignment(.leading)
 
         if showSubtitles {
           HStack {
-            // Game ID with enhanced styling
             Text(item.gameID)
-              .font(enhancedCaptionFont)
-              .foregroundStyle(
-                LinearGradient(
-                  colors: [Color.secondary, Color.secondary.opacity(0.8)],
-                  startPoint: .top,
-                  endPoint: .bottom
-                )
-              )
-              .padding(.horizontal, 6)
-              .padding(.vertical, 2)
-              .background(
-                Capsule()
-                  .fill(Color.primary.opacity(0.05))
-                  .overlay(
-                    Capsule()
-                      .stroke(Color.primary.opacity(0.1), lineWidth: 0.5)
-                  )
-              )
+              .icubeText(.tag)
+              .foregroundStyle(ICubeDesign.color(.textSecondary))
 
             Spacer()
 
