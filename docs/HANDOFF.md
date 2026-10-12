@@ -158,3 +158,6 @@ develop `06407190da` is on origin. What happened, in order:
 5. **Provenance gitlink not bumped** to `06407190da`.
 
 Traps met this session: the simulator test runner dies at bootstrap under heavy Mac load ("Mach error -308" / "signal term before establishing connection") — pre-boot the simulator and rerun, it is not a test failure; another session's `kill` ends a running `xcodebuild` with "BUILD INTERRUPTED".
+
+### Addendum (02:50): the review-fix batch is verified on iOS
+`06407190da` shipped a compile error (`Notification.Name(DOLEmulationDidEndNotification)`; the Swift name is `.DOLEmulationDidEnd`), fixed in `49ffbc0974` + `eba82c4f7b`. On `eba82c4f7b` the targeted suites (QuickMenu, PauseArbiter, PauseMenuModelBuilder, CorePauseCallSites, UILayerPauseCalls, RecordingManager, PauseFastForwardState, MenuModel) pass with 0 failures, so the recording and audio-cycle changes compile and behave on iOS. **Still unverified: the tvOS compile of `eba82c4f7b`** (the additions are platform-neutral or inside existing `#if os(tvOS)` blocks, but nobody has built it) and the full iOS suite on this head. Screenshots remain owed.
