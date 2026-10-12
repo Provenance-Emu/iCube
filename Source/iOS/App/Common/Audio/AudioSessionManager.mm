@@ -50,15 +50,18 @@ static const double kPreferredSampleRate = 48000.0;
               }];
 }
 
-- (void)registerMicrophoneHookOnce {
-  if (_hookRegistered) {
+- (void)registerMicrophoneHookOnce
+{
+  if (_hookRegistered)
+  {
     return;
   }
   _hookRegistered = YES;
   __weak AudioSessionManager* weakSelf = self;
   AudioCommon::IOSAudioSession::SetMicrophoneSessionHook([weakSelf](bool active) {
     AudioSessionManager* strongSelf = weakSelf;
-    if (!strongSelf) {
+    if (!strongSelf)
+    {
       return;
     }
     strongSelf->_microphoneActive = active ? YES : NO;
@@ -78,7 +81,8 @@ static const double kPreferredSampleRate = 48000.0;
   return sharedInstance;
 }
 
-- (BOOL)microphoneActive {
+- (BOOL)microphoneActive
+{
   return _microphoneActive;
 }
 
@@ -88,7 +92,8 @@ static const double kPreferredSampleRate = 48000.0;
   NSError* error = nil;
 
 #if !TARGET_OS_TV
-  if (_microphoneActive) {
+  if (_microphoneActive)
+  {
     // Recording: Bluetooth stays on A2DP for output (built-in microphone for input) rather than
     // dropping to the low-quality HFP profile, and the speaker stays the default output. tvOS has
     // no app-accessible microphone, so the core never asks for this there.
@@ -98,16 +103,19 @@ static const double kPreferredSampleRate = 48000.0;
     if (![session setCategory:AVAudioSessionCategoryPlayAndRecord
                          mode:AVAudioSessionModeDefault
                       options:options
-                        error:&error]) {
+                        error:&error])
+    {
       NSLog(@"[Audio] setCategory(PlayAndRecord) failed: %@", error);
     }
-  } else
+  }
+  else
 #endif
   {
     AudioMuteSwitchMode mode = (AudioMuteSwitchMode)Config::Get(Config::MAIN_MUTE_SWITCH_MODE);
     NSString* category = AVAudioSessionCategoryPlayback;
 #if !TARGET_OS_TV
-    if (mode == AudioMuteSwitchModeObey) {
+    if (mode == AudioMuteSwitchModeObey)
+    {
       category = AVAudioSessionCategorySoloAmbient;
     }
 #else
@@ -115,7 +123,8 @@ static const double kPreferredSampleRate = 48000.0;
 #endif
     // Playback categories route to Bluetooth and AirPlay on their own; the AllowBluetoothA2DP /
     // AllowAirPlay options are PlayAndRecord-only and tvOS rejects them.
-    if (![session setCategory:category mode:AVAudioSessionModeMoviePlayback options:0 error:&error]) {
+    if (![session setCategory:category mode:AVAudioSessionModeMoviePlayback options:0 error:&error])
+    {
       NSLog(@"[Audio] setCategory(%@) failed: %@", category, error);
     }
   }

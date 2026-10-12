@@ -11,33 +11,33 @@
 #include "Core/Config/GraphicsSettings.h"
 // Full definition of `enum class TriState` (GraphicsSettings.h only forward-declares it). Needed for
 // the (TriState)mode cast in the VISkipMode setter (setVISkipMode:).
-#include "VideoCommon/VideoConfig.h"
-#include "Core/Config/iOSSettings.h"
+#include <algorithm>
+#include <atomic>
 #include "AudioCommon/AudioCommon.h"
+#include "Common/IOFile.h"
+#include "Common/Logging/Log.h"
+#include "Core/AchievementManager.h"
+#include "Core/Config/AchievementSettings.h"
 #include "Core/Config/SYSCONFSettings.h"
 #include "Core/Config/UISettings.h"
 #include "Core/Config/WiimoteSettings.h"
+#include "Core/Config/iOSSettings.h"
+#include "Core/Core.h"
 #include "Core/HW/SI/SI_Device.h"
 #include "Core/HW/Wiimote.h"
-#include "Core/Config/AchievementSettings.h"
-#include "Core/AchievementManager.h"
-#include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.h"
-#include "Common/Logging/Log.h"
-#include "Core/Core.h"
-#include "Core/System.h"
-#include "Common/IOFile.h"
 #include "Core/IOS/USB/Emulated/Skylanders/Skylander.h"
 #include "Core/IOS/USB/Emulated/Skylanders/SkylanderFigure.h"
-#include <algorithm>
-#include <atomic>
-#import "Swift.h"
+#include "Core/System.h"
 #import "EmulationCoordinator.h"
+#include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.h"
+#import "Swift.h"
+#include "VideoCommon/VideoConfig.h"
 
-#include "Common/StringUtil.h"
-#import "FastmemManager.h"
-#import "AudioSessionManager.h"
 #include "AudioCommon/Enums.h"
+#import "AudioSessionManager.h"
+#include "Common/StringUtil.h"
 #include "Core/HW/EXI/EXI_Device.h"
+#import "FastmemManager.h"
 
 #include "Common/FileUtil.h"
 #include "Common/IniFile.h"
@@ -576,78 +576,208 @@ static bool HasCurrentRunLayer()
 }
 + (NSInteger)audioVolume { return (NSInteger)Config::Get(Config::MAIN_AUDIO_VOLUME); }
 + (void)setAudioVolume:(NSInteger)percent { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_VOLUME, (int)percent); }
-+ (NSInteger)audioBufferSizeMs { return (NSInteger)Config::Get(Config::MAIN_AUDIO_BUFFER_SIZE); }
-+ (void)setAudioBufferSizeMs:(NSInteger)ms { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_BUFFER_SIZE, (int)ms); }
-+ (BOOL)audioFillGaps { return Config::Get(Config::MAIN_AUDIO_FILL_GAPS); }
-+ (void)setAudioFillGaps:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FILL_GAPS, (bool)enabled); }
-+ (BOOL)audioPreservePitch { return Config::Get(Config::MAIN_AUDIO_PRESERVE_PITCH); }
-+ (void)setAudioPreservePitch:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_PRESERVE_PITCH, (bool)enabled); }
++ (NSInteger)audioBufferSizeMs
+{
+  return (NSInteger)Config::Get(Config::MAIN_AUDIO_BUFFER_SIZE);
+}
++ (void)setAudioBufferSizeMs:(NSInteger)ms
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_BUFFER_SIZE, (int)ms);
+}
++ (BOOL)audioFillGaps
+{
+  return Config::Get(Config::MAIN_AUDIO_FILL_GAPS);
+}
++ (void)setAudioFillGaps:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FILL_GAPS, (bool)enabled);
+}
++ (BOOL)audioPreservePitch
+{
+  return Config::Get(Config::MAIN_AUDIO_PRESERVE_PITCH);
+}
++ (void)setAudioPreservePitch:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_PRESERVE_PITCH, (bool)enabled);
+}
 + (BOOL)audioMuteOnDisabledSpeedLimit { return Config::Get(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT); }
 + (void)setAudioMuteOnDisabledSpeedLimit:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT, (bool)enabled); }
 + (BOOL)audioMuteSwitchObey { return ((int)Config::Get(Config::MAIN_MUTE_SWITCH_MODE)) != 0; }
-+ (void)setAudioMuteSwitchObey:(BOOL)obey {
++ (void)setAudioMuteSwitchObey:(BOOL)obey
+{
   Config::SetBaseOrCurrent(Config::MAIN_MUTE_SWITCH_MODE, (int)(obey ? 1 : 0));
   // The category is what makes the switch matter; applying it here makes the toggle live.
   [[AudioSessionManager shared] setSessionCategory];
 }
-+ (BOOL)audioSurround { return Config::Get(Config::MAIN_DPL2_DECODER); }
-+ (void)setAudioSurround:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_DPL2_DECODER, (bool)enabled); }
-+ (NSInteger)audioSurroundQuality { return (NSInteger)Config::Get(Config::MAIN_DPL2_QUALITY); }
-+ (void)setAudioSurroundQuality:(NSInteger)quality {
++ (BOOL)audioSurround
+{
+  return Config::Get(Config::MAIN_DPL2_DECODER);
+}
++ (void)setAudioSurround:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_DPL2_DECODER, (bool)enabled);
+}
++ (NSInteger)audioSurroundQuality
+{
+  return (NSInteger)Config::Get(Config::MAIN_DPL2_QUALITY);
+}
++ (void)setAudioSurroundQuality:(NSInteger)quality
+{
   const int clamped = (int)std::clamp<NSInteger>(quality, 0, 3);
   Config::SetBaseOrCurrent(Config::MAIN_DPL2_QUALITY, (AudioCommon::DPL2Quality)clamped);
 }
-+ (BOOL)audioSpatial { return Config::Get(Config::MAIN_AUDIO_SPATIAL); }
-+ (void)setAudioSpatial:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_SPATIAL, (bool)enabled); }
-+ (BOOL)audioSpatialHeadTracking { return Config::Get(Config::MAIN_AUDIO_SPATIAL_HEAD_TRACKING); }
-+ (void)setAudioSpatialHeadTracking:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_SPATIAL_HEAD_TRACKING, (bool)enabled); }
-+ (BOOL)audioFXDelayEnabled { return Config::Get(Config::MAIN_AUDIO_FX_DELAY_ENABLED); }
-+ (void)setAudioFXDelayEnabled:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_DELAY_ENABLED, (bool)enabled); }
-+ (NSInteger)audioFXDelayMs { return (NSInteger)Config::Get(Config::MAIN_AUDIO_FX_DELAY_MS); }
-+ (void)setAudioFXDelayMs:(NSInteger)ms { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_DELAY_MS, (int)ms); }
-+ (double)audioFXDelayFeedback { return (double)Config::Get(Config::MAIN_AUDIO_FX_DELAY_FEEDBACK); }
-+ (void)setAudioFXDelayFeedback:(double)feedback { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_DELAY_FEEDBACK, (float)feedback); }
-+ (BOOL)audioFXCrushEnabled { return Config::Get(Config::MAIN_AUDIO_FX_CRUSH_ENABLED); }
-+ (void)setAudioFXCrushEnabled:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_CRUSH_ENABLED, (bool)enabled); }
-+ (NSInteger)audioFXCrushBits { return (NSInteger)Config::Get(Config::MAIN_AUDIO_FX_CRUSH_BITS); }
-+ (void)setAudioFXCrushBits:(NSInteger)bits { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_CRUSH_BITS, (int)bits); }
-+ (NSInteger)audioFXCrushDownsample { return (NSInteger)Config::Get(Config::MAIN_AUDIO_FX_CRUSH_DOWNSAMPLE); }
-+ (void)setAudioFXCrushDownsample:(NSInteger)factor { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_CRUSH_DOWNSAMPLE, (int)factor); }
-+ (BOOL)audioFXEQEnabled { return Config::Get(Config::MAIN_AUDIO_FX_EQ_ENABLED); }
-+ (void)setAudioFXEQEnabled:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_EQ_ENABLED, (bool)enabled); }
-+ (double)audioFXEQLowDb { return (double)Config::Get(Config::MAIN_AUDIO_FX_EQ_LOW_DB); }
-+ (void)setAudioFXEQLowDb:(double)db { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_EQ_LOW_DB, (float)db); }
-+ (double)audioFXEQMidDb { return (double)Config::Get(Config::MAIN_AUDIO_FX_EQ_MID_DB); }
-+ (void)setAudioFXEQMidDb:(double)db { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_EQ_MID_DB, (float)db); }
-+ (double)audioFXEQHighDb { return (double)Config::Get(Config::MAIN_AUDIO_FX_EQ_HIGH_DB); }
-+ (void)setAudioFXEQHighDb:(double)db { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_EQ_HIGH_DB, (float)db); }
-+ (void)migrateLegacyAudioEffectDefaults {
++ (BOOL)audioSpatial
+{
+  return Config::Get(Config::MAIN_AUDIO_SPATIAL);
+}
++ (void)setAudioSpatial:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_SPATIAL, (bool)enabled);
+}
++ (BOOL)audioSpatialHeadTracking
+{
+  return Config::Get(Config::MAIN_AUDIO_SPATIAL_HEAD_TRACKING);
+}
++ (void)setAudioSpatialHeadTracking:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_SPATIAL_HEAD_TRACKING, (bool)enabled);
+}
++ (BOOL)audioFXDelayEnabled
+{
+  return Config::Get(Config::MAIN_AUDIO_FX_DELAY_ENABLED);
+}
++ (void)setAudioFXDelayEnabled:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_DELAY_ENABLED, (bool)enabled);
+}
++ (NSInteger)audioFXDelayMs
+{
+  return (NSInteger)Config::Get(Config::MAIN_AUDIO_FX_DELAY_MS);
+}
++ (void)setAudioFXDelayMs:(NSInteger)ms
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_DELAY_MS, (int)ms);
+}
++ (double)audioFXDelayFeedback
+{
+  return (double)Config::Get(Config::MAIN_AUDIO_FX_DELAY_FEEDBACK);
+}
++ (void)setAudioFXDelayFeedback:(double)feedback
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_DELAY_FEEDBACK, (float)feedback);
+}
++ (BOOL)audioFXCrushEnabled
+{
+  return Config::Get(Config::MAIN_AUDIO_FX_CRUSH_ENABLED);
+}
++ (void)setAudioFXCrushEnabled:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_CRUSH_ENABLED, (bool)enabled);
+}
++ (NSInteger)audioFXCrushBits
+{
+  return (NSInteger)Config::Get(Config::MAIN_AUDIO_FX_CRUSH_BITS);
+}
++ (void)setAudioFXCrushBits:(NSInteger)bits
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_CRUSH_BITS, (int)bits);
+}
++ (NSInteger)audioFXCrushDownsample
+{
+  return (NSInteger)Config::Get(Config::MAIN_AUDIO_FX_CRUSH_DOWNSAMPLE);
+}
++ (void)setAudioFXCrushDownsample:(NSInteger)factor
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_CRUSH_DOWNSAMPLE, (int)factor);
+}
++ (BOOL)audioFXEQEnabled
+{
+  return Config::Get(Config::MAIN_AUDIO_FX_EQ_ENABLED);
+}
++ (void)setAudioFXEQEnabled:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_EQ_ENABLED, (bool)enabled);
+}
++ (double)audioFXEQLowDb
+{
+  return (double)Config::Get(Config::MAIN_AUDIO_FX_EQ_LOW_DB);
+}
++ (void)setAudioFXEQLowDb:(double)db
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_EQ_LOW_DB, (float)db);
+}
++ (double)audioFXEQMidDb
+{
+  return (double)Config::Get(Config::MAIN_AUDIO_FX_EQ_MID_DB);
+}
++ (void)setAudioFXEQMidDb:(double)db
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_EQ_MID_DB, (float)db);
+}
++ (double)audioFXEQHighDb
+{
+  return (double)Config::Get(Config::MAIN_AUDIO_FX_EQ_HIGH_DB);
+}
++ (void)setAudioFXEQHighDb:(double)db
+{
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_FX_EQ_HIGH_DB, (float)db);
+}
++ (void)migrateLegacyAudioEffectDefaults
+{
   // The CoreAudio editor used to keep its chain in UserDefaults and replay it from the emulation
   // screen. Both backends now read Config, so move a stored chain over exactly once.
   NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
   NSArray<NSString*>* keys = @[
-    @"ca_fx_delay_enabled", @"ca_fx_delay_ms", @"ca_fx_delay_fb",
-    @"ca_fx_crush_enabled", @"ca_fx_crush_bits", @"ca_fx_crush_down",
-    @"ca_fx_eq_enabled", @"ca_fx_eq_low", @"ca_fx_eq_mid", @"ca_fx_eq_high",
+    @"ca_fx_delay_enabled",
+    @"ca_fx_delay_ms",
+    @"ca_fx_delay_fb",
+    @"ca_fx_crush_enabled",
+    @"ca_fx_crush_bits",
+    @"ca_fx_crush_down",
+    @"ca_fx_eq_enabled",
+    @"ca_fx_eq_low",
+    @"ca_fx_eq_mid",
+    @"ca_fx_eq_high",
   ];
   BOOL any = NO;
-  for (NSString* k in keys) {
-    if ([d objectForKey:k] != nil) { any = YES; break; }
+  for (NSString* k in keys)
+  {
+    if ([d objectForKey:k] != nil)
+    {
+      any = YES;
+      break;
+    }
   }
-  if (!any) return;
+  if (!any)
+    return;
   auto has = [d](NSString* k) { return [d objectForKey:k] != nil; };
-  if (has(@"ca_fx_delay_enabled")) Config::SetBase(Config::MAIN_AUDIO_FX_DELAY_ENABLED, (bool)[d boolForKey:@"ca_fx_delay_enabled"]);
-  if (has(@"ca_fx_delay_ms")) Config::SetBase(Config::MAIN_AUDIO_FX_DELAY_MS, (int)[d doubleForKey:@"ca_fx_delay_ms"]);
-  if (has(@"ca_fx_delay_fb")) Config::SetBase(Config::MAIN_AUDIO_FX_DELAY_FEEDBACK, (float)[d doubleForKey:@"ca_fx_delay_fb"]);
-  if (has(@"ca_fx_crush_enabled")) Config::SetBase(Config::MAIN_AUDIO_FX_CRUSH_ENABLED, (bool)[d boolForKey:@"ca_fx_crush_enabled"]);
-  if (has(@"ca_fx_crush_bits")) Config::SetBase(Config::MAIN_AUDIO_FX_CRUSH_BITS, (int)[d integerForKey:@"ca_fx_crush_bits"]);
-  if (has(@"ca_fx_crush_down")) Config::SetBase(Config::MAIN_AUDIO_FX_CRUSH_DOWNSAMPLE, (int)[d integerForKey:@"ca_fx_crush_down"]);
-  if (has(@"ca_fx_eq_enabled")) Config::SetBase(Config::MAIN_AUDIO_FX_EQ_ENABLED, (bool)[d boolForKey:@"ca_fx_eq_enabled"]);
-  if (has(@"ca_fx_eq_low")) Config::SetBase(Config::MAIN_AUDIO_FX_EQ_LOW_DB, (float)[d doubleForKey:@"ca_fx_eq_low"]);
-  if (has(@"ca_fx_eq_mid")) Config::SetBase(Config::MAIN_AUDIO_FX_EQ_MID_DB, (float)[d doubleForKey:@"ca_fx_eq_mid"]);
-  if (has(@"ca_fx_eq_high")) Config::SetBase(Config::MAIN_AUDIO_FX_EQ_HIGH_DB, (float)[d doubleForKey:@"ca_fx_eq_high"]);
+  if (has(@"ca_fx_delay_enabled"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_DELAY_ENABLED,
+                    (bool)[d boolForKey:@"ca_fx_delay_enabled"]);
+  if (has(@"ca_fx_delay_ms"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_DELAY_MS, (int)[d doubleForKey:@"ca_fx_delay_ms"]);
+  if (has(@"ca_fx_delay_fb"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_DELAY_FEEDBACK,
+                    (float)[d doubleForKey:@"ca_fx_delay_fb"]);
+  if (has(@"ca_fx_crush_enabled"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_CRUSH_ENABLED,
+                    (bool)[d boolForKey:@"ca_fx_crush_enabled"]);
+  if (has(@"ca_fx_crush_bits"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_CRUSH_BITS, (int)[d integerForKey:@"ca_fx_crush_bits"]);
+  if (has(@"ca_fx_crush_down"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_CRUSH_DOWNSAMPLE,
+                    (int)[d integerForKey:@"ca_fx_crush_down"]);
+  if (has(@"ca_fx_eq_enabled"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_EQ_ENABLED, (bool)[d boolForKey:@"ca_fx_eq_enabled"]);
+  if (has(@"ca_fx_eq_low"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_EQ_LOW_DB, (float)[d doubleForKey:@"ca_fx_eq_low"]);
+  if (has(@"ca_fx_eq_mid"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_EQ_MID_DB, (float)[d doubleForKey:@"ca_fx_eq_mid"]);
+  if (has(@"ca_fx_eq_high"))
+    Config::SetBase(Config::MAIN_AUDIO_FX_EQ_HIGH_DB, (float)[d doubleForKey:@"ca_fx_eq_high"]);
   Config::Save();
-  for (NSString* k in keys) [d removeObjectForKey:k];
+  for (NSString* k in keys)
+    [d removeObjectForKey:k];
   INFO_LOG_FMT(AUDIO, "Migrated the CoreAudio effect chain from UserDefaults into Config");
 }
 
@@ -668,12 +798,15 @@ static bool HasCurrentRunLayer()
   return (base && base->Exists(Config::MAIN_GC_LANGUAGE.GetLocation())) ? YES : NO;
 }
 
-+ (BOOL)mainSlotBMicrophone {
++ (BOOL)mainSlotBMicrophone
+{
   return Config::Get(Config::MAIN_SLOT_B) == ExpansionInterface::EXIDeviceType::Microphone;
 }
-+ (void)setMainSlotBMicrophone:(BOOL)enabled {
-  Config::SetBaseOrCurrent(Config::MAIN_SLOT_B, enabled ? ExpansionInterface::EXIDeviceType::Microphone :
-                                                          ExpansionInterface::EXIDeviceType::None);
++ (void)setMainSlotBMicrophone:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_SLOT_B, enabled ?
+                                                    ExpansionInterface::EXIDeviceType::Microphone :
+                                                    ExpansionInterface::EXIDeviceType::None);
 }
 
 // Config > Wii
@@ -913,13 +1046,30 @@ static bool HasCurrentRunLayer()
 
 + (BOOL)mainEmulateSkylanderPortal { return Config::Get(Config::MAIN_EMULATE_SKYLANDER_PORTAL); }
 + (void)setMainEmulateSkylanderPortal:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_EMULATE_SKYLANDER_PORTAL, (bool)enabled); }
-+ (BOOL)mainEmulateWiiSpeak { return Config::Get(Config::MAIN_EMULATE_WII_SPEAK); }
-+ (void)setMainEmulateWiiSpeak:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_EMULATE_WII_SPEAK, (bool)enabled); }
-+ (BOOL)mainWiiSpeakMuted { return Config::Get(Config::MAIN_WII_SPEAK_MUTED); }
-+ (void)setMainWiiSpeakMuted:(BOOL)muted { Config::SetBaseOrCurrent(Config::MAIN_WII_SPEAK_MUTED, (bool)muted); }
-+ (NSInteger)mainWiiSpeakVolumeModifier { return (NSInteger)Config::Get(Config::MAIN_WII_SPEAK_VOLUME_MODIFIER); }
-+ (void)setMainWiiSpeakVolumeModifier:(NSInteger)db {
-  Config::SetBaseOrCurrent(Config::MAIN_WII_SPEAK_VOLUME_MODIFIER, (s16)std::clamp<NSInteger>(db, -50, 50));
++ (BOOL)mainEmulateWiiSpeak
+{
+  return Config::Get(Config::MAIN_EMULATE_WII_SPEAK);
+}
++ (void)setMainEmulateWiiSpeak:(BOOL)enabled
+{
+  Config::SetBaseOrCurrent(Config::MAIN_EMULATE_WII_SPEAK, (bool)enabled);
+}
++ (BOOL)mainWiiSpeakMuted
+{
+  return Config::Get(Config::MAIN_WII_SPEAK_MUTED);
+}
++ (void)setMainWiiSpeakMuted:(BOOL)muted
+{
+  Config::SetBaseOrCurrent(Config::MAIN_WII_SPEAK_MUTED, (bool)muted);
+}
++ (NSInteger)mainWiiSpeakVolumeModifier
+{
+  return (NSInteger)Config::Get(Config::MAIN_WII_SPEAK_VOLUME_MODIFIER);
+}
++ (void)setMainWiiSpeakVolumeModifier:(NSInteger)db
+{
+  Config::SetBaseOrCurrent(Config::MAIN_WII_SPEAK_VOLUME_MODIFIER,
+                           (s16)std::clamp<NSInteger>(db, -50, 50));
 }
 
 // iCube: gameplay/perf "Reset Settings".

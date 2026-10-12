@@ -63,7 +63,8 @@ static inline CoreAudioSound* ActiveCoreAudio()
 
 + (NSString*)routeDescription
 {
-  return [NSString stringWithUTF8String:AudioCommon::IOSAudioSession::QueryRoute().description.c_str()];
+  return [NSString
+      stringWithUTF8String:AudioCommon::IOSAudioSession::QueryRoute().description.c_str()];
 }
 
 + (NSInteger)routeMaxOutputChannels
@@ -108,9 +109,9 @@ static inline CoreAudioSound* ActiveCoreAudio()
   for (AVAudioUnitComponent* c in [mgr componentsMatchingDescription:desc])
   {
     const AudioComponentDescription acd = c.audioComponentDescription;
-    NSString* ident = [NSString stringWithFormat:@"type:%u sub:%u manu:%u", (unsigned)acd.componentType,
-                                                 (unsigned)acd.componentSubType,
-                                                 (unsigned)acd.componentManufacturer];
+    NSString* ident = [NSString
+        stringWithFormat:@"type:%u sub:%u manu:%u", (unsigned)acd.componentType,
+                         (unsigned)acd.componentSubType, (unsigned)acd.componentManufacturer];
     [out addObject:@{@"name" : c.name ?: @"Effect", @"identifier" : ident}];
   }
   return out;
@@ -191,7 +192,9 @@ static inline CoreAudioSound* ActiveCoreAudio()
 + (void)requestMicrophonePermission:(void (^)(BOOL granted))completion
 {
   IOSAudioInput::RequestPermission([completion](bool granted) {
-    dispatch_async(dispatch_get_main_queue(), ^{ completion(granted); });
+    dispatch_async(dispatch_get_main_queue(), ^{
+      completion(granted);
+    });
   });
 }
 
