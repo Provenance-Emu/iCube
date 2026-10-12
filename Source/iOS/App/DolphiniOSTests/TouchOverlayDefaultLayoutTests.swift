@@ -150,7 +150,31 @@ final class TouchOverlayDefaultLayoutTests: XCTestCase {
   func testGameCubeHasEveryButton() {
     let ids = Set(cases([.gameCube])[0].layouts.flatMap(\.controls).map(\.id))
     XCTAssertEqual(ids, ["gc.mainStick", "gc.cStick", "gc.dpad", "gc.a", "gc.b", "gc.x", "gc.y",
-                         "gc.l", "gc.r", "gc.z", "gc.start"])
+                         "gc.l", "gc.r", "gc.z", "gc.start", "gc.mic"])
+  }
+
+  /// The Microphone's button stacks directly above Start, centred like it, on every screen.
+  func testGameCubeMicrophoneSitsAboveStart() throws {
+    for c in cases([.gameCube]) {
+      let boxes = Dictionary(uniqueKeysWithValues: c.layouts.map { ($0.group, $0.placement.box(in: c.bounds)) })
+      let start = try XCTUnwrap(boxes[.gcStart], c.label)
+      let mic = try XCTUnwrap(boxes[.gcMicrophone], c.label)
+      XCTAssertEqual(mic.midX, start.midX, accuracy: 0.01, c.label)
+      XCTAssertLessThan(mic.maxY, start.minY, c.label)
+      XCTAssertLessThan(start.minY - mic.maxY, 20, "\(c.label): the microphone drifted away from Start")
+    }
+  }
+
+  /// Only the GameCube Microphone group is conditional, and only on the slot B setting.
+  func testShownDropsTheMicrophoneUnlessSlotBHasOne() {
+    for c in cases() {
+      let all = c.layouts
+      let without = TouchOverlayDefaults.shown(all, gameCubeMicrophone: false)
+      let with = TouchOverlayDefaults.shown(all, gameCubeMicrophone: true)
+      XCTAssertEqual(with.map(\.group), all.map(\.group), c.label)
+      XCTAssertEqual(without.map(\.group), all.map(\.group).filter { $0 != .gcMicrophone }, c.label)
+      XCTAssertEqual(all.contains { $0.group == .gcMicrophone }, c.kind == .gameCube, c.label)
+    }
   }
 }
 #endif

@@ -122,7 +122,7 @@ struct TouchOverlayButtonClusterView: View {
     case "a", "b", "one", "two", "c": return .circle
     case "x", "y": return .kidney
     case "z", "l", "r", "zl", "zr": return .bar
-    case "start", "minus", "plus", "home": return .pill
+    case "start", "minus", "plus", "home", "mic": return .pill
     default: return .circle
     }
   }

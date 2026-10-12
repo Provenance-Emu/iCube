@@ -51,6 +51,7 @@ Touchscreen::Touchscreen(int controller_id, bool wiimote)
     AddInput(new Axis(m_controller_id, ButtonType::STICK_C_DOWN));
     AddInput(new Axis(m_controller_id, ButtonType::TRIGGER_L));
     AddInput(new Axis(m_controller_id, ButtonType::TRIGGER_R));
+    AddInput(new Button(m_controller_id, ButtonType::BUTTON_MIC));
   }
   else
   {

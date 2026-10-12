@@ -5072,8 +5072,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "playing stereo" = "playing stereo";
 "playing stereo (surround needs a 5.1 route or headphones on AVAudioEngine)" = "playing stereo (surround needs a 5.1 route or headphones on AVAudioEngine)";
 "up to 6 channels" = "up to 6 channels";
-
-// tvOS redesign plan A
 "Addresses" = "Addresses";
 "Open this address in a browser on another device to upload games." = "Open this address in a browser on another device to upload games.";
 "Connect to this address from Finder as Guest to drag files in." = "Connect to this address from Finder as Guest to drag files in.";
@@ -5155,8 +5153,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Last downloaded %@." = "Last downloaded %@.";
 "Codes download automatically from codes.rc24.xyz." = "Codes download automatically from codes.rc24.xyz.";
 "Codes download automatically when this game has any." = "Codes download automatically when this game has any.";
-
-// iCloud sync keys restored after merge ace74e0e65
 "Also Sync" = "Also Sync";
 "Always Synced" = "Always Synced";
 "Another device deleted this after you changed it here. Keeping it brings it back everywhere; deleting it moves it to Recently Deleted for 30 days." = "Another device deleted this after you changed it here. Keeping it brings it back everywhere; deleting it moves it to Recently Deleted for 30 days.";

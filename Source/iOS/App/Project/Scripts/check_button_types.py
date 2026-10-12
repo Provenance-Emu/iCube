@@ -75,6 +75,7 @@ KNOWN_PAIRS = [
     ("STICK_C", "gcStickC"),
     ("TRIGGER_L", "gcTriggerL"),
     ("TRIGGER_R", "gcTriggerR"),
+    ("BUTTON_MIC", "gcButtonMic"),
     # Wiimote
     ("WIIMOTE_BUTTON_A", "wiiButtonA"),
     ("WIIMOTE_BUTTON_B", "wiiButtonB"),

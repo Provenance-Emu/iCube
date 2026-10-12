@@ -54,10 +54,12 @@ enum TouchOverlayOrientation: String, CaseIterable, Codable, Sendable {
 /// A movable control GROUP, the atomic unit the editor drags. Each pad kind instantiates the
 /// subset it needs (`TouchOverlayDefaults`). Groups follow the clusters the xibs actually draw,
 /// not the console's logical grouping: GameCube Z rides with R on the right shoulder, and Start
-/// is its own group; the sideways remote's A/1/2/+/- form one cluster.
+/// is its own group; the sideways remote's A/1/2/+/- form one cluster. `gcMicrophone` is the
+/// GameCube Microphone's button (slot B); `TouchOverlayDefaults.shown` drops it unless the
+/// Microphone is plugged in.
 enum TouchOverlayGroup: String, CaseIterable, Codable, Sendable {
   // GameCube
-  case gcDpad, gcMainStick, gcCStick, gcFaceButtons, gcLeftShoulder, gcRightShoulder, gcStart
+  case gcDpad, gcMainStick, gcCStick, gcFaceButtons, gcLeftShoulder, gcRightShoulder, gcStart, gcMicrophone
   // Wii Remote, upright
   case wiiDpad, wiiAB, wiiOneTwo, wiiMinusPlusHome, wiiIRPad
   // Wii Remote, sideways

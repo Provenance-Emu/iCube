@@ -66,7 +66,9 @@ struct TouchOverlayView: View {
       let safeArea = geometry.safeArea
       let bounds = geometry.bounds
       let orientation = geometry.orientation
-      let layouts = TouchOverlayDefaults.layout(for: padKind, orientation: orientation, canvas: canvas, safeArea: safeArea)
+      let layouts = TouchOverlayDefaults.shown(
+        TouchOverlayDefaults.layout(for: padKind, orientation: orientation, canvas: canvas, safeArea: safeArea),
+        gameCubeMicrophone: DOLConfigBridge.mainSlotBMicrophone())
       let opacity = TouchOverlayInput.resolvedOpacity(isEditing: editMode != .none, configuredOpacity: DOLConfigBridge.mainTouchPadOpacity())
       let variant = TouchOverlayArt.variant(for: padKind)
       // `revision` isn't read directly, but touching it here ties this body's re-evaluation to

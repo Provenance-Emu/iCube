@@ -52,7 +52,7 @@ enum BindingDisplay {
   /// Buttons, sticks and triggers the overlay draws.
   private static func onScreenControl(_ id: Int) -> String? {
     switch id {
-    // GameCube (BUTTON_A = 0 … TRIGGER_R = 21).
+    // GameCube (BUTTON_A = 0 … BUTTON_MIC = 22).
     case 0: return "A"
     case 1: return "B"
     case 2: return L("Start")
@@ -64,6 +64,7 @@ enum BindingDisplay {
     case 16 ... 19: return String(format: L("C-Stick %@"), arrows[id - 16])
     case 20: return "L"
     case 21: return "R"
+    case 22: return L("Microphone")
     // Wii Remote (WIIMOTE_BUTTON_A = 100 … WIIMOTE_RIGHT = 110).
     case 100: return "A"
     case 101: return "B"

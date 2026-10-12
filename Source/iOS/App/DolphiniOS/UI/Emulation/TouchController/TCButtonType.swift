@@ -28,6 +28,7 @@ enum TCButtonType: Int {
   case gcStickC = 15
   case gcTriggerL = 20
   case gcTriggerR = 21
+  case gcButtonMic = 22
   // Wiimote
   case wiiButtonA = 100
   case wiiButtonB = 101

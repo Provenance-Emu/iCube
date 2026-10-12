@@ -36,6 +36,14 @@ Written 2026-10-11 on branch `claude/icube-audio-engine-809825`. Spec:
 - GameCube: `Microphone in Slot B` (`MAIN_SLOT_B`). Wii: Wii Speak emulate / mute / volume.
   `RemapGroup.gamecube` gained the Microphone group (PadGroup 6) so a pad button can be bound.
 - `Info.plist`: `NSMicrophoneUsageDescription`, `NSMotionUsageDescription`.
+- Touch overlay (2026-10-12): the GameCube pad has a `gcMicrophone` group, a pill labelled MIC
+  stacked above Start, shown only while `MAIN_SLOT_B` holds the Microphone
+  (`TouchOverlayDefaults.shown`). It writes `BUTTON_MIC = 22` (`ButtonType.h`, mirrored in
+  `TCButtonType.swift`, registered in `Touchscreen.mm` and `StateManager.cpp`; `GetButtonPressed`
+  uses `.at()`, so an unregistered id would throw). The bundled `GCPad/Touchscreen.ini` binds
+  `Microphone/Button`; for a mapping the user kept from before, `assignTouchscreenToGCPort`
+  (`TVControllerMappingBridge.mm`) binds the empty Microphone control to `Button 22` and leaves
+  every other binding alone. Delta skins have no microphone input; a skin user binds a pad button.
 
 ## Traps
 
@@ -61,4 +69,5 @@ Written 2026-10-11 on branch `claude/icube-audio-engine-809825`. Spec:
   the `.mm` files); `check_localized_keys.py --check` and `icube_config_lint.py` show no new findings.
 - Owed (device): both backends on iPhone speaker, AirPods (spatial, head turn), Apple TV over HDMI to a
   5.1 receiver, pause/resume and a phone call on each backend, GC mic in Mario Party 6, Wii Speak in
-  Monster Hunter Tri. The touch overlay has no Microphone button yet (bind a pad button).
+  Monster Hunter Tri, and the overlay's MIC button in Mario Party 6 (it only appears with
+  "Microphone in Slot B" on).

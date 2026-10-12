@@ -43,7 +43,7 @@ final class BindingDisplayTests: XCTestCase {
     XCTAssertEqual(BindingDisplay.text(for: "`Paddle 1`", family: .xbox), "Paddle 1")
   }
 
-  /// GameCube ids 0…21 (ButtonType.h): the on-screen pad's buttons, sticks and triggers.
+  /// GameCube ids 0…22 (ButtonType.h): the on-screen pad's buttons, sticks, triggers and microphone.
   func testTouchscreenGameCubeIDsReadAsTheOnScreenControl() {
     XCTAssertEqual(BindingDisplay.text(for: "`Button 0`", family: .touchscreen), "On-screen A")
     XCTAssertEqual(BindingDisplay.text(for: "`Button 2`", family: .touchscreen), "On-screen Start")
@@ -52,6 +52,7 @@ final class BindingDisplayTests: XCTestCase {
     XCTAssertEqual(BindingDisplay.text(for: "`Axis 11`", family: .touchscreen), "On-screen Control Stick ↑")
     XCTAssertEqual(BindingDisplay.text(for: "`Axis 18`", family: .touchscreen), "On-screen C-Stick ←")
     XCTAssertEqual(BindingDisplay.text(for: "`Axis 21`", family: .touchscreen), "On-screen R")
+    XCTAssertEqual(BindingDisplay.text(for: "`Button 22`", family: .touchscreen), "On-screen Microphone")
   }
 
   /// Wii Remote, Nunchuk and Classic ids, as the bundled Touchscreen profile binds them.
