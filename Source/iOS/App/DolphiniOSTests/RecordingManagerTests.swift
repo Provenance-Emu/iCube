@@ -116,7 +116,7 @@ final class RecordingManagerTests: XCTestCase {
     let m = manager(recorder)
     m.installLifecycleObservers()
     try await m.start()
-    NotificationCenter.default.post(name: DOLEmulationDidEndNotification, object: nil)
+    NotificationCenter.default.post(name: .DOLEmulationDidEnd, object: nil)
     for _ in 0 ..< 50 where m.isRecording { try await Task.sleep(nanoseconds: 10_000_000) }
     XCTAssertFalse(m.isRecording)
     XCTAssertEqual(recorder.stoppedTo.count, 1)

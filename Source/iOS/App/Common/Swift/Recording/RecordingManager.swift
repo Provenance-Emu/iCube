@@ -127,7 +127,7 @@ final class RecordingManager: ObservableObject {
   func installLifecycleObservers() {
     guard observers.isEmpty else { return }
     let center = NotificationCenter.default
-    observers.append(center.addObserver(forName: DOLEmulationDidEndNotification, object: nil, queue: .main) { [weak self] _ in
+    observers.append(center.addObserver(forName: .DOLEmulationDidEnd, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.stopForLifecycle() }
     })
     #if canImport(UIKit)
