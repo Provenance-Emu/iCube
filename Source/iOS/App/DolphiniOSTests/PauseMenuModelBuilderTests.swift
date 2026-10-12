@@ -24,7 +24,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     PauseMenuActions(
       resume: { self.log.append("resume") }, quickSave: { self.log.append("save") }, quickLoad: { self.log.append("load") },
       screenshot: { self.log.append("shot") }, openSaveStates: {}, openCheats: {}, openControllers: {},
-      openShaders: { self.log.append("shaders") }, openContinuity: {}, openSettings: {}, requestReset: {},
+      openShaders: { self.log.append("shaders") }, openContinuity: {}, openSettings: {}, openPerfOverlay: { self.log.append("perf") }, requestReset: {},
       requestExit: {}, recenterPointer: {})
   }
 
@@ -39,8 +39,17 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     XCTAssertEqual(model.sections.map(\.id), ["quick", "game", "system"])
     XCTAssertEqual(model.sections[0].items.map(\.id), ["resume", "quick-save", "quick-load", "fast-forward", "mute", "screenshot"])
-    XCTAssertEqual(model.sections[1].items.map(\.id), ["save-states", "cheats", "shaders", "controllers", "continuity"])
+    XCTAssertEqual(model.sections[1].items.map(\.id), ["save-states", "perf-hud", "cheats", "shaders", "controllers", "continuity"])
     XCTAssertEqual(model.sections[2].items.map(\.id), ["settings", "reset", "exit"])
+  }
+
+  func test_perfHUD_tile_isInGameSection_andCallsOpenPerfOverlay() {
+    let m = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    let item = m.item(id: "perf-hud")!
+    XCTAssertEqual(m.section(containing: "perf-hud")?.id, "game")
+    guard case .action(let run) = item.role else { return XCTFail("perf-hud is not an action") }
+    run()
+    XCTAssertEqual(log, ["perf"])
   }
 
   func test_everyTile_hasADescription() {
@@ -54,7 +63,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     let without = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     XCTAssertNil(without.item(id: "recenter-pointer"))
     let with = PauseMenuModelBuilder.make(state: state(recenter: true), bindings: bindings(), actions: actions())
-    XCTAssertEqual(with.sections[1].items.map(\.id), ["save-states", "cheats", "shaders", "controllers", "continuity", "recenter-pointer"])
+    XCTAssertEqual(with.sections[1].items.map(\.id), ["save-states", "perf-hud", "cheats", "shaders", "controllers", "continuity", "recenter-pointer"])
   }
 
   func test_fastForward_isACycle_offFirst_sixOptions() {

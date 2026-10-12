@@ -12,6 +12,7 @@ internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
   let onClose: () -> Void
   let onShowSettings: () -> Void
+  var onShowPerfOverlay: () -> Void = {}
   let platform: PlatformKind
   let game: TVGameItem
 
@@ -248,10 +249,11 @@ internal struct PauseMenuView: View {
 
   // Add pull-down to dismiss for iOS
   #if os(iOS)
-  init(selectedSlot: Binding<Int>, onClose: @escaping () -> Void, onShowSettings: @escaping () -> Void, platform: PlatformKind, game: TVGameItem) {
+  init(selectedSlot: Binding<Int>, onClose: @escaping () -> Void, onShowSettings: @escaping () -> Void, onShowPerfOverlay: @escaping () -> Void = {}, platform: PlatformKind, game: TVGameItem) {
     self._selectedSlot = selectedSlot
     self.onClose = onClose
     self.onShowSettings = onShowSettings
+    self.onShowPerfOverlay = onShowPerfOverlay
     self.platform = platform
     self.game = game
   }
@@ -771,6 +773,7 @@ internal struct PauseMenuView: View {
         onShowSettings()
         #endif
       },
+      openPerfOverlay: { onClose(); onShowPerfOverlay() },
       requestReset: { showResetDialog = true },
       requestExit: { showExitDialog = true },
       recenterPointer: {
@@ -849,6 +852,7 @@ struct PauseMenuActions {
   var openShaders: () -> Void
   var openContinuity: () -> Void
   var openSettings: () -> Void
+  var openPerfOverlay: () -> Void
   var requestReset: () -> Void
   var requestExit: () -> Void
   var recenterPointer: () -> Void
@@ -913,6 +917,8 @@ enum PauseMenuModelBuilder {
     var game: [MenuItem] = [
       MenuItem(id: "save-states", title: L("Save States"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates),
                description: L("Save, load and browse every slot.")),
+      MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .action(actions.openPerfOverlay),
+               description: L("Frame rate, CPU and GPU timing drawn over the game.")),
       MenuItem(id: "cheats", title: L("Cheats"), icon: "star.circle", tint: .yellow, role: .action(actions.openCheats),
                badge: state.activeCheatCount > 0 ? "\(state.activeCheatCount)" : nil,
                description: L("Enable Gecko and Action Replay codes for this game.")),
