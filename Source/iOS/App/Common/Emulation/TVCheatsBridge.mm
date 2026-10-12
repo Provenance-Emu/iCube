@@ -3,6 +3,9 @@
 
 #import "TVCheatsBridge.h"
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
+
 #import "Common/FileUtil.h"
 #import "Common/IniFile.h"
 #import "Common/StringUtil.h"
@@ -15,18 +18,67 @@
 #import "FoundationStringUtil.h"
 
 @implementation TVGeckoCodeInfo
-- (instancetype)initWithName:(NSString*)name enabled:(BOOL)enabled userDefined:(BOOL)userDefined {
-    if (self = [super init]) { _name = name; _enabled = enabled; _userDefined = userDefined; }
-    return self;
+- (instancetype)initWithName:(NSString*)name
+                     creator:(NSString*)creator
+                       notes:(NSString*)notes
+                     enabled:(BOOL)enabled
+              defaultEnabled:(BOOL)defaultEnabled
+                 userDefined:(BOOL)userDefined
+                   lineCount:(NSInteger)lineCount
+{
+  if (self = [super init])
+  {
+    _name = name;
+    _creator = creator;
+    _notes = notes;
+    _enabled = enabled;
+    _defaultEnabled = defaultEnabled;
+    _userDefined = userDefined;
+    _lineCount = lineCount;
+  }
+  return self;
 }
 @end
 
 @implementation TVActionReplayCodeInfo
-- (instancetype)initWithName:(NSString*)name enabled:(BOOL)enabled userDefined:(BOOL)userDefined {
-    if (self = [super init]) { _name = name; _enabled = enabled; _userDefined = userDefined; }
-    return self;
+- (instancetype)initWithName:(NSString*)name
+                     enabled:(BOOL)enabled
+              defaultEnabled:(BOOL)defaultEnabled
+                 userDefined:(BOOL)userDefined
+                   lineCount:(NSInteger)lineCount
+{
+  if (self = [super init])
+  {
+    _name = name;
+    _enabled = enabled;
+    _defaultEnabled = defaultEnabled;
+    _userDefined = userDefined;
+    _lineCount = lineCount;
+  }
+  return self;
 }
 @end
+
+static TVGeckoCodeInfo* MakeGeckoInfo(const Gecko::GeckoCode& c)
+{
+  const std::string notes = fmt::format("{}", fmt::join(c.notes, "\n"));
+  return [[TVGeckoCodeInfo alloc] initWithName:CppToFoundationString(c.name)
+                                       creator:CppToFoundationString(c.creator)
+                                         notes:CppToFoundationString(notes)
+                                       enabled:c.enabled
+                                defaultEnabled:c.default_enabled
+                                   userDefined:c.user_defined
+                                     lineCount:(NSInteger)c.codes.size()];
+}
+
+static TVActionReplayCodeInfo* MakeARInfo(const ActionReplay::ARCode& c)
+{
+  return [[TVActionReplayCodeInfo alloc] initWithName:CppToFoundationString(c.name)
+                                              enabled:c.enabled
+                                       defaultEnabled:c.default_enabled
+                                          userDefined:c.user_defined
+                                            lineCount:(NSInteger)c.ops.size()];
+}
 
 @implementation TVCheatsBridge
 
@@ -152,9 +204,9 @@
 	std::vector<Gecko::GeckoCode> codes = Gecko::LoadCodes(gameIniDefault, gameIniLocal);
 	NSMutableArray<TVGeckoCodeInfo*>* out = [NSMutableArray arrayWithCapacity:codes.size()];
 	for (const auto& c : codes) {
-		[out addObject:[[TVGeckoCodeInfo alloc] initWithName:CppToFoundationString(c.name) enabled:c.enabled userDefined:c.user_defined]];
-	}
-	return out;
+    [out addObject:MakeGeckoInfo(c)];
+  }
+  return out;
 }
 
 + (BOOL)setGeckoCodeEnabled:(BOOL)enabled atIndex:(NSInteger)index forGameId:(NSString*)gameId revision:(NSInteger)revision {
@@ -178,9 +230,9 @@
 	std::vector<ActionReplay::ARCode> codes = ActionReplay::LoadCodes(gameIniDefault, gameIniLocal);
 	NSMutableArray<TVActionReplayCodeInfo*>* out = [NSMutableArray arrayWithCapacity:codes.size()];
 	for (const auto& c : codes) {
-		[out addObject:[[TVActionReplayCodeInfo alloc] initWithName:CppToFoundationString(c.name) enabled:c.enabled userDefined:c.user_defined]];
-	}
-	return out;
+    [out addObject:MakeARInfo(c)];
+  }
+  return out;
 }
 
 + (BOOL)setActionReplayCodeEnabled:(BOOL)enabled atIndex:(NSInteger)index forGameId:(NSString*)gameId revision:(NSInteger)revision {
