@@ -11,12 +11,14 @@ import XCTest
 final class PauseMenuModelBuilderTests: XCTestCase {
   private final class Box { var value: AnyHashable; init(_ v: AnyHashable) { value = v } }
 
-  private func bindings(ff: Box = Box(PauseMenuModelBuilder.fastForwardOff), slot: Box = Box(3), muted: Box = Box(false), shader: Box = Box(ShaderQuickApply.noneValue)) -> PauseMenuBindings {
+  private func bindings(ff: Box = Box(PauseMenuModelBuilder.fastForwardOff), slot: Box = Box(3), muted: Box = Box(false), shader: Box = Box(ShaderQuickApply.noneValue), resolution: Box = Box(1), volume: Box = Box(100)) -> PauseMenuBindings {
     PauseMenuBindings(
       mute: Binding(get: { muted.value as? Bool ?? false }, set: { muted.value = $0 }),
       fastForward: Binding(get: { ff.value }, set: { ff.value = $0 }),
       quickSlot: Binding(get: { slot.value }, set: { slot.value = $0 }),
-      shader: Binding(get: { shader.value }, set: { shader.value = $0 }))
+      shader: Binding(get: { shader.value }, set: { shader.value = $0 }),
+      internalResolution: Binding(get: { resolution.value }, set: { resolution.value = $0 }),
+      audioVolume: Binding(get: { volume.value }, set: { volume.value = $0 }))
   }
 
   private var log: [String] = []
@@ -24,7 +26,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     PauseMenuActions(
       resume: { self.log.append("resume") }, quickSave: { self.log.append("save") }, quickLoad: { self.log.append("load") },
       screenshot: { self.log.append("shot") }, openSaveStates: {}, openCheats: {}, openControllers: {},
-      openShaders: { self.log.append("shaders") }, openContinuity: {}, openSettings: {}, openPerfOverlay: { self.log.append("perf") }, requestReset: {},
+      openShaders: { self.log.append("shaders") }, openContinuity: {}, openSettings: {}, openSettingsLeaf: { self.log.append("leaf:\($0)") }, openPerfOverlay: { self.log.append("perf") }, requestReset: {},
       requestExit: {}, recenterPointer: {})
   }
 
@@ -32,14 +34,15 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     PauseMenuState(
       quickSlot: 3, isMuted: false, activeCheatCount: cheats,
       shaderOptions: [("None", ShaderQuickApply.noneValue), ("crt", AnyHashable("/s/crt.slangp"))],
-      showsRecenterPointer: recenter)
+      showsRecenterPointer: recenter,
+      internalResolution: 1, audioVolume: 100, engineShortName: "CIR", jitAcquired: false)
   }
 
   func test_threeSections_inOrder_withExpectedTiles() {
     let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     XCTAssertEqual(model.sections.map(\.id), ["quick", "game", "system"])
     XCTAssertEqual(model.sections[0].items.map(\.id), ["resume", "quick-save", "quick-load", "fast-forward", "mute", "screenshot"])
-    XCTAssertEqual(model.sections[1].items.map(\.id), ["save-states", "perf-hud", "cheats", "shaders", "controllers", "continuity"])
+    XCTAssertEqual(model.sections[1].items.map(\.id), ["save-states", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers", "continuity"])
     XCTAssertEqual(model.sections[2].items.map(\.id), ["settings", "reset", "exit"])
   }
 
@@ -50,6 +53,44 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     guard case .action(let run) = item.role else { return XCTFail("perf-hud is not an action") }
     run()
     XCTAssertEqual(log, ["perf"])
+  }
+
+  func test_upscaling_cyclesResolutions_andLongPressOpensGraphicsLeaf() {
+    let resolution = Box(1)
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(resolution: resolution), actions: actions())
+    let item = model.item(id: "upscaling")!
+    XCTAssertEqual(model.section(containing: "upscaling")?.id, "game")
+    guard case .cycle(let options, let selection) = item.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.1), [AnyHashable(1), AnyHashable(2), AnyHashable(3), AnyHashable(4), AnyHashable(6)])
+    XCTAssertEqual(options.map(\.0).dropFirst(), ["2x", "3x", "4x", "6x"])
+    selection.wrappedValue = AnyHashable(4)
+    XCTAssertEqual(resolution.value, AnyHashable(4))
+    guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("long press") }
+    run()
+    XCTAssertEqual(log, ["leaf:graphics-enhancements"])
+  }
+
+  func test_audio_cyclesVolumes_andLongPressOpensAudioLeaf() {
+    let volume = Box(100)
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(volume: volume), actions: actions())
+    let item = model.item(id: "audio")!
+    guard case .cycle(let options, let selection) = item.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["0 %", "25 %", "50 %", "75 %", "100 %"])
+    XCTAssertEqual(options.map(\.1), [AnyHashable(0), AnyHashable(25), AnyHashable(50), AnyHashable(75), AnyHashable(100)])
+    selection.wrappedValue = AnyHashable(25)
+    XCTAssertEqual(volume.value, AnyHashable(25))
+    guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("long press") }
+    run()
+    XCTAssertEqual(log, ["leaf:audio"])
+  }
+
+  func test_performance_opensTuningLeaf_withEngineBadge() {
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    let item = model.item(id: "performance")!
+    XCTAssertEqual(item.badge, "CIR")
+    guard case .action(let run) = item.role else { return XCTFail("action") }
+    run()
+    XCTAssertEqual(log, ["leaf:performance-tuning"])
   }
 
   func test_everyTile_hasADescription() {
@@ -63,7 +104,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     let without = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     XCTAssertNil(without.item(id: "recenter-pointer"))
     let with = PauseMenuModelBuilder.make(state: state(recenter: true), bindings: bindings(), actions: actions())
-    XCTAssertEqual(with.sections[1].items.map(\.id), ["save-states", "perf-hud", "cheats", "shaders", "controllers", "continuity", "recenter-pointer"])
+    XCTAssertEqual(with.sections[1].items.map(\.id), ["save-states", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers", "continuity", "recenter-pointer"])
   }
 
   func test_fastForward_isACycle_offFirst_sixOptions() {
@@ -136,7 +177,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertNil(tv.sections[0].header)
     XCTAssertEqual(tv.sections[0].items.map(\.id), ["resume", "save-states", "reset", "exit"])
     XCTAssertEqual(tv.sections[1].items.map(\.id),
-                   ["quick-save", "quick-load", "fast-forward", "mute", "screenshot", "cheats", "shaders", "controllers",
+                   ["quick-save", "quick-load", "fast-forward", "mute", "screenshot", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers",
                     "continuity", "settings"])
     XCTAssertEqual(Set(tv.sections.flatMap(\.items).map(\.id)), Set(model.sections.flatMap(\.items).map(\.id)))
   }
