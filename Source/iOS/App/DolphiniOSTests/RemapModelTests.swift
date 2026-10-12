@@ -20,8 +20,9 @@ final class RemapModelTests: XCTestCase {
     XCTAssertEqual(ids["D-Pad"], 3)
     XCTAssertEqual(ids["Triggers"], 4)
     XCTAssertEqual(ids["Rumble"], 5)
+    XCTAssertEqual(ids["Microphone"], 6)
     XCTAssertEqual(ids["Options"], 7)
-    XCTAssertEqual(RemapGroup.gamecube.count, 7)
+    XCTAssertEqual(RemapGroup.gamecube.count, 8)
   }
 
   func test_wiiGroupIds_matchWiimoteGroupEnum() {

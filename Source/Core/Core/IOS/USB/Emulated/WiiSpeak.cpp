@@ -35,9 +35,10 @@ public:
       : Microphone(sampler, "Wii Speak Worker")
   {
   }
+  ~MicrophoneWiiSpeak() override { StreamTerminate(); }
 
 private:
-#ifdef HAVE_CUBEB
+#if defined(HAVE_CUBEB) || defined(IPHONEOS)
   std::string GetInputDeviceId() const override
   {
     return Config::Get(Config::MAIN_WII_SPEAK_MICROPHONE);

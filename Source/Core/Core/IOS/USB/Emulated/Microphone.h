@@ -18,6 +18,9 @@
 struct cubeb;
 struct cubeb_stream;
 #endif
+#ifdef IPHONEOS
+class IOSAudioInput;
+#endif
 
 namespace IOS::HLE::USB
 {
@@ -55,6 +58,8 @@ private:
 #ifdef HAVE_CUBEB
   static long CubebDataCallback(cubeb_stream* stream, void* user_data, const void* input_buffer,
                                 void* output_buffer, long nframes);
+#endif
+#if defined(HAVE_CUBEB) || defined(IPHONEOS)
   virtual std::string GetInputDeviceId() const = 0;
   virtual std::string GetCubebStreamName() const = 0;
   virtual s16 GetVolumeModifier() const = 0;
@@ -66,9 +71,15 @@ private:
   void UpdateLoudness(SampleType sample);
 
   void StreamInit();
-  void StreamTerminate();
   void StreamStart(u32 sampling_rate);
   void StreamStop();
+
+protected:
+  /// The capture callback calls virtuals of the derived class, so the most-derived destructor must
+  /// stop the stream before those overrides disappear. ~Microphone calls it again harmlessly.
+  void StreamTerminate();
+
+private:
 
   virtual u32 GetStreamSize() const = 0;
   std::vector<SampleType> m_stream_buffer{};
@@ -122,6 +133,9 @@ private:
   std::shared_ptr<cubeb> m_cubeb_ctx = nullptr;
   cubeb_stream* m_cubeb_stream = nullptr;
   CubebUtils::CoInitSyncWorker m_worker;
+#endif
+#ifdef IPHONEOS
+  std::unique_ptr<IOSAudioInput> m_ios_input;
 #endif
 };
 }  // namespace IOS::HLE::USB

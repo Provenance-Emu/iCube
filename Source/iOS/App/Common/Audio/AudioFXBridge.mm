@@ -5,173 +5,197 @@
 
 #import <AVFoundation/AVFoundation.h>
 #import <AudioToolbox/AudioToolbox.h>
-#import <CoreAudio/CoreAudioTypes.h>
-#import <AudioUnit/AudioUnit.h>
 #if !TARGET_OS_TV
 #import <CoreAudioKit/CoreAudioKit.h>
 #endif
 
-// Ensure iOS guard is enabled for the engine header when building in the app target
+// The engine headers are guarded on the core's platform define.
 #ifndef IPHONEOS
 #define IPHONEOS 1
 #endif
 #include "AudioCommon/AVAudioEngineSoundStream.h"
 #include "AudioCommon/AudioCommon.h"
 #include "AudioCommon/CoreAudioSoundStream.h"
+#include "AudioCommon/IOSAudioInput.h"
+#include "AudioCommon/IOSAudioSession.h"
 #include "Core/System.h"
 
 static inline AVAudioEngineSound* ActiveEngine()
 {
-  Core::System& sys = Core::System::GetInstance();
-  SoundStream* ss = sys.GetSoundStream();
-  return dynamic_cast<AVAudioEngineSound*>(ss);
+  return dynamic_cast<AVAudioEngineSound*>(Core::System::GetInstance().GetSoundStream());
+}
+
+static inline CoreAudioSound* ActiveCoreAudio()
+{
+  return dynamic_cast<CoreAudioSound*>(Core::System::GetInstance().GetSoundStream());
 }
 
 @implementation AudioFXBridge
 
-+ (BOOL)isEngineActive {
++ (BOOL)isEngineActive
+{
   return ActiveEngine() != nullptr;
 }
 
-+ (NSArray<NSDictionary*>*)currentEffects {
++ (BOOL)isCoreAudioActive
+{
+  return ActiveCoreAudio() != nullptr;
+}
+
++ (NSString*)outputModeName
+{
+  if (AVAudioEngineSound* engine = ActiveEngine())
+  {
+    switch (engine->GetMode())
+    {
+    case AVAudioEngineSound::Mode::Stereo:
+      return @"stereo";
+    case AVAudioEngineSound::Mode::Spatial:
+      return @"spatial";
+    case AVAudioEngineSound::Mode::Discrete51:
+      return @"discrete";
+    }
+  }
+  if (CoreAudioSound* core = ActiveCoreAudio())
+    return core->IsSurroundOutput() ? @"discrete" : @"stereo";
+  return @"";
+}
+
++ (NSString*)routeDescription
+{
+  return [NSString
+      stringWithUTF8String:AudioCommon::IOSAudioSession::QueryRoute().description.c_str()];
+}
+
++ (NSInteger)routeMaxOutputChannels
+{
+  return AudioCommon::IOSAudioSession::QueryRoute().max_output_channels;
+}
+
++ (BOOL)routeIsHeadphones
+{
+  return AudioCommon::IOSAudioSession::QueryRoute().headphones;
+}
+
+// MARK: - Plug-in chain
+
++ (NSArray<NSDictionary*>*)currentEffects
+{
   AVAudioEngineSound* eng = ActiveEngine();
-  if (!eng) return @[];
+  if (!eng)
+    return @[];
   NSMutableArray* arr = [NSMutableArray array];
   const size_t n = eng->fxCount();
-  for (size_t i = 0; i < n; ++i) {
-    AVAudioUnitEffect* u = (AVAudioUnitEffect*)eng->fxAt(i);
-    NSString* name = u.name ?: @"Effect";
-    [arr addObject:@{ @"name": name, @"bypass": @(u.bypass), @"index": @(i) }];
+  for (size_t i = 0; i < n; ++i)
+  {
+    AVAudioUnit* u = eng->fxAt(i);
+    if (!u)
+      continue;
+    [arr addObject:@{
+      @"name" : u.name ?: @"Effect",
+      @"bypass" : @(u.AUAudioUnit.shouldBypassEffect),
+      @"index" : @(i)
+    }];
   }
   return arr;
 }
 
-+ (NSArray<NSDictionary*>*)availableEffects {
++ (NSArray<NSDictionary*>*)availableEffects
+{
   NSMutableArray<NSDictionary*>* out = [NSMutableArray array];
   AVAudioUnitComponentManager* mgr = [AVAudioUnitComponentManager sharedAudioUnitComponentManager];
-  // Effect types only
-  AudioComponentDescription desc; memset(&desc, 0, sizeof(desc));
+  AudioComponentDescription desc{};
   desc.componentType = kAudioUnitType_Effect;
-  NSArray<AVAudioUnitComponent*>* comps = [mgr componentsMatchingDescription:desc];
-  for (AVAudioUnitComponent* c in comps) {
-    NSString* name = c.name ?: @"Effect";
-    // Build a stable identifier string from the AudioComponentDescription tuple
-    AudioComponentDescription acd = c.audioComponentDescription;
-    NSString* ident = [NSString stringWithFormat:@"type:%u sub:%u manu:%u", acd.componentType, acd.componentSubType, acd.componentManufacturer];
-    [out addObject:@{ @"name": name, @"identifier": ident }];
+  for (AVAudioUnitComponent* c in [mgr componentsMatchingDescription:desc])
+  {
+    const AudioComponentDescription acd = c.audioComponentDescription;
+    NSString* ident = [NSString
+        stringWithFormat:@"type:%u sub:%u manu:%u", (unsigned)acd.componentType,
+                         (unsigned)acd.componentSubType, (unsigned)acd.componentManufacturer];
+    [out addObject:@{@"name" : c.name ?: @"Effect", @"identifier" : ident}];
   }
   return out;
 }
 
-+ (BOOL)addEffectWithName:(NSString*)name {
++ (BOOL)addEffectWithName:(NSString*)name
+{
   AVAudioEngineSound* eng = ActiveEngine();
-  NSLog(@"[FX/Bridge] addEffect name/ident=%@ engine=%p", name, eng);
-  if (!eng) return NO;
-  const bool ok = eng->addEffectWithIdentifier(name.UTF8String);
-  NSLog(@"[FX/Bridge] addEffect result=%d", ok);
-  return ok ? YES : NO;
+  if (!eng)
+    return NO;
+  return eng->addEffectWithIdentifier(name.UTF8String) ? YES : NO;
 }
 
-+ (void)removeEffectAt:(NSUInteger)index {
-  AVAudioEngineSound* eng = ActiveEngine();
-  if (!eng) return;
-  eng->removeEffectAt(index);
++ (void)removeEffectAt:(NSUInteger)index
+{
+  if (AVAudioEngineSound* eng = ActiveEngine())
+    eng->removeEffectAt(index);
 }
 
-+ (void)moveEffectFrom:(NSUInteger)from to:(NSUInteger)to {
-  AVAudioEngineSound* eng = ActiveEngine();
-  if (!eng) return;
-  eng->moveEffect(from, to);
++ (void)moveEffectFrom:(NSUInteger)from to:(NSUInteger)to
+{
+  if (AVAudioEngineSound* eng = ActiveEngine())
+    eng->moveEffect(from, to);
 }
 
-+ (void)setEffectAt:(NSUInteger)index bypassed:(BOOL)bypassed {
-  AVAudioEngineSound* eng = ActiveEngine();
-  if (!eng) return;
-  eng->setEffectBypass(index, bypassed);
++ (void)setEffectAt:(NSUInteger)index bypassed:(BOOL)bypassed
+{
+  if (AVAudioEngineSound* eng = ActiveEngine())
+    eng->setEffectBypass(index, bypassed);
 }
 
-+ (void)requestEffectViewControllerAt:(NSUInteger)index completion:(void(^)(UIViewController* _Nullable vc))completion {
++ (void)saveEffectChain
+{
+  if (AVAudioEngineSound* eng = ActiveEngine())
+    eng->saveEffectChain();
+}
+
++ (void)requestEffectViewControllerAt:(NSUInteger)index
+                           completion:(void (^)(UIViewController* _Nullable vc))completion
+{
   AVAudioEngineSound* eng = ActiveEngine();
-  NSLog(@"[FX/Bridge] requestEffectVC index=%lu engine=%p", (unsigned long)index, eng);
-  if (!eng) { completion(nil); return; }
-  AVAudioUnitEffect* u = (AVAudioUnitEffect*)eng->fxAt(index);
-  if (!u) { NSLog(@"[FX/Bridge] requestEffectVC: no unit at index"); completion(nil); return; }
-#if !TARGET_OS_TV
-  if (@available(iOS 9.0, *)) {
-    [u.AUAudioUnit requestViewControllerWithCompletionHandler:^(UIViewController * _Nullable viewController) {
-      NSLog(@"[FX/Bridge] requestEffectVC completion: vc=%@", viewController);
-      completion(viewController);
-    }];
-  } else {
+  AVAudioUnit* u = eng ? eng->fxAt(index) : nil;
+  if (!u)
+  {
     completion(nil);
+    return;
   }
+#if !TARGET_OS_TV
+  [u.AUAudioUnit requestViewControllerWithCompletionHandler:^(UIViewController* _Nullable vc) {
+    completion(vc);
+  }];
 #else
   completion(nil);
 #endif
 }
 
-// MARK: - CoreAudio (RemoteIO) built-in DSP controls
-+ (BOOL)isCoreAudioActive {
-  Core::System& sys = Core::System::GetInstance();
-  SoundStream* ss = sys.GetSoundStream();
-  return dynamic_cast<CoreAudioSound*>(ss) != nullptr;
+// MARK: - Microphone
+
++ (BOOL)microphoneSupported
+{
+  return IOSAudioInput::IsSupported();
 }
 
-+ (void)setCADelayEnabled:(BOOL)enabled {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setDelayEnabled(enabled);
-}
-+ (void)setCADelayMs:(NSInteger)ms {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setDelayMs((int)ms);
-}
-+ (void)setCADelayFeedback:(double)fb {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setDelayFeedback((float)fb);
-}
-+ (void)setCABitcrushEnabled:(BOOL)enabled {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setBitcrushEnabled(enabled);
-}
-+ (void)setCABitcrushBits:(NSInteger)bits {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setBitcrushBits((int)bits);
-}
-+ (void)setCABitcrushDownsample:(NSInteger)factor {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setBitcrushDownsample((int)factor);
-}
-+ (void)setCAEQEnabled:(BOOL)enabled {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setEQEnabled(enabled);
-}
-+ (void)setCAEQLowGainDb:(double)db {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setEQLowGainDb((float)db);
-}
-+ (void)setCAEQMidGainDb:(double)db {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setEQMidGainDb((float)db);
-}
-+ (void)setCAEQHighGainDb:(double)db {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) ca->setEQHighGainDb((float)db);
-}
-
-+ (NSDictionary*)coreAudioDSPState {
-  Core::System& sys = Core::System::GetInstance();
-  if (auto* ca = dynamic_cast<CoreAudioSound*>(sys.GetSoundStream())) {
-    return @{ @"delayEnabled": @(ca->getDelayEnabled()),
-              @"delayMs": @(ca->getDelayMs()),
-              @"delayFeedback": @(ca->getDelayFeedback()),
-              @"crushEnabled": @(ca->getBitcrushEnabled()),
-              @"crushBits": @(ca->getBitcrushBits()),
-              @"crushDown": @(ca->getBitcrushDownsample()),
-              @"eqEnabled": @(ca->getEQEnabled()),
-              @"low": @(ca->getEQLowGainDb()),
-              @"mid": @(ca->getEQMidGainDb()),
-              @"high": @(ca->getEQHighGainDb()) };
++ (NSInteger)microphonePermission
+{
+  switch (IOSAudioInput::GetPermission())
+  {
+  case IOSAudioInput::Permission::Undetermined:
+    return 0;
+  case IOSAudioInput::Permission::Denied:
+    return 1;
+  case IOSAudioInput::Permission::Granted:
+    return 2;
   }
-  return @{};
+  return 0;
 }
+
++ (void)requestMicrophonePermission:(void (^)(BOOL granted))completion
+{
+  IOSAudioInput::RequestPermission([completion](bool granted) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      completion(granted);
+    });
+  });
+}
+
 @end

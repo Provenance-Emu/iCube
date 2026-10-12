@@ -31,21 +31,6 @@ extension EmulationScreen {
     }
   }
 
-  /// Apply saved CoreAudio DSP defaults to the engine when a game starts
-  func applyCoreAudioDSPDefaults() {
-    func has(_ k: String) -> Bool { UserDefaults.standard.object(forKey: k) != nil }
-    if has("ca_fx_delay_enabled") { AudioFXBridge.setCADelayEnabled(UserDefaults.standard.bool(forKey: "ca_fx_delay_enabled")) }
-    if has("ca_fx_delay_ms") { AudioFXBridge.setCADelayMs(Int(UserDefaults.standard.double(forKey: "ca_fx_delay_ms"))) }
-    if has("ca_fx_delay_fb") { AudioFXBridge.setCADelayFeedback(UserDefaults.standard.double(forKey: "ca_fx_delay_fb")) }
-    if has("ca_fx_crush_enabled") { AudioFXBridge.setCABitcrushEnabled(UserDefaults.standard.bool(forKey: "ca_fx_crush_enabled")) }
-    if has("ca_fx_crush_bits") { AudioFXBridge.setCABitcrushBits(UserDefaults.standard.integer(forKey: "ca_fx_crush_bits")) }
-    if has("ca_fx_crush_down") { AudioFXBridge.setCABitcrushDownsample(UserDefaults.standard.integer(forKey: "ca_fx_crush_down")) }
-    if has("ca_fx_eq_enabled") { AudioFXBridge.setCAEQEnabled(UserDefaults.standard.bool(forKey: "ca_fx_eq_enabled")) }
-    if has("ca_fx_eq_low") { AudioFXBridge.setCAEQLowGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_low")) }
-    if has("ca_fx_eq_mid") { AudioFXBridge.setCAEQMidGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_mid")) }
-    if has("ca_fx_eq_high") { AudioFXBridge.setCAEQHighGainDb(UserDefaults.standard.double(forKey: "ca_fx_eq_high")) }
-  }
-
   /// Setup enhanced motion controls optimized for touchscreen usage
   func setupEnhancedMotionControls() {
     NSLog("[MOTION] Enhanced motion controls enabled for Wii game - roll/pitch → IR cursor, improved shake detection")

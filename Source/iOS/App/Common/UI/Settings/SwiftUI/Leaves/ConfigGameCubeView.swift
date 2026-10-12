@@ -22,6 +22,7 @@ struct ConfigGameCubeView: View {
     var s = ConfigGameCubeState()
     s.loadMainMenu = !DOLConfigBridge.mainSkipIPL()
     s.language = ConfigGameCubeState.displayedLanguage(isSet: DOLConfigBridge.mainGCLanguageIsSet(), stored: DOLConfigBridge.mainGCLanguage(), preferredLanguage: Self.preferredLanguage)
+    s.slotBMicrophone = DOLConfigBridge.mainSlotBMicrophone()
     state = s
   }
 
@@ -37,6 +38,7 @@ struct ConfigGameCubeView: View {
     switch change {
     case .loadMainMenu(let v): state.loadMainMenu = v; DOLConfigBridge.setMainSkipIPL(!v)
     case .language(let v): state.language = v; DOLConfigBridge.setMainGCLanguage(v)
+    case .slotBMicrophone(let v): state.slotBMicrophone = v; DOLConfigBridge.setMainSlotBMicrophone(v)
     }
   }
 }

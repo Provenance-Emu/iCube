@@ -38,6 +38,7 @@ enum ButtonType
   STICK_C_RIGHT = 19,
   TRIGGER_L = 20,
   TRIGGER_R = 21,
+  BUTTON_MIC = 22,
   // Wiimote
   WIIMOTE_BUTTON_A = 100,
   WIIMOTE_BUTTON_B = 101,

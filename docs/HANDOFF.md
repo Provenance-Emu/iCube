@@ -41,6 +41,12 @@ This is the current state of the tvOS / iPad UI redo and the pause-lifecycle wor
 - Cards rest at exactly 2° and tilt to 5° when focused.
 - If a body `Menu` does not present on tvOS, View & Sort can be panel sheets of rows.
 
+## Audio (2026-10-11, branch `claude/icube-audio-engine-809825`)
+
+Both iOS audio backends were finished: shared filters, 5.1 over HDMI, spatial audio on headphones,
+and GameCube / Wii Speak microphones. Read `docs/handoff-2026-10-11-audio-engines.md` before touching
+`Source/Core/AudioCommon` or the Audio settings leaf; the device checklist there is still owed.
+
 ## Pause / lifecycle (done, on develop)
 
 - `PauseArbiter` owns pausing. Do not call `TVEmulationBridge` pause or resume directly from UI code; `CorePauseCallSitesTests` and `UILayerPauseCallsTests` enforce this.

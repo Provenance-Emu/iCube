@@ -7,6 +7,8 @@ import Foundation
 enum ConfigWiiLimits {
   static let sensorBarSensitivity: ClosedRange<Double> = 1 ... 5
   static let speakerVolume: ClosedRange<Double> = 0 ... 7
+  /// MAIN_WII_SPEAK_VOLUME_MODIFIER, dB; the desktop slider's range.
+  static let wiiSpeakVolumeDb: ClosedRange<Double> = -50 ... 50
 }
 
 /// Snapshot of Config for the Wii screen. Defaults match the old view's `@State` defaults.
@@ -30,6 +32,10 @@ struct ConfigWiiState: Equatable {
   var sdCard = false
   var sdWrites = false
   var sdFolderSync = false
+  var wiiSpeak = false
+  /// Dolphin ships Wii Speak muted; the toggle is what makes it capture.
+  var wiiSpeakMuted = true
+  var wiiSpeakVolumeDb = 0
 }
 
 /// The UserDefaults key the touchpad IR setting is stored under; defined once so the host's read and write cannot drift.
@@ -55,4 +61,7 @@ enum ConfigWiiChange: Equatable {
   case sdCard(Bool)
   case sdWrites(Bool)
   case sdFolderSync(Bool)
+  case wiiSpeak(Bool)
+  case wiiSpeakMuted(Bool)
+  case wiiSpeakVolumeDb(Int)
 }

@@ -29,6 +29,9 @@ struct ConfigWiiView: View {
     s.sdCard = DOLConfigBridge.mainWiiSDCard()
     s.sdWrites = DOLConfigBridge.mainAllowSDWrites()
     s.sdFolderSync = DOLConfigBridge.mainWiiSDCardEnableFolderSync()
+    s.wiiSpeak = DOLConfigBridge.mainEmulateWiiSpeak()
+    s.wiiSpeakMuted = DOLConfigBridge.mainWiiSpeakMuted()
+    s.wiiSpeakVolumeDb = DOLConfigBridge.mainWiiSpeakVolumeModifier()
     state = s
   }
 
@@ -52,6 +55,9 @@ struct ConfigWiiView: View {
     case .sdCard(let v): state.sdCard = v; DOLConfigBridge.setMainWiiSDCard(v)
     case .sdWrites(let v): state.sdWrites = v; DOLConfigBridge.setMainAllowSDWrites(v)
     case .sdFolderSync(let v): state.sdFolderSync = v; DOLConfigBridge.setMainWiiSDCardEnableFolderSync(v)
+    case .wiiSpeak(let v): state.wiiSpeak = v; DOLConfigBridge.setMainEmulateWiiSpeak(v)
+    case .wiiSpeakMuted(let v): state.wiiSpeakMuted = v; DOLConfigBridge.setMainWiiSpeakMuted(v)
+    case .wiiSpeakVolumeDb(let v): state.wiiSpeakVolumeDb = v; DOLConfigBridge.setMainWiiSpeakVolumeModifier(v)
     }
   }
 }

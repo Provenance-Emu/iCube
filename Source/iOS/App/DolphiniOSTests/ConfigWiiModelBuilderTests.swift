@@ -17,20 +17,65 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     return s
   }
 
+  /// The Wii Speak rows exist on iOS only: tvOS exposes no microphone to apps.
+  private var wiiSpeakRows: [String] {
+    #if os(iOS)
+    return ["wii-speak", "wii-speak-muted", "wii-speak-volume"]
+    #else
+    return []
+    #endif
+  }
+  private var wiiSpeakSections: [String] {
+    #if os(iOS)
+    return ["wii-speak"]
+    #else
+    return []
+    #endif
+  }
+
   func test_rowOrder_sectionsAndFooters() {
     XCTAssertEqual(model().allItems.map(\.id), [
       "pal60", "aspect-ratio",
       "screensaver", "language", "sound-mode",
       "sensor-bar-position", "sensor-bar-sensitivity", "speaker-volume", "rumble", "touchpad-ir-follow",
       "skylander-portal", "usb-keyboard", "wiilink", "sd-card", "sd-writes", "sd-folder-sync",
-    ])
-    XCTAssertEqual(model().sections.map(\.id), ["video", "general", "wii-remotes", "usb-sd"])
-    XCTAssertEqual(model().sections.map(\.header), ["Video", "General", "Wii Remotes", "USB / SD"])
-    XCTAssertEqual(model().sections.map(\.footer), [
+    ] + wiiSpeakRows)
+    XCTAssertEqual(model().sections.map(\.id), ["video", "general", "wii-remotes", "usb-sd"] + wiiSpeakSections)
+    XCTAssertEqual(Array(model().sections.map(\.header).prefix(4)), ["Video", "General", "Wii Remotes", "USB / SD"])
+    XCTAssertEqual(Array(model().sections.map(\.footer).prefix(4)), [
       "These write to the emulated Wii's SYSCONF, so they affect Wii titles only and persist like a real Wii would.",
       nil, nil,
       "Emulated Wii peripherals. None of these affect emulation speed.",
     ])
+  }
+
+  func test_wiiSpeakRows_iOSOnly() {
+    #if os(iOS)
+    let off = model()
+    XCTAssertEqual(off.item(id: "wii-speak-muted")?.isEnabled, false)
+    XCTAssertEqual(off.item(id: "wii-speak-volume")?.isEnabled, false)
+    let on = state { $0.wiiSpeak = true; $0.wiiSpeakMuted = false; $0.wiiSpeakVolumeDb = -12 }
+    let m = model(on)
+    XCTAssertEqual(m.item(id: "wii-speak-muted")?.isEnabled, true)
+    XCTAssertEqual(m.item(id: "wii-speak-volume")?.isEnabled, true)
+    XCTAssertEqual(m.item(id: "wii-speak-volume")?.currentValueTitle, "-12 dB")
+    guard case .stepper(let stepper)? = m.item(id: "wii-speak-volume")?.role else { return XCTFail("not a stepper") }
+    XCTAssertEqual(stepper.range, -50 ... 50)
+    changes = []
+    stepper.value.wrappedValue = 10
+    XCTAssertEqual(changes, [.wiiSpeakVolumeDb(10)])
+    for (id, change) in [("wii-speak", { ConfigWiiChange.wiiSpeak($0) }), ("wii-speak-muted", { ConfigWiiChange.wiiSpeakMuted($0) })] as [(String, (Bool) -> ConfigWiiChange)] {
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail(id); continue }
+      changes = []
+      binding.wrappedValue = false
+      XCTAssertEqual(changes, [change(false)], id)
+    }
+    // The muted toggle's value follows the state.
+    guard case .toggle(let muted)? = m.item(id: "wii-speak-muted")?.role else { return XCTFail("not a toggle") }
+    XCTAssertEqual(muted.wrappedValue, false)
+    #else
+    XCTAssertNil(model().item(id: "wii-speak"))
+    #endif
   }
 
   func test_everyRow_hasADescription() {

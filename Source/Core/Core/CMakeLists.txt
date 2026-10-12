@@ -736,6 +736,12 @@ if(ENABLE_CUBEB)
     HW/EXI/EXI_DeviceMic.cpp
     HW/EXI/EXI_DeviceMic.h
   )
+elseif(IOS)
+  # The GameCube microphone captures through AudioCommon/IOSAudioInput instead of cubeb.
+  target_sources(core PRIVATE
+    HW/EXI/EXI_DeviceMic.cpp
+    HW/EXI/EXI_DeviceMic.h
+  )
 endif()
 
 if(TARGET LibUSB::LibUSB)

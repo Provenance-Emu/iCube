@@ -46,6 +46,7 @@ StateManager::StateManager()
     state.PopulateAxis(ButtonType::STICK_C_RIGHT);
     state.PopulateAxis(ButtonType::TRIGGER_L);
     state.PopulateAxis(ButtonType::TRIGGER_R);
+    state.PopulateButton(ButtonType::BUTTON_MIC);
 
     m_controllers.push_back(state);
   }

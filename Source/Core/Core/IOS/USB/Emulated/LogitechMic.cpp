@@ -74,9 +74,10 @@ public:
         m_index(index)
   {
   }
+  ~MicrophoneLogitech() override { StreamTerminate(); }
 
 private:
-#ifdef HAVE_CUBEB
+#if defined(HAVE_CUBEB) || defined(IPHONEOS)
   std::string GetInputDeviceId() const override
   {
     return Config::Get(Config::MAIN_LOGITECH_MIC_MICROPHONE[m_index]);

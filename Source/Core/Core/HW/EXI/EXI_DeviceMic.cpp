@@ -7,9 +7,14 @@
 #include <cstring>
 #include <mutex>
 
+#ifdef HAVE_CUBEB
 #include <cubeb/cubeb.h>
 
 #include "AudioCommon/CubebUtils.h"
+#endif
+#ifdef IPHONEOS
+#include "AudioCommon/IOSAudioInput.h"
+#endif
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 
@@ -25,6 +30,27 @@
 
 namespace ExpansionInterface
 {
+void CEXIMic::PushSamples(const s16* buff_in, long nframes)
+{
+  std::lock_guard lk(ring_lock);
+  if (!stream_buffer)
+    return;
+
+  for (long i = 0; i < nframes; i++)
+  {
+    stream_buffer[stream_wpos] = buff_in[i];
+    stream_wpos = (stream_wpos + 1) % stream_size;
+  }
+
+  samples_avail += nframes;
+  if (samples_avail > stream_size)
+  {
+    samples_avail = 0;
+    status.buff_ovrflw = 1;
+  }
+}
+
+#ifdef HAVE_CUBEB
 void CEXIMic::StreamInit()
 {
   stream_buffer = nullptr;
@@ -66,24 +92,7 @@ static void state_callback(cubeb_stream* stream, void* user_data, cubeb_state st
 long CEXIMic::DataCallback(cubeb_stream* stream, void* user_data, const void* input_buffer,
                            void* /*output_buffer*/, long nframes)
 {
-  CEXIMic* mic = static_cast<CEXIMic*>(user_data);
-
-  std::lock_guard lk(mic->ring_lock);
-
-  const s16* buff_in = static_cast<const s16*>(input_buffer);
-  for (long i = 0; i < nframes; i++)
-  {
-    mic->stream_buffer[mic->stream_wpos] = buff_in[i];
-    mic->stream_wpos = (mic->stream_wpos + 1) % mic->stream_size;
-  }
-
-  mic->samples_avail += nframes;
-  if (mic->samples_avail > mic->stream_size)
-  {
-    mic->samples_avail = 0;
-    mic->status.buff_ovrflw = 1;
-  }
-
+  static_cast<CEXIMic*>(user_data)->PushSamples(static_cast<const s16*>(input_buffer), nframes);
   return nframes;
 }
 
@@ -155,12 +164,52 @@ void CEXIMic::StreamStop()
   delete[] stream_buffer;
   stream_buffer = nullptr;
 }
+#elif defined(IPHONEOS)
+void CEXIMic::StreamInit()
+{
+  stream_buffer = nullptr;
+  samples_avail = stream_wpos = stream_rpos = 0;
+}
+
+void CEXIMic::StreamTerminate()
+{
+  StreamStop();
+}
+
+void CEXIMic::StreamStart()
+{
+  StreamStop();
+  {
+    std::lock_guard lk(ring_lock);
+    stream_size = buff_size_samples * 500;
+    stream_buffer = new s16[stream_size];
+    samples_avail = stream_wpos = stream_rpos = 0;
+  }
+  m_ios_input = std::make_unique<IOSAudioInput>(
+      "Dolphin Emulated GameCube Microphone",
+      [this](const s16* samples, std::size_t frames) { PushSamples(samples, (long)frames); });
+  if (!m_ios_input->Start(sample_rate))
+    WARN_LOG_FMT(EXPANSIONINTERFACE, "GameCube microphone capture unavailable; feeding silence");
+}
+
+void CEXIMic::StreamStop()
+{
+  // Destroying the input stops capture synchronously, so the ring buffer is freed only once no
+  // callback can touch it.
+  m_ios_input.reset();
+
+  std::lock_guard lk(ring_lock);
+  samples_avail = stream_wpos = stream_rpos = 0;
+  delete[] stream_buffer;
+  stream_buffer = nullptr;
+}
+#endif
 
 void CEXIMic::StreamReadOne()
 {
   std::lock_guard lk(ring_lock);
 
-  if (samples_avail >= buff_size_samples)
+  if (stream_buffer && samples_avail >= buff_size_samples)
   {
     s16* last_buffer = &stream_buffer[stream_rpos];
     std::memcpy(ring_buffer, last_buffer, buff_size);

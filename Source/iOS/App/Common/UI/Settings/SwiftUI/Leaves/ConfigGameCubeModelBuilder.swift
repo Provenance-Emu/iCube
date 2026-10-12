@@ -24,6 +24,21 @@ enum ConfigGameCubeModelBuilder {
                         L("Language the emulated GameCube reports to games. The GameCube supports English, German, French, Spanish, Italian, and Dutch only. Defaults to your device language where supported, otherwise English."),
                         set: { apply(.language($0)) }),
     ])
-    return MenuModel(sections: [general, language])
+    return MenuModel(sections: [general, language] + peripheralSections(state, apply: apply))
+  }
+
+  /// The GameCube Microphone sits in memory card slot B. iOS only: tvOS exposes no microphone to apps.
+  private static func peripheralSections(_ state: ConfigGameCubeState, apply: @escaping (ConfigGameCubeChange) -> Void) -> [MenuSection] {
+    #if os(iOS)
+    return [MenuSection(id: "peripherals", header: L("Peripherals"),
+                        footer: L("Takes effect when a game starts. Bind the microphone button under Controllers, GameCube, Microphone. Slot A keeps the memory card."),
+                        items: [
+                          SettingsRow.toggle("slot-b-microphone", L("Microphone in Slot B"), state.slotBMicrophone,
+                                             L("Plugs the GameCube Microphone into slot B and captures from this device's microphone, for Mario Party 6 and 7, Karaoke Revolution, Odama and Chibi-Robo."),
+                                             set: { apply(.slotBMicrophone($0)) }),
+                        ])]
+    #else
+    return []
+    #endif
   }
 }

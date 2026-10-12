@@ -7,6 +7,7 @@
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 #include "InputCommon/ControllerInterface/iOS/MFiController.h"
 #include "Core/HW/GCPad.h"
+#include "Core/HW/GCPadEmu.h"
 #include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 #include "Core/HW/WiimoteEmu/Extension/Nunchuk.h"
@@ -307,6 +308,33 @@ static bool RepairTouchscreenIRPointer(int idx)
   return (imu_changed || ir_changed) ? YES : NO;
 }
 
+// The Microphone line of the bundled Data/Sys/Profiles/GCPad/Touchscreen.ini (ButtonType.h
+// BUTTON_MIC), for a GameCube mapping that predates the on-screen Microphone button.
+static constexpr const char* kTouchscreenMicExpression = "`Button 22`";
+
+// Binds the GameCube Microphone's button to the on-screen one when a kept mapping leaves it
+// unbound (a user Touchscreen.ini or a pad config saved before the overlay had a Microphone
+// button). Every other binding stays as the user has it. Does not save; returns whether it
+// changed anything.
+static bool RepairTouchscreenMicrophone(int port)
+{
+  auto* cfg = Pad::GetConfig();
+  auto* pad = cfg ? cfg->GetController(port) : nullptr;
+  auto* mic = Pad::GetGroup(port, PadGroup::Mic);
+  if (!pad || !mic || mic->controls.empty())
+    return false;
+  {
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+    const auto& ref = mic->controls[0]->control_ref;
+    if (ref && !ref->GetExpression().empty())
+      return false;
+    mic->SetControlExpression(0, kTouchscreenMicExpression);
+  }
+  pad->UpdateReferences(g_controller_interface);
+  NSLog(@"[iCube][Input] GCPad%d: Microphone button bound to the touchscreen", port + 1);
+  return true;
+}
+
 + (void)assignTouchscreenToGCPort:(NSInteger)portOneBased
 {
   if (portOneBased < 1 || portOneBased > 4)
@@ -366,6 +394,9 @@ static bool RepairTouchscreenIRPointer(int idx)
     pad->SetDefaultDevice(dq);
   }
   pad->UpdateReferences(g_controller_interface);
+  // A mapping kept from before the overlay had a Microphone button (or a user profile without
+  // the line) leaves `Microphone/Button` empty; bind it so the on-screen button works.
+  RepairTouchscreenMicrophone(port);
   Pad::GetConfig()->SaveConfig();
 }
 

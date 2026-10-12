@@ -1237,10 +1237,6 @@ struct EmulationScreen: View {
         isWiiSystem = inferIsWii(from: game)
         touchPadsRefreshToken = UUID()
       }
-      // Apply saved CoreAudio DSP defaults if CoreAudio backend is selected
-      if DOLConfigBridge.audioBackend() == "CoreAudio" {
-        applyCoreAudioDSPDefaults()
-      }
       // Load current OC/VBI state
       ocEnabled = DOLConfigBridge.mainOverclockEnableBase()
       ocPercent = DOLConfigBridge.mainOverclockPercentBase()
@@ -1406,17 +1402,7 @@ struct EmulationScreen: View {
       }
     }
     .sheet(isPresented: $showFXSheet) {
-      NavigationStack {
-        Group {
-          if DOLConfigBridge.audioBackend() == "AVAudioEngine" || AudioFXBridge.isEngineActive() {
-            FXChainEditor()
-              .navigationTitle(L("Audio Effects"))
-          } else {
-            CoreAudioDSPEditor()
-              .navigationTitle(L("Audio Effects"))
-          }
-        }
-      }
+      NavigationStack { AudioEffectsSheet() }
     }
     .sheet(isPresented: $showControllerSettings, onDismiss: controllerSettingsDismissed) {
       NavigationStack {

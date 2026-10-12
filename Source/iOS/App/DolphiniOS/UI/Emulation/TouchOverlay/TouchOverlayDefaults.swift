@@ -32,7 +32,7 @@ enum TouchOverlayDefaults {
   // Raw TCButtonType ids the xibs use (TCButtonType.swift). Named here once.
   enum ButtonID {
     static let gcA = 0, gcB = 1, gcStart = 2, gcX = 3, gcY = 4, gcZ = 5
-    static let gcDpadUp = 6, gcMainStick = 10, gcCStick = 15, gcTriggerL = 20, gcTriggerR = 21
+    static let gcDpadUp = 6, gcMainStick = 10, gcCStick = 15, gcTriggerL = 20, gcTriggerR = 21, gcMic = 22
     static let wiiA = 100, wiiB = 101, wiiMinus = 102, wiiPlus = 103, wiiHome = 104, wiiOne = 105, wiiTwo = 106
     static let wiiDpadUp = 107
     static let nunchukC = 200, nunchukZ = 201, nunchukStick = 202
@@ -87,6 +87,14 @@ enum TouchOverlayDefaults {
   static func layout(for group: TouchOverlayGroup, kind: TouchOverlayPadKind, orientation: TouchOverlayOrientation,
                      canvas: CGSize, safeArea: UIEdgeInsets) -> TouchOverlayGroupLayout? {
     layout(for: kind, orientation: orientation, canvas: canvas, safeArea: safeArea).first { $0.group == group }
+  }
+
+  /// The groups a game actually shows. The GameCube Microphone button only exists while the
+  /// Microphone sits in slot B (`MAIN_SLOT_B`, read when the game boots); every other group is
+  /// always shown. Hidden groups keep their saved placement, so turning the Microphone back on
+  /// restores where the button was.
+  static func shown(_ layouts: [TouchOverlayGroupLayout], gameCubeMicrophone: Bool) -> [TouchOverlayGroupLayout] {
+    layouts.filter { $0.group != .gcMicrophone || gameCubeMicrophone }
   }
 
   /// Moves edge-anchored groups inward by the safe area: what the xibs' safe-area-relative
@@ -202,6 +210,8 @@ enum TouchOverlayDefaults {
     static let shoulder = CGSize(width: 96, height: 44)
     static let z = CGSize(width: 80, height: 44)
     static let start = CGSize(width: 70, height: 44)
+    /// The Microphone's button: a pill like Start, stacked above it.
+    static let mic = CGSize(width: 70, height: 44)
     /// Space between the face buttons inside their cluster.
     static let faceGap: CGFloat = 6
     /// Tall screens (iPad) keep the controls in a band at the bottom instead of spreading them up
@@ -214,7 +224,7 @@ enum TouchOverlayDefaults {
     let s = Screen(canvas: canvas, safeArea: safeArea, orientation: orientation)
     let gap = s.gap, left = s.left, right = s.right, bottom = s.bottom
     let stick = GC.mainStick * s.u, cStick = GC.cStick * s.u, dpad = GC.dpad * s.u
-    let shoulder = s.size(GC.shoulder), zSize = s.size(GC.z), startSize = s.size(GC.start)
+    let shoulder = s.size(GC.shoulder), zSize = s.size(GC.z), startSize = s.size(GC.start), micSize = s.size(GC.mic)
     let face = gameCubeFaceButtons(scale: s.u)
     let top = max(s.regionTop, bottom - GC.maxBandHeight * s.u)
 
@@ -233,6 +243,9 @@ enum TouchOverlayDefaults {
                            y: max(top + rzSize.height / 2, faceCenter.y - face.size.height / 2 - gap - rzSize.height / 2))
 
     let startCenter = CGPoint(x: s.w / 2, y: bottom - startSize.height / 2)
+    // The Microphone's button sits above Start in the middle column, between the main stick and
+    // the face buttons; beside Start it would run into the C-stick on a phone.
+    let micCenter = CGPoint(x: s.w / 2, y: startCenter.y - startSize.height / 2 - gap - micSize.height / 2)
 
     return [
       single(.gcMainStick, s.leading(stickCenter), size: CGSize(width: stick, height: stick),
@@ -249,6 +262,8 @@ enum TouchOverlayDefaults {
                        button("gc.z", ButtonID.gcZ, (shoulder.width - zSize.width) / 2, shoulder.height + gap, size: zSize)]),
       group(.gcStart, s.centered(startCenter), size: startSize,
             controls: [button("gc.start", ButtonID.gcStart, 0, 0, size: startSize)]),
+      group(.gcMicrophone, s.centered(micCenter), size: micSize,
+            controls: [button("gc.mic", ButtonID.gcMic, 0, 0, size: micSize)]),
     ]
   }
 
