@@ -182,7 +182,6 @@ struct ICubeTileButtonStyle: ButtonStyle {
   var isFocusedOverride: Bool? = nil
   /// Overrides the spec's tile height where a screen must fit a fixed number of rows (the tvOS pause grid).
   var minHeight: CGFloat? = nil
-  @Environment(\.isFocused) private var isFocused
 
   #if os(tvOS)
   private static let minHeight: CGFloat = 180
@@ -191,9 +190,24 @@ struct ICubeTileButtonStyle: ButtonStyle {
   #endif
 
   func makeBody(configuration: Configuration) -> some View {
-    configuration.label
+    ICubeTileButtonChrome(label: configuration.label, isPressed: configuration.isPressed,
+                          isFocusedOverride: isFocusedOverride, minHeight: minHeight ?? Self.minHeight)
+  }
+}
+
+/// Focus is read here: a `ButtonStyle` property's `@Environment(\.isFocused)` does not update on tvOS,
+/// so tiles without an override never showed focus there.
+private struct ICubeTileButtonChrome<Label: View>: View {
+  let label: Label
+  let isPressed: Bool
+  let isFocusedOverride: Bool?
+  let minHeight: CGFloat
+  @Environment(\.isFocused) private var isFocused
+
+  var body: some View {
+    label
       .padding(ICubeDesign.Spacing.m.rawValue)
-      .frame(maxWidth: .infinity, minHeight: minHeight ?? Self.minHeight, alignment: .topLeading)
+      .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
       .background(
         RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
           .fill(ICubeDesign.color(.rowSurface))
@@ -202,7 +216,7 @@ struct ICubeTileButtonStyle: ButtonStyle {
         RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
           .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
       )
-      .modifier(ICubeFocusChrome(focused: isFocusedOverride ?? isFocused, pressed: configuration.isPressed,
+      .modifier(ICubeFocusChrome(focused: isFocusedOverride ?? isFocused, pressed: isPressed,
                                  radius: ICubeDesign.Radius.large.rawValue, scale: ICubeDesign.Motion.tileFocusScale))
   }
 }
