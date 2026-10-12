@@ -26,7 +26,7 @@ public actor UserDataScanner {
 
     /// Absolute URL of iCube's `User/` directory. Every relative path in the
     /// sync engine is relative to this.
-    public let rootDirectory: URL
+    public nonisolated let rootDirectory: URL
 
     private let fileManager: FileManager
     private var checksumCache: [String: CachedChecksum] = [:]
@@ -44,11 +44,15 @@ public actor UserDataScanner {
 
     // MARK: - Scanning
 
-    /// Metadata for every syncable file under the root.
+    /// Metadata for every syncable file under the root that the policy allows.
+    ///
+    /// Categories the user has switched off are pruned at the directory level
+    /// where possible and skipped per file otherwise, so a NAND nobody asked to
+    /// sync is never hashed.
     ///
     /// Never throws for a missing root: a fresh install may not have created
     /// `User/` yet, and an empty result is the correct answer.
-    public func scanLocalFiles() -> [SyncableFileMetadata] {
+    public func scanLocalFiles(policy: SyncPolicy = .default) -> [SyncableFileMetadata] {
         guard fileManager.fileExists(atPath: rootDirectory.path) else { return [] }
 
         let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .fileSizeKey, .contentModificationDateKey]
@@ -70,7 +74,7 @@ public actor UserDataScanner {
             let values = try? url.resourceValues(forKeys: Set(keys))
 
             if values?.isDirectory == true {
-                if !SyncClassifier.shouldDescend(intoDirectoryRelativePath: relativePath) {
+                if !SyncClassifier.shouldDescend(intoDirectoryRelativePath: relativePath, policy: policy) {
                     enumerator.skipDescendants()
                 }
                 continue
@@ -82,7 +86,7 @@ public actor UserDataScanner {
             // needless round trip.
             guard size > 0 else { continue }
 
-            guard let fileType = SyncClassifier.syncableType(relativePath: relativePath, sizeBytes: size) else {
+            guard let fileType = SyncClassifier.syncableType(relativePath: relativePath, sizeBytes: size, policy: policy) else {
                 continue
             }
 
@@ -118,8 +122,7 @@ public actor UserDataScanner {
             return cached.checksum
         }
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
-        let digest = SHA256.hash(data: data)
-        let checksum = digest.map { String(format: "%02x", $0) }.joined()
+        let checksum = SyncChecksum.sha256Hex(data)
         checksumCache[relativePath] = CachedChecksum(size: size, modified: modified, checksum: checksum)
         return checksum
     }
@@ -137,6 +140,22 @@ public actor UserDataScanner {
     public func modificationDate(relativePath: String) -> Date? {
         let attributes = try? fileManager.attributesOfItem(atPath: absoluteURL(for: relativePath).path)
         return attributes?[.modificationDate] as? Date
+    }
+
+    public func fileExists(relativePath: String) -> Bool {
+        fileManager.fileExists(atPath: absoluteURL(for: relativePath).path)
+    }
+
+    /// Move a local file into `trash` because a remote tombstone said so. The
+    /// engine never unlinks a user file outright; this is the only removal path.
+    public func moveToTrash(relativePath: String, trash: SyncTrash, now: Date = Date()) async throws -> SyncTrashEntry {
+        let url = absoluteURL(for: relativePath)
+        guard CanonicalRelativePath.relativePath(of: url, under: rootDirectory) != nil else {
+            throw SyncProviderError.invalidData
+        }
+        let entry = try await trash.move(fileAt: url, relativePath: relativePath, now: now)
+        checksumCache[relativePath] = nil
+        return entry
     }
 
     /// Write a downloaded payload into the local tree, creating intermediate

@@ -12,6 +12,8 @@ internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
   let onClose: () -> Void
   let onShowSettings: () -> Void
+  /// Opens Settings straight on a leaf (a tile's long-press or the Performance tile); wired by `EmulationScreen`.
+  var onShowSettingsLeaf: (String) -> Void = { _ in }
   var onShowPerfOverlay: () -> Void = {}
   let platform: PlatformKind
   let game: TVGameItem
@@ -50,6 +52,13 @@ internal struct PauseMenuView: View {
   @State private var shaderOptions: [(String, AnyHashable)] = []
   /// WS-4: "continue this game on another device".
   @State private var showContinuitySheet: Bool = false
+  /// Mirrors of the live Dolphin values behind the Upscaling and Audio tiles; the bridge is read on appear and
+  /// written through the bindings, so the cycle tiles redraw without polling.
+  @State private var internalResolution: Int = 1
+  @State private var audioVolume: Int = 100
+  /// The Performance tile badge and the cover-column chip: the engine actually running.
+  @State private var engineShortName: String = ""
+  @State private var jitAcquired: Bool = false
   @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   /// True while any sheet, full-screen cover, or non-main pane owned by this menu is
@@ -71,6 +80,8 @@ internal struct PauseMenuView: View {
   // pane rather than a settings trip. Mute is shared with the in-game top bar
   // via `QuickMute`.
   @State private var isMuted: Bool = false
+  /// Observed so the Record tile's toggle and REC badge follow the recorder.
+  @ObservedObject private var recorder = RecordingManager.shared
   @State private var fastForward = PauseFastForwardState(isEnabled: false, percent: ConfigGeneralState.storedFastForward(nil))
   /// This menu's hold on the pause (spec §4.3). Adopted from the gesture tracker's pending claim when
   /// there is one, otherwise claimed here. Released only on a real teardown, see `onDisappear`.
@@ -79,6 +90,17 @@ internal struct PauseMenuView: View {
   /// pane returns to `.main` (including from the Cheats pane itself), so toggling a
   /// cheat and backing out updates the count without needing a manual refresh.
   @State private var activeCheatCount: Int = 0
+  private func refreshEngineState() {
+    jitAcquired = JitManager.shared().acquiredJit
+    engineShortName = CpuEngine.resolved(stored: CpuEngine.from(raw: DOLConfigBridge.mainCpuCore()), acquiredJit: jitAcquired).shortName
+  }
+
+  private func refreshLiveSettings() {
+    internalResolution = TVEmulationBridge.internalResolution()
+    audioVolume = TVEmulationBridge.audioVolumePercent()
+    refreshEngineState()
+  }
+
   private func refreshActiveCheatCount() {
     activeCheatCount = CheatsMenuView.activeCheatCount(forGameId: game.gameID, revision: game.revision)
   }
@@ -137,6 +159,7 @@ internal struct PauseMenuView: View {
         percent: ConfigGeneralState.storedFastForward(UserDefaults.standard.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int))
       refreshActiveCheatCount()
       refreshShaderState()
+      refreshLiveSettings()
       #if DEBUG
       switch debugInitialPane {
       case "saves": pane = .saves
@@ -175,6 +198,7 @@ internal struct PauseMenuView: View {
           // D15: covers backing out of Cheats (toggled codes should update the
           // badge) as well as the other panes, which is a harmless extra read.
           refreshActiveCheatCount()
+          refreshEngineState()
         case .saves:
           focused = .back
         case .cheats:
@@ -249,10 +273,11 @@ internal struct PauseMenuView: View {
 
   // Add pull-down to dismiss for iOS
   #if os(iOS)
-  init(selectedSlot: Binding<Int>, onClose: @escaping () -> Void, onShowSettings: @escaping () -> Void, onShowPerfOverlay: @escaping () -> Void = {}, platform: PlatformKind, game: TVGameItem) {
+  init(selectedSlot: Binding<Int>, onClose: @escaping () -> Void, onShowSettings: @escaping () -> Void, onShowSettingsLeaf: @escaping (String) -> Void = { _ in }, onShowPerfOverlay: @escaping () -> Void = {}, platform: PlatformKind, game: TVGameItem) {
     self._selectedSlot = selectedSlot
     self.onClose = onClose
     self.onShowSettings = onShowSettings
+    self.onShowSettingsLeaf = onShowSettingsLeaf
     self.onShowPerfOverlay = onShowPerfOverlay
     self.platform = platform
     self.game = game
@@ -374,7 +399,18 @@ internal struct PauseMenuView: View {
       Text(game.gameID)
         .icubeText(.tag)
         .foregroundStyle(ICubeDesign.color(.textSecondary))
+      engineChip
     }
+  }
+
+  /// "JIT ON" while the JIT is acquired, otherwise the engine that is running (INT, CIR, CIR-IR).
+  private var engineChip: some View {
+    Text(jitAcquired ? L("JIT ON") : engineShortName)
+      .icubeText(.tag)
+      .foregroundStyle(ICubeDesign.color(.textPrimary))
+      .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
+      .padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
+      .background(Capsule().fill(jitAcquired ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface)))
   }
 
   @ViewBuilder
@@ -388,10 +424,14 @@ internal struct PauseMenuView: View {
       if isCompactHeight {
         Text(game.title).font(.headline).foregroundStyle(.white).lineLimit(1)
         Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
+        engineChip
       } else {
         VStack(alignment: .leading, spacing: 2) {
           Text(game.title).font(.headline).foregroundStyle(.white).lineLimit(1)
-          Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
+          HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+            Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
+            engineChip
+          }
         }
       }
       Spacer()
@@ -414,42 +454,34 @@ internal struct PauseMenuView: View {
   private func confirmOverlay(title: String, message: String, model: MenuModel, onBack: @escaping () -> Void) -> some View {
     ZStack {
       Color.black.opacity(0.55).ignoresSafeArea()
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
         Text(title)
-          .font(.system(size: 18, weight: .bold))
-          .foregroundColor(.white)
+          .icubeText(.title)
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
         Text(message)
-          .font(.system(size: 14, weight: .medium))
-          .foregroundColor(.white.opacity(0.8))
-        // `.grid`'s `ScrollView` has no natural height of its own here, so it
-        // greedily fills whatever the VStack offers -- clamp using `gridCard`'s
-        // actual row math (44pt icon + 12pt padding top/bottom = 68pt per
-        // card, 12pt inter-row spacing, `gridBody`'s own 16pt top+bottom
-        // padding = 80n + 20 for n rows) instead of letting a 2-button
-        // confirm card stretch to the screen's height. `maxHeight`, not a
-        // fixed `height`, so it can still shrink (and `MenuScreen.grid`
-        // scroll) in landscape or under Dynamic Type, where a long
-        // confirm list may not fit.
+          .icubeText(.detail)
+          .foregroundStyle(ICubeDesign.color(.textSecondary))
+        // Intrinsic height: the card is as tall as its rows (two or three of them), however the type scales.
         #if os(tvOS)
         MenuScreen(model: model, style: .list, onBack: onBack)
-          .frame(maxHeight: CGFloat(model.allItems.count) * 110 + 40)
+          .fixedSize(horizontal: false, vertical: true)
           .focusSection()
         #else
         MenuScreen(model: model, style: .grid, onBack: onBack)
-          .frame(maxHeight: CGFloat(model.allItems.count) * 80 + 20)
+          .fixedSize(horizontal: false, vertical: true)
         #endif
       }
-      .padding(16)
+      .padding(ICubeDesign.Spacing.m.rawValue)
       .frame(maxWidth: confirmWidth)
       .background(
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
           .fill(.ultraThinMaterial)
       )
       .overlay(
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-          .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
+          .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
       )
-      .padding(24)
+      .padding(ICubeDesign.Spacing.l.rawValue)
     }
     .transition(.opacity)
   }
@@ -516,7 +548,7 @@ internal struct PauseMenuView: View {
         }
       } else {
         ZStack {
-          // Beautiful blurred background - use GameBanner if available
+          // The pause scrim: the game's art blurred under a dark gradient.
           Image(uiImage: game.bannerImage ?? game.coverImage)
             .resizable()
             .scaledToFill()
@@ -524,173 +556,82 @@ internal struct PauseMenuView: View {
             .opacity(0.8)
             .ignoresSafeArea()
 
-          // Elegant gradient overlay
           LinearGradient(
-            colors: [
-              Color.black.opacity(0.85),
-              Color.black.opacity(0.4),
-              Color.black.opacity(0.85)
-            ],
+            colors: [.black.opacity(0.85), .black.opacity(0.4), .black.opacity(0.85)],
             startPoint: .top,
             endPoint: .bottom
           )
           .ignoresSafeArea()
 
-          // Content with proper layout
-          VStack(spacing: 40) {
-            // Header with back button and title
-            HStack {
+          VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+            HStack(alignment: .top) {
+              ICubeLeafHeader(title: L("Save States"), subtitle: game.title)
+              Spacer()
               Button(action: { pane = .main }) {
-                HStack(spacing: 12) {
+                HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
                   Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                  Text("Back to Menu")
-                    .font(.system(size: 18, weight: .semibold))
+                  Text(L("Back to Menu")).icubeText(.body)
                 }
-                .foregroundColor(.white.opacity(0.8))
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(.white.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .foregroundStyle(ICubeDesign.color(.textPrimary))
               }
-              .buttonStyle(.plain)
+              .buttonStyle(ICubeRowButtonStyle())
+              .fixedSize()
               .focused($focused, equals: .back)
-
-              Spacer()
-
-              VStack(spacing: 4) {
-                Text(L("Save States"))
-                  .font(.system(size: 28, weight: .bold))
-                  .foregroundColor(.white)
-
-                Text(L("Manage your game progress"))
-                  .font(.system(size: 16, weight: .medium))
-                  .foregroundColor(.white.opacity(0.7))
-              }
-
-              Spacer()
             }
 
-            // Save slot selection
-            VStack(spacing: 24) {
-              Text(L("Select Save Slot"))
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
+            Text(L("Select Save Slot"))
+              .icubeText(.section)
+              .foregroundStyle(ICubeDesign.color(.textSecondary))
 
-              ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                  ForEach(1 ... 10, id: \.self) { i in
-                    Button(action: { selectedSlot = i }) {
-                      VStack(spacing: 4) {
-                        ZStack {
-                          RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(selectedSlot == i ? .blue.opacity(0.3) : .white.opacity(0.1))
-                            .frame(width: 44, height: 44)
-
-                          VStack(spacing: 1) {
-                            if selectedSlot == i {
-                              Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.blue)
-                            } else {
-                              Image(systemName: "square.stack.3d.up")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
-                            }
-
-                            Text("\(i)")
-                              .font(.system(size: 10, weight: .semibold))
-                              .foregroundColor(selectedSlot == i ? .blue : .white)
-                          }
-                        }
-
-                        Text(L("Slot") + "\(i)")
-                          .font(.system(size: 8, weight: .medium))
-                          .foregroundColor(.white.opacity(0.7))
-                      }
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: ICubeDesign.Spacing.m.rawValue) {
+                ForEach(1 ... 10, id: \.self) { i in
+                  Button(action: { selectedSlot = i }) {
+                    VStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+                      Image(systemName: selectedSlot == i ? "checkmark.circle.fill" : "square.stack.3d.up")
+                        .font(ICubeDesign.symbolFont(.tile))
+                        .foregroundStyle(selectedSlot == i ? ICubeDesign.color(.accent) : ICubeDesign.color(.textSecondary))
+                      Text(String(format: L("Slot %d"), i))
+                        .icubeText(.tag)
+                        .foregroundStyle(ICubeDesign.color(.textPrimary))
                     }
-                    .buttonStyle(.plain)
-                    .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .compositingGroup()
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                    .focused($focused, equals: .slot(i))
+                    .frame(maxWidth: .infinity)
                   }
+                  .buttonStyle(ICubeTileButtonStyle(minHeight: 120))
+                  .frame(width: 140)
+                  .focused($focused, equals: .slot(i))
                 }
-                .padding(.horizontal, 30)
               }
+              // Room for the focus scale and glow so the first and last card are not clipped.
+              .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
+              .padding(.vertical, ICubeDesign.Spacing.l.rawValue)
             }
 
-            // Action buttons
-            HStack(spacing: 24) {
+            HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
               Button(action: { SaveStateService.saveSlot(selectedSlot) }) {
-                HStack(spacing: 12) {
-                  Image(systemName: "square.and.arrow.down")
-                    .font(.system(size: 16, weight: .semibold))
-                  Text(L("Save to Slot") + "\(selectedSlot)")
-                    .font(.system(size: 16, weight: .semibold))
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 16)
-                .background(.green.opacity(0.2))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.green.opacity(0.4), lineWidth: 1)
-                )
+                saveActionLabel(icon: "square.and.arrow.down", title: String(format: L("Save to Slot %d"), selectedSlot))
               }
-              .buttonStyle(.plain)
+              .buttonStyle(ICubeRowButtonStyle())
               .focused($focused, equals: .save)
 
               Button(action: { TVEmulationBridge.loadState(fromSlot: selectedSlot) }) {
-                HStack(spacing: 12) {
-                  Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
-                  Text(L("Load from Slot") + "\(selectedSlot)")
-                    .font(.system(size: 16, weight: .semibold))
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 16)
-                .background(.blue.opacity(0.2))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.blue.opacity(0.4), lineWidth: 1)
-                )
+                saveActionLabel(icon: "square.and.arrow.up", title: String(format: L("Load Slot %d"), selectedSlot))
               }
-              .buttonStyle(.plain)
+              .buttonStyle(ICubeRowButtonStyle())
               .focused($focused, equals: .load)
 
               // D10: tvOS previously had no way to reach the redesigned grid at
               // all -- showFilmstripSheet was only ever set from the iOS pane.
               Button(action: { showFilmstripSheet = true }) {
-                HStack(spacing: 12) {
-                  Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 16, weight: .semibold))
-                  Text(L("View All States"))
-                    .font(.system(size: 16, weight: .semibold))
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 16)
-                .background(.white.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                  RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(.white.opacity(0.25), lineWidth: 1)
-                )
+                saveActionLabel(icon: "square.grid.2x2", title: L("View All States"))
               }
-              .buttonStyle(.plain)
+              .buttonStyle(ICubeRowButtonStyle())
               .focused($focused, equals: .filmstrip)
             }
-            .frame(maxWidth: 600)
           }
-          .padding(60)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .padding(.horizontal, ICubeDesign.Spacing.xl.rawValue)
+          .padding(.vertical, ICubeDesign.Spacing.xl.rawValue)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
           .zIndex(100)
         }
         #if os(tvOS)
@@ -703,6 +644,15 @@ internal struct PauseMenuView: View {
         }
       }
     }
+  }
+
+  private func saveActionLabel(icon: String, title: String) -> some View {
+    HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+      Image(systemName: icon)
+      Text(title).icubeText(.body)
+    }
+    .foregroundStyle(ICubeDesign.color(.textPrimary))
+    .frame(maxWidth: .infinity)
   }
 
   // MARK: - Pause menu model
@@ -729,7 +679,22 @@ internal struct PauseMenuView: View {
           let path = value as? String
           ShaderQuickApply.apply(path: (path?.isEmpty ?? true) ? nil : path)
           refreshShaderState()
-        }))
+        }),
+      internalResolution: Binding(
+        get: { AnyHashable(internalResolution) },
+        set: { value in
+          guard let scale = value as? Int else { return }
+          TVEmulationBridge.setInternalResolution(scale)
+          internalResolution = scale
+        }),
+      audioVolume: Binding(
+        get: { AnyHashable(audioVolume) },
+        set: { value in
+          guard let percent = value as? Int else { return }
+          TVEmulationBridge.setAudioVolumePercent(percent)
+          audioVolume = percent
+        }),
+      recording: Binding(get: { recorder.isRecording }, set: { RecordingToggle.set($0) }))
   }
 
   private func refreshShaderState() {
@@ -743,7 +708,11 @@ internal struct PauseMenuView: View {
       isMuted: isMuted,
       activeCheatCount: activeCheatCount,
       shaderOptions: shaderOptions,
-      showsRecenterPointer: Self.showsRecenterPointer)
+      showsRecenterPointer: Self.showsRecenterPointer,
+      internalResolution: internalResolution,
+      audioVolume: audioVolume,
+      engineShortName: engineShortName,
+      jitAcquired: jitAcquired)
     let actions = PauseMenuActions(
       resume: { PauseArbiter.shared.userResume(); onClose() },
       quickSave: { _ = QuickSlot.save(slot: selectedSlot) },
@@ -771,6 +740,13 @@ internal struct PauseMenuView: View {
         showSettingsSheet = true
         #else
         onShowSettings()
+        #endif
+      },
+      openSettingsLeaf: { id in
+        #if os(iOS)
+        showSettingsSheet = true
+        #else
+        onShowSettingsLeaf(id)
         #endif
       },
       openPerfOverlay: { onClose(); onShowPerfOverlay() },
@@ -831,6 +807,12 @@ struct PauseMenuState {
   var shaderOptions: [(String, AnyHashable)]
   /// Wii title on iOS, where the pointer is driven by touch or the gyro.
   var showsRecenterPointer: Bool
+  /// Dolphin's EFB scale (1 = native, 2 = 2x, ...; 0 = auto) and master volume percent, read by the host.
+  var internalResolution: Int = 1
+  var audioVolume: Int = 100
+  /// The engine actually running ("INT", "CIR", "CIR-IR", "JIT"), and whether the JIT was acquired.
+  var engineShortName: String = ""
+  var jitAcquired: Bool = false
 }
 
 /// Live bindings for the in-place tiles. Writing one applies immediately; the host rebuilds the model.
@@ -839,6 +821,10 @@ struct PauseMenuBindings {
   var fastForward: Binding<AnyHashable>
   var quickSlot: Binding<AnyHashable>
   var shader: Binding<AnyHashable>
+  var internalResolution: Binding<AnyHashable> = .constant(AnyHashable(1))
+  var audioVolume: Binding<AnyHashable> = .constant(AnyHashable(100))
+  /// Screen recording on/off (`RecordingManager`); the Record tile toggles it.
+  var recording: Binding<Bool> = .constant(false)
 }
 
 struct PauseMenuActions {
@@ -852,6 +838,8 @@ struct PauseMenuActions {
   var openShaders: () -> Void
   var openContinuity: () -> Void
   var openSettings: () -> Void
+  /// Opens Settings on the leaf with this id (`SettingsRootView(initialLeafID:)`).
+  var openSettingsLeaf: (String) -> Void = { _ in }
   var openPerfOverlay: () -> Void
   var requestReset: () -> Void
   var requestExit: () -> Void
@@ -880,6 +868,10 @@ enum PauseMenuModelBuilder {
     (L("Off"), fastForwardOff), ("2x", AnyHashable(200)), ("3x", AnyHashable(300)), ("4x", AnyHashable(400)), ("8x", AnyHashable(800)), (L("Unlimited"), AnyHashable(0)),
   ]
   static let slotCount = 10
+  static let upscalingOptions: [(String, AnyHashable)] = [
+    (L("Native"), AnyHashable(1)), ("2x", AnyHashable(2)), ("3x", AnyHashable(3)), ("4x", AnyHashable(4)), ("6x", AnyHashable(6)),
+  ]
+  static let audioVolumeOptions: [(String, AnyHashable)] = [0, 25, 50, 75, 100].map { ("\($0) %", AnyHashable($0)) }
 
   /// With nothing to cycle (only "None"), the tile just opens the full picker.
   private static func shadersItem(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions) -> MenuItem {
@@ -912,6 +904,9 @@ enum PauseMenuModelBuilder {
                role: .toggle(bindings.mute), description: L("Silence the game's audio.")),
       MenuItem(id: "screenshot", title: L("Screenshot"), icon: "camera", tint: .pink, role: .action(actions.screenshot),
                description: L("Save the last frame to ScreenShots.")),
+      MenuItem(id: "record", title: L("Record"), icon: "record.circle", tint: ICubeDesign.color(.destructive),
+               role: .toggle(bindings.recording), badge: bindings.recording.wrappedValue ? L("REC") : nil,
+               description: L("Record the screen to a video in Recordings.")),
     ])
 
     var game: [MenuItem] = [
@@ -922,6 +917,18 @@ enum PauseMenuModelBuilder {
       MenuItem(id: "cheats", title: L("Cheats"), icon: "star.circle", tint: .yellow, role: .action(actions.openCheats),
                badge: state.activeCheatCount > 0 ? "\(state.activeCheatCount)" : nil,
                description: L("Enable Gecko and Action Replay codes for this game.")),
+      MenuItem(id: "upscaling", title: L("Upscaling"), icon: "arrow.up.left.and.arrow.down.right", tint: .indigo,
+               role: .cycle(options: upscalingOptions, selection: bindings.internalResolution),
+               description: L("Internal resolution. Takes effect immediately."),
+               longPress: .action { actions.openSettingsLeaf("graphics-enhancements") }),
+      MenuItem(id: "audio", title: L("Audio"), icon: "speaker.wave.2", tint: .cyan,
+               role: .cycle(options: audioVolumeOptions, selection: bindings.audioVolume),
+               description: L("Game volume. Long-press for audio settings."),
+               longPress: .action { actions.openSettingsLeaf("audio") }),
+      MenuItem(id: "performance", title: L("Performance"), icon: "gauge.with.dots.needle.67percent", tint: .orange,
+               role: .action { actions.openSettingsLeaf("performance-tuning") },
+               badge: state.engineShortName.isEmpty ? nil : state.engineShortName,
+               description: L("CPU engine and speed tuning.")),
       shadersItem(state: state, bindings: bindings, actions: actions),
       MenuItem(id: "controllers", title: L("Controllers"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers),
                description: L("Players, devices and what each one plays as.")),
@@ -942,6 +949,72 @@ enum PauseMenuModelBuilder {
                description: L("Return to the library. Unsaved progress is lost.")),
     ])
     return MenuModel(sections: [quick, MenuSection(id: "game", header: L("Game"), items: game), system])
+  }
+}
+
+/// Starts or stops `RecordingManager` from a synchronous toggle binding; failures surface as a toast.
+@MainActor
+enum RecordingToggle {
+  static func set(_ on: Bool) {
+    let manager = RecordingManager.shared
+    guard on != manager.isRecording else { return }
+    Task { @MainActor in
+      do {
+        if on { try await manager.start() } else { _ = try await manager.stop() }
+      } catch {
+        EmulationToast.post(L("Recording failed"))
+      }
+    }
+  }
+}
+
+/// Bindings and actions for the in-game quick menu, built from the same sources the pause menu uses
+/// (`QuickMute`, `QuickSlot`, `QuickScreenshot`, the fast-forward bridge) so both menus always agree.
+@MainActor
+enum QuickMenuHost {
+  static func bindings(selectedSlot: Binding<Int>) -> PauseMenuBindings {
+    PauseMenuBindings(
+      mute: Binding(get: { QuickMute.isMuted }, set: { _ in _ = QuickMute.toggle() }),
+      fastForward: Binding(get: { fastForwardState().selection }, set: { value in
+        var state = fastForwardState()
+        applyFastForward(state.select(value))
+      }),
+      quickSlot: Binding(get: { AnyHashable(selectedSlot.wrappedValue) }, set: { if let slot = $0 as? Int { selectedSlot.wrappedValue = slot } }),
+      shader: .constant(ShaderQuickApply.noneValue),
+      recording: Binding(get: { RecordingManager.shared.isRecording }, set: { RecordingToggle.set($0) }))
+  }
+
+  static func actions(selectedSlot: Binding<Int>, openPerfOverlay: @escaping () -> Void) -> PauseMenuActions {
+    PauseMenuActions(
+      resume: {},
+      quickSave: { _ = QuickSlot.save(slot: selectedSlot.wrappedValue) },
+      quickLoad: { QuickSlot.load(slot: selectedSlot.wrappedValue) },
+      screenshot: {
+        switch QuickScreenshot.saveFromPausePreview() {
+        case .saved: EmulationToast.post(L("Screenshot saved to ScreenShots"))
+        case .pausedNoFrame: EmulationToast.post(L("No frame to save yet"))
+        case .failed: EmulationToast.post(L("Screenshot failed"))
+        }
+      },
+      openSaveStates: {}, openCheats: {}, openControllers: {}, openShaders: {}, openContinuity: {}, openSettings: {},
+      openPerfOverlay: openPerfOverlay,
+      requestReset: {}, requestExit: {}, recenterPointer: {})
+  }
+
+  private static func fastForwardState() -> PauseFastForwardState {
+    PauseFastForwardState(
+      isEnabled: TVEmulationBridge.isFastForwardEnabled(),
+      percent: ConfigGeneralState.storedFastForward(UserDefaults.standard.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int))
+  }
+
+  private static func applyFastForward(_ effect: PauseFastForwardState.Effect) {
+    switch effect {
+    case .setSpeed(let percent):
+      TVEmulationBridge.setFastForwardSpeedPercent(percent)
+      if !TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
+    case .turnOff:
+      if TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
+    }
   }
 }
 

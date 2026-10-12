@@ -14,6 +14,7 @@
 #import "TVControllerMappingBridge.h"
 
 // C++ Core host messaging
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include "Core/HW/ProcessorInterface.h"
@@ -26,6 +27,8 @@
 #include "Common/FileUtil.h"
 #include "Common/Version.h"
 #include "Core/Config/MainSettings.h"
+#include "Core/Config/GraphicsSettings.h"
+#include "Common/Config/Config.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/FrameDumper.h"
@@ -332,6 +335,22 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   if (g_framebuffer_manager) {
     g_framebuffer_manager->RecompileShaders();
   }
+}
+
++ (NSInteger)internalResolution {
+  return Config::Get(Config::GFX_EFB_SCALE);
+}
+
++ (void)setInternalResolution:(NSInteger)scale {
+  Config::SetCurrent(Config::GFX_EFB_SCALE, static_cast<int>(std::max<NSInteger>(scale, 0)));
+}
+
++ (NSInteger)audioVolumePercent {
+  return Config::Get(Config::MAIN_AUDIO_VOLUME);
+}
+
++ (void)setAudioVolumePercent:(NSInteger)percent {
+  Config::SetCurrent(Config::MAIN_AUDIO_VOLUME, static_cast<int>(std::clamp<NSInteger>(percent, 0, 100)));
 }
 
 // Fast-forward (configurable speed multiplier)

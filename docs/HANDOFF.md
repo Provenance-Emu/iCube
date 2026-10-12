@@ -128,3 +128,19 @@ These are the next things to restyle, in this style:
 
 - The uppercase-title fix in the pause hero is in the last commit. It compiled for iOS but was not screenshotted on tvOS.
 - `"IR Sensitivity"` is now in Core.strings (8c440ddc1a), so builds no longer leave that diff behind.
+
+## Update: tvOS redesign completion, plans A–D landed UNCOMPILED (2026-10-11/12)
+
+Spec: `docs/superpowers/specs/2026-10-11-tvos-redesign-completion-design.md`. Plans: `docs/superpowers/plans/2026-10-11-tvos-redesign-plan-{a,b,c,d}.md`. Branch `feat/tvos-redesign-a` (worktree `~/Workspace/icube-redesign-a`), fast-forwarded into develop after each plan.
+
+**Owner ruling (velocity mode):** the Mac was saturated by other sessions' builds, so every task was written by a subagent WITHOUT compiling, testing or per-task review, and committed by the controller. Nothing on this branch has been built. The first thing to do next is one tvOS compile pass and one `make test`, then fix what they find in a single batch (expect: labels/argument order on new `MenuScreen` init calls, `tvHeader:` on hand-built leaves, `#if os(tvOS)` placement, Photos/ReplayKit availability on tvOS, `.fontWeight` after `.icubeText`).
+
+What landed, per plan:
+- **A** (settings leaves on the iFly look): `-ICubeSettingsPreview <leafID>` / `-ICubePausePane <pane>` launch args + `Scripts/tvos_screens.sh`; fast-forward tile fixed with `PauseFastForwardState`; floating speedometer button → "Performance HUD" tile; `ICubeLeafHeader`, `IconBadge`, `icubeRowChrome`; `MenuScreen` `tvHeader:`/`tvInset:` + iFly row anatomy; sidebar accent + hairline; About, Web UI, iCloud, Nearby (+Share My Library, grant detail), Shaders and Achievements leaves on `MenuModel` builders with tests.
+- **B** (library): in-body "iCube" title + view/count subtitle, shelf headers on every view, token card type, rail accent selection, animated room by default (`LibraryBackgroundStyle.default`), 90 s hue drift with Reduce Motion respected.
+- **C** (pause): Upscaling/Audio/Performance tiles (live via `TVEmulationBridge.setInternalResolution:`/`setAudioVolumePercent:`), JIT chip, Save States/Cheats/Shaders/confirm panes on tokens, `SettingsRootView(initialLeafID:)` deep link from pause.
+- **D** (quick menu + recording): `QuickMenuView`/`QuickMenuModelBuilder`, `PauseArbiter.Reason.quickMenu`, unbound-Siri-Remote short press and Options-hold triggers, `RecordingManager` (ReplayKit, `<user>/Recordings/`), `RecordingWatermarkView`, Interface → Recording settings; D3 wires them into `EmulationScreen`/pause tiles.
+
+**Not done:** package 0 baseline screenshots (script exists, never run); the shader-preview crash (spec §9, needs the simulator); peer detail / peer library / sync-conflict screens and the Achievements text fields still use stock `List`; `check_design_tokens.py` baseline was refreshed with `--update` after each wave (it only ratchets, it never blocks new literals in new files — audit `GameGridItem.swift`, `CheatsMenuView.swift`, `ShaderQuickPickerView.swift` for leftover literals); no Opus review happened.
+
+**Owner device checks once it compiles:** every settings leaf's focus walk; FF cycle 2x→Unlimited; Performance HUD tile; live resolution/volume tiles; Siri Remote short-press quick menu and Options-hold; a real recording lands in Recordings and shows in the Web UI; the animated room and card tilt.

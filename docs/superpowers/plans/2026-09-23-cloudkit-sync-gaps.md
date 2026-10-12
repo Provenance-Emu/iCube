@@ -1,5 +1,12 @@
 # WS-5 CloudKit sync — gap audit, 2026-09-23
 
+> **Superseded in scope, 2026-10-11.** The category list, the additive-only merge and the
+> "IPL/NAND never sync" decisions below were replaced by
+> `docs/superpowers/specs/2026-10-11-icube-user-data-sync-design.md` (opt-in firmware, channels
+> and NAND; tombstones with a trash; merged documents for play stats and game profiles; room for
+> the content server and a shared iCloud Drive folder as later providers). Everything here about
+> the provisioning checklist and the engine's existing behaviour remains accurate.
+
 Written against this worktree's branch point on `develop`, which already contains
 `b566893b38` (engine core), `7c83861c01` (app wiring), `e362c5dbdd` (app-prefs decision) and
 `8af5c86218` (review follow-ups: "iOS and tvOS both BUILD SUCCEEDED; 46 PVCloudSync tests pass").

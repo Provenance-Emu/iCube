@@ -4,18 +4,29 @@
 import Foundation
 import PVCloudSync
 import PVSyncRules
+#if canImport(CloudKit)
+import CloudKit
+#endif
 
-/// Drives iCloud sync of everything under `User/` except ROMs.
+/// How far the current run has got, for the status row.
+struct SyncProgress: Equatable {
+    var completed: Int
+    var total: Int
+}
+
+/// Drives sync of the user's data under `User/` — never games.
 ///
 /// This is **glue only**. Every rule worth arguing about lives in `PVCloudSync`
 /// and is unit-tested there without a network or a container:
+/// - *what may leave the device* — `PVSyncRules.SyncClassifier`, shared with
+///   Continuity so the two can never disagree; *which of that the user wants
+///   synced right now* — `PVSyncRules.SyncPolicy`
 /// - *when* to sync — `SyncLifecyclePolicy`
-/// - *what* to do about a file — `SyncPlanner` + `TimestampConflictResolver`
+/// - *what to do about a file* — `SyncPlanner` (including the tombstone table
+///   from the design spec) + `TimestampConflictResolver` + `DocumentMergers`
 /// - *whether to retry* — `SyncRetryPolicy`
-/// - *what may leave the device at all* — `PVSyncRules.SyncClassifier`, shared
-///   with WS-4's continuity manifest so the two can never disagree.
-///
-/// Same split as WS-3's `WebServerLifecycleService` / `WebServerLifecyclePolicy`.
+/// - *what this device has synced before* — `SyncIndexStore`
+/// - *where removed files go* — `SyncTrash`; nothing is unlinked outright
 ///
 /// ## It has to work with no container
 ///
@@ -25,34 +36,24 @@ import PVSyncRules
 /// construct, `InertSyncProvider` takes its place, and `unavailableReason` is
 /// shown in Settings. Nothing here crashes, spins, or silently pretends.
 ///
-/// ## App preferences are deliberately NOT synced (WS-5 item 6)
+/// ## App preferences are deliberately NOT mirrored wholesale
 ///
-/// `UserDefaults` / `@AppStorage` is not covered by a file mirror, and
-/// `NSUbiquitousKeyValueStore` is the usual answer. iCube does not adopt it, on
-/// the evidence rather than on taste. Of the 44 distinct `@AppStorage` keys in
-/// the app:
-///
-/// - **~18 are debug or device-capability keys** — the `shader_debug_*` family,
-///   `adaptive_clock_enable`, `icube_vertex_loader_mode`, `shader_precopy_enabled`,
-///   `gfx_overscan_fullscreen`, `motion_debug_*`, `ui_show_dsu_debug_hud`.
-/// - **~18 are peripheral-specific** — the `dsu_*` and `motion_*` families,
-///   `rumble_destination`. These describe *this* device's
-///   controllers and sensors. An Apple TV has no gyro; pushing an iPhone's
-///   motion configuration onto it is a bug, not a feature.
-/// - **8 are genuinely device-independent**, and 7 of those are library view
-///   preferences (`library_sort_field`, `library_grid_column_offset`, …) plus
-///   `resume_where_left_off`.
-///
-/// So KVS would carry real risk for eight keys of cosmetic value, while the
-/// settings people actually care about — everything Dolphin itself persists —
-/// live in `User/Config/*.ini` and `User/GameSettings/*.ini` and are **already
-/// covered by this file mirror**. Adding an empty KVS scaffold to "leave the
-/// door open" would be dead code. If this is revisited, the right shape is an
-/// explicit allow-list of those eight keys, not a blanket KVS mirror.
+/// Of the 44 `@AppStorage` keys, most describe this device's controllers,
+/// sensors or debug state; pushing an iPhone's motion configuration onto an
+/// Apple TV is a bug. The settings people care about live in `User/Config/*.ini`
+/// and `User/GameSettings/*.ini`, already covered by the file mirror, and the
+/// handful of library preferences worth sharing (favorites, last played, play
+/// stats) ride in `Profiles/library_state.json` through `LibraryStateStore`.
 @MainActor
 final class CloudSyncCoordinator: ObservableObject {
 
     static let shared = CloudSyncCoordinator()
+
+    /// Posted after a merged document (`libraryState`, `gameProfile`) was
+    /// rewritten on disk by a sync. `userInfo[fileTypeKey]` is the category's
+    /// raw value. Stores that own those files reload on it.
+    static let documentDidChangeNotification = Notification.Name("CloudSyncDocumentDidChangeNotification")
+    static let fileTypeKey = "fileType"
 
     // MARK: - Observable state
 
@@ -65,58 +66,71 @@ final class CloudSyncCoordinator: ObservableObject {
         }
     }
 
+    /// Which opt-in categories are on and whether large files wait for Wi-Fi.
+    /// Persisted; a change rescans so the new switches take effect at once.
+    @Published var policy: SyncPolicy {
+        didSet {
+            guard oldValue != policy else { return }
+            Self.store(policy)
+            Task { await apply(.trigger(.policyChanged)) }
+        }
+    }
+
     @Published private(set) var isSyncing = false
+    @Published private(set) var progress: SyncProgress?
     @Published private(set) var statistics = SyncStatistics()
     @Published private(set) var pendingConflicts: [SyncConflict] = []
     @Published private(set) var recentEvents: [SyncEvent] = []
     @Published private(set) var lastError: String?
     /// Non-nil when sync cannot run, with the reason to show the user.
     @Published private(set) var unavailableReason: SyncUnavailableReason?
+    /// Files removed by a remote delete, recoverable from Settings.
+    @Published private(set) var trashEntries: [SyncTrashEntry] = []
+    /// Large files held back this run because the network was metered.
+    @Published private(set) var heldForWiFiCount = 0
 
     // MARK: - Private
 
     private enum PreferenceKey {
         static let enabled = "icube.cloudSync.enabled"
-        /// Stable per-install identifier. Preferred over
-        /// `identifierForVendor`, which changes when the last app from a vendor
-        /// is deleted — that would orphan the "which device wrote this" field.
-        static let deviceIdentifier = "icube.cloudSync.deviceIdentifier"
+        static let policy = "icube.cloudSync.policy"
     }
 
-    private var policy: SyncLifecyclePolicy
+    private var lifecycle: SyncLifecyclePolicy
     private let planner = SyncPlanner()
+    private let network: any SyncNetworkObserving
     private var scanner: UserDataScanner?
     private var provider: (any SyncProvider)?
+    private var index: SyncIndexStore?
+    private var trash: SyncTrash?
 
     private var watchers: [DirectoryWatcher] = []
     private var backgroundTimerTask: Task<Void, Never>?
     private var syncTask: Task<Void, Never>?
+    private var accountObserver: NSObjectProtocol?
 
     /// Set when the policy says to bail out of an in-flight run. The run checks
     /// it between files, which is the only way to actually stop a sync that is
     /// already looping — an entry guard only blocks new ones.
     private var abortRequested = false
 
-    /// Last known metadata per path, for the statistics pane. In memory only:
-    /// iCube has no ORM and this is not worth inventing one for.
+    /// Last known metadata per path, for the statistics pane. In memory only;
+    /// the durable record of what was synced is `SyncIndexStore`.
     private var metadataCache: [String: SyncableFileMetadata] = [:]
 
     /// When a sync run last actually completed (successfully or not). `nil`
-    /// until the first run finishes.
-    ///
-    /// `refreshStatistics()` is called from `runSync` right after the local
-    /// scan — before the availability/remote checks — so the settings pane can
-    /// show real per-category counts on a build with no container at all. That
-    /// call must not stamp "now" as the sync date, or the footer would read
-    /// "Last Synced: just now" on the same screen that says "iCloud sync is not
-    /// available in this build yet." Only the trigger that runs a call site
-    /// which reaches the end of `runSync` moves this forward.
+    /// until the first run finishes. `refreshStatistics()` runs right after
+    /// the local scan, before the remote is consulted, so it must not stamp
+    /// "now" — the footer would read "Last Synced: just now" on the same
+    /// screen that says sync is unavailable.
     private var lastSyncCompletionDate: Date?
 
-    private init() {
+    private init(network: any SyncNetworkObserving = SyncNetworkMonitor()) {
         let enabled = UserDefaults.standard.bool(forKey: PreferenceKey.enabled)
         self.isEnabled = enabled
-        self.policy = SyncLifecyclePolicy(isEnabled: enabled)
+        self.policy = Self.loadPolicy()
+        self.lifecycle = SyncLifecyclePolicy(isEnabled: enabled)
+        self.network = network
     }
 
     // MARK: - Events in
@@ -142,7 +156,13 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     private func apply(_ event: SyncLifecycleEvent) async {
-        let action = policy.handle(event)
+        // Timer ticks stand down in Low Power Mode; the user's own actions and
+        // the foreground and game-end triggers still run.
+        if case .trigger(.periodicTimer) = event, network.isLowPowerModeEnabled {
+            return
+        }
+
+        let action = lifecycle.handle(event)
         switch action {
         case .none, .deferUntilIdle:
             break
@@ -168,6 +188,7 @@ final class CloudSyncCoordinator: ObservableObject {
 
     private func finishSync() async {
         isSyncing = false
+        progress = nil
         syncTask = nil
         await apply(.syncFinished)
     }
@@ -180,19 +201,26 @@ final class CloudSyncCoordinator: ObservableObject {
             return
         }
         scanner = UserDataScanner(rootDirectory: root)
-        provider = Self.makeProvider(deviceIdentifier: deviceIdentifier())
+        let provider = Self.makeProvider(deviceIdentifier: SyncDeviceIdentity.deviceIdentifier())
+        self.provider = provider
 
-        if let provider {
-            do {
-                try await provider.initialize()
-                unavailableReason = nil
-            } catch {
-                unavailableReason = await provider.unavailableReason()
-                    ?? .unknown(error.localizedDescription)
-            }
+        let support = Self.supportDirectory()
+        index = SyncIndexStore(fileURL: support
+            .appendingPathComponent(provider.kind.rawValue, isDirectory: true)
+            .appendingPathComponent("index.json"))
+        trash = SyncTrash(rootURL: support.appendingPathComponent("Trash", isDirectory: true))
+
+        do {
+            try await provider.initialize()
+            unavailableReason = nil
+        } catch {
+            unavailableReason = await provider.unavailableReason()
+                ?? .unknown(error.localizedDescription)
         }
         await installWatchers(root: root)
+        installAccountObserver()
         startBackgroundTimer()
+        await refreshTrash()
     }
 
     /// The real provider when this build can use CloudKit, otherwise an inert
@@ -208,21 +236,25 @@ final class CloudSyncCoordinator: ObservableObject {
         return InertSyncProvider(reason: .entitlementMissing)
     }
 
-    private func deviceIdentifier() -> String {
-        if let existing = UserDefaults.standard.string(forKey: PreferenceKey.deviceIdentifier) {
-            return existing
-        }
-        let fresh = UUID().uuidString
-        UserDefaults.standard.set(fresh, forKey: PreferenceKey.deviceIdentifier)
-        return fresh
+    /// Where the index and the trash live. Not under `User/`, so neither is
+    /// visible in Files nor ever a candidate for the classifier. tvOS can only
+    /// write Caches; a purge there costs one additive run, not correctness.
+    private static func supportDirectory() -> URL {
+        #if os(tvOS)
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        #else
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #endif
+        return base.appendingPathComponent("iCubeSync", isDirectory: true)
     }
 
     /// One watcher per directory: `DISPATCH_SOURCE_TYPE_VNODE` has no recursive
     /// mode, so a watcher on `User/` alone would never see a save state land in
-    /// `User/StateSaves/`.
+    /// `User/StateSaves/`. The NAND's deep `title/` tree is not watched; it
+    /// changes only while a game runs, and the game-end flush covers that.
     private func installWatchers(root: URL) async {
         await tearDownWatchers()
-        let watched = ["StateSaves", "GC", "Wii", "Config", "GameSettings"]
+        let watched = ["StateSaves", "GC", "Wii", "GBA", "Config", "GameSettings", "Profiles", "Skins"]
         for directory in watched {
             let watcher = DirectoryWatcher(url: root.appendingPathComponent(directory, isDirectory: true))
             await watcher.setOnChange { [weak self] in
@@ -243,6 +275,25 @@ final class CloudSyncCoordinator: ObservableObject {
         watchers.removeAll()
     }
 
+    /// A sign-out or account switch must never let one account's index speak
+    /// for another's. The identity check in `runSync` is the backstop; this
+    /// makes the switch take effect without waiting for the next trigger.
+    private func installAccountObserver() {
+        #if canImport(CloudKit)
+        guard accountObserver == nil else { return }
+        accountObserver = NotificationCenter.default.addObserver(
+            forName: .CKAccountChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                await self.index?.reset()
+                self.addEvent(.info, message: "iCloud account changed; starting fresh")
+                await self.handle(.trigger(.accountChanged))
+            }
+        }
+        #endif
+    }
+
     private func startBackgroundTimer() {
         backgroundTimerTask?.cancel()
         backgroundTimerTask = Task { [weak self] in
@@ -259,36 +310,41 @@ final class CloudSyncCoordinator: ObservableObject {
         syncTask = nil
         backgroundTimerTask?.cancel()
         backgroundTimerTask = nil
+        if let accountObserver {
+            NotificationCenter.default.removeObserver(accountObserver)
+            self.accountObserver = nil
+        }
         await tearDownWatchers()
         await scanner?.resetCache()
         scanner = nil
         provider = nil
+        index = nil
+        // The trash is deliberately kept: turning sync off must not throw away
+        // the user's recoverable files.
         isSyncing = false
+        progress = nil
         abortRequested = false
         metadataCache.removeAll()
         pendingConflicts.removeAll()
         statistics = SyncStatistics()
         lastSyncCompletionDate = nil
         lastError = nil
+        heldForWiFiCount = 0
     }
 
     // MARK: - The sync run
 
     private func runSync(trigger: SyncTrigger) async {
-        guard let scanner, let provider else { return }
+        guard let scanner, let provider, let index, let trash else { return }
 
-        // A fresh trigger gets a fresh chance to report cleanly. Without this,
-        // one transient fetch failure leaves red error text in the status
-        // footer for the rest of the session, even after a later run succeeds
-        // without incident — nothing else on the success path clears it.
+        // A fresh trigger gets a fresh chance to report cleanly.
         lastError = nil
+        heldForWiFiCount = 0
 
         // Scan first, and unconditionally. The local inventory is the half that
         // does not need a cloud, so the settings pane can show what *would*
-        // sync — and the classifier can be seen doing its job — on a build with
-        // no container at all. It also means the counts are real before the
-        // first successful round trip rather than after it.
-        let local = await scanner.scanLocalFiles()
+        // sync on a build with no container at all.
+        let local = await scanner.scanLocalFiles(policy: policy)
         rebuildMetadataCache(from: local)
         refreshStatistics()
 
@@ -299,9 +355,9 @@ final class CloudSyncCoordinator: ObservableObject {
         }
         unavailableReason = nil
 
-        let remote: [SyncableFileMetadata]
+        let remote: RemoteSyncSnapshot
         do {
-            remote = try await provider.fetchRemoteMetadata()
+            remote = try await provider.fetchRemoteSnapshot()
         } catch {
             // Never treat a failed remote fetch as "the cloud is empty" — that
             // reads as "every local file is new" and re-uploads the library.
@@ -309,21 +365,88 @@ final class CloudSyncCoordinator: ObservableObject {
             return
         }
 
-        for step in planner.plan(local: local, remote: remote) {
+        // Bind the index to the account before it is consulted.
+        if await index.bind(toAccountIdentity: provider.accountIdentity()) {
+            addEvent(.info, message: "Different iCloud account than last time; starting fresh")
+        }
+
+        let now = Date()
+        // Housekeeping first, both best-effort.
+        let purged = await trash.purge(olderThan: now.addingTimeInterval(-CloudSyncConstants.trashRetention))
+        if purged > 0 { addEvent(.info, message: "Emptied \(purged) file(s) from Recently Deleted after 30 days") }
+        try? await provider.purgeExpiredTombstones(olderThan: now.addingTimeInterval(-CloudSyncConstants.tombstoneRetention))
+
+        let steps = planner.plan(
+            local: local,
+            remote: remote,
+            index: await index.snapshot(),
+            policy: policy,
+            now: now,
+            deviceIdentifier: SyncDeviceIdentity.deviceIdentifier()
+        )
+        progress = SyncProgress(completed: 0, total: steps.count)
+
+        let metered = network.isConstrainedOrExpensive
+        var downloaded = 0
+
+        for step in steps {
             // The only way to actually stop a run that is already going.
-            if abortRequested || Task.isCancelled { return }
+            if abortRequested || Task.isCancelled { break }
+            defer { progress?.completed += 1 }
+
+            // Large categories wait for Wi-Fi when the user asked them to.
+            if metered, let type = step.transferredFileType, policy.requiresUnconstrainedNetwork(for: type) {
+                heldForWiFiCount += 1
+                continue
+            }
 
             switch step {
             case .markSynced(var metadata):
                 metadata.syncStatus = .synced
-                metadata.lastSyncDate = Date()
+                metadata.lastSyncDate = now
                 metadataCache[metadata.relativePath] = metadata
+                await index.record(path: metadata.relativePath, checksum: metadata.checksum, lastModified: metadata.lastModified, syncedAt: now)
 
             case .upload(let metadata, let reason):
-                await upload(metadata, reason: reason, scanner: scanner, provider: provider)
+                await upload(metadata, reason: reason, scanner: scanner, provider: provider, index: index)
 
             case .download(let metadata):
-                await download(metadata, scanner: scanner, provider: provider)
+                if await download(metadata, scanner: scanner, provider: provider, index: index) { downloaded += 1 }
+
+            case .restore(let metadata):
+                if await download(metadata, scanner: scanner, provider: provider, index: index) {
+                    downloaded += 1
+                    addEvent(.info, file: metadata.relativePath,
+                             message: "Brought back: it was deleted here but changed on another device")
+                }
+
+            case .merge(let localMeta, let remoteMeta):
+                await merge(local: localMeta, remote: remoteMeta, scanner: scanner, provider: provider, index: index)
+
+            case .writeTombstone(let tombstone):
+                do {
+                    try await provider.writeTombstone(tombstone)
+                    await index.markDeleted(path: tombstone.relativePath, at: now)
+                    addEvent(.info, file: tombstone.relativePath, message: "Deleted on your other devices too")
+                } catch {
+                    addEvent(.error, file: tombstone.relativePath,
+                             message: "Could not propagate delete: \(error.localizedDescription)")
+                }
+
+            case .trashLocal(let metadata, let tombstone):
+                do {
+                    _ = try await scanner.moveToTrash(relativePath: metadata.relativePath, trash: trash, now: now)
+                    await index.markDeleted(path: metadata.relativePath, at: tombstone.deletedAt)
+                    metadataCache.removeValue(forKey: metadata.relativePath)
+                    addEvent(.info, file: metadata.relativePath,
+                             message: "Removed because it was deleted on another device. Recoverable in Recently Deleted for 30 days")
+                } catch {
+                    addEvent(.error, file: metadata.relativePath,
+                             message: "Could not remove: \(error.localizedDescription)")
+                }
+
+            case .markDeleted(let relativePath):
+                await index.markDeleted(path: relativePath, at: now)
 
             case .conflict(let conflict):
                 if !pendingConflicts.contains(where: { $0.metadata.relativePath == conflict.metadata.relativePath }) {
@@ -331,22 +454,43 @@ final class CloudSyncCoordinator: ObservableObject {
                     var metadata = conflict.metadata
                     metadata.syncStatus = .conflict
                     metadataCache[metadata.relativePath] = metadata
-                    addEvent(.conflict, file: conflict.metadata.relativePath,
-                             message: "Changed on two devices at once")
+                    addEvent(.conflict, file: conflict.metadata.relativePath, message: Self.message(for: conflict.kind))
                 }
             }
         }
 
+        do {
+            try await index.save()
+        } catch {
+            addEvent(.error, message: "Could not save the sync index: \(error.localizedDescription)")
+        }
+
+        if heldForWiFiCount > 0 {
+            addEvent(.info, message: "Waiting for Wi-Fi to move \(heldForWiFiCount) large file(s)")
+        }
+        if trigger == .enabled, downloaded > 0 {
+            addEvent(.info, message: "Downloaded \(downloaded) file(s) from iCloud")
+        }
+
         lastSyncCompletionDate = Date()
         refreshStatistics()
+        await refreshTrash()
         addEvent(.success, message: "Sync completed (\(trigger.rawValue))")
+    }
+
+    private static func message(for kind: SyncConflict.Kind) -> String {
+        switch kind {
+        case .bothChanged: return "Changed on two devices at once"
+        case .deletedRemotelyChangedLocally: return "Deleted on another device, but changed here"
+        }
     }
 
     private func upload(
         _ metadata: SyncableFileMetadata,
         reason: SyncPlanStep.UploadReason,
         scanner: UserDataScanner,
-        provider: any SyncProvider
+        provider: any SyncProvider,
+        index: SyncIndexStore
     ) async {
         var working = metadata
         working.syncStatus = .uploading
@@ -358,6 +502,7 @@ final class CloudSyncCoordinator: ObservableObject {
             working.lastSyncDate = Date()
             working.lastError = nil
             metadataCache[working.relativePath] = working
+            await index.record(path: metadata.relativePath, checksum: metadata.checksum, lastModified: metadata.lastModified)
             addEvent(.upload, file: metadata.relativePath, message: "Uploaded (\(reason.rawValue))")
         } catch {
             working.syncStatus = .error
@@ -369,16 +514,19 @@ final class CloudSyncCoordinator: ObservableObject {
         }
     }
 
+    /// Returns true when the file was written.
+    @discardableResult
     private func download(
         _ metadata: SyncableFileMetadata,
         scanner: UserDataScanner,
-        provider: any SyncProvider
-    ) async {
+        provider: any SyncProvider,
+        index: SyncIndexStore
+    ) async -> Bool {
         // Belt and braces on top of the planner: never overwrite a local file
         // that is newer than the remote copy, whatever routed us here.
         if let localModified = await scanner.modificationDate(relativePath: metadata.relativePath),
            localModified > metadata.lastModified.addingTimeInterval(CloudSyncConstants.modificationTimeTolerance) {
-            return
+            return false
         }
 
         var working = metadata
@@ -397,7 +545,10 @@ final class CloudSyncCoordinator: ObservableObject {
             working.lastSyncDate = Date()
             working.lastError = nil
             metadataCache[working.relativePath] = working
+            await index.record(path: metadata.relativePath, checksum: metadata.checksum, lastModified: metadata.lastModified)
             addEvent(.download, file: metadata.relativePath, message: "Downloaded from iCloud")
+            notifyIfDocument(metadata.fileType)
+            return true
         } catch {
             working.syncStatus = .error
             working.lastError = error.localizedDescription
@@ -405,24 +556,119 @@ final class CloudSyncCoordinator: ObservableObject {
             metadataCache[working.relativePath] = working
             addEvent(.error, file: metadata.relativePath,
                      message: "Download failed: \(error.localizedDescription)")
+            return false
         }
+    }
+
+    /// Field-level merge for `library_state.json` and `game_profiles.json`.
+    /// Neither side is discarded and no conflict is raised. If either copy is
+    /// unreadable the merge cannot run, and the newer copy wins instead — a
+    /// corrupt file must not block sync forever.
+    private func merge(
+        local: SyncableFileMetadata,
+        remote: SyncableFileMetadata,
+        scanner: UserDataScanner,
+        provider: any SyncProvider,
+        index: SyncIndexStore
+    ) async {
+        guard let merger = DocumentMergers.merger(for: local.fileType) else {
+            // Should not happen: the planner only emits .merge for document kinds.
+            if local.lastModified >= remote.lastModified {
+                await upload(local, reason: .contentChanged, scanner: scanner, provider: provider, index: index)
+            } else {
+                await download(remote, scanner: scanner, provider: provider, index: index)
+            }
+            return
+        }
+
+        let path = local.relativePath
+        do {
+            let localData = try await scanner.readFile(relativePath: path)
+            let remoteData = try await provider.download(metadata: remote)
+            let merged: Data
+            do {
+                merged = try merger.merge(local: localData, remote: remoteData)
+            } catch {
+                addEvent(.error, file: path, message: "Could not merge; keeping the newer copy (\(error.localizedDescription))")
+                if local.lastModified >= remote.lastModified {
+                    await upload(local, reason: .contentChanged, scanner: scanner, provider: provider, index: index)
+                } else {
+                    await download(remote, scanner: scanner, provider: provider, index: index)
+                }
+                return
+            }
+
+            let now = Date()
+            var result = local
+            result.checksum = SyncChecksum.sha256Hex(merged)
+            result.fileSize = Int64(merged.count)
+            result.lastModified = now
+            result.syncStatus = .synced
+            result.lastSyncDate = now
+            result.lastError = nil
+
+            let localChanged = merged != localData
+            if localChanged {
+                try await scanner.writeFile(relativePath: path, data: merged, modificationDate: now)
+            }
+            if merged != remoteData {
+                try await provider.upload(metadata: result, data: merged)
+            }
+            metadataCache[path] = result
+            await index.record(path: path, checksum: result.checksum, lastModified: now, syncedAt: now)
+            addEvent(.info, file: path, message: localChanged ? "Merged changes from another device" : "Merged this device's changes into iCloud")
+            if localChanged { notifyIfDocument(local.fileType) }
+        } catch {
+            var working = local
+            working.syncStatus = .error
+            working.lastError = error.localizedDescription
+            working.syncAttempts += 1
+            metadataCache[path] = working
+            addEvent(.error, file: path, message: "Merge failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func notifyIfDocument(_ type: SyncableFileType) {
+        guard type.mergeKind == .document else { return }
+        NotificationCenter.default.post(
+            name: Self.documentDidChangeNotification,
+            object: self,
+            userInfo: [Self.fileTypeKey: type.rawValue]
+        )
     }
 
     // MARK: - Conflicts
 
     func resolve(_ conflict: SyncConflict, as resolution: ConflictResolution) async {
-        guard let scanner, let provider else { return }
-        switch resolution {
-        case .useLocal:
-            await upload(conflict.metadata, reason: .conflictKeepLocal, scanner: scanner, provider: provider)
-        case .useRemote:
-            await download(conflict.metadata, scanner: scanner, provider: provider)
-        case .keepBoth:
-            await keepBoth(conflict, scanner: scanner, provider: provider)
-        case .manual:
+        guard let scanner, let provider, let index, let trash else { return }
+        switch (conflict.kind, resolution) {
+        case (.bothChanged, .useLocal):
+            await upload(conflict.metadata, reason: .conflictKeepLocal, scanner: scanner, provider: provider, index: index)
+        case (.bothChanged, .useRemote):
+            await download(conflict.metadata, scanner: scanner, provider: provider, index: index)
+        case (.bothChanged, .keepBoth):
+            await keepBoth(conflict, scanner: scanner, provider: provider, index: index)
+
+        // A delete conflict has no second copy to keep: "keep both" and "keep
+        // this device's" both mean the file lives on, which undeletes it.
+        case (.deletedRemotelyChangedLocally, .useLocal), (.deletedRemotelyChangedLocally, .keepBoth):
+            await upload(conflict.metadata, reason: .undelete, scanner: scanner, provider: provider, index: index)
+        case (.deletedRemotelyChangedLocally, .useRemote):
+            do {
+                _ = try await scanner.moveToTrash(relativePath: conflict.metadata.relativePath, trash: trash)
+                await index.markDeleted(path: conflict.metadata.relativePath)
+                metadataCache.removeValue(forKey: conflict.metadata.relativePath)
+                addEvent(.info, file: conflict.metadata.relativePath, message: "Removed. Recoverable in Recently Deleted for 30 days")
+                await refreshTrash()
+            } catch {
+                addEvent(.error, file: conflict.metadata.relativePath, message: "Could not remove: \(error.localizedDescription)")
+            }
+
+        case (_, .manual):
             return
         }
         pendingConflicts.removeAll { $0.id == conflict.id }
+        try? await index.save()
         refreshStatistics()
     }
 
@@ -432,7 +678,8 @@ final class CloudSyncCoordinator: ObservableObject {
     private func keepBoth(
         _ conflict: SyncConflict,
         scanner: UserDataScanner,
-        provider: any SyncProvider
+        provider: any SyncProvider,
+        index: SyncIndexStore
     ) async {
         let relativePath = conflict.metadata.relativePath
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
@@ -448,7 +695,7 @@ final class CloudSyncCoordinator: ObservableObject {
         do {
             let localData = try await scanner.readFile(relativePath: relativePath)
             try await scanner.writeFile(relativePath: copyPath, data: localData, modificationDate: nil)
-            await download(conflict.metadata, scanner: scanner, provider: provider)
+            await download(conflict.metadata, scanner: scanner, provider: provider, index: index)
             addEvent(.info, file: relativePath, message: "Kept both (this device's copy saved as \(copyName))")
         } catch {
             addEvent(.error, file: relativePath, message: "Could not keep both: \(error.localizedDescription)")
@@ -461,13 +708,48 @@ final class CloudSyncCoordinator: ObservableObject {
         }
     }
 
+    // MARK: - Recently Deleted
+
+    func refreshTrash() async {
+        guard let trash else { return }
+        trashEntries = await trash.entries()
+    }
+
+    /// Put a trashed file back. It is stamped now, so the next run reads it as
+    /// an undelete and uploads it, replacing the tombstone everywhere.
+    func restoreFromTrash(_ entry: SyncTrashEntry) async {
+        guard let trash, let root = scanner?.rootDirectory else { return }
+        do {
+            try await trash.restore(entry, into: root)
+            await index?.remove(path: entry.relativePath)
+            try? await index?.save()
+            addEvent(.info, file: entry.relativePath, message: "Restored from Recently Deleted")
+            await refreshTrash()
+            await apply(.trigger(.fileChanged))
+        } catch {
+            addEvent(.error, file: entry.relativePath, message: "Could not restore: \(error.localizedDescription)")
+        }
+    }
+
+    func deleteFromTrash(_ entry: SyncTrashEntry) async {
+        guard let trash else { return }
+        do {
+            try await trash.delete(entry)
+            await refreshTrash()
+        } catch {
+            addEvent(.error, file: entry.relativePath, message: "Could not delete: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Maintenance
 
-    /// Delete every record in iCloud. Local files are never touched.
+    /// Delete every record in iCloud. Local files are never touched. The index
+    /// is reset too: with nothing remote, there is nothing to have synced.
     func clearCloudData() async {
         guard let provider else { return }
         do {
             try await provider.purgeAllData()
+            await index?.reset()
             metadataCache.removeAll()
             pendingConflicts.removeAll()
             refreshStatistics()
@@ -485,21 +767,30 @@ final class CloudSyncCoordinator: ObservableObject {
         unavailableReason = await provider?.unavailableReason()
     }
 
+    // MARK: - Policy persistence
+
+    private static func loadPolicy() -> SyncPolicy {
+        guard let data = UserDefaults.standard.data(forKey: PreferenceKey.policy),
+              let policy = try? JSONDecoder().decode(SyncPolicy.self, from: data) else {
+            return .default
+        }
+        return policy
+    }
+
+    private static func store(_ policy: SyncPolicy) {
+        if let data = try? JSONEncoder().encode(policy) {
+            UserDefaults.standard.set(data, forKey: PreferenceKey.policy)
+        }
+    }
+
     // MARK: - Bookkeeping
 
     /// Rebuild the cache from what is actually on disk, carrying forward what we
     /// already know about files whose bytes have not changed.
-    ///
-    /// Rebuilt rather than mutated in place because a cache that is only ever
-    /// added to drifts: delete a save state and its entry — and its bytes —
-    /// stay in the totals for the rest of the session, so the per-category
-    /// counts climb and never come back down.
     private func rebuildMetadataCache(from local: [SyncableFileMetadata]) {
         var rebuilt: [String: SyncableFileMetadata] = [:]
         for file in local {
             var entry = file
-            // Same bytes as last pass: keep the sync state we learned, so a
-            // synced file does not flip back to "local" on every scan.
             if let previous = metadataCache[file.relativePath],
                previous.checksum == file.checksum {
                 entry.syncStatus = previous.syncStatus
@@ -538,6 +829,20 @@ final class CloudSyncCoordinator: ObservableObject {
         recentEvents.insert(SyncEvent(kind: kind, file: file, message: message), at: 0)
         if recentEvents.count > 100 {
             recentEvents = Array(recentEvents.prefix(100))
+        }
+    }
+}
+
+private extension SyncPlanStep {
+    /// The category whose bytes this step would move, for the Wi-Fi rule.
+    var transferredFileType: SyncableFileType? {
+        switch self {
+        case .upload(let metadata, _), .download(let metadata), .restore(let metadata):
+            return metadata.fileType
+        case .merge(let local, _):
+            return local.fileType
+        case .markSynced, .conflict, .writeTombstone, .trashLocal, .markDeleted:
+            return nil
         }
     }
 }

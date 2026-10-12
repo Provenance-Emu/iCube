@@ -100,6 +100,15 @@ NS_ASSUME_NONNULL_BEGIN
 // fast-forward; call -toggleFastForward for that when -isFastForwardEnabled is NO.
 + (void)setFastForwardSpeedPercent:(NSInteger)percent;
 
+// Pause-menu quick settings. Both read/write Dolphin's current-run config layer, so they apply live
+// (EFB scale on the next frame) and are not persisted by themselves.
+// Internal resolution: Config::GFX_EFB_SCALE (0 = auto, 1 = native, 2 = 2x, ...).
++ (NSInteger)internalResolution;
++ (void)setInternalResolution:(NSInteger)scale;
+// Audio volume as a 0...100 percentage: Config::MAIN_AUDIO_VOLUME.
++ (NSInteger)audioVolumePercent;
++ (void)setAudioVolumePercent:(NSInteger)percent;
+
 // System Detection
 + (BOOL)isCurrentSystemWii;
 + (float)currentDrawAspectRatio;

@@ -63,6 +63,37 @@ final class PauseGestureTracker {
   /// extended gamepads), keyed by route. See `menuButtonChanged`.
   private var menuPressStart: [String: TimeInterval] = [:]
 
+  /// Reason string of the Siri Remote's micro-gamepad Menu route (`installPauseMenuHandlers`).
+  static let siriRemoteMenuReason = "microGamepad.buttonMenu"
+  /// Reason string of an extended gamepad's Options route.
+  static let optionsReason = "extendedGamepad.buttonOptions"
+
+  /// Seconds Options must be held before release opens the quick menu (spec §7.2).
+  static let quickMenuHoldDuration: TimeInterval = 0.5
+
+  /// Posted to ask `EmulationScreen` to present the quick menu.
+  static let showQuickMenuNotification = Notification.Name("DOLShowQuickMenu")
+
+  /// Press-down time of the current Options press, nil while it is up.
+  private var optionsPressStart: TimeInterval?
+
+  /// A short Siri Remote Menu press opens the quick menu only when the remote drives no player slot.
+  static func routesToQuickMenu(reason: String, isUnboundRemote: Bool) -> Bool {
+    reason == siriRemoteMenuReason && isUnboundRemote
+  }
+
+  /// An Options hold opens the quick menu from `quickMenuHoldDuration` up to the exit-to-library hold,
+  /// which keeps its own meaning.
+  static func optionsHoldFired(start: TimeInterval, now: TimeInterval) -> Bool {
+    let held = now - start
+    return held >= quickMenuHoldDuration && held < DOLMenuLongPressDuration
+  }
+
+  /// True when a Siri Remote (micro gamepad without an extended profile) exists and holds no player slot.
+  private static var siriRemoteIsUnbound: Bool {
+    GCController.controllers().first { $0.microGamepad != nil && $0.extendedGamepad == nil }?.playerIndex == .indexUnset
+  }
+
   /// State of the most recent `extendedGamepad.buttonMenu` transition, noted
   /// by `ControllerExtensions.installPauseMenuHandlers` on every press AND
   /// release. An extended gamepad's Menu button (Xbox "≡", the PlayStation
@@ -134,7 +165,44 @@ final class PauseGestureTracker {
     }
     guard let start = menuPressStart.removeValue(forKey: reason) else { return }
     guard now - start < DOLMenuLongPressDuration else { return }
+    // An Options hold belongs to the quick menu (`optionsButtonChanged`), not the pause menu.
+    if reason == Self.optionsReason, Self.optionsHoldFired(start: start, now: now) { return }
+    if Self.routesToQuickMenu(reason: reason, isUnboundRemote: Self.siriRemoteIsUnbound) {
+      requestQuickMenu(reason: reason)
+      return
+    }
     requestPauseMenu(reason: reason)
+  }
+
+  /// Call on every `buttonOptions` press/release. Releasing after a hold of at least
+  /// `quickMenuHoldDuration` (and before the exit hold) opens the quick menu; a shorter press is left to
+  /// `menuButtonChanged`.
+  func optionsButtonChanged(pressed: Bool) {
+    let now = Date().timeIntervalSinceReferenceDate
+    guard !pressed else {
+      optionsPressStart = now
+      return
+    }
+    guard let start = optionsPressStart else { return }
+    optionsPressStart = nil
+    guard Self.optionsHoldFired(start: start, now: now) else { return }
+    requestQuickMenu(reason: "options-hold")
+  }
+
+  /// The single sink for "the user asked for the quick menu". Same guards as `requestPauseMenu`: emulation
+  /// running, outside the controller-connect grace window, coalesced. The panel claims the pause itself.
+  func requestQuickMenu(reason: String = "") {
+    guard TVEmulationBridge.isRunning() else { return }
+    let now = Date().timeIntervalSinceReferenceDate
+    guard now - lastControllerConnect >= Self.connectGraceWindow else { return }
+    guard now - lastPauseRequest > Self.pauseRequestCoalesceWindow else { return }
+    lastPauseRequest = now
+    DispatchQueue.main.async {
+      if UserDefaults.standard.bool(forKey: "input_debug") {
+        NSLog("[INPUT] presenting quick menu (%@)", reason)
+      }
+      NotificationCenter.default.post(name: Self.showQuickMenuNotification, object: nil)
+    }
   }
 
   /// The single sink for "the user asked for the pause menu".

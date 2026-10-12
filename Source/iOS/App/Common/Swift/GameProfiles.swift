@@ -22,6 +22,11 @@ struct GameProfile: Codable {
   /// already the per-game keyed-by-GameID record, and a second parallel store
   /// would be one more thing to keep in sync with profile deletion.
   var excludedFromNearbySharing: Bool?
+  /// When this profile was last saved. Optional so every `game_profiles.json`
+  /// written before it existed still decodes. iCloud sync merges this file per
+  /// game and keeps the entry with the newer stamp; an unstamped entry counts
+  /// as oldest. Set by `GameProfiles` on every write — never by hand.
+  var updatedAt: Date?
 }
 
 final class GameProfiles {
@@ -70,8 +75,16 @@ final class GameProfiles {
   }
 
   func setProfile(_ profile: GameProfile, for gameID: String) {
-    profiles[gameID] = profile
+    var stamped = profile
+    stamped.updatedAt = Date()
+    profiles[gameID] = stamped
     save()
+  }
+
+  /// iCloud sync merged `game_profiles.json` and wrote the result: pick it up.
+  func reloadAfterSync() {
+    profiles.removeAll()
+    load()
   }
 
   // MARK: - Nearby Sharing exclusion
@@ -97,6 +110,7 @@ final class GameProfiles {
     guard !gameID.isEmpty else { return }
     var profile = profiles[gameID] ?? GameProfile()
     profile.excludedFromNearbySharing = excluded ? true : nil
+    profile.updatedAt = Date()
     profiles[gameID] = profile
     save()
   }

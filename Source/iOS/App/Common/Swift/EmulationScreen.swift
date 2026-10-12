@@ -250,8 +250,13 @@ struct EmulationScreen: View {
 
   // Pause menu state
   @State private var showPauseMenu = false
+  /// The quick menu (spec §7): an overlay over the running game, never a cover.
+  @State private var showQuickMenu = false
+  @ObservedObject private var recorder = RecordingManager.shared
   @State private var selectedSlot = 1
   @State private var showSettings = false
+  /// Leaf to open when Settings is presented from a pause tile's long-press; nil opens the root.
+  @State private var settingsLeafID: String?
   @AppStorage("ui_show_dsu_debug_hud") private var showDSUDebugHUD: Bool = {
     #if DEBUG
     return true
@@ -261,6 +266,7 @@ struct EmulationScreen: View {
   }()
 
   @State private var obsShowPause: NSObjectProtocol?
+  @State private var obsShowQuickMenu: NSObjectProtocol?
 
   // iOS top overlay
   #if os(iOS)
@@ -403,6 +409,35 @@ struct EmulationScreen: View {
   }
   #endif
 
+  // MARK: - Quick menu and recording overlays
+
+  /// Recording badge (drawn in the game container so ReplayKit captures it) and the quick menu panel.
+  /// The quick menu is an overlay, never a cover, so the game stays visible behind its scrim.
+  @ViewBuilder
+  private var quickMenuAndRecordingOverlay: some View {
+    if recorder.isRecording {
+      RecordingWatermarkView(showsWatermark: recorder.watermarkEnabled)
+        .zIndex(2)
+    }
+    if showQuickMenu && !showPauseMenu {
+      QuickMenuView(
+        isPresented: $showQuickMenu,
+        bindings: QuickMenuHost.bindings(selectedSlot: $selectedSlot),
+        actions: QuickMenuHost.actions(selectedSlot: $selectedSlot, openPerfOverlay: {
+          showQuickMenu = false
+          refreshPerfOverlayState()
+          showPerfOverlay = true
+        }),
+        onOpenPauseMenu: {
+          // The quick menu has already released its claim; take the pending pause claim synchronously
+          // so the core stays paused until the pause menu adopts it.
+          PauseGestureTracker.shared.requestPauseMenu(reason: "quick-menu")
+        })
+        .zIndex(4)
+        .transition(.opacity)
+    }
+  }
+
   var body: some View {
     #if os(tvOS)
     ZStack {
@@ -422,6 +457,8 @@ struct EmulationScreen: View {
         })
         .zIndex(3)
       }
+
+      quickMenuAndRecordingOverlay
 
       // Banner shown while a disconnect-induced pause is active (reconnect resumes).
       // No "Use Touch Controls" action on tvOS — there is no touchscreen overlay.
@@ -523,8 +560,8 @@ struct EmulationScreen: View {
         .zIndex(5)
       }
     }
-    .fullScreenCover(isPresented: $showSettings) {
-      SettingsRootView()
+    .fullScreenCover(isPresented: $showSettings, onDismiss: { settingsLeafID = nil }) {
+      SettingsRootView(initialLeafID: settingsLeafID)
         .pauseClaim("settings")
         .interactiveDismissDisabled(true)
     }
@@ -533,6 +570,7 @@ struct EmulationScreen: View {
         selectedSlot: $selectedSlot,
         onClose: { showPauseMenu = false },
         onShowSettings: { showSettings = true },
+        onShowSettingsLeaf: { id in settingsLeafID = id; showSettings = true },
         onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
         platform: .tvos,
         game: game
@@ -552,6 +590,9 @@ struct EmulationScreen: View {
       // Handle pause menu events
       obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
         showPauseMenu = true
+      }
+      obsShowQuickMenu = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowQuickMenu"), object: nil, queue: .main) { _ in
+        if !showPauseMenu { showQuickMenu = true }
       }
 
       if initialCount == 0 {
@@ -655,6 +696,9 @@ struct EmulationScreen: View {
       }
       if let token = obsShowPause { NotificationCenter.default.removeObserver(token)
         obsShowPause = nil
+      }
+      if let token = obsShowQuickMenu { NotificationCenter.default.removeObserver(token)
+        obsShowQuickMenu = nil
       }
       #if os(tvOS)
       if let token = exitObserver { NotificationCenter.default.removeObserver(token)
@@ -772,6 +816,8 @@ struct EmulationScreen: View {
         })
         .zIndex(3)
       }
+
+      quickMenuAndRecordingOverlay
 
       // Banner shown while a disconnect-induced pause is active (reconnect resumes).
       if controllerManager.disconnectPause != nil {
@@ -1036,12 +1082,13 @@ struct EmulationScreen: View {
       guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
       TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
     }
-    .modifier(SettingsNavigationFallback(showSettings: $showSettings))
+    .modifier(SettingsNavigationFallback(showSettings: $showSettings, leafID: $settingsLeafID))
     .fullScreenCover(isPresented: $showPauseMenu) {
       PauseMenuView(
         selectedSlot: $selectedSlot,
         onClose: { showPauseMenu = false },
         onShowSettings: { showSettings = true },
+        onShowSettingsLeaf: { id in settingsLeafID = id; showSettings = true },
         onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
         platform: .ios,
         game: game
@@ -1162,6 +1209,9 @@ struct EmulationScreen: View {
       obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
         showPauseMenu = true
       }
+      obsShowQuickMenu = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowQuickMenu"), object: nil, queue: .main) { _ in
+        if !showPauseMenu { showQuickMenu = true }
+      }
       // Re-fetch AR soon after appear to avoid tiny first layout
       scheduleARPoll()
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { TVEmulationBridge.resizeSurfaceNow() }
@@ -1234,6 +1284,9 @@ struct EmulationScreen: View {
       }
       if let t = obsShowPause { NotificationCenter.default.removeObserver(t)
         obsShowPause = nil
+      }
+      if let t = obsShowQuickMenu { NotificationCenter.default.removeObserver(t)
+        obsShowQuickMenu = nil
       }
       if let t = obsMotionSettingsChanged { NotificationCenter.default.removeObserver(t)
         obsMotionSettingsChanged = nil
@@ -1675,15 +1728,19 @@ struct EmulationScreen: View {
 
 private struct SettingsNavigationFallback: ViewModifier {
   @Binding var showSettings: Bool
+  @Binding var leafID: String?
   func body(content: Content) -> some View {
     Group {
       content
         .navigationDestination(isPresented: $showSettings) {
-          SettingsRootView()
+          SettingsRootView(initialLeafID: leafID)
             .pauseClaim("settings")
           #if !os(tvOS)
             .navigationBarTitleDisplayMode(.inline)
           #endif
+        }
+        .onChange(of: showSettings) { _, isShown in
+          if !isShown { leafID = nil }
         }
     }
   }

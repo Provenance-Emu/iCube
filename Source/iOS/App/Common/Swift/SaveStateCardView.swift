@@ -26,8 +26,10 @@ struct SaveStateCardView: View {
 
   #if os(tvOS)
   private static let thumbnailSize = CGSize(width: 480, height: 270)
+  private static let cornerRadius = ICubeDesign.Radius.large.rawValue
   #else
   private static let thumbnailSize = CGSize(width: 300, height: 170)
+  private static let cornerRadius: CGFloat = 12
   #endif
 
   var body: some View {
@@ -43,46 +45,47 @@ struct SaveStateCardView: View {
             .resizable()
             .scaledToFit()
         } else {
-          RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.gray.opacity(0.25))
+          RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+            .fill(placeholderFill)
             .overlay(
               Image(systemName: "photo")
-                .font(.system(size: 28, weight: .regular))
-                .foregroundColor(.white.opacity(0.7))
+                .font(placeholderGlyphFont)
+                .foregroundColor(placeholderGlyphColor)
             )
         }
       }
       .frame(width: Self.thumbnailSize.width, height: Self.thumbnailSize.height)
       .clipped()
       .overlay(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+          .strokeBorder(borderColor, lineWidth: borderWidth)
       )
       .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
-          .fill(Color.white.opacity(0.04))
+        RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+          .fill(surfaceFill)
       )
-      .cornerRadius(12)
+      .cornerRadius(Self.cornerRadius)
 
       // Vignette + metadata
       LinearGradient(
         colors: [Color.black.opacity(0.0), Color.black.opacity(0.75)],
         startPoint: .center, endPoint: .bottom
       )
-      .cornerRadius(12)
+      .cornerRadius(Self.cornerRadius)
 
       VStack(alignment: .leading, spacing: 4) {
-        Text(state.displayName)
-          .font(.headline)
-          .foregroundColor(.white)
-          .lineLimit(1)
+        titleText
+
 
         HStack(spacing: 8) {
           if state.isAuto {
             Badge(text: L("Continue"), color: .green)
-          } else if let slot = state.slot {
+          }
+          #if !os(tvOS)
+          if !state.isAuto, let slot = state.slot {
             Badge(text: String(format: L("Slot %d"), slot))
           }
+          #endif
           if !state.isCompatible {
             #if os(tvOS)
             // No nested Button on tvOS -- see the type-level focus note. The
@@ -102,21 +105,30 @@ struct SaveStateCardView: View {
         }
 
         HStack(spacing: 8) {
-          Text(timestampString)
-            .font(.subheadline)
-            .foregroundColor(.white.opacity(0.85))
+          detailText(timestampString)
           if let gameTimeString {
             Text("\u{00B7}")
-              .foregroundColor(.white.opacity(0.5))
-            Label(gameTimeString, systemImage: "clock")
-              .font(.subheadline)
-              .foregroundColor(.white.opacity(0.85))
-              .labelStyle(.titleAndIcon)
+              .foregroundColor(separatorColor)
+            detailLabel(gameTimeString)
           }
         }
       }
       .padding(12)
     }
+    #if os(tvOS)
+    // The slot number sits top-right of the thumbnail as a tag capsule.
+    .overlay(alignment: .topTrailing) {
+      if !state.isAuto, let slot = state.slot {
+        Text(String(format: L("Slot %d"), slot))
+          .icubeText(.tag)
+          .foregroundColor(ICubeDesign.color(.textPrimary))
+          .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
+          .padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
+          .background(Capsule().fill(ICubeDesign.color(.rowSurface)))
+          .padding(ICubeDesign.Spacing.s.rawValue)
+      }
+    }
+    #endif
     #if !os(tvOS)
     .sheet(isPresented: $showIncompatibleHelp) {
       NavigationStack {
@@ -128,6 +140,105 @@ struct SaveStateCardView: View {
           }
       }
     }
+    #endif
+  }
+
+  // MARK: Platform styling (tvOS reads tokens; iOS keeps its existing look)
+
+  private var titleText: some View {
+    #if os(tvOS)
+    Text(state.displayName)
+      .icubeText(.body)
+      .fontWeight(.semibold)
+      .foregroundColor(ICubeDesign.color(.textPrimary))
+      .lineLimit(1)
+    #else
+    Text(state.displayName)
+      .font(.headline)
+      .foregroundColor(.white)
+      .lineLimit(1)
+    #endif
+  }
+
+  private func detailText(_ string: String) -> some View {
+    #if os(tvOS)
+    Text(string)
+      .icubeText(.detail)
+      .foregroundColor(ICubeDesign.color(.textSecondary))
+    #else
+    Text(string)
+      .font(.subheadline)
+      .foregroundColor(.white.opacity(0.85))
+    #endif
+  }
+
+  private func detailLabel(_ string: String) -> some View {
+    #if os(tvOS)
+    Label(string, systemImage: "clock")
+      .icubeText(.detail)
+      .foregroundColor(ICubeDesign.color(.textSecondary))
+      .labelStyle(.titleAndIcon)
+    #else
+    Label(string, systemImage: "clock")
+      .font(.subheadline)
+      .foregroundColor(.white.opacity(0.85))
+      .labelStyle(.titleAndIcon)
+    #endif
+  }
+
+  private var placeholderFill: Color {
+    #if os(tvOS)
+    ICubeDesign.color(.rowSurface)
+    #else
+    Color.gray.opacity(0.25)
+    #endif
+  }
+
+  private var placeholderGlyphFont: Font {
+    #if os(tvOS)
+    ICubeDesign.symbolFont(.tile)
+    #else
+    .system(size: 28, weight: .regular)
+    #endif
+  }
+
+  private var placeholderGlyphColor: Color {
+    #if os(tvOS)
+    ICubeDesign.color(.textSecondary)
+    #else
+    .white.opacity(0.7)
+    #endif
+  }
+
+  private var borderColor: Color {
+    #if os(tvOS)
+    ICubeDesign.color(.hairline)
+    #else
+    Color.white.opacity(0.08)
+    #endif
+  }
+
+  private var borderWidth: CGFloat {
+    #if os(tvOS)
+    ICubeDesign.Line.hairline.rawValue
+    #else
+    1
+    #endif
+  }
+
+  private var surfaceFill: Color {
+    #if os(tvOS)
+    ICubeDesign.color(.rowSurface)
+    #else
+    Color.white.opacity(0.04)
+    #endif
+  }
+
+  private var separatorColor: Color {
+    #if os(tvOS)
+    ICubeDesign.color(.textTertiary)
+    #else
+    .white.opacity(0.5)
     #endif
   }
 
@@ -172,11 +283,22 @@ private struct Badge: View {
   var color: Color = .blue
   var body: some View {
     Text(text)
-      .font(.caption2.weight(.semibold))
+      .badgeFont()
       .padding(.horizontal, 6)
       .padding(.vertical, 2)
       .background(color.opacity(0.75), in: Capsule())
       .foregroundColor(.white)
+  }
+}
+
+private extension View {
+  /// tvOS badges (Continue, Incompatible) use the tag role; iOS keeps caption2 semibold.
+  @ViewBuilder func badgeFont() -> some View {
+    #if os(tvOS)
+    icubeText(.tag)
+    #else
+    font(.caption2.weight(.semibold))
+    #endif
   }
 }
 

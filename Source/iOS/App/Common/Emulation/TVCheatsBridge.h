@@ -7,16 +7,40 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface TVGeckoCodeInfo : NSObject
 @property (nonatomic, readonly) NSString *name;
+/// The `[creator]` from the code header; empty when the code has none.
+@property(nonatomic, readonly) NSString* creator;
+/// The code's comment lines joined with "\n"; empty when there are none.
+@property(nonatomic, readonly) NSString* notes;
 @property (nonatomic, assign) BOOL enabled;
+/// Enabled by the game's bundled ini (`Sys/GameSettings`), before any user override.
+@property(nonatomic, readonly) BOOL defaultEnabled;
+/// NO for a code shipped in Dolphin's bundled game ini; YES for one the user added or downloaded.
 @property (nonatomic, readonly) BOOL userDefined;
-- (instancetype)initWithName:(NSString*)name enabled:(BOOL)enabled userDefined:(BOOL)userDefined;
+/// Number of 8+8 hex code lines.
+@property(nonatomic, readonly) NSInteger lineCount;
+- (instancetype)initWithName:(NSString*)name
+                     creator:(NSString*)creator
+                       notes:(NSString*)notes
+                     enabled:(BOOL)enabled
+              defaultEnabled:(BOOL)defaultEnabled
+                 userDefined:(BOOL)userDefined
+                   lineCount:(NSInteger)lineCount;
 @end
 
 @interface TVActionReplayCodeInfo : NSObject
 @property (nonatomic, readonly) NSString *name;
 @property (nonatomic, assign) BOOL enabled;
+/// Enabled by the game's bundled ini (`Sys/GameSettings`), before any user override.
+@property(nonatomic, readonly) BOOL defaultEnabled;
+/// NO for a code shipped in Dolphin's bundled game ini; YES for one the user added.
 @property (nonatomic, readonly) BOOL userDefined;
-- (instancetype)initWithName:(NSString*)name enabled:(BOOL)enabled userDefined:(BOOL)userDefined;
+/// Number of decrypted AR operations.
+@property(nonatomic, readonly) NSInteger lineCount;
+- (instancetype)initWithName:(NSString*)name
+                     enabled:(BOOL)enabled
+              defaultEnabled:(BOOL)defaultEnabled
+                 userDefined:(BOOL)userDefined
+                   lineCount:(NSInteger)lineCount;
 @end
 
 @interface TVCheatsBridge : NSObject

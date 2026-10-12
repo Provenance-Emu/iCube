@@ -51,7 +51,11 @@ struct ShaderQuickPickerView: View {
 
   @FocusState private var focusedCardID: String?
 
+  #if os(tvOS)
+  private static let columns = [GridItem(.adaptive(minimum: 260), spacing: ICubeDesign.Spacing.l.rawValue)]
+  #else
   private static let columns = [GridItem(.adaptive(minimum: 148, maximum: 200), spacing: 14)]
+  #endif
   /// `SaveStateService.captureThumbnail`'s own freshness window for adopting the
   /// pause preview into a save thumbnail. Reused here for the same reason: a PNG
   /// left over in `NSTemporaryDirectory()` from a much older pause (or a
@@ -59,16 +63,34 @@ struct ShaderQuickPickerView: View {
   /// be shown as "the current frame".
   private static let pausePreviewFreshnessWindow: TimeInterval = 60
 
+  #if os(tvOS)
+  private static let stackSpacing: CGFloat = ICubeDesign.Spacing.l.rawValue
+  #else
+  private static let stackSpacing: CGFloat = 20
+  #endif
+
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 20) {
+      // One VStack for both platforms: a brace opened inside an `#if` branch
+      // cannot be closed after its `#endif`, so only the contents differ.
+      VStack(alignment: .leading, spacing: Self.stackSpacing) {
+        #if os(tvOS)
+        ICubeLeafHeader(title: L("Shaders"), subtitle: nil)
+        #endif
+
         heroSection
 
         if let error = DOLShaderPostProcessor.shared.lastError {
+          #if os(tvOS)
+          Label(error, systemImage: "exclamationmark.triangle.fill")
+            .icubeText(.detail)
+            .foregroundStyle(ICubeDesign.color(.destructive))
+          #else
           Label(error, systemImage: "exclamationmark.triangle.fill")
             .font(.footnote)
             .foregroundStyle(.red)
             .padding(.horizontal, 16)
+          #endif
         }
 
         if isLoading {
@@ -88,10 +110,16 @@ struct ShaderQuickPickerView: View {
           grid(allItems, sectionKey: "all")
         }
       }
+      #if os(tvOS)
+      .padding(.vertical, ICubeDesign.Spacing.m.rawValue)
+      #else
       .padding(.vertical, 16)
+      #endif
     }
+    #if !os(tvOS)
     .background(Color.black.ignoresSafeArea())
     .navigationTitle(L("Shaders"))
+    #endif
     #if !os(tvOS)
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
@@ -218,6 +246,65 @@ struct ShaderQuickPickerView: View {
     )
   }
 
+  #if os(tvOS)
+  /// tvOS hero: a tile with the selected preset's preview as art, then an Enabled row and a
+  /// Parameters row. The "Enabled" value replaces the old orange `Toggle`.
+  private var heroSection: some View {
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+      Button { pushedParameterPath = currentPath } label: {
+        HStack(alignment: .center, spacing: ICubeDesign.Spacing.l.rawValue) {
+          heroBackdrop
+            .aspectRatio(16.0 / 9.0, contentMode: .fill)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous))
+          VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+            Text(currentDisplayName)
+              .icubeText(.body)
+              .fontWeight(.semibold)
+              .foregroundStyle(ICubeDesign.color(.textPrimary))
+              .lineLimit(1)
+            Text(currentPath == nil ? L("Shaders off") : L("Shaders"))
+              .icubeText(.tag)
+              .foregroundStyle(ICubeDesign.color(.textSecondary))
+              .lineLimit(1)
+          }
+          .frame(maxWidth: .infinity, alignment: .leading)
+        }
+      }
+      .buttonStyle(ICubeTileButtonStyle())
+      .disabled(currentPath == nil)
+
+      Button { enabledBinding.wrappedValue.toggle() } label: {
+        HStack {
+          Text(L("Enabled"))
+            .icubeText(.body)
+            .foregroundStyle(ICubeDesign.color(.textPrimary))
+          Spacer()
+          Text(enabled ? L("On") : L("Off"))
+            .icubeText(.body)
+            .foregroundStyle(enabled ? ICubeDesign.color(.accent) : ICubeDesign.color(.textSecondary))
+        }
+      }
+      .buttonStyle(ICubeRowButtonStyle())
+
+      if currentPath != nil {
+        Button { pushedParameterPath = currentPath } label: {
+          HStack {
+            Text(L("Parameters"))
+              .icubeText(.body)
+              .foregroundStyle(ICubeDesign.color(.textPrimary))
+            Spacer()
+            Image(systemName: "chevron.right")
+              .font(ICubeDesign.symbolFont(.rail))
+              .foregroundStyle(ICubeDesign.color(.textSecondary))
+          }
+        }
+        .buttonStyle(ICubeRowButtonStyle())
+        .focused($focusedCardID, equals: "HERO#params")
+      }
+    }
+  }
+  #else
   private var heroSection: some View {
     ZStack(alignment: .bottomLeading) {
       heroBackdrop
@@ -256,6 +343,7 @@ struct ShaderQuickPickerView: View {
     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     .padding(.horizontal, 16)
   }
+  #endif
 
   @ViewBuilder
   private var heroBackdrop: some View {
@@ -272,10 +360,17 @@ struct ShaderQuickPickerView: View {
         .aspectRatio(contentMode: .fill)
     } else {
       ZStack {
+        #if os(tvOS)
+        ICubeDesign.color(.selectedFill)
+        Image(systemName: "wand.and.stars")
+          .font(ICubeDesign.symbolFont(.tilePrimary))
+          .foregroundStyle(ICubeDesign.color(.textSecondary))
+        #else
         Color.white.opacity(0.06)
         Image(systemName: "wand.and.stars")
           .font(.system(size: 36, weight: .medium))
           .foregroundColor(.white.opacity(0.4))
+        #endif
       }
     }
   }
@@ -298,18 +393,30 @@ struct ShaderQuickPickerView: View {
 
   // MARK: - Grid
 
+  @ViewBuilder
   private func sectionHeader(_ title: String) -> some View {
+    #if os(tvOS)
+    Text(title)
+      .icubeText(.section)
+      .foregroundStyle(ICubeDesign.color(.textSecondary))
+    #else
     Text(title)
       .font(.system(size: 13, weight: .semibold))
       .foregroundColor(.white.opacity(0.6))
       .textCase(.uppercase)
       .padding(.horizontal, 16)
+    #endif
   }
 
   /// `sectionKey` scopes the focus ids: the same preset appears in Favorites, Recent AND
   /// All Shaders, and duplicate `@FocusState` values across mounted views are undefined.
   private func grid(_ items: [PickerItem], sectionKey: String) -> some View {
-    LazyVGrid(columns: Self.columns, spacing: 14) {
+    #if os(tvOS)
+    let gridSpacing = ICubeDesign.Spacing.l.rawValue
+    #else
+    let gridSpacing: CGFloat = 14
+    #endif
+    return LazyVGrid(columns: Self.columns, spacing: gridSpacing) {
       ForEach(items) { item in
         ShaderQuickCard(
           item: item,
@@ -326,7 +433,9 @@ struct ShaderQuickPickerView: View {
         )
       }
     }
+    #if !os(tvOS)
     .padding(.horizontal, 16)
+    #endif
   }
 
   // MARK: - Actions
@@ -399,6 +508,96 @@ private struct ShaderQuickCard: View {
   private var isFocused: Bool { focusedCardID.wrappedValue == focusKey }
 
   var body: some View {
+    #if os(tvOS)
+    tvBody
+      .task(id: item.id) { await loadPreview() }
+    #else
+    iosBody
+      .task(id: item.id) { await loadPreview() }
+    #endif
+  }
+
+  #if os(tvOS)
+  private var tvBody: some View {
+    ZStack(alignment: .topTrailing) {
+      Button(action: onApply) {
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+          tvThumbnail
+          VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+            Text(item.preset?.name ?? L("None"))
+              .icubeText(.body)
+              .fontWeight(.semibold)
+              .foregroundStyle(ICubeDesign.color(.textPrimary))
+              .lineLimit(1)
+            Text(item.preset?.category ?? L("Shaders off"))
+              .icubeText(.tag)
+              .foregroundStyle(ICubeDesign.color(.textSecondary))
+              .lineLimit(1)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .buttonStyle(ICubeTileButtonStyle())
+      .overlay(
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
+          .stroke(isSelected ? ICubeDesign.color(.accent) : Color.clear, lineWidth: ICubeDesign.Line.focus.rawValue)
+      )
+      .focused(focusedCardID, equals: focusKey)
+
+      HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+        if isSelected {
+          Image(systemName: "checkmark.circle.fill")
+            .font(ICubeDesign.symbolFont(.rail))
+            .foregroundStyle(ICubeDesign.color(.accent))
+        }
+        if item.preset != nil {
+          Button(action: onOpenParameters) {
+            Image(systemName: "slider.horizontal.3")
+              .font(ICubeDesign.symbolFont(.rail))
+              .foregroundStyle(ICubeDesign.color(.textPrimary))
+              .padding(ICubeDesign.Spacing.xs.rawValue)
+              .background(ICubeDesign.color(.rowSurface), in: Circle())
+          }
+          .buttonStyle(.plain)
+          .focused(focusedCardID, equals: focusKey + "#params")
+          .accessibilityLabel(L("Parameters"))
+
+          Button(action: onToggleFavorite) {
+            Image(systemName: isFavorite ? "star.fill" : "star")
+              .font(ICubeDesign.symbolFont(.rail))
+              .foregroundStyle(ICubeDesign.color(.textPrimary))
+              .padding(ICubeDesign.Spacing.xs.rawValue)
+              .background(ICubeDesign.color(.rowSurface), in: Circle())
+          }
+          .buttonStyle(.plain)
+          .focused(focusedCardID, equals: focusKey + "#fav")
+          .accessibilityLabel(isFavorite ? L("Remove Favorite") : L("Add Favorite"))
+        }
+      }
+      .padding(ICubeDesign.Spacing.s.rawValue)
+    }
+  }
+
+  private var tvThumbnail: some View {
+    ZStack {
+      if let previewImage {
+        Image(uiImage: previewImage)
+          .resizable()
+          .aspectRatio(contentMode: .fill)
+      } else {
+        ICubeDesign.color(.selectedFill)
+        Image(systemName: iconName)
+          .font(ICubeDesign.symbolFont(.tilePrimary))
+          .foregroundStyle(ICubeDesign.color(.textSecondary))
+      }
+    }
+    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+    .frame(maxWidth: .infinity)
+    .clipShape(RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous))
+  }
+  #endif
+
+  private var iosBody: some View {
     ZStack(alignment: .topTrailing) {
       Button(action: onApply) {
         VStack(alignment: .leading, spacing: 0) {
@@ -474,25 +673,26 @@ private struct ShaderQuickCard: View {
       .padding(6)
     }
     .animation(.easeInOut(duration: 0.15), value: isFocused)
-    .task(id: item.id) {
-      // Fresh identity each time `item.id` changes (including when this card
-      // is reused by `ForEach` for a different preset) — start clean rather
-      // than briefly showing the previous card's thumbnail.
-      previewImage = nil
-      guard let preset = item.preset, let previewSource else { return }
-      guard let rendered = await ShaderPreviewCache.shared.preview(
-        presetPath: ShaderLibrary.normalizedPath(preset.id.path),
-        presetURL: preset.id,
-        sourceImage: previewSource.image,
-        sourceMTime: previewSource.mtime
-      ) else { return }
-      // SwiftUI cancels this Task automatically if the card scrolls out and
-      // `ForEach` tears it down (or the whole sheet closes) before the render
-      // lands — this guard just avoids a pointless `@State` write on the way
-      // out; the render itself already ran and is cached for next time.
-      guard !Task.isCancelled else { return }
-      previewImage = UIImage(cgImage: rendered)
-    }
+  }
+
+  private func loadPreview() async {
+    // Fresh identity each time `item.id` changes (including when this card
+    // is reused by `ForEach` for a different preset) — start clean rather
+    // than briefly showing the previous card's thumbnail.
+    previewImage = nil
+    guard let preset = item.preset, let previewSource else { return }
+    guard let rendered = await ShaderPreviewCache.shared.preview(
+      presetPath: ShaderLibrary.normalizedPath(preset.id.path),
+      presetURL: preset.id,
+      sourceImage: previewSource.image,
+      sourceMTime: previewSource.mtime
+    ) else { return }
+    // SwiftUI cancels this Task automatically if the card scrolls out and
+    // `ForEach` tears it down (or the whole sheet closes) before the render
+    // lands — this guard just avoids a pointless `@State` write on the way
+    // out; the render itself already ran and is cached for next time.
+    guard !Task.isCancelled else { return }
+    previewImage = UIImage(cgImage: rendered)
   }
 
   @ViewBuilder
