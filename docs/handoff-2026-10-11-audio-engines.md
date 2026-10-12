@@ -67,6 +67,8 @@ Written 2026-10-11 on branch `claude/icube-audio-engine-809825`. Spec:
 - Done: `AudioDSPChainTest` (7 tests) compiled and run standalone against the main checkout's gtest;
   every changed core TU syntax-checked against the simulator compile database (with `-fobjc-arc` for
   the `.mm` files); `check_localized_keys.py --check` and `icube_config_lint.py` show no new findings.
+- Done (2026-10-12): merged develop, `make test` on the iPhone 17 Pro simulator: 1634 tests, 6 skipped, 0 failures
+  (the last run after the final merge re-ran the player screen, remap and overlay classes).
 - Owed (device): both backends on iPhone speaker, AirPods (spatial, head turn), Apple TV over HDMI to a
   5.1 receiver, pause/resume and a phone call on each backend, GC mic in Mario Party 6, Wii Speak in
   Monster Hunter Tri, and the overlay's MIC button in Mario Party 6 (it only appears with
