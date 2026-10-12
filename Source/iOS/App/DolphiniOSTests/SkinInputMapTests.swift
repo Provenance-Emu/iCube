@@ -78,5 +78,26 @@ final class SkinInputMapTests: XCTestCase {
     XCTAssertNil(SkinInputMap.action(for: ["start"], padKind: .wiiRemote))
     XCTAssertNil(SkinInputMap.action(for: ["zl"], padKind: .wiiRemote))
   }
+
+  /// N64 skins installed from the store keep their C-button items; on the GameCube pad those press
+  /// the C-stick half-axes. Provenance accepts the same spellings.
+  func testN64CButtonsDriveTheCStickOnGameCubeOnly() {
+    XCTAssertEqual(SkinInputMap.action(for: ["cUp"], padKind: .gameCube), .control(.axisButton(id: 16)))
+    XCTAssertEqual(SkinInputMap.action(for: ["cDown"], padKind: .gameCube), .control(.axisButton(id: 17)))
+    XCTAssertEqual(SkinInputMap.action(for: ["cLeft"], padKind: .gameCube), .control(.axisButton(id: 18)))
+    XCTAssertEqual(SkinInputMap.action(for: ["cRight"], padKind: .gameCube), .control(.axisButton(id: 19)))
+    XCTAssertEqual(SkinInputMap.action(for: ["c-up"], padKind: .gameCube), .control(.axisButton(id: 16)))
+    XCTAssertEqual(SkinInputMap.action(for: ["c▼"], padKind: .gameCube), .control(.axisButton(id: 17)))
+    XCTAssertEqual(SkinInputMap.action(for: ["CUP"], padKind: .gameCube), .control(.axisButton(id: 16)), "case-insensitive")
+    XCTAssertNil(SkinInputMap.action(for: ["cUp"], padKind: .wiiRemote))
+    XCTAssertNil(SkinInputMap.action(for: ["cUp"], padKind: .wiiClassic))
+  }
+
+  func testManicIdentifiersAndRetargetSuffixes() {
+    XCTAssertEqual(SkinGameType.gameCube.manicIdentifier, "public.aoshuang.game.ngc")
+    XCTAssertEqual(SkinGameType.wii.manicIdentifier, "public.aoshuang.game.wii")
+    XCTAssertEqual(SkinGameType(identifier: SkinGameType.gameCube.manicIdentifier), .gameCube)
+    XCTAssertEqual(SkinGameType.gameCube.retargetSuffix, "-gamecube")
+  }
 }
 #endif
