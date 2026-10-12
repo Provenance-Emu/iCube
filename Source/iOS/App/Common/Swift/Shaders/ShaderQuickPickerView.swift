@@ -63,30 +63,35 @@ struct ShaderQuickPickerView: View {
   /// be shown as "the current frame".
   private static let pausePreviewFreshnessWindow: TimeInterval = 60
 
+  #if os(tvOS)
+  private static let stackSpacing: CGFloat = ICubeDesign.Spacing.l.rawValue
+  #else
+  private static let stackSpacing: CGFloat = 20
+  #endif
+
   var body: some View {
     ScrollView {
-      #if os(tvOS)
-      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+      // One VStack for both platforms: a brace opened inside an `#if` branch
+      // cannot be closed after its `#endif`, so only the contents differ.
+      VStack(alignment: .leading, spacing: Self.stackSpacing) {
+        #if os(tvOS)
         ICubeLeafHeader(title: L("Shaders"), subtitle: nil)
+        #endif
 
         heroSection
 
         if let error = DOLShaderPostProcessor.shared.lastError {
+          #if os(tvOS)
           Label(error, systemImage: "exclamationmark.triangle.fill")
             .icubeText(.detail)
             .foregroundStyle(ICubeDesign.color(.destructive))
-        }
-      #else
-      VStack(alignment: .leading, spacing: 20) {
-        heroSection
-
-        if let error = DOLShaderPostProcessor.shared.lastError {
+          #else
           Label(error, systemImage: "exclamationmark.triangle.fill")
             .font(.footnote)
             .foregroundStyle(.red)
             .padding(.horizontal, 16)
+          #endif
         }
-      #endif
 
         if isLoading {
           ProgressView(L("Loading shaders…"))
