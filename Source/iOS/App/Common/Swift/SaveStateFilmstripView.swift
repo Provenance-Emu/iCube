@@ -37,19 +37,31 @@ struct SaveStateFilmstripView: View {
 
   #if os(tvOS)
   private static let columnMinWidth: CGFloat = 480
+  private static let gridSpacing = ICubeDesign.Spacing.l.rawValue
   #else
   private static let columnMinWidth: CGFloat = 300
+  private static let gridSpacing: CGFloat = 20
   #endif
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       HStack {
+        #if os(tvOS)
+        Text(L("Save States"))
+          .icubeText(.title)
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
+        Spacer()
+        Text(gameID)
+          .icubeText(.detail)
+          .foregroundStyle(ICubeDesign.color(.textSecondary))
+        #else
         Text(L("Save States"))
           .font(.largeTitle.weight(.bold))
         Spacer()
         Text(gameID)
           .font(.callout)
           .foregroundStyle(.secondary)
+        #endif
       }
       .padding(.horizontal)
 
@@ -60,7 +72,7 @@ struct SaveStateFilmstripView: View {
         // how many states exist, so selecting a specific card is unambiguous
         // even for a game with a dozen slots.
         ScrollView {
-          LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.columnMinWidth), spacing: 20)], spacing: 20) {
+          LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.columnMinWidth), spacing: Self.gridSpacing)], spacing: Self.gridSpacing) {
             ForEach(vm.states) { state in
               Button {
                 actionTarget = state
@@ -68,7 +80,7 @@ struct SaveStateFilmstripView: View {
                 SaveStateCardView(state: state, thumbnail: vm.thumbnails[state.id])
               }
               #if os(tvOS)
-              .buttonStyle(.card)
+              .buttonStyle(ICubeTileButtonStyle())
               #else
               .buttonStyle(.plain)
               #endif
@@ -195,6 +207,19 @@ struct SaveStateFilmstripView: View {
 
   private var emptyState: some View {
     VStack(spacing: 12) {
+      #if os(tvOS)
+      Image(systemName: "tray")
+        .font(ICubeDesign.symbolFont(.tilePrimary))
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
+      Text(L("No Save States"))
+        .icubeText(.body)
+        .fontWeight(.semibold)
+        .foregroundStyle(ICubeDesign.color(.textPrimary))
+      Text(L("Save states for this game will appear here."))
+        .icubeText(.detail)
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
+        .multilineTextAlignment(.center)
+      #else
       Image(systemName: "tray")
         .font(.system(size: 40, weight: .regular))
         .foregroundStyle(.secondary)
@@ -204,6 +229,7 @@ struct SaveStateFilmstripView: View {
         .font(.subheadline)
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.center)
+      #endif
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .padding()
