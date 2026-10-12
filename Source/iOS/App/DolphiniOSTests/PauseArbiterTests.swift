@@ -171,6 +171,21 @@ final class PauseArbiterTests: XCTestCase {
     XCTAssertEqual(fake.resumeCalls, 1)
   }
 
+  /// Quick menu → pause menu: the host claims pending before the panel releases, so the core never
+  /// resumes between the two menus.
+  func test_quickMenuHandover_pendingClaimBeforeRelease_neverResumes() {
+    let quick = arbiter.claim(PauseArbiter.Reason.quickMenu)
+    XCTAssertEqual(fake.pauseCalls, 1)
+    arbiter.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+    arbiter.release(quick)
+    runScheduled()
+    XCTAssertEqual(fake.resumeCalls, 0, "the pending pause-menu token keeps the core paused across the handover")
+    guard let menu = arbiter.adoptPending() else { return XCTFail("no pending token to adopt") }
+    arbiter.release(menu)
+    runScheduled()
+    XCTAssertEqual(fake.resumeCalls, 1)
+  }
+
   func test_claimPending_isIgnoredWhileTheMenuHoldsAToken() {
     arbiter.claim("pause-menu")
     arbiter.claimPending("pause-menu-request")

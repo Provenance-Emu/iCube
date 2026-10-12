@@ -780,7 +780,10 @@ struct MenuScreen: View {
         }
       }
       if let exit = tvPinnedExit {
+        // Fixed, not min, height: the tile face stretches to whatever the VStack proposes, and a
+        // flexible footer took half the screen from the options grid above it.
         tvTile(exit, prominent: true)
+          .frame(height: Self.tvPrimaryTileHeight)
           .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
       }
       InfoShelf(text: tvFocusedItem?.description, value: tvFocusedItem?.currentValueTitle,

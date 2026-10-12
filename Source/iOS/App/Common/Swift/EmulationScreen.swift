@@ -429,22 +429,33 @@ struct EmulationScreen: View {
           showPerfOverlay = true
         }),
         onOpenPauseMenu: {
-          // The quick menu has already released its claim; take the pending pause claim synchronously
-          // so the core stays paused until the pause menu adopts it.
-          PauseGestureTracker.shared.requestPauseMenu(reason: "quick-menu")
+          // Runs before the quick menu releases its token: the pending claim keeps the core paused
+          // across the handover, and `PauseMenuView.onAppear` adopts it. Not through the gesture
+          // tracker, whose coalescing window would drop a press soon after the panel opened.
+          PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+          showPauseMenu = true
         })
         .zIndex(4)
         .transition(.opacity)
     }
   }
 
+  #if os(tvOS)
+  /// `EmuEventVC` drops its focus trap and enables controller navigation while either menu is up; a
+  /// menu that does not announce itself can never take focus.
+  private func postOverlayVisibility() {
+    let visible = showPauseMenu || showQuickMenu
+    NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
+  }
+  #endif
+
   var body: some View {
     #if os(tvOS)
     ZStack {
       EmulationSurfaceController(gamePath: game.filePath)
         .ignoresSafeArea()
-        .focusable(!showPauseMenu)
-        .allowsHitTesting(!showPauseMenu)
+        .focusable(!(showPauseMenu || showQuickMenu))
+        .allowsHitTesting(!(showPauseMenu || showQuickMenu))
         .navigationBarBackButtonHidden(true)
 
       // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
@@ -741,13 +752,19 @@ struct EmulationScreen: View {
       isWiiSystem = false
     }
     .onChange(of: showPauseMenu) { visible in
-      NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
+      // The quick menu never outlives the pause menu; left set, it came back (and re-claimed the
+      // pause) the moment the pause menu closed.
+      if visible { showQuickMenu = false }
+      postOverlayVisibility()
       isPaused = TVEmulationBridge.isPaused()
       #if canImport(ActivityKit)
       GameActivityManager.update(isPaused: visible, elapsedSeconds: elapsedSeconds)
       #endif
     }
-    .onExitCommand { if showPauseMenu { showPauseMenu = false } }
+    .onChange(of: showQuickMenu) { _ in postOverlayVisibility() }
+    .onExitCommand {
+      if showPauseMenu { showPauseMenu = false } else if showQuickMenu { showQuickMenu = false }
+    }
     .onPlayPauseCommand {}
     .navigationBarBackButtonHidden(true)
     #else // os(iOS)
@@ -1361,6 +1378,7 @@ struct EmulationScreen: View {
       }
     }
     .onChange(of: showPauseMenu) { visible in
+      if visible { showQuickMenu = false }
       isPaused = TVEmulationBridge.isPaused()
       // The fullScreenCover transition perturbs the GeometryReader size and the Metal
       // surface never resizes itself (updateUIViewController is empty), so without this

@@ -11,9 +11,12 @@ private final class FakeRecorder: ScreenRecording {
   var stopError: Error?
   var started = 0
   var stoppedTo: [URL] = []
+  /// A slow ReplayKit answer, to race a second start against the first.
+  var startDelayNanoseconds: UInt64 = 0
 
   func startRecording() async throws {
     if let startError { throw startError }
+    if startDelayNanoseconds > 0 { try await Task.sleep(nanoseconds: startDelayNanoseconds) }
     started += 1
   }
 
@@ -89,6 +92,34 @@ final class RecordingManagerTests: XCTestCase {
     let m = manager(FakeRecorder())
     try await m.start()
     do { try await m.start(); XCTFail("expected throw") } catch { XCTAssertEqual(error as? RecordingError, .alreadyRecording) }
+  }
+
+  func test_secondStartWhileTheFirstIsInFlight_throwsAlreadyRecording() async throws {
+    let recorder = FakeRecorder()
+    recorder.startDelayNanoseconds = 50_000_000
+    let m = manager(recorder)
+    async let first: Void = m.start()
+    try await Task.sleep(nanoseconds: 5_000_000)
+    do {
+      try await m.start()
+      XCTFail("the second start must throw")
+    } catch {
+      XCTAssertEqual(error as? RecordingError, .alreadyRecording)
+    }
+    try await first
+    XCTAssertEqual(recorder.started, 1)
+    XCTAssertTrue(m.isRecording)
+  }
+
+  func test_emulationEnd_stopsTheRecording() async throws {
+    let recorder = FakeRecorder()
+    let m = manager(recorder)
+    m.installLifecycleObservers()
+    try await m.start()
+    NotificationCenter.default.post(name: Notification.Name(DOLEmulationDidEndNotification), object: nil)
+    for _ in 0 ..< 50 where m.isRecording { try await Task.sleep(nanoseconds: 10_000_000) }
+    XCTAssertFalse(m.isRecording)
+    XCTAssertEqual(recorder.stoppedTo.count, 1)
   }
 
   func test_stopWhenIdle_returnsNil() async throws {

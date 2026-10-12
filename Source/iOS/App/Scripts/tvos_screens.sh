@@ -17,13 +17,13 @@ if [ "$BUILD" = 1 ]; then
     2>&1 | grep -E ": error:|BUILD (SUCCEEDED|FAILED)"
 fi
 xcrun simctl boot "$UDID" 2>/dev/null || true
-xcrun simctl ui "$UDID" appearance "$STYLE"
+# The tvOS runtime rejects `simctl ui appearance`; the DEBUG app honours `-ICubeAppearance light|dark` instead.
 xcrun simctl install "$UDID" "$DD"/Build/Products/*appletvsimulator/iCube*.app
 shot() { # name, then launch args
   name="$1"; shift
   xcrun simctl terminate "$UDID" "$BID" 2>/dev/null || true
-  xcrun simctl launch "$UDID" "$BID" "$@" >/dev/null
-  sleep 4
+  xcrun simctl launch "$UDID" "$BID" -ICubeAppearance "$STYLE" "$@" >/dev/null
+  sleep 6
   xcrun simctl io "$UDID" screenshot "$OUT/$name-$STYLE.png" >/dev/null
 }
 # Library: platform filter raw values are LibraryPlatformCategory's: all, gameCube, wii.
