@@ -6,7 +6,8 @@ import PVSyncRules
 import SwiftUI
 
 /// Settings surface for iCloud sync: the toggle, why it is or is not running,
-/// per-category counts, conflicts, and the recent log.
+/// what syncs and the opt-in switches, per-category counts, conflicts, the
+/// trash, and the recent log.
 ///
 /// The "why" is the point. iCube's CloudKit container is not provisioned yet, so
 /// the shipping state of this screen is "off, and here is the reason" — a toggle
@@ -19,17 +20,20 @@ struct CloudSyncSettingsView: View {
     var body: some View {
         Form {
             statusSection
+            if coordinator.isEnabled, !coordinator.pendingConflicts.isEmpty {
+                conflictsSection
+            }
+            scopeSection
+            optInSection
+            networkSection
             if coordinator.isEnabled {
-                if !coordinator.pendingConflicts.isEmpty {
-                    conflictsSection
-                }
                 contentsSection
-                maintenanceSection
+                recentlyDeletedSection
                 if !coordinator.recentEvents.isEmpty {
                     activitySection
                 }
+                maintenanceSection
             }
-            scopeSection
         }
         .navigationTitle(L("iCloud Sync"))
         .task { await coordinator.refreshAvailability() }
@@ -80,8 +84,79 @@ struct CloudSyncSettingsView: View {
                 .foregroundStyle(.orange)
         } else if let error = coordinator.lastError {
             Text(error).foregroundStyle(.red)
+        } else if coordinator.heldForWiFiCount > 0 {
+            Text(L("Waiting for Wi-Fi to move large files. Saves and settings still sync on any connection."))
         } else {
-            Text(L("Save states, memory cards, Wii saves and settings are kept in step across your devices. Games are never uploaded."))
+            Text(L("Saves, memory cards, settings, controller layouts, favorites and play stats are kept in step across your devices. Games are never uploaded."))
+        }
+    }
+
+    // MARK: - Scope
+
+    /// States the policy plainly, because "what gets uploaded" is the question
+    /// people actually have about a sync feature.
+    private var scopeSection: some View {
+        Section(header: Text(L("Always Synced"))) {
+            Label(L("Save states and resume points"), systemImage: "checkmark")
+            Label(L("GameCube memory cards, Wii and GBA saves"), systemImage: "checkmark")
+            Label(L("Settings, controller setup and per-game settings & cheats"), systemImage: "checkmark")
+            Label(L("Touch controls layout and skins"), systemImage: "checkmark")
+            Label(L("Favorites, last played and play time"), systemImage: "checkmark")
+            Label(L("Games are never uploaded"), systemImage: "xmark")
+                .foregroundStyle(.secondary)
+            Label(L("Cover art is not uploaded — it is re-downloaded instead"), systemImage: "xmark")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// The categories that are the user's own dumps of system software. Off by
+    /// default; each switch says what it moves and where it goes.
+    private var optInSection: some View {
+        Section(
+            header: Text(L("Also Sync")),
+            footer: Text(L("These go only to your own private iCloud storage, like any other backup. Nothing is shared with anyone."))
+        ) {
+            Toggle(isOn: $coordinator.policy.firmwareEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("GameCube Firmware"))
+                    Text(L("Your IPL dump, about 2 MB per region."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Toggle(isOn: channelsBinding) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("Wii Channels & DLC"))
+                    Text(L("Installed WiiWare, Virtual Console and downloadable content. Up to a few hundred MB."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(coordinator.policy.fullWiiNANDEnabled)
+            Toggle(isOn: $coordinator.policy.fullWiiNANDEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("Full Wii NAND"))
+                    Text(L("Everything on the emulated Wii, including the System Menu. Includes channels. Can be 500 MB."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    /// Channels read as on while the NAND switch covers them, without moving
+    /// the stored value, so turning the NAND back off leaves channels as the
+    /// user had them.
+    private var channelsBinding: Binding<Bool> {
+        Binding(
+            get: { coordinator.policy.effectiveWiiChannelsEnabled },
+            set: { coordinator.policy.wiiChannelsEnabled = $0 }
+        )
+    }
+
+    private var networkSection: some View {
+        Section(footer: Text(L("Applies to firmware, channels and the NAND. Saves and settings are small and always sync."))) {
+            Toggle(L("Large Files Over Wi-Fi Only"), isOn: $coordinator.policy.largeFilesOverWiFiOnly)
         }
     }
 
@@ -142,6 +217,21 @@ struct CloudSyncSettingsView: View {
         }
     }
 
+    // MARK: - Recently Deleted
+
+    private var recentlyDeletedSection: some View {
+        Section(footer: Text(L("Files removed because they were deleted on another device are kept for 30 days."))) {
+            NavigationLink(destination: SyncRecentlyDeletedView()) {
+                HStack {
+                    Label(L("Recently Deleted"), systemImage: "trash")
+                    Spacer()
+                    Text("\(coordinator.trashEntries.count)")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     // MARK: - Maintenance
 
     private var maintenanceSection: some View {
@@ -185,25 +275,6 @@ struct CloudSyncSettingsView: View {
         }
     }
 
-    // MARK: - Scope
-
-    /// States the policy plainly, because "what gets uploaded" is the question
-    /// people actually have about a sync feature.
-    private var scopeSection: some View {
-        Section(header: Text(L("What Is Synced"))) {
-            Label(L("Save states and resume points"), systemImage: "checkmark")
-            Label(L("GameCube memory cards"), systemImage: "checkmark")
-            Label(L("Wii save data"), systemImage: "checkmark")
-            Label(L("Settings, per-game settings and cheats"), systemImage: "checkmark")
-            Label(L("Games are never uploaded"), systemImage: "xmark")
-                .foregroundStyle(.secondary)
-            Label(L("Cover art is not uploaded — it is re-downloaded instead"), systemImage: "xmark")
-                .foregroundStyle(.secondary)
-            Label(L("System firmware is never uploaded"), systemImage: "xmark")
-                .foregroundStyle(.secondary)
-        }
-    }
-
     // MARK: - Formatting
 
     static func displayName(for type: SyncableFileType) -> String {
@@ -214,8 +285,16 @@ struct CloudSyncSettingsView: View {
         case .saveStateThumbnail: return L("Save Thumbnails")
         case .gameCubeMemoryCard: return L("Memory Cards")
         case .wiiSave: return L("Wii Saves")
+        case .gbaSave: return L("GBA Saves")
         case .config: return L("Settings")
         case .gameSettings: return L("Per-Game Settings & Cheats")
+        case .gameProfile: return L("Game Profiles")
+        case .touchOverlayLayout: return L("Touch Controls Layout")
+        case .libraryState: return L("Favorites & Play Stats")
+        case .skin: return L("Controller Skins")
+        case .firmware: return L("GameCube Firmware")
+        case .wiiChannel: return L("Wii Channels & DLC")
+        case .wiiSystem: return L("Wii System Files")
         }
     }
 

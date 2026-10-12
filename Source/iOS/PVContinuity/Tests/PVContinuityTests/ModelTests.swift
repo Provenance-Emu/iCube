@@ -183,7 +183,31 @@ final class ContinuityFileKindTests: XCTestCase {
 
     func testPullPriorityDelegatesToSyncRules() {
         for type in SyncableFileType.allCases {
-            XCTAssertEqual(ContinuityFileKind(type).pullPriority, type.pullPriority)
+            guard let kind = ContinuityFileKind(type) else { continue }
+            XCTAssertEqual(kind.pullPriority, type.pullPriority)
+        }
+    }
+
+    /// Continuity carries exactly the eight original user-data categories.
+    /// Cloud-sync-only categories (opt-in firmware and NAND, skins, iCube's JSON
+    /// stores) must never be liftable into a transfer kind by accident.
+    func testOnlyHandoffCategoriesLiftIntoAKind() {
+        let carried: Set<SyncableFileType> = [
+            .saveState, .resumeState, .saveStateMetadata, .saveStateThumbnail,
+            .gameCubeMemoryCard, .wiiSave, .config, .gameSettings
+        ]
+        for type in SyncableFileType.allCases {
+            let kind = ContinuityFileKind(type)
+            if carried.contains(type) {
+                XCTAssertNotNil(kind, "\(type) must still be carried")
+                XCTAssertEqual(kind?.syncableType, type)
+            } else {
+                XCTAssertNil(kind, "\(type) must not ride a handoff")
+            }
+        }
+        // Every non-game kind round-trips to its category.
+        for kind in ContinuityFileKind.allCases where kind != .gameFile {
+            XCTAssertEqual(kind.syncableType.flatMap(ContinuityFileKind.init), kind)
         }
     }
 

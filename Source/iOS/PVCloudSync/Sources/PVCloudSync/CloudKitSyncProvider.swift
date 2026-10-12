@@ -18,11 +18,14 @@ import CloudKit
 ///   Inline data would be marginally cheaper for a 4 KB INI, but a second code
 ///   path is a second thing that can round-trip wrong, and the size threshold is
 ///   exactly the kind of constant that drifts.
-/// - **Deletions are never propagated** — that decision lives in `SyncPlanner`;
-///   `purgeAllData` exists only for the explicit "clear iCloud data" action.
+/// - **Deletes travel as tombstones**: the same record with its asset removed
+///   and `deleted = 1`, `deletedAt` set. Whether a tombstone is *applied* is
+///   `SyncPlanner`'s decision; the provider only stores and reports them.
+///   `purgeAllData` exists for the explicit "clear iCloud data" action.
 public actor CloudKitSyncProvider: SyncProvider {
 
     public nonisolated let providerName = "iCloud"
+    public nonisolated let kind: SyncProviderKind = .iCloud
 
     private let container: CKContainer
     private let database: CKDatabase
@@ -72,6 +75,13 @@ public actor CloudKitSyncProvider: SyncProvider {
         try await createCustomZoneIfNeeded()
     }
 
+    /// The signed-in user's record name: stable per iCloud account, opaque,
+    /// and different for every account. The index is bound to it so a sign-out
+    /// and sign-in never reads one account's deletions as the other's.
+    public func accountIdentity() async -> String? {
+        (try? await container.userRecordID())?.recordName
+    }
+
     private func createCustomZoneIfNeeded() async throws {
         guard !hasVerifiedZone else { return }
         do {
@@ -85,9 +95,18 @@ public actor CloudKitSyncProvider: SyncProvider {
 
     // MARK: - Fetch
 
-    public func fetchRemoteMetadata() async throws -> [SyncableFileMetadata] {
-        try await withRetry { try await self.performFetchAllZoneRecords() }
-            .sorted { $0.lastModified > $1.lastModified }
+    public func fetchRemoteSnapshot() async throws -> RemoteSyncSnapshot {
+        let records = try await withRetry { try await self.performFetchAllZoneRecords() }
+        var snapshot = RemoteSyncSnapshot()
+        for record in records {
+            switch record {
+            case .file(let metadata): snapshot.files.append(metadata)
+            case .tombstone(let tombstone): snapshot.tombstones.append(tombstone)
+            }
+        }
+        snapshot.files.sort { $0.lastModified > $1.lastModified }
+        snapshot.tombstones.sort { $0.deletedAt > $1.deletedAt }
+        return snapshot
     }
 
     /// Every record in the zone, via `CKFetchRecordZoneChangesOperation` with a
@@ -100,7 +119,7 @@ public actor CloudKitSyncProvider: SyncProvider {
     /// file look local-only and re-uploaded the whole library on every boot.
     /// Zone-change fetch needs no index at all. (The returned change token is
     /// discarded; a future delta sync can persist it.)
-    private func performFetchAllZoneRecords() async throws -> [SyncableFileMetadata] {
+    private func performFetchAllZoneRecords() async throws -> [RemoteRecord] {
         let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
         configuration.previousServerChangeToken = nil   // nil ⇒ full snapshot
         let operation = CKFetchRecordZoneChangesOperation(
@@ -115,8 +134,8 @@ public actor CloudKitSyncProvider: SyncProvider {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 operation.recordWasChangedBlock = { _, result in
                     if case .success(let record) = result,
-                       let metadata = Self.metadata(from: record) {
-                        collector.append(metadata)
+                       let mapped = Self.remoteRecord(from: record) {
+                        collector.append(mapped)
                     }
                 }
                 // A per-zone failure (the zone was deleted, say) surfaces here,
@@ -151,7 +170,7 @@ public actor CloudKitSyncProvider: SyncProvider {
             throw error
         }
 
-        return collector.metadata()
+        return collector.records()
     }
 
     // MARK: - Transfer
@@ -193,11 +212,67 @@ public actor CloudKitSyncProvider: SyncProvider {
         record[CloudSyncConstants.Field.fileType] = metadata.fileType.rawValue as CKRecordValue
         record[CloudSyncConstants.Field.fileSize] = metadata.fileSize as CKRecordValue
         record[CloudSyncConstants.Field.deviceIdentifier] = deviceIdentifier as CKRecordValue
-        record[CloudSyncConstants.Field.appVersion] =
-            (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown") as CKRecordValue
+        record[CloudSyncConstants.Field.appVersion] = Self.appVersion as CKRecordValue
+        // An upload over a tombstone is an undelete: clear the markers.
+        record[CloudSyncConstants.Field.deleted] = nil
+        record[CloudSyncConstants.Field.deletedAt] = nil
 
         _ = try await database.save(record)
     }
+
+    private nonisolated static var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+    }
+
+    // MARK: - Tombstones
+
+    public func writeTombstone(_ tombstone: SyncTombstone) async throws {
+        try await withRetry { try await self.performWriteTombstone(tombstone) }
+    }
+
+    /// Same record name, asset removed, markers set. Reusing the record (rather
+    /// than deleting it and creating a sibling) keeps the identity key simple:
+    /// one path, one record, live or dead.
+    private func performWriteTombstone(_ tombstone: SyncTombstone) async throws {
+        try await createCustomZoneIfNeeded()
+        let recordID = CKRecord.ID(recordName: tombstone.relativePath, zoneID: zone.zoneID)
+        let record: CKRecord
+        if let existing = try? await database.record(for: recordID) {
+            record = existing
+        } else {
+            record = CKRecord(recordType: CloudSyncConstants.recordType, recordID: recordID)
+        }
+        guard let fileType = SyncClassifier.classify(relativePath: tombstone.relativePath) else {
+            throw SyncProviderError.invalidData
+        }
+        record[CloudSyncConstants.Field.fileName] = tombstone.relativePath as CKRecordValue
+        record[CloudSyncConstants.Field.fileData] = nil
+        record[CloudSyncConstants.Field.lastModified] = tombstone.deletedAt as CKRecordValue
+        record[CloudSyncConstants.Field.checksum] = tombstone.checksum as CKRecordValue
+        record[CloudSyncConstants.Field.fileType] = fileType.rawValue as CKRecordValue
+        record[CloudSyncConstants.Field.fileSize] = Int64(0) as CKRecordValue
+        record[CloudSyncConstants.Field.deviceIdentifier] = deviceIdentifier as CKRecordValue
+        record[CloudSyncConstants.Field.appVersion] = Self.appVersion as CKRecordValue
+        record[CloudSyncConstants.Field.deleted] = Int64(1) as CKRecordValue
+        record[CloudSyncConstants.Field.deletedAt] = tombstone.deletedAt as CKRecordValue
+        _ = try await database.save(record)
+    }
+
+    /// Any device may clear tombstones past retention; the planner treats a
+    /// path with neither a record nor a tombstone as "upload if you have it".
+    public func purgeExpiredTombstones(olderThan cutoff: Date) async throws {
+        let snapshot = try await fetchRemoteSnapshot()
+        let expired = snapshot.tombstones.filter { $0.deletedAt < cutoff }
+        guard !expired.isEmpty else { return }
+        let recordIDs = expired.map { CKRecord.ID(recordName: $0.relativePath, zoneID: zone.zoneID) }
+        for start in stride(from: 0, to: recordIDs.count, by: Self.deleteBatchSize) {
+            let batch = Array(recordIDs[start ..< min(start + Self.deleteBatchSize, recordIDs.count)])
+            try await withRetry { try await self.performDelete(recordIDs: batch) }
+        }
+    }
+
+    /// CloudKit's documented ceiling is 400 items per modify operation.
+    private static let deleteBatchSize = 200
 
     public func download(metadata: SyncableFileMetadata) async throws -> Data {
         try await withRetry { try await self.performDownload(metadata: metadata) }
@@ -221,16 +296,16 @@ public actor CloudKitSyncProvider: SyncProvider {
     /// Deletes every record in the zone. Batched, because deletes carry no
     /// assets and the batch limit, not the size limit, is what binds.
     public func purgeAllData() async throws {
-        let all = try await fetchRemoteMetadata()
-        let recordIDs = all.map {
+        let snapshot = try await fetchRemoteSnapshot()
+        let recordIDs = snapshot.files.map {
             CKRecord.ID(recordName: $0.cloudKitRecordID ?? $0.relativePath, zoneID: zone.zoneID)
+        } + snapshot.tombstones.map {
+            CKRecord.ID(recordName: $0.relativePath, zoneID: zone.zoneID)
         }
         guard !recordIDs.isEmpty else { return }
 
-        // CloudKit's documented ceiling is 400 items per modify operation.
-        let batchSize = 200
-        for start in stride(from: 0, to: recordIDs.count, by: batchSize) {
-            let batch = Array(recordIDs[start ..< min(start + batchSize, recordIDs.count)])
+        for start in stride(from: 0, to: recordIDs.count, by: Self.deleteBatchSize) {
+            let batch = Array(recordIDs[start ..< min(start + Self.deleteBatchSize, recordIDs.count)])
             try await withRetry { try await self.performDelete(recordIDs: batch) }
         }
     }
@@ -293,8 +368,40 @@ public actor CloudKitSyncProvider: SyncProvider {
 
     // MARK: - Record mapping
 
-    /// Pure record → metadata mapping. `nonisolated static` so it is safe to
-    /// call from a CloudKit operation callback, which runs off the actor.
+    /// A remote record, live or dead.
+    enum RemoteRecord: Equatable {
+        case file(SyncableFileMetadata)
+        case tombstone(SyncTombstone)
+    }
+
+    /// Pure record → model mapping. `nonisolated static` so it is safe to call
+    /// from a CloudKit operation callback, which runs off the actor.
+    nonisolated static func remoteRecord(from record: CKRecord) -> RemoteRecord? {
+        if (record[CloudSyncConstants.Field.deleted] as? Int64 ?? 0) != 0 {
+            return tombstone(from: record).map(RemoteRecord.tombstone)
+        }
+        return metadata(from: record).map(RemoteRecord.file)
+    }
+
+    nonisolated static func tombstone(from record: CKRecord) -> SyncTombstone? {
+        guard let fileName = record[CloudSyncConstants.Field.fileName] as? String,
+              let checksum = record[CloudSyncConstants.Field.checksum] as? String else {
+            return nil
+        }
+        // A tombstone for a path we would never sync is noise.
+        guard SyncClassifier.classify(relativePath: fileName) != nil else { return nil }
+        let deletedAt = (record[CloudSyncConstants.Field.deletedAt] as? Date)
+            ?? (record[CloudSyncConstants.Field.lastModified] as? Date)
+            ?? record.modificationDate
+            ?? Date()
+        return SyncTombstone(
+            relativePath: fileName,
+            checksum: checksum,
+            deletedAt: deletedAt,
+            deviceIdentifier: record[CloudSyncConstants.Field.deviceIdentifier] as? String
+        )
+    }
+
     nonisolated static func metadata(from record: CKRecord) -> SyncableFileMetadata? {
         guard let fileName = record[CloudSyncConstants.Field.fileName] as? String,
               let lastModified = record[CloudSyncConstants.Field.lastModified] as? Date,
@@ -307,6 +414,8 @@ public actor CloudKitSyncProvider: SyncProvider {
         // Re-classify on the way in. A record written by a future build, a
         // different app version, or anything that got into the container by
         // other means does not get to decide where a file lands on this device.
+        // Classification only: policy is applied by the planner, so a record
+        // from a device with different switches is still understood here.
         guard SyncClassifier.syncableType(relativePath: fileName, sizeBytes: fileSize) != nil else {
             return nil
         }
@@ -329,10 +438,10 @@ public actor CloudKitSyncProvider: SyncProvider {
 /// which run off the actor.
 private final class ZoneFetchCollector: @unchecked Sendable {
     private let lock = NSLock()
-    private var items: [SyncableFileMetadata] = []
+    private var items: [CloudKitSyncProvider.RemoteRecord] = []
     private var error: Error?
 
-    func append(_ item: SyncableFileMetadata) {
+    func append(_ item: CloudKitSyncProvider.RemoteRecord) {
         lock.lock(); defer { lock.unlock() }
         items.append(item)
     }
@@ -342,7 +451,7 @@ private final class ZoneFetchCollector: @unchecked Sendable {
         error = newError
     }
 
-    func metadata() -> [SyncableFileMetadata] {
+    func records() -> [CloudKitSyncProvider.RemoteRecord] {
         lock.lock(); defer { lock.unlock() }
         return items
     }
