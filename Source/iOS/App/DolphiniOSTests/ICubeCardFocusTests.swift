@@ -162,7 +162,7 @@ final class ICubeCardFocusTests: XCTestCase {
     RunLoop.main.run(until: Date().addingTimeInterval(0.15))
 
     var previous = try capture(window)
-    for _ in 0..<Self.settleAttempts {
+    for _ in 0 ..< Self.settleAttempts {
       RunLoop.main.run(until: Date().addingTimeInterval(Self.settleInterval))
       let next = try capture(window)
       if next == previous { return next }
