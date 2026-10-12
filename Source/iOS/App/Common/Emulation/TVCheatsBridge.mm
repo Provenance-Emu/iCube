@@ -206,7 +206,7 @@ static TVActionReplayCodeInfo* MakeARInfo(const ActionReplay::ARCode& c)
 	for (const auto& c : codes) {
     [out addObject:MakeGeckoInfo(c)];
   }
-	return out;
+  return out;
 }
 
 + (BOOL)setGeckoCodeEnabled:(BOOL)enabled atIndex:(NSInteger)index forGameId:(NSString*)gameId revision:(NSInteger)revision {
@@ -232,7 +232,7 @@ static TVActionReplayCodeInfo* MakeARInfo(const ActionReplay::ARCode& c)
 	for (const auto& c : codes) {
     [out addObject:MakeARInfo(c)];
   }
-	return out;
+  return out;
 }
 
 + (BOOL)setActionReplayCodeEnabled:(BOOL)enabled atIndex:(NSInteger)index forGameId:(NSString*)gameId revision:(NSInteger)revision {
