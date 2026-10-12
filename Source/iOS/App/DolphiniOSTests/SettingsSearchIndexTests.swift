@@ -46,7 +46,7 @@ final class SettingsSearchIndexTests: XCTestCase {
   }
 
   func test_audioRows_areFoundByTheirOwnTitles() {
-    XCTAssertTrue(index.hits(query: "audio stretching").contains { $0.entryID == "audio" })
+    XCTAssertTrue(index.hits(query: "buffer size").contains { $0.entryID == "audio" })
   }
 
   func test_interfaceRows_areFoundByTheirOwnTitles() {
