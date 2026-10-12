@@ -31,12 +31,36 @@ final class PauseMenuModelBuilderTests: XCTestCase {
       requestExit: {}, recenterPointer: {})
   }
 
-  private func state(recenter: Bool = false, cheats: Int = 0) -> PauseMenuState {
+  private func state(recenter: Bool = false, cheats: Int = 0, resolution: Int = 1, volume: Int = 100) -> PauseMenuState {
     PauseMenuState(
       quickSlot: 3, isMuted: false, activeCheatCount: cheats,
       shaderOptions: [("None", ShaderQuickApply.noneValue), ("crt", AnyHashable("/s/crt.slangp"))],
       showsRecenterPointer: recenter,
-      internalResolution: 1, audioVolume: 100, engineShortName: "CIR", jitAcquired: false)
+      internalResolution: resolution, audioVolume: volume, engineShortName: "CIR", jitAcquired: false)
+  }
+
+  /// A value a settings leaf set off the tile ladder (volume 80, scale 5x) is listed in place, so one press
+  /// steps to the next option instead of jumping to 0 % / Native.
+  func test_offLadderValues_areListedInPlace_soOnePressSteps() {
+    let model = PauseMenuModelBuilder.make(state: state(resolution: 5, volume: 80), bindings: bindings(), actions: actions())
+    guard case .cycle(let scales, _) = model.item(id: "upscaling")!.role,
+          case .cycle(let volumes, _) = model.item(id: "audio")!.role else { return XCTFail("cycle") }
+    XCTAssertEqual(scales.map(\.1), [1, 2, 3, 4, 5, 6].map { AnyHashable($0) })
+    XCTAssertEqual(scales[4].0, "5x")
+    XCTAssertEqual(MenuItemRole.cycled(options: scales, current: AnyHashable(5), step: 1), AnyHashable(6))
+    XCTAssertEqual(volumes.map(\.1), [0, 25, 50, 75, 80, 100].map { AnyHashable($0) })
+    XCTAssertEqual(volumes[4].0, "80 %")
+    XCTAssertEqual(MenuItemRole.cycled(options: volumes, current: AnyHashable(80), step: 1), AnyHashable(100))
+  }
+
+  func test_upscalingAuto_isListedFirst_andLadderValuesAddNothing() {
+    let auto = PauseMenuModelBuilder.make(state: state(resolution: 0), bindings: bindings(), actions: actions())
+    guard case .cycle(let scales, _) = auto.item(id: "upscaling")!.role else { return XCTFail("cycle") }
+    XCTAssertEqual(scales.first?.1, AnyHashable(0))
+    XCTAssertEqual(scales.count, 6)
+    let onLadder = PauseMenuModelBuilder.make(state: state(resolution: 3, volume: 50), bindings: bindings(), actions: actions())
+    guard case .cycle(let plain, _) = onLadder.item(id: "audio")!.role else { return XCTFail("cycle") }
+    XCTAssertEqual(plain.count, 5)
   }
 
   func test_threeSections_inOrder_withExpectedTiles() {

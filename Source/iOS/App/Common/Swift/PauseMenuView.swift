@@ -30,9 +30,8 @@ internal struct PauseMenuView: View {
   #if DEBUG
   /// `-ICubePausePane <saves|cheats|controllers|reset|exit>`: open a sub-pane for simulator screenshots.
   var debugInitialPane: String?
-  /// Applied once: `onAppear` runs again after every child sheet, and the view is a struct, so
-  /// the pane cannot be cleared from inside it.
-  @State private var debugPaneApplied = false
+  /// onAppear re-runs after every child sheet closes; the debug pane applies once.
+  @State private var debugInitialPaneConsumed = false
   #endif
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
@@ -164,8 +163,8 @@ internal struct PauseMenuView: View {
       refreshShaderState()
       refreshLiveSettings()
       #if DEBUG
-      if !debugPaneApplied {
-        debugPaneApplied = true
+      if !debugInitialPaneConsumed {
+        debugInitialPaneConsumed = true
         switch debugInitialPane {
         case "saves": pane = .saves
         case "cheats": pane = .cheats
@@ -878,6 +877,25 @@ enum PauseMenuModelBuilder {
   ]
   static let audioVolumeOptions: [(String, AnyHashable)] = [0, 25, 50, 75, 100].map { ("\($0) %", AnyHashable($0)) }
 
+  /// The ladder plus the current value when a settings leaf put it off the ladder, in sorted position: the
+  /// badge stays honest and a press moves one step, instead of `cycled` jumping to the first option (0 %).
+  static func options(_ ladder: [(String, AnyHashable)], including current: Int, label: (Int) -> String) -> [(String, AnyHashable)] {
+    guard !ladder.contains(where: { $0.1 == AnyHashable(current) }) else { return ladder }
+    var result = ladder
+    let index = result.firstIndex { ($0.1 as? Int ?? Int.max) > current } ?? result.count
+    result.insert((label(current), AnyHashable(current)), at: index)
+    return result
+  }
+
+  /// Dolphin's EFB scale 0 is Auto.
+  static func upscalingOptions(including current: Int) -> [(String, AnyHashable)] {
+    options(upscalingOptions, including: current) { $0 == 0 ? L("Auto") : "\($0)x" }
+  }
+
+  static func audioVolumeOptions(including current: Int) -> [(String, AnyHashable)] {
+    options(audioVolumeOptions, including: current) { "\($0) %" }
+  }
+
   /// With nothing to cycle (only "None"), the tile just opens the full picker.
   private static func shadersItem(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions) -> MenuItem {
     if state.shaderOptions.count <= 1 {
@@ -920,11 +938,11 @@ enum PauseMenuModelBuilder {
       MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .action(actions.openPerfOverlay),
                description: L("Frame rate, CPU and GPU timing drawn over the game.")),
       MenuItem(id: "upscaling", title: L("Upscaling"), icon: "arrow.up.left.and.arrow.down.right", tint: .indigo,
-               role: .cycle(options: upscalingOptions, selection: bindings.internalResolution),
+               role: .cycle(options: upscalingOptions(including: state.internalResolution), selection: bindings.internalResolution),
                description: L("Internal resolution. Takes effect immediately."),
                longPress: .action { actions.openSettingsLeaf("graphics-enhancements") }),
       MenuItem(id: "audio", title: L("Audio"), icon: "speaker.wave.2", tint: .cyan,
-               role: .cycle(options: audioVolumeOptions, selection: bindings.audioVolume),
+               role: .cycle(options: audioVolumeOptions(including: state.audioVolume), selection: bindings.audioVolume),
                description: L("Game volume. Long-press for audio settings."),
                longPress: .action { actions.openSettingsLeaf("audio") }),
       MenuItem(id: "performance", title: L("Performance"), icon: "gauge.with.dots.needle.67percent", tint: .orange,
@@ -962,7 +980,7 @@ enum PauseMenuModelBuilder {
 enum RecordingToggle {
   static func set(_ on: Bool) {
     let manager = RecordingManager.shared
-    guard on != manager.isRecording else { return }
+    guard on != manager.isRecording, !manager.isTransitioning else { return }
     Task { @MainActor in
       do {
         if on { try await manager.start() } else { _ = try await manager.stop() }

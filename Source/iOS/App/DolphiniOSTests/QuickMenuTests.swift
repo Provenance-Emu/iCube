@@ -19,7 +19,7 @@ final class QuickMenuTests: XCTestCase {
 
   func test_itemIDs_inOrder() {
     XCTAssertEqual(model().allItems.map(\.id),
-                   ["fast-forward", "mute", "quick-save", "quick-load", "screenshot", "perf-hud", "pause-menu"])
+                   ["fast-forward", "mute", "quick-save", "quick-load", "screenshot", "record", "perf-hud", "pause-menu"])
     XCTAssertEqual(model().sections.count, 1)
     XCTAssertNil(model().sections[0].header)
   }
@@ -35,6 +35,9 @@ final class QuickMenuTests: XCTestCase {
     let remote = PauseGestureTracker.siriRemoteMenuReason
     XCTAssertTrue(PauseGestureTracker.routesToQuickMenu(reason: remote, isUnboundRemote: true))
     XCTAssertFalse(PauseGestureTracker.routesToQuickMenu(reason: remote, isUnboundRemote: false))
+    let uipress = PauseGestureTracker.uipressMenuReason
+    XCTAssertTrue(PauseGestureTracker.routesToQuickMenu(reason: uipress, isUnboundRemote: true), "the UIPress route of the same press must agree")
+    XCTAssertFalse(PauseGestureTracker.routesToQuickMenu(reason: uipress, isUnboundRemote: false))
     XCTAssertFalse(PauseGestureTracker.routesToQuickMenu(reason: PauseGestureTracker.optionsReason, isUnboundRemote: true))
   }
 

@@ -9,7 +9,7 @@ import SwiftUI
 struct QuickMenuView: View {
   /// Opacity of the scrim that dims the game behind the panel.
   private static let scrimOpacity = 0.35
-  private static let columns = 7
+  private static let columns = 8
 
   @Binding var isPresented: Bool
   let bindings: PauseMenuBindings
@@ -36,11 +36,12 @@ struct QuickMenuView: View {
     QuickMenuModelBuilder.make(state: state, bindings: bindings, actions: actions, onOpenPauseMenu: openPauseMenu)
   }
 
-  /// Hands the pause over: releases the quick-menu claim first, then lets the host present the pause menu.
+  /// Hands the pause over. The host claims first (a pending token the pause menu adopts), so releasing
+  /// ours never lets the core resume in between.
   private func openPauseMenu() {
+    onOpenPauseMenu()
     releaseClaim()
     isPresented = false
-    onOpenPauseMenu()
   }
 
   private func releaseClaim() {
@@ -58,6 +59,9 @@ struct QuickMenuView: View {
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
     .onAppear {
+      // Before the claim, as the pause menu does: the Screenshot tile and the quick-save thumbnail read
+      // this frame, and nothing else refreshes it while the panel is up.
+      SaveStateService.capturePausePreview()
       if token == nil { token = PauseArbiter.shared.claim(PauseArbiter.Reason.quickMenu) }
     }
     .onDisappear { releaseClaim() }

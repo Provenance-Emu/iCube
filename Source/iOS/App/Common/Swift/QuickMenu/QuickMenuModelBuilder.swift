@@ -7,7 +7,7 @@ import Foundation
 /// drift, plus a tile that opens the full pause menu.
 enum QuickMenuModelBuilder {
   /// Ids taken from `PauseMenuModelBuilder.make`, in display order.
-  static let sharedIDs = ["fast-forward", "mute", "quick-save", "quick-load", "screenshot", "perf-hud"]
+  static let sharedIDs = ["fast-forward", "mute", "quick-save", "quick-load", "screenshot", "record", "perf-hud"]
   static let pauseMenuID = "pause-menu"
 
   static func make(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions,

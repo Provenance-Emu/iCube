@@ -77,9 +77,13 @@ final class PauseGestureTracker {
   /// Press-down time of the current Options press, nil while it is up.
   private var optionsPressStart: TimeInterval?
 
+  /// `EmuEventVC`'s UIPress route for the same Siri Remote Menu press.
+  static let uipressMenuReason = "uipress-menu"
+
   /// A short Siri Remote Menu press opens the quick menu only when the remote drives no player slot.
+  /// Both routes the press can take (GCController and UIPress) must agree, or one press opens either menu.
   static func routesToQuickMenu(reason: String, isUnboundRemote: Bool) -> Bool {
-    reason == siriRemoteMenuReason && isUnboundRemote
+    (reason == siriRemoteMenuReason || reason == uipressMenuReason) && isUnboundRemote
   }
 
   /// An Options hold opens the quick menu from `quickMenuHoldDuration` up to the exit-to-library hold,
@@ -165,8 +169,10 @@ final class PauseGestureTracker {
     }
     guard let start = menuPressStart.removeValue(forKey: reason) else { return }
     guard now - start < DOLMenuLongPressDuration else { return }
+    #if os(tvOS)
     // An Options hold belongs to the quick menu (`optionsButtonChanged`), not the pause menu.
     if reason == Self.optionsReason, Self.optionsHoldFired(start: start, now: now) { return }
+    #endif
     if Self.routesToQuickMenu(reason: reason, isUnboundRemote: Self.siriRemoteIsUnbound) {
       requestQuickMenu(reason: reason)
       return
@@ -186,7 +192,10 @@ final class PauseGestureTracker {
     guard let start = optionsPressStart else { return }
     optionsPressStart = nil
     guard Self.optionsHoldFired(start: start, now: now) else { return }
+    // tvOS only (spec §7.2): on iOS the hold keeps opening the pause menu on release.
+    #if os(tvOS)
     requestQuickMenu(reason: "options-hold")
+    #endif
   }
 
   /// The single sink for "the user asked for the quick menu". Same guards as `requestPauseMenu`: emulation
@@ -236,11 +245,15 @@ final class PauseGestureTracker {
     // correlates with an extended gamepad's Menu press is that pad's Start
     // button, not a pause request — drop it. A genuine Siri Remote press has
     // no accompanying extended-gamepad transition and is unaffected.
-    if reason == "uipress-menu",
+    if reason == Self.uipressMenuReason,
        extendedGamepadMenuIsDown || now - lastExtendedGamepadMenuTransition < Self.pauseRequestCoalesceWindow {
       if UserDefaults.standard.bool(forKey: "input_debug") {
         NSLog("[INPUT] pause request ignored (%@): correlates with an extended-gamepad Menu press (Start)", reason)
       }
+      return
+    }
+    if Self.routesToQuickMenu(reason: reason, isUnboundRemote: Self.siriRemoteIsUnbound) {
+      requestQuickMenu(reason: reason)
       return
     }
     guard now - lastPauseRequest > Self.pauseRequestCoalesceWindow else { return }

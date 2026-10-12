@@ -6,6 +6,9 @@ import ReplayKit
 #if canImport(Photos)
 import Photos
 #endif
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// The slice of `RPScreenRecorder` the manager uses, so tests can substitute a fake.
 protocol ScreenRecording {
@@ -28,7 +31,9 @@ struct ReplayKitScreenRecorder: ScreenRecording {
 
   func startRecording() async throws {
     let recorder = RPScreenRecorder.shared()
+    #if !os(tvOS)
     recorder.isMicrophoneEnabled = false
+    #endif
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       recorder.startRecording { error in
         if let error { continuation.resume(throwing: error) } else { continuation.resume() }
@@ -50,13 +55,20 @@ struct ReplayKitScreenRecorder: ScreenRecording {
 /// the clip setting "Save to Photos" is on.
 @MainActor
 final class RecordingManager: ObservableObject {
-  static let shared = RecordingManager()
+  static let shared: RecordingManager = {
+    let manager = RecordingManager()
+    manager.installLifecycleObservers()
+    return manager
+  }()
 
   static let folderName = "Recordings"
   static let timestampFormat = "yyyy-MM-dd_HH-mm-ss"
   static let fileExtension = "mp4"
 
   @Published private(set) var isRecording = false
+  /// True between a start or stop being asked for and ReplayKit answering; the toggle waits it out.
+  private(set) var isTransitioning = false
+  private var observers: [NSObjectProtocol] = []
 
   /// Reads the Interface leaf's setting; on unless the owner turned it off.
   var watermarkEnabled: Bool {
@@ -107,14 +119,41 @@ final class RecordingManager: ObservableObject {
       .appendingPathComponent(fileName(gameID: gameID, date: date, timeZone: timeZone))
   }
 
+  // MARK: Lifecycle
+
+  /// A recording ends with the game or when the app leaves the foreground: ReplayKit would otherwise keep
+  /// capturing the library (or nothing) with `isRecording` stuck on, and the next game would open with the
+  /// REC badge and watermark showing. Called once for `shared`; tests call it on their own instances.
+  func installLifecycleObservers() {
+    guard observers.isEmpty else { return }
+    let center = NotificationCenter.default
+    observers.append(center.addObserver(forName: DOLEmulationDidEndNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.stopForLifecycle() }
+    })
+    #if canImport(UIKit)
+    observers.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.stopForLifecycle() }
+    })
+    #endif
+  }
+
+  private func stopForLifecycle() {
+    guard isRecording, !isTransitioning else { return }
+    Task { @MainActor in
+      do { try await stop() } catch { NSLog("[Recording] lifecycle stop failed: %@", error.localizedDescription) }
+    }
+  }
+
   // MARK: Start / stop
 
   func start() async throws {
-    guard !isRecording else { throw RecordingError.alreadyRecording }
+    guard !isRecording, !isTransitioning else { throw RecordingError.alreadyRecording }
     guard recorder.isAvailable else { throw RecordingError.unavailable }
     guard let directory = userDirectory() else { throw RecordingError.noDestination }
     let url = Self.outputURL(gameID: gameID() ?? "UNKNOWN", date: now(), userDirectory: directory)
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    isTransitioning = true
+    defer { isTransitioning = false }
     try await recorder.startRecording()
     pendingURL = url
     isRecording = true
@@ -126,6 +165,8 @@ final class RecordingManager: ObservableObject {
     guard isRecording, let url = pendingURL else { return nil }
     isRecording = false
     pendingURL = nil
+    isTransitioning = true
+    defer { isTransitioning = false }
     try await recorder.stopRecording(to: url)
     if savesToPhotos() { await saveToPhotos(url) }
     toast(L("Recording saved to Recordings"))

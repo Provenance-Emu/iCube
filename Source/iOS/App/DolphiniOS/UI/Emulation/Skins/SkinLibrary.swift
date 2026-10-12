@@ -88,8 +88,7 @@ final class SkinLibrary: ObservableObject {
     selection = Self.loadSelection(from: rootURL.appendingPathComponent(Self.selectionFileName))
   }
 
-  /// Nonisolated: a path computation that `SkinStoreInstalledRecord`'s default argument evaluates
-  /// outside the main actor.
+  /// Pure path arithmetic, so default arguments can call it off the main actor.
   nonisolated static func defaultRootURL() -> URL {
     URL(fileURLWithPath: UserFolderUtil.getUserFolder()).appendingPathComponent(rootFolderName, isDirectory: true)
   }

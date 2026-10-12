@@ -25,6 +25,13 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       let window = UIWindow(windowScene: windowScene)
       let rootView = TVRootView()
       window.rootViewController = UIHostingController(rootView: rootView)
+      #if DEBUG
+      // `-ICubeAppearance light|dark` pins the appearance for simulator screenshots
+      // (Scripts/tvos_screens.sh): the tvOS runtime rejects `simctl ui appearance`.
+      if let style = TVRootView.argument(after: "-ICubeAppearance", in: ProcessInfo.processInfo.arguments) {
+        window.overrideUserInterfaceStyle = style == "light" ? .light : .dark
+      }
+      #endif
       // Apply global tint from asset catalog (DolphinTint)
       if let tint = UIColor(named: "DolphinTint") {
         window.tintColor = tint

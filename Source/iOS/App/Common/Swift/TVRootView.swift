@@ -21,7 +21,7 @@ struct TVRootView: View {
   }
 
   #if DEBUG
-  private static func argument(after flag: String, in args: [String]) -> String? {
+  static func argument(after flag: String, in args: [String]) -> String? {
     guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
     return args[i + 1]
   }

@@ -58,13 +58,12 @@ final class SkinStoreInstaller: ObservableObject {
   private let installStep: InstallStep
   private var tasks: [String: Task<Void, Never>] = [:]
 
-  /// `installStep` defaults to `libraryInstallStep(.shared)`, resolved in the body: a default
-  /// argument is evaluated outside the main actor and cannot reach the shared library.
   init(downloader: any SkinStoreDownloading = URLSessionSkinStoreDownloader(),
        record: SkinStoreInstalledRecord = SkinStoreInstalledRecord(),
        installStep: InstallStep? = nil) {
     self.downloader = downloader
     self.record = record
+    // Resolved here, not as a default argument: that expression runs outside the main actor.
     self.installStep = installStep ?? Self.libraryInstallStep(.shared)
     installedIds = Set(record.load().keys)
   }
