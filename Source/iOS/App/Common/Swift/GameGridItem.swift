@@ -352,8 +352,10 @@ struct GameGridItem: View {
           #if os(tvOS)
           .icubeText(.body)
           .foregroundStyle(ICubeDesign.color(.textPrimary))
+          .fontWeight(.semibold)
           .multilineTextAlignment(.center)
-          .lineLimit(2)
+          .lineLimit(1)
+          .minimumScaleFactor(0.75)
           #else
           .font(.system(
             size: screenScaledFontSize(base: 18),
@@ -385,6 +387,9 @@ struct GameGridItem: View {
             #if os(tvOS)
             .icubeText(.tag)
             .foregroundStyle(ICubeDesign.color(.textSecondary))
+            .padding(.horizontal, ICubeDesign.Spacing.s.rawValue)
+            .padding(.vertical, ICubeDesign.Spacing.xs.rawValue)
+            .background(Capsule().fill(ICubeDesign.color(.rowSurface)))
             #else
             .font(.system(
               size: screenScaledFontSize(base: 11),

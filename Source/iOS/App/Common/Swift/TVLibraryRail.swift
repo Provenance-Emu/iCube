@@ -140,7 +140,7 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
     action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
-      rowLabel(icon: icon, title: title)
+      rowLabel(icon: icon, title: title, selected: selected)
     }
     .buttonStyle(ICubeRailButtonStyle(isSelected: selected))
     .focused($focusedItem, equals: item)
@@ -161,7 +161,7 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
   }
 
   /// Icon in a fixed left column; the label ends on the row's trailing edge.
-  private func rowLabel(icon: RailIcon, title: String) -> some View {
+  private func rowLabel(icon: RailIcon, title: String, selected: Bool = false) -> some View {
     HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
       railIcon(icon)
       if isExpanded {
@@ -172,6 +172,7 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+    .foregroundStyle(selected ? ICubeDesign.color(.accent) : ICubeDesign.color(.textPrimary))
   }
 
   private func railIcon(_ icon: RailIcon) -> some View {

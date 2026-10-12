@@ -263,7 +263,7 @@ struct TVLibraryView: View {
 
   // MARK: - UI Settings
 
-  @AppStorage(ConfigInterfaceDefaultsKey.backgroundStyle) private var backgroundStyle: BackgroundStyle = .gradient
+  @AppStorage(ConfigInterfaceDefaultsKey.backgroundStyle) private var backgroundStyle: BackgroundStyle = .animated
   @AppStorage(ConfigInterfaceDefaultsKey.showSubtitles) private var showSubtitles: Bool = true
 
   // MARK: - Sort settings (persisted)
@@ -879,6 +879,23 @@ struct TVLibraryView: View {
     }
   }
 
+  /// Subtitle under the "iCube" title: the view's name, plus the game count on the grid views.
+  static func libraryHeaderSubtitle(destination: TVLibraryRailDestination, count: Int) -> String {
+    switch destination {
+    case .home:
+      return L("My Library")
+    case .all:
+      return "\(L("All Games")) · \(count)"
+    case .platform(let category):
+      return "\(category.displayName) · \(count)"
+    }
+  }
+
+  /// A search shows the grid of matches even from Home, so it reads as All Games.
+  private func libraryHeaderDestination() -> TVLibraryRailDestination {
+    isSearching && tvLibraryDestination == .home ? .all : tvLibraryDestination
+  }
+
   private func libraryView_tvOS(_ displayGames: [TVGameItem]) -> some View {
     HStack(alignment: .top, spacing: ICubeDesign.Spacing.l.rawValue) {
       TVLibraryRail(
@@ -899,7 +916,14 @@ struct TVLibraryView: View {
         sortMenu: { sortMenuItems }
       )
       GeometryReader { proxy in
-        VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+          ICubeLeafHeader(
+            title: "iCube",
+            subtitle: Self.libraryHeaderSubtitle(destination: libraryHeaderDestination(), count: displayGames.count)
+          )
+          .padding(.horizontal, Constants.gridHorizontalPadding)
+          .animation(ICubeDesign.Motion.selection, value: tvLibraryDestination)
+          .animation(ICubeDesign.Motion.selection, value: displayGames.count)
           ScrollView {
             if isSearching || tvLibraryDestination != .home {
               libraryToolbar_tvOS_main(displayGames, columnWidth: proxy.size.width)
@@ -978,6 +1002,14 @@ struct TVLibraryView: View {
     }
   }
 
+  /// Title above the All Games and per-platform grids.
+  private func libraryGridSectionTitle() -> String {
+    switch libraryHeaderDestination() {
+    case .home, .all: return L("All Games")
+    case .platform(let category): return category.displayName
+    }
+  }
+
   /// How many library cards fit across the content column beside the rail.
   private func tvOSColumnCount(forWidth width: CGFloat) -> Int {
     let paddingH = Constants.gridHorizontalPadding
@@ -995,15 +1027,18 @@ struct TVLibraryView: View {
       repeating: GridItem(.flexible(minimum: LibraryLayout.cardSize.width), spacing: Constants.gridHorizontalSpacing),
       count: count
     )
-    LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
-      ForEach(displayGames, id: \.filePath) { item in
-        gameGridItem(for: item)
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+      TVLibrarySectionHeader(title: libraryGridSectionTitle())
+      LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
+        ForEach(displayGames, id: \.filePath) { item in
+          gameGridItem(for: item)
+        }
       }
+      .padding(.horizontal, Constants.gridHorizontalPadding)
+      .padding(.vertical, Constants.gridVerticalPadding)
+      .onAppear { gridColumnCount = count }
+      .onChangeCompat(of: count) { _, newVal in gridColumnCount = newVal }
     }
-    .padding(.horizontal, Constants.gridHorizontalPadding)
-    .padding(.vertical, Constants.gridVerticalPadding)
-    .onAppear { gridColumnCount = count }
-    .onChangeCompat(of: count) { _, newVal in gridColumnCount = newVal }
   }
   #endif // os(tvOS)
 
@@ -1253,23 +1288,27 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var emptyLibraryActions: some View {
 #if os(tvOS)
-    HStack(spacing: 16) {
-      Button(action: { showWebImportSheet = true }) {
-        Label(L("Upload via Wi-Fi…"), systemImage: "wifi")
-      }
-      .buttonStyle(.borderedProminent)
-      Button(action: { showSources = true }) {
-        Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
-      }
-      .buttonStyle(.bordered)
-      Button(action: { model.rescan() }) {
-        Label(L("Rescan"), systemImage: "arrow.clockwise")
-      }
-      .buttonStyle(.bordered)
-      .disabled(model.isRescanning)
+    VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+      tvEmptyStateRow(L("Upload via Wi-Fi…"), systemImage: "wifi") { showWebImportSheet = true }
+      tvEmptyStateRow(L("Manage Sources"), systemImage: "externaldrive.badge.plus") { showSources = true }
+      tvEmptyStateRow(L("Rescan"), systemImage: "arrow.clockwise") { model.rescan() }
+        .disabled(model.isRescanning)
     }
+    .frame(maxWidth: ICubeDesign.Motion.railExpandedWidth * 2)
 #endif
   }
+
+#if os(tvOS)
+  /// One focusable row of the tvOS empty states.
+  private func tvEmptyStateRow(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Label(title, systemImage: systemImage)
+        .icubeText(.body)
+        .foregroundStyle(ICubeDesign.color(.textPrimary))
+    }
+    .buttonStyle(ICubeRowButtonStyle())
+  }
+#endif
 
   @ViewBuilder
   private var filteredEmptyLibraryView: some View {
@@ -1281,13 +1320,26 @@ struct TVLibraryView: View {
           message: filteredEmptyMessage
         )
         if showPlatformFilterBar, platformFilter != .all {
+#if os(tvOS)
+          tvEmptyStateRow(L("Show All Games"), systemImage: "square.grid.2x2") {
+            platformFilter = .all
+            tvLibraryDestination = .home
+          }
+          .frame(maxWidth: ICubeDesign.Motion.railExpandedWidth * 2)
+#else
           Button(L("Show All Games")) {
             platformFilter = .all
           }
           .buttonStyle(.borderedProminent)
+#endif
         } else if isSearching {
+#if os(tvOS)
+          tvEmptyStateRow(L("Clear Search"), systemImage: "xmark.circle") { searchText = "" }
+            .frame(maxWidth: ICubeDesign.Motion.railExpandedWidth * 2)
+#else
           Button(L("Clear Search")) { searchText = "" }
             .buttonStyle(.borderedProminent)
+#endif
         }
       }
       .padding()

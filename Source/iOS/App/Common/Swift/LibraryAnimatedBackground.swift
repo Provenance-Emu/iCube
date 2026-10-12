@@ -28,9 +28,16 @@ struct EmulationQuiet<Idle: View, Active: View>: View {
 /// `repeatForever` at once. Now the motion is one `@State` flag flipped once on appear.
 struct LibraryAnimatedBackground: View {
   @Environment(\.colorScheme) private var colorScheme
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   /// Flipped once on appear; the orbs and tiles animate between its two values forever.
   @State private var drifting = false
+
+  /// Flipped once on appear; the first orb crossfades between the accent and purple over `hueDuration`.
+  @State private var hueShifted = false
+
+  /// One full accent-to-purple sweep; it then runs back, so a round trip is twice this.
+  private static let hueDuration: Double = 90
 
   private static let orbCount = 5
   private static let tileCount = 8
@@ -52,12 +59,12 @@ struct LibraryAnimatedBackground: View {
         let y = (Self.unit(index, salt: 3) - 0.5) * 400
         let drift = 30 + Self.unit(index, salt: 4) * 40
         let duration = 10 + Self.unit(index, salt: 5) * 8
-        orb(index: index)
+        orbStack(index: index)
           .frame(width: size, height: size)
           .offset(x: x + (drifting ? drift : -drift), y: y + (drifting ? -drift : drift))
           .scaleEffect(0.8 + CGFloat(index) * 0.1)
           .animation(
-            .easeInOut(duration: duration).repeatForever(autoreverses: true).delay(Double(index) * 1.5),
+            reduceMotion ? nil : .easeInOut(duration: duration).repeatForever(autoreverses: true).delay(Double(index) * 1.5),
             value: drifting)
       }
 
@@ -85,14 +92,19 @@ struct LibraryAnimatedBackground: View {
           .frame(width: side, height: side)
           .offset(x: x, y: y)
           .rotationEffect(.degrees(startAngle + (drifting ? 360 : 0)))
-          .animation(.linear(duration: duration).repeatForever(autoreverses: false).delay(Double(index) * 2), value: drifting)
+          .animation(reduceMotion ? nil : .linear(duration: duration).repeatForever(autoreverses: false).delay(Double(index) * 2), value: drifting)
       }
     }
     // No .clipped(): it cut the whole effect off at the safe area, leaving plain bands behind the
     // navigation bar and the bottom search bar. The orbs move by .offset, which never affects
     // layout, and this is the bottom layer, so nothing needs clipping.
     .ignoresSafeArea()
-    .onAppear { drifting = true }
+    .onAppear {
+      // Reduce Motion: leave both flags false so the orbs and tiles render static.
+      guard !reduceMotion else { return }
+      drifting = true
+      hueShifted = true
+    }
   }
 
   @ViewBuilder
@@ -126,15 +138,32 @@ struct LibraryAnimatedBackground: View {
     }
   }
 
-  private func orb(index: Int) -> some View {
+  /// Orb 0 is the accent orb: it crossfades accent to system purple, linearly and forever.
+  /// The rest keep their fixed purple/blue tint.
+  @ViewBuilder
+  private func orbStack(index: Int) -> some View {
+    if index == 0 {
+      ZStack {
+        orb(index: index, tint: ICubeDesign.color(.accent))
+          .opacity(hueShifted ? 0 : 1)
+        orb(index: index, tint: Color(uiColor: .systemPurple))
+          .opacity(hueShifted ? 1 : 0)
+      }
+      .animation(
+        reduceMotion ? nil : .linear(duration: Self.hueDuration).repeatForever(autoreverses: true),
+        value: hueShifted)
+    } else {
+      orb(index: index, tint: index % 2 == 0 ? Color.purple : Color.blue)
+    }
+  }
+
+  private func orb(index: Int, tint: Color) -> some View {
     Circle()
       .fill(
         RadialGradient(
           colors: [
-            colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.06) : Color.blue.opacity(0.05))
-              : (index % 2 == 0 ? Color.purple.opacity(0.10) : Color.blue.opacity(0.10)),
-            colorScheme == .dark ? (index % 2 == 0 ? Color.purple.opacity(0.03) : Color.blue.opacity(0.025))
-              : Color.white.opacity(0.0),
+            colorScheme == .dark ? tint.opacity(index % 2 == 0 ? 0.06 : 0.05) : tint.opacity(0.10),
+            colorScheme == .dark ? tint.opacity(index % 2 == 0 ? 0.03 : 0.025) : Color.white.opacity(0.0),
             Color.clear
           ],
           center: .center,
