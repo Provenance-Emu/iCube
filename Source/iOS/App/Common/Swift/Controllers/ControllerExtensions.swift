@@ -184,7 +184,8 @@ func installPauseMenuHandlers(_ c: GCController) {
   // Options is the one dedicated pause-menu button on extended gamepads.
   eg.buttonOptions?.pressedChangedHandler = { _, _, pressed in
     Task { @MainActor in
-      PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "extendedGamepad.buttonOptions")
+      PauseGestureTracker.shared.optionsButtonChanged(pressed: pressed)
+      PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: PauseGestureTracker.optionsReason)
     }
   }
 }
