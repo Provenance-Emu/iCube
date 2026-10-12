@@ -60,7 +60,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
     model.reload()
     XCTAssertEqual(model.state.player.id, "gc-1")
     XCTAssertEqual(model.state.player.deviceQualifier, Self.xbox)
-    XCTAssertEqual(io.groupReads, ["gcPad-0", "gcPad-3", "gcPad-1", "gcPad-2", "gcPad-4", "gcPad-5", "gcPad-7"])
+    XCTAssertEqual(io.groupReads, ["gcPad-0", "gcPad-3", "gcPad-1", "gcPad-2", "gcPad-4", "gcPad-5", "gcPad-6", "gcPad-7"])
     XCTAssertEqual(model.state.advanced.map(\.groupId), [1, 2, 4])
   }
 
