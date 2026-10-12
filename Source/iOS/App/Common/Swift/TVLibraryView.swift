@@ -1915,7 +1915,9 @@ struct TVLibraryView: View {
       Button(L("Cancel")) { SaveStateService.skipResumeOnce = false }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
-      .sheet(item: $showCheatListFor) { TVCheatListView(item: $0).claimsController() }
+      .sheet(item: $showCheatListFor) { item in
+        CheatsMenuView(game: item, onBack: { showCheatListFor = nil }).claimsController()
+      }
       // D17: while this sheet is up, `.claimsController()` pushes a new
       // controller-ownership scope, which makes the library's own
       // `extendedGamepad.valueChangedHandler` (gated on
