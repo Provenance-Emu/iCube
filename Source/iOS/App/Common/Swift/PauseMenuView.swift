@@ -70,7 +70,7 @@ internal struct PauseMenuView: View {
   // pane rather than a settings trip. Mute is shared with the in-game top bar
   // via `QuickMute`.
   @State private var isMuted: Bool = false
-  @State private var fastForwardEnabled: Bool = false
+  @State private var fastForward = PauseFastForwardState(isEnabled: false, percent: ConfigGeneralState.storedFastForward(nil))
   /// This menu's hold on the pause (spec §4.3). Adopted from the gesture tracker's pending claim when
   /// there is one, otherwise claimed here. Released only on a real teardown, see `onDisappear`.
   @State private var pauseToken: PauseArbiter.Token?
@@ -85,22 +85,6 @@ internal struct PauseMenuView: View {
   /// Mutes / unmutes through the helper the top bar shares, so both always agree.
   private func toggleMute() {
     isMuted = QuickMute.toggle()
-  }
-
-  /// Currently configured fast-forward speed, read from the same UserDefaults key
-  /// `TVEmulationBridge.setFastForwardSpeedPercent(_:)` writes (`ConfigGeneralDefaultsKey`). Falls back to the
-  /// bridge's own default (300 = 3x) before anything has been picked.
-  private var configuredFastForwardPercent: Int {
-    ConfigGeneralState.storedFastForward(UserDefaults.standard.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int)
-  }
-
-  /// Turns fast-forward off without leaving the pause menu, mirroring the old
-  /// in-place toggle's off behavior.
-  private func turnOffFastForward() {
-    if TVEmulationBridge.isFastForwardEnabled() {
-      _ = TVEmulationBridge.toggleFastForward()
-    }
-    fastForwardEnabled = false
   }
 
   var body: some View {
@@ -147,7 +131,9 @@ internal struct PauseMenuView: View {
         openedAt = Date()
       }
       isMuted = QuickMute.isMuted
-      fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
+      fastForward = PauseFastForwardState(
+        isEnabled: TVEmulationBridge.isFastForwardEnabled(),
+        percent: ConfigGeneralState.storedFastForward(UserDefaults.standard.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int))
       refreshActiveCheatCount()
       refreshShaderState()
       #if DEBUG
@@ -719,21 +705,21 @@ internal struct PauseMenuView: View {
 
   // MARK: - Pause menu model
 
-  /// Persists `percent` and turns fast-forward on; the game picks it up when the player resumes.
-  private func selectFastForwardSpeed(_ percent: Int) {
-    TVEmulationBridge.setFastForwardSpeedPercent(percent)
-    if !TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
-    fastForwardEnabled = true
+  /// Carries out what a fast-forward tile selection decided; the game picks it up when the player resumes.
+  private func applyFastForward(_ effect: PauseFastForwardState.Effect) {
+    switch effect {
+    case .setSpeed(let percent):
+      TVEmulationBridge.setFastForwardSpeedPercent(percent)
+      if !TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
+    case .turnOff:
+      if TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
+    }
   }
 
   private var pauseMenuBindings: PauseMenuBindings {
     PauseMenuBindings(
       mute: Binding(get: { isMuted }, set: { _ in toggleMute() }),
-      fastForward: Binding(
-        get: { fastForwardEnabled ? AnyHashable(configuredFastForwardPercent) : PauseMenuModelBuilder.fastForwardOff },
-        set: { value in
-          if let percent = value as? Int, percent >= 0 { selectFastForwardSpeed(percent) } else { turnOffFastForward() }
-        }),
+      fastForward: Binding(get: { fastForward.selection }, set: { applyFastForward(fastForward.select($0)) }),
       quickSlot: Binding(get: { AnyHashable(selectedSlot) }, set: { if let slot = $0 as? Int { selectedSlot = slot } }),
       shader: Binding(
         get: { AnyHashable(ShaderQuickApply.currentPath ?? "") },
