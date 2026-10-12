@@ -13,10 +13,15 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
   }
 
   func test_rowOrder_andSections() {
+    #if os(iOS)
+    let recordingIDs = ["recording-watermark", "recording-camera"]
+    #else
+    let recordingIDs = ["recording-watermark"]
+    #endif
     XCTAssertEqual(model().allItems.map(\.id),
-                   ["names-db", "covers", "background-style", "show-subtitles", "confirm-on-stop", "panic-handlers", "osd-messages"])
-    XCTAssertEqual(model().sections.map(\.header), ["Game List", "Library UI", "General"])
-    XCTAssertEqual(model().sections.map(\.items.count), [2, 2, 3])
+                   ["names-db", "covers", "background-style", "show-subtitles", "confirm-on-stop", "panic-handlers", "osd-messages"] + recordingIDs)
+    XCTAssertEqual(model().sections.map(\.header), ["Game List", "Library UI", "General", "Recording"])
+    XCTAssertEqual(model().sections.map(\.items.count), [2, 2, 3, recordingIDs.count])
   }
 
   func test_everyRow_hasADescription() {
@@ -27,6 +32,7 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
     let expected: [(String, (Bool) -> ConfigInterfaceChange)] = [
       ("names-db", { .useNamesDB($0) }), ("covers", { .useCovers($0) }), ("show-subtitles", { .showSubtitles($0) }),
       ("confirm-on-stop", { .confirmOnStop($0) }), ("panic-handlers", { .usePanicHandlers($0) }), ("osd-messages", { .osdMessages($0) }),
+      ("recording-watermark", { .recordingWatermark($0) }),
     ]
     let m = model()
     for (id, change) in expected {
@@ -71,6 +77,15 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
     XCTAssertTrue(ConfigInterfaceState.storedShowSubtitles(nil))
     XCTAssertTrue(ConfigInterfaceState.storedShowSubtitles(true))
     XCTAssertFalse(ConfigInterfaceState.storedShowSubtitles(false))
+  }
+
+  func test_recordingDefaults_watermarkOn_cameraOff() {
+    let s = ConfigInterfaceState()
+    XCTAssertTrue(s.recordingWatermark); XCTAssertFalse(s.recordingCamera)
+    XCTAssertTrue(ConfigInterfaceState.storedRecordingWatermark(nil))
+    XCTAssertFalse(ConfigInterfaceState.storedRecordingWatermark(false))
+    XCTAssertEqual(ConfigInterfaceDefaultsKey.recordingWatermark, "recording_watermark")
+    XCTAssertEqual(ConfigInterfaceDefaultsKey.recordingCamera, "recording_camera_overlay")
   }
 
   func test_defaults_matchTheOldView() {
