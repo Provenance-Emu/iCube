@@ -62,11 +62,16 @@ struct ShaderQuickPickerView: View {
   /// different game entirely, if the temp file survived an app-switch) shouldn't
   /// be shown as "the current frame".
   private static let pausePreviewFreshnessWindow: TimeInterval = 60
+  #if os(tvOS)
+  private static let stackSpacing: CGFloat = ICubeDesign.Spacing.l.rawValue
+  #else
+  private static let stackSpacing: CGFloat = 20
+  #endif
 
   var body: some View {
     ScrollView {
-      #if os(tvOS)
-      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+      VStack(alignment: .leading, spacing: Self.stackSpacing) {
+        #if os(tvOS)
         ICubeLeafHeader(title: L("Shaders"), subtitle: nil)
 
         heroSection
@@ -76,8 +81,7 @@ struct ShaderQuickPickerView: View {
             .icubeText(.detail)
             .foregroundStyle(ICubeDesign.color(.destructive))
         }
-      #else
-      VStack(alignment: .leading, spacing: 20) {
+        #else
         heroSection
 
         if let error = DOLShaderPostProcessor.shared.lastError {
@@ -86,7 +90,7 @@ struct ShaderQuickPickerView: View {
             .foregroundStyle(.red)
             .padding(.horizontal, 16)
         }
-      #endif
+        #endif
 
         if isLoading {
           ProgressView(L("Loading shaders…"))

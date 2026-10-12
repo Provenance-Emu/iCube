@@ -88,7 +88,8 @@ final class SkinLibrary: ObservableObject {
     selection = Self.loadSelection(from: rootURL.appendingPathComponent(Self.selectionFileName))
   }
 
-  static func defaultRootURL() -> URL {
+  /// Pure path arithmetic, so default arguments can call it off the main actor.
+  nonisolated static func defaultRootURL() -> URL {
     URL(fileURLWithPath: UserFolderUtil.getUserFolder()).appendingPathComponent(rootFolderName, isDirectory: true)
   }
 

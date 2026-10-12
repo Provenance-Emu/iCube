@@ -30,6 +30,8 @@ internal struct PauseMenuView: View {
   #if DEBUG
   /// `-ICubePausePane <saves|cheats|controllers|reset|exit>`: open a sub-pane for simulator screenshots.
   var debugInitialPane: String?
+  /// onAppear re-runs after every child sheet closes; the debug pane applies once.
+  @State private var debugInitialPaneConsumed = false
   #endif
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
@@ -161,15 +163,17 @@ internal struct PauseMenuView: View {
       refreshShaderState()
       refreshLiveSettings()
       #if DEBUG
-      switch debugInitialPane {
-      case "saves": pane = .saves
-      case "cheats": pane = .cheats
-      case "controllers": pane = .controllers
-      case "reset": showResetDialog = true
-      case "exit": showExitDialog = true
-      default: break
+      if !debugInitialPaneConsumed {
+        debugInitialPaneConsumed = true
+        switch debugInitialPane {
+        case "saves": pane = .saves
+        case "cheats": pane = .cheats
+        case "controllers": pane = .controllers
+        case "reset": showResetDialog = true
+        case "exit": showExitDialog = true
+        default: break
+        }
       }
-      debugInitialPane = nil
       #endif
     }
     .onDisappear {
@@ -914,9 +918,6 @@ enum PauseMenuModelBuilder {
                description: L("Save, load and browse every slot.")),
       MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .action(actions.openPerfOverlay),
                description: L("Frame rate, CPU and GPU timing drawn over the game.")),
-      MenuItem(id: "cheats", title: L("Cheats"), icon: "star.circle", tint: .yellow, role: .action(actions.openCheats),
-               badge: state.activeCheatCount > 0 ? "\(state.activeCheatCount)" : nil,
-               description: L("Enable Gecko and Action Replay codes for this game.")),
       MenuItem(id: "upscaling", title: L("Upscaling"), icon: "arrow.up.left.and.arrow.down.right", tint: .indigo,
                role: .cycle(options: upscalingOptions, selection: bindings.internalResolution),
                description: L("Internal resolution. Takes effect immediately."),
@@ -929,6 +930,9 @@ enum PauseMenuModelBuilder {
                role: .action { actions.openSettingsLeaf("performance-tuning") },
                badge: state.engineShortName.isEmpty ? nil : state.engineShortName,
                description: L("CPU engine and speed tuning.")),
+      MenuItem(id: "cheats", title: L("Cheats"), icon: "star.circle", tint: .yellow, role: .action(actions.openCheats),
+               badge: state.activeCheatCount > 0 ? "\(state.activeCheatCount)" : nil,
+               description: L("Enable Gecko and Action Replay codes for this game.")),
       shadersItem(state: state, bindings: bindings, actions: actions),
       MenuItem(id: "controllers", title: L("Controllers"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers),
                description: L("Players, devices and what each one plays as.")),

@@ -28,7 +28,9 @@ struct ReplayKitScreenRecorder: ScreenRecording {
 
   func startRecording() async throws {
     let recorder = RPScreenRecorder.shared()
+    #if !os(tvOS)
     recorder.isMicrophoneEnabled = false
+    #endif
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
       recorder.startRecording { error in
         if let error { continuation.resume(throwing: error) } else { continuation.resume() }

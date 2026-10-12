@@ -191,8 +191,8 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertNil(tv.sections[0].header)
     XCTAssertEqual(tv.sections[0].items.map(\.id), ["resume", "save-states", "reset", "exit"])
     XCTAssertEqual(tv.sections[1].items.map(\.id),
-                   ["quick-save", "quick-load", "fast-forward", "mute", "screenshot", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers",
-                    "continuity", "settings"])
+                   ["quick-save", "quick-load", "fast-forward", "mute", "screenshot", "record", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders",
+                    "controllers", "continuity", "settings"])
     XCTAssertEqual(Set(tv.sections.flatMap(\.items).map(\.id)), Set(model.sections.flatMap(\.items).map(\.id)))
   }
 }

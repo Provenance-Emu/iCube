@@ -60,10 +60,11 @@ final class SkinStoreInstaller: ObservableObject {
 
   init(downloader: any SkinStoreDownloading = URLSessionSkinStoreDownloader(),
        record: SkinStoreInstalledRecord = SkinStoreInstalledRecord(),
-       installStep: @escaping InstallStep = SkinStoreInstaller.libraryInstallStep(.shared)) {
+       installStep: InstallStep? = nil) {
     self.downloader = downloader
     self.record = record
-    self.installStep = installStep
+    // Resolved here, not as a default argument: that expression runs outside the main actor.
+    self.installStep = installStep ?? Self.libraryInstallStep(.shared)
     installedIds = Set(record.load().keys)
   }
 

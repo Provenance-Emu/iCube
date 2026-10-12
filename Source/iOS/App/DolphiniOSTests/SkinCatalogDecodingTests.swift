@@ -68,7 +68,9 @@ final class SkinCatalogDecodingTests: XCTestCase {
     XCTAssertEqual(n64.downloadURL.host, "deltastyles.com")
     XCTAssertEqual(n64.downloadURL.pathExtension.lowercased(), "deltaskin")
     let gba = try entry(SkinCatalogFixture.gbaSpaceURLID, in: catalog)
-    XCTAssertEqual(gba.downloadURL.lastPathComponent, "328%20Black%20GBA.deltaskin")
+    // `lastPathComponent` is percent-decoded; the request string is what must carry the encoding.
+    XCTAssertEqual(gba.downloadURL.lastPathComponent, "328 Black GBA.deltaskin")
+    XCTAssertTrue(gba.downloadURL.absoluteString.hasSuffix("328%20Black%20GBA.deltaskin"), gba.downloadURL.absoluteString)
   }
 
   func testSystemsAreNormalisedForComparison() throws {
