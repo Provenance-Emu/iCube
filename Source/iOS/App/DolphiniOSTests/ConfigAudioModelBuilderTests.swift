@@ -114,7 +114,7 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
     XCTAssertEqual(m.item(id: "crush-downsample")?.currentValueTitle, "3x")
   }
 
-  func test_dependentRows_followTheirMasterToggle() {
+  func test_dependentRows_followTheirParentToggle() {
     let off = model()
     for id in ["surround-quality", "spatial", "head-tracking", "echo-time", "echo-feedback", "eq-low", "eq-mid", "eq-high", "crush-bits", "crush-downsample"] {
       XCTAssertEqual(off.item(id: id)?.isEnabled, false, id)

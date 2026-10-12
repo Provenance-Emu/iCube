@@ -32,10 +32,10 @@ struct FXChainEditor: View {
   var body: some View {
     Group {
       HStack {
-        Button(action: { refresh() }) { Label(L("Refresh Effects"), systemImage: "arrow.clockwise") }
+        Button(action: { refresh() }, label: { Label(L("Refresh Effects"), systemImage: "arrow.clockwise") })
           .padding(.vertical, 4)
         Spacer()
-        Button(action: { showAddSheet = true }) { Label(L("Add Effect"), systemImage: "plus").padding(.horizontal, 8).padding(.vertical, 6) }
+        Button(action: { showAddSheet = true }, label: { Label(L("Add Effect"), systemImage: "plus").padding(.horizontal, 8).padding(.vertical, 6) })
           .contentShape(Rectangle())
       }
       .padding(.top, 4)
@@ -61,12 +61,14 @@ struct FXChainEditor: View {
       }
     }
     .onAppear { refresh() }
-    .sheet(isPresented: Binding(get: { showingAU != nil }, set: { if !$0 { showingAU = nil } }), onDismiss: {
-      // The plug-in's own view edited its parameters; keep them with the chain.
-      AudioFXBridge.saveEffectChain()
-    }) {
-      if let vc = showingAU { UIViewControllerWrapper(controller: vc) }
-    }
+    .sheet(isPresented: Binding(get: { showingAU != nil }, set: { if !$0 { showingAU = nil } }),
+           onDismiss: {
+             // The plug-in's own view edited its parameters; keep them with the chain.
+             AudioFXBridge.saveEffectChain()
+           },
+           content: {
+             if let vc = showingAU { UIViewControllerWrapper(controller: vc) }
+           })
     .sheet(isPresented: $showAddSheet) { AUAddSheet(onPick: { name in add(name) }).onDisappear { refresh() } }
   }
 
@@ -118,12 +120,12 @@ struct FXChainEditor: View {
           HStack { TextField(L("Search Effects"), text: $search).textFieldStyle(.roundedBorder) }
             .padding()
           List(filtered()) { item in
-            Button(action: { onPick(item.identifier); dismiss() }) {
+            Button(action: { onPick(item.identifier); dismiss() }, label: {
               VStack(alignment: .leading) {
                 Text(item.name)
                 Text(item.identifier).font(.footnote).foregroundStyle(.secondary)
               }
-            }
+            })
           }
         }
         .navigationTitle(L("Add Effect"))
