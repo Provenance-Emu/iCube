@@ -43,7 +43,9 @@ private struct SettingsLeafHost: ViewModifier {
 
   func body(content: Content) -> some View {
     content
+      #if !os(tvOS)
       .navigationTitle(title)
+      #endif
       .configSynced(sync)
       .onReceive(Self.onMain(.DOLEmulationDidStart)) { _ in sync() }
       .onReceive(Self.onMain(EmulationState.didEndName)) { _ in sync() }
@@ -75,6 +77,7 @@ struct SettingsLeafScreen: View {
   let sync: () -> Void
   @Environment(\.dismiss) private var dismiss
   @Environment(\.settingsPaneBack) private var paneBack
+  @Environment(\.icubeLeafParentTitle) private var parentTitle
 
   init(model: MenuModel, title: String, helpKey: String? = nil, sync: @escaping () -> Void) {
     self.model = model
@@ -88,8 +91,19 @@ struct SettingsLeafScreen: View {
     paneBack ?? dismiss
   }
 
+  /// The in-body tvOS header: the leaf's title over its parent's title (or "Settings" for a root leaf).
+  static func header(title: String, parentTitle: String?) -> ICubeLeafHeader {
+    ICubeLeafHeader(title: title, subtitle: ICubeLeafHeader.subtitle(parentTitle: parentTitle))
+  }
+
   var body: some View {
+    #if os(tvOS)
+    MenuScreen(model: model, style: .list, onBack: Self.backAction(paneBack: paneBack, dismiss: { dismiss() }),
+               tvHeader: Self.header(title: title, parentTitle: parentTitle), tvInset: .xxl)
+      .settingsLeaf(title: title, helpKey: helpKey, sync: sync)
+    #else
     MenuScreen(model: model, style: .list, onBack: Self.backAction(paneBack: paneBack, dismiss: { dismiss() }))
       .settingsLeaf(title: title, helpKey: helpKey, sync: sync)
+    #endif
   }
 }
