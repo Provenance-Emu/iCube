@@ -26,7 +26,7 @@ public actor UserDataScanner {
 
     /// Absolute URL of iCube's `User/` directory. Every relative path in the
     /// sync engine is relative to this.
-    public let rootDirectory: URL
+    public nonisolated let rootDirectory: URL
 
     private let fileManager: FileManager
     private var checksumCache: [String: CachedChecksum] = [:]
@@ -122,8 +122,7 @@ public actor UserDataScanner {
             return cached.checksum
         }
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
-        let digest = SHA256.hash(data: data)
-        let checksum = digest.map { String(format: "%02x", $0) }.joined()
+        let checksum = SyncChecksum.sha256Hex(data)
         checksumCache[relativePath] = CachedChecksum(size: size, modified: modified, checksum: checksum)
         return checksum
     }
