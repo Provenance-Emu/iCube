@@ -5075,3 +5075,15 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Performance HUD" = "パフォーマンス HUD";
 "Frame rate, CPU and GPU timing drawn over the game." = "フレームレート、CPU と GPU の処理時間をゲームの上に表示します。";
 "\"Ask Every Time\" prompts you when a device tries to copy a game — not when it merely looks at your list." = "「毎回確認」は、デバイスがゲームをコピーしようとしたときに確認します。リストを見るだけでは確認しません。";
+"Upscaling" = "アップスケーリング";
+"Internal resolution. Takes effect immediately." = "内部解像度。すぐに反映されます。";
+"Game volume. Long-press for audio settings." = "ゲームの音量。長押しでオーディオ設定を開きます。";
+"CPU engine and speed tuning." = "CPUエンジンと速度の調整。";
+"JIT ON" = "JIT オン";
+"Back to Menu" = "メニューに戻る";
+"Open the full pause menu." = "完全なポーズメニューを開きます。";
+"Recording saved to Recordings" = "録画をRecordingsに保存しました";
+"Recording Watermark" = "録画ウォーターマーク";
+"Draws the iCube badge and a QR code for icube-emu.com in the corner of recordings." = "録画の隅にiCubeバッジとicube-emu.comのQRコードを表示します。";
+"Camera Overlay" = "カメラオーバーレイ";
+"Shows the front camera in a corner of recordings." = "録画の隅にフロントカメラを表示します。";
