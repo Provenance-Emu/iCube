@@ -78,7 +78,7 @@ public struct SyncableFileMetadata: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
-/// A file that changed on both sides and could not be resolved automatically.
+/// A file the engine refused to decide about on its own.
 public struct SyncConflict: Identifiable, Sendable, Equatable {
     public struct FileVersion: Sendable, Equatable {
         public let modifiedDate: Date
@@ -92,7 +92,19 @@ public struct SyncConflict: Identifiable, Sendable, Equatable {
         }
     }
 
+    /// What kind of disagreement this is. Decides the wording and which
+    /// resolutions make sense.
+    public enum Kind: String, Sendable, Equatable {
+        /// Both sides changed the file within the simultaneity window.
+        case bothChanged
+        /// Another device deleted the file; this device changed it after the
+        /// version that was deleted. `remoteVersion` describes the tombstone:
+        /// its date is the deletion time and its size is zero.
+        case deletedRemotelyChangedLocally
+    }
+
     public let id: UUID
+    public let kind: Kind
     public let metadata: SyncableFileMetadata
     public let localVersion: FileVersion
     public let remoteVersion: FileVersion
@@ -100,16 +112,36 @@ public struct SyncConflict: Identifiable, Sendable, Equatable {
 
     public init(
         id: UUID = UUID(),
+        kind: Kind = .bothChanged,
         metadata: SyncableFileMetadata,
         localVersion: FileVersion,
         remoteVersion: FileVersion,
         detectedDate: Date = Date()
     ) {
         self.id = id
+        self.kind = kind
         self.metadata = metadata
         self.localVersion = localVersion
         self.remoteVersion = remoteVersion
         self.detectedDate = detectedDate
+    }
+
+    /// Conflict between a local file and a tombstone for it.
+    public init(local: SyncableFileMetadata, tombstone: SyncTombstone) {
+        self.init(
+            kind: .deletedRemotelyChangedLocally,
+            metadata: local,
+            localVersion: FileVersion(
+                modifiedDate: local.lastModified,
+                size: local.fileSize,
+                checksum: local.checksum
+            ),
+            remoteVersion: FileVersion(
+                modifiedDate: tombstone.deletedAt,
+                size: 0,
+                checksum: tombstone.checksum
+            )
+        )
     }
 
     /// Conflict for a local/remote metadata pair, filling both versions from them.

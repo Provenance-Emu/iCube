@@ -10,7 +10,7 @@ import SwiftUI
 struct SettingsSidebarShell: View {
   let sections: [SettingsRootSection]
   let searchIndex: SettingsSearchIndex?
-  @Binding var jumpToControllers: Bool
+  @Binding var jumpToLeafID: String?
 
   @State private var selectedID: String?
   @FocusState private var sidebarFocus: String?
@@ -23,8 +23,6 @@ struct SettingsSidebarShell: View {
   #else
   @State private var searchText = ""
   #endif
-
-  private static let controllersID = "controllers"
 
   private enum Layout {
     static let sidebarWidthTV: CGFloat = 320
@@ -52,7 +50,11 @@ struct SettingsSidebarShell: View {
         .focusSection()
         .onExitCommand(perform: leaveSettings)
         #endif
+      #if os(tvOS)
+      Rectangle().fill(ICubeDesign.color(.hairline)).frame(width: ICubeDesign.Line.hairline.rawValue)
+      #else
       Divider()
+      #endif
       NavigationStack {
         if let selected {
           selected.makeView().id(selected.id)
@@ -86,18 +88,17 @@ struct SettingsSidebarShell: View {
       openedAt = Date()
       #endif
       if selectedID == nil { selectedID = sections.first?.entries.first?.id }
-      if jumpToControllers { selectControllers() }
+      consumeJump()
     }
-    .onChange(of: jumpToControllers) { _, requested in
-      if requested { selectControllers() }
-    }
+    .onChange(of: jumpToLeafID) { _, _ in consumeJump() }
   }
 
-  /// The DSU deep link lands on the Controllers leaf.
-  private func selectControllers() {
-    selectedID = Self.controllersID
-    sidebarFocus = Self.controllersID
-    jumpToControllers = false
+  /// A deep link (DSU → "controllers") or a debug preview lands on one leaf.
+  private func consumeJump() {
+    guard let id = jumpToLeafID, entries.contains(where: { $0.id == id }) else { jumpToLeafID = nil; return }
+    selectedID = id
+    sidebarFocus = id
+    jumpToLeafID = nil
   }
 
   #if os(tvOS)
@@ -155,22 +156,24 @@ struct SettingsSidebarShell: View {
               .frame(width: ICubeDesign.Line.focus.rawValue, height: ICubeDesign.Spacing.l.rawValue)
             Text(section.header)
               .icubeText(.section)
-              .foregroundStyle(ICubeDesign.color(.textSecondary))
+              .foregroundStyle(ICubeDesign.color(.textPrimary))
           }
           .padding(.top, ICubeDesign.Spacing.m.rawValue)
           ForEach(section.entries) { entry in
+            let isSelected = selectedID == entry.id
             Button { selectedID = entry.id } label: {
               HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
                 Image(systemName: entry.icon)
-                  .frame(width: ICubeDesign.Spacing.xl.rawValue)
+                  .font(ICubeDesign.symbolFont(.rail))
+                  .frame(width: ICubeDesign.Symbol.railColumn)
                 Text(entry.title)
                   .icubeText(.nav)
-                  .foregroundStyle(ICubeDesign.color(.textPrimary))
                   .lineLimit(1)
                 Spacer(minLength: 0)
               }
+              .foregroundStyle(isSelected ? ICubeDesign.color(.accent) : ICubeDesign.color(.textPrimary))
             }
-            .buttonStyle(ICubeRowButtonStyle(isSelected: selectedID == entry.id))
+            .buttonStyle(ICubeRowButtonStyle(isSelected: isSelected))
             .focused($sidebarFocus, equals: entry.id)
           }
         }

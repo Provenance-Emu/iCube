@@ -54,7 +54,12 @@ struct SyncStatusIndicator: View {
     private var label: String {
         if let reason = coordinator.unavailableReason { return reason.localizedDescription }
         if !coordinator.isEnabled { return L("Off") }
-        if coordinator.isSyncing { return L("Syncing…") }
+        if coordinator.isSyncing {
+            if let progress = coordinator.progress, progress.total > 0 {
+                return String(format: L("Syncing %d of %d…"), progress.completed, progress.total)
+            }
+            return L("Syncing…")
+        }
         if !coordinator.pendingConflicts.isEmpty {
             return L("Needs your decision")
         }

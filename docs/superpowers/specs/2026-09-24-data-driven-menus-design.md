@@ -430,6 +430,29 @@ The engine (§0 of §6's migration order) landed with one proof-of-life screen.
     game that has none yet. The actions section is now unconditional on both
     platforms; `CheatsMenuModelBuilderTests.swift` (new) covers this and the
     enable-cheats-intercept toggle logic.
+  - **2026-10-11 — on-demand download, labels, category filters** (the
+    iFly/Provenance cheats UX). The builder moved to
+    `Common/Swift/Cheats/CheatsMenuModelBuilder.swift` with `CheatItem`,
+    `CheatsMenuState`/`Actions` and the new `CheatFilter`. `CheatItem` now
+    carries creator, notes, built-in flag and line count (new
+    `TVGeckoCodeInfo`/`TVActionReplayCodeInfo` properties), and each row shows
+    `sourceLine` ("Gecko · by Ralf" / "Action Replay · Built-in") as its
+    subtitle, the `CheatCategory` (keyword-classified from the name, as iFly's
+    parsers do — Dolphin's sources carry no category) as its badge, and the
+    first non-title note line as its description. Opening the pane fetches
+    Gecko codes from codes.rc24.xyz by itself when `CheatFetchLedger` says the
+    game was never fetched or is older than `CheatAutoFetchPolicy.staleAfter`,
+    once per game per launch; the Download row stays as the manual retry and
+    the actions section's footer carries `CheatFetchStatus`. Filtering is
+    applied in the builder from `state.filter`: iOS draws `CheatFilterChips`
+    (All · On · categories present, with counts) as host chrome above
+    `MenuScreen`, the same place `.searchable` lives; tvOS asks for
+    `showsFilterRow` and gets a "Show" `.cycle` row in the model instead,
+    keeping §2's one-control-per-row contract. The library's game sheet
+    presents the same `CheatsMenuView`; `TVCheatListView` is deleted.
+    `CheatCategoryTests`, `CheatFetchPolicyTests` and the extended
+    `CheatsMenuModelBuilderTests` cover the classifier, filter set, fetch
+    policy/ledger, footer text and the filter row.
 - **Tests**: `MenuModelTests.swift` (construction/lookup — allItems ordering,
   focusableIDs excluding disabled items, section lookup, section-jump lookup
   including the "already at the edge" no-op case, badge pass-through, binding

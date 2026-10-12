@@ -56,6 +56,8 @@ final class PauseArbiter {
     static let disconnect = "disconnect"
     static let pauseMenu = "pause-menu"
     static let pauseMenuRequest = "pause-menu-request"
+    /// The quick menu panel over the running game (spec §7).
+    static let quickMenu = "quick-menu"
     /// The app is not active (switcher, lock, Control Center, notification pull-down, backgrounded).
     static let appInactive = "app-inactive"
   }

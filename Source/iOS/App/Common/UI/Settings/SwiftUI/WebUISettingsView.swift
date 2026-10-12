@@ -8,6 +8,11 @@ import SwiftUI
 /// `WebServerLifecycleService`, not from here.
 struct WebUISettingsView: View {
   @Environment(\.openURL) private var openURL
+  #if os(tvOS)
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.settingsPaneBack) private var paneBack
+  @Environment(\.icubeLeafParentTitle) private var parentTitle
+  #endif
   @State private var webURLDisplay = ""
   @State private var webDavDisplay = ""
   #if os(iOS)
@@ -24,6 +29,12 @@ struct WebUISettingsView: View {
   private static let helpURLString = "https://icube-emu.com/help/web-import"
 
   var body: some View {
+    #if os(tvOS)
+    MenuScreen(model: WebUIModelBuilder.make(webURL: webURLDisplay, webDavURL: webDavDisplay, open: { openURL($0) }),
+               style: .list, onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
+               tvHeader: SettingsLeafScreen.header(title: L("Web UI & WebDAV"), parentTitle: parentTitle), tvInset: .xxl)
+      .task { await refresh() }
+    #else
     List {
       Section(footer: webImportFooter) {
         HStack {
@@ -40,7 +51,6 @@ struct WebUISettingsView: View {
     }
     .navigationTitle(L("Web UI & WebDAV"))
     .task { await refresh() }
-    #if os(iOS)
     .sheet(isPresented: $showSafari) {
       if let url = safariURL { SafariView(url: url) }
     }

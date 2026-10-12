@@ -68,6 +68,9 @@ final class SkinLibrary: ObservableObject {
 
   private static let rootFolderName = "Skins"
   private static let selectionFileName = "selection.json"
+  /// The store's record of which catalog entries it installed, beside `selection.json`.
+  static let storeRecordFileName = "store.json"
+  private static let identifierKey = "identifier"
   private static let infoFileName = "info.json"
   private static let stagingArchiveName = "archive.zip"
   private static let stagingExtractFolderName = "extracted"
@@ -85,7 +88,7 @@ final class SkinLibrary: ObservableObject {
     selection = Self.loadSelection(from: rootURL.appendingPathComponent(Self.selectionFileName))
   }
 
-  private static func defaultRootURL() -> URL {
+  static func defaultRootURL() -> URL {
     URL(fileURLWithPath: UserFolderUtil.getUserFolder()).appendingPathComponent(rootFolderName, isDirectory: true)
   }
 
@@ -101,9 +104,10 @@ final class SkinLibrary: ObservableObject {
   // MARK: - Import and delete
 
   /// Unpacks, validates and installs the skin in `archive`, replacing any installed skin with the same identifier.
-  /// Nothing is left on disk when this throws.
+  /// With `target`, a skin made for another system is rewritten to it first (`info.json` gets the target's game type
+  /// and a suffixed identifier); a skin already of that type is installed as-is. Nothing is left on disk when this throws.
   @discardableResult
-  func importSkin(from archive: URL) throws -> InstalledSkin {
+  func importSkin(from archive: URL, retargetingTo target: SkinGameType? = nil) throws -> InstalledSkin {
     let fileManager = FileManager.default
     let staging = fileManager.temporaryDirectory.appendingPathComponent("SkinImport-\(UUID().uuidString)", isDirectory: true)
     defer { try? fileManager.removeItem(at: staging) }
@@ -124,6 +128,7 @@ final class SkinLibrary: ObservableObject {
     }
 
     let skinFolder = try Self.skinFolder(in: extracted)
+    if let target { try Self.retarget(folder: skinFolder, to: target) }
     let info = try Self.loadInfo(from: skinFolder)
     guard Self.isUsableFolderName(info.identifier) else { throw SkinImportError.invalidIdentifier }
 
@@ -205,6 +210,22 @@ final class SkinLibrary: ObservableObject {
     throw SkinImportError.missingInfo
   }
 
+  /// Rewrites `info.json` so the skin declares `target`: the Manic game type, and the identifier with the target's
+  /// suffix. Comments are stripped and the JSON re-serialised; assets are untouched. No-op when the skin already
+  /// declares `target`.
+  private static func retarget(folder: URL, to target: SkinGameType) throws {
+    let infoURL = folder.appendingPathComponent(infoFileName)
+    guard let raw = try? Data(contentsOf: infoURL),
+          let data = try? SkinInfo.stripComments(raw),
+          var json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+          let identifier = json[identifierKey] as? String else { throw SkinImportError.missingInfo }
+    if let current = json[gameTypeKey] as? String, SkinGameType(identifier: current) == target { return }
+    json[gameTypeKey] = target.manicIdentifier
+    json[identifierKey] = identifier + target.retargetSuffix
+    let rewritten = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
+    try rewritten.write(to: infoURL, options: .atomic)
+  }
+
   private static func loadInfo(from folder: URL) throws -> SkinInfo {
     do {
       return try SkinInfo.load(directory: folder)
@@ -228,6 +249,7 @@ final class SkinLibrary: ObservableObject {
   /// An identifier becomes a folder name, so it must not be able to climb out of the library or hide.
   private static func isUsableFolderName(_ name: String) -> Bool {
     !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && name.lowercased() != selectionFileName
+      && name.lowercased() != storeRecordFileName
       && ZipEntryScanner.isSafeRelativePath(name)
   }
 

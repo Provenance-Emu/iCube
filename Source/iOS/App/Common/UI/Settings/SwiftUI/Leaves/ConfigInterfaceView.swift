@@ -21,6 +21,8 @@ struct ConfigInterfaceView: View {
     s.confirmOnStop = DOLConfigBridge.mainConfirmOnStop()
     s.usePanicHandlers = DOLConfigBridge.mainUsePanicHandlers()
     s.osdMessages = DOLConfigBridge.mainOSDMessages()
+    s.recordingWatermark = ConfigInterfaceState.storedRecordingWatermark(defaults.object(forKey: ConfigInterfaceDefaultsKey.recordingWatermark) as? Bool)
+    s.recordingCamera = defaults.bool(forKey: ConfigInterfaceDefaultsKey.recordingCamera)
     state = s
   }
 
@@ -34,6 +36,8 @@ struct ConfigInterfaceView: View {
     case .confirmOnStop(let v): state.confirmOnStop = v; DOLConfigBridge.setMainConfirmOnStop(v)
     case .usePanicHandlers(let v): state.usePanicHandlers = v; DOLConfigBridge.setMainUsePanicHandlers(v)
     case .osdMessages(let v): state.osdMessages = v; DOLConfigBridge.setMainOSDMessages(v)
+    case .recordingWatermark(let v): state.recordingWatermark = v; defaults.set(v, forKey: ConfigInterfaceDefaultsKey.recordingWatermark)
+    case .recordingCamera(let v): state.recordingCamera = v; defaults.set(v, forKey: ConfigInterfaceDefaultsKey.recordingCamera)
     }
   }
 }

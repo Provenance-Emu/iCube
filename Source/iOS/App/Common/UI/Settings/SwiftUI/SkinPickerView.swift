@@ -30,6 +30,7 @@ struct SkinPickerView: View {
   @State private var padKind: TouchOverlayPadKind
   @State private var orientation: TouchOverlayOrientation
   @State private var showImporter = false
+  @State private var showStore = false
   @State private var alertMessage: String?
 
   init(padKinds: [TouchOverlayPadKind], library: SkinLibrary = .shared) {
@@ -78,8 +79,14 @@ struct SkinPickerView: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
-        Button(L("Import…")) { showImporter = true }
+        HStack {
+          Button(L("Browse Catalog…")) { showStore = true }
+          Button(L("Import…")) { showImporter = true }
+        }
       }
+    }
+    .sheet(isPresented: $showStore) {
+      NavigationStack { SkinStoreView(showsDoneButton: true) }
     }
     .fileImporter(isPresented: $showImporter, allowedContentTypes: SkinLibrary.archiveContentTypes, allowsMultipleSelection: false) { result in
       handleImport(result)

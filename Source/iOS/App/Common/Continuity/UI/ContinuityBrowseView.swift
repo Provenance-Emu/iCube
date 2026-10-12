@@ -18,6 +18,10 @@ import SwiftUI
 struct ContinuityBrowseView: View {
     @ObservedObject private var manager = ContinuityManager.shared
     @Environment(\.dismiss) private var dismiss
+    #if os(tvOS)
+    @Environment(\.settingsPaneBack) private var paneBack
+    @Environment(\.icubeLeafParentTitle) private var parentTitle
+    #endif
     /// Whether this view owns its own dismissal affordance. False when it is
     /// pushed inside an existing navigation stack (Settings), true in a sheet.
     let showsDoneRow: Bool
@@ -27,6 +31,56 @@ struct ContinuityBrowseView: View {
     }
 
     var body: some View {
+        #if os(tvOS)
+        tvBody
+        #else
+        listBody
+        #endif
+    }
+
+    #if os(tvOS)
+    /// The tvOS leaf: the same content as the `List`, as rows on the menu engine.
+    private var tvBody: some View {
+        MenuScreen(
+            model: ContinuityBrowseModelBuilder.make(
+                peers: manager.discoveredPeers.map {
+                    ContinuityPeerSummary(
+                        id: $0.id, name: $0.serviceName,
+                        subtitle: ContinuityPeerRow.subtitle(for: $0),
+                        glyph: ContinuityPeerRow.glyph(for: $0.advertisement?.deviceType)
+                    )
+                },
+                trusted: manager.trustedPeers.map { ($0.id, $0.name) },
+                sharesLibrary: manager.sharesLibrary,
+                showsDone: showsDoneRow,
+                peerDetail: { id in
+                    guard let peer = manager.discoveredPeers.first(where: { $0.id == id }) else { return AnyView(EmptyView()) }
+                    return AnyView(ContinuityPeerDetailView(peer: peer))
+                },
+                trustedDetail: { id in
+                    guard let peer = manager.trustedPeers.first(where: { $0.id == id }) else { return AnyView(EmptyView()) }
+                    return AnyView(ContinuityTrustedPeerDetailView(peer: peer))
+                },
+                sharing: AnyView(ContinuityLibrarySharingView()),
+                done: { dismiss() }
+            ),
+            style: .list,
+            onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
+            tvHeader: SettingsLeafScreen.header(title: L("Nearby"), parentTitle: parentTitle),
+            tvInset: .xxl
+        )
+        .continuityPairingPrompt()
+        .continuityLibraryPullPrompt()
+        .task {
+            manager.startBrowsing()
+            await manager.refreshTrustedPeers()
+            await manager.refreshLibraryGrants()
+        }
+        .onDisappear { manager.stopBrowsing() }
+    }
+    #endif
+
+    private var listBody: some View {
         List {
             Section {
                 ContinuitySecurityNotice()
@@ -105,14 +159,14 @@ private struct ContinuityPeerRow: View {
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(peer.serviceName)
-                Text(subtitle)
+                Text(Self.subtitle(for: peer))
                     .font(.footnote)
                     .foregroundColor(.secondary)
             }
         }
     }
 
-    private var subtitle: String {
+    fileprivate static func subtitle(for peer: ContinuityPeer) -> String {
         guard let advertisement = peer.advertisement else {
             return L("Not compatible with this version of iCube")
         }
@@ -125,7 +179,7 @@ private struct ContinuityPeerRow: View {
         return L("No game in progress")
     }
 
-    private static func glyph(for deviceType: String?) -> String {
+    fileprivate static func glyph(for deviceType: String?) -> String {
         switch deviceType {
         case "tv": return "appletv"
         case "pd": return "ipad"

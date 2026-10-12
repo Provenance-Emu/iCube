@@ -175,3 +175,11 @@ extension ICubeDesign {
     .system(size: size.rawValue, weight: .medium)
   }
 }
+
+extension ICubeDesign {
+  /// The row icon badge (spec §3 Row): a 44 pt rounded square tinted at 15 %.
+  enum IconBadge {
+    static let size: CGFloat = 44
+    static let tintOpacity: Double = 0.15
+  }
+}

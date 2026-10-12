@@ -224,8 +224,61 @@ struct ShaderSettingsView: View {
   @State private var presetPath: String?
   @State private var flipVertically: Bool = false
   @AppStorage("shader_precopy_enabled") private var compatPreCopyEnabled: Bool = false
+  #if os(tvOS)
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.settingsPaneBack) private var paneBack
+  @Environment(\.icubeLeafParentTitle) private var parentTitle
+  #endif
 
   var body: some View {
+    #if os(tvOS)
+    tvBody
+    #else
+    iosBody
+    #endif
+  }
+
+  #if os(tvOS)
+  private var tvBody: some View {
+    #if DEBUG
+    let debugTools = AnyView(ShaderDeveloperDebugView())
+    let isDebug = true
+    #else
+    let debugTools = AnyView(EmptyView())
+    let isDebug = false
+    #endif
+    let snapshot = ShaderSettingsSnapshot(enabled: enabled, presetLabel: presetLabel, flipVertically: flipVertically,
+                                          preCopy: compatPreCopyEnabled, lastError: DOLShaderPostProcessor.shared.lastError, isDebug: isDebug)
+    let model = ShaderSettingsModelBuilder.make(snapshot, picker: AnyView(ShaderPickerView(selectedPresetPath: $presetPath)), debugTools: debugTools) { change in
+      switch change {
+      case .enabled(let on):
+        enabled = on
+        UserDefaults.standard.set(on, forKey: "shader_enabled")
+        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+      case .flipVertically(let on):
+        flipVertically = on
+        UserDefaults.standard.set(on, forKey: "shader_flip_vertical")
+        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+      case .preCopy(let on):
+        compatPreCopyEnabled = on
+      }
+    }
+    return MenuScreen(model: model, style: .list, onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
+                      tvHeader: SettingsLeafScreen.header(title: L("Shaders"), parentTitle: parentTitle), tvInset: .xxl)
+      .onAppear { sync() }
+      .onChange(of: presetPath) { p in
+        if let p {
+          UserDefaults.standard.set(ShaderLibrary.normalizedPath(p), forKey: "shader_preset_path")
+        } else {
+          UserDefaults.standard.removeObject(forKey: "shader_preset_path")
+        }
+        NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
+        DOLShaderPostProcessor.shared.applyPresetPath(p)
+      }
+  }
+  #endif
+
+  private var iosBody: some View {
     List {
       Section(header: Text(L("Post-Processing Shader")), footer: Text(L("Note: Some shaders can reduce performance. Heavier effects may cause slowdowns depending on your device."))) {
         Toggle(L("Enable Shader"), isOn: $enabled)

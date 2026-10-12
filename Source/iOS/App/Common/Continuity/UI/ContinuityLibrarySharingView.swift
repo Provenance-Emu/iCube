@@ -19,8 +19,53 @@ import SwiftUI
 struct ContinuityLibrarySharingView: View {
     @ObservedObject private var manager = ContinuityManager.shared
     @State private var excludedGameIDs: [String] = []
+    #if os(tvOS)
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.settingsPaneBack) private var paneBack
+    @Environment(\.icubeLeafParentTitle) private var parentTitle
+    #endif
 
     var body: some View {
+        #if os(tvOS)
+        tvBody
+        #else
+        listBody
+        #endif
+    }
+
+    #if os(tvOS)
+    /// The tvOS leaf: the same content as the `List`, as rows on the menu engine.
+    private var tvBody: some View {
+        MenuScreen(
+            model: ContinuitySharingModelBuilder.make(
+                sharesLibrary: manager.sharesLibrary,
+                grants: grantRows.map {
+                    ContinuityGrantRowSummary(peerId: $0.peerId, name: $0.name, grantTitle: ContinuityGrantDetailView.describe($0.grant))
+                },
+                excluded: excludedGameIDs.map { ($0, Self.title(forGameID: $0)) },
+                grantDetail: { id, name in AnyView(ContinuityGrantDetailView(peerId: id, peerName: name)) },
+                setShares: { v in Task { await manager.setSharesLibrary(v) } },
+                shareAgain: { id in
+                    GameProfiles.shared.setExcludedFromNearbySharing(false, forGameID: id)
+                    reloadExclusions()
+                }
+            ),
+            style: .list,
+            onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
+            tvHeader: SettingsLeafScreen.header(title: L("Share My Library"), parentTitle: parentTitle),
+            tvInset: .xxl
+        )
+        .continuityPairingPrompt()
+        .continuityLibraryPullPrompt()
+        .task {
+            await manager.refreshTrustedPeers()
+            await manager.refreshLibraryGrants()
+            reloadExclusions()
+        }
+    }
+    #endif
+
+    private var listBody: some View {
         List {
             Section {
                 ContinuitySecurityNotice()
@@ -169,8 +214,39 @@ struct ContinuityGrantDetailView: View {
 
     @ObservedObject private var manager = ContinuityManager.shared
     @Environment(\.dismiss) private var dismiss
+    #if os(tvOS)
+    @Environment(\.settingsPaneBack) private var paneBack
+    @Environment(\.icubeLeafParentTitle) private var parentTitle
+    #endif
 
     var body: some View {
+        #if os(tvOS)
+        tvBody
+        #else
+        listBody
+        #endif
+    }
+
+    #if os(tvOS)
+    /// The tvOS leaf: a picker row (one row per option) plus Clear when a decision is recorded.
+    private var tvBody: some View {
+        MenuScreen(
+            model: ContinuitySharingModelBuilder.grant(
+                peerName: peerName,
+                current: current,
+                hasExplicitGrant: manager.libraryGrants[peerId] != nil,
+                choose: { g in Task { await manager.setLibraryGrant(g, forPeerId: peerId) } },
+                clear: { Task { await manager.clearLibraryGrant(forPeerId: peerId); dismiss() } }
+            ),
+            style: .list,
+            onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
+            tvHeader: SettingsLeafScreen.header(title: peerName, parentTitle: parentTitle),
+            tvInset: .xxl
+        )
+    }
+    #endif
+
+    private var listBody: some View {
         List {
             Section {
                 ContinuitySecurityNotice()

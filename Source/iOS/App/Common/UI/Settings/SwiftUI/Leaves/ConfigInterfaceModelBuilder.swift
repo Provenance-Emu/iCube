@@ -36,6 +36,20 @@ enum ConfigInterfaceModelBuilder {
                          set: { apply(.osdMessages($0)) }),
     ])
 
-    return MenuModel(sections: [gameList, libraryUI, general])
+    var recordingItems = [
+      SettingsRow.toggle("recording-watermark", L("Recording Watermark"), state.recordingWatermark,
+                         L("Draws the iCube badge and a QR code for icube-emu.com in the corner of recordings."),
+                         icon: "qrcode", set: { apply(.recordingWatermark($0)) }),
+    ]
+    #if os(iOS)
+    recordingItems.append(
+      SettingsRow.toggle("recording-camera", L("Camera Overlay"), state.recordingCamera,
+                         L("Shows the front camera in a corner of recordings."),
+                         icon: "camera.fill", set: { apply(.recordingCamera($0)) })
+    )
+    #endif
+    let recording = MenuSection(id: "recording", header: L("Recording"), items: recordingItems)
+
+    return MenuModel(sections: [gameList, libraryUI, general, recording])
   }
 }
