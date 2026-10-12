@@ -167,3 +167,53 @@ Traps met this session: the simulator test runner dies at bootstrap under heavy 
 
 ### Addendum (02:50): the review-fix batch is verified on iOS
 `06407190da` shipped a compile error (`Notification.Name(DOLEmulationDidEndNotification)`; the Swift name is `.DOLEmulationDidEnd`), fixed in `49ffbc0974` + `eba82c4f7b`. On `eba82c4f7b` the targeted suites (QuickMenu, PauseArbiter, PauseMenuModelBuilder, CorePauseCallSites, UILayerPauseCalls, RecordingManager, PauseFastForwardState, MenuModel) pass with 0 failures, so the recording and audio-cycle changes compile and behave on iOS. **Still unverified: the tvOS compile of `eba82c4f7b`** (the additions are platform-neutral or inside existing `#if os(tvOS)` blocks, but nobody has built it) and the full iOS suite on this head. Screenshots remain owed.
+
+## Update: review items 7 and 9b, release gate, screenshots (2026-10-12 evening)
+
+**State.** origin develop = `90e854c9ed` (PRs #39–#44: on-demand cheats, sync categories, audio engines, shader picker fix, card focus test fix). Provenance gitlink is bumped to it (`d68fc67b06`). Merged worktrees and branches are deleted; the only worktree left is `~/Workspace/icube-tile-focus` (branch `fix/tile-focus-tvos`).
+
+**Verified:** tvOS Debug (NJB) compile of `90e854c9ed` is clean (`BUILD SUCCEEDED`, no `: error:` lines).
+
+**New on `fix/tile-focus-tvos` (not pushed, not yet compiled):**
+- `20d5703cdc` **item 7.** `ICubeTileButtonStyle` read `@Environment(\.isFocused)` on the style struct, which never updates on tvOS. Focus is now read in a nested `ICubeTileButtonChrome` view, the same pattern as the row and rail styles. This fixes the shader picker hero and cards, the save-state grid and the pause save slots in one place. Tiles that pass `isFocusedOverride` (`MenuScreen`) are unchanged.
+- `33a43a50eb` **9b.** On iOS the pause sheet built a bare `SettingsRootView()`, and the iPhone list (`phoneList`) never read `jumpToLeafID`; only `SettingsSidebarShell` did. `PauseMenuView` now keeps `settingsSheetLeafID` and passes it as `initialLeafID`. `phoneList` consumes the jump by pushing the matching entry. When the DSU deep link set the jump, it drops the `"controllers"` id, because that link pushes the DSU list itself.
+
+**Queued when this was written** (background jobs in the session that wrote this; check before rerunning anything):
+1. The owner's full `make test` on `90e854c9ed` (in a terminal tab).
+2. Then: fast-forward develop to `fix/tile-focus-tvos` and run the Release gate (iOS + tvOS, `Release (Non-Jailbroken)`).
+3. Then: `Scripts/tvos_screens.sh docs/superpowers/baselines/2026-10-12-tvos --dark`, then `--no-build --light`.
+
+**Then:**
+- Check `pause-grid-*` (the pinned Exit tile fix), `library-all-*`, and the save-slot tiles (they show item 7's focus ring).
+- Check the iPhone long-press → leaf on the simulator.
+- Push develop and dispatch TestFlight: `gh workflow run testflight.yml -R Provenance-Emu/iCube -f platform=all`. The owner asked to hold TestFlight until 7 and 9b were in.
+- Bump the Provenance gitlink again.
+
+**Still owed:** owner device checks (list in the previous update); the decision on fast-forward off-ladder (Off then 2x).
+
+### Next project: website screenshots and video
+
+The site is `~/Workspace/Provenance/iCube/icube-emu.github.io` (Next.js, `Provenance-Emu/icube-emu.github.io`). Its screenshots are `public/screenshots/{iphone,ipad,appletv}/*.{jpg,webp}`, indexed by `src/data/screenshots.json`. **They were last updated 2026-09-08**, before the tvOS redesign, the pause tile grid, the quick menu, the controller hub, audio engines, on-demand cheats, sync, skins and JIT. The video section (`src/components/VideoShowcase.tsx`) is a "Gameplay video coming soon" placeholder that turns on when `public/video/gameplay.mp4` exists.
+
+Owner's goals: replace the placeholders and old images, show off the missing features, add gameplay video, and use real game artwork instead of the filler titles.
+
+**Two sources, split by what each can show:**
+- **Simulator** for UI stills: library, settings, pause grid, quick menu, controller hub, cheats, shaders picker, sync, and light/dark variants. These are reproducible and scriptable, and `tvos_screens.sh` already covers tvOS. It needs iPhone and iPad equivalents. The simulator cannot run gameplay worth showing.
+- **Owner's devices** for everything that needs real emulation: gameplay video, upscaling before/after, the performance HUD, graphics enhancements and shaders in-game, and controller variations (touch layouts/skins, MFi/DualSense, Wii pointer). The devices hold real games. Capture with ReplayKit through the app's own Record tile (`RecordingManager`, lands in `<user>/Recordings/`) or with QuickTime over USB. The debug API `screenshot` route works too (see the phone debug recipe memory).
+
+**Real artwork in simulator stills.** The `-SCREENSHOT_MODE 1` catalogue (`TVLibraryBridge.mm`, `DOLScreenshotDemoGames`) uses invented titles and IDs **on purpose**: its comment says no real game, box art or trademark is referenced. Switching to real titles is an owner decision, not a cleanup. If yes:
+- Swap in real game IDs. `TVGameItem.mm` already fetches covers from GameTDB by game ID, so check whether demo items go through that path or need cached covers bundled.
+- Keep the store-listing set (App Store/TestFlight) separate from the website set. Apple review is far stricter about third-party game IP in emulator screenshots than a self-hosted site is.
+
+**Suggested shot list:**
+- **tvOS:** library sections and rail, pause grid, quick menu, settings sidebar, controller hub.
+- **iPhone / iPad:** library, pause grid, touch overlay + skins, controller hub, cheats download, shader picker with live previews, settings search.
+- **Device stills:** upscaling native vs 3x, shaders before/after, performance HUD.
+- **Device video:** 20–40 s mixed gameplay with a few games, cuts showing touch, pad and TV.
+
+**Steps:**
+1. Get the owner's ruling on real artwork.
+2. Add iPhone/iPad variants of `tvos_screens.sh`.
+3. Owner captures on device (Claude can drive the debug API where useful).
+4. Convert to jpg+webp at the site's sizes and update `screenshots.json`.
+5. Drop in the video.
