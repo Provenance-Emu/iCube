@@ -50,7 +50,11 @@ struct SettingsSidebarShell: View {
         .focusSection()
         .onExitCommand(perform: leaveSettings)
         #endif
+      #if os(tvOS)
+      Rectangle().fill(ICubeDesign.color(.hairline)).frame(width: ICubeDesign.Line.hairline.rawValue)
+      #else
       Divider()
+      #endif
       NavigationStack {
         if let selected {
           selected.makeView().id(selected.id)
@@ -152,22 +156,24 @@ struct SettingsSidebarShell: View {
               .frame(width: ICubeDesign.Line.focus.rawValue, height: ICubeDesign.Spacing.l.rawValue)
             Text(section.header)
               .icubeText(.section)
-              .foregroundStyle(ICubeDesign.color(.textSecondary))
+              .foregroundStyle(ICubeDesign.color(.textPrimary))
           }
           .padding(.top, ICubeDesign.Spacing.m.rawValue)
           ForEach(section.entries) { entry in
+            let isSelected = selectedID == entry.id
             Button { selectedID = entry.id } label: {
               HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
                 Image(systemName: entry.icon)
-                  .frame(width: ICubeDesign.Spacing.xl.rawValue)
+                  .font(ICubeDesign.symbolFont(.rail))
+                  .frame(width: ICubeDesign.Symbol.railColumn)
                 Text(entry.title)
                   .icubeText(.nav)
-                  .foregroundStyle(ICubeDesign.color(.textPrimary))
                   .lineLimit(1)
                 Spacer(minLength: 0)
               }
+              .foregroundStyle(isSelected ? ICubeDesign.color(.accent) : ICubeDesign.color(.textPrimary))
             }
-            .buttonStyle(ICubeRowButtonStyle(isSelected: selectedID == entry.id))
+            .buttonStyle(ICubeRowButtonStyle(isSelected: isSelected))
             .focused($sidebarFocus, equals: entry.id)
           }
         }
