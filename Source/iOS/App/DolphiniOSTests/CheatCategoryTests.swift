@@ -6,7 +6,6 @@ import XCTest
 @testable import iCube
 
 final class CheatCategoryTests: XCTestCase {
-
   private func cheat(_ name: String, enabled: Bool = false) -> CheatItem {
     CheatItem(id: name, name: name, type: "Gecko Code", enabled: enabled, isGecko: true, index: 0)
   }

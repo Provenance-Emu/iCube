@@ -7,7 +7,6 @@ import XCTest
 @testable import iCube
 
 final class CheatsMenuModelBuilderTests: XCTestCase {
-
   private func actions(
     setEnabledGlobal: @escaping (Bool) -> Void = { _ in },
     requestEnableGlobalCheats: @escaping (CheatItem) -> Void = { _ in },
