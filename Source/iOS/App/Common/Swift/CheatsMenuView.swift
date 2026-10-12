@@ -52,7 +52,11 @@ struct CheatsMenuView: View {
       },
       refreshCheats: { loadCheats() }
     )
+    #if os(tvOS)
+    return CheatsMenuModelBuilder.make(state: state, actions: actions, typeAsBadge: true)
+    #else
     return CheatsMenuModelBuilder.make(state: state, actions: actions)
+    #endif
   }
 
   /// Shared by the alert's own "Turn On Cheats" button AND (iOS only)
@@ -103,7 +107,7 @@ struct CheatsMenuView: View {
     }
     #else
     ZStack {
-      // Match parent background
+      // Blurred cover backdrop; the material keeps the list legible with no hard-coded scrim colour.
       Image(uiImage: game.coverImage)
         .resizable()
         .scaledToFill()
@@ -111,69 +115,31 @@ struct CheatsMenuView: View {
         .opacity(0.8)
         .ignoresSafeArea()
 
-      LinearGradient(
-        colors: [
-          Color.black.opacity(0.85),
-          Color.black.opacity(0.4),
-          Color.black.opacity(0.85)
-        ],
-        startPoint: .top,
-        endPoint: .bottom
-      )
-      .ignoresSafeArea()
+      Rectangle()
+        .fill(.ultraThinMaterial)
+        .ignoresSafeArea()
 
-      // Match parent content structure
-      HStack(spacing: 80) {
-        // Left column — game cover + info, same as parent. Non-focusable
-        // host chrome around `MenuScreen`: the design doc's §2 tvOS
-        // contract bars a compound ROW, not a hero slot alongside the list
-        // (the "keep the cover-image flavour" option this migration took).
-        VStack(alignment: .leading, spacing: 16) {
-          Image(uiImage: game.coverImage)
-            .resizable()
-            .aspectRatio(2.0 / 3.0, contentMode: .fit)
-            .frame(width: 180, height: 270)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .shadow(color: .black.opacity(0.6), radius: 20, x: 0, y: 10)
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+        // Search stays an inline field above the list (the engine has no search of its own).
+        TextField(L("Search"), text: $searchText)
+          .icubeText(.body)
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
+          .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
+          .padding(.vertical, ICubeDesign.Spacing.s.rawValue)
+          .background(
+            RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+              .fill(ICubeDesign.color(.rowSurface))
+          )
+          .padding(.horizontal, ICubeDesign.Spacing.xl.rawValue)
 
-          VStack(alignment: .leading, spacing: 6) {
-            Text(game.title)
-              .font(.system(size: 24, weight: .bold))
-              .foregroundColor(.white)
-              .lineLimit(2)
-
-            Text(game.gameID)
-              .font(.system(size: 14, weight: .medium))
-              .foregroundColor(.white.opacity(0.7))
-          }
-        }
-        .frame(width: 180)
-
-        // Right column — title + the SAME `MenuModel`/`MenuScreen` iOS
-        // renders. This used to be a bespoke layout (Enable Cheats toggle,
-        // search, Download/Refresh buttons and `CheatRowView` rows all
-        // hand-laid with `@FocusState`, no `MenuFocusRouter` involvement);
-        // now it is one `List` -- every `MenuItem` a single-control row per
-        // §2's tvOS contract -- sharing its model, its Download-always-
-        // visible fix, and its toggle behaviour with iOS instead of
-        // drifting from it. The bespoke Back button is also gone: Menu
-        // (`MenuScreen`'s own `.onExitCommand`) is back, matching every
-        // other tvOS pane in the app. Search is dropped for tvOS -- no host
-        // affordance replaces it, so `searchText` stays "" and every cheat
-        // is always listed; a `TextField` sibling's on-screen-keyboard
-        // detour isn't worth the focus-order risk on a 10-foot UI for a
-        // filter this screen can live without.
-        VStack(alignment: .leading, spacing: 20) {
-          Text(L("Cheat Codes"))
-            .font(.system(size: 28, weight: .bold))
-            .foregroundColor(.white)
-
-          MenuScreen(model: cheatsMenuModel, style: .list, onBack: onBack)
-            .frame(maxWidth: 860, maxHeight: 620)
-        }
-        .frame(maxWidth: 900, alignment: .leading)
+        MenuScreen(
+          model: cheatsMenuModel,
+          style: .list,
+          onBack: onBack,
+          tvHeader: ICubeLeafHeader(title: L("Cheats"), subtitle: game.title),
+          tvInset: .xl
+        )
       }
-      .padding(.horizontal, 60)
     }
     .onAppear { cheatsEnabledGlobal = DOLConfigBridge.mainEnableCheats()
       loadCheats()
@@ -254,7 +220,8 @@ struct CheatsMenuActions {
 }
 
 enum CheatsMenuModelBuilder {
-  static func make(state: CheatsMenuState, actions: CheatsMenuActions) -> MenuModel {
+  /// `typeAsBadge`: tvOS shows the Gecko/Action Replay type as the row's trailing badge instead of a subtitle.
+  static func make(state: CheatsMenuState, actions: CheatsMenuActions, typeAsBadge: Bool = false) -> MenuModel {
     var sections: [MenuSection] = []
 
     sections.append(MenuSection(id: "enable", items: [
@@ -289,7 +256,7 @@ enum CheatsMenuModelBuilder {
         MenuItem(
           id: "cheat-\(cheat.id)",
           title: cheat.name,
-          subtitle: cheat.type,
+          subtitle: typeAsBadge ? nil : cheat.type,
           role: .toggle(Binding(
             get: { cheat.enabled },
             set: { newValue in
@@ -299,7 +266,8 @@ enum CheatsMenuModelBuilder {
                 actions.toggleCheat(cheat)
               }
             }
-          ))
+          )),
+          badge: typeAsBadge ? cheat.type : nil
         )
       }))
     }

@@ -127,4 +127,22 @@ final class CheatsMenuModelBuilderTests: XCTestCase {
     XCTAssertNil(requested)
     XCTAssertEqual(toggled?.id, "gecko_0")
   }
+
+  // MARK: tvOS type badge
+
+  func test_typeAsBadge_movesTypeFromSubtitleToBadge() {
+    let state = CheatsMenuState(cheatsEnabledGlobal: true, cheats: [cheat("gecko_0")])
+    let model = CheatsMenuModelBuilder.make(state: state, actions: actions(), typeAsBadge: true)
+    let item = model.item(id: "cheat-gecko_0")
+    XCTAssertEqual(item?.badge, "Gecko Code")
+    XCTAssertNil(item?.subtitle)
+  }
+
+  func test_defaultKeepsTypeAsSubtitle() {
+    let state = CheatsMenuState(cheatsEnabledGlobal: true, cheats: [cheat("gecko_0")])
+    let model = CheatsMenuModelBuilder.make(state: state, actions: actions())
+    let item = model.item(id: "cheat-gecko_0")
+    XCTAssertEqual(item?.subtitle, "Gecko Code")
+    XCTAssertNil(item?.badge)
+  }
 }
