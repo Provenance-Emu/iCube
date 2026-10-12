@@ -56,4 +56,13 @@ final class SettingsRootModelBuilderTests: XCTestCase {
     XCTAssertEqual(Set(entries).count, entries.count)
     XCTAssertEqual(entries[0], SettingsRootModelBuilder.sections(isIOS: false, achievements: false).flatMap(\.entries)[0])
   }
+
+  func test_tvScreenshotScript_leafIDs_exist() {
+    let ids = Set(SettingsRootModelBuilder.sections(isIOS: false, achievements: false).flatMap(\.entries).map(\.id))
+    for id in ["general", "interface", "advanced", "graphics-video", "graphics-enhancements", "graphics-hacks",
+               "graphics-advanced", "shaders", "audio", "console-gamecube", "console-wii", "controllers",
+               "performance-tuning", "debug", "web-ui", "icloud", "nearby", "about"] {
+      XCTAssertTrue(ids.contains(id), id)
+    }
+  }
 }

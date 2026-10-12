@@ -93,8 +93,9 @@ enum Region: Int, CaseIterable { case ntscJ = 0, ntscU = 1, pal = 2, unknown = 3
 /// Library backdrop. Raw values are what `@AppStorage("library_background_style")` stores (TVLibraryView keeps its own identical enum).
 enum LibraryBackgroundStyle: String, CaseIterable { case clean, gradient, animated
   var label: String { switch self { case .clean: return L("Clean"); case .gradient: return L("GameCube Gradient"); case .animated: return L("Animated (Full Effects)") } }
-  /// AppStorage fell back to `.gradient` for an unset or unknown raw value; so does this.
-  static func from(stored: String?) -> LibraryBackgroundStyle { stored.flatMap(LibraryBackgroundStyle.init(rawValue:)) ?? .gradient }
+  /// What an unset or unknown stored value means.
+  static let `default`: LibraryBackgroundStyle = .animated
+  static func from(stored: String?) -> LibraryBackgroundStyle { stored.flatMap(LibraryBackgroundStyle.init(rawValue:)) ?? .default }
 }
 
 /// Which gesture moves the gyro pointer sideways.

@@ -92,12 +92,19 @@ struct MenuScreen: View {
   /// what "back" means (pop a nav pane, dismiss a sheet, flip a host's own
   /// `@State` pane enum, as `PauseMenuView`'s `CheatsMenuView(onBack:)` does).
   var onBack: (() -> Void)?
+  /// tvOS only: the in-body leaf title drawn above the first section (spec §4.2). `nil` draws none.
+  var tvHeader: ICubeLeafHeader?
+  /// tvOS only: the horizontal inset of the list body. Leaves pass `.xxl`.
+  var tvInset: ICubeDesign.Spacing
 
-  init(model: MenuModel, style: MenuStyle = .list, onBack: (() -> Void)? = nil, modal: MenuModal? = nil) {
+  init(model: MenuModel, style: MenuStyle = .list, onBack: (() -> Void)? = nil, modal: MenuModal? = nil,
+       tvHeader: ICubeLeafHeader? = nil, tvInset: ICubeDesign.Spacing = .l) {
     self.model = model
     self.style = style
     self.onBack = onBack
     self.modal = modal
+    self.tvHeader = tvHeader
+    self.tvInset = tvInset
     #if os(iOS)
     _router = State(initialValue: MenuFocusRouter(config: style.navConfig))
     #endif
@@ -346,50 +353,59 @@ struct MenuScreen: View {
   }
 
   #if os(tvOS)
-  /// Settings and list rows on the type ramp: nav title, detail value (On/Off), tag badge.
+  /// How a trailing value is coloured (spec §4.3): a live choice in accent, Off/neutral in secondary.
+  private enum TVValueStyle { case accent, neutral }
+
+  /// Settings and list rows on the iFly anatomy: tinted icon badge, nav title, trailing value, chevron.
   private func tvRowLabel(
     title: String, subtitle: String?, icon: String?, tint: Color?, badge: String?,
-    value: String?, description: String?, showsChevron: Bool
+    value: String?, valueStyle: TVValueStyle = .neutral, description: String?, showsChevron: Bool,
+    isDestructive: Bool = false
   ) -> some View {
-    HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+    HStack(spacing: ICubeDesign.Spacing.m.rawValue) {
       if let icon {
         Image(systemName: icon)
           .font(ICubeDesign.symbolFont(.shelf))
-          .foregroundStyle(tint ?? ICubeDesign.color(.accent))
-          .frame(width: ICubeDesign.Spacing.xl.rawValue)
+          .foregroundStyle(isDestructive ? ICubeDesign.color(.destructive) : (tint ?? ICubeDesign.color(.accent)))
+          .frame(width: ICubeDesign.IconBadge.size, height: ICubeDesign.IconBadge.size)
+          .background(
+            RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+              .fill((tint ?? ICubeDesign.color(.accent)).opacity(ICubeDesign.IconBadge.tintOpacity)))
       }
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
         Text(title)
           .icubeText(.nav)
-          .foregroundStyle(ICubeDesign.color(.textPrimary))
+          .foregroundStyle(isDestructive ? ICubeDesign.color(.destructive) : ICubeDesign.color(.textPrimary))
+          .lineLimit(1)
         if let subtitle {
-          Text(subtitle)
-            .icubeText(.detail)
-            .foregroundStyle(ICubeDesign.color(.textSecondary))
+          Text(subtitle).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary)).lineLimit(1)
         }
         if let description {
-          Text(description)
-            .icubeText(.detail)
-            .foregroundStyle(ICubeDesign.color(.textSecondary))
-            .lineLimit(2)
+          Text(description).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary)).lineLimit(1)
         }
       }
-      Spacer(minLength: 0)
+      Spacer(minLength: ICubeDesign.Spacing.m.rawValue)
       if let value {
         Text(value)
-          .icubeText(.detail)
-          .foregroundStyle(ICubeDesign.color(.textSecondary))
+          .icubeText(.body)
+          .foregroundStyle(valueStyle == .accent ? ICubeDesign.color(.accent) : ICubeDesign.color(.textSecondary))
+          .lineLimit(1)
       }
       if let badge {
-        Text(badge)
-          .icubeText(.tag)
-          .foregroundStyle(ICubeDesign.color(.textSecondary))
+        Text(badge).icubeText(.tag).foregroundStyle(ICubeDesign.color(.textSecondary))
       }
       if showsChevron {
-        Image(systemName: "chevron.right")
-          .foregroundStyle(ICubeDesign.color(.textTertiary))
+        Image(systemName: "chevron.right").foregroundStyle(ICubeDesign.color(.textTertiary))
       }
     }
+  }
+
+  private func rowLabel(
+    _ item: MenuItem, value: String?, valueStyle: TVValueStyle, isDestructive: Bool = false
+  ) -> some View {
+    tvRowLabel(title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, badge: item.badge,
+               value: value, valueStyle: valueStyle, description: item.description, showsChevron: item.showsChevron,
+               isDestructive: isDestructive)
   }
   #endif
 
@@ -800,6 +816,7 @@ struct MenuScreen: View {
   private var tvListBody: some View {
     let list = ScrollView {
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+        if let tvHeader { tvHeader }
         ForEach(model.sections) { section in
           if let header = section.header {
             tvListSectionHeader(header)
@@ -808,11 +825,14 @@ struct MenuScreen: View {
           if let footer = section.footer {
             Text(footer)
               .icubeText(.detail)
-              .foregroundStyle(ICubeDesign.color(.textTertiary))
+              .foregroundStyle(ICubeDesign.color(.textSecondary))
+              .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
+              .padding(.top, ICubeDesign.Spacing.xs.rawValue)
           }
         }
       }
-      .padding(ICubeDesign.Spacing.l.rawValue)
+      .padding(.vertical, ICubeDesign.Spacing.l.rawValue)
+      .padding(.horizontal, tvInset.rawValue)
     }
     .buttonStyle(ICubeRowButtonStyle())
     if let first = defaultTVFocusID {
@@ -830,9 +850,9 @@ struct MenuScreen: View {
         .frame(width: ICubeDesign.Line.focus.rawValue, height: ICubeDesign.Spacing.l.rawValue)
       Text(header)
         .icubeText(.section)
-        .foregroundStyle(ICubeDesign.color(.textSecondary))
+        .foregroundStyle(ICubeDesign.color(.textPrimary))
     }
-    .padding(.top, ICubeDesign.Spacing.s.rawValue)
+    .padding(.top, ICubeDesign.Spacing.l.rawValue)
   }
 
   @ViewBuilder
@@ -882,34 +902,31 @@ struct MenuScreen: View {
       tvCompactPicker(item, options: options, selection: selection)
     case .picker(let options, let selection):
       ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+        let selected = option.1 == selection.wrappedValue
         Button {
           selection.wrappedValue = option.1
         } label: {
-          HStack {
-            rowLabel(title: option.0, subtitle: nil, icon: nil, tint: nil, badge: nil)
-            Spacer()
-            if option.1 == selection.wrappedValue {
-              Image(systemName: "checkmark")
-            }
-          }
+          tvRowLabel(title: option.0, subtitle: nil, icon: nil, tint: nil, badge: nil,
+                     value: selected ? L("Selected") : nil, valueStyle: .accent, description: nil,
+                     showsChevron: false)
         }
+        .buttonStyle(ICubeRowButtonStyle(isSelected: selected))
         .disabled(!item.isEnabled)
         .focused($tvFocusedID, equals: "\(item.id)#\(index)")
       }
     case .toggle(let binding):
+      let on = binding.wrappedValue
       Button {
         binding.wrappedValue.toggle()
       } label: {
-        rowLabel(
-          title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, badge: item.badge,
-          value: binding.wrappedValue ? L("On") : L("Off"), description: item.description,
-          showsChevron: item.showsChevron
-        )
+        rowLabel(item, value: on ? L("On") : L("Off"), valueStyle: on ? .accent : .neutral)
       }
       .disabled(!item.isEnabled)
       .focused($tvFocusedID, equals: item.id)
     case .destination(let destinationView):
-      NavigationLink { destinationView.clearingSettingsPaneBack() } label: { rowLabel(item) }
+      NavigationLink {
+        destinationView.clearingSettingsPaneBack().environment(\.icubeLeafParentTitle, tvHeader?.title)
+      } label: { rowLabel(item) }
         .disabled(!item.isEnabled)
         .focused($tvFocusedID, equals: item.id)
     case .custom(let customView):
@@ -919,7 +936,11 @@ struct MenuScreen: View {
         stepper.value.wrappedValue = stepper.stepped(stepper.value.wrappedValue, by: direction)
       }
     case .cycle(let options, let selection):
-      Button { performActivate(item) } label: { cycleRowLabel(item) }
+      Button {
+        performActivate(item)
+      } label: {
+        rowLabel(item, value: "‹ \(item.currentValueTitle ?? "—") ›", valueStyle: .accent)
+      }
         .disabled(!item.isEnabled)
         .focused($tvFocusedID, equals: item.id)
         .onMoveCommand { direction in   // A still cycles; left/right step without leaving the row
@@ -930,8 +951,14 @@ struct MenuScreen: View {
           default: break
           }
         }
-    case .navigation, .action, .destructive:
+    case .navigation, .action:
       Button { performActivate(item) } label: { rowLabel(item) }
+        .disabled(!item.isEnabled)
+        .focused($tvFocusedID, equals: item.id)
+    case .destructive:
+      Button { performActivate(item) } label: {
+        rowLabel(item, value: nil, valueStyle: .neutral, isDestructive: true)
+      }
         .disabled(!item.isEnabled)
         .focused($tvFocusedID, equals: item.id)
     }
@@ -951,20 +978,17 @@ struct MenuScreen: View {
   /// A row that left/right steps: title, then "‹ value ›". Built like `tvCompactPicker` always was: a
   /// `.focusable` HStack with `.onMoveCommand`, not a `Button`, because select does nothing here.
   private func tvSteppedRow(_ item: MenuItem, valueTitle: String, step: @escaping (Int) -> Void) -> some View {
-    HStack {
+    HStack(spacing: ICubeDesign.Spacing.m.rawValue) {
       rowLabel(item)
-      Image(systemName: "chevron.left")
-      Text(valueTitle).monospacedDigit()
-      Image(systemName: "chevron.right")
+      Spacer(minLength: 0)
+      Image(systemName: "chevron.left").foregroundStyle(ICubeDesign.color(.textTertiary))
+      Text(valueTitle).icubeText(.tag).foregroundStyle(ICubeDesign.color(.accent)).monospacedDigit()
+      Image(systemName: "chevron.right").foregroundStyle(ICubeDesign.color(.textTertiary))
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
     .contentShape(Rectangle())
     .focusable(item.isEnabled)
     .focused($tvFocusedID, equals: item.id)
-    .padding(8)
-    .overlay(
-      RoundedRectangle(cornerRadius: 10)
-        .stroke(tvFocusedID == item.id ? Color.accentColor : Color.clear, lineWidth: 4))
+    .icubeRowChrome(focused: tvFocusedID == item.id)
     .opacity(item.isEnabled ? 1 : 0.5)
     .onMoveCommand { direction in
       guard item.isEnabled else { return }

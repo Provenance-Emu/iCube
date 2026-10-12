@@ -83,3 +83,4 @@ __pycache__/
 # Ignore CMake user presets
 CMakeUserPresets.json
 /Source/iOS/App/build-Xcode
+/Source/iOS/App/build-Xcode-tvsim

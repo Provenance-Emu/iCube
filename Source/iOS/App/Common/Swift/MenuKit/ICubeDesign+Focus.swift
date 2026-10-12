@@ -136,6 +136,10 @@ private struct ICubeRowButtonChrome<Label: View>: View {
         RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
           .fill(focused || isSelected ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface))
       )
+      .overlay(
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+          .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
+      )
       .modifier(ICubeFocusChrome(focused: focused, pressed: isPressed,
                                  radius: ICubeDesign.Radius.small.rawValue, scale: ICubeDesign.Motion.rowFocusScale))
   }
@@ -211,5 +215,25 @@ extension View {
         RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
           .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
       )
+  }
+}
+
+extension View {
+  /// Row surface plus the focus ring, glow and scale, for a row that is not a `Button` (the stepped
+  /// picker row reads left/right itself). Same drawing as `ICubeRowButtonStyle`.
+  func icubeRowChrome(focused: Bool) -> some View {
+    padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
+      .padding(.vertical, ICubeDesign.Spacing.s.rawValue)
+      .frame(maxWidth: .infinity, minHeight: ICubeRowButtonStyle.minHeight, alignment: .leading)
+      .background(
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+          .fill(focused ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+          .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
+      )
+      .modifier(ICubeFocusChrome(focused: focused, pressed: false,
+                                 radius: ICubeDesign.Radius.small.rawValue, scale: ICubeDesign.Motion.rowFocusScale))
   }
 }

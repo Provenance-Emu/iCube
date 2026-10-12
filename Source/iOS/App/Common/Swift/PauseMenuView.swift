@@ -12,6 +12,7 @@ internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
   let onClose: () -> Void
   let onShowSettings: () -> Void
+  var onShowPerfOverlay: () -> Void = {}
   let platform: PlatformKind
   let game: TVGameItem
 
@@ -24,6 +25,10 @@ internal struct PauseMenuView: View {
   }
   private enum Pane { case main, saves, cheats, controllers }
   @State private var pane: Pane = .main
+  #if DEBUG
+  /// `-ICubePausePane <saves|cheats|controllers|reset|exit>`: open a sub-pane for simulator screenshots.
+  var debugInitialPane: String?
+  #endif
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
   @State private var showShaders: Bool = false
@@ -66,7 +71,7 @@ internal struct PauseMenuView: View {
   // pane rather than a settings trip. Mute is shared with the in-game top bar
   // via `QuickMute`.
   @State private var isMuted: Bool = false
-  @State private var fastForwardEnabled: Bool = false
+  @State private var fastForward = PauseFastForwardState(isEnabled: false, percent: ConfigGeneralState.storedFastForward(nil))
   /// This menu's hold on the pause (spec §4.3). Adopted from the gesture tracker's pending claim when
   /// there is one, otherwise claimed here. Released only on a real teardown, see `onDisappear`.
   @State private var pauseToken: PauseArbiter.Token?
@@ -81,22 +86,6 @@ internal struct PauseMenuView: View {
   /// Mutes / unmutes through the helper the top bar shares, so both always agree.
   private func toggleMute() {
     isMuted = QuickMute.toggle()
-  }
-
-  /// Currently configured fast-forward speed, read from the same UserDefaults key
-  /// `TVEmulationBridge.setFastForwardSpeedPercent(_:)` writes (`ConfigGeneralDefaultsKey`). Falls back to the
-  /// bridge's own default (300 = 3x) before anything has been picked.
-  private var configuredFastForwardPercent: Int {
-    ConfigGeneralState.storedFastForward(UserDefaults.standard.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int)
-  }
-
-  /// Turns fast-forward off without leaving the pause menu, mirroring the old
-  /// in-place toggle's off behavior.
-  private func turnOffFastForward() {
-    if TVEmulationBridge.isFastForwardEnabled() {
-      _ = TVEmulationBridge.toggleFastForward()
-    }
-    fastForwardEnabled = false
   }
 
   var body: some View {
@@ -143,9 +132,22 @@ internal struct PauseMenuView: View {
         openedAt = Date()
       }
       isMuted = QuickMute.isMuted
-      fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
+      fastForward = PauseFastForwardState(
+        isEnabled: TVEmulationBridge.isFastForwardEnabled(),
+        percent: ConfigGeneralState.storedFastForward(UserDefaults.standard.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int))
       refreshActiveCheatCount()
       refreshShaderState()
+      #if DEBUG
+      switch debugInitialPane {
+      case "saves": pane = .saves
+      case "cheats": pane = .cheats
+      case "controllers": pane = .controllers
+      case "reset": showResetDialog = true
+      case "exit": showExitDialog = true
+      default: break
+      }
+      debugInitialPane = nil
+      #endif
     }
     .onDisappear {
       // `.sheet`/`.fullScreenCover` presentation (Shaders, Settings, Controllers,
@@ -241,12 +243,17 @@ internal struct PauseMenuView: View {
     }
   }
 
+  #if DEBUG
+  func debugPane(_ pane: String?) -> PauseMenuView { var copy = self; copy.debugInitialPane = pane; return copy }
+  #endif
+
   // Add pull-down to dismiss for iOS
   #if os(iOS)
-  init(selectedSlot: Binding<Int>, onClose: @escaping () -> Void, onShowSettings: @escaping () -> Void, platform: PlatformKind, game: TVGameItem) {
+  init(selectedSlot: Binding<Int>, onClose: @escaping () -> Void, onShowSettings: @escaping () -> Void, onShowPerfOverlay: @escaping () -> Void = {}, platform: PlatformKind, game: TVGameItem) {
     self._selectedSlot = selectedSlot
     self.onClose = onClose
     self.onShowSettings = onShowSettings
+    self.onShowPerfOverlay = onShowPerfOverlay
     self.platform = platform
     self.game = game
   }
@@ -700,21 +707,21 @@ internal struct PauseMenuView: View {
 
   // MARK: - Pause menu model
 
-  /// Persists `percent` and turns fast-forward on; the game picks it up when the player resumes.
-  private func selectFastForwardSpeed(_ percent: Int) {
-    TVEmulationBridge.setFastForwardSpeedPercent(percent)
-    if !TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
-    fastForwardEnabled = true
+  /// Carries out what a fast-forward tile selection decided; the game picks it up when the player resumes.
+  private func applyFastForward(_ effect: PauseFastForwardState.Effect) {
+    switch effect {
+    case .setSpeed(let percent):
+      TVEmulationBridge.setFastForwardSpeedPercent(percent)
+      if !TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
+    case .turnOff:
+      if TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
+    }
   }
 
   private var pauseMenuBindings: PauseMenuBindings {
     PauseMenuBindings(
       mute: Binding(get: { isMuted }, set: { _ in toggleMute() }),
-      fastForward: Binding(
-        get: { fastForwardEnabled ? AnyHashable(configuredFastForwardPercent) : PauseMenuModelBuilder.fastForwardOff },
-        set: { value in
-          if let percent = value as? Int, percent >= 0 { selectFastForwardSpeed(percent) } else { turnOffFastForward() }
-        }),
+      fastForward: Binding(get: { fastForward.selection }, set: { applyFastForward(fastForward.select($0)) }),
       quickSlot: Binding(get: { AnyHashable(selectedSlot) }, set: { if let slot = $0 as? Int { selectedSlot = slot } }),
       shader: Binding(
         get: { AnyHashable(ShaderQuickApply.currentPath ?? "") },
@@ -766,6 +773,7 @@ internal struct PauseMenuView: View {
         onShowSettings()
         #endif
       },
+      openPerfOverlay: { onClose(); onShowPerfOverlay() },
       requestReset: { showResetDialog = true },
       requestExit: { showExitDialog = true },
       recenterPointer: {
@@ -844,6 +852,7 @@ struct PauseMenuActions {
   var openShaders: () -> Void
   var openContinuity: () -> Void
   var openSettings: () -> Void
+  var openPerfOverlay: () -> Void
   var requestReset: () -> Void
   var requestExit: () -> Void
   var recenterPointer: () -> Void
@@ -908,6 +917,8 @@ enum PauseMenuModelBuilder {
     var game: [MenuItem] = [
       MenuItem(id: "save-states", title: L("Save States"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates),
                description: L("Save, load and browse every slot.")),
+      MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .action(actions.openPerfOverlay),
+               description: L("Frame rate, CPU and GPU timing drawn over the game.")),
       MenuItem(id: "cheats", title: L("Cheats"), icon: "star.circle", tint: .yellow, role: .action(actions.openCheats),
                badge: state.activeCheatCount > 0 ? "\(state.activeCheatCount)" : nil,
                description: L("Enable Gecko and Action Replay codes for this game.")),

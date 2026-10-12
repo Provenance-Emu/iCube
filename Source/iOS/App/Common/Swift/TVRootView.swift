@@ -3,10 +3,15 @@ import SwiftUI
 struct TVRootView: View {
   var body: some View {
     #if DEBUG
-    // `-ICubePausePreview` opens the pause menu on a stand-in game, for simulator screenshots of the pause UI.
-    if ProcessInfo.processInfo.arguments.contains("-ICubePausePreview") {
+    // `-ICubePausePreview` opens the pause menu on a stand-in game, `-ICubeSettingsPreview <leafID>` opens one
+    // settings leaf, for simulator screenshots (Scripts/tvos_screens.sh).
+    let args = ProcessInfo.processInfo.arguments
+    if args.contains("-ICubePausePreview") {
       PauseMenuView(selectedSlot: .constant(1), onClose: {}, onShowSettings: {}, platform: .tvos,
                     game: PauseMenuView.previewGame())
+        .debugPane(Self.argument(after: "-ICubePausePane", in: args))
+    } else if let leaf = Self.argument(after: "-ICubeSettingsPreview", in: args) {
+      SettingsRootView(initialLeafID: leaf)
     } else {
       library
     }
@@ -14,6 +19,13 @@ struct TVRootView: View {
     library
     #endif
   }
+
+  #if DEBUG
+  private static func argument(after flag: String, in args: [String]) -> String? {
+    guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+    return args[i + 1]
+  }
+  #endif
 
   private var library: some View {
     TVLibraryView()

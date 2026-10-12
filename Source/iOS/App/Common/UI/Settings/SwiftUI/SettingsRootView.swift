@@ -8,6 +8,9 @@ import SwiftUI
 struct SettingsRootView: View {
   @Environment(\.horizontalSizeClass) private var sizeClass
   @Environment(\.dismiss) private var dismiss
+  /// A leaf to open first (the DSU deep link, the tvOS `-ICubeSettingsPreview` argument).
+  var initialLeafID: String? = nil
+  @State private var jumpToLeafID: String?
   @State private var jumpToControllersRequested = false
   /// Built once: the entries' closures are stable across body evaluations, and `pushed` compares by id.
   @State private var sections = SettingsRootView.makeSections()
@@ -43,10 +46,10 @@ struct SettingsRootView: View {
   var body: some View {
     Group {
       #if os(tvOS)
-      SettingsSidebarShell(sections: sections, searchIndex: nil, jumpToControllers: $jumpToControllersRequested)
+      SettingsSidebarShell(sections: sections, searchIndex: nil, jumpToLeafID: $jumpToLeafID)
       #else
       if usesSidebar {
-        SettingsSidebarShell(sections: sections, searchIndex: searchIndex, jumpToControllers: $jumpToControllersRequested)
+        SettingsSidebarShell(sections: sections, searchIndex: searchIndex, jumpToLeafID: $jumpToLeafID)
       } else {
         phoneList
       }
@@ -55,7 +58,11 @@ struct SettingsRootView: View {
     #if os(tvOS)
     .background { ICubeRoom(style: .gradient) }
     #endif
-    .onReceive(NotificationCenter.default.publisher(for: .dolSettingsSelectControllers)) { _ in jumpToControllersRequested = true }
+    .onAppear { if jumpToLeafID == nil { jumpToLeafID = initialLeafID } }
+    .onReceive(NotificationCenter.default.publisher(for: .dolSettingsSelectControllers)) { _ in
+      jumpToLeafID = "controllers"
+      jumpToControllersRequested = true
+    }
     #if os(iOS)
     .task { if searchIndex == nil { searchIndex = SettingsSearchIndex(sections: sections) } }   // once per appearance
     #endif

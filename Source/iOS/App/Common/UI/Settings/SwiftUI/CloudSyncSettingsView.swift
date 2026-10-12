@@ -15,8 +15,61 @@ struct CloudSyncSettingsView: View {
 
     @ObservedObject private var coordinator = CloudSyncCoordinator.shared
     @State private var showClearConfirmation = false
+    #if os(tvOS)
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.settingsPaneBack) private var paneBack
+    @Environment(\.icubeLeafParentTitle) private var parentTitle
+    #endif
 
     var body: some View {
+        #if os(tvOS)
+        tvBody
+        #else
+        iosBody
+        #endif
+    }
+
+    #if os(tvOS)
+    private var tvBody: some View {
+        MenuScreen(model: CloudSyncModelBuilder.make(snapshot, conflicts: AnyView(SyncConflictResolutionView())) { change in
+            switch change {
+            case .enabled(let on): coordinator.isEnabled = on
+            case .syncNow: Task { await coordinator.syncNow() }
+            case .clearCloudData: showClearConfirmation = true
+            }
+        }, style: .list, onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
+                   tvHeader: SettingsLeafScreen.header(title: L("iCloud Sync"), parentTitle: parentTitle), tvInset: .xxl)
+            .confirmationDialog(
+                L("Remove all iCube data from iCloud?"),
+                isPresented: $showClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(L("Clear iCloud Data"), role: .destructive) {
+                    Task { await coordinator.clearCloudData() }
+                }
+                Button(L("Cancel"), role: .cancel) {}
+            }
+            .task { await coordinator.refreshAvailability() }
+    }
+
+    private var snapshot: CloudSyncSnapshot {
+        CloudSyncSnapshot(
+            isEnabled: coordinator.isEnabled,
+            isSyncing: coordinator.isSyncing,
+            unavailableReason: coordinator.unavailableReason?.localizedDescription,
+            lastError: coordinator.lastError,
+            lastSyncDate: coordinator.statistics.lastSyncDate,
+            countsByType: coordinator.statistics.countsByType,
+            bytesByType: coordinator.statistics.bytesByType,
+            totalFiles: coordinator.statistics.totalFiles,
+            formattedTotalSize: coordinator.statistics.formattedTotalSize,
+            errorFiles: coordinator.statistics.errorFiles,
+            pendingConflicts: coordinator.pendingConflicts.count,
+            recentEvents: coordinator.recentEvents.map { ($0.message, $0.file) })
+    }
+    #endif
+
+    private var iosBody: some View {
         Form {
             statusSection
             if coordinator.isEnabled {

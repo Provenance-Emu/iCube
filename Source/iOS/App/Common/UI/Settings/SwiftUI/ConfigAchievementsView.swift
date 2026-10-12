@@ -31,8 +31,100 @@ struct ConfigAchievementsView: View {
   @State private var discordPresence: Bool = false
   @State private var progress: Bool = true
   @State private var hostURL: String = ""
+  #if os(tvOS)
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.settingsPaneBack) private var paneBack
+  @Environment(\.icubeLeafParentTitle) private var parentTitle
+  #endif
 
   var body: some View {
+    #if os(tvOS)
+    tvBody
+    #else
+    iosBody
+    #endif
+  }
+
+  #if os(tvOS)
+  /// The toggles are menu-engine rows; the credential and server fields stay in a stock `List` below them.
+  private var tvBody: some View {
+    VStack(spacing: 0) {
+      MenuScreen(model: AchievementsModelBuilder.make(snapshot, apply: apply),
+                 onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
+                 tvHeader: SettingsLeafScreen.header(title: L("Achievements"), parentTitle: parentTitle),
+                 tvInset: .xxl)
+      List {
+        Section(header: Text(L("Account"))) {
+          HStack {
+            Label(L("Username"), systemImage: "person.fill")
+            Spacer()
+            TextField(L("Username"), text: $username.onSet { DOLConfigBridge.setRaUsername($0) })
+              .multilineTextAlignment(.trailing)
+              .disabled(hasToken || !enabled)
+          }
+          .disabled(!enabled)
+
+          HStack {
+            Label(L("Password"), systemImage: "key.fill")
+            Spacer()
+            SecureField(L("Password"), text: $password)
+              .multilineTextAlignment(.trailing)
+              .disabled(hasToken || !enabled)
+          }
+          .disabled(!enabled)
+
+          Button(action: toggleLogin) {
+            Label(hasToken ? L("Log Out") : L("Log In"), systemImage: hasToken ? "person.badge.minus" : "person.badge.plus")
+          }
+          .disabled(!enabled)
+        }
+
+        Section(header: Text(L("Game Mode Options"))) {
+          Toggle(L("Enable Unofficial"), isOn: $unofficial.onSet { DOLConfigBridge.setRaUnofficialEnabled($0) })
+          Toggle(L("Encore Mode"), isOn: $encore.onSet { DOLConfigBridge.setRaEncoreEnabled($0) })
+        }
+
+        Section(header: Text(L("Advanced"))) {
+          HStack {
+            Label(L("Server URL"), systemImage: "server.rack")
+            Spacer()
+            TextField("https://retroachievements.org", text: $hostURL.onSet { DOLConfigBridge.setRaHostURL($0) })
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled(true)
+              .multilineTextAlignment(.trailing)
+          }
+        }
+      }
+    }
+    .settingsLeaf(title: L("Achievements"), sync: sync)
+  }
+
+  private var snapshot: AchievementsSnapshot {
+    AchievementsSnapshot(enabled: enabled, hardcore: hardcore, spectator: spectator, discordPresence: discordPresence, progress: progress, isSignedIn: hasToken)
+  }
+
+  private func apply(_ change: AchievementsChange) {
+    switch change {
+    case .enabled(let v): enabled = v; DOLConfigBridge.setRaEnabled(v)
+    case .hardcore(let v): hardcore = v; DOLConfigBridge.setRaHardcoreEnabled(v)
+    case .spectator(let v): spectator = v; DOLConfigBridge.setRaSpectatorEnabled(v)
+    case .discordPresence(let v): discordPresence = v; DOLConfigBridge.setRaDiscordPresenceEnabled(v)
+    case .progress(let v): progress = v; DOLConfigBridge.setRaProgressEnabled(v)
+    }
+  }
+  #endif
+
+  private func toggleLogin() {
+    if hasToken {
+      DOLConfigBridge.raLogout()
+    } else {
+      DOLConfigBridge.raInit()
+      DOLConfigBridge.raLogin(password)
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sync() }
+  }
+
+  private var iosBody: some View {
     List {
       Section(header: Text(L("RetroAchievements"))) {
         settingsCaption(
@@ -61,15 +153,7 @@ struct ConfigAchievementsView: View {
         }
         .disabled(!enabled)
 
-        Button(action: {
-          if hasToken {
-            DOLConfigBridge.raLogout()
-          } else {
-            DOLConfigBridge.raInit()
-            DOLConfigBridge.raLogin(password)
-          }
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { sync() }
-        }) {
+        Button(action: toggleLogin) {
           Label(hasToken ? L("Log Out") : L("Log In"), systemImage: hasToken ? "person.badge.minus" : "person.badge.plus")
         }
         .disabled(!enabled)

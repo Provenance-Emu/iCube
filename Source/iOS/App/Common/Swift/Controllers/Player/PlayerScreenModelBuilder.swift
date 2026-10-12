@@ -339,9 +339,17 @@ struct PlayerHelpCaption: View {
   let text: String
 
   var body: some View {
+    #if os(tvOS)
+    Text(text)
+      .icubeText(.detail)
+      .foregroundStyle(ICubeDesign.color(.textSecondary))
+      .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
+      .fixedSize(horizontal: false, vertical: true)
+    #else
     Text(text)
       .font(.footnote)
       .foregroundStyle(.secondary)
       .fixedSize(horizontal: false, vertical: true)
+    #endif
   }
 }

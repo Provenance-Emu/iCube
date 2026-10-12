@@ -17,9 +17,13 @@ final class SettingsEnumsTests: XCTestCase {
     XCTAssertEqual(Region.unknown.label, "Error")
   }
 
-  func test_libraryBackgroundStyle_unsetOrUnknownStoredValueIsGradient() {
-    XCTAssertEqual(LibraryBackgroundStyle.from(stored: nil), .gradient)
-    XCTAssertEqual(LibraryBackgroundStyle.from(stored: "bogus"), .gradient)
+  func test_default_isAnimated() {
+    XCTAssertEqual(LibraryBackgroundStyle.default, .animated)
+  }
+
+  func test_fromUnknown_fallsBackToDefault() {
+    XCTAssertEqual(LibraryBackgroundStyle.from(stored: nil), .default)
+    XCTAssertEqual(LibraryBackgroundStyle.from(stored: "bogus"), .default)
     for style in LibraryBackgroundStyle.allCases { XCTAssertEqual(LibraryBackgroundStyle.from(stored: style.rawValue), style) }
   }
 

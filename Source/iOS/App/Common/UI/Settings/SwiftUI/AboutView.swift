@@ -25,12 +25,30 @@ private enum AboutLogoAnimationStyle {
 
 struct AboutView: View {
   @Environment(\.openURL) private var openURL
+  #if os(tvOS)
+  @Environment(\.dismiss) private var dismiss
+  @Environment(\.settingsPaneBack) private var paneBack
+  @Environment(\.icubeLeafParentTitle) private var parentTitle
+  @State private var confirmReset = false
+  #endif
   @State private var animationStyle: AboutLogoAnimationStyle = .centerPulse
   @State private var logoScale: CGFloat = 1.0
   @State private var orbitAngle: Double = 0.0
   @State private var sparkleOpacity: Double = 0.3
 
   var body: some View {
+    #if os(tvOS)
+    MenuScreen(model: AboutModelBuilder.make(
+      appVersion: VersionManager.shared().appVersion.userFacing, coreVersion: VersionManager.shared().coreVersion,
+      open: { openURL($0) }, blog: AnyView(DolphinBlogView()), help: AnyView(WikiHelpView()),
+      resetAll: { confirmReset = true }),
+      style: .list, onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
+      tvHeader: SettingsLeafScreen.header(title: L("About"), parentTitle: parentTitle), tvInset: .xxl)
+      .alert(L("Reset All Settings"), isPresented: $confirmReset) {
+        Button(L("Cancel"), role: .cancel) {}
+        Button(L("Reset"), role: .destructive) { DOLConfigBridge.resetAllToDefaults() }
+      } message: { Text(L("This will reset all settings to factory defaults. This may require restarting emulation.")) }
+    #else
     ScrollView {
       VStack(spacing: 20) {
         // Top spacer to mimic storyboard padding
@@ -145,6 +163,7 @@ struct AboutView: View {
       .frame(maxWidth: .infinity)
     }
     .navigationTitle(L("About iCube"))
+    #endif
   }
 
   private func startAboutAnimation() {

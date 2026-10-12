@@ -529,36 +529,14 @@ struct EmulationScreen: View {
         .interactiveDismissDisabled(true)
     }
     .fullScreenCover(isPresented: $showPauseMenu) {
-      ZStack {
-        PauseMenuView(
-          selectedSlot: $selectedSlot,
-          onClose: { showPauseMenu = false },
-          onShowSettings: { showSettings = true },
-          platform: .tvos,
-          game: game
-        )
-        // Speed overlay toggle inside pause menu
-        VStack {
-          HStack {
-            Spacer()
-            Button {
-              refreshPerfOverlayState()
-              showPerfOverlay = true
-            } label: {
-              Image(systemName: "speedometer")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundColor(.white)
-                .padding(12)
-                .background(.white.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .focusable(true)
-            .padding([.top, .trailing], 24)
-          }
-          Spacer()
-        }
-      }
+      PauseMenuView(
+        selectedSlot: $selectedSlot,
+        onClose: { showPauseMenu = false },
+        onShowSettings: { showSettings = true },
+        onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
+        platform: .tvos,
+        game: game
+      )
     }
     .onAppear {
       NSLog("[INPUT] tvOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
@@ -1064,6 +1042,7 @@ struct EmulationScreen: View {
         selectedSlot: $selectedSlot,
         onClose: { showPauseMenu = false },
         onShowSettings: { showSettings = true },
+        onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
         platform: .ios,
         game: game
       )

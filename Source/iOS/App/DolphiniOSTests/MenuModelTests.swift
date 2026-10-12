@@ -194,4 +194,23 @@ final class MenuModelTests: XCTestCase {
     XCTAssertFalse(MenuItem(id: "a", title: "A", role: .action({})).showsChevron)
     XCTAssertTrue(MenuItem(id: "b", title: "B", role: .action({}), showsChevron: true).showsChevron)
   }
+
+  func test_currentValueTitle_forExplodedPicker_isSelectedOptionTitle() {
+    let sel = Binding<AnyHashable>(get: { AnyHashable(2) }, set: { _ in })
+    let item = MenuItem(id: "x", title: "X", role: .picker(options: [("One", 1), ("Two", 2)], selection: sel))
+    XCTAssertEqual(item.currentValueTitle, "Two")
+  }
+
+  func test_currentValueTitle_forCycleOffLadder_isDash() {
+    let sel = Binding<AnyHashable>(get: { AnyHashable(150) }, set: { _ in })
+    let item = MenuItem(id: "x", title: "X", role: .cycle(options: [("2x", 200)], selection: sel))
+    XCTAssertEqual(item.currentValueTitle, "—")
+  }
+
+  func test_disabledPicker_keepsItsValue_andIsNotFocusable() {
+    let sel = Binding<AnyHashable>(get: { AnyHashable(2) }, set: { _ in })
+    let item = MenuItem(id: "x", title: "X", role: .picker(options: [("One", 1), ("Two", 2)], selection: sel), isEnabled: false)
+    XCTAssertEqual(item.currentValueTitle, "Two")
+    XCTAssertFalse(MenuModel(sections: [MenuSection(id: "s", items: [item])]).focusableIDs.contains("x"))
+  }
 }

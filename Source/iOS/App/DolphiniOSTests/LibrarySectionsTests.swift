@@ -45,4 +45,16 @@ final class LibrarySectionsTests: XCTestCase {
     )
     XCTAssertEqual(shelves.map(\.id), ["all"])
   }
+
+#if os(tvOS)
+  func testHeaderSubtitleHomeHasNoCount() {
+    XCTAssertEqual(TVLibraryView.libraryHeaderSubtitle(destination: .home, count: 12), L("My Library"))
+  }
+
+  func testHeaderSubtitleGridViewsCarryTheCount() {
+    XCTAssertEqual(TVLibraryView.libraryHeaderSubtitle(destination: .all, count: 7), "\(L("All Games")) · 7")
+    XCTAssertEqual(TVLibraryView.libraryHeaderSubtitle(destination: .platform(.gameCube), count: 3), "\(L("GameCube")) · 3")
+    XCTAssertEqual(TVLibraryView.libraryHeaderSubtitle(destination: .platform(.wii), count: 0), "\(L("Wii")) · 0")
+  }
+#endif
 }
