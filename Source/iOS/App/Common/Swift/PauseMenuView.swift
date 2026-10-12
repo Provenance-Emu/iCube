@@ -37,6 +37,8 @@ internal struct PauseMenuView: View {
   @State private var showResetDialog: Bool = false
   @State private var showShaders: Bool = false
   @State private var showSettingsSheet: Bool = false
+  /// The leaf the iOS Settings sheet opens on; nil opens the root.
+  @State private var settingsSheetLeafID: String?
   @State private var showControllersSheet: Bool = false
   /// Recenter Pointer is offered for a running Wii title on iOS, where touch or the gyro drives it.
   private static var showsRecenterPointer: Bool {
@@ -245,7 +247,7 @@ internal struct PauseMenuView: View {
     #if os(iOS)
     .sheet(isPresented: $showSettingsSheet) {
       NavigationStack {
-        SettingsRootView()
+        SettingsRootView(initialLeafID: settingsSheetLeafID)
           .navigationTitle(L("Settings"))
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showSettingsSheet = false } } }
       }
@@ -741,6 +743,7 @@ internal struct PauseMenuView: View {
       openContinuity: { showContinuitySheet = true },
       openSettings: {
         #if os(iOS)
+        settingsSheetLeafID = nil
         showSettingsSheet = true
         #else
         onShowSettings()
@@ -748,6 +751,7 @@ internal struct PauseMenuView: View {
       },
       openSettingsLeaf: { id in
         #if os(iOS)
+        settingsSheetLeafID = id
         showSettingsSheet = true
         #else
         onShowSettingsLeaf(id)

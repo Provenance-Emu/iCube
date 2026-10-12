@@ -90,6 +90,16 @@ struct SettingsRootView: View {
       // DSU-add deep link (dolphinios://dsu/add, legacy dsu://) opens the DSU server list, where the server it just added shows.
       .navigationDestination(isPresented: $jumpToControllersRequested) { DSUSettingsView().padBackNavigation() }
     }
+    .onChange(of: jumpToLeafID, initial: true) { _, _ in consumePhoneJump() }
+  }
+
+  /// `initialLeafID` (the pause menu's tiles and long-presses) pushes that leaf. The DSU link pushes the
+  /// DSU list itself, so its "controllers" id is dropped here rather than pushed on top of it.
+  private func consumePhoneJump() {
+    guard let id = jumpToLeafID else { return }
+    jumpToLeafID = nil
+    guard !jumpToControllersRequested else { return }
+    pushed = sections.flatMap(\.entries).first { $0.id == id }
   }
   #endif
 }
