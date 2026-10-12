@@ -11,14 +11,15 @@ import XCTest
 final class PauseMenuModelBuilderTests: XCTestCase {
   private final class Box { var value: AnyHashable; init(_ v: AnyHashable) { value = v } }
 
-  private func bindings(ff: Box = Box(PauseMenuModelBuilder.fastForwardOff), slot: Box = Box(3), muted: Box = Box(false), shader: Box = Box(ShaderQuickApply.noneValue), resolution: Box = Box(1), volume: Box = Box(100)) -> PauseMenuBindings {
+  private func bindings(ff: Box = Box(PauseMenuModelBuilder.fastForwardOff), slot: Box = Box(3), muted: Box = Box(false), shader: Box = Box(ShaderQuickApply.noneValue), resolution: Box = Box(1), volume: Box = Box(100), recording: Box = Box(false)) -> PauseMenuBindings {
     PauseMenuBindings(
       mute: Binding(get: { muted.value as? Bool ?? false }, set: { muted.value = $0 }),
       fastForward: Binding(get: { ff.value }, set: { ff.value = $0 }),
       quickSlot: Binding(get: { slot.value }, set: { slot.value = $0 }),
       shader: Binding(get: { shader.value }, set: { shader.value = $0 }),
       internalResolution: Binding(get: { resolution.value }, set: { resolution.value = $0 }),
-      audioVolume: Binding(get: { volume.value }, set: { volume.value = $0 }))
+      audioVolume: Binding(get: { volume.value }, set: { volume.value = $0 }),
+      recording: Binding(get: { recording.value as? Bool ?? false }, set: { recording.value = $0 }))
   }
 
   private var log: [String] = []
@@ -41,9 +42,22 @@ final class PauseMenuModelBuilderTests: XCTestCase {
   func test_threeSections_inOrder_withExpectedTiles() {
     let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     XCTAssertEqual(model.sections.map(\.id), ["quick", "game", "system"])
-    XCTAssertEqual(model.sections[0].items.map(\.id), ["resume", "quick-save", "quick-load", "fast-forward", "mute", "screenshot"])
+    XCTAssertEqual(model.sections[0].items.map(\.id), ["resume", "quick-save", "quick-load", "fast-forward", "mute", "screenshot", "record"])
     XCTAssertEqual(model.sections[1].items.map(\.id), ["save-states", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers", "continuity"])
     XCTAssertEqual(model.sections[2].items.map(\.id), ["settings", "reset", "exit"])
+  }
+
+  func test_record_tile_togglesRecordingBinding_andBadgesWhileOn() {
+    let recording = Box(false)
+    let off = PauseMenuModelBuilder.make(state: state(), bindings: bindings(recording: recording), actions: actions())
+    let item = off.item(id: "record")!
+    XCTAssertEqual(off.section(containing: "record")?.id, "quick")
+    XCTAssertNil(item.badge)
+    guard case .toggle(let binding) = item.role else { return XCTFail("record is not a toggle") }
+    binding.wrappedValue = true
+    XCTAssertEqual(recording.value, AnyHashable(true))
+    let on = PauseMenuModelBuilder.make(state: state(), bindings: bindings(recording: recording), actions: actions())
+    XCTAssertEqual(on.item(id: "record")?.badge, "REC")
   }
 
   func test_perfHUD_tile_isInGameSection_andCallsOpenPerfOverlay() {

@@ -5065,3 +5065,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Draws the iCube badge and a QR code for icube-emu.com in the corner of recordings." = "Draws the iCube badge and a QR code for icube-emu.com in the corner of recordings.";
 "Camera Overlay" = "Camera Overlay";
 "Shows the front camera in a corner of recordings." = "Shows the front camera in a corner of recordings.";
+"REC" = "REC";
+"Record the screen to a video in Recordings." = "Record the screen to a video in Recordings.";
+"Recording failed" = "Recording failed";

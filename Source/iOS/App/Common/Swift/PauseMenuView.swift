@@ -80,6 +80,8 @@ internal struct PauseMenuView: View {
   // pane rather than a settings trip. Mute is shared with the in-game top bar
   // via `QuickMute`.
   @State private var isMuted: Bool = false
+  /// Observed so the Record tile's toggle and REC badge follow the recorder.
+  @ObservedObject private var recorder = RecordingManager.shared
   @State private var fastForward = PauseFastForwardState(isEnabled: false, percent: ConfigGeneralState.storedFastForward(nil))
   /// This menu's hold on the pause (spec §4.3). Adopted from the gesture tracker's pending claim when
   /// there is one, otherwise claimed here. Released only on a real teardown, see `onDisappear`.
@@ -691,7 +693,8 @@ internal struct PauseMenuView: View {
           guard let percent = value as? Int else { return }
           TVEmulationBridge.setAudioVolumePercent(percent)
           audioVolume = percent
-        }))
+        }),
+      recording: Binding(get: { recorder.isRecording }, set: { RecordingToggle.set($0) }))
   }
 
   private func refreshShaderState() {
@@ -820,6 +823,8 @@ struct PauseMenuBindings {
   var shader: Binding<AnyHashable>
   var internalResolution: Binding<AnyHashable> = .constant(AnyHashable(1))
   var audioVolume: Binding<AnyHashable> = .constant(AnyHashable(100))
+  /// Screen recording on/off (`RecordingManager`); the Record tile toggles it.
+  var recording: Binding<Bool> = .constant(false)
 }
 
 struct PauseMenuActions {
@@ -899,6 +904,9 @@ enum PauseMenuModelBuilder {
                role: .toggle(bindings.mute), description: L("Silence the game's audio.")),
       MenuItem(id: "screenshot", title: L("Screenshot"), icon: "camera", tint: .pink, role: .action(actions.screenshot),
                description: L("Save the last frame to ScreenShots.")),
+      MenuItem(id: "record", title: L("Record"), icon: "record.circle", tint: ICubeDesign.color(.destructive),
+               role: .toggle(bindings.recording), badge: bindings.recording.wrappedValue ? L("REC") : nil,
+               description: L("Record the screen to a video in Recordings.")),
     ])
 
     var game: [MenuItem] = [
@@ -941,6 +949,72 @@ enum PauseMenuModelBuilder {
                description: L("Return to the library. Unsaved progress is lost.")),
     ])
     return MenuModel(sections: [quick, MenuSection(id: "game", header: L("Game"), items: game), system])
+  }
+}
+
+/// Starts or stops `RecordingManager` from a synchronous toggle binding; failures surface as a toast.
+@MainActor
+enum RecordingToggle {
+  static func set(_ on: Bool) {
+    let manager = RecordingManager.shared
+    guard on != manager.isRecording else { return }
+    Task { @MainActor in
+      do {
+        if on { try await manager.start() } else { _ = try await manager.stop() }
+      } catch {
+        EmulationToast.post(L("Recording failed"))
+      }
+    }
+  }
+}
+
+/// Bindings and actions for the in-game quick menu, built from the same sources the pause menu uses
+/// (`QuickMute`, `QuickSlot`, `QuickScreenshot`, the fast-forward bridge) so both menus always agree.
+@MainActor
+enum QuickMenuHost {
+  static func bindings(selectedSlot: Binding<Int>) -> PauseMenuBindings {
+    PauseMenuBindings(
+      mute: Binding(get: { QuickMute.isMuted }, set: { _ in _ = QuickMute.toggle() }),
+      fastForward: Binding(get: { fastForwardState().selection }, set: { value in
+        var state = fastForwardState()
+        applyFastForward(state.select(value))
+      }),
+      quickSlot: Binding(get: { AnyHashable(selectedSlot.wrappedValue) }, set: { if let slot = $0 as? Int { selectedSlot.wrappedValue = slot } }),
+      shader: .constant(ShaderQuickApply.noneValue),
+      recording: Binding(get: { RecordingManager.shared.isRecording }, set: { RecordingToggle.set($0) }))
+  }
+
+  static func actions(selectedSlot: Binding<Int>, openPerfOverlay: @escaping () -> Void) -> PauseMenuActions {
+    PauseMenuActions(
+      resume: {},
+      quickSave: { _ = QuickSlot.save(slot: selectedSlot.wrappedValue) },
+      quickLoad: { QuickSlot.load(slot: selectedSlot.wrappedValue) },
+      screenshot: {
+        switch QuickScreenshot.saveFromPausePreview() {
+        case .saved: EmulationToast.post(L("Screenshot saved to ScreenShots"))
+        case .pausedNoFrame: EmulationToast.post(L("No frame to save yet"))
+        case .failed: EmulationToast.post(L("Screenshot failed"))
+        }
+      },
+      openSaveStates: {}, openCheats: {}, openControllers: {}, openShaders: {}, openContinuity: {}, openSettings: {},
+      openPerfOverlay: openPerfOverlay,
+      requestReset: {}, requestExit: {}, recenterPointer: {})
+  }
+
+  private static func fastForwardState() -> PauseFastForwardState {
+    PauseFastForwardState(
+      isEnabled: TVEmulationBridge.isFastForwardEnabled(),
+      percent: ConfigGeneralState.storedFastForward(UserDefaults.standard.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int))
+  }
+
+  private static func applyFastForward(_ effect: PauseFastForwardState.Effect) {
+    switch effect {
+    case .setSpeed(let percent):
+      TVEmulationBridge.setFastForwardSpeedPercent(percent)
+      if !TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
+    case .turnOff:
+      if TVEmulationBridge.isFastForwardEnabled() { _ = TVEmulationBridge.toggleFastForward() }
+    }
   }
 }
 
