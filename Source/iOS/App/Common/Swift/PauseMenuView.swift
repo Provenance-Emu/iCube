@@ -24,6 +24,10 @@ internal struct PauseMenuView: View {
   }
   private enum Pane { case main, saves, cheats, controllers }
   @State private var pane: Pane = .main
+  #if DEBUG
+  /// `-ICubePausePane <saves|cheats|controllers|reset|exit>`: open a sub-pane for simulator screenshots.
+  var debugInitialPane: String?
+  #endif
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
   @State private var showShaders: Bool = false
@@ -146,6 +150,17 @@ internal struct PauseMenuView: View {
       fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
       refreshActiveCheatCount()
       refreshShaderState()
+      #if DEBUG
+      switch debugInitialPane {
+      case "saves": pane = .saves
+      case "cheats": pane = .cheats
+      case "controllers": pane = .controllers
+      case "reset": showResetDialog = true
+      case "exit": showExitDialog = true
+      default: break
+      }
+      debugInitialPane = nil
+      #endif
     }
     .onDisappear {
       // `.sheet`/`.fullScreenCover` presentation (Shaders, Settings, Controllers,
@@ -240,6 +255,10 @@ internal struct PauseMenuView: View {
         .claimsController()
     }
   }
+
+  #if DEBUG
+  func debugPane(_ pane: String?) -> PauseMenuView { var copy = self; copy.debugInitialPane = pane; return copy }
+  #endif
 
   // Add pull-down to dismiss for iOS
   #if os(iOS)

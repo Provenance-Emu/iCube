@@ -10,7 +10,7 @@ import SwiftUI
 struct SettingsSidebarShell: View {
   let sections: [SettingsRootSection]
   let searchIndex: SettingsSearchIndex?
-  @Binding var jumpToControllers: Bool
+  @Binding var jumpToLeafID: String?
 
   @State private var selectedID: String?
   @FocusState private var sidebarFocus: String?
@@ -23,8 +23,6 @@ struct SettingsSidebarShell: View {
   #else
   @State private var searchText = ""
   #endif
-
-  private static let controllersID = "controllers"
 
   private enum Layout {
     static let sidebarWidthTV: CGFloat = 320
@@ -86,18 +84,17 @@ struct SettingsSidebarShell: View {
       openedAt = Date()
       #endif
       if selectedID == nil { selectedID = sections.first?.entries.first?.id }
-      if jumpToControllers { selectControllers() }
+      consumeJump()
     }
-    .onChange(of: jumpToControllers) { _, requested in
-      if requested { selectControllers() }
-    }
+    .onChange(of: jumpToLeafID) { _, _ in consumeJump() }
   }
 
-  /// The DSU deep link lands on the Controllers leaf.
-  private func selectControllers() {
-    selectedID = Self.controllersID
-    sidebarFocus = Self.controllersID
-    jumpToControllers = false
+  /// A deep link (DSU → "controllers") or a debug preview lands on one leaf.
+  private func consumeJump() {
+    guard let id = jumpToLeafID, entries.contains(where: { $0.id == id }) else { jumpToLeafID = nil; return }
+    selectedID = id
+    sidebarFocus = id
+    jumpToLeafID = nil
   }
 
   #if os(tvOS)
