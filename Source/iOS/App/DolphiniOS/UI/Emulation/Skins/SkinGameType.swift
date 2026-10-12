@@ -25,6 +25,25 @@ enum SkinGameType: Equatable {
     }
   }
 
+  private static let manicPrefix = "public.aoshuang.game."
+
+  /// The Manic EMU identifier for this game type, used when a skin is rewritten to it.
+  var manicIdentifier: String {
+    switch self {
+    case .gameCube: return Self.manicPrefix + "ngc"
+    case .wii: return Self.manicPrefix + "wii"
+    }
+  }
+
+  /// Appended to a skin's identifier when it is rewritten to this type, so the rewritten copy never
+  /// replaces an as-is import of the same skin.
+  var retargetSuffix: String {
+    switch self {
+    case .gameCube: return "-gamecube"
+    case .wii: return "-wii"
+    }
+  }
+
   /// The touch overlay pad kinds a skin of this game type can replace.
   var padKinds: [TouchOverlayPadKind] {
     switch self {

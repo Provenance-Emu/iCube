@@ -34,6 +34,10 @@ enum SkinInputName {
   static let quickLoad = "quickLoad"
   static let leftThumbstick = "leftThumbstick"
   static let rightThumbstick = "rightThumbstick"
+  /// N64 C buttons, as Delta skins spell them (`cUp`), Provenance's hyphenated and arrow forms too.
+  static let cUp = "cUp", cDown = "cDown", cLeft = "cLeft", cRight = "cRight"
+  static let cUpHyphen = "c-up", cDownHyphen = "c-down", cLeftHyphen = "c-left", cRightHyphen = "c-right"
+  static let cUpArrow = "c▲", cDownArrow = "c▼", cLeftArrow = "c◀", cRightArrow = "c▶"
 }
 
 /// What a skin input does: drive a touch overlay control, or one of the app-level actions.
@@ -61,7 +65,19 @@ enum SkinInputMap {
     SkinInputName.l: .axisButton(id: ID.gcTriggerL),
     SkinInputName.l2: .axisButton(id: ID.gcTriggerL),
     SkinInputName.r: .axisButton(id: ID.gcTriggerR),
-    SkinInputName.r2: .axisButton(id: ID.gcTriggerR)
+    SkinInputName.r2: .axisButton(id: ID.gcTriggerR),
+    SkinInputName.cUp: .axisButton(id: ID.gcCStick + 1),
+    SkinInputName.cDown: .axisButton(id: ID.gcCStick + 2),
+    SkinInputName.cLeft: .axisButton(id: ID.gcCStick + 3),
+    SkinInputName.cRight: .axisButton(id: ID.gcCStick + 4),
+    SkinInputName.cUpHyphen: .axisButton(id: ID.gcCStick + 1),
+    SkinInputName.cDownHyphen: .axisButton(id: ID.gcCStick + 2),
+    SkinInputName.cLeftHyphen: .axisButton(id: ID.gcCStick + 3),
+    SkinInputName.cRightHyphen: .axisButton(id: ID.gcCStick + 4),
+    SkinInputName.cUpArrow: .axisButton(id: ID.gcCStick + 1),
+    SkinInputName.cDownArrow: .axisButton(id: ID.gcCStick + 2),
+    SkinInputName.cLeftArrow: .axisButton(id: ID.gcCStick + 3),
+    SkinInputName.cRightArrow: .axisButton(id: ID.gcCStick + 4)
   ]
 
   /// Wii Remote buttons plus the Nunchuk's C and Z, shared by the upright and sideways remotes.

@@ -260,5 +260,40 @@ final class SkinLibraryTests: XCTestCase {
     XCTAssertFalse(SkinLibrary.isImportableArchive(URL(fileURLWithPath: "/tmp/a.png")))
     XCTAssertFalse(SkinLibrary.isImportableArchive(URL(string: "https://example.com/a.zip")!))
   }
+
+  func testRetargetInstallsAnN64SkinAsGameCube() throws {
+    let library = SkinLibrary(rootURL: root)
+    let archive = try makeArchive(gameType: "com.rileytestut.delta.game.n64")
+    let skin = try library.importSkin(from: archive, retargetingTo: .gameCube)
+    XCTAssertEqual(skin.gameType, .gameCube)
+    XCTAssertEqual(skin.id, "\(Self.fixtureIdentifier)-gamecube")
+    XCTAssertEqual(skin.name, "Test Cube")
+    let info = try SkinInfo.load(directory: skin.directory)
+    XCTAssertEqual(info.identifier, "\(Self.fixtureIdentifier)-gamecube")
+    XCTAssertEqual(info.gameType, .gameCube)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: skin.directory.appendingPathComponent("bg.png").path), "assets travel with the rewrite")
+    XCTAssertEqual(SkinLibrary(rootURL: root).skins.map(\.id), [skin.id], "a fresh scan reads the rewritten info.json")
+  }
+
+  func testRetargetKeepsAnAsIsImportSeparate() throws {
+    let library = SkinLibrary(rootURL: root)
+    _ = try library.importSkin(from: makeArchive())
+    _ = try library.importSkin(from: makeArchive(gameType: "com.rileytestut.delta.game.n64"), retargetingTo: .gameCube)
+    XCTAssertEqual(library.skins.map(\.id).sorted(), [Self.fixtureIdentifier, "\(Self.fixtureIdentifier)-gamecube"])
+  }
+
+  func testRetargetToTheSkinsOwnTypeIsANoOp() throws {
+    let library = SkinLibrary(rootURL: root)
+    let skin = try library.importSkin(from: makeArchive(), retargetingTo: .gameCube)
+    XCTAssertEqual(skin.id, Self.fixtureIdentifier, "already GameCube: no suffix, no rewrite")
+  }
+
+  func testWithoutRetargetAnN64SkinStillThrows() throws {
+    let library = SkinLibrary(rootURL: root)
+    XCTAssertThrowsError(try library.importSkin(from: makeArchive(gameType: "com.rileytestut.delta.game.n64"))) {
+      XCTAssertEqual($0 as? SkinImportError, .unsupportedGameType("com.rileytestut.delta.game.n64"))
+    }
+    XCTAssertEqual(installedFolderNames(), [])
+  }
 }
 #endif
