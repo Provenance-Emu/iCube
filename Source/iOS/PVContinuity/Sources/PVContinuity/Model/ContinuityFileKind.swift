@@ -43,8 +43,16 @@ public enum ContinuityFileKind: String, Codable, Hashable, Sendable, CaseIterabl
     case config
     case gameSettings
 
-    /// Lift a classified user-data file into a transfer kind.
-    public init(_ syncableType: SyncableFileType) {
+    /// Lift a classified user-data file into a transfer kind, or nil for a
+    /// category continuity does not carry.
+    ///
+    /// Failable on purpose. `SyncableFileType` has since grown categories that
+    /// belong to cloud sync alone — opt-in firmware and NAND, skins, iCube's
+    /// JSON stores — and a handoff must never pick one of those up just
+    /// because the shared classifier learned a new path. A new category is
+    /// carried by continuity only when someone adds a case here and decides
+    /// its ordering and resume requirement.
+    public init?(_ syncableType: SyncableFileType) {
         switch syncableType {
         case .saveState: self = .saveState
         case .resumeState: self = .resumeState
@@ -54,6 +62,9 @@ public enum ContinuityFileKind: String, Codable, Hashable, Sendable, CaseIterabl
         case .wiiSave: self = .wiiSave
         case .config: self = .config
         case .gameSettings: self = .gameSettings
+        case .gbaSave, .gameProfile, .touchOverlayLayout, .libraryState, .skin,
+             .firmware, .wiiChannel, .wiiSystem:
+            return nil
         }
     }
 

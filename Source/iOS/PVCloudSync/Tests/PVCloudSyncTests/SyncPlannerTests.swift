@@ -37,16 +37,20 @@ final class SyncPlannerTests: XCTestCase {
         XCTAssertEqual(SyncPlanner().plan(local: [], remote: [remote]), [.download(remote)])
     }
 
-    /// The merge is additive in both directions: an empty cloud never deletes
-    /// local saves, and a file missing locally is never deleted remotely.
-    func testNoStepEverDeletesAnything() {
+    /// Without an index the plan is additive in both directions: an empty
+    /// cloud never deletes local saves, and a file missing locally is never
+    /// tombstoned remotely. Deletes need evidence (section 6 of the spec), and
+    /// a fresh install has none.
+    func testWithoutAnIndexNoStepEverDeletesAnything() {
         let planner = SyncPlanner()
         let localOnly = planner.plan(local: [meta("GC/USA/MemoryCardA.raw", type: .gameCubeMemoryCard)], remote: [])
         let remoteOnly = planner.plan(local: [], remote: [meta("GC/USA/MemoryCardA.raw", type: .gameCubeMemoryCard)])
         for step in localOnly + remoteOnly {
             switch step {
-            case .upload, .download, .markSynced, .conflict:
-                continue   // there is deliberately no `.delete` case to match
+            case .upload, .download, .markSynced, .conflict, .merge, .restore:
+                continue
+            case .writeTombstone, .trashLocal, .markDeleted:
+                XCTFail("additive plan must not delete: \(step)")
             }
         }
         XCTAssertEqual(localOnly.count, 1)

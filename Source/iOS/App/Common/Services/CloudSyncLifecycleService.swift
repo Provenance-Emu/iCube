@@ -3,6 +3,7 @@
 
 import Foundation
 import PVCloudSync
+import PVSyncRules
 import UIKit
 
 /// Feeds app and emulation lifecycle into `CloudSyncCoordinator`.
@@ -57,7 +58,21 @@ final class CloudSyncLifecycleService: NSObject, UIApplicationDelegate {
             center.addObserver(
                 forName: Notification.Name("DOLEmulationDidEndNotification"),
                 object: nil, queue: .main
-            ) { [weak self] _ in self?.send(.emulationDidEnd) }
+            ) { [weak self] _ in self?.send(.emulationDidEnd) },
+            // A merged document was rewritten on disk: the store that owns it
+            // reloads so the UI reflects the other device's changes.
+            center.addObserver(
+                forName: CloudSyncCoordinator.documentDidChangeNotification,
+                object: nil, queue: .main
+            ) { note in
+                guard let raw = note.userInfo?[CloudSyncCoordinator.fileTypeKey] as? String,
+                      let type = SyncableFileType(rawValue: raw) else { return }
+                switch type {
+                case .libraryState: LibraryStateStore.shared.reloadAfterSync()
+                case .gameProfile: GameProfiles.shared.reloadAfterSync()
+                default: break
+                }
+            }
         ]
     }
 

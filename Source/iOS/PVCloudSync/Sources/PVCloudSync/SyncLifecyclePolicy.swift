@@ -14,6 +14,11 @@ public enum SyncTrigger: String, Sendable, Equatable {
     case manual
     /// Flush of work that was deferred while a game was running.
     case emulationEnded
+    /// The user changed which categories sync; rescan with the new switches.
+    case policyChanged
+    /// The iCloud account changed; the index was reset and this is the first
+    /// run against the new account.
+    case accountChanged
 }
 
 /// Something that happened which the sync engine has to react to.

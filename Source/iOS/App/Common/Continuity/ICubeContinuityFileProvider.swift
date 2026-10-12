@@ -165,8 +165,9 @@ struct ICubeContinuityFileProvider: ContinuityFileProviding {
                   let relative = ContinuityPaths.relativePath(forAbsolutePath: url.path),
                   let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64,
                   SyncClassifier.syncableType(relativePath: relative, sizeBytes: size) == expecting,
+                  let kind = ContinuityFileKind(expecting),
                   let descriptor = ContinuityPaths.describe(
-                    relativePath: relative, kind: ContinuityFileKind(expecting), required: false
+                    relativePath: relative, kind: kind, required: false
                   )
             else { continue }
             descriptors.append(descriptor)

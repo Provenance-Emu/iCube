@@ -49,8 +49,58 @@ final class UserDataScannerTests: XCTestCase {
         XCTAssertEqual(byPath["GameSettings/GALE01.ini"], .gameSettings)
     }
 
+    /// Opt-in categories are not even hashed until their switch is on.
+    func testOptInCategoriesFollowPolicy() async throws {
+        try write("GC/USA/IPL.bin", bytes: 2048)
+        try write("Wii/title/00010001/48414441/content/00000000.app", bytes: 4096)
+        try write("Wii/ticket/00010001/48414441.tik")
+        try write("Wii/shared1/00000000.app")
+        try write("Wii/title/00000001/00000002/content/00000000.app")
+        try write("Wii/title/00010001/48414441/data/save.bin")
+        try write("StateSaves/GALE01.s01")
+
+        let scanner = UserDataScanner(rootDirectory: root)
+
+        let off = await scanner.scanLocalFiles(policy: .default)
+        XCTAssertEqual(Set(off.map(\.relativePath)),
+                       ["StateSaves/GALE01.s01", "Wii/title/00010001/48414441/data/save.bin"])
+
+        let channels = await scanner.scanLocalFiles(policy: SyncPolicy(wiiChannelsEnabled: true))
+        XCTAssertEqual(Set(channels.map(\.relativePath)), [
+            "StateSaves/GALE01.s01",
+            "Wii/title/00010001/48414441/data/save.bin",
+            "Wii/title/00010001/48414441/content/00000000.app",
+            "Wii/ticket/00010001/48414441.tik",
+            "Wii/shared1/00000000.app"
+        ])
+
+        let everything = await scanner.scanLocalFiles(policy: SyncPolicy(firmwareEnabled: true, fullWiiNANDEnabled: true))
+        XCTAssertEqual(everything.count, 7)
+        let types = Dictionary(uniqueKeysWithValues: everything.map { ($0.relativePath, $0.fileType) })
+        XCTAssertEqual(types["GC/USA/IPL.bin"], .firmware)
+        XCTAssertEqual(types["Wii/title/00000001/00000002/content/00000000.app"], .wiiSystem)
+    }
+
+    func testICubeStoresAndSkinsAreScanned() async throws {
+        try write("Profiles/game_profiles.json")
+        try write("Profiles/library_state.json")
+        try write("Profiles/touch_overlay_layout_v2.json")
+        try write("Skins/selection.json")
+        try write("Skins/com.example/info.json")
+        try write("GBA/Saves/ZELDA.sav")
+        let found = await UserDataScanner(rootDirectory: root).scanLocalFiles()
+        let byPath = Dictionary(uniqueKeysWithValues: found.map { ($0.relativePath, $0.fileType) })
+        XCTAssertEqual(byPath["Profiles/game_profiles.json"], .gameProfile)
+        XCTAssertEqual(byPath["Profiles/library_state.json"], .libraryState)
+        XCTAssertEqual(byPath["Profiles/touch_overlay_layout_v2.json"], .touchOverlayLayout)
+        XCTAssertEqual(byPath["Skins/selection.json"], .skin)
+        XCTAssertEqual(byPath["Skins/com.example/info.json"], .skin)
+        XCTAssertEqual(byPath["GBA/Saves/ZELDA.sav"], .gbaSave)
+    }
+
     /// The acceptance criterion for the whole workstream: no ROM ever leaves the
-    /// device, and neither does artwork or firmware.
+    /// device, and neither does artwork. Firmware is scanned only when its
+    /// switch is on, which the default policy here leaves off.
     func testNoRomArtworkOrFirmwareIsEverScanned() async throws {
         try write("Games/SuperMario.iso", bytes: 4096)
         try write("StateSaves/NotAGame.rvz")
