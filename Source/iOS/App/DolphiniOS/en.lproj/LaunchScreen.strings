@@ -7,5 +7,5 @@
 /* Class = "UILabel"; text = "Loading..."; ObjectID = "LOA-di-ng"; */
 "LOA-di-ng.text" = "Loading...";
 
-/* Class = "UILabel"; text = "🐬 GameCube & Wii emulator 🌊"; ObjectID = "SUB-ti-tle"; */
-"SUB-ti-tle.text" = "🐬 GameCube & Wii emulator 🌊";
+/* Class = "UILabel"; text = "Play your own GameCube and Wii discs"; ObjectID = "SUB-ti-tle"; */
+"SUB-ti-tle.text" = "Play your own GameCube and Wii discs";

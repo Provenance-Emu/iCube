@@ -363,8 +363,8 @@ static UIImage *DOLDemoCoverImage(NSString *title, NSString *platformLabel, CGFl
 
     NSString *platformLabel;
     switch (platform) {
-        case 0:  platformLabel = @"Nintendo GameCube"; break;
-        case 2:  platformLabel = @"Nintendo Wii"; break;
+        case 0:  platformLabel = @"GameCube"; break;
+        case 2:  platformLabel = @"Wii"; break;
         case 3:  platformLabel = @"WiiWare"; break;
         default: platformLabel = @"Disc"; break;
     }

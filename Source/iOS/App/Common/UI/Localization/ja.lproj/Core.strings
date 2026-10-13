@@ -4840,8 +4840,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "No GameCube or Wii skins in the catalog yet." = "No GameCube or Wii skins in the catalog yet.";
 "Submit a skin" = "Submit a skin";
 "Skins are listed by the Provenance skin catalog and download from each author's own site. Each card credits its author and where it's hosted." = "Skins are listed by the Provenance skin catalog and download from each author's own site. Each card credits its author and where it's hosted.";
-"Made for Nintendo 64" = "Made for Nintendo 64";
-"Made for the Nintendo 64. iCube puts A, B, Z, L, R, Start, the D-pad and the stick on the GameCube pad and the C buttons on the C-stick, so the art keeps its N64 labels." = "Made for the Nintendo 64. iCube puts A, B, Z, L, R, Start, the D-pad and the stick on the GameCube pad and the C buttons on the C-stick, so the art keeps its N64 labels.";
+"N64-style layout" = "N64-style layout";
+"Built for N64-style layouts. iCube puts A, B, Z, L, R, Start, the D-pad and the stick on the GameCube pad and the C buttons on the C-stick, so the art keeps its N64 labels." = "Built for N64-style layouts. iCube puts A, B, Z, L, R, Start, the D-pad and the stick on the GameCube pad and the C buttons on the C-stick, so the art keeps its N64 labels.";
 "N64" = "N64";
 "by %@" = "by %@";
 "Downloading" = "Downloading";

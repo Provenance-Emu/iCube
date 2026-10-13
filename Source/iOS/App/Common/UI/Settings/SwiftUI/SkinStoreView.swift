@@ -162,7 +162,7 @@ private extension SkinStoreSection {
     switch self {
     case .gameCube: return L("GameCube")
     case .wii: return L("Wii")
-    case .nintendo64: return L("Made for Nintendo 64")
+    case .nintendo64: return L("N64-style layout")
     }
   }
 
@@ -170,7 +170,7 @@ private extension SkinStoreSection {
     switch self {
     case .gameCube, .wii: return nil
     case .nintendo64:
-      return L("Made for the Nintendo 64. iCube puts A, B, Z, L, R, Start, the D-pad and the stick on the GameCube pad and the C buttons on the C-stick, so the art keeps its N64 labels.")
+      return L("Built for N64-style layouts. iCube puts A, B, Z, L, R, Start, the D-pad and the stick on the GameCube pad and the C buttons on the C-stick, so the art keeps its N64 labels.")
     }
   }
 

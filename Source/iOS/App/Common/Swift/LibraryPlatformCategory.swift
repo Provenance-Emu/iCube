@@ -157,13 +157,9 @@ enum LibraryGameSystem {
 
   var templateImageName: String {
     switch self {
-    #if APPSTORE
+    // Logo-free in every build: no GameCube, Wii or Nintendo marks, and screenshots match what ships.
     case .gameCube: return "GCCoverTemplate-NoLogo"
     case .wii: return "WiiCoverTemplate-NoLogo"
-    #else
-    case .gameCube: return "GCCoverTemplate"
-    case .wii: return "WiiCoverTemplate"
-    #endif
     }
   }
 }
