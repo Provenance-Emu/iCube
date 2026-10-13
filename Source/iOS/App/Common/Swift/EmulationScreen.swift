@@ -6,15 +6,17 @@ import UIKit
 #if os(iOS)
 #endif
 
+private let log = ICubeLog.logger("Emulation")
+
 private struct EmulationSurfaceView: UIViewRepresentable {
   let gamePath: String
   func makeUIView(context: Context) -> UIView {
     let host = UIView()
     host.backgroundColor = .black
     TVEmulationBridge.registerMainDisplay(host)
-    NSLog("[INPUT] tvOS Emulation: launching game after display registration")
+    log.debug("[INPUT] tvOS Emulation: launching game after display registration")
     if TVEmulationBridge.isRunning() {
-      NSLog("[INPUT] Core already running; skipping launch")
+      log.debug("[INPUT] Core already running; skipping launch")
     } else {
       TVEmulationBridge.launchGame(atPath: gamePath)
     }
@@ -66,7 +68,7 @@ private final class EmuContainerViewController: UIViewController {
     vc.didMove(toParent: self)
     emuVC = vc
     _ = vc.becomeFirstResponder()
-    NSLog("[INPUT] EmuEventVC becomeFirstResponder attempted")
+    log.debug("[INPUT] EmuEventVC becomeFirstResponder attempted")
 
     let displayContainer = UIView(frame: vc.view.bounds)
     displayContainer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -77,9 +79,9 @@ private final class EmuContainerViewController: UIViewController {
       DispatchQueue.main.async {
         TVEmulationBridge.registerMainDisplay(displayContainer)
         if TVEmulationBridge.isRunning() {
-          NSLog("[INPUT] tvOS Container: core running, skipping relaunch; display registered")
+          log.debug("[INPUT] tvOS Container: core running, skipping relaunch; display registered")
         } else {
-          NSLog("[INPUT] tvOS Container: launching game after registerMainDisplayView")
+          log.debug("[INPUT] tvOS Container: launching game after registerMainDisplayView")
           TVEmulationBridge.launchGame(atPath: self.gamePath)
         }
       }
@@ -154,7 +156,7 @@ private final class EmuContainerViewController: UIViewController {
       // Allow SwiftUI PauseMenu to receive controller navigation
       evc.controllerUserInteractionEnabled = true
       if UserDefaults.standard.bool(forKey: "input_debug") {
-        NSLog("[INPUT] EmuContainer toggled GC interaction OFF for PauseMenu")
+        log.debug("[INPUT] EmuContainer toggled GC interaction OFF for PauseMenu")
       }
     }
     pauseHiddenObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLPauseOverlayHidden"), object: nil, queue: .main) { [weak self] _ in
@@ -162,7 +164,7 @@ private final class EmuContainerViewController: UIViewController {
       // Restore gameplay interception setting
       evc.controllerUserInteractionEnabled = false
       if UserDefaults.standard.bool(forKey: "input_debug") {
-        NSLog("[INPUT] EmuContainer restored GC interaction to %d after PauseMenu", evc.controllerUserInteractionEnabled)
+        log.debug("[INPUT] EmuContainer restored GC interaction to \(evc.controllerUserInteractionEnabled) after PauseMenu")
       }
     }
     #endif
@@ -588,9 +590,9 @@ struct EmulationScreen: View {
       )
     }
     .onAppear {
-      NSLog("[INPUT] tvOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
+      log.debug("[INPUT] tvOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
       let initialCount = GCController.controllers().count
-      NSLog("[INPUT] tvOS initial controllers count: %d", initialCount)
+      log.debug("[INPUT] tvOS initial controllers count: \(initialCount)")
       GCController.shouldMonitorBackgroundEvents = true
       // One install entry point (see ControllerManager.refreshInputHandlers).
       // Re-run here because installExtraInputHandlers reads the touchpad IR mode
@@ -607,9 +609,9 @@ struct EmulationScreen: View {
       }
 
       if initialCount == 0 {
-        NSLog("[INPUT] tvOS starting wireless controller discovery")
+        log.debug("[INPUT] tvOS starting wireless controller discovery")
         GCController.startWirelessControllerDiscovery(completionHandler: {
-          NSLog("[INPUT] tvOS wireless controller discovery completed")
+          log.debug("[INPUT] tvOS wireless controller discovery completed")
         })
       }
       // Controller connect/disconnect is handled by the app-wide ControllerManager
@@ -640,14 +642,14 @@ struct EmulationScreen: View {
       }
       // Auto-pause when app goes to background on tvOS
       obsDidEnterBackground = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
-        NSLog("[INPUT] tvOS app backgrounded - showing pause menu")
+        log.debug("[INPUT] tvOS app backgrounded - showing pause menu")
         // Claim before the menu exists: the app-inactive claim is released on return, and the menu may
         // not have appeared (and claimed) by then. The menu adopts this token on appear.
         PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
         showPauseMenu = true
       }
       obsWillEnterForeground = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
-        NSLog("[INPUT] tvOS app foregrounded - keeping pause menu visible")
+        log.debug("[INPUT] tvOS app foregrounded - keeping pause menu visible")
         // Keep pause menu visible when returning to foreground so user can choose to resume
       }
       // Load current OC/VBI state
@@ -1133,8 +1135,8 @@ struct EmulationScreen: View {
       Button(L("Cancel"), role: .cancel) {}
     }
     .onAppear {
-      NSLog("[INPUT] iOS EmulationScreen onAppear. input_debug=%d", UserDefaults.standard.bool(forKey: "input_debug"))
-      NSLog("[INPUT] iOS initial controllers count: %d", GCController.controllers().count)
+      log.debug("[INPUT] iOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
+      log.debug("[INPUT] iOS initial controllers count: \(GCController.controllers().count)")
       // Controller observation is started app-wide from MainDisplaySceneDelegate
       // (scene root) so hotplug auto-assign works in library/menus/in-game on both
       // iOS and tvOS. Do not start/stop it here.
@@ -1723,9 +1725,9 @@ struct EmulationScreen: View {
   private func logCurrentControllers() {
     guard UserDefaults.standard.bool(forKey: "input_debug") else { return }
     let controllers = GCController.controllers()
-    NSLog("[INPUT] Currently connected controllers: %d", controllers.count)
+    log.debug("[INPUT] Currently connected controllers: \(controllers.count)")
     for (idx, c) in controllers.enumerated() {
-      NSLog("[INPUT] #%d vendor=%@ category=%@ extended=%d micro=%d", idx, c.vendorName ?? "(nil)", c.productCategory, c.extendedGamepad != nil, c.microGamepad != nil)
+      log.debug("[INPUT] #\(idx) vendor=\(c.vendorName ?? "(nil)", privacy: .private) category=\(c.productCategory) extended=\(c.extendedGamepad != nil) micro=\(c.microGamepad != nil)")
     }
   }
 }
