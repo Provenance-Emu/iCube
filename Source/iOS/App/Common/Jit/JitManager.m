@@ -53,20 +53,14 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 
     // JIT is supported iff the process is debuggable (carries get-task-allow): that
     // is the universal precondition for enabling JIT on iOS. Determined at runtime
-    // for non-App-Store builds so it adapts to how the binary is actually run —
+    // so it adapts to how the binary is actually run —
     // sideload / jailbreak / TrollStore / dev builds are debuggable (flag present
     // → true), normal App Store / TestFlight installs are jitless (flag stripped).
     //
-    // App Store builds are jitless by contract: hard-lock JIT off at compile time so
-    // the App Store scheme stays jitless even when dev-signed for local testing
-    // (dev-signing carries get-task-allow, and Xcode sets CS_DEBUGGED on attach,
-    // which would otherwise make the runtime check report JIT as available and lead
-    // the boot path to attempt the LuckTXM handshake and crash).
-#if APPSTORE
-    self.jitSupported = false;
-#else
+    // Every configuration, the App Store one included: the same IPA can be re-signed with get-task-allow
+    // (sideload, LiveContainer, Xcode) and must get JIT then. A store install has no get-task-allow, so this is
+    // false there and every JIT surface (boot prompt, Debug leaf, StikDebug) stays hidden.
     self.jitSupported = [self checkIfProcessIsJitCapable];
-#endif
     
     if (@available(iOS 26, tvOS 26, *)) {
       self.deviceHasTxm = [self checkIfDeviceUsesTXM];
