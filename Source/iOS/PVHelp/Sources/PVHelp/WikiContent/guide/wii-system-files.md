@@ -1,12 +1,12 @@
 # Install Your Own Wii System Files
 
-Wii games run on top of the Wii's system software: the System Menu, the IOS modules, and the channels. iCube does not include or download any of it. If a Wii game needs it, iCube uses the files from your own console, which you copy over from a BootMii NAND backup.
+Wii games run on top of the Wii's system software: the System Menu, the IOS modules, and the channels. iCube does not include any of it, and the App Store version of iCube does not download it either. If a Wii game needs it, iCube uses the files from your own console, which you copy over from a BootMii NAND backup.
 
 This page covers making that backup on a Wii you own and importing it on iPhone, iPad, and Apple TV.
 
 ## Why you need this
 
-A Wii game that wants a system title that isn't in iCube's emulated Wii storage (the NAND) stops with a message like **"Could not launch title … because it is missing from the NAND."** The alert has a **How to Install Wii System Files** button that opens this page. You can also open it from the **System** menu in the library.
+A Wii game that wants a system title that isn't in iCube's emulated Wii storage (the NAND) stops with a message like **"Could not launch title … because it is missing from the NAND."** The alert has a **How to Install Wii System Files** button that opens this page. In the App Store version you can also open it from the **System** menu in the library (**Install Wii System Files…**). Other builds of iCube have different entries in that menu.
 
 Not every game asks for it. Install the files when one does.
 
@@ -35,7 +35,7 @@ Importing writes your console's files over iCube's emulated Wii storage. A file 
 * **iPhone and iPad:** copy iCube's `Wii` folder out through the Files app.
 * **Apple TV:** there is no Files app to copy saves out through, so import before you have progress you can't replace.
 
-iCube refuses the import while a game is running. Quit the game first.
+Quit any running game before you import. The Web UI upload below is refused while a game is running; the iPhone and iPad picker does not check, so make sure the game is closed yourself.
 
 ## iPhone and iPad
 
@@ -63,7 +63,7 @@ You can also skip the appending and use the upload method from the Apple TV sect
 
 Apple TV has no file picker, so you send the files from a computer on the same Wi-Fi network.
 
-1. On the Apple TV, open iCube and go to **Settings → Web UI & WebDAV**. It shows the Web UI address.
+1. On the Apple TV, open iCube and go to **Settings → Sync & Network → Web UI & WebDAV**. It shows the Web UI address.
 2. Open that address in a browser on your computer.
 3. If your `nand.bin` is 553,648,128 bytes (no keys), **upload `keys.bin` first**. iCube says it received the keys.
 4. Upload **`nand.bin`**. The import starts by itself and a message tells you when it's done.

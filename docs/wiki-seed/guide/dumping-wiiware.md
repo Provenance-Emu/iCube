@@ -55,11 +55,13 @@ copy /b nand.bin + keys.bin nand_with_keys.bin
 
 ### Import it
 
+On iPhone and iPad (Apple TV has no file picker; use the Web UI upload described in **Install Your Own Wii System Files**):
+
 1. Put the 553,649,152-byte file (`nand.bin`, or `nand_with_keys.bin` if you appended the keys) somewhere the Files app can see it, such as iCloud Drive or **On My iPhone**. iCube opens it with the standard Files picker.
 2. In iCube's library, open the **Import** menu and choose **Import BootMii NAND Backup…**.
 3. Pick the `.bin` file and wait for **Importing NAND backup** to finish.
 
-The import writes the backup's files into iCube's emulated Wii NAND, which by default is the `Wii` folder in the User Folder, replacing any file at the same path. If you've already played Wii games in iCube and want to keep that progress, copy your User Folder somewhere safe first. You can see where it is in **Settings → Debug → Environment → User Folder**.
+The import writes the backup's files into iCube's emulated Wii NAND, which by default is the `Wii` folder in the User Folder, replacing any file at the same path. If you've already played Wii games in iCube and want to keep that progress, copy your User Folder somewhere safe first. On iPhone and iPad you can see that folder in the Files app, under **On My iPhone** (or **On My iPad**) → **iCube**.
 
 ### Import messages
 
