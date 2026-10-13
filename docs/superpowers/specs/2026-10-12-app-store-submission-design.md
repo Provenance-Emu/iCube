@@ -16,6 +16,7 @@ Owner decisions (2026-10-12):
 | Wii System Update (downloads Nintendo firmware) | Compiled out of `APPSTORE` for 1.0, and may return in an update after review. Users supply their own NAND or system files instead, documented on the website, in the wiki and in in-app help. |
 | Cheat downloads (rc24 code database) | Kept. Codes are user-applied text, not game content. |
 | Crash reporting (Sentry) | On by default with an opt-out toggle. `game_id` is dropped in `APPSTORE`. Disclosed on the privacy label as crash and performance data, not linked to the user. |
+| JIT in the App Store binary | **Kept, detected, hidden.** The same IPA is installed by power users through sideloading, jailbreak, LiveContainer or Xcode, and they must keep JIT. Under `APPSTORE`, JIT support is detected at runtime, and every JIT surface (settings, boot prompt, StikDebug and AltServer acquisition) stays hidden unless JIT is actually possible. A normal App Store install, and Apple's reviewers, never see it. |
 | Box art | No GameCube, Wii or Nintendo logos. The logo-free cover templates exist (`GCCoverTemplate-NoLogo`, `WiiCoverTemplate-NoLogo`). |
 
 ## 2. Current state (audit, 2026-10-12)
@@ -61,15 +62,18 @@ Each workstream lists its outcome, the changes, and how it is verified. Code cha
 
 ### WS1 — Compliance gates
 
-Outcome: the App Store binary contains no debug server, no firmware downloader, no JIT plumbing, and no entitlement that claims JIT.
+Outcome: the App Store binary contains no debug server and no firmware downloader, and claims no JIT entitlement. JIT stays in the binary but is runtime-detected and invisible unless it works (§1).
 - Compile `Common/Swift/Debug/*` (server, routes, benchmark manager) and the Settings → Debug leaf out of `APPSTORE`. If the Debug leaf holds anything an App Store user needs (such as log export), that control moves to an App Store-safe leaf first.
   - Fix the stale "loopback-only" claims in `DebugServerManager` and `docs/dev/debug-api.md:19`.
 - Compile Wii System Update (iOS and tvOS view controllers and their menu entries) out of `APPSTORE`.
-- JIT leftovers in `APPSTORE`:
-  - Remove the `acquireJitByAltServer` call path.
-  - Remove `_altserver._tcp` and the `stikdebug`/`stikjit` query schemes, through an App Store Info.plist variant or build-setting substitution.
-  - Exclude `icube.js` from the App Store resources.
-  - Decide whether AltKit can be unlinked in `APPSTORE`. If not, leave it, since it is inert.
+- JIT under `APPSTORE`: detect, don't strip.
+  - Replace the hard `jitSupported = false` (`Common/Jit/JitManager.m:65`) and the ptrace disable (`JitManager+PTrace.m:13,31`) with the same runtime detection the sideload builds use: get-task-allow or debugger-attached, jailbreak, and the existing acquisition checks.
+  - Every JIT surface must stay hidden while detection is negative:
+    - the Debug/JIT settings rows;
+    - the boot JIT prompt;
+    - StikDebug and AltServer acquisition;
+    - JIT help links.
+  - Keep `acquireJitByAltServer`, the `stikdebug`/`stikjit` query schemes, `_altserver._tcp` and `icube.js`. They must stay inert on a normal install: no local-network prompt and no UI unless detection or explicit acquisition applies.
 - `iCube AppStore.entitlements`: remove the `cs.*` keys and `inter-app-audio`. Keep `increased-memory-limit` and `extended-virtual-addressing` (both allowed on iOS). Re-check every remaining key against Apple's iOS/tvOS entitlement list.
 - Camera: grep for `AVCaptureDevice`, `AVCaptureSession` and `VNDocumentCamera`. Add a usage string or remove the use.
 - Bundle IDs: confirm App Store Connect only ever receives `Release (AppStore)` builds. Document that a sideload build signed with `com.joemattiello.iCube` must never be uploaded.
@@ -190,7 +194,7 @@ Critical path: WS1 → WS3 → WS6 screenshots → WS8.
 
 ## 5. Out of scope
 
-- JIT in any App Store build (impossible: no `get-task-allow`).
+- JIT on a normal App Store install. It is impossible there (no `get-task-allow`), and the JIT UI stays hidden. Re-signed installs of the same IPA keep JIT (§1).
 - Firmware download, until after 1.0 review.
 - A separate App Store target or bundle ID.
 - macOS and visionOS listings.
