@@ -280,6 +280,8 @@ struct TVLibraryView: View {
 #if os(tvOS)
   /// Home, all games, or one platform. The left rail writes this; the grid reads it.
   @State private var tvLibraryDestination: TVLibraryRailDestination = .home
+  /// L1/R1 rail stepping owns this controller scope, so a sheet over the library silences it.
+  @State private var tvShoulderScopeID = UUID()
 #endif
 
   // MARK: - Multi-select state
@@ -949,6 +951,17 @@ struct TVLibraryView: View {
     }
     .onChange(of: tvLibraryDestination) { _, destination in
       applyTVLibraryDestination(destination)
+    }
+    .controllerScope(tvShoulderScopeID)
+    .onReceive(ControllerFocusCoordinator.shared.$activeScope) { active in
+      if active == tvShoulderScopeID { DispatchQueue.main.async { installTVShoulderStepping() } }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
+      installTVShoulderStepping()
+    }
+    .onChange(of: navigateTo == nil) { _, gameClosed in
+      guard gameClosed else { return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + Self.shoulderReinstallDelay) { installTVShoulderStepping() }
     }
   }
 
@@ -2786,6 +2799,55 @@ struct TVLibraryView: View {
     }
 #endif
   }
+
+#if os(tvOS)
+  /// The focus engine moves through the grid; only L1/R1 need a raw handler, to step the rail (iOS steps its filter
+  /// bar from its own nav handler). The game screen clears every `valueChangedHandler` when it closes, so this is
+  /// reinstalled on scope regain, controller connect and game end. It stays quiet under a sheet (scope) and while a
+  /// game runs, since the tvOS game screen claims no scope of its own.
+  private func installTVShoulderStepping() {
+    let scope = tvShoulderScopeID
+    for controller in GCController.controllers() {
+      controller.extendedGamepad?.valueChangedHandler = { (gamepad: GCExtendedGamepad, element: GCControllerElement) in
+        guard ControllerFocusCoordinator.isActiveScope(scope), !TVEmulationBridge.isRunning() else { return }
+        if element == gamepad.leftShoulder, gamepad.leftShoulder.isPressed {
+          DispatchQueue.main.async { stepTVLibraryDestination(-1) }
+        }
+        if element == gamepad.rightShoulder, gamepad.rightShoulder.isPressed {
+          DispatchQueue.main.async { stepTVLibraryDestination(1) }
+        }
+      }
+    }
+  }
+
+  /// After the game's pop animation: its `onDisappear` clears the handlers on the way out.
+  private static let shoulderReinstallDelay: TimeInterval = 0.6
+
+  /// L1/R1: the next rail destination (`TVLibraryRailDestination.stepped`), with the same snackbar as iOS.
+  private func stepTVLibraryDestination(_ delta: Int) {
+    let platforms = tvRailPlatforms
+    tvLibraryDestination = tvLibraryDestination.stepped(by: delta, platforms: platforms)
+    let destination = tvLibraryDestination
+    let title: String
+    let count: Int
+    switch destination {
+    case .home:
+      title = L("My Library")
+      count = model.games.count
+    case .all:
+      title = L("All Games")
+      count = model.games.count
+    case .platform(let category):
+      title = category.displayName
+      count = LibraryPlatformMapper.count(in: model.games, for: category, overrides: platformOverrides)
+    }
+    NotificationCenter.default.post(
+      name: NSNotification.Name("DOLShowSnackbar"),
+      object: nil,
+      userInfo: ["text": "\(title) · \(count) \(L("games"))"]
+    )
+  }
+#endif
 
 #if !os(tvOS)
   /// B2: steps `platformFilter` through the same visible-category list

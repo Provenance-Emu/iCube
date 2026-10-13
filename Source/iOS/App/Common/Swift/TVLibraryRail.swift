@@ -3,9 +3,7 @@
 
 import SwiftUI
 
-#if os(tvOS)
-
-/// Where the tvOS library content column is looking.
+/// Where the tvOS library content column is looking. Platform-neutral so the iOS test target covers `stepped`.
 enum TVLibraryRailDestination: Hashable {
   /// Recently played, favorites, and the mixed library.
   case home
@@ -13,7 +11,18 @@ enum TVLibraryRailDestination: Hashable {
   case all
   /// One platform's games.
   case platform(LibraryPlatformCategory)
+
+  /// L1/R1 on a controller: My Library, All Games, then each platform the rail shows, wrapping around.
+  /// A destination the rail no longer shows (its platform's last game was removed) steps from My Library.
+  func stepped(by delta: Int, platforms: [LibraryPlatformCategory]) -> TVLibraryRailDestination {
+    let order: [TVLibraryRailDestination] = [.home, .all] + platforms.map { .platform($0) }
+    let index = order.firstIndex(of: self) ?? 0
+    let count = order.count
+    return order[((index + delta) % count + count) % count]
+  }
 }
+
+#if os(tvOS)
 
 /// Collapsible left rail for the tvOS library. Icon-only until a row is focused.
 struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
