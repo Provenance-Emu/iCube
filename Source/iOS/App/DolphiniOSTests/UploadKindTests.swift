@@ -17,4 +17,20 @@ final class UploadKindTests: XCTestCase {
   func testOtherNamesAreOther() {
     XCTAssertEqual(UploadKind.classify(fileName: "game.rvz", size: UploadKind.acceptedSizes.first!), .other)
   }
+
+  func testKeysFileIsRecognisedByNameAndSize() {
+    XCTAssertEqual(UploadKind.classify(fileName: "keys.bin", size: 0x400), .nandKeys)
+    XCTAssertEqual(UploadKind.classify(fileName: "KEYS.BIN", size: 0x400), .nandKeys)
+  }
+
+  func testKeysFileOfAnotherSizeIsOther() {
+    XCTAssertEqual(UploadKind.classify(fileName: "keys.bin", size: 0x401), .other)
+    XCTAssertEqual(UploadKind.classify(fileName: "keys.bin", size: 0), .other)
+    XCTAssertEqual(UploadKind.classify(fileName: "nand.bin", size: 0x400), .other)
+  }
+
+  func testOnlyTheKeylessDumpNeedsSeparateKeys() {
+    XCTAssertTrue(UploadKind.needsSeparateKeys(size: 0x2100_0000))
+    XCTAssertFalse(UploadKind.needsSeparateKeys(size: 0x2100_0400))
+  }
 }

@@ -6,9 +6,9 @@ import Foundation
   }
 
   /// Imports a BootMii backup on iOS (picked file) and tvOS (Web UI upload). Call on the main thread.
-  /// `completion` runs on the main thread once the progress alert is gone; `success` is false when the
-  /// import didn't reach its last step.
-  static func importNAND(from url: URL, completion: @escaping (_ success: Bool) -> Void) {
-    NANDImportManagerObjC.importNAND(from: url, completion: completion)
+  /// `keysURL` is the keys.bin for a dump without its keys appended. `completion` runs on the main thread when the
+  /// import ends, whether or not the progress alert showed; `success` is false when it didn't reach its last step.
+  static func importNAND(from url: URL, keysURL: URL? = nil, completion: @escaping (_ success: Bool) -> Void) {
+    NANDImportManagerObjC.importNAND(from: url, keysURL: keysURL, completion: completion)
   }
 }
