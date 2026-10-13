@@ -26,6 +26,8 @@ shot() { # name, then launch args
   sleep 6
   xcrun simctl io "$UDID" screenshot "$OUT/$name-$STYLE.png" >/dev/null
 }
+# A fresh install shows the first-run onboarding over the library; mark it seen except for library-empty.
+xcrun simctl spawn "$UDID" defaults write "$BID" onboarding_seen_v1 -bool true
 # Library: platform filter raw values are LibraryPlatformCategory's: all, gameCube, wii.
 for view in all gameCube wii; do
   xcrun simctl spawn "$UDID" defaults write "$BID" library_platform_filter -string "$view"
@@ -33,7 +35,9 @@ for view in all gameCube wii; do
 done
 xcrun simctl spawn "$UDID" defaults delete "$BID" library_platform_filter 2>/dev/null || true
 shot "library-home" -SCREENSHOT_MODE 1
+xcrun simctl spawn "$UDID" defaults delete "$BID" onboarding_seen_v1 2>/dev/null || true
 shot "library-empty"
+xcrun simctl spawn "$UDID" defaults write "$BID" onboarding_seen_v1 -bool true
 for leaf in general interface advanced graphics-video graphics-enhancements graphics-hacks graphics-advanced \
             shaders audio console-gamecube console-wii controllers performance-tuning debug web-ui icloud nearby about; do
   shot "settings-$leaf" -ICubeSettingsPreview "$leaf"
