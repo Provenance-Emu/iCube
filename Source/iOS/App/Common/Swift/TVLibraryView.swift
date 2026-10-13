@@ -2409,7 +2409,10 @@ struct TVLibraryView: View {
             withAnimation { showOnboarding = false }
           }
           .buttonStyle(.bordered)
+          #if !os(tvOS)
+          // On tvOS the focused bordered capsule is white, so a white tint makes the label vanish.
           .tint(.white)
+          #endif
 
           // Lineage / credits — iCube is a downstream fork; credit the projects it builds on.
           VStack(spacing: 4) {
