@@ -10,6 +10,7 @@ struct TVRootView: View {
       PauseMenuView(selectedSlot: .constant(1), onClose: {}, onShowSettings: {}, platform: .tvos,
                     game: PauseMenuView.previewGame())
         .debugPane(Self.argument(after: "-ICubePausePane", in: args))
+        .debugFocus(Self.argument(after: "-ICubePauseFocus", in: args))
     } else if let leaf = Self.argument(after: "-ICubeSettingsPreview", in: args) {
       SettingsRootView(initialLeafID: leaf)
     } else {

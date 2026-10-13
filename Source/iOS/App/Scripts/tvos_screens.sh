@@ -26,18 +26,13 @@ shot() { # name, then launch args
   sleep 6
   xcrun simctl io "$UDID" screenshot "$OUT/$name-$STYLE.png" >/dev/null
 }
-# A fresh install shows the first-run onboarding over the library; mark it seen except for library-empty.
-xcrun simctl spawn "$UDID" defaults write "$BID" onboarding_seen_v1 -bool true
-# Library: platform filter raw values are LibraryPlatformCategory's: all, gameCube, wii.
+# Library state goes in as launch arguments (the NSUserDefaults argument domain): `simctl spawn defaults write`
+# writes the simulator's global domain, which loses to whatever the app already saved in its own container.
+# Filter raw values are LibraryPlatformCategory's; `all` is the My Library home.
 for view in all gameCube wii; do
-  xcrun simctl spawn "$UDID" defaults write "$BID" library_platform_filter -string "$view"
-  shot "library-$view" -SCREENSHOT_MODE 1
+  shot "library-$view" -SCREENSHOT_MODE 1 -onboarding_seen_v1 YES -library_platform_filter "$view"
 done
-xcrun simctl spawn "$UDID" defaults delete "$BID" library_platform_filter 2>/dev/null || true
-shot "library-home" -SCREENSHOT_MODE 1
-xcrun simctl spawn "$UDID" defaults delete "$BID" onboarding_seen_v1 2>/dev/null || true
-shot "library-empty"
-xcrun simctl spawn "$UDID" defaults write "$BID" onboarding_seen_v1 -bool true
+shot "library-empty" -onboarding_seen_v1 NO -library_platform_filter all
 for leaf in general interface advanced graphics-video graphics-enhancements graphics-hacks graphics-advanced \
             shaders audio console-gamecube console-wii controllers performance-tuning debug web-ui icloud nearby about; do
   shot "settings-$leaf" -ICubeSettingsPreview "$leaf"
@@ -46,4 +41,6 @@ shot "pause-grid" -ICubePausePreview
 for pane in saves cheats controllers reset exit; do
   shot "pause-$pane" -ICubePausePreview -ICubePausePane "$pane"
 done
+# A focused save-slot tile: the tile focus ring (ICubeTileButtonStyle) only shows with focus on a tile.
+shot "pause-saves-slot-focus" -ICubePausePreview -ICubePausePane saves -ICubePauseFocus slot-3
 echo "wrote $(ls "$OUT" | wc -l | tr -d ' ') files to $OUT"

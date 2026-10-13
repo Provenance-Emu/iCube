@@ -26,12 +26,18 @@ internal struct PauseMenuView: View {
     case filmstrip
   }
   private enum Pane { case main, saves, cheats, controllers }
+  /// The quick-slot picker's slots, numbered as the UI shows them.
+  static let saveSlots = 1 ... 10
   @State private var pane: Pane = .main
   #if DEBUG
   /// `-ICubePausePane <saves|cheats|controllers|reset|exit>`: open a sub-pane for simulator screenshots.
   var debugInitialPane: String?
   /// onAppear re-runs after every child sheet closes; the debug pane applies once.
   @State private var debugInitialPaneConsumed = false
+  /// `-ICubePauseFocus <back|slot-N|save|load|filmstrip>`: where the saves pane's focus lands, so a screenshot
+  /// can show a focused tile (simctl cannot press the remote).
+  var debugInitialFocus: String?
+  @State private var debugInitialFocusConsumed = false
   #endif
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
@@ -207,6 +213,12 @@ internal struct PauseMenuView: View {
           refreshEngineState()
         case .saves:
           focused = .back
+          #if DEBUG
+          if !debugInitialFocusConsumed, let field = Self.debugFocusField(debugInitialFocus) {
+            debugInitialFocusConsumed = true
+            focused = field
+          }
+          #endif
         case .cheats:
           focused = .back
         case .controllers:
@@ -275,6 +287,21 @@ internal struct PauseMenuView: View {
 
   #if DEBUG
   func debugPane(_ pane: String?) -> PauseMenuView { var copy = self; copy.debugInitialPane = pane; return copy }
+  func debugFocus(_ focus: String?) -> PauseMenuView { var copy = self; copy.debugInitialFocus = focus; return copy }
+
+  /// Parses `-ICubePauseFocus`. `slot-N` takes the pane's 1-based slot numbers; anything unknown is nil.
+  static func debugFocusField(_ value: String?) -> FocusField? {
+    switch value {
+    case "back": return .back
+    case "save": return .save
+    case "load": return .load
+    case "filmstrip": return .filmstrip
+    case let value? where value.hasPrefix("slot-"):
+      guard let n = Int(value.dropFirst("slot-".count)), Self.saveSlots.contains(n) else { return nil }
+      return .slot(n)
+    default: return nil
+    }
+  }
   #endif
 
   // Add pull-down to dismiss for iOS
@@ -500,7 +527,7 @@ internal struct PauseMenuView: View {
             Section(header: Text(L("Quick Slots"))) {
               ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                  ForEach(1 ... 10, id: \.self) { i in
+                  ForEach(Self.saveSlots, id: \.self) { i in
                     Button(action: { selectedSlot = i }) {
                       Label(String(format: L("Slot %d"), i), systemImage: selectedSlot == i ? "checkmark.circle.fill" : "circle")
                     }
@@ -591,7 +618,7 @@ internal struct PauseMenuView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
               HStack(spacing: ICubeDesign.Spacing.m.rawValue) {
-                ForEach(1 ... 10, id: \.self) { i in
+                ForEach(Self.saveSlots, id: \.self) { i in
                   Button(action: { selectedSlot = i }) {
                     VStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
                       Image(systemName: selectedSlot == i ? "checkmark.circle.fill" : "square.stack.3d.up")
