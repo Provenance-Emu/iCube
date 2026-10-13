@@ -32,7 +32,7 @@ struct SettingsRootView: View {
     #else
     let achievements = false
     #endif
-    return SettingsRootModelBuilder.sections(isIOS: isIOS, achievements: achievements)
+    return SettingsRootModelBuilder.sections(isIOS: isIOS, achievements: achievements, debugLeaf: SettingsRootModelBuilder.storeDebugLeaf)
   }
 
   /// tvOS always; iPad only at regular width. Not the size class alone: it is also `.regular` on a Max iPhone in landscape,

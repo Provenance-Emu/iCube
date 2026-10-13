@@ -15,18 +15,19 @@ live event stream. Backing implementation:
 
 ## Server facts
 
-- **Port:** `8723`, bound to `127.0.0.1` only (loopback-only by design — this
-  is the App Store review-safety property; it must never change).
+- **Port:** `8723`, bound to `127.0.0.1` by default. A Release sideload build that
+  has the bench turned on also accepts LAN clients that present the bearer token
+  (`allowsNonLoopbackClients`); see the Release availability note below.
 - **Reaching it from a Mac:** `brew install libimobiledevice`, then
   `iproxy 8723 8723` forwards the device's loopback port 8723 to the Mac's
   own port 8723 over USB.
-- **Availability:** DEBUG builds always start the server. Release builds
-  start it only when the user has opted in via the `ICubeBenchServerEnabled`
-  `UserDefaults` key (the "Perf Test Bench (HTTP)" toggle in Settings), which
-  defaults to **off**. With the toggle off — the default for every shipping
-  install — nothing binds.
-- No authentication in v1; safety comes entirely from loopback-only + the
-  opt-in gate.
+- **Availability:** DEBUG builds always start the server, on loopback only. Release
+  sideload builds start it only when the user has opted in via the
+  `ICubeBenchServerEnabled` `UserDefaults` key (the "Perf Test Bench (HTTP)" toggle
+  in Settings → Debug), which defaults to **off**; they then accept LAN clients
+  that send `Authorization: Bearer <token>`. The App Store build (`APPSTORE`)
+  never starts it, and its Debug leaf shows only the JIT section.
+- Loopback callers need no authentication; LAN callers need the token.
 
 ## Envelope and errors
 

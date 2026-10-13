@@ -6,11 +6,12 @@ import SwiftUI
 /// Debug, on the menu engine. `sync()` reads Config and UserDefaults into the snapshot and writes nothing; `apply(_:)` is the only writer.
 /// The JIT, fastmem and user-folder facts are read once by `.task` (reading them rechecks JIT) and carried forward by `sync()`.
 struct DebugRootView: View {
+  var scope: DebugLeafScope = .full
   @State private var state = DebugRootState()
   @State private var hydrated = false
 
   var body: some View {
-    SettingsLeafScreen(model: DebugRootModelBuilder.make(state: state, apply: apply), title: L("Debug"), sync: sync)
+    SettingsLeafScreen(model: DebugRootModelBuilder.make(state: state, scope: scope, apply: apply), title: L("Debug"), sync: sync)
       .task {
         guard !hydrated else { return }
         hydrated = true

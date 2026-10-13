@@ -45,7 +45,7 @@ struct SettingsRootSection: Identifiable {
 /// Spec §6.2: eight sections. Every leaf is one row; migrated leaves also expose their model so search
 /// can see their rows. `isIOS`/`achievements` replace the `#if`s the old root had.
 enum SettingsRootModelBuilder {
-  static func sections(isIOS: Bool, achievements: Bool) -> [SettingsRootSection] {
+  static func sections(isIOS: Bool, achievements: Bool, debugLeaf: DebugLeafScope? = .full) -> [SettingsRootSection] {
     var consoles = [
       SettingsLeafEntry(id: "console-gamecube", title: L("GameCube"), icon: "cube", description: L("Memory cards, slots and GameCube-only options."),
                         hostsMenuScreen: true,
@@ -60,6 +60,18 @@ enum SettingsRootModelBuilder {
       consoles.append(SettingsLeafEntry(id: "achievements", title: L("Achievements"), icon: "trophy", description: L("RetroAchievements sign-in and hardcore mode.")) { ConfigAchievementsView() })
     }
     #endif
+    var performance = [
+      SettingsLeafEntry(id: "performance-tuning", title: L("Performance Tuning"), icon: "gauge.with.dots.needle.67percent",
+                        description: L("CPU engine, optimisations, clock overrides. The CPU is the bottleneck on iCube."),
+                        hostsMenuScreen: true,
+                        // showValidation: true so the correctness-validation rows are searchable.
+                        makeModel: { PerformanceTuningModelBuilder.make(state: PerformanceTuningState(), showValidation: true, apply: { _ in }) }) { PerformanceTuningView() },
+    ]
+    if let debugLeaf {
+      performance.append(SettingsLeafEntry(id: "debug", title: L("Debug"), icon: "ladybug", description: L("Developer switches: fastmem, JIT, logging, stall metrics."),
+                                           hostsMenuScreen: true,
+                                           makeModel: { DebugRootModelBuilder.make(state: DebugRootState(isIOS: isIOS), scope: debugLeaf, apply: { _ in }) }) { DebugRootView(scope: debugLeaf) })
+    }
     return [
       SettingsRootSection(id: "general", header: L("General"), entries: [
         SettingsLeafEntry(id: "general", title: L("General"), icon: "gear", description: L("Dual core, cheats, speed limit and other core options."),
@@ -103,16 +115,7 @@ enum SettingsRootModelBuilder {
                           description: L("Players, devices, what each plays as, and remapping."),
                           hostsMenuScreen: true) { ControllersRootView() },
       ]),
-      SettingsRootSection(id: "performance", header: L("Performance"), entries: [
-        SettingsLeafEntry(id: "performance-tuning", title: L("Performance Tuning"), icon: "gauge.with.dots.needle.67percent",
-                          description: L("CPU engine, optimisations, clock overrides. The CPU is the bottleneck on iCube."),
-                          hostsMenuScreen: true,
-                          // showValidation: true so the correctness-validation rows are searchable.
-                          makeModel: { PerformanceTuningModelBuilder.make(state: PerformanceTuningState(), showValidation: true, apply: { _ in }) }) { PerformanceTuningView() },
-        SettingsLeafEntry(id: "debug", title: L("Debug"), icon: "ladybug", description: L("Developer switches: fastmem, JIT, logging, stall metrics."),
-                          hostsMenuScreen: true,
-                          makeModel: { DebugRootModelBuilder.make(state: DebugRootState(isIOS: isIOS), apply: { _ in }) }) { DebugRootView() },
-      ]),
+      SettingsRootSection(id: "performance", header: L("Performance"), entries: performance),
       SettingsRootSection(id: "sync-network", header: L("Sync & Network"), entries: [
         SettingsLeafEntry(id: "web-ui", title: L("Web UI & WebDAV"), icon: "network", description: L("Import games from a computer on the same Wi-Fi.")) { WebUISettingsView() },
         SettingsLeafEntry(id: "icloud", title: L("iCloud Sync"), icon: "icloud", description: L("Sync saves, states and settings across your devices.")) { CloudSyncSettingsView() },
@@ -122,6 +125,15 @@ enum SettingsRootModelBuilder {
         SettingsLeafEntry(id: "about", title: L("About"), icon: "info.circle", description: L("Version, core, blog, help and Reset All Settings.")) { AboutView() },
       ]),
     ]
+  }
+
+  /// What this build shows: the App Store build hides the leaf unless JIT is detected (a re-signed install).
+  static var storeDebugLeaf: DebugLeafScope? {
+    #if APPSTORE
+    JitManager.shared().jitSupported ? .jitOnly : nil
+    #else
+    .full
+    #endif
   }
 
   /// The root as one `MenuModel`: a chevron row per leaf. The iPhone list renders it; the sidebar renders `sections` directly.

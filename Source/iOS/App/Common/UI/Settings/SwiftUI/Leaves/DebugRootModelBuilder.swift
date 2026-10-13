@@ -4,12 +4,21 @@
 import PVHelp
 import SwiftUI
 
+/// How much of the Debug leaf a build shows. The App Store build shows only the JIT section, and only when JIT is
+/// possible (a re-signed install); developer tools (bench server, logging, metrics) never reach store users.
+enum DebugLeafScope {
+  case full, jitOnly
+}
+
 /// Pure: snapshot in, changes out (it cannot write, and it reads no singleton). Descriptions are the captions the hand-built
 /// screen showed; the read-only status rows have a one-sentence description of their own.
 enum DebugRootModelBuilder {
   typealias Apply = (DebugRootChange) -> Void
 
-  static func make(state: DebugRootState, apply: @escaping Apply) -> MenuModel {
+  static func make(state: DebugRootState, scope: DebugLeafScope = .full, apply: @escaping Apply) -> MenuModel {
+    if scope == .jitOnly {
+      return MenuModel(sections: [environment(state, apply)].filter { !$0.items.isEmpty })
+    }
     var sections = [cpuMemory(state, apply)]
     if state.isIOS { sections.append(recording(state, apply)) }
     sections += [environment(state, apply), diagnostics(state, apply), rendering(state, apply), logging(state, apply), artwork(state, apply)]

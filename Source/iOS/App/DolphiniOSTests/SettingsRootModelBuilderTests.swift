@@ -65,4 +65,15 @@ final class SettingsRootModelBuilderTests: XCTestCase {
       XCTAssertTrue(ids.contains(id), id)
     }
   }
+
+  func test_debugLeafNil_omitsTheDebugEntry() {
+    let ids = SettingsRootModelBuilder.sections(isIOS: true, achievements: false, debugLeaf: nil).flatMap(\.entries).map(\.id)
+    XCTAssertFalse(ids.contains("debug"))
+    XCTAssertTrue(ids.contains("performance-tuning"))
+  }
+
+  func test_debugLeafJitOnly_keepsTheEntry() {
+    let ids = SettingsRootModelBuilder.sections(isIOS: true, achievements: false, debugLeaf: .jitOnly).flatMap(\.entries).map(\.id)
+    XCTAssertTrue(ids.contains("debug"))
+  }
 }

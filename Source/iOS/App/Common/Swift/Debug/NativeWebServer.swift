@@ -9,8 +9,9 @@
 // custom-route table + JSON response helpers. WebDAV / multipart upload /
 // file browser were dropped — this server only answers the debug JSON API.
 //
-// SECURITY: binds loopback only (127.0.0.1) instead of all interfaces, and
-// additionally rejects any connection whose remote endpoint is not loopback.
+// SECURITY: binds loopback only (127.0.0.1) by default and rejects any connection whose remote endpoint is not
+// loopback. Only an explicit sideload opt-in (`allowsNonLoopbackClients`, token required) opens it to the LAN; the
+// App Store build never starts the server (see DebugServerManager).
 // To reach it from a Mac over USB, forward the port with libimobiledevice:
 //     iproxy 8723 8723   # then curl http://127.0.0.1:8723/api/perf/live
 

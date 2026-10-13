@@ -332,4 +332,12 @@ final class DebugRootModelBuilderTests: XCTestCase {
     XCTAssertEqual(DebugDefaultsKey.inputDebug, "input_debug")
     XCTAssertEqual(DebugDefaultsKey.disableArtwork, "library_disable_artwork")
   }
+
+  func test_jitOnlyScope_keepsOnlyTheEnvironmentSection() {
+    let model = DebugRootModelBuilder.make(state: populated, scope: .jitOnly) { _ in }
+    XCTAssertEqual(model.sections.map(\.id), ["environment"])
+    let ids = model.sections.flatMap(\.items).map(\.id)
+    XCTAssertFalse(ids.contains("perf-bench"))
+    XCTAssertFalse(ids.contains("console-logging"))
+  }
 }

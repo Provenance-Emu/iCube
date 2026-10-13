@@ -4,18 +4,10 @@
 // TARGET PATH (when integrated):
 //   Source/iOS/App/Common/Swift/Debug/DebugServerManager.swift
 //
-// Lifecycle owner for the debug/benchmark HTTP server. Self-gating:
-//   - DEBUG builds: `start()` always starts the server (developer convenience).
-//   - Release builds: `start()` starts ONLY when the user has flipped the
-//     "Perf Test Bench (HTTP)" toggle, persisted in UserDefaults under
-//     `ICubeBenchServerEnabled` (default OFF). With the toggle off — the default
-//     for every shipping install — nothing binds, so there is no always-on local
-//     HTTP server to flag in App Store review.
-//
-// App Store safety: the server is loopback-only (NativeWebServer binds 127.0.0.1;
-// do not change that — it's the review-safety property), default-off, and gated
-// behind a user-visible toggle. Reaching it requires an explicit USB
-// `iproxy 8723 8723` forward from a Mac. Opt-in developer feature, not a service.
+// Lifecycle owner for the debug/benchmark HTTP server, and self-gating. DEBUG builds start it on loopback
+// (USB `iproxy 8723 8723`). Release sideload builds start it only after the user turns on Settings → Debug →
+// Perf Test Bench, and then accept LAN clients that present the bearer token (`allowsNonLoopbackClients`).
+// The App Store build never starts it (`isEnabled`).
 //
 // ObjC visibility: this is `@objc`/NSObject so EmulationCoordinator.mm (ObjC++)
 // can call `[DebugServerManager.shared start]` through the generated
@@ -146,9 +138,13 @@ final class DebugServerManager: NSObject {
   static let enabledDefaultsKey = "ICubeBenchServerEnabled"
 
   /// Whether the server is permitted to run. Always true in DEBUG; in Release
-  /// only when the user has opted in via the "Perf Test Bench (HTTP)" toggle.
+  /// only when the user has opted in via the "Perf Test Bench (HTTP)" toggle;
+  /// never in the App Store build.
   private var isEnabled: Bool {
-    #if DEBUG
+    #if APPSTORE
+    // The App Store build never runs the bench server; the Debug leaf that toggles it is not shown there.
+    return false
+    #elseif DEBUG
     return true
     #else
     return UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey)
