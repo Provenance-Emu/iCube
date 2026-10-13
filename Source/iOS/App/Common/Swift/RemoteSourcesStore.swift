@@ -17,6 +17,7 @@ private struct PersistedSource: Codable {
 @MainActor
 class RemoteSourcesStore: ObservableObject {
   /// Shared singleton instance that starts automatically
+  private static let log = ICubeLog.logger("RemoteSourcesStore")
   static let shared = RemoteSourcesStore()
 
   var sources: [any RemoteLibrarySource] {
@@ -32,7 +33,7 @@ class RemoteSourcesStore: ObservableObject {
   private var cancellables = Set<AnyCancellable>()
 
   init() {
-    print("RemoteSourcesStore: init() called")
+    Self.log.debug("RemoteSourcesStore: init() called")
     // Forward coordinator's objectWillChange to our own
     coordinator.objectWillChange
       .sink { [weak self] in
@@ -40,9 +41,9 @@ class RemoteSourcesStore: ObservableObject {
       }
       .store(in: &cancellables)
 
-    print("RemoteSourcesStore: calling hydrate()")
+    Self.log.debug("RemoteSourcesStore: calling hydrate()")
     hydrate()
-    print("RemoteSourcesStore: hydrate() completed, sources count: \(coordinator.sources.count)")
+    Self.log.debug("RemoteSourcesStore: hydrate() completed, sources count: \(coordinator.sources.count)")
   }
 
   func addWebDAV(name: String, url: URL, username: String?, password: String?, recursive: Bool, interval: TimeInterval, startPath: String?, enablePreCaching: Bool = false) {
@@ -72,20 +73,20 @@ class RemoteSourcesStore: ObservableObject {
   }
 
   private func hydrate() {
-    print("RemoteSourcesStore: hydrate() starting")
+    Self.log.debug("RemoteSourcesStore: hydrate() starting")
     guard let data = UserDefaults.standard.data(forKey: defaultsKey) else {
-      print("RemoteSourcesStore: no saved sources found in UserDefaults")
+      Self.log.debug("RemoteSourcesStore: no saved sources found in UserDefaults")
       return
     }
     guard let list = try? JSONDecoder().decode([PersistedSource].self, from: data) else {
-      print("RemoteSourcesStore: failed to decode saved sources")
+      Self.log.error("RemoteSourcesStore: failed to decode saved sources")
       return
     }
-    print("RemoteSourcesStore: found \(list.count) saved sources")
+    Self.log.debug("RemoteSourcesStore: found \(list.count) saved sources")
     for (index, p) in list.enumerated() {
-      print("RemoteSourcesStore: loading source [\(index)]: \(p.name) - \(p.url)")
+      Self.log.debug("RemoteSourcesStore: loading source [\(index)]: \(p.name, privacy: .private) - \(p.url, privacy: .private)")
       guard let url = URL(string: p.url) else {
-        print("RemoteSourcesStore: invalid URL for source: \(p.url)")
+        Self.log.error("RemoteSourcesStore: invalid URL for source: \(p.url, privacy: .private)")
         continue
       }
       let password = KeychainService.getPassword(for: p.id)
@@ -100,10 +101,10 @@ class RemoteSourcesStore: ObservableObject {
         startPath: p.startPath,
         enablePreCaching: p.enablePreCaching
       )
-      print("RemoteSourcesStore: adding source to coordinator: \(src.name)")
+      Self.log.debug("RemoteSourcesStore: adding source to coordinator: \(src.name, privacy: .private)")
       coordinator.add(source: src)
     }
-    print("RemoteSourcesStore: hydrate() completed")
+    Self.log.debug("RemoteSourcesStore: hydrate() completed")
   }
 
   private func persist() {
