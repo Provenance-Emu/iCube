@@ -36,9 +36,11 @@ fi
 xcrun simctl boot "$UDID" 2>/dev/null || true
 # The tvOS runtime rejects `simctl ui appearance`; the DEBUG app honours `-ICubeAppearance light|dark` instead.
 xcrun simctl install "$UDID" "$DD/Build/Products/$CONFIG-appletvsimulator"/iCube*.app
+SHOT_COUNT=0
 shot() { # name, then launch args
   name="$1"; shift
   if [ -n "$ONLY" ]; then case "$ONLY" in *",$name,"*) ;; *) return 0;; esac; fi
+  SHOT_COUNT=$((SHOT_COUNT + 1))
   xcrun simctl terminate "$UDID" "$BID" 2>/dev/null || true
   xcrun simctl launch "$UDID" "$BID" -ICubeAppearance "$STYLE" "$@" >/dev/null
   sleep "$SETTLE"
@@ -55,10 +57,15 @@ for leaf in general interface advanced graphics-video graphics-enhancements grap
             shaders audio console-gamecube console-wii controllers performance-tuning debug web-ui icloud nearby privacy about; do
   shot "settings-$leaf" -ICubeSettingsPreview "$leaf"
 done
-shot "pause-grid" -ICubePausePreview
+# -SCREENSHOT_MODE 1 makes the pause menu's stand-in game the first demo title (fictional name, ID and cover).
+shot "pause-grid" -SCREENSHOT_MODE 1 -ICubePausePreview
 for pane in saves cheats controllers reset exit; do
-  shot "pause-$pane" -ICubePausePreview -ICubePausePane "$pane"
+  shot "pause-$pane" -SCREENSHOT_MODE 1 -ICubePausePreview -ICubePausePane "$pane"
 done
 # A focused save-slot tile: the tile focus ring (ICubeTileButtonStyle) only shows with focus on a tile.
-shot "pause-saves-slot-focus" -ICubePausePreview -ICubePausePane saves -ICubePauseFocus slot-3
+shot "pause-saves-slot-focus" -SCREENSHOT_MODE 1 -ICubePausePreview -ICubePausePane saves -ICubePauseFocus slot-3
+if [ -n "$ONLY" ] && [ "$SHOT_COUNT" = 0 ]; then
+  echo "warning: --only matched no shot (got ${ONLY#,}); names are e.g. library-all, pause-grid, settings-controllers" >&2
+  exit 1
+fi
 echo "wrote $(ls "$OUT" | wc -l | tr -d ' ') files to $OUT"

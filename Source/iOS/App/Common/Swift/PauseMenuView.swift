@@ -974,15 +974,22 @@ enum QuickMenuHost {
 import UIKit
 
 extension PauseMenuView {
-  /// A stand-in `TVGameItem` for previews and snapshot tests.
+  /// Fictional stand-in ID for the placeholder game (no real title's ID).
+  private static let placeholderGameID = "PRVW01"
+
+  /// A stand-in `TVGameItem` for previews and snapshot tests. In `-SCREENSHOT_MODE` it is the first demo-catalogue
+  /// title, so store screenshots show the same fictional title, ID and procedural cover as the library.
   static func previewGame() -> TVGameItem {
+    if TVLibraryBridge.isScreenshotDemoMode(), let demo = TVLibraryBridge.currentGames().first {
+      return demo
+    }
     guard let cls = NSClassFromString("TVGameItem") as? NSObject.Type else {
       fatalError("TVGameItem class not found for preview")
     }
     let obj = cls.init()
     let img = UIImage(systemName: "gamecontroller")?.withTintColor(.white, renderingMode: .alwaysOriginal) ?? UIImage()
     obj.setValue("Preview Game", forKey: "title")
-    obj.setValue("RMCP01", forKey: "gameID")
+    obj.setValue(placeholderGameID, forKey: "gameID")
     obj.setValue(img, forKey: "coverImage")
     return unsafeBitCast(obj, to: TVGameItem.self)
   }

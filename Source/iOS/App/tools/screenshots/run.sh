@@ -186,7 +186,10 @@ run_class() {  # <class>
   prepare_ui "$1"
   capture "$1"
   # Never leave a simulator stuck in dark mode for the next run.
-  [ "$1" != appletv ] && xcrun simctl ui "$UDID" appearance light 2>/dev/null || true
+  if [ "$1" != appletv ]; then
+    xcrun simctl ui "$UDID" appearance light 2>/dev/null || true
+    xcrun simctl status_bar "$UDID" clear 2>/dev/null || true
+  fi
 }
 
 for p in $PLATFORM; do
