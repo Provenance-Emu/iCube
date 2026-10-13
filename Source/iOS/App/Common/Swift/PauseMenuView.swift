@@ -27,17 +27,16 @@ internal struct PauseMenuView: View {
   }
   private enum Pane { case main, saves, cheats, controllers }
   /// The quick-slot picker's slots, numbered as the UI shows them.
-  static let saveSlots = 1 ... 10
+  static let saveSlots = 1 ... PauseMenuModelBuilder.slotCount
   @State private var pane: Pane = .main
   #if DEBUG
   /// `-ICubePausePane <saves|cheats|controllers|reset|exit>`: open a sub-pane for simulator screenshots.
   var debugInitialPane: String?
   /// onAppear re-runs after every child sheet closes; the debug pane applies once.
   @State private var debugInitialPaneConsumed = false
-  /// `-ICubePauseFocus <back|slot-N|save|load|filmstrip>`: where the saves pane's focus lands, so a screenshot
-  /// can show a focused tile (simctl cannot press the remote).
+  /// `-ICubePauseFocus <slot-N|view-all>`: where the Save States pane's focus lands, so a screenshot can show a
+  /// focused tile (simctl cannot press the remote). Parsed by `TVSaveSlotsPane.debugFocus`.
   var debugInitialFocus: String?
-  @State private var debugInitialFocusConsumed = false
   #endif
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
@@ -212,13 +211,8 @@ internal struct PauseMenuView: View {
           refreshActiveCheatCount()
           refreshEngineState()
         case .saves:
-          focused = .back
-          #if DEBUG
-          if !debugInitialFocusConsumed, let field = Self.debugFocusField(debugInitialFocus) {
-            debugInitialFocusConsumed = true
-            focused = field
-          }
-          #endif
+          // `TVSaveSlotsPane` puts focus on the quick slot itself.
+          break
         case .cheats:
           focused = .back
         case .controllers:
@@ -289,19 +283,6 @@ internal struct PauseMenuView: View {
   func debugPane(_ pane: String?) -> PauseMenuView { var copy = self; copy.debugInitialPane = pane; return copy }
   func debugFocus(_ focus: String?) -> PauseMenuView { var copy = self; copy.debugInitialFocus = focus; return copy }
 
-  /// Parses `-ICubePauseFocus`. `slot-N` takes the pane's 1-based slot numbers; anything unknown is nil.
-  static func debugFocusField(_ value: String?) -> FocusField? {
-    switch value {
-    case "back": return .back
-    case "save": return .save
-    case "load": return .load
-    case "filmstrip": return .filmstrip
-    case let value? where value.hasPrefix("slot-"):
-      guard let n = Int(value.dropFirst("slot-".count)), Self.saveSlots.contains(n) else { return nil }
-      return .slot(n)
-    default: return nil
-    }
-  }
   #endif
 
   // Add pull-down to dismiss for iOS
@@ -326,13 +307,7 @@ internal struct PauseMenuView: View {
       let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: isTV, isCompactHeight: compactHeight)
       ZStack {
         if isTV {
-          HStack(alignment: .center, spacing: 64) {
-            coverColumn.frame(width: 300, alignment: .leading)
-            tiles(columns: columns, compact: false)
-          }
-          .padding(.horizontal, 90)
-          .padding(.top, 70)
-          .padding(.bottom, 44)
+          tvHeroLayout { tiles(columns: columns, compact: false) }
         } else {
           VStack(alignment: .leading, spacing: 8) {
             compactHeader(isCompactHeight: compactHeight).padding(compactHeight ? 12 : 16)
@@ -383,7 +358,16 @@ internal struct PauseMenuView: View {
     })
     .disabled(confirmUp)
     .allowsHitTesting(!confirmUp)
+    .environment(\.icubePlatformAccent, isTV ? platformAccent : nil)
+    .environment(\.icubeShelfHint, isTV ? L("Resume") : nil)
   }
+
+  /// The running game's platform (the user's library override wins): tile badges, chips and the hero use its colour.
+  private var gamePlatform: LibraryPlatformCategory {
+    LibraryPlatformMapper.category(for: game, override: LibraryPlatformOverrideStore.load()[game.filePath])
+  }
+
+  private var platformAccent: Color { ICubeDesign.platformAccent(gamePlatform) }
 
   /// tvOS: the dark room with the game's art as a faint wash and a vignette, not a black screen.
   private var tvBackdrop: some View {
@@ -408,24 +392,18 @@ internal struct PauseMenuView: View {
   /// tvOS hero (iFly layout, iCube tokens): cover, PAUSED in accent, the game title in the display face, its ID.
   private var coverColumn: some View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
-      Image(uiImage: game.coverImage)
-        .resizable().aspectRatio(2.0 / 3.0, contentMode: .fit).frame(width: 260)
-        .clipShape(RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous))
-        .overlay(
-          RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
-            .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
-        )
+      heroArt
         .shadow(color: .black.opacity(0.5), radius: 24, x: 0, y: 14)
         .padding(.bottom, ICubeDesign.Spacing.xs.rawValue)
       Label(L("Paused"), systemImage: "pause.fill")
         .icubeText(.nav)
         .tracking(ICubeDesign.Spacing.xxs.rawValue)
-        .foregroundStyle(ICubeDesign.color(.accent))
+        .foregroundStyle(platformAccent)
       Text(game.title)
         // Before `icubeText`: the role's own `textCase(nil)` would otherwise sit closer to the text and win.
         .textCase(.uppercase)
         .icubeText(.title)
-        .foregroundStyle(ICubeDesign.titleGradient)
+        .foregroundStyle(LinearGradient(colors: [ICubeDesign.color(.textPrimary), platformAccent], startPoint: .top, endPoint: .bottom))
         .lineLimit(3)
         .minimumScaleFactor(0.6)
         .fixedSize(horizontal: false, vertical: true)
@@ -434,6 +412,28 @@ internal struct PauseMenuView: View {
         .foregroundStyle(ICubeDesign.color(.textSecondary))
       engineChip
     }
+  }
+
+  /// Hero cover width; the art is always 2:3 (a GameCube/Wii case).
+  private static let heroArtWidth: CGFloat = 260
+
+  /// The cover, filled into a 2:3 case and clipped; without one, the platform's case template on its accent,
+  /// never a stretched placeholder glyph. The title is not repeated: it sits right below.
+  private var heroArt: some View {
+    let shape = RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
+    return ZStack {
+      if game.hasCoverArt {
+        Image(uiImage: game.coverImage).resizable().scaledToFill()
+      } else {
+        shape.fill(platformAccent.opacity(ICubeDesign.IconBadge.tintOpacity))
+        Image(LibraryGameSystem.from(item: game).templateImageName)
+          .resizable().scaledToFill()
+          .opacity(0.5)
+      }
+    }
+    .frame(width: Self.heroArtWidth, height: Self.heroArtWidth * 3 / 2)
+    .clipShape(shape)
+    .overlay(shape.stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue))
   }
 
   /// "JIT ON" while the JIT is acquired, otherwise the engine that is running (INT, CIR, CIR-IR).
@@ -476,47 +476,10 @@ internal struct PauseMenuView: View {
     }
   }
 
-  /// Shared wrapper for the Reset/Exit confirm overlays: a
-  /// translucent scrim behind a card with an explicit title/message above
-  /// the confirm/cancel row list (the model's own `MenuSection.header` is
-  /// left `nil` for these models specifically so `MenuScreen`'s grid
-  /// doesn't render a second, differently-styled title below this one).
-  private var confirmWidth: CGFloat { platform == .tvos ? 640 : 380 }
+  private var isTV: Bool { platform == .tvos }
 
-  @ViewBuilder
   private func confirmOverlay(title: String, message: String, model: MenuModel, onBack: @escaping () -> Void) -> some View {
-    ZStack {
-      Color.black.opacity(0.55).ignoresSafeArea()
-      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
-        Text(title)
-          .icubeText(.title)
-          .foregroundStyle(ICubeDesign.color(.textPrimary))
-        Text(message)
-          .icubeText(.detail)
-          .foregroundStyle(ICubeDesign.color(.textSecondary))
-        // Intrinsic height: the card is as tall as its rows (two or three of them), however the type scales.
-        #if os(tvOS)
-        MenuScreen(model: model, style: .list, onBack: onBack)
-          .fixedSize(horizontal: false, vertical: true)
-          .focusSection()
-        #else
-        MenuScreen(model: model, style: .grid, onBack: onBack)
-          .fixedSize(horizontal: false, vertical: true)
-        #endif
-      }
-      .padding(ICubeDesign.Spacing.m.rawValue)
-      .frame(maxWidth: confirmWidth)
-      .background(
-        RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
-          .fill(.ultraThinMaterial)
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
-          .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
-      )
-      .padding(ICubeDesign.Spacing.l.rawValue)
-    }
-    .transition(.opacity)
+    ICubeConfirmPanel(title: title, message: message, model: model, isTV: isTV, onBack: onBack)
   }
 
   private var savesMenu: some View {
@@ -580,96 +543,13 @@ internal struct PauseMenuView: View {
           }
         }
       } else {
-        ZStack {
-          // The pause scrim: the game's art blurred under a dark gradient.
-          Image(uiImage: game.bannerImage ?? game.coverImage)
-            .resizable()
-            .scaledToFill()
-            .blur(radius: 25)
-            .opacity(0.8)
-            .ignoresSafeArea()
-
-          LinearGradient(
-            colors: [.black.opacity(0.85), .black.opacity(0.4), .black.opacity(0.85)],
-            startPoint: .top,
-            endPoint: .bottom
-          )
-          .ignoresSafeArea()
-
-          VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
-            HStack(alignment: .top) {
-              ICubeLeafHeader(title: L("Save States"), subtitle: game.title)
-              Spacer()
-              Button(action: { pane = .main }) {
-                HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
-                  Image(systemName: "chevron.left")
-                  Text(L("Back to Menu")).icubeText(.body)
-                }
-                .foregroundStyle(ICubeDesign.color(.textPrimary))
-              }
-              .buttonStyle(ICubeRowButtonStyle())
-              .fixedSize()
-              .focused($focused, equals: .back)
-            }
-
-            Text(L("Select Save Slot"))
-              .icubeText(.section)
-              .foregroundStyle(ICubeDesign.color(.textSecondary))
-
-            ScrollView(.horizontal, showsIndicators: false) {
-              HStack(spacing: ICubeDesign.Spacing.m.rawValue) {
-                ForEach(Self.saveSlots, id: \.self) { i in
-                  Button(action: { selectedSlot = i }) {
-                    VStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
-                      Image(systemName: selectedSlot == i ? "checkmark.circle.fill" : "square.stack.3d.up")
-                        .font(ICubeDesign.symbolFont(.tile))
-                        .foregroundStyle(selectedSlot == i ? ICubeDesign.color(.accent) : ICubeDesign.color(.textSecondary))
-                      Text(String(format: L("Slot %d"), i))
-                        .icubeText(.tag)
-                        .foregroundStyle(ICubeDesign.color(.textPrimary))
-                    }
-                    .frame(maxWidth: .infinity)
-                  }
-                  .buttonStyle(ICubeTileButtonStyle(minHeight: 120))
-                  .frame(width: 140)
-                  .focused($focused, equals: .slot(i))
-                }
-              }
-              // Room for the focus scale and glow so the first and last card are not clipped.
-              .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
-              .padding(.vertical, ICubeDesign.Spacing.l.rawValue)
-            }
-
-            HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
-              Button(action: { SaveStateService.saveSlot(selectedSlot) }) {
-                saveActionLabel(icon: "square.and.arrow.down", title: String(format: L("Save to Slot %d"), selectedSlot))
-              }
-              .buttonStyle(ICubeRowButtonStyle())
-              .focused($focused, equals: .save)
-
-              Button(action: { TVEmulationBridge.loadState(fromSlot: selectedSlot) }) {
-                saveActionLabel(icon: "square.and.arrow.up", title: String(format: L("Load Slot %d"), selectedSlot))
-              }
-              .buttonStyle(ICubeRowButtonStyle())
-              .focused($focused, equals: .load)
-
-              // D10: tvOS previously had no way to reach the redesigned grid at
-              // all -- showFilmstripSheet was only ever set from the iOS pane.
-              Button(action: { showFilmstripSheet = true }) {
-                saveActionLabel(icon: "square.grid.2x2", title: L("View All States"))
-              }
-              .buttonStyle(ICubeRowButtonStyle())
-              .focused($focused, equals: .filmstrip)
-            }
-          }
-          .padding(.horizontal, ICubeDesign.Spacing.xl.rawValue)
-          .padding(.vertical, ICubeDesign.Spacing.xl.rawValue)
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-          .zIndex(100)
+        tvHeroLayout {
+          TVSaveSlotsPane(game: game, selectedSlot: $selectedSlot, initialFocus: debugSavesFocus,
+                          onViewAll: { showFilmstripSheet = true })
         }
-        #if os(tvOS)
-        .onExitCommand { pane = .main }
-        #endif
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background { tvBackdrop }
+        .environment(\.icubePlatformAccent, platformAccent)
         .sheet(isPresented: $showFilmstripSheet) {
           NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
             .pauseClaim("filmstrip")
@@ -679,14 +559,32 @@ internal struct PauseMenuView: View {
     }
   }
 
-  private func saveActionLabel(icon: String, title: String) -> some View {
-    HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
-      Image(systemName: icon)
-      Text(title).icubeText(.body)
-    }
-    .foregroundStyle(ICubeDesign.color(.textPrimary))
-    .frame(maxWidth: .infinity)
+  private var debugSavesFocus: TVSaveSlotsPane.Focus? {
+    #if DEBUG
+    TVSaveSlotsPane.debugFocus(debugInitialFocus)
+    #else
+    nil
+    #endif
   }
+
+  /// tvOS: the hero column (cover, PAUSED, title) beside `content`, with the pause grid's margins. The grid and
+  /// the Save States pane share it, so switching between them keeps the hero still.
+  private func tvHeroLayout<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    HStack(alignment: .center, spacing: Self.tvHeroGap) {
+      coverColumn.frame(width: Self.tvHeroColumnWidth, alignment: .leading)
+      content()
+    }
+    .padding(.horizontal, Self.tvHorizontalMargin)
+    .padding(.top, Self.tvTopMargin)
+    .padding(.bottom, Self.tvBottomMargin)
+  }
+
+  private static let tvHeroGap: CGFloat = 64
+  private static let tvHeroColumnWidth: CGFloat = 300
+  private static let tvHorizontalMargin: CGFloat = 90
+  /// On top of the tvOS safe area (60 pt top and bottom at 1080p).
+  private static let tvTopMargin: CGFloat = 24
+  private static let tvBottomMargin: CGFloat = 24
 
   // MARK: - Pause menu model
 

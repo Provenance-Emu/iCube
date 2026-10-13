@@ -93,29 +93,47 @@ struct TileFace: View {
   }
 
   #if os(tvOS)
-  /// tvOS face (design spec §3, laid out like iFly's pause tiles): a centred glyph over an uppercase `nav` title,
-  /// with the value as a `tag` underneath. `ICubeTileButtonStyle` draws the surface, hairline and focus.
+  /// tvOS face (design spec §3, laid out like iFly's pause tiles): a centred glyph in a tinted badge over an
+  /// uppercase `nav` title, the value as a `tag` chip in the top-right corner. The tint is the running game's
+  /// platform accent (`icubePlatformAccent`); destructive tiles are red. `ICubeTileButtonStyle` draws the
+  /// surface, hairline and focus.
+  @Environment(\.icubePlatformAccent) private var platformAccent
+
   private var tvContent: some View {
-    // Monochrome glyphs (iFly): colour is kept for destructive tiles and for focus.
-    let tone = isDestructive ? ICubeDesign.color(.destructive) : ICubeDesign.color(.textPrimary)
-    let hasValue = !(badge ?? "").isEmpty
-    return VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
-      if let icon {
-        Image(systemName: icon)
-          .font(ICubeDesign.symbolFont(isProminent ? .tilePrimary : .tile))
-          .foregroundStyle(tone)
+    let tone = isDestructive ? ICubeDesign.color(.destructive) : (platformAccent ?? ICubeDesign.color(.accent))
+    let badgeSize = isProminent ? ICubeDesign.TileBadge.primarySize : ICubeDesign.TileBadge.size
+    return ZStack(alignment: .topTrailing) {
+      VStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+        if let icon {
+          Image(systemName: icon)
+            .font(ICubeDesign.TileBadge.glyphFont(prominent: isProminent))
+            .foregroundStyle(tone)
+            .frame(width: badgeSize, height: badgeSize)
+            .background(
+              RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+                .fill(tone.opacity(ICubeDesign.IconBadge.tintOpacity))
+            )
+        }
+        Text(title)
+          .icubeText(.nav)
+          .foregroundStyle(isDestructive ? tone : ICubeDesign.color(.textPrimary))
+          // One line, shrinking to fit ("CONTINUE ELSEWHERE"): a wrapped title makes its whole grid row taller,
+          // which pushes the last row off a 1080p screen.
+          .lineLimit(1)
+          .multilineTextAlignment(.center)
+          .minimumScaleFactor(0.7)
       }
-      // The value rides inline in accent, "SPEED: OFF" style.
-      (Text(title).foregroundStyle(tone)
-        + Text(hasValue ? ": \(badge ?? "")" : "").foregroundStyle(ICubeDesign.color(.accent)))
-        .icubeText(.nav)
-        // One word never wraps mid-word ("CONTROLLER/S"): it shrinks to fit on one line instead.
-        .lineLimit(title.contains(" ") || hasValue ? 2 : 1)
-        .truncationMode(.middle)
-        .multilineTextAlignment(.center)
-        .minimumScaleFactor(0.7)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      if let badge, !badge.isEmpty {
+        Text(badge)
+          .icubeText(.tag)
+          .lineLimit(1)
+          .foregroundStyle(tone)
+          .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
+          .padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
+          .background(Capsule().fill(tone.opacity(ICubeDesign.IconBadge.tintOpacity)))
+      }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .opacity(isEnabled ? 1 : 0.45)
   }
   #endif

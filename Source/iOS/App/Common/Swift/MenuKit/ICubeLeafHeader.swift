@@ -34,3 +34,24 @@ extension EnvironmentValues {
   /// Set on a pushed sub-leaf by `MenuScreen`: the title of the leaf that pushed it.
   @Entry var icubeLeafParentTitle: String? = nil
 }
+
+/// Spec §3 section header at pause scale: an accent bar and an uppercase `nav` label. The bar takes the running
+/// game's platform accent when the pause menu set one.
+struct ICubeAccentHeader: View {
+  let text: String
+  @Environment(\.icubePlatformAccent) private var platformAccent
+
+  private static let barWidth: CGFloat = 6
+  private static let barHeight: CGFloat = 24
+
+  var body: some View {
+    HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+      Capsule()
+        .fill(platformAccent ?? ICubeDesign.color(.accent))
+        .frame(width: Self.barWidth, height: Self.barHeight)
+      Text(text)
+        .icubeText(.nav)
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
+    }
+  }
+}

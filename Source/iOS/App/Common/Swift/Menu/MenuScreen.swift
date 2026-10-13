@@ -174,6 +174,11 @@ struct MenuScreen: View {
   private static let navTick = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
   #else
   @FocusState private var tvFocusedID: String?
+  #if os(tvOS)
+  /// The last tile that had focus: the help shelf keeps describing it while focus is in an overlay above
+  /// the grid (the Exit/Reset confirm), instead of going blank.
+  @State private var tvShelfID: String?
+  #endif
   #endif
 
   var body: some View {
@@ -725,22 +730,13 @@ struct MenuScreen: View {
   // MARK: tvOS — native focus only
 
   #if os(tvOS)
-  /// A headerless section is the primary row (the pause menu's Resume/Save States/Reset/Quit) and draws taller.
-  private static let tvPrimaryTileHeight: CGFloat = 150
-  /// Short enough that the pause menu's options grid fits on one screen with the help shelf below.
-  private static let tvTileHeight: CGFloat = 118
+  /// A headerless section is the primary row (the pause menu's Resume/Save States/Reset/Exit) and draws taller.
+  /// Badge (`ICubeDesign.TileBadge`) + one title line + tile padding. With the pause menu's margins, four option
+  /// rows (15 tiles), this row and the help shelf fit inside the tvOS safe area at 1080p without scrolling.
+  private static let tvPrimaryTileHeight: CGFloat = 136
+  private static let tvTileHeight: CGFloat = 116
 
-  /// Exit stays in a footer so a tall options grid cannot scroll it off the TV.
-  private var tvPinnedExit: MenuItem? {
-    guard var item = model.item(id: "exit") else { return nil }
-    item.title = L("Exit Game")
-    return item
-  }
-
-  /// First real action. Exit is pinned, so it is not the default.
-  private var tvInitialFocusID: String? {
-    model.focusableIDs.first { $0 != "exit" } ?? model.focusableIDs.first
-  }
+  private var tvInitialFocusID: String? { model.focusableIDs.first }
 
   private var tvTilesBody: some View {
     let columns = style.columns
@@ -749,7 +745,7 @@ struct MenuScreen: View {
         ScrollView {
           VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
             ForEach(model.sections) { section in
-              let items = section.items.filter { $0.id != "exit" }
+              let items = section.items
               if !items.isEmpty {
                 if let header = section.header {
                   tvTileSectionHeader(header)
@@ -767,24 +763,18 @@ struct MenuScreen: View {
               }
             }
           }
-          .padding(ICubeDesign.Spacing.l.rawValue)
+          .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
+          .padding(.vertical, ICubeDesign.Spacing.m.rawValue)
         }
         .frame(maxHeight: .infinity)
         .onAppear {
           if tvFocusedID == nil {
             tvFocusedID = tvInitialFocusID
           }
-          if let id = tvFocusedID, id != "exit" {
+          if let id = tvFocusedID {
             proxy.scrollTo(id, anchor: .top)
           }
         }
-      }
-      if let exit = tvPinnedExit {
-        // Fixed, not min, height: the tile face stretches to whatever the VStack proposes, and a
-        // flexible footer took half the screen from the options grid above it.
-        tvTile(exit, prominent: true)
-          .frame(height: Self.tvPrimaryTileHeight)
-          .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
       }
       InfoShelf(text: tvFocusedItem?.description, value: tvFocusedItem?.currentValueTitle,
                 title: tvFocusedItem?.title, icon: tvFocusedItem?.icon)
@@ -792,22 +782,17 @@ struct MenuScreen: View {
     }
     .frame(maxHeight: .infinity)
     .focusSection()
-  }
-
-  /// Spec §3 section header at pause scale: accent bar plus an uppercase `nav` label.
-  private func tvTileSectionHeader(_ header: String) -> some View {
-    HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
-      Capsule()
-        .fill(ICubeDesign.color(.accent))
-        .frame(width: 6, height: 24)
-      Text(header)
-        .icubeText(.nav)
-        .foregroundStyle(ICubeDesign.color(.textSecondary))
+    .onChange(of: tvFocusedID) { _, id in
+      if let id { tvShelfID = id }
     }
-    .padding(.top, ICubeDesign.Spacing.xs.rawValue)
   }
 
-  private var tvFocusedItem: MenuItem? { tvFocusedID.flatMap { model.item(id: $0) } }
+  private func tvTileSectionHeader(_ header: String) -> some View {
+    ICubeAccentHeader(text: header)
+      .padding(.top, ICubeDesign.Spacing.xs.rawValue)
+  }
+
+  private var tvFocusedItem: MenuItem? { (tvFocusedID ?? tvShelfID ?? tvInitialFocusID).flatMap { model.item(id: $0) } }
 
   /// A tile. All four directions are left to the focus engine; A cycles a `.cycle` tile and a long-press lists it.
   private func tvTile(_ item: MenuItem, prominent: Bool = false) -> some View {

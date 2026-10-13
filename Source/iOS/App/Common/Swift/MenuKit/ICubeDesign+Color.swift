@@ -40,6 +40,18 @@ extension ICubeDesign {
 
   static func color(_ role: ICubeColorRole) -> Color { Color(uiColor: uiColor(role)) }
 
+  /// The running game's platform colour: GameCube indigo, Wii sky blue. Pause tile badges, value chips and
+  /// the hero title use it; focus rings stay on `focusGradient` and destructive items stay red.
+  static func uiPlatformAccent(_ platform: LibraryPlatformCategory) -> UIColor {
+    switch platform {
+    case .gameCube: adaptive(light: hex(0x4B3FB0), dark: hex(0x9F92FF))
+    case .wii, .wiiWare: adaptive(light: hex(0x0A72B5), dark: hex(0x5CC8F5))
+    case .all: uiColor(.accent)
+    }
+  }
+
+  static func platformAccent(_ platform: LibraryPlatformCategory) -> Color { Color(uiColor: uiPlatformAccent(platform)) }
+
   /// The room gradient, top-leading → bottom-trailing.
   static let roomStops: [UIColor] = [
     adaptive(light: hex(0xE6EDFA), dark: hex(0x141F38)),

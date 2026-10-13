@@ -23,34 +23,53 @@ struct InfoShelf: View {
   }
 
   #if os(tvOS)
-  /// tvOS help bar under the pause grid: accent glyph, `body` description, the value as an accent `tag`, on a panel.
+  @Environment(\.icubePlatformAccent) private var platformAccent
+  @Environment(\.icubeShelfHint) private var hint
+
+  /// tvOS help bar under the pause grid (iFly layout): glyph, the item's name over its description, the
+  /// value as a `tag`, and a Play/Pause remote hint on the trailing edge. Fixed height, so it never jumps.
   private var tvBody: some View {
-    HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
+    let tone = platformAccent ?? ICubeDesign.color(.accent)
+    return HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
       Image(systemName: icon ?? "info.circle")
         .font(ICubeDesign.symbolFont(.shelf))
-        .foregroundStyle(ICubeDesign.color(.accent))
+        .foregroundStyle(tone)
         .frame(width: ICubeDesign.Spacing.xl.rawValue)
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
         if let title {
           Text(title)
             .icubeText(.nav)
             .foregroundStyle(ICubeDesign.color(.textSecondary))
+            .lineLimit(1)
         }
         Text(text ?? " ")
           .icubeText(.body)
           .foregroundStyle(ICubeDesign.color(.textPrimary))
           .lineLimit(2)
+          .minimumScaleFactor(0.8)
+          .fixedSize(horizontal: false, vertical: true)
       }
-      Spacer(minLength: 0)
+      Spacer(minLength: ICubeDesign.Spacing.l.rawValue)
       if let value, !value.isEmpty {
         Text(value)
           .icubeText(.tag)
-          .foregroundStyle(ICubeDesign.color(.accent))
+          .foregroundStyle(tone)
+          .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
+          .padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
+          .background(Capsule().fill(tone.opacity(ICubeDesign.IconBadge.tintOpacity)))
+      }
+      if let hint {
+        Label(hint, systemImage: "playpause.fill")
+          .icubeText(.detail)
+          .foregroundStyle(ICubeDesign.color(.textSecondary))
+          .lineLimit(1)
+          .fixedSize()
       }
     }
-    .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
-    .padding(.vertical, ICubeDesign.Spacing.m.rawValue)
-    .frame(maxWidth: .infinity, minHeight: theme.shelfHeight, alignment: .leading)
+    .padding(.horizontal, ICubeDesign.Spacing.xl.rawValue)
+    .padding(.vertical, ICubeDesign.Spacing.l.rawValue)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .frame(height: theme.shelfHeight)
     .icubePanel()
   }
   #endif

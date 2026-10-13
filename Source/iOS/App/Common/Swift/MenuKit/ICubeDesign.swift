@@ -23,7 +23,8 @@ struct ICubeDesign {
   var focusScale: CGFloat = Motion.tileFocusScale
   #if os(tvOS)
   var tileMinHeight: CGFloat = 180
-  var shelfHeight: CGFloat = 80
+  /// The tvOS help shelf holds a `nav` title and two `body` lines inside 24 pt vertical padding.
+  var shelfHeight: CGFloat = 136
   var tileTitleFont: Font = .headline
   #else
   var tileMinHeight: CGFloat = 96
@@ -140,6 +141,10 @@ struct ICubeDesign {
 
 extension EnvironmentValues {
   @Entry var icube: ICubeDesign = .standard
+  /// Set by the pause menu to the running game's `ICubeDesign.platformAccent`; nil means the app accent.
+  @Entry var icubePlatformAccent: Color? = nil
+  /// tvOS help shelf: a remote hint on the trailing edge, e.g. the pause menu's "Resume" on Play/Pause.
+  @Entry var icubeShelfHint: String? = nil
 }
 
 private struct ICubeTextModifier: ViewModifier {
@@ -181,5 +186,17 @@ extension ICubeDesign {
   enum IconBadge {
     static let size: CGFloat = 44
     static let tintOpacity: Double = 0.15
+  }
+
+  /// tvOS pause tiles: the glyph in a larger badge, tinted with the running game's platform accent.
+  enum TileBadge {
+    static let primarySize: CGFloat = 68
+    static let size: CGFloat = 48
+    static let primaryGlyph: CGFloat = 36
+    static let glyph: CGFloat = 28
+
+    static func glyphFont(prominent: Bool) -> Font {
+      .system(size: prominent ? primaryGlyph : glyph, weight: .semibold)
+    }
   }
 }
