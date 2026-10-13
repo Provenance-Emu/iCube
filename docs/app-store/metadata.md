@@ -132,6 +132,22 @@ Welcome to iCube 1.0.
 | Privacy Policy URL | `https://icube-emu.com/privacy/` | Page exists, HTTP 200 live, but the live copy is the OLD policy (mentions Bugsnag). **OWNER:** deploy the website branch `docs/privacy-crash-reports` before submitting. |
 | Help guide cited in review notes | `https://icube-emu.com/guide/wii-system-files/` | Exists only on the unpushed website branch `docs/wii-system-files` (Task 9). **OWNER:** push and deploy before submitting. |
 
+### OWNER: the marketing and support URLs land on sideload-oriented pages
+
+Both URLs are live and would be opened by App Review. Today they show wording that does not fit an App Store listing, and could prompt questions about JIT and about how games are obtained. I did not edit these pages, because sideloading is your other distribution channel and the change is your call. Recommended before submission: an App Store-specific landing page for the Marketing URL (for example `/app-store/`), and a support page or section for the Support URL without JIT or ROM wording. The lines (website repo `~/Workspace/Provenance/iCube/icube-emu.github.io`, file:line):
+
+| File:line | Text |
+|---|---|
+| `src/app/page.tsx:6` | meta description "Download iCube and play classic Nintendo GameCube and Wii games..." |
+| `src/app/page.tsx:39-40` | "brings classic Nintendo GameCube and Wii games to your Apple devices... No JIT required." |
+| `src/app/page.tsx:17-18, 43-55` | AltStore and SideStore badges ("Download from") |
+| `src/app/page.tsx:85` | stat tile `['No JIT', 'Required']` |
+| `src/app/page.tsx:99` and `src/components/DownloadSection.tsx:16-43` | "iCube isn't on the App Store. You can sideload it...", SideStore and Sideloadly links, "to enable JIT on iOS/iPadOS" (becomes false once listed) |
+| `src/app/support/page.tsx:7` | meta description "...FAQs, JIT setup, ..." |
+| `src/app/support/page.tsx:68` | "drag and drop ROM/ISO files" |
+| `src/components/Footer.tsx:36` | "TestFlight Beta" link |
+| `src/app/guide/importing/page.tsx:46-47` | "enable the web server" (fixed on the website branch; the server starts by itself) |
+
 ## Homebrew test title (for the review notes)
 
 **OWNER: pick a freely distributable homebrew title + public URL.** Put it into `review-notes.md` where marked.
