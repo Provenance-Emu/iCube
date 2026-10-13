@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "EmuEventVC.h"
+#import "ICubeLog.h"
 #import <UIKit/UIKit.h>
 
 NSNotificationName const DOLRequestPauseMenuNotification = @"DOLRequestPauseMenu";
@@ -21,7 +22,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 // Forward press events to the next responder (the GCEventViewController) so it can handle them.
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-    NSLog(@"[INPUT] EmuFocusTrapView pressesBegan forwarding %lu presses", (unsigned long)presses.count);
+    DOLDebugLog(@"[INPUT] EmuFocusTrapView pressesBegan forwarding %lu presses", (unsigned long)presses.count);
   }
   [self.nextResponder pressesBegan:presses withEvent:event];
 }
@@ -46,7 +47,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 - (BOOL)canBecomeFirstResponder { return YES; }
 - (void)viewDidLoad {
   [super viewDidLoad];
-  NSLog(@"[INPUT] EmuEventVC viewDidLoad (unconditional)");
+  DOLDebugLog(@"[INPUT] EmuEventVC viewDidLoad (unconditional)");
   // Long-press on tvOS Menu button to exit back to library
   UILongPressGestureRecognizer* lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleMenuLongPress:)];
   lp.minimumPressDuration = DOLMenuLongPressDuration;
@@ -66,7 +67,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
     [_focusTrap.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor]
   ]];
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-    NSLog(@"[INPUT] EmuEventVC viewDidLoad – focus trap installed");
+    DOLDebugLog(@"[INPUT] EmuEventVC viewDidLoad – focus trap installed");
   }
   // Observe pause overlay visibility to relinquish focus
   __weak typeof(self) weakSelf = self;
@@ -84,13 +85,13 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 }
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
-  NSLog(@"[INPUT] EmuEventVC viewDidAppear (unconditional)");
+  DOLDebugLog(@"[INPUT] EmuEventVC viewDidAppear (unconditional)");
   [self becomeFirstResponder];
 #if TARGET_OS_TV
   [self setNeedsFocusUpdate];
   [self updateFocusIfNeeded];
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-    NSLog(@"[INPUT] EmuEventVC viewDidAppear – isFirstResponder=%d", self.isFirstResponder);
+    DOLDebugLog(@"[INPUT] EmuEventVC viewDidAppear – isFirstResponder=%d", self.isFirstResponder);
   }
 #endif
 }
@@ -98,7 +99,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 - (void)handleMenuLongPress:(UILongPressGestureRecognizer*)gr {
   if (gr.state == UIGestureRecognizerStateBegan) {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-      NSLog(@"[INPUT] Menu long-press began – posting DOLEmulationRequestExitToLibrary");
+      DOLDebugLog(@"[INPUT] Menu long-press began – posting DOLEmulationRequestExitToLibrary");
     }
     dispatch_async(dispatch_get_main_queue(), ^{
       [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLEmulationRequestExitToLibrary" object:nil];
@@ -119,7 +120,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     for (UIPress* p in presses) {
-      NSLog(@"[INPUT] pressesBegan type=%ld force=%.2f timestamp=%.3f", (long)p.type, p.force, p.timestamp);
+      DOLDebugLog(@"[INPUT] pressesBegan type=%ld force=%.2f timestamp=%.3f", (long)p.type, p.force, p.timestamp);
     }
   }
 #if TARGET_OS_TV
@@ -136,12 +137,12 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
     if (_menuLongPressTimer != nil)
       continue;
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-      NSLog(@"[INPUT] Starting Menu long-press timer (%.1fs)", DOLMenuLongPressDuration);
+      DOLDebugLog(@"[INPUT] Starting Menu long-press timer (%.1fs)", DOLMenuLongPressDuration);
     }
     __weak typeof(self) weakSelf = self;
     _menuLongPressTimer = [NSTimer scheduledTimerWithTimeInterval:DOLMenuLongPressDuration repeats:NO block:^(__unused NSTimer * _Nonnull t) {
       if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-        NSLog(@"[INPUT] Menu long-press timer fired – posting DOLEmulationRequestExitToLibrary");
+        DOLDebugLog(@"[INPUT] Menu long-press timer fired – posting DOLEmulationRequestExitToLibrary");
       }
       dispatch_async(dispatch_get_main_queue(), ^{
         // Clearing the handle is what tells pressesEnded this was a LONG press,
@@ -163,7 +164,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 - (void)pressesChanged:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     for (UIPress* p in presses) {
-      NSLog(@"[INPUT] pressesChanged type=%ld force=%.2f timestamp=%.3f", (long)p.type, p.force, p.timestamp);
+      DOLDebugLog(@"[INPUT] pressesChanged type=%ld force=%.2f timestamp=%.3f", (long)p.type, p.force, p.timestamp);
     }
   }
 #if TARGET_OS_TV
@@ -176,7 +177,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     for (UIPress* p in presses) {
-      NSLog(@"[INPUT] pressesEnded type=%ld force=%.2f timestamp=%.3f", (long)p.type, p.force, p.timestamp);
+      DOLDebugLog(@"[INPUT] pressesEnded type=%ld force=%.2f timestamp=%.3f", (long)p.type, p.force, p.timestamp);
     }
   }
 #if TARGET_OS_TV
@@ -189,7 +190,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
     if (_menuLongPressTimer == nil)
       continue;  // the long press already fired (exit posted); swallow the release
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-      NSLog(@"[INPUT] Menu released before %.1fs – requesting pause menu", DOLMenuLongPressDuration);
+      DOLDebugLog(@"[INPUT] Menu released before %.1fs – requesting pause menu", DOLMenuLongPressDuration);
     }
     [_menuLongPressTimer invalidate];
     _menuLongPressTimer = nil;
@@ -218,7 +219,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 - (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
   if (_menuLongPressTimer) {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-      NSLog(@"[INPUT] Cancelling Menu long-press timer (press cancelled)");
+      DOLDebugLog(@"[INPUT] Cancelling Menu long-press timer (press cancelled)");
     }
     [_menuLongPressTimer invalidate];
     _menuLongPressTimer = nil;
@@ -253,7 +254,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 
 - (void)handleExitKey:(UIKeyCommand *)command {
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-    NSLog(@"[INPUT] Consumed Exit/Back key command (Escape)");
+    DOLDebugLog(@"[INPUT] Consumed Exit/Back key command (Escape)");
   }
 }
 #endif
