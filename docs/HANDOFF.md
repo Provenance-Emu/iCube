@@ -201,8 +201,9 @@ Owner's goals: replace the placeholders and old images, show off the missing fea
 - **Simulator** for UI stills: library, settings, pause grid, quick menu, controller hub, cheats, shaders picker, sync, and light/dark variants. These are reproducible and scriptable, and `tvos_screens.sh` already covers tvOS. It needs iPhone and iPad equivalents. The simulator cannot run gameplay worth showing.
 - **Owner's devices** for everything that needs real emulation: gameplay video, upscaling before/after, the performance HUD, graphics enhancements and shaders in-game, and controller variations (touch layouts/skins, MFi/DualSense, Wii pointer). The devices hold real games. Capture with ReplayKit through the app's own Record tile (`RecordingManager`, lands in `<user>/Recordings/`) or with QuickTime over USB. The debug API `screenshot` route works too (see the phone debug recipe memory).
 
-**Real artwork in simulator stills.** The `-SCREENSHOT_MODE 1` catalogue (`TVLibraryBridge.mm`, `DOLScreenshotDemoGames`) uses invented titles and IDs **on purpose**: its comment says no real game, box art or trademark is referenced. Switching to real titles is an owner decision, not a cleanup. If yes:
-- Swap in real game IDs. `TVGameItem.mm` already fetches covers from GameTDB by game ID, so check whether demo items go through that path or need cached covers bundled.
+**Real artwork in simulator stills (owner's direction, 2026-10-12).** The `-SCREENSHOT_MODE 1` catalogue (`TVLibraryBridge.mm`, `DOLScreenshotDemoGames`) currently uses invented titles and IDs, and its comment says so on purpose. The owner wants it to use **known real game IDs instead, and let the normal metadata/artwork path fill in the real title, cover and details**; the IDs are faked, the artwork is not.
+- Check that demo `TVGameItem`s (`initWithDemoTitle:`) go through the same GameTDB cover/metadata fetch as imported games (`TVGameItem.mm`). If they short-circuit it, route them through it, and keep a bundled-cover fallback so offline or CI captures stay reproducible.
+- Update the catalogue comment; the "no real game" rule no longer holds.
 - Keep the store-listing set (App Store/TestFlight) separate from the website set. Apple review is far stricter about third-party game IP in emulator screenshots than a self-hosted site is.
 
 **Suggested shot list:**
