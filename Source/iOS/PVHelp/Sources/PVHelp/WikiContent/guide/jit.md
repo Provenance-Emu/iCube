@@ -76,8 +76,8 @@ next time you open a game with a debugger attached.
 
 ## App Store note
 
-TestFlight and App Store builds of iCube can never use JIT — Apple does not
-grant the `get-task-allow` entitlement to App Store builds, and TXM is
-hard-disabled for them regardless. If you want JIT, install iCube via
-sideloading (StikDebug, Xcode, or a similar tool) rather than through
-TestFlight or the App Store.
+An unmodified App Store or TestFlight install of iCube can't use JIT, because
+Apple does not grant the `get-task-allow` entitlement to those builds. A
+re-signed install (sideloading with StikDebug, LiveContainer or a similar
+tool, or Xcode) carries it and can use JIT. If you want JIT, install iCube
+that way rather than through TestFlight or the App Store.

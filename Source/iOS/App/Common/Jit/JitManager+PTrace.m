@@ -5,15 +5,15 @@
 
 #import "JitManager+PTrace.h"
 
+#import <dlfcn.h>
 #import <spawn.h>
 
 #import "FoundationStringUtil.h"
 #import "JitManager+Debugger.h"
 
-#if !TARGET_OS_MACCATALYST
-void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
-CFTypeRef SecTaskCopyValueForEntitlement(void* task, CFStringRef entitlement, CFErrorRef* _Nullable error);
-#endif
+// SecTask is private API: resolved at runtime, never linked, so it leaves no undefined symbol in the binary.
+typedef void* _Nullable (*DOLSecTaskCreateFromSelfFn)(CFAllocatorRef _Nullable allocator);
+typedef CFTypeRef _Nullable (*DOLSecTaskCopyValueForEntitlementFn)(void* task, CFStringRef entitlement, CFErrorRef* _Nullable error);
 
 #define PT_TRACE_ME 0
 #define PT_DETACH 11
@@ -28,16 +28,26 @@ const char* _Nonnull DOLJitPTraceChildProcessArgument = "ptraceChild";
 - (bool)checkCanAcquireJitByPTrace {
   // If we're out of the sandbox, then we can run ptrace.
   // We can check this by the presence of the "platform-application" private entitlement.
-  void* task = SecTaskCreateFromSelf(NULL);
-  CFTypeRef entitlementValue = SecTaskCopyValueForEntitlement(task, CFSTR("platform-application"), NULL);
+  DOLSecTaskCreateFromSelfFn createFromSelf = (DOLSecTaskCreateFromSelfFn)dlsym(RTLD_DEFAULT, "SecTaskCreateFromSelf");
+  DOLSecTaskCopyValueForEntitlementFn copyValue = (DOLSecTaskCopyValueForEntitlementFn)dlsym(RTLD_DEFAULT, "SecTaskCopyValueForEntitlement");
   
-  if (entitlementValue == NULL) {
+  if (createFromSelf == NULL || copyValue == NULL) {
     return false;
   }
   
+  void* task = createFromSelf(NULL);
+  
+  if (task == NULL) {
+    return false;
+  }
+  
+  CFTypeRef entitlementValue = copyValue(task, CFSTR("platform-application"), NULL);
   bool result = entitlementValue == kCFBooleanTrue;
   
-  CFRelease(entitlementValue);
+  if (entitlementValue != NULL) {
+    CFRelease(entitlementValue);
+  }
+  
   CFRelease(task);
   
   return result;

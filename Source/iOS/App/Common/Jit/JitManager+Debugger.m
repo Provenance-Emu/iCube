@@ -30,10 +30,11 @@ extern int csops(pid_t pid, unsigned int ops, void* useraddr, size_t usersize);
 // True when the process carries the get-task-allow entitlement, i.e. a debugger
 // (Xcode, AltStore/SideStore, StikDebug) can attach and JIT can ever be enabled.
 // This is the universal JIT precondition on iOS: it is present on every
-// debuggable distribution (sideload, jailbreak, TrollStore, dev, and the App
-// Store scheme when launched from Xcode) and stripped from App Store / TestFlight
-// builds, which are jitless. Used to drive jitSupported at runtime so JIT UI
-// shows exactly when JIT is achievable, regardless of build configuration.
+// debuggable distribution (sideload, jailbreak, TrollStore, dev, and any build
+// re-signed with it, the App Store IPA included) and stripped from unmodified
+// App Store / TestFlight installs, which are jitless. Used to drive jitSupported
+// at runtime so JIT UI shows exactly when JIT is achievable, regardless of build
+// configuration.
 - (bool)checkIfProcessIsJitCapable {
   int flags = 0;
   if (csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags)) != 0) {

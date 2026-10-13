@@ -74,11 +74,10 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 }
 
 - (void)recheckIfJitIsAcquired {
-  // Builds that cannot support JIT at all (App Store / jitless) must never acquire
-  // it, even with a debugger attached — Xcode sets CS_DEBUGGED on any attached
-  // process, and a dev-signed App Store binary carries get-task-allow, either of
-  // which would otherwise flip acquiredJit true and drive the boot path into the
-  // JIT/LuckTXM handshake. Hard-stop here keeps such builds jitless and crash-free.
+  // Without get-task-allow (an unmodified App Store / TestFlight install) JIT can never be
+  // acquired, even with a debugger attached: Xcode sets CS_DEBUGGED on any attached process,
+  // which would otherwise flip acquiredJit true and drive the boot path into the JIT/LuckTXM
+  // handshake. Hard-stop here keeps such installs jitless and crash-free.
   if (!self.jitSupported) {
     self.acquiredJit = false;
     return;
