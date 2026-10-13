@@ -253,7 +253,7 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
 
     sources.append(source)
-    Self.log.debug("RemoteSourcesCoordinator: total sources now: \(sources.count)")
+    Self.log.debug("RemoteSourcesCoordinator: total sources now: \(self.sources.count)")
     start(source: source)
     Self.log.debug("RemoteSourcesCoordinator: source \(source.id, privacy: .private) added and started")
     // Load cached listing immediately
@@ -402,7 +402,7 @@ class RemoteSourcesCoordinator: ObservableObject {
 
   /// Keep cached directory listings and force fresh scans from all sources (in-place)
   private func refreshAllSources() {
-    Self.log.debug("REFRESH: In-place refresh for all \(sources.count) sources")
+    Self.log.debug("REFRESH: In-place refresh for all \(self.sources.count) sources")
     for source in sources {
       if let w = source as? WebDAVSource {
         w.requestRefresh()
@@ -432,7 +432,7 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
 
     Self.log.debug("PUSH: pushCacheUpdate() called")
-    Self.log.debug("PUSH: lastItemsBySource has \(lastItemsBySource.count) sources")
+    Self.log.debug("PUSH: lastItemsBySource has \(self.lastItemsBySource.count) sources")
     for (sourceId, items) in lastItemsBySource {
       Self.log.debug("PUSH:   source \(sourceId, privacy: .private): \(items.count) items")
     }
@@ -445,7 +445,7 @@ class RemoteSourcesCoordinator: ObservableObject {
         // Fallback: append raw URLs
         for item in items {
           let s = item.url.absoluteString
-          if s.isEmpty { Self.log.error("PUSH: empty URL for item=\(item, privacy: .private)")
+          if s.isEmpty { Self.log.error("PUSH: empty URL for item=\(item.displayName, privacy: .private)")
             continue
           }
           allUrls.append(s)
@@ -462,7 +462,7 @@ class RemoteSourcesCoordinator: ObservableObject {
       if let webdav = source as? WebDAVSource {
         for item in items {
           let converted = webdav.httpURL(for: item.url)
-          if converted.isEmpty { Self.log.error("PUSH: empty converted URL for item=\(item, privacy: .private)")
+          if converted.isEmpty { Self.log.error("PUSH: empty converted URL for item=\(item.displayName, privacy: .private)")
             continue
           }
           Self.log.debug("PUSH: URL transform (WebDAV -> HTTP): \(item.url.absoluteString, privacy: .private) -> \(converted, privacy: .private)")
@@ -471,7 +471,7 @@ class RemoteSourcesCoordinator: ObservableObject {
       } else {
         for item in items {
           let s = item.url.absoluteString
-          if s.isEmpty { Self.log.error("PUSH: empty URL for item=\(item, privacy: .private)")
+          if s.isEmpty { Self.log.error("PUSH: empty URL for item=\(item.displayName, privacy: .private)")
             continue
           }
           allUrls.append(s)
@@ -545,6 +545,7 @@ class RemoteSourcesCoordinator: ObservableObject {
 @MainActor
 /// Centralizes library updates across local and remote (WebDAV) sources and publishes the current game list.
 final class LibraryCoordinator: ObservableObject {
+  private static let log = ICubeLog.logger("LibraryCoordinator")
   static let shared = LibraryCoordinator()
 
   /// Current list of games after merging local cache and remote entries
