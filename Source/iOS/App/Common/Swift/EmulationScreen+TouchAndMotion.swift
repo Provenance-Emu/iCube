@@ -5,6 +5,8 @@ import SwiftUI
 
 #if os(iOS)
 
+private let log = ICubeLog.logger("Touch")
+
 extension EmulationScreen {
   func toggleTopBar() {
     withAnimation(TopBarStyle.transition) {
@@ -33,7 +35,7 @@ extension EmulationScreen {
 
   /// Setup enhanced motion controls optimized for touchscreen usage
   func setupEnhancedMotionControls() {
-    NSLog("[MOTION] Enhanced motion controls enabled for Wii game - roll/pitch → IR cursor, improved shake detection")
+    log.debug("[MOTION] Enhanced motion controls enabled for Wii game - roll/pitch → IR cursor, improved shake detection")
 
     // CRITICAL: Restart motion system to pick up the newly enabled settings
     // Small delay to ensure UserDefaults are synchronized
@@ -42,7 +44,7 @@ extension EmulationScreen {
         name: Notification.Name("DOLMotionSettingsChanged"),
         object: nil
       )
-      NSLog("[MOTION] Triggered motion system restart after enabling enhanced controls")
+      log.debug("[MOTION] Triggered motion system restart after enabling enhanced controls")
     }
   }
 
@@ -54,7 +56,7 @@ extension EmulationScreen {
   }
 
   func restartMotionSystemForSettingsChange() {
-    NSLog("[MOTION] Motion settings changed during gameplay - restarting motion system")
+    log.debug("[MOTION] Motion settings changed during gameplay - restarting motion system")
 
     // If we're using TCDeviceMotion, restart it to pick up new settings
     if isTouchControlsActive {
@@ -64,7 +66,7 @@ extension EmulationScreen {
       // Small delay to ensure clean restart
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
         TCDeviceMotion.shared.setMotionEnabled(currentMotionEnabled)
-        NSLog("[MOTION] TCDeviceMotion restarted with new settings - cursor reset to center")
+        log.debug("[MOTION] TCDeviceMotion restarted with new settings - cursor reset to center")
       }
     }
 
@@ -266,9 +268,9 @@ extension EmulationScreen {
           v.alpha = max(0.2, CGFloat(DOLConfigBridge.mainTouchPadOpacity()))
           host.addSubview(v)
           applyPort(ControllerManager.shared.touchscreenControllerId(isWii: false), to: v)
-          NSLog("[TOUCH] Added GC pad with alpha=%.2f", v.alpha)
+          log.debug("[TOUCH] Added GC pad with alpha=\(v.alpha)")
         } else {
-          NSLog("[TOUCH] Failed to load TCGameCubePad nib")
+          log.error("[TOUCH] Failed to load TCGameCubePad nib")
         }
       }
       return host
@@ -360,7 +362,7 @@ extension EmulationScreen {
           uiView.addSubview(v)
           applyPort(ControllerManager.shared.touchscreenControllerId(isWii: false), to: v)
         } else {
-          NSLog("[TOUCH] Failed to load TCGameCubePad nib (update)")
+          log.error("[TOUCH] Failed to load TCGameCubePad nib (update)")
         }
       } else {
         for sub in uiView.subviews {
@@ -389,7 +391,7 @@ extension EmulationScreen {
       let hasExternal = !GCController.controllers().isEmpty
       if hasExternal && !forceVisible { return false }
       let show = ControllerManager.shared.shouldShowGCPad(wiiSystem: isWii, wiiPadAttached: true, gcPadAttached: true)
-      if TCManagerInterface.inputDebugEnabled { NSLog("%@", "[TOUCH] GameCube pad decision: isWiiState=\(isWii) shouldShow=\(show)") }
+      if TCManagerInterface.inputDebugEnabled { log.debug("[TOUCH] GameCube pad decision: isWiiState=\(isWii) shouldShow=\(show)") }
       return show
     }
 
@@ -397,7 +399,7 @@ extension EmulationScreen {
       let hasExternal = !GCController.controllers().isEmpty
       if hasExternal && !forceVisible { return false }
       let show = ControllerManager.shared.shouldShowWiiOverlay(wiiSystem: isWii, wiiPadAttached: true, gcPadAttached: true)
-      if TCManagerInterface.inputDebugEnabled { NSLog("%@", "[TOUCH] Wii pad decision: isWiiState=\(isWii) shouldShow=\(show)") }
+      if TCManagerInterface.inputDebugEnabled { log.debug("[TOUCH] Wii pad decision: isWiiState=\(isWii) shouldShow=\(show)") }
       return show
     }
 
@@ -412,13 +414,13 @@ extension EmulationScreen {
       let view: TCWiiPad
       if classic {
         view = TCClassicWiiPad()
-        if TCManagerInterface.inputDebugEnabled { NSLog("[TOUCH] Using TCClassicWiiPad") }
+        if TCManagerInterface.inputDebugEnabled { log.debug("[TOUCH] Using TCClassicWiiPad") }
       } else if sideways {
         view = TCSidewaysWiiPad()
-        if TCManagerInterface.inputDebugEnabled { NSLog("[TOUCH] Using TCSidewaysWiiPad") }
+        if TCManagerInterface.inputDebugEnabled { log.debug("[TOUCH] Using TCSidewaysWiiPad") }
       } else {
         view = TCWiiPad()
-        if TCManagerInterface.inputDebugEnabled { NSLog("[TOUCH] Using TCWiiPad") }
+        if TCManagerInterface.inputDebugEnabled { log.debug("[TOUCH] Using TCWiiPad") }
       }
       view.port = ControllerManager.shared.touchscreenControllerId(isWii: true)
       let modeRaw = DOLConfigBridge.mainTouchPadIRMode()
@@ -467,13 +469,13 @@ extension EmulationScreen {
           if let _ = b.path(forResource: n, ofType: "nib") {
             let nib = UINib(nibName: n, bundle: b)
             let objects = nib.instantiate(withOwner: nil, options: nil)
-            if let v = objects.first as? UIView { NSLog("[TOUCH] Loaded nib %@ from %@", n, String(describing: b.bundlePath))
+            if let v = objects.first as? UIView { log.debug("[TOUCH] Loaded nib \(n) from \(b.bundlePath, privacy: .private)")
               return v
             }
           }
         }
       }
-      NSLog("[TOUCH] Could not find nib for %@ in candidate bundles", name)
+      log.error("[TOUCH] Could not find nib for \(name) in candidate bundles")
       return nil
     }
 
@@ -490,7 +492,7 @@ extension EmulationScreen {
       else if let d = view as? TCDirectionalPad { d.port = port }
       for sub in view.subviews { applyPortRecursively(port, to: sub) }
       if TCManagerInterface.inputDebugEnabled {
-        NSLog("[TOUCH] Applied port=%ld recursively to subtree: %@", port, String(describing: type(of: view)))
+        log.debug("[TOUCH] Applied port=\(port) recursively to subtree: \(String(describing: type(of: view)))")
       }
     }
   }
