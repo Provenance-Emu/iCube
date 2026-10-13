@@ -6,10 +6,10 @@ import SwiftUI
 /// Settings → Privacy. One switch today: crash and performance reports to Sentry (on by default, App Store
 /// privacy label: "Diagnostics, not linked to you"). Pure: the value in, the change out.
 enum ConfigPrivacyModelBuilder {
-  /// Only the App Store build strips game ids and file paths from reports, so only it may promise that.
+  /// Only the App Store build strips game ids and file paths from reports, so only it may say reports are designed to leave them out.
   static var crashReportsFooter: String {
     #if APPSTORE
-    L("Sends crash and performance reports to the iCube developers. Reports never include your games, file names or personal data.")
+    L("Sends crash and performance reports to the iCube developers. Reports are designed to leave out your games, file names and personal data.")
     #else
     L("Sends crash and performance reports to the iCube developers. Reports can include the ID of the game you were playing.")
     #endif
