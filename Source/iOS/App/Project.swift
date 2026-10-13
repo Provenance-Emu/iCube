@@ -321,9 +321,9 @@ let iCube = Target.target(
         "Common/UI/Localization/en.lproj/**",
         "Common/UI/Localization/ja.lproj/**",
         "Project/Assets/DefaultPreferences.plist",
+        "Project/Assets/Logger.ini",
         // Required-reason API declarations for the app itself (extensions ship their own).
         "DolphiniOS/PrivacyInfo.xcprivacy",
-        "Project/Assets/Logger.ini",
         "Project/Assets/cacert.pem",
         // StikDebug JIT broker script handed off at runtime via the stikdebug:// URL scheme
         // (StikDebugLauncher.swift). Bundled flat so Bundle.main.url(forResource:"icube") resolves.
