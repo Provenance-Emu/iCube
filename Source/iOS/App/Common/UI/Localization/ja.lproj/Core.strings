@@ -5236,3 +5236,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Wii keys received. Now upload nand.bin." = "Wii keys received. Now upload nand.bin.";
 "This NAND backup has no keys. Upload keys.bin from the same backup first, then upload nand.bin again." = "This NAND backup has no keys. Upload keys.bin from the same backup first, then upload nand.bin again.";
 "A NAND import is already running." = "A NAND import is already running.";
+"How to Install Wii System Files" = "Wiiシステムファイルのインストール方法";

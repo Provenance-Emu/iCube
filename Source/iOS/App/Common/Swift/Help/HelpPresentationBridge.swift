@@ -21,6 +21,11 @@ final class HelpPresentationBridge: NSObject {
     presentWikiPage(path: WikiConstants.Paths.biosRequirements, title: L("BIOS Requirements"))
   }
 
+  /// Presents the "Install Your Own Wii System Files" guide. Safe to call from any thread.
+  @objc static func presentWiiSystemFilesGuide() {
+    presentWikiPage(path: WikiConstants.Paths.wiiSystemFiles, title: L("Install Wii System Files"))
+  }
+
   @objc static func presentWikiPage(path: String, title: String) {
     DispatchQueue.main.async {
       guard let presenter = topViewController() else { return }

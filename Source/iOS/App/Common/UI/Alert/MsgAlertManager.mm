@@ -21,6 +21,33 @@
 
 @end
 
+// iCube: "Could not launch IOS/the Wii Menu/title ... because it is missing from the NAND." (ES.cpp). The text
+// reaches this handler already translated, so it is matched against the localized templates rather than the
+// English words: every fixed fragment of the first line (the text around its {0:016x}) must be present.
+static bool IsMissingFromNANDAlert(NSString* text) {
+  if (text == nil) { return false; }
+
+  NSArray<NSString*>* templates = @[
+    DOLCoreLocalizedString(@"Could not launch IOS {0:016x} because it is missing from the NAND.\nThe emulated software will likely hang now."),
+    DOLCoreLocalizedString(@"Could not launch the Wii Menu because it is missing from the NAND.\nThe emulated software will likely hang now."),
+    DOLCoreLocalizedString(@"Could not launch title {0:016x} because it is missing from the NAND.\nThe emulated software will likely hang now."),
+  ];
+
+  for (NSString* messageTemplate in templates) {
+    NSString* firstLine = [messageTemplate componentsSeparatedByString:@"\n"].firstObject;
+    BOOL matches = firstLine.length > 0;
+    for (NSString* fragment in [firstLine componentsSeparatedByString:@"{0:016x}"]) {
+      if (fragment.length > 0 && [text rangeOfString:fragment].location == NSNotFound) {
+        matches = NO;
+        break;
+      }
+    }
+    if (matches) { return true; }
+  }
+
+  return false;
+}
+
 static bool MsgAlert(const char* caption, const char* text, bool question, Common::MsgType style) {
   return [[MsgAlertManager shared] handleAlertWithCaption:caption text:text question:question style:style];
 }
@@ -74,6 +101,10 @@ static bool MsgAlert(const char* caption, const char* text, bool question, Commo
     foundationText = DOLCoreLocalizedString(@"The GameCube BIOS (IPL) isn't installed. It's required to boot the GameCube menu. You can play games without it by turning off \"Load GameCube Main Menu\" in Settings → Config → GameCube. Learn More explains how to install a GameCube BIOS dump.");
   }
   
+  // iCube: the same for the "missing from the NAND" panic, which otherwise leaves the user at a dead end:
+  // add a button to the bundled guide for installing their own Wii system files. The message is untouched.
+  const bool isMissingNANDAlert = !question && IsMissingFromNANDAlert(foundationText);
+
   UIWindowScene* mainScene = [MainSceneCoordinator shared].mainScene;
 
   if (mainScene == nil) {
@@ -130,6 +161,15 @@ static bool MsgAlert(const char* caption, const char* text, bool question, Commo
           confirmed = true;
           finish();
           [DOLHelpBridge presentBIOSGuide];
+        }]];
+      }
+
+      if (isMissingNANDAlert) {
+        [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"How to Install Wii System Files") style:UIAlertActionStyleDefault
+          handler:^(UIAlertAction* action) {
+          confirmed = true;
+          finish();
+          [DOLHelpBridge presentWiiSystemFilesGuide];
         }]];
       }
 
