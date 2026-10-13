@@ -11,7 +11,21 @@ final class WikiHelpViewModel: ObservableObject {
   @Published var isLoadingTree = false
   @Published var isLoadingPage = false
 
-  private let provider = WikiContentProvider()
+  private let provider = WikiContentProvider(hiddenPaths: WikiHelpViewModel.hiddenPaths())
+
+  /// Pages Help must not list. The App Store build lists the JIT guide only on a re-signed install where JIT is
+  /// detected; the filter runs after parsing, so neither the bundled nor the remote `SUMMARY.md` can bring it back.
+  nonisolated static func hiddenPaths(isAppStore: Bool = isAppStoreBuild, jitSupported: Bool = JitManager.shared().jitSupported) -> Set<String> {
+    isAppStore && !jitSupported ? [WikiConstants.Paths.jitGuide] : []
+  }
+
+  private nonisolated static var isAppStoreBuild: Bool {
+    #if APPSTORE
+    true
+    #else
+    false
+    #endif
+  }
 
   func loadNavigationTree() async {
     guard navigationTree == nil else { return }

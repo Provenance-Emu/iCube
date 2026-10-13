@@ -84,6 +84,29 @@ public struct WikiNavigationTree: Codable, Sendable {
         }
     }
 
+    /// Recursively removes every item whose path is in `hiddenPaths` (compared case-insensitively), together with its
+    /// children, then drops sections left empty. Pure, so the same call covers a tree parsed from the bundled or the
+    /// remote `SUMMARY.md` and one decoded from cache: the host app passes the pages it must not show (the JIT guide
+    /// while JIT is not available) and a remote edit of `SUMMARY.md` cannot reintroduce them.
+    public func removing(paths hiddenPaths: Set<String>) -> WikiNavigationTree {
+        guard !hiddenPaths.isEmpty else { return self }
+        let hidden = Set(hiddenPaths.map { $0.lowercased() })
+        func strip(_ items: [WikiNavItem]) -> [WikiNavItem] {
+            items.compactMap { item in
+                guard !hidden.contains(item.path.lowercased()) else { return nil }
+                var kept = item
+                kept.children = strip(item.children)
+                return kept
+            }
+        }
+        let kept = sections.compactMap { section -> WikiSection? in
+            var s = section
+            s.items = strip(s.items)
+            return s.items.isEmpty && !s.title.isEmpty ? nil : s
+        }
+        return WikiNavigationTree(sections: kept)
+    }
+
     /// Re-applies the App Store content filter to an already-decoded tree.
     /// Call this on trees loaded from cache to catch any newly-blocked paths.
     public func appStoreFiltered() -> WikiNavigationTree {

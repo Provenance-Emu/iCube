@@ -84,6 +84,43 @@ final class WikiContentProviderTests: XCTestCase {
         XCTAssertFalse(tree.sections.isEmpty, "bundled SUMMARY.md should always parse into at least one section")
     }
 
+    // MARK: - Hidden paths
+
+    private func allPaths(_ items: [WikiNavItem]) -> [String] {
+        items.flatMap { [$0.path] + allPaths($0.children) }
+    }
+
+    private func paths(of tree: WikiNavigationTree) -> [String] {
+        tree.sections.flatMap { allPaths($0.items) }
+    }
+
+    func testHiddenPaths_bundledSummaryOmitsThem() async {
+        let provider = WikiContentProvider(session: MockWikiLoader.failure(), cache: cache, hiddenPaths: [WikiConstants.Paths.jitGuide])
+        let tree = await provider.loadNavigationTree()
+        XCTAssertFalse(tree.sections.isEmpty)
+        XCTAssertFalse(paths(of: tree).contains(WikiConstants.Paths.jitGuide))
+
+        let unfiltered = await WikiContentProvider(session: MockWikiLoader.failure(), cache: cache).loadNavigationTree()
+        XCTAssertTrue(paths(of: unfiltered).contains(WikiConstants.Paths.jitGuide), "the bundled SUMMARY.md lists the JIT guide; only the filter hides it")
+    }
+
+    func testHiddenPaths_remoteSummaryCannotReintroduceThem() async {
+        let remote = "## Guides\n\n* [JIT](guide/jit.md)\n* [BIOS](help/gamecube-bios.md)\n"
+        let provider = WikiContentProvider(session: MockWikiLoader.success(remote), cache: cache, hiddenPaths: [WikiConstants.Paths.jitGuide])
+        let tree = await provider.loadNavigationTree()
+        XCTAssertEqual(paths(of: tree), ["help/gamecube-bios.md"])
+    }
+
+    func testHiddenPaths_cachedTreeIsFilteredOnRead() async {
+        cache.cacheNavigationTree(WikiNavigationTree(sections: [WikiSection(title: "Guides", items: [
+            WikiNavItem(title: "JIT", path: "guide/jit.md"),
+            WikiNavItem(title: "BIOS", path: "help/gamecube-bios.md"),
+        ])]))
+        let provider = WikiContentProvider(session: MockWikiLoader.failure(), cache: cache, hiddenPaths: [WikiConstants.Paths.jitGuide])
+        let tree = await provider.loadNavigationTree()
+        XCTAssertEqual(paths(of: tree), ["help/gamecube-bios.md"])
+    }
+
     // MARK: - Cache hit within TTL -> no fetch
 
     func testLoadPage_cacheHitWithinTTL_doesNotHitNetwork() async {

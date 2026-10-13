@@ -17,17 +17,22 @@ extension URLSession: WikiURLLoading {}
 public final class WikiContentProvider: Sendable {
     public let cache: WikiContentCache
     private let session: WikiURLLoading
+    /// Wiki paths the navigation tree must not list (see ``WikiNavigationTree/removing(paths:)``).
+    private let hiddenPaths: Set<String>
 
-    public init() {
+    /// - Parameter hiddenPaths: pages to leave out of the navigation tree, whichever source it came from.
+    public init(hiddenPaths: Set<String> = []) {
         self.cache = WikiContentCache()
         self.session = URLSession.shared
+        self.hiddenPaths = hiddenPaths
     }
 
     /// Test-only seam: inject a fake cache/transport. Not `public` — only reachable from this
     /// package's own test target via `@testable import`.
-    init(session: WikiURLLoading, cache: WikiContentCache) {
+    init(session: WikiURLLoading, cache: WikiContentCache, hiddenPaths: Set<String> = []) {
         self.session = session
         self.cache = cache
+        self.hiddenPaths = hiddenPaths
     }
 
     // MARK: - Navigation Tree
@@ -36,7 +41,7 @@ public final class WikiContentProvider: Sendable {
     /// Returns cached tree immediately if available; refreshes in background if TTL expired.
     public func loadNavigationTree() async -> WikiNavigationTree {
         // Try cache first — re-apply filter in case blocklist has changed since caching
-        if let cached = cache.cachedNavigationTree()?.appStoreFiltered() {
+        if let cached = cache.cachedNavigationTree()?.appStoreFiltered().removing(paths: hiddenPaths) {
             if !cache.isNavigationCacheValid() {
                 // Refresh in background
                 Task { await refreshNavigationTree() }
@@ -46,7 +51,7 @@ public final class WikiContentProvider: Sendable {
 
         // Try network (404s until icube-wiki exists; falls through below)
         if let tree = await refreshNavigationTree() {
-            return tree
+            return tree.removing(paths: hiddenPaths)
         }
 
         // Fall back to the bundled SUMMARY.md shipped with the app
@@ -69,7 +74,7 @@ public final class WikiContentProvider: Sendable {
         guard let content = Self.bundledContent(forPath: WikiConstants.summaryFileName) else {
             return WikiNavigationTree(sections: [])
         }
-        return WikiNavigationTree.parse(markdown: content)
+        return WikiNavigationTree.parse(markdown: content).removing(paths: hiddenPaths)
     }
 
     // MARK: - Page Content

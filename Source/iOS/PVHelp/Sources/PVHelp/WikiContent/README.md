@@ -14,8 +14,6 @@ is public, and falls back to the pages it shipped with until then.
 Use the list on the left (or, in the app, the Help section's page list) to jump
 to a topic. The most-asked-about ones:
 
-* **JIT & Performance (iOS 26)** — what JIT does, why iOS 26 needs a debugger
-  to turn it on, and what to expect without it.
 * **Wi-Fi / Web Import** — get GameCube and Wii files onto your device
   without a cable.
 * **Dumping GameCube & Wii Discs** — make a disc image from a disc you own with
@@ -28,6 +26,13 @@ to a topic. The most-asked-about ones:
   and where it goes.
 * **Save State Compatibility** — why a save state can go stale across
   updates, and how to avoid losing progress.
+
+## Re-signed installs
+
+If you run a copy of iCube that was re-signed with debugging entitlements
+rather than the App Store build, the **JIT & Performance (iOS 26)** page
+explains what JIT does and how to switch it on. It is listed in Help only
+when iCube detects that JIT can work.
 
 ## Getting help beyond this wiki
 

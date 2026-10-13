@@ -179,4 +179,38 @@ final class WikiNavigationTreeTests: XCTestCase {
         XCTAssertEqual(filtered.sections.count, 1)
         XCTAssertEqual(filtered.sections[0].items.map(\.title), ["BIOS"])
     }
+
+    // MARK: - removing(paths:)
+
+    private var guideTree: WikiNavigationTree {
+        WikiNavigationTree(sections: [
+            WikiSection(title: "Guides", items: [
+                WikiNavItem(title: "JIT", path: "guide/jit.md", children: [WikiNavItem(title: "JIT Child", path: "guide/jit-child.md")]),
+                WikiNavItem(title: "Discs", path: "guide/dumping-discs.md", children: [WikiNavItem(title: "Nested JIT", path: "guide/JIT.md")]),
+            ]),
+            WikiSection(title: "Only JIT", items: [WikiNavItem(title: "JIT again", path: "guide/jit.md")]),
+            WikiSection(title: "Help", items: [WikiNavItem(title: "BIOS", path: "help/gamecube-bios.md")]),
+        ])
+    }
+
+    func testRemovingPathsDropsTheItemWhereverItSitsAndEmptiedSections() {
+        let tree = guideTree.removing(paths: ["guide/jit.md"])
+
+        XCTAssertEqual(tree.sections.map(\.title), ["Guides", "Help"])
+        let guides = tree.sections[0].items
+        XCTAssertEqual(guides.map(\.title), ["Discs"])
+        // Paths compare case-insensitively, so the nested `guide/JIT.md` goes too; unrelated siblings stay.
+        XCTAssertTrue(guides[0].children.isEmpty)
+    }
+
+    func testRemovingNoPathsLeavesTheTreeAlone() {
+        let tree = guideTree.removing(paths: [])
+        XCTAssertEqual(tree.sections.map(\.title), ["Guides", "Only JIT", "Help"])
+        XCTAssertEqual(tree.sections[0].items.count, 2)
+    }
+
+    func testRemovingPathsKeepsRootSectionWithoutTitle() {
+        let tree = WikiNavigationTree(sections: [WikiSection(id: "root", title: "", items: [WikiNavItem(title: "JIT", path: "guide/jit.md")])])
+        XCTAssertEqual(tree.removing(paths: ["guide/jit.md"]).sections.count, 1)
+    }
 }
