@@ -1,6 +1,6 @@
 # App Store Connect: App Review Information notes (iCube 1.0)
 
-Paste the text between the rules into App Review Information > Notes. The field limit is 4000 characters; the text is 3935 including the placeholder (a real title line is about the same length; keep the total under 4000).
+Paste the text between the rules into App Review Information > Notes. The field limit is 4000 characters; the text is 3985 including the placeholder (a real title line is about the same length; keep the total under 4000).
 
 OWNER items before pasting:
 - Fill the test title line (name, licence, public download URL). Check on a real device that it boots from a clean install and needs no Wii system files.
@@ -28,9 +28,9 @@ Apple TV:
 2. On a computer on the same Wi-Fi, open that address in a browser and drop the file onto the page.
 
 NO JIT, NO DOWNLOADED CODE
-- An App Store install runs Dolphin's interpreter CPU core only, with a software vertex loader. The app requests no JIT or dynamic-code-signing entitlement and generates no executable code at runtime.
+- An App Store install runs Dolphin's interpreter CPU core only, with a precompiled (non-JIT) vertex loader. The app requests no JIT or dynamic-code-signing entitlement and generates no executable code at runtime.
 - The open source Dolphin code includes a JIT recompiler. It is inactive and its settings are hidden unless the device's owner re-signs the app with debugging entitlements, which an App Store install cannot do.
-- The app downloads no executable code or game software. There is no debug server in this build.
+- The app downloads no executable code or game software. The developer debug server is disabled in this build and cannot be turned on.
 
 NETWORK USE
 - Web UI and WebDAV server, for importing files from a computer on the same network. It starts when the app is in the foreground (the Local Network prompt appears at launch) and stops while a game runs, except during an upload. It has no password, so anyone on the same network can reach it while it runs. It is not reachable from the internet. Nearby Devices uses Bonjour on the same network to hand a game off to another iCube.

@@ -32,7 +32,7 @@ emulator,retro,classic,controller,gamepad,touch,save state,shader,filter,homebre
 - Comma-separated with no spaces after commas; the one internal space is inside the phrase `save state`.
 - No trademarks of others (no GameCube, Wii, Nintendo, Dolphin, or any other console or emulator name). Apple indexes the name and subtitle too, so those words are not repeated here.
 
-## Description (1764 of 4000)
+## Description (1777 of 4000)
 
 Use this text when iCloud Sync does **not** ship in 1.0. If Task 14 ships iCloud Sync, use the variant in the next section.
 
@@ -59,7 +59,7 @@ YOUR LIBRARY, YOUR WAY
 • Available in English and Japanese
 
 PRIVACY
-iCube has no accounts, no ads and no tracking. Anonymous crash and performance reports help us fix bugs and can be turned off in Settings > Privacy. Reports never include your games or file names.
+iCube has no accounts, no ads and no tracking. Anonymous crash and performance reports help us fix bugs and can be turned off in Settings > Privacy. Reports are designed to leave out your games and file names.
 
 OPEN SOURCE
 iCube is free software under the GNU General Public License. Source code: github.com/Provenance-Emu/iCube
@@ -68,13 +68,14 @@ iCube is free software under the GNU General Public License. Source code: github
 ```
 
 Notes on the description:
+- **OWNER: "Available in English and Japanese" is generous.** `ja.lproj/Core.strings` has 4,496 entries and about 2,350 of them (roughly half) are still the English text (key equals value), so Japanese users see a mix. Either drop the line from both descriptions, or have the Japanese strings translated first.
 - GameCube and Wii appear only descriptively ("plays GameCube and Wii games that you own"), as the spec (WS3) allows. They never appear in the name, subtitle, keywords or promotional text.
 - The trademark disclaimer is copied verbatim from the app: `Source/iOS/App/Common/UI/Localization/en.lproj/Core.strings` line 5115 (the string shown in About, `AboutView.swift` lines 144-148, where it is split across two lines).
 - It says "iCube does not include any games or system software" in the Bring Your Own Games section.
 - It does not mention JIT, the Wii System Update, StikDebug or sideloading. It does not give shader counts.
 - Every feature line was checked against code (see the task report). The Files-app import, Web UI / WebDAV import, Nearby Devices hand-off, cheats, skins (iOS only), screen filters and pause menu all ship in the App Store build.
 
-### Variant with iCloud Sync (1855 of 4000)
+### Variant with iCloud Sync (1868 of 4000)
 
 Only if **OWNER** Task 14 ships iCloud Sync. It adds one line after the hand-off line; everything else is identical.
 
@@ -102,7 +103,7 @@ YOUR LIBRARY, YOUR WAY
 • Available in English and Japanese
 
 PRIVACY
-iCube has no accounts, no ads and no tracking. Anonymous crash and performance reports help us fix bugs and can be turned off in Settings > Privacy. Reports never include your games or file names.
+iCube has no accounts, no ads and no tracking. Anonymous crash and performance reports help us fix bugs and can be turned off in Settings > Privacy. Reports are designed to leave out your games and file names.
 
 OPEN SOURCE
 iCube is free software under the GNU General Public License. Source code: github.com/Provenance-Emu/iCube
