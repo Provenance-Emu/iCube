@@ -7,7 +7,7 @@ iCube does not provide, link to, or endorse any source of pre-dumped titles or b
 ## Which one do you want?
 
 * **One title, ready to play: a `.wad` file.** iCube lists `.wad` files with your other games. Launching one installs it to iCube's emulated Wii NAND temporarily and boots it, so there is nothing else to set up.
-* **Everything on the console: a BootMii NAND backup.** This brings over your Wii saves, installed channels, and system files in one go. The file is about 553 MB, and importing it is iPhone and iPad only (not Apple TV), so use it when you want your saves and not just one game.
+* **Everything on the console: a BootMii NAND backup.** This brings over your Wii saves, installed channels, and system files in one go. The file is about 553 MB. Use it when you want your saves or the system files, and not just one game.
 
 ## Dump a single title to a `.wad`
 
@@ -29,6 +29,8 @@ Then get it onto iCube like any other game, with **Wi-Fi / Web Import** (under H
 ## Back up the whole console with BootMii
 
 BootMii writes `nand.bin` (the console's storage) and `keys.bin` (1,024 bytes of keys needed to decrypt it) to the root of the SD card. Depending on how the backup was made, the keys may already be at the end of `nand.bin`. The Wii Hacks Guide has the steps for making the backup: [BootMii Backup](https://wii.hacks.guide/bootmii) and [NAND backup](https://wii.hacks.guide/nand-backup).
+
+For the full walkthrough, including Apple TV, see **Install Your Own Wii System Files**.
 
 ### Check the size, then append the keys only if they're missing
 
@@ -54,7 +56,7 @@ copy /b nand.bin + keys.bin nand_with_keys.bin
 ### Import it
 
 1. Put the 553,649,152-byte file (`nand.bin`, or `nand_with_keys.bin` if you appended the keys) somewhere the Files app can see it, such as iCloud Drive or **On My iPhone**. iCube opens it with the standard Files picker.
-2. In iCube's library, open the **Import** menu and choose **Import BootMii NAND Backup…**. This menu item is on iPhone and iPad only, not Apple TV.
+2. In iCube's library, open the **Import** menu and choose **Import BootMii NAND Backup…**.
 3. Pick the `.bin` file and wait for **Importing NAND backup** to finish.
 
 The import writes the backup's files into iCube's emulated Wii NAND, which by default is the `Wii` folder in the User Folder, replacing any file at the same path. If you've already played Wii games in iCube and want to keep that progress, copy your User Folder somewhere safe first. You can see where it is in **Settings → Debug → Environment → User Folder**.

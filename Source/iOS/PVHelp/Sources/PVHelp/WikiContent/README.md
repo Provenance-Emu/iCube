@@ -22,6 +22,8 @@ to a topic. The most-asked-about ones:
   a Wii and CleanRip, then shrink it to RVZ.
 * **WiiWare, Virtual Console & Channels** — dump a title to a `.wad`, or import
   a BootMii NAND backup.
+* **Install Your Own Wii System Files** — import the System Menu and IOS from a
+  BootMii backup of your own Wii, on iPhone, iPad and Apple TV.
 * **GameCube BIOS (IPL)** — what the GameCube BIOS is, whether you need it,
   and where it goes.
 * **Save State Compatibility** — why a save state can go stale across
