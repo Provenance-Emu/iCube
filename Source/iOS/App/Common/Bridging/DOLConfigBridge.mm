@@ -726,6 +726,9 @@ static bool HasCurrentRunLayer()
 {
   // The CoreAudio editor used to keep its chain in UserDefaults and replay it from the emulation
   // screen. Both backends now read Config, so move a stored chain over exactly once.
+  // Config::SetBase dereferences the Base layer, which only exists after UICommon::Init().
+  if (!Config::GetLayer(Config::LayerType::Base))
+    return;
   NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
   NSArray<NSString*>* keys = @[
     @"ca_fx_delay_enabled",

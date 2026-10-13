@@ -24,7 +24,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // settings persist between runs, + a coalesced refresh notification so open settings UI re-reads
     // live Config after resets/external changes).
     DOLConfigBridge.startConfigAutoSyncBridge()
-    DOLConfigBridge.migrateLegacyAudioEffectDefaults()
 
     // Single app-lifetime listener that resolves the resume/boot-into-state decision for
     // every emulation boot (see SaveStateService.resumeOrBootIntoPendingState()). Installed

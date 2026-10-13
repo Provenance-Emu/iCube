@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "DolphinCoreService.h"
+#import "DOLConfigBridge.h"
 
 #import "Core/Config/UISettings.h"
 #import "Core/Config/MainSettings.h"
@@ -186,6 +187,10 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // seeds below, so a key it deletes is seeded again where the launch has a value for it.
   const bool fastmemAvailable = [FastmemManager shared].fastmemAvailable;
   [ICubeSettingsRepair runAtLaunchWithFastmemAvailable:fastmemAvailable];
+
+  // Move the old CoreAudio effect chain from UserDefaults into Config. Needs the Base layer, which
+  // UICommon::Init() creates above; run from AppDelegate it crashed every launch (ICUBE-FS).
+  [DOLConfigBridge migrateLegacyAudioEffectDefaults];
 
   [DolphinCoreService seedLaunchDefaultsWithFastmemAvailable:fastmemAvailable];
 
