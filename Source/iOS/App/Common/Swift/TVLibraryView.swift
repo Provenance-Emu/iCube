@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import GameController
+import PVHelp
 import PVWebServer
 import UniformTypeIdentifiers
 #if os(iOS)
@@ -149,9 +150,11 @@ final class TVLibraryViewModel: ObservableObject {
     TVLibraryBridge.loadGameCubeMainMenu()
   }
 
+#if !APPSTORE
   func performOnlineSystemUpdate() {
     TVLibraryBridge.performOnlineSystemUpdate()
   }
+#endif
 
   private func isLocal(_ item: TVGameItem) -> Bool {
     if let scheme = URL(string: item.filePath)?.scheme?.lowercased() { return scheme == "file" }
@@ -491,7 +494,11 @@ struct TVLibraryView: View {
   @State private var showSettings = false
   @State private var didReloadOnce = false
   @State private var navigateTo: TVGameItem?
+#if !APPSTORE
   @State private var showUpdateRegions = false
+#else
+  @State private var showWiiSystemFilesHelp = false
+#endif
   @State private var showDSUSession = false
   /// Presents the About iCube sheet (tapped via the toolbar Dolphin logo on iOS).
   @State private var showAbout = false
@@ -1622,6 +1629,7 @@ struct TVLibraryView: View {
       Button(action: { libraryMenuAction { model.loadGameCubeMainMenu() } }) {
         Label(L("GameCube: Load Main Menu"), systemImage: "gamecontroller")
       }
+#if !APPSTORE
 #if os(tvOS)
       Button(action: { libraryMenuAction { showUpdateRegions = true } }) {
         Label(L("Wii: Online System Update"), systemImage: "arrow.triangle.2.circlepath")
@@ -1629,6 +1637,12 @@ struct TVLibraryView: View {
 #else
       Button(action: { model.performOnlineSystemUpdate() }) {
         Label(L("Wii: Online System Update"), systemImage: "arrow.triangle.2.circlepath")
+      }
+#endif
+#else
+      // The App Store build never downloads Nintendo firmware; point at installing your own files.
+      Button(action: { libraryMenuAction { showWiiSystemFilesHelp = true } }) {
+        Label(L("Install Wii System Files…"), systemImage: "questionmark.circle")
       }
 #endif
 #if os(iOS)
@@ -1957,6 +1971,7 @@ struct TVLibraryView: View {
       }
     }
 #endif
+#if !APPSTORE
     .confirmationDialog(L("Select Region"), isPresented: $showUpdateRegions, titleVisibility: .visible) {
       Button(L("Europe")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "EUR") }
       Button(L("Japan")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "JPN") }
@@ -1964,6 +1979,21 @@ struct TVLibraryView: View {
       Button(L("United States")) { TVLibraryBridge.performOnlineSystemUpdate(withRegion: "USA") }
       Button(L("Cancel"), role: .cancel) {}
     }
+#else
+    .sheet(isPresented: $showWiiSystemFilesHelp) {
+      NavigationStack {
+        WikiPageView(path: WikiConstants.Paths.wiiSystemFiles, title: L("Install Wii System Files"))
+#if os(iOS)
+          .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+              Button(L("Close")) { showWiiSystemFilesHelp = false }
+            }
+          }
+#endif
+      }
+      .claimsController()
+    }
+#endif
     .confirmationDialog(L("A game is already running."), isPresented: $model.showReplaceAlert, titleVisibility: .visible) {
       Button(L("Replace Game"), role: .destructive) {
         TVEmulationBridge.stop()

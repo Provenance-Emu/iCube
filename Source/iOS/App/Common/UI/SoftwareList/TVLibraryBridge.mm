@@ -178,7 +178,10 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
   [[EmulationCoordinator shared] runEmulationWithBootParameter:p];
 }
 
+// The App Store build never downloads Nintendo firmware, so these stay empty there and no
+// other caller (a deep link, say) can reach the downloader.
 + (void)presentUpdateControllerWithRegion:(NSString*)regionCode {
+#if !APPSTORE
   UIViewController* root = UIApplication.sharedApplication.keyWindow.rootViewController;
   if (!root) return;
 
@@ -209,14 +212,19 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
     }
   } @catch (...) {
   }
+#endif
 }
 
 + (void)performOnlineSystemUpdate {
+#if !APPSTORE
   [self presentUpdateControllerWithRegion:nil];
+#endif
 }
 
 + (void)performOnlineSystemUpdateWithRegion:(NSString*)regionCode {
+#if !APPSTORE
   [self presentUpdateControllerWithRegion:regionCode];
+#endif
 }
 
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch {

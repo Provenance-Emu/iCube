@@ -56,5 +56,8 @@ public enum WikiConstants {
         public static let biosRequirements = "help/gamecube-bios.md"
         /// Save-state version-mismatch explainer. Referenced from the save state browser.
         public static let saveStateCompatibility = "help/save-state-compatibility.md"
+        /// Installing your own Wii system files (NAND / System Menu). Referenced from the library
+        /// System menu in the App Store build, which has no online system update.
+        public static let wiiSystemFiles = "guide/wii-system-files.md"
     }
 }
