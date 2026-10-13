@@ -4,6 +4,7 @@
 #import "GameFileCacheManager.h"
 
 #import "FoundationStringUtil.h"
+#import "ICubeLog.h"
 #import "GameFilePtrWrapper.h"
 #import "TVGameItem.h"
 #import "Swift.h"
@@ -61,7 +62,7 @@ static void PurgeAppleDoubleSidecars(NSString* softwareFolder) {
       removed++;
   }
   if (removed > 0)
-    NSLog(@"[GameFileCache] Removed %lu AppleDouble/.DS_Store sidecar(s) from the Software folder", (unsigned long)removed);
+    DOLDebugLog(@"[GameFileCache] Removed %lu AppleDouble/.DS_Store sidecar(s) from the Software folder", (unsigned long)removed);
 }
 
 /// Extract orphaned archives in the Software folder before scanning so web uploads and
@@ -157,15 +158,13 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   for (const std::shared_ptr<const UICommon::GameFile>& game : next) {
     // Protect against null GameFile shared_ptr in cache
     if (!game) {
-      printf("DEBUG CACHE MGR: SKIPPED null GameFile shared_ptr in cache\n");
+      DOLDebugLog(@"CACHE MGR: SKIPPED null GameFile shared_ptr in cache");
       continue;
     }
 
     // Additional safety check - ensure GameFile is valid
     if (!game->IsValid()) {
-#ifdef DEBUG
-      printf("DEBUG CACHE MGR: SKIPPED invalid GameFile in cache: %s\n", game->GetFilePath().c_str());
-#endif
+      DOLDebugLog(@"CACHE MGR: SKIPPED invalid GameFile in cache: %s", game->GetFilePath().c_str());
       continue;
     }
 
@@ -182,9 +181,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   }
   NSArray<TVGameItem*>* nextItems = [items copy];
 
-#ifdef DEBUG
-  NSLog(@"GameFileCacheManager: published %lu games (%lu reused)", (unsigned long)nextItems.count, (unsigned long)reused);
-#endif
+  DOLDebugLog(@"GameFileCacheManager: published %lu games (%lu reused)", (unsigned long)nextItems.count, (unsigned long)reused);
 
   os_unfair_lock_lock(&self->_publishedLock);
   self->_published.swap(next);
@@ -224,7 +221,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
     std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
-    printf("DEBUG CACHE MGR: rescan() - only using %lu local paths (not preserving old remote URLs)\n", (unsigned long)all.size());
+    DOLDebugLog(@"CACHE MGR: rescan() - only using %lu local paths (not preserving old remote URLs)", (unsigned long)all.size());
     bool updated = self->_cache->Update(all);
     if (updated) {
       self->_cache->Save();
@@ -243,7 +240,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
     std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
 
-    printf("DEBUG CACHE MGR: rescanAndFetchMetadata() - only using %lu local paths (not preserving old remote URLs)\n", (unsigned long)all.size());
+    DOLDebugLog(@"CACHE MGR: rescanAndFetchMetadata() - only using %lu local paths (not preserving old remote URLs)", (unsigned long)all.size());
 
     bool updated = false;
     @try {
@@ -298,7 +295,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     self->_cache->ForEach([remoteUrls](const std::shared_ptr<const UICommon::GameFile>& game) {
       std::string path = game->GetFilePath();
       if (path.empty()) {
-        printf("DEBUG CACHE MGR: SKIPPED empty path from cached GameFile\n");
+        DOLDebugLog(@"CACHE MGR: SKIPPED empty path from cached GameFile");
         return;
       }
       NSString* pathStr = [NSString stringWithUTF8String:path.c_str()];
@@ -317,12 +314,12 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
       if (remoteUrl.length > 0) {
         all.push_back(FoundationToCppString(remoteUrl));
       } else {
-        printf("DEBUG CACHE MGR: SKIPPED empty remote URL from cache\n");
+        DOLDebugLog(@"CACHE MGR: SKIPPED empty remote URL from cache");
       }
     }
 
-    printf("DEBUG CACHE MGR: rescanLocalAndFetchMetadata() - using %lu local paths + %lu preserved remote URLs\n",
-           (unsigned long)(all.size() - remoteUrls.count), (unsigned long)remoteUrls.count);
+    DOLDebugLog(@"CACHE MGR: rescanLocalAndFetchMetadata() - using %lu local paths + %lu preserved remote URLs",
+                (unsigned long)(all.size() - remoteUrls.count), (unsigned long)remoteUrls.count);
 
     bool updated = false;
     @try {
@@ -381,9 +378,9 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 }
 
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch {
-  printf("DEBUG CACHE MGR: updateWithExtraPaths called with %lu extra paths\n", (unsigned long)extraPaths.count);
+  DOLDebugLog(@"CACHE MGR: updateWithExtraPaths called with %lu extra paths", (unsigned long)extraPaths.count);
   for (NSUInteger i = 0; i < extraPaths.count; i++) {
-    printf("DEBUG CACHE MGR:   input[%lu]: %s\n", (unsigned long)i, [extraPaths[i] UTF8String]);
+    DOLDebugLog(@"CACHE MGR:   input[%lu]: %s", (unsigned long)i, [extraPaths[i] UTF8String]);
   }
 
   // All of this runs on the cache queue: it mutates _cache, and the cache queue is its only writer.
@@ -394,18 +391,18 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     // Expand only local folders via FindAllGamePaths
     std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
     std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
-    printf("DEBUG CACHE MGR: Found %lu local paths\n", (unsigned long)all.size());
+    DOLDebugLog(@"CACHE MGR: Found %lu local paths", (unsigned long)all.size());
 
     // Filter and append only accessible remote URLs
-    printf("DEBUG CACHE MGR: Processing %lu extra paths\n", (unsigned long)extraPaths.count);
+    DOLDebugLog(@"CACHE MGR: Processing %lu extra paths", (unsigned long)extraPaths.count);
     NSUInteger acceptedCount = 0, rejectedCount = 0;
     for (NSString* s in extraPaths) {
       if (s.length == 0) {
-        printf("DEBUG CACHE MGR: SKIPPED empty string\n");
+        DOLDebugLog(@"CACHE MGR: SKIPPED empty string");
         continue;
       }
 
-      printf("DEBUG CACHE MGR: Processing path: %s\n", [s UTF8String]);
+      DOLDebugLog(@"CACHE MGR: Processing path: %s", [s UTF8String]);
 
       // Check if it's a remote URL
       if ([s hasPrefix:@"http://"] || [s hasPrefix:@"https://"] ||
@@ -414,32 +411,32 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
         // Only add if we can create a basic URL object
         NSURL* url = [NSURL URLWithString:s];
         if (url && url.host) {
-          printf("DEBUG CACHE MGR: ACCEPTED remote URL: %s\n", [s UTF8String]);
+          DOLDebugLog(@"CACHE MGR: ACCEPTED remote URL: %s", [s UTF8String]);
           all.push_back(FoundationToCppString(s));
           acceptedCount++;
         } else {
-          printf("DEBUG CACHE MGR: REJECTED remote URL (invalid): %s\n", [s UTF8String]);
+          DOLDebugLog(@"CACHE MGR: REJECTED remote URL (invalid): %s", [s UTF8String]);
           rejectedCount++;
         }
       } else {
-        printf("DEBUG CACHE MGR: ACCEPTED local path: %s\n", [s UTF8String]);
+        DOLDebugLog(@"CACHE MGR: ACCEPTED local path: %s", [s UTF8String]);
         // Local files - add as-is
         all.push_back(FoundationToCppString(s));
         acceptedCount++;
       }
     }
-    printf("DEBUG CACHE MGR: *** FILTER RESULTS: %lu accepted, %lu rejected ***\n", (unsigned long)acceptedCount, (unsigned long)rejectedCount);
+    DOLDebugLog(@"CACHE MGR: *** FILTER RESULTS: %lu accepted, %lu rejected ***", (unsigned long)acceptedCount, (unsigned long)rejectedCount);
 
     bool updated = false;
     @try {
-      printf("DEBUG CACHE MGR: *** CALLING C++ GameFileCache::Update with %lu TOTAL paths ***\n", (unsigned long)all.size());
+      DOLDebugLog(@"CACHE MGR: *** CALLING C++ GameFileCache::Update with %lu TOTAL paths ***", (unsigned long)all.size());
       for (size_t i = 0; i < all.size(); ++i) {
-        printf("DEBUG CACHE MGR:   final[%zu]: %s\n", i, all[i].c_str());
+        DOLDebugLog(@"CACHE MGR:   final[%zu]: %s", i, all[i].c_str());
       }
 
-      printf("DEBUG CACHE MGR: About to call self->_cache->Update(all)\n");
+      DOLDebugLog(@"CACHE MGR: About to call self->_cache->Update(all)");
       updated = self->_cache->Update(all);
-      printf("DEBUG CACHE MGR: C++ Update returned %s\n", updated ? "true" : "false");
+      DOLDebugLog(@"CACHE MGR: C++ Update returned %s", updated ? "true" : "false");
 
       if (fetch) {
         try {
@@ -452,7 +449,7 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
       }
       if (updated) {
         self->_cache->Save();
-        NSLog(@"GameFileCacheManager: Cache saved");
+        DOLDebugLog(@"GameFileCacheManager: Cache saved");
       }
     } @catch (NSException* exception) {
       NSLog(@"GameFileCache update failed: %@", exception);
