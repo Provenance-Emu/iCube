@@ -118,11 +118,13 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 // press events independently of the responder chain, so skipping super does not
 // disable it.
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+#ifdef DEBUG
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     for (UIPress* p in presses) {
       DOLDebugLog(@"[INPUT] pressesBegan type=%ld force=%.2f timestamp=%.3f", (long)p.type, p.force, p.timestamp);
     }
   }
+#endif
 #if TARGET_OS_TV
   BOOL handledMenu = NO;
   // Only intercept Menu while the GAME owns the screen. With the pause overlay
@@ -162,11 +164,13 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 }
 
 - (void)pressesChanged:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+#ifdef DEBUG
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     for (UIPress* p in presses) {
       DOLDebugLog(@"[INPUT] pressesChanged type=%ld force=%.2f timestamp=%.3f", (long)p.type, p.force, p.timestamp);
     }
   }
+#endif
 #if TARGET_OS_TV
   return;
 #else
@@ -175,11 +179,13 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 }
 
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+#ifdef DEBUG
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     for (UIPress* p in presses) {
       DOLDebugLog(@"[INPUT] pressesEnded type=%ld force=%.2f timestamp=%.3f", (long)p.type, p.force, p.timestamp);
     }
   }
+#endif
 #if TARGET_OS_TV
   BOOL handledMenu = NO;
   const BOOL gameOwnsScreen = (_focusTrap != nil && !_focusTrap.hidden);
