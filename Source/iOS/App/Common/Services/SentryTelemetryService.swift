@@ -173,8 +173,10 @@ enum SentryTelemetryService {
       options.swiftAsyncStacktraces = true
       // Close must not block the main thread on a flush: the consent gate below drops anything queued.
       options.shutdownTimeInterval = 0
-      // Everything the SDK sends, including envelopes captured earlier and crash reports from a previous
-      // run, passes these two callbacks, so opting out stops it even before the SDK is closed.
+      // Events, spans and crash reports from a previous run pass these callbacks, so opting out stops them even
+      // before the SDK is closed. Envelopes already written to disk do not pass beforeSend again; deleting the
+      // SDK's disk state at opt-out (applyConsent) covers those. beforeSendTransaction only exists under
+      // SDK_V10 in 9.30.1, so transactions are scrubbed in beforeSend above; revisit if the SDK moves to v10.
       options.beforeSend = { event in
         guard TelemetryConsent.isEnabled() else { return nil }
         #if APPSTORE
@@ -197,6 +199,8 @@ enum SentryTelemetryService {
       options.beforeSendSpan = { span in
         guard TelemetryConsent.isEnabled() else { return nil }
         #if APPSTORE
+        // Backstop for the file I/O switches below: a file span names the file and carries its full path.
+        if span.operation.hasPrefix("file.") { return nil }
         for tag in SentryEventScrubber.strippedTags { span.removeTag(key: tag) }
         #endif
         return span
@@ -204,6 +208,8 @@ enum SentryTelemetryService {
       #if APPSTORE
       options.enableCaptureFailedRequests = false // failed request URLs can carry user source hosts
       options.enableFileManagerSwizzling = false // file I/O spans carry container paths
+      options.enableFileIOTracing = false // `file.read`/`file.write` spans put the file name in the description and the full path in `file.path`
+      options.enableDataSwizzling = false // Data(contentsOf:) / write(to:) are traced as file I/O spans too
       // WebDAV sources use URLSession: breadcrumb `url` and `http.client` span names carry the host and ROM file names.
       options.enableNetworkBreadcrumbs = false
       options.enableNetworkTracking = false

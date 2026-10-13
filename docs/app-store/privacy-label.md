@@ -31,7 +31,7 @@ Every other data type: **Data Not Collected**, subject to the RetroAchievements 
 From `SentryTelemetryService.swift` and `SentryEventScrubber.swift`, under `#if APPSTORE`. This is scrubbing in code, not a guarantee, so the wording everywhere is "designed to exclude":
 - Game identifiers: the `game_id` and `game_title` tags are stripped from every event, transaction and span, and `game_id` is not set on the boot scope.
 - File paths: the scrubber replaces paths that start with the app's data folders (`/var/mobile`, `/private/var/mobile`, `/Users`, optionally behind `file://`) with `<path>`, running to the first known game or data file extension, in event, exception and breadcrumb messages; breadcrumb `url` data is removed. A path outside those roots, or text that merely contains a game name, would not be caught.
-- Network breadcrumbs, network tracking, failed-request capture and file-manager spans are all off (they could carry WebDAV host names and file names).
+- Network breadcrumbs, network tracking, failed-request capture, file-manager swizzling, file I/O tracing and data swizzling are all off (they could carry WebDAV host names, file names and container paths). `beforeSendSpan` also drops any span whose operation starts with `file.` as a backstop.
 - No accounts and no email, name or user object is ever set. `sendDefaultPii` is not enabled.
 - The reporting switch is Settings > Privacy > Share Crash Reports, on by default. Turning it off persists the choice, closes the SDK and deletes the SDK's on-disk queue (`applyConsent`, `removeSDKDiskState`), so nothing already queued is sent later.
 
@@ -67,6 +67,6 @@ The developer receives none of this: the user signs in to a third-party service 
 4. **Purpose.** Declared as App Functionality (minimizing crashes and improving performance). If you also use the data for product analytics, Apple would require adding Analytics as a purpose.
 5. **Third-party SDK manifest.** Run Xcode > Organizer > Generate Privacy Report on the archive and compare it with this page; Sentry ships its own privacy manifest, which the report merges.
 6. **Keep three things in step.** If the declared types change, change them together in `PrivacyInfo.xcprivacy`, here, and `src/app/privacy/page.tsx` on the website.
-7. **In-app footer wording.** The Settings > Privacy footer in the App Store build says "Reports never include your games, file names or personal data" (`ConfigPrivacyModelBuilder.swift`). The website and these notes say "designed to exclude". Consider softening the footer the same way. I did not change it.
+7. **In-app footer wording.** The Settings > Privacy footer in the App Store build says reports are "designed to leave out your games, file names and personal data" (`ConfigPrivacyModelBuilder.swift`), the same "designed to exclude" framing as the website and these notes.
 8. **Hosting logs.** Confirm that Cloudflare and GitHub Pages analytics or log export are not enabled for `provenance-emu.com` and `icube-emu.com` before relying on "no request logs of our own".
 9. **Privacy contact.** The policy contact is `provenance.emu+icube-privacy@gmail.com`. The project convention for public-facing files is `git@joemattiello.com`. I did not change it.
