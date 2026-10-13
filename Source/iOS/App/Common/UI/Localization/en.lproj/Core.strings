@@ -5206,3 +5206,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Share Crash Reports" = "Share Crash Reports";
 "Sends crash and performance reports to the iCube developers. Reports never include your games, file names or personal data." = "Sends crash and performance reports to the iCube developers. Reports never include your games, file names or personal data.";
 "Crash reports and diagnostics." = "Crash reports and diagnostics.";
+"Sends crash and performance reports to the iCube developers. Reports can include the ID of the game you were playing." = "Sends crash and performance reports to the iCube developers. Reports can include the ID of the game you were playing.";

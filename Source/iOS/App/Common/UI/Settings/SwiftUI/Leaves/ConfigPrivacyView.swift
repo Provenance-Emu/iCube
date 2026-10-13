@@ -18,6 +18,7 @@ struct ConfigPrivacyView: View {
 
   private func apply(_ on: Bool) {
     crashReports = on
-    Task { @MainActor in SentryTelemetryService.applyConsent(on) }
+    // Toggle bindings run on the main thread; applyConsent persists the choice before this returns.
+    MainActor.assumeIsolated { SentryTelemetryService.applyConsent(on) }
   }
 }

@@ -28,4 +28,14 @@ final class ConfigPrivacyModelBuilderTests: XCTestCase {
       XCTAssertFalse((item.description ?? "").isEmpty, item.id)
     }
   }
+
+  /// Only the App Store build scrubs game ids, so only it may say reports never include games.
+  func test_footer_matchesTheBuildConfiguration() {
+    let footer = ConfigPrivacyModelBuilder.make(crashReports: true, apply: { _ in }).item(id: "crash-reports")?.description
+    #if APPSTORE
+    XCTAssertTrue(footer?.contains("never include your games") == true)
+    #else
+    XCTAssertEqual(footer, "Sends crash and performance reports to the iCube developers. Reports can include the ID of the game you were playing.")
+    #endif
+  }
 }
