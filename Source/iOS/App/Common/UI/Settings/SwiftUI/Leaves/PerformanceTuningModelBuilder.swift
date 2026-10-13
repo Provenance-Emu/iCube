@@ -16,7 +16,7 @@ enum PerformanceTuningModelBuilder {
     } else {
       sections.append(MenuSection(id: "engine-optimizations-hint", header: L("Engine Optimizations"), items: [
         SettingsRow.action("engine-optimizations-hint", L("Select a Cached Interpreter engine"),
-                           L("Select Cached Interpreter or Cached Interpreter (IR) as the CPU engine above to configure optimizations. The plain Interpreter and JIT engines don't use these."),
+                           engineHint(state),
                            enabled: false, run: {}),
       ]))
     }
@@ -45,20 +45,51 @@ enum PerformanceTuningModelBuilder {
     return MenuModel(sections: sections)
   }
 
+  // MARK: Copy
+
+  // The App Store build without JIT gets copy that does not mention JIT at all (a normal store install never has it).
+
+  private static func cpuFooter(_ state: PerformanceTuningState) -> String {
+    if state.jitAvailable {
+      return L("These options control the PowerPC CPU emulation. On iCube the emulated CPU is almost always the performance bottleneck, so the CPU options below matter far more than any graphics setting.")
+    }
+    #if APPSTORE
+    return L("Games use the Cached Interpreter. The emulated CPU is the performance bottleneck on iCube — these options matter far more than any graphics setting.")
+    #else
+    return L("This build runs without JIT, so games always use the Cached Interpreter (the JIT engine choices are hidden). The emulated CPU is the performance bottleneck on iCube — these options matter far more than any graphics setting.")
+    #endif
+  }
+
+  private static func engineCaption(_ state: PerformanceTuningState) -> String {
+    if state.jitAvailable {
+      return L("Cached Interpreter and the JIT recompilers are faster; the plain Interpreter is the most accurate but far too slow for full-speed play.")
+    }
+    #if APPSTORE
+    return L("Cached Interpreter is the recommended (and default) choice; the plain Interpreter is the most accurate but far too slow for full-speed play.")
+    #else
+    return L("This build runs without a JIT entitlement, so only interpreter engines are available. Cached Interpreter is the recommended (and default) choice. Selecting a JIT engine on other builds would silently fall back to Cached Interpreter here.")
+    #endif
+  }
+
+  private static func engineHint(_ state: PerformanceTuningState) -> String {
+    #if APPSTORE
+    if !state.jitAvailable {
+      return L("Select Cached Interpreter or Cached Interpreter (IR) as the CPU engine above to configure optimizations. The plain Interpreter doesn't use these.")
+    }
+    #endif
+    return L("Select Cached Interpreter or Cached Interpreter (IR) as the CPU engine above to configure optimizations. The plain Interpreter and JIT engines don't use these.")
+  }
+
   // MARK: Sections
 
   private static func cpuOptions(_ state: PerformanceTuningState, _ apply: @escaping Apply) -> MenuSection {
     let engines = state.jitAvailable ? CpuEngine.allCases : [.interpreter, .cachedInterpreter, .cachedInterpreterIR]
     return MenuSection(
       id: "cpu-options", header: L("CPU Options"),
-      footer: state.jitAvailable
-        ? L("These options control the PowerPC CPU emulation. On iCube the emulated CPU is almost always the performance bottleneck, so the CPU options below matter far more than any graphics setting.")
-        : L("This build runs without JIT, so games always use the Cached Interpreter (the JIT engine choices are hidden). The emulated CPU is the performance bottleneck on iCube — these options matter far more than any graphics setting."),
+      footer: cpuFooter(state),
       items: [
         SettingsRow.cycle("cpu-engine", L("CPU Emulation Engine"), engines.map { ($0.label, $0) }, state.effectiveEngine,
-              state.jitAvailable
-                ? L("Cached Interpreter and the JIT recompilers are faster; the plain Interpreter is the most accurate but far too slow for full-speed play.")
-                : L("This build runs without a JIT entitlement, so only interpreter engines are available. Cached Interpreter is the recommended (and default) choice. Selecting a JIT engine on other builds would silently fall back to Cached Interpreter here."),
+              engineCaption(state),
               set: { apply(.cpuEngine($0)) }),
         flagRow("mmu", L("Enable MMU"), .mmu, state, apply,
                 L("Emulates the PowerPC memory management unit. Required by a small number of games (e.g. some Star Wars titles) but adds CPU overhead on every memory access, so it hurts the framerate on this already CPU-bound build. Leave OFF unless a specific game needs it.")),

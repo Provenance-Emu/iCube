@@ -68,7 +68,11 @@ enum SettingsRootModelBuilder {
                         makeModel: { PerformanceTuningModelBuilder.make(state: PerformanceTuningState(), showValidation: true, apply: { _ in }) }) { PerformanceTuningView() },
     ]
     if let debugLeaf {
-      performance.append(SettingsLeafEntry(id: "debug", title: L("Debug"), icon: "ladybug", description: L("Developer switches: fastmem, JIT, logging, stall metrics."),
+      // The limited leaf only has the Environment section, so it must not promise the full set of developer switches.
+      let debugDescription = debugLeaf == .jitOnly
+        ? L("JIT status, how to turn JIT on, and the fastmem state.")
+        : L("Developer switches: fastmem, JIT, logging, stall metrics.")
+      performance.append(SettingsLeafEntry(id: "debug", title: L("Debug"), icon: "ladybug", description: debugDescription,
                                            hostsMenuScreen: true,
                                            makeModel: { DebugRootModelBuilder.make(state: DebugRootState(isIOS: isIOS), scope: debugLeaf, apply: { _ in }) }) { DebugRootView(scope: debugLeaf) })
     }

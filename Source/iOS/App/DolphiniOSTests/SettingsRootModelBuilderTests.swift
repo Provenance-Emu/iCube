@@ -76,4 +76,14 @@ final class SettingsRootModelBuilderTests: XCTestCase {
     let ids = SettingsRootModelBuilder.sections(isIOS: true, achievements: false, debugLeaf: .jitOnly).flatMap(\.entries).map(\.id)
     XCTAssertTrue(ids.contains("debug"))
   }
+
+  func test_debugEntryDescription_followsTheScope() {
+    func description(_ scope: DebugLeafScope) -> String? {
+      SettingsRootModelBuilder.sections(isIOS: true, achievements: false, debugLeaf: scope).flatMap(\.entries).first { $0.id == "debug" }?.description
+    }
+    XCTAssertTrue(description(.full)?.contains("logging") == true)
+    // The limited leaf has only the Environment section, so it must not promise logging or stall metrics.
+    XCTAssertFalse(description(.jitOnly)?.contains("logging") == true)
+    XCTAssertNotEqual(description(.jitOnly), description(.full))
+  }
 }

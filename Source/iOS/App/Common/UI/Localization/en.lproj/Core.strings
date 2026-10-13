@@ -5204,7 +5204,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Install Wii System Files" = "Install Wii System Files";
 "Privacy" = "Privacy";
 "Share Crash Reports" = "Share Crash Reports";
-"Sends crash and performance reports to the iCube developers. Reports never include your games, file names or personal data." = "Sends crash and performance reports to the iCube developers. Reports never include your games, file names or personal data.";
+"Sends crash and performance reports to the iCube developers. Reports are designed to leave out your games, file names and personal data." = "Sends crash and performance reports to the iCube developers. Reports are designed to leave out your games, file names and personal data.";
 "Crash reports and diagnostics." = "Crash reports and diagnostics.";
 "Sends crash and performance reports to the iCube developers. Reports can include the ID of the game you were playing." = "Sends crash and performance reports to the iCube developers. Reports can include the ID of the game you were playing.";
 "A Wii NAND import can't start right now. Quit the game, then upload nand.bin again." = "A Wii NAND import can't start right now. Quit the game, then upload nand.bin again.";
@@ -5215,3 +5215,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "This NAND backup has no keys. Upload keys.bin from the same backup first, then upload nand.bin again." = "This NAND backup has no keys. Upload keys.bin from the same backup first, then upload nand.bin again.";
 "A NAND import is already running." = "A NAND import is already running.";
 "How to Install Wii System Files" = "How to Install Wii System Files";
+"Games use the Cached Interpreter. The emulated CPU is the performance bottleneck on iCube — these options matter far more than any graphics setting." = "Games use the Cached Interpreter. The emulated CPU is the performance bottleneck on iCube — these options matter far more than any graphics setting.";
+"Cached Interpreter is the recommended (and default) choice; the plain Interpreter is the most accurate but far too slow for full-speed play." = "Cached Interpreter is the recommended (and default) choice; the plain Interpreter is the most accurate but far too slow for full-speed play.";
+"Select Cached Interpreter or Cached Interpreter (IR) as the CPU engine above to configure optimizations. The plain Interpreter doesn't use these." = "Select Cached Interpreter or Cached Interpreter (IR) as the CPU engine above to configure optimizations. The plain Interpreter doesn't use these.";
+"JIT status, how to turn JIT on, and the fastmem state." = "JIT status, how to turn JIT on, and the fastmem state.";

@@ -72,7 +72,11 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
     XCTAssertTrue(model(cir).sections[1].footer!.hasPrefix("Optimizations for the Cached Interpreter engine."))
     XCTAssertTrue(model(ir).sections[1].footer!.hasPrefix("Optimizations for the Cached Interpreter (IR) engine."))
     XCTAssertTrue(model(cir).sections[0].footer!.hasPrefix("These options control"))
+    #if APPSTORE
+    XCTAssertTrue(model(state { $0.engine = .cachedInterpreter }).sections[0].footer!.hasPrefix("Games use the Cached Interpreter."))
+    #else
     XCTAssertTrue(model(state { $0.engine = .cachedInterpreter }).sections[0].footer!.hasPrefix("This build runs without JIT"))
+    #endif
   }
 
   func test_performanceAB_isADestination_andResetIsAnAction() {
@@ -102,6 +106,18 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
     XCTAssertEqual(options.map { $0.1 }, [CpuEngine.interpreter, .cachedInterpreter, .cachedInterpreterIR].map { AnyHashable($0) })
     // A stored JIT core on a jitless build also gets the Cached Interpreter optimisations, as it does at runtime.
     XCTAssertNotNil(m.item(id: "pic-load-store"))
+  }
+
+  /// A normal store install has no JIT, and nothing on this screen may mention it there.
+  func test_jitlessStoreBuild_hasNoJitCopy() {
+    #if APPSTORE
+    let m = model(state { $0.jitAvailable = false; $0.engine = .cachedInterpreter })
+    let section = m.sections.first { $0.id == "cpu-options" }
+    XCTAssertFalse(section?.footer?.contains("JIT") == true)
+    XCTAssertFalse(m.item(id: "cpu-engine")?.description?.contains("JIT") == true)
+    let interpreter = model(state { $0.jitAvailable = false; $0.engine = .interpreter })
+    XCTAssertFalse(interpreter.item(id: "engine-optimizations-hint")?.description?.contains("JIT") == true)
+    #endif
   }
 
   func test_engineCycle_offersEveryEngine_whenJITIsAvailable() {
