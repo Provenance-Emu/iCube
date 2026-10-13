@@ -10,7 +10,11 @@ class JitAcquisitionService: UIResponder, UIApplicationDelegate {
     manager.recheckIfJitIsAcquired()
 
     if !manager.acquiredJit {
-      manager.acquireJitByPTrace()
+      // ptrace cannot deliver JIT without get-task-allow (recheckIfJitIsAcquired returns early when !jitSupported),
+      // so a normal store install never calls the private SecTask functions behind it.
+      if manager.jitSupported {
+        manager.acquireJitByPTrace()
+      }
 
       #if NONJAILBROKEN || APPSTORE
       manager.acquireJitByAltServer()
