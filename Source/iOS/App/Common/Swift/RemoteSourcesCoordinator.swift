@@ -5,6 +5,7 @@ import Network
 /// Coordinates multiple remote sources and updates the Dolphin cache with their items.
 @MainActor
 class RemoteSourcesCoordinator: ObservableObject {
+  private static let log = ICubeLog.logger("RemoteSources")
   static let shared = RemoteSourcesCoordinator()
   static var isGlobalRefreshRunning: Bool = false
   @Published var sources: [any RemoteLibrarySource] = []
@@ -108,11 +109,11 @@ class RemoteSourcesCoordinator: ObservableObject {
       Task { @MainActor in
         guard let self else { return }
         if Self.isGlobalRefreshRunning {
-          print("DEBUG REFRESH: Global refresh already running; coalescing request")
+          Self.log.debug("REFRESH: Global refresh already running; coalescing request")
           return
         }
         Self.isGlobalRefreshRunning = true
-        print("DEBUG REFRESH: RefreshRemoteSources notification received - in-place refresh")
+        Self.log.debug("REFRESH: RefreshRemoteSources notification received - in-place refresh")
         for src in self.sources {
           if let w = src as? WebDAVSource {
             w.requestRefresh()
@@ -143,7 +144,7 @@ class RemoteSourcesCoordinator: ObservableObject {
       guard !lastPathSatisfied else { return }
       isSystemOnline = true
       if suppressNextOnlineRefresh {
-        print("Reachability: Online detected (initial). Suppressing first refresh.")
+        Self.log.debug("Reachability: Online detected (initial). Suppressing first refresh.")
         lastPathSatisfied = true
         suppressNextOnlineRefresh = false
         // A game may already be running; its end owes the sources a fresh listing.
@@ -169,7 +170,7 @@ class RemoteSourcesCoordinator: ObservableObject {
           self.pushCacheUpdate(forceUpdate: true)
           return
         }
-        print("Reachability: Online detected, refreshing remote sources")
+        Self.log.debug("Reachability: Online detected, refreshing remote sources")
         self.refreshWebDAVSources()
         self.pushCacheUpdate(forceUpdate: true)
         NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Back online — refreshing library…")])
@@ -214,11 +215,11 @@ class RemoteSourcesCoordinator: ObservableObject {
   }
 
   func add(source: any RemoteLibrarySource) {
-    print("RemoteSourcesCoordinator: adding source \(source.id) (\(source.name))")
+    Self.log.debug("RemoteSourcesCoordinator: adding source \(source.id, privacy: .private) (\(source.name, privacy: .private))")
 
     // Check if we already have this source
     if sources.contains(where: { $0.id == source.id }) {
-      print("RemoteSourcesCoordinator: source \(source.id) already exists, updating and restarting")
+      Self.log.debug("RemoteSourcesCoordinator: source \(source.id, privacy: .private) already exists, updating and restarting")
       // Replace existing instance reference to avoid duplicates in array
       sources.removeAll { $0.id == source.id }
       sources.append(source)
@@ -239,7 +240,7 @@ class RemoteSourcesCoordinator: ObservableObject {
         let existingRoot = w.rootURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
         return existingRoot == newRoot && w.name.caseInsensitiveCompare(webdav.name) == .orderedSame
       }) {
-        print("RemoteSourcesCoordinator: duplicate WebDAV source detected for root=\(newRoot); requesting refresh on existing")
+        Self.log.debug("RemoteSourcesCoordinator: duplicate WebDAV source detected for root=\(newRoot, privacy: .private); requesting refresh on existing")
         if let existing = sources.first(where: { ($0 as? WebDAVSource)?.rootURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased() == newRoot }) {
           (existing as? WebDAVSource)?.requestRefresh()
           let cached = loadCachedListing(for: existing.id)
@@ -252,9 +253,9 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
 
     sources.append(source)
-    print("RemoteSourcesCoordinator: total sources now: \(sources.count)")
+    Self.log.debug("RemoteSourcesCoordinator: total sources now: \(sources.count)")
     start(source: source)
-    print("RemoteSourcesCoordinator: source \(source.id) added and started")
+    Self.log.debug("RemoteSourcesCoordinator: source \(source.id, privacy: .private) added and started")
     // Load cached listing immediately
     let cached = loadCachedListing(for: source.id)
     if !cached.isEmpty { lastItemsBySource[source.id] = cached
@@ -284,11 +285,11 @@ class RemoteSourcesCoordinator: ObservableObject {
   }
 
   private func start(source: any RemoteLibrarySource) {
-    print("RemoteSourcesCoordinator: starting source \(source.id) (\(source.name))")
+    Self.log.debug("RemoteSourcesCoordinator: starting source \(source.id, privacy: .private) (\(source.name, privacy: .private))")
 
     // Stop any existing tasks for this source to prevent conflicts
     if let existingTasks = tasks[source.id] {
-      print("RemoteSourcesCoordinator: stopping existing tasks for source \(source.id)")
+      Self.log.debug("RemoteSourcesCoordinator: stopping existing tasks for source \(source.id, privacy: .private)")
       for task in existingTasks { task.cancel() }
       tasks[source.id] = nil
     }
@@ -296,11 +297,11 @@ class RemoteSourcesCoordinator: ObservableObject {
     // Start the source FIRST so fresh streams are created
     source.start()
     if firstScanStartTime == nil { firstScanStartTime = Date() }
-    print("RemoteSourcesCoordinator: source \(source.id) start() called, now creating tasks for fresh streams")
+    Self.log.debug("RemoteSourcesCoordinator: source \(source.id, privacy: .private) start() called, now creating tasks for fresh streams")
 
     let onlineTask = Task {
       for await isOnline in source.onlineStream {
-        print("RemoteSourcesCoordinator: source \(source.id) online status changed to \(isOnline)")
+        Self.log.debug("RemoteSourcesCoordinator: source \(source.id, privacy: .private) online status changed to \(isOnline)")
         await MainActor.run {
           self.objectWillChange.send()
         }
@@ -308,22 +309,22 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
 
     let itemsTask = Task {
-      print("DEBUG COORDINATOR: Starting NEW items task for source \(source.id), stream=\(source.itemsStream)")
-      print("DEBUG COORDINATOR: About to iterate over itemsStream for source \(source.id)")
+      Self.log.debug("COORDINATOR: Starting NEW items task for source \(source.id, privacy: .private)")
+      Self.log.debug("COORDINATOR: About to iterate over itemsStream for source \(source.id, privacy: .private)")
       for await items in source.itemsStream {
-        print("DEBUG COORDINATOR: *** RECEIVED \(items.count) ITEMS FROM SOURCE \(source.id) ***")
+        Self.log.debug("COORDINATOR: *** RECEIVED \(items.count) ITEMS FROM SOURCE \(source.id, privacy: .private) ***")
         await MainActor.run {
           let prev = self.lastItemsBySource[source.id] ?? []
           let prevSet = Set(prev.map { $0.url.absoluteString })
           let newSet = Set(items.map { $0.url.absoluteString })
           let removed = prevSet.subtracting(newSet)
           let added = newSet.subtracting(prevSet)
-          print("DEBUG COORDINATOR: source \(source.id) removed=\(removed.count), added=\(added.count)")
+          Self.log.debug("COORDINATOR: source \(source.id, privacy: .private) removed=\(removed.count), added=\(added.count)")
 
           // Guard: ignore empty emissions mid-scan to avoid flicker
           let progress = self.scanningProgressBySource[source.id] ?? 0.0
           if items.isEmpty && !prev.isEmpty && progress < 1.0 {
-            print("DEBUG COORDINATOR: Ignoring empty emission mid-scan for \(source.id)")
+            Self.log.debug("COORDINATOR: Ignoring empty emission mid-scan for \(source.id, privacy: .private)")
             return
           }
 
@@ -340,7 +341,7 @@ class RemoteSourcesCoordinator: ObservableObject {
           NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
         }
       }
-      print("DEBUG COORDINATOR: Items task ended normally (stream finished) for source \(source.id)")
+      Self.log.debug("COORDINATOR: Items task ended normally (stream finished) for source \(source.id, privacy: .private)")
     }
 
     var progressTask: Task<Void, Never>?
@@ -369,7 +370,7 @@ class RemoteSourcesCoordinator: ObservableObject {
             }
             // Safety: if first scan is taking too long, force a commit after 15s to avoid partial UI state
             if self.suppressWritesUntilFirstScanComplete, let start = self.firstScanStartTime, Date().timeIntervalSince(start) > 15 {
-              print("DEBUG PUSH: Forcing commit due to slow first scan (>15s)")
+              Self.log.debug("PUSH: Forcing commit due to slow first scan (>15s)")
               self.suppressWritesUntilFirstScanComplete = false
               self.pushCacheUpdate(forceUpdate: true)
             }
@@ -379,7 +380,7 @@ class RemoteSourcesCoordinator: ObservableObject {
     }
 
     tasks[source.id] = [onlineTask, itemsTask].compactMap { $0 } + (progressTask != nil ? [progressTask!] : [])
-    print("RemoteSourcesCoordinator: tasks created and stored for source \(source.id)")
+    Self.log.debug("RemoteSourcesCoordinator: tasks created and stored for source \(source.id, privacy: .private)")
   }
 
   private func stop(sourceId: String) {
@@ -401,7 +402,7 @@ class RemoteSourcesCoordinator: ObservableObject {
 
   /// Keep cached directory listings and force fresh scans from all sources (in-place)
   private func refreshAllSources() {
-    print("DEBUG REFRESH: In-place refresh for all \(sources.count) sources")
+    Self.log.debug("REFRESH: In-place refresh for all \(sources.count) sources")
     for source in sources {
       if let w = source as? WebDAVSource {
         w.requestRefresh()
@@ -430,21 +431,21 @@ class RemoteSourcesCoordinator: ObservableObject {
       return
     }
 
-    print("DEBUG PUSH: pushCacheUpdate() called")
-    print("DEBUG PUSH: lastItemsBySource has \(lastItemsBySource.count) sources")
+    Self.log.debug("PUSH: pushCacheUpdate() called")
+    Self.log.debug("PUSH: lastItemsBySource has \(lastItemsBySource.count) sources")
     for (sourceId, items) in lastItemsBySource {
-      print("DEBUG PUSH:   source \(sourceId): \(items.count) items")
+      Self.log.debug("PUSH:   source \(sourceId, privacy: .private): \(items.count) items")
     }
 
     // Build flattened list of URLs, converting WebDAV URLs to HTTP(S) with credentials
     var allUrls: [String] = []
     for (sourceId, items) in lastItemsBySource {
       guard let source = sources.first(where: { $0.id == sourceId }) else {
-        print("DEBUG PUSH: WARNING - no matching source found for id=\(sourceId)")
+        Self.log.error("PUSH: no matching source found for id=\(sourceId, privacy: .private)")
         // Fallback: append raw URLs
         for item in items {
           let s = item.url.absoluteString
-          if s.isEmpty { print("DEBUG PUSH: WARNING - empty URL for item=\(item)")
+          if s.isEmpty { Self.log.error("PUSH: empty URL for item=\(item, privacy: .private)")
             continue
           }
           allUrls.append(s)
@@ -454,41 +455,41 @@ class RemoteSourcesCoordinator: ObservableObject {
 
       // While offline, exclude WebDAV sources entirely from updates
       if !isSystemOnline, source is WebDAVSource {
-        print("DEBUG PUSH: Skipping WebDAV source \(sourceId) due to offline state")
+        Self.log.debug("PUSH: Skipping WebDAV source \(sourceId, privacy: .private) due to offline state")
         continue
       }
 
       if let webdav = source as? WebDAVSource {
         for item in items {
           let converted = webdav.httpURL(for: item.url)
-          if converted.isEmpty { print("DEBUG PUSH: WARNING - empty converted URL for item=\(item)")
+          if converted.isEmpty { Self.log.error("PUSH: empty converted URL for item=\(item, privacy: .private)")
             continue
           }
-          print("DEBUG PUSH: URL transform (WebDAV -> HTTP): \(item.url.absoluteString) -> \(converted)")
+          Self.log.debug("PUSH: URL transform (WebDAV -> HTTP): \(item.url.absoluteString, privacy: .private) -> \(converted, privacy: .private)")
           allUrls.append(converted)
         }
       } else {
         for item in items {
           let s = item.url.absoluteString
-          if s.isEmpty { print("DEBUG PUSH: WARNING - empty URL for item=\(item)")
+          if s.isEmpty { Self.log.error("PUSH: empty URL for item=\(item, privacy: .private)")
             continue
           }
           allUrls.append(s)
         }
       }
     }
-    print("DEBUG PUSH: *** FLATTENED TO \(allUrls.count) TOTAL URLs (after filtering empty) ***")
+    Self.log.debug("PUSH: *** FLATTENED TO \(allUrls.count) TOTAL URLs (after filtering empty) ***")
     for (index, url) in allUrls.enumerated() {
-      print("DEBUG PUSH:   [\(index)]: \(url)")
+      Self.log.debug("PUSH:   [\(index)]: \(url, privacy: .private)")
     }
 
     // During cold boot, avoid writing to the core cache until the first scan is complete
     if suppressWritesUntilFirstScanComplete && !forceUpdate {
       // Safety timeout: if we're stuck >15s since first scan start, allow a one-time forced write
       if let start = firstScanStartTime, Date().timeIntervalSince(start) > 15 {
-        print("DEBUG PUSH: Overriding first-scan suppression due to timeout (>15s)")
+        Self.log.debug("PUSH: Overriding first-scan suppression due to timeout (>15s)")
       } else {
-        print("DEBUG PUSH: Suppressing updateLibrary write until first scan completes; posting UI update only")
+        Self.log.debug("PUSH: Suppressing updateLibrary write until first scan completes; posting UI update only")
         DispatchQueue.main.async {
           NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
         }
@@ -498,7 +499,7 @@ class RemoteSourcesCoordinator: ObservableObject {
 
     // Avoid nuking the cache with an empty remote list during startup/refresh
     guard !allUrls.isEmpty || forceUpdate else {
-      print("DEBUG PUSH: Skipping updateLibrary because URL list is empty and not forced")
+      Self.log.debug("PUSH: Skipping updateLibrary because URL list is empty and not forced")
       return
     }
 
@@ -509,11 +510,11 @@ class RemoteSourcesCoordinator: ObservableObject {
     let deltaCount = added.count + removed.count
     let elapsed = Date().timeIntervalSince(lastPushTime)
     if !forceUpdate, deltaCount <= smallDeltaThreshold, elapsed < debounceInterval {
-      print("DEBUG PUSH: Debounced small delta (\(deltaCount)) within \(elapsed)s")
+      Self.log.debug("PUSH: Debounced small delta (\(deltaCount)) within \(elapsed)s")
       return
     }
 
-    print("DEBUG PUSH: Calling TVLibraryBridge.updateLibrary with \(allUrls.count) URLs")
+    Self.log.debug("PUSH: Calling TVLibraryBridge.updateLibrary with \(allUrls.count) URLs")
     SentryTelemetryService.trace(
       "library.remote_sync",
       op: "library.remote_sync",
@@ -522,16 +523,16 @@ class RemoteSourcesCoordinator: ObservableObject {
       }
 
     if forceUpdate, allUrls.isEmpty {
-      print("DEBUG PUSH: *** FORCE UPDATE: Cleaned up library after source deletion ***")
+      Self.log.debug("PUSH: *** FORCE UPDATE: Cleaned up library after source deletion ***")
     }
 
-    print("DEBUG PUSH: TVLibraryBridge.updateLibrary completed")
+    Self.log.debug("PUSH: TVLibraryBridge.updateLibrary completed")
 
     // Notify UI to refresh
     DispatchQueue.main.async {
       NotificationCenter.default.post(name: NSNotification.Name("RemoteLibraryUpdated"), object: nil)
     }
-    print("DEBUG PUSH: pushCacheUpdate() finished")
+    Self.log.debug("PUSH: pushCacheUpdate() finished")
 
     // Update debounce state
     lastPushedURLs = newSet
@@ -596,9 +597,7 @@ final class LibraryCoordinator: ObservableObject {
 
     NotificationCenter.default.publisher(for: NSNotification.Name("RemoteLibraryUpdated"))
       .sink { [weak self] _ in
-        #if DEBUG
-        print("LibraryCoordinator: RemoteLibraryUpdated notification received")
-        #endif
+        Self.log.debug("LibraryCoordinator: RemoteLibraryUpdated notification received")
         self?.triggerReload()
       }
       .store(in: &cancellables)
@@ -608,9 +607,7 @@ final class LibraryCoordinator: ObservableObject {
       .sink { [weak self] in
         guard let self, self.debouncedReloadPending else { return }
         self.debouncedReloadPending = false
-        #if DEBUG
-        print("LibraryCoordinator: Debounced reload executing loadCurrent()")
-        #endif
+        Self.log.debug("LibraryCoordinator: Debounced reload executing loadCurrent()")
         self.loadCurrent()
       }
       .store(in: &cancellables)
@@ -662,9 +659,7 @@ final class LibraryCoordinator: ObservableObject {
   }
 
   private func triggerReload() {
-    #if DEBUG
-    print("LibraryCoordinator.triggerReload(): Triggering reload")
-    #endif
+    Self.log.debug("LibraryCoordinator.triggerReload(): Triggering reload")
     debouncedReloadPending = true
     reloadSubject.send(())
   }
