@@ -236,6 +236,210 @@
             "seconds": 2.5
           }
         ]
+      },
+      {
+        "name": "library-all.png",
+        "set": "appstore",
+        "desc": "Library grid, All, demo titles only",
+        "appearance": "dark",
+        "order": 1,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 20
+          },
+          {
+            "do": "tap",
+            "label": "All, 16 games",
+            "type": "button",
+            "settle": 1.5
+          },
+          {
+            "do": "swipe",
+            "from": "220,300",
+            "to": "220,700",
+            "settle": 1.5
+          },
+          {
+            "do": "settle",
+            "seconds": 1.5
+          }
+        ],
+        "verify": [
+          "Starfall Rally"
+        ]
+      },
+      {
+        "name": "library-gameCube.png",
+        "set": "appstore",
+        "desc": "Library filtered to GameCube",
+        "appearance": "dark",
+        "order": 2,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 20
+          },
+          {
+            "do": "tap",
+            "label": "GameCube, 6 games",
+            "type": "button",
+            "settle": 2.0
+          },
+          {
+            "do": "swipe",
+            "from": "220,300",
+            "to": "220,700",
+            "settle": 1.5
+          },
+          {
+            "do": "settle",
+            "seconds": 1.5
+          }
+        ],
+        "verify": [
+          "Cube Quest"
+        ]
+      },
+      {
+        "name": "settings-graphics-enhancements.png",
+        "set": "appstore",
+        "desc": "Graphics > Enhancements",
+        "appearance": "dark",
+        "order": 3,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 30
+          },
+          {
+            "do": "tap",
+            "label": "Settings",
+            "type": "button",
+            "settle": 1.0
+          },
+          {
+            "do": "wait",
+            "label": "Enhancements,",
+            "type": "button",
+            "timeout": 10
+          },
+          {
+            "do": "tap",
+            "label": "Enhancements,",
+            "type": "button",
+            "settle": 1.5
+          },
+          {
+            "do": "wait",
+            "label": "Internal Resolution",
+            "timeout": 10
+          },
+          {
+            "do": "settle",
+            "seconds": 1.5
+          }
+        ],
+        "verify": [
+          "Internal Resolution"
+        ]
+      },
+      {
+        "name": "settings-controllers.png",
+        "set": "appstore",
+        "desc": "Controllers",
+        "appearance": "dark",
+        "order": 4,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 30
+          },
+          {
+            "do": "tap",
+            "label": "Settings",
+            "type": "button",
+            "settle": 1.0
+          },
+          {
+            "do": "wait",
+            "label": "Enhancements,",
+            "type": "button",
+            "timeout": 10
+          },
+          {
+            "do": "swipe",
+            "from": "220,700",
+            "to": "220,200",
+            "settle": 1.0
+          },
+          {
+            "do": "wait",
+            "label": "Controllers,",
+            "type": "button",
+            "timeout": 10
+          },
+          {
+            "do": "tap",
+            "label": "Controllers,",
+            "type": "button",
+            "settle": 1.5
+          },
+          {
+            "do": "settle",
+            "seconds": 2.0
+          }
+        ]
+      },
+      {
+        "name": "settings-graphics-video.png",
+        "set": "appstore",
+        "desc": "Graphics > Video (replaces Shaders: its page shows the DEBUG-only Developer section)",
+        "appearance": "dark",
+        "order": 5,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 30
+          },
+          {
+            "do": "tap",
+            "label": "Settings",
+            "type": "button",
+            "settle": 1.0
+          },
+          {
+            "do": "wait",
+            "label": "Video,",
+            "type": "button",
+            "timeout": 10
+          },
+          {
+            "do": "tap",
+            "label": "Video,",
+            "type": "button",
+            "settle": 1.5
+          },
+          {
+            "do": "wait",
+            "label": "Backend",
+            "timeout": 10
+          },
+          {
+            "do": "settle",
+            "seconds": 1.5
+          }
+        ]
       }
     ],
     "ipad": [
@@ -352,6 +556,200 @@
           {
             "do": "wait",
             "label": "Internal Resolution",
+            "timeout": 10
+          },
+          {
+            "do": "settle",
+            "seconds": 1.5
+          }
+        ]
+      },
+      {
+        "name": "library-all.png",
+        "set": "appstore",
+        "desc": "Library grid, All, demo titles only",
+        "appearance": "dark",
+        "order": 1,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 20
+          },
+          {
+            "do": "tap",
+            "label": "All, 16 games",
+            "type": "button",
+            "settle": 1.5
+          },
+          {
+            "do": "swipe",
+            "from": "500,300",
+            "to": "500,700",
+            "settle": 1.5
+          },
+          {
+            "do": "settle",
+            "seconds": 1.5
+          }
+        ],
+        "verify": [
+          "Starfall Rally"
+        ]
+      },
+      {
+        "name": "library-gameCube.png",
+        "set": "appstore",
+        "desc": "Library filtered to GameCube",
+        "appearance": "dark",
+        "order": 2,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 20
+          },
+          {
+            "do": "tap",
+            "label": "GameCube, 6 games",
+            "type": "button",
+            "settle": 2.0
+          },
+          {
+            "do": "swipe",
+            "from": "500,300",
+            "to": "500,700",
+            "settle": 1.5
+          },
+          {
+            "do": "settle",
+            "seconds": 1.5
+          }
+        ],
+        "verify": [
+          "Cube Quest"
+        ]
+      },
+      {
+        "name": "settings-graphics-enhancements.png",
+        "set": "appstore",
+        "desc": "Graphics > Enhancements",
+        "appearance": "dark",
+        "order": 3,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 30
+          },
+          {
+            "do": "tap",
+            "label": "Settings",
+            "type": "button",
+            "settle": 1.0
+          },
+          {
+            "do": "wait",
+            "label": "Enhancements",
+            "type": "button",
+            "timeout": 10
+          },
+          {
+            "do": "tap",
+            "label": "Enhancements",
+            "type": "button",
+            "settle": 1.5
+          },
+          {
+            "do": "wait",
+            "label": "Internal Resolution",
+            "timeout": 10
+          },
+          {
+            "do": "settle",
+            "seconds": 1.5
+          }
+        ]
+      },
+      {
+        "name": "settings-controllers.png",
+        "set": "appstore",
+        "desc": "Controllers",
+        "appearance": "dark",
+        "order": 4,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 30
+          },
+          {
+            "do": "tap",
+            "label": "Settings",
+            "type": "button",
+            "settle": 1.0
+          },
+          {
+            "do": "wait",
+            "label": "Controllers",
+            "type": "button",
+            "timeout": 10
+          },
+          {
+            "do": "tap",
+            "label": "Controllers",
+            "type": "button",
+            "settle": 1.5
+          },
+          {
+            "do": "wait",
+            "label": "Player 1",
+            "timeout": 10
+          },
+          {
+            "do": "settle",
+            "seconds": 1.5
+          }
+        ]
+      },
+      {
+        "name": "settings-graphics-video.png",
+        "set": "appstore",
+        "desc": "Graphics > Video (replaces Shaders: its page shows the DEBUG-only Developer section)",
+        "appearance": "dark",
+        "order": 5,
+        "steps": [
+          {
+            "do": "wait",
+            "label": "Settings",
+            "type": "button",
+            "timeout": 30
+          },
+          {
+            "do": "tap",
+            "label": "Settings",
+            "type": "button",
+            "settle": 1.0
+          },
+          {
+            "do": "wait",
+            "label": "Video",
+            "type": "button",
+            "timeout": 10
+          },
+          {
+            "do": "tap",
+            "label": "Video",
+            "type": "button",
+            "settle": 1.5
+          },
+          {
+            "do": "wait",
+            "label": "Backend",
             "timeout": 10
           },
           {

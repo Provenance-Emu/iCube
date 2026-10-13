@@ -31,6 +31,19 @@ the contract the website's importer expects:
 node scripts/import-screenshots.mjs /path/to/captures
 ```
 
+## App Store Connect set
+
+```bash
+CONFIG=appstore PLATFORM=iphone ./run.sh      # or ipad; shots tagged "set": "appstore"
+Scripts/tvos_screens.sh <out> --config appstore --settle 45 --only library-all,pause-grid,...   # tvOS, from Source/iOS/App
+```
+
+`CONFIG=appstore` builds `Debug (AppStore)` (bundle id `com.joemattiello.iCube`): DEBUG, so
+`-SCREENSHOT_MODE` exists, and `APPSTORE`, so the store gates and logo-free cover templates apply.
+A cold DEBUG launch sits on the splash for ~30 s, so `capture.py` waits for the accessibility tree
+(and `tvos_screens.sh` needs `--settle`). The Shaders page shows a DEBUG-only "Developer" section,
+so the store set uses Graphics > Video instead. Pause-menu shots exist on tvOS only.
+
 ## How a populated library is faked
 
 iCube's library is Dolphin's C++ `GameFileCache` scanning real disc images, so a

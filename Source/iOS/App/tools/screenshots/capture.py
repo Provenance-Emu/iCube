@@ -18,7 +18,7 @@ swaps the library for a fixed set of synthetic demo titles with procedurally
 generated cover art. No copyrighted content is involved at any point.
 
 Usage:
-    python3 capture.py --udid UDID --device iphone --out DIR [--only NAME ...]
+    python3 capture.py --udid UDID --device iphone --out DIR [--only NAME ...] [--set appstore]
     python3 capture.py --list
 
 Every step is declarative and every shot is independent: a step that cannot
@@ -145,11 +145,14 @@ def step_focus_type(step):
 
 
 def step_swipe(step):
-    args = ["interact", "swipe", "--direction", step.get("direction", "up")]
+    args = ["interact", "swipe"]
     if step.get("label") or step.get("type") or step.get("value"):
+        args += ["--direction", step.get("direction", "up")]
         args += selector(step) + ["--screen", "latest"]
-    else:
+    elif "from" in step:
         args += ["--from", step["from"], "--to", step["to"]]
+    else:
+        args += ["--direction", step.get("direction", "up")]
     rs(*args)
 
 
@@ -244,6 +247,23 @@ RESET_DEFAULTS = {
 }
 
 
+#: A DEBUG build can sit on its splash for ~30 s (Dolphin init), far longer than
+#: the fixed settle above; until the accessibility tree has rows, nothing can be
+#: tapped or waited for.
+UI_READY_TIMEOUT = 120
+
+
+def wait_for_ui():
+    deadline = time.time() + UI_READY_TIMEOUT
+    while time.time() < deadline:
+        try:
+            if snapshot():
+                return
+        except StepError:
+            pass
+        time.sleep(2.0)
+
+
 def reset_to_root(udid, bundle_id):
     """Cheapest reliable way back to the library: relaunch.
 
@@ -265,6 +285,7 @@ def reset_to_root(udid, bundle_id):
         capture_output=True, text=True,
     )
     time.sleep(4.0)
+    wait_for_ui()
     seed_snapshot_store()
 
 
@@ -322,6 +343,9 @@ def main():
     ap.add_argument("--manifest", default=os.path.join(HERE, "shots.json"))
     ap.add_argument("--only", nargs="*", default=None,
                     help="capture just these shot names")
+    ap.add_argument("--set", dest="shot_set", default=None,
+                    help="capture only the shots tagged with this set (e.g. appstore); "
+                         "without it, shots that belong to a set are skipped")
     ap.add_argument("--list", action="store_true",
                     help="print the manifest's shots per device and exit")
     args = ap.parse_args()
@@ -332,7 +356,7 @@ def main():
         for dev, shots in manifest["devices"].items():
             print(f"\n{dev}:")
             for s in shots:
-                print(f"  {s['name']:<34} {s.get('desc', '')}")
+                print(f"  {s['name']:<34} {('[' + s['set'] + '] ') if s.get('set') else ''}{s.get('desc', '')}")
         return 0
 
     for required in ("udid", "device", "out", "bundle_id"):
@@ -340,6 +364,9 @@ def main():
             ap.error(f"--{required.replace('_', '-')} is required")
 
     shots = manifest["devices"].get(args.device, [])
+    # A shot with a "set" (the App Store Connect list) runs only when that set is
+    # asked for, so the default website pass is unchanged.
+    shots = [s for s in shots if s.get("set") == args.shot_set]
     if args.only:
         shots = [s for s in shots if s["name"] in args.only
                  or s["name"].rsplit(".", 1)[0] in args.only]

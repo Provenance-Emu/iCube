@@ -11,6 +11,9 @@
 #   SKIP_BUILD=1 ./run.sh          # reuse the app already installed
 #   OUT=/tmp/shots ./run.sh        # override the output directory
 #   SHOTS="library-light search" ./run.sh   # subset of the shot list
+#   CONFIG=appstore ./run.sh       # App Store Connect set: builds "Debug (AppStore)"
+#                                  # (APPSTORE gates on, logo-free art) and captures
+#                                  # only the shots tagged "set": "appstore"
 #
 # Output: $OUT/<device>/<name>.png plus $OUT/captions.json, which is exactly the
 # contract icube-emu.github.io's scripts/import-screenshots.mjs expects:
@@ -21,6 +24,7 @@ cd "$(dirname "$0")"
 APP_DIR="$(cd ../.. && pwd)"                 # Source/iOS/App
 WORKSPACE="$APP_DIR/iCube.xcworkspace"
 SCHEME="iCube (NJB)"
+CAPTURE_SET=""
 
 # DEBUG must be defined for screenshot mode to exist at all: both the demo
 # library and TVGameItem's demo initializer are #ifdef DEBUG. "Debug
@@ -29,6 +33,17 @@ SCHEME="iCube (NJB)"
 # leaves the SPM resource bundles built into the wrong products directory.
 CONFIG_IOS="Debug (Non-Jailbroken)"
 BUNDLE_ID="com.joemattiello.iCube-debug"
+# CONFIG=appstore: the compliant build for App Store Connect. Still DEBUG (the
+# -SCREENSHOT_MODE hook needs it), but with APPSTORE defined, so the store gates
+# and the logo-free cover templates apply. DD defaults to its own folder so it
+# never reuses (or clobbers) the NJB products.
+case "${CONFIG:-}" in
+  appstore) SCHEME="iCube (AppStore)"; CONFIG_IOS="Debug (AppStore)"
+            BUNDLE_ID="com.joemattiello.iCube"; CAPTURE_SET="appstore"
+            DD=${DD:-"$PWD/.dd-appstore"} ;;
+  ""|njb) ;;
+  *) echo "unknown CONFIG '$CONFIG' (appstore|njb)" >&2; exit 1 ;;
+esac
 
 PLATFORM=${PLATFORM:-"iphone ipad appletv"}
 OUT=${OUT:-"$PWD/captures"}
@@ -128,7 +143,7 @@ build_install() {  # <class>
     note "first run also builds the Dolphin core via CMake; expect 20-60 min cold"
     if ! xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" \
         -configuration "$CONFIG_IOS" -destination "$dest" \
-        -derivedDataPath "$DD" build >"$log" 2>&1; then
+        -derivedDataPath "$DD" ${CAPTURE_SET:+CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= EXCLUDED_ARCHS=x86_64} build >"$log" 2>&1; then
       tail -30 "$log" >&2
       die "build failed (full log: $log)" "see the tail above"
     fi
@@ -157,7 +172,7 @@ prepare_ui() {  # <class>
 capture() {  # <class>
   bold "== capturing $1"
   python3 capture.py --udid "$UDID" --device "$1" --out "$OUT" \
-      --bundle-id "$BUNDLE_ID" ${SHOTS:+--only $SHOTS} \
+      --bundle-id "$BUNDLE_ID" ${CAPTURE_SET:+--set $CAPTURE_SET} ${SHOTS:+--only $SHOTS} \
     || note "capture.py reported failures for $1 (see above)"
 }
 

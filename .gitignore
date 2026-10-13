@@ -83,3 +83,6 @@ __pycache__/
 # Ignore CMake user presets
 CMakeUserPresets.json
 /Source/iOS/App/build-Xcode*
+
+# App Store Connect screenshots (captured by Source/iOS/App/tools/screenshots, uploaded by hand)
+/docs/app-store/screenshots/
