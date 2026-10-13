@@ -20,8 +20,10 @@
 #include "Core/CommonTitles.h"
 #import "EmulationBootParameter.h"
 #import "EmulationBootType.h"
+#if !APPSTORE
 #import "WiiSystemUpdateViewController.h"
 #import "TVWiiSystemUpdateViewController.h"
+#endif
 
 @implementation TVLibraryBridge
 

@@ -1,6 +1,9 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+// The App Store build never downloads Nintendo firmware, so this screen is not compiled there.
+#if !APPSTORE
+
 #import "TVWiiSystemUpdateViewController.h"
 
 #import "Core/WiiUtils.h"
@@ -204,3 +207,5 @@
 }
 
 @end
+
+#endif  // !APPSTORE
