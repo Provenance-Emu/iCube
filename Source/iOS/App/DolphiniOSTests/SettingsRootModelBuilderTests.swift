@@ -8,7 +8,7 @@ import XCTest
 final class SettingsRootModelBuilderTests: XCTestCase {
   func test_sections_inSpecOrder() {
     let sections = SettingsRootModelBuilder.sections(isIOS: true, achievements: true)
-    XCTAssertEqual(sections.map(\.id), ["general", "graphics", "audio", "consoles", "controllers", "performance", "sync-network", "about"])
+    XCTAssertEqual(sections.map(\.id), ["general", "graphics", "audio", "consoles", "controllers", "performance", "sync-network", "privacy", "about"])
   }
 
   func test_everyEntry_hasDescriptionAndUniqueID() {
@@ -19,7 +19,7 @@ final class SettingsRootModelBuilderTests: XCTestCase {
 
   func test_migratedLeaves_exposeTheirModels() {
     let entries = SettingsRootModelBuilder.sections(isIOS: true, achievements: true).flatMap(\.entries)
-    for id in ["graphics-hacks", "graphics-enhancements", "graphics-video", "graphics-advanced", "performance-tuning", "advanced", "interface", "general", "console-gamecube", "console-wii", "audio", "debug"] {
+    for id in ["graphics-hacks", "graphics-enhancements", "graphics-video", "graphics-advanced", "performance-tuning", "advanced", "interface", "general", "console-gamecube", "console-wii", "audio", "debug", "privacy"] {
       XCTAssertNotNil(entries.first { $0.id == id }?.makeModel, id)
     }
   }
@@ -48,7 +48,7 @@ final class SettingsRootModelBuilderTests: XCTestCase {
   func test_hostsMenuScreen_isExactlyTheMigratedLeavesAndControllers() {
     let entries = SettingsRootModelBuilder.sections(isIOS: true, achievements: true).flatMap(\.entries)
     let hosting = Set(entries.filter(\.hostsMenuScreen).map(\.id))
-    XCTAssertEqual(hosting, ["graphics-video", "graphics-enhancements", "graphics-hacks", "graphics-advanced", "performance-tuning", "controllers", "advanced", "interface", "general", "console-gamecube", "console-wii", "audio", "debug"])
+    XCTAssertEqual(hosting, ["graphics-video", "graphics-enhancements", "graphics-hacks", "graphics-advanced", "performance-tuning", "controllers", "advanced", "interface", "general", "console-gamecube", "console-wii", "audio", "debug", "privacy"])
   }
 
   func test_entriesAreHashableByID() {
@@ -61,7 +61,7 @@ final class SettingsRootModelBuilderTests: XCTestCase {
     let ids = Set(SettingsRootModelBuilder.sections(isIOS: false, achievements: false).flatMap(\.entries).map(\.id))
     for id in ["general", "interface", "advanced", "graphics-video", "graphics-enhancements", "graphics-hacks",
                "graphics-advanced", "shaders", "audio", "console-gamecube", "console-wii", "controllers",
-               "performance-tuning", "debug", "web-ui", "icloud", "nearby", "about"] {
+               "performance-tuning", "debug", "web-ui", "icloud", "nearby", "privacy", "about"] {
       XCTAssertTrue(ids.contains(id), id)
     }
   }

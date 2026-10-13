@@ -5202,3 +5202,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Saved %@. Press to load, overwrite or delete." = "Saved %@. Press to load, overwrite or delete.";
 "Install Wii System Files…" = "Install Wii System Files…";
 "Install Wii System Files" = "Install Wii System Files";
+"Privacy" = "Privacy";
+"Share Crash Reports" = "Share Crash Reports";
+"Sends crash and performance reports to the iCube developers. Reports never include your games, file names or personal data." = "Sends crash and performance reports to the iCube developers. Reports never include your games, file names or personal data.";
+"Crash reports and diagnostics." = "Crash reports and diagnostics.";

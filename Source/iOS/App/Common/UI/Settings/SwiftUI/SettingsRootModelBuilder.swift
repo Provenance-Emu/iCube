@@ -121,6 +121,11 @@ enum SettingsRootModelBuilder {
         SettingsLeafEntry(id: "icloud", title: L("iCloud Sync"), icon: "icloud", description: L("Sync saves, states and settings across your devices.")) { CloudSyncSettingsView() },
         SettingsLeafEntry(id: "nearby", title: L("Nearby Devices"), icon: "antenna.radiowaves.left.and.right", description: L("Continue a game from another device, and manage paired ones.")) { ContinuityBrowseView() },
       ]),
+      SettingsRootSection(id: "privacy", header: L("Privacy"), entries: [
+        SettingsLeafEntry(id: "privacy", title: L("Privacy"), icon: "hand.raised", description: L("Crash reports and diagnostics."),
+                          hostsMenuScreen: true,
+                          makeModel: { ConfigPrivacyModelBuilder.make(crashReports: TelemetryConsent.isEnabled(), apply: { _ in }) }) { ConfigPrivacyView() },
+      ]),
       SettingsRootSection(id: "about", header: L("About"), entries: [
         SettingsLeafEntry(id: "about", title: L("About"), icon: "info.circle", description: L("Version, core, blog, help and Reset All Settings.")) { AboutView() },
       ]),

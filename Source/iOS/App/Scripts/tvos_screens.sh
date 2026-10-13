@@ -34,7 +34,7 @@ for view in all gameCube wii; do
 done
 shot "library-empty" -onboarding_seen_v1 NO -library_platform_filter all
 for leaf in general interface advanced graphics-video graphics-enhancements graphics-hacks graphics-advanced \
-            shaders audio console-gamecube console-wii controllers performance-tuning debug web-ui icloud nearby about; do
+            shaders audio console-gamecube console-wii controllers performance-tuning debug web-ui icloud nearby privacy about; do
   shot "settings-$leaf" -ICubeSettingsPreview "$leaf"
 done
 shot "pause-grid" -ICubePausePreview
