@@ -504,6 +504,10 @@ struct TVLibraryView: View {
   /// A toolbar-menu action that presents another sheet has to wait for the toolbar sheet to
   /// finish dismissing, or the second presentation is dropped.
   private static let tvToolbarSheetDismissDelay: TimeInterval = 0.35
+  #if os(tvOS)
+  /// "Maybe Later" under the onboarding's two full-width actions: a row, not a third full-width bar.
+  private static let onboardingSecondaryWidth: CGFloat = 480
+  #endif
 #endif
 
   // MARK: - Computed Bindings (extracted to prevent compiler timeout)
@@ -2404,13 +2408,18 @@ struct TVLibraryView: View {
           }
 
           // Secondary action
-          Button(L("Maybe Later")) {
+          Button {
             UserDefaults.standard.set(true, forKey: "onboarding_seen_v1")
             withAnimation { showOnboarding = false }
+          } label: {
+            Text(L("Maybe Later")).frame(maxWidth: .infinity)
           }
+          #if os(tvOS)
+          // The system bordered capsule drew this label in its own tint on tvOS, so it rendered blank.
+          .buttonStyle(ICubeRowButtonStyle())
+          .frame(maxWidth: Self.onboardingSecondaryWidth)
+          #else
           .buttonStyle(.bordered)
-          #if !os(tvOS)
-          // On tvOS the focused bordered capsule is white, so a white tint makes the label vanish.
           .tint(.white)
           #endif
 

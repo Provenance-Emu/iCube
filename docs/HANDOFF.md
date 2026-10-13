@@ -189,6 +189,10 @@ Traps met this session: the simulator test runner dies at bootstrap under heavy 
 - Push develop and dispatch TestFlight: `gh workflow run testflight.yml -R Provenance-Emu/iCube -f platform=all`. The owner asked to hold TestFlight until 7 and 9b were in.
 - Bump the Provenance gitlink again.
 
+**New evidence for owner priority 1 (tvOS platform switching).** In the 2026-10-12 baseline run, all four library captures (`library-all`, `-gameCube`, `-wii`, `-home`) show "GAMECUBE · 6" with the GameCube rail item selected. `tvos_screens.sh` writes `library_platform_filter` with `simctl spawn defaults write` before each shot; the same mechanism does reach the app for `onboarding_seen_v1`. So on tvOS something selects and persists `.gameCube` on its own, and the rail destination then restores it (`TVLibraryView` `.onAppear`: `platformFilter != .all` → `.platform(platformFilter)`). Start with what writes `platformFilter`/`tvLibraryDestination` during launch or rail focus (`applyTVLibraryDestination`, `TVLibraryRail`). The only stepping code (`stepPlatformFilter`) is iOS-only.
+
+**Also fixed this session:** the tvOS onboarding "Maybe Later" button rendered blank, both focused and unfocused. The system `.bordered` capsule drew the label in its own tint. It now uses `ICubeRowButtonStyle` on tvOS. `tvos_screens.sh` marks onboarding as seen except for `library-empty`.
+
 **Still owed:** owner device checks (list in the previous update); the decision on fast-forward off-ladder (Off then 2x).
 
 ### Next project: website screenshots and video
