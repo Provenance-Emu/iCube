@@ -8,12 +8,23 @@ import Foundation
 enum SentryEventScrubber {
   static let strippedTags: Set<String> = ["game_id", "game_title"]
 
-  /// A path runs from its root to the file extension that ends it, because game file names contain spaces
-  /// ("Super Smash Bros. Melee.iso"). With no extension in sight it takes the rest of the line.
-  private static let pathEnd = #"(?:\.[A-Za-z0-9]{2,5}(?=$|[\s:;,)\]"'])|$)"#
-  private static let pathPattern = try! NSRegularExpression(
-    pattern: #"(?:/private)?/var/mobile/[^\n]*?"# + pathEnd + #"|/Users/[^\n]*?"# + pathEnd,
-    options: .anchorsMatchLines)
+  /// Extensions that end a path: everything the library imports or browses (`ImportableFileTypes`), plus the
+  /// save, config and data files the app reads. `nkit.iso` ends in `iso`.
+  private static let pathExtensions = ImportableFileTypes.webDAVBrowsableExtensions
+    .union(["sav", "gci", "raw", "json", "ini"])
+    .sorted()
+    .joined(separator: "|")
+
+  /// A path runs from its root (`/var/mobile`, `/private/var/mobile` or `/Users`, optionally behind `file://`)
+  /// to the first known file extension that ends a word (a sentence's closing period counts), case-insensitively, because game file names contain
+  /// spaces, dots and version numbers ("Foo v1.02 Collector's Edition.iso"). With no such extension it takes
+  /// the rest of the line.
+  private static let pathPattern: NSRegularExpression = {
+    let end = #"(?:\.(?:"# + pathExtensions + #")(?=$|[\s:;,)\]"'?#]|\.(?:\s|$))|$)"#
+    let pattern = #"(?:file://)?(?:(?:/private)?/var/mobile|/Users)/[^\n]*?"# + end
+    // The pattern is built from constants, so failing to compile is a programmer error.
+    return try! NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines, .caseInsensitive])
+  }()
 
   static func scrubTags(_ tags: [String: String]) -> [String: String] {
     tags.filter { !strippedTags.contains($0.key) }

@@ -12,4 +12,23 @@ final class TelemetryConsentTests: XCTestCase {
     TelemetryConsent.set(false, defaults: defaults)
     XCTAssertFalse(TelemetryConsent.isEnabled(defaults))
   }
+
+  // Opting out deletes the SDK's queued envelopes and pending crash reports, and nothing else in Caches.
+  func testRemovesOnlyTheSDKDiskState() throws {
+    let fileManager = FileManager.default
+    let caches = fileManager.temporaryDirectory.appendingPathComponent("TelemetryConsentTests-\(UUID().uuidString)")
+    defer { try? fileManager.removeItem(at: caches) }
+    for name in SentryTelemetryService.sdkCacheDirectoryNames + ["Keep"] {
+      let directory = caches.appendingPathComponent(name)
+      try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+      try Data("x".utf8).write(to: directory.appendingPathComponent("file"))
+    }
+
+    SentryTelemetryService.removeSDKDiskState(cachesDirectory: caches, fileManager: fileManager)
+
+    for name in SentryTelemetryService.sdkCacheDirectoryNames {
+      XCTAssertFalse(fileManager.fileExists(atPath: caches.appendingPathComponent(name).path), name)
+    }
+    XCTAssertTrue(fileManager.fileExists(atPath: caches.appendingPathComponent("Keep/file").path))
+  }
 }

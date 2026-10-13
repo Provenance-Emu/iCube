@@ -171,10 +171,13 @@ enum SentryTelemetryService {
       #endif
       options.enableTimeToFullDisplayTracing = true
       options.swiftAsyncStacktraces = true
-      #if APPSTORE
-      options.enableCaptureFailedRequests = false // failed request URLs can carry user source hosts
-      options.enableFileManagerSwizzling = false // file I/O spans carry container paths
+      // Close must not block the main thread on a flush: the consent gate below drops anything queued.
+      options.shutdownTimeInterval = 0
+      // Everything the SDK sends, including envelopes captured earlier and crash reports from a previous
+      // run, passes these two callbacks, so opting out stops it even before the SDK is closed.
       options.beforeSend = { event in
+        guard TelemetryConsent.isEnabled() else { return nil }
+        #if APPSTORE
         // Transactions come through here too, with scope and tracer tags merged into `tags`.
         if let tags = event.tags { event.tags = SentryEventScrubber.scrubTags(tags) }
         if let message = event.message?.formatted {
@@ -186,13 +189,24 @@ enum SentryTelemetryService {
         for crumb in event.breadcrumbs ?? [] {
           crumb.message = crumb.message.map(SentryEventScrubber.scrubMessage)
           crumb.setData(value: nil, key: "game_id")
+          crumb.setData(value: nil, key: "url")
         }
+        #endif
         return event
       }
       options.beforeSendSpan = { span in
+        guard TelemetryConsent.isEnabled() else { return nil }
+        #if APPSTORE
         for tag in SentryEventScrubber.strippedTags { span.removeTag(key: tag) }
+        #endif
         return span
       }
+      #if APPSTORE
+      options.enableCaptureFailedRequests = false // failed request URLs can carry user source hosts
+      options.enableFileManagerSwizzling = false // file I/O spans carry container paths
+      // WebDAV sources use URLSession: breadcrumb `url` and `http.client` span names carry the host and ROM file names.
+      options.enableNetworkBreadcrumbs = false
+      options.enableNetworkTracking = false
       #else
       options.enableCaptureFailedRequests = true
       options.enableFileManagerSwizzling = true
@@ -210,15 +224,38 @@ enum SentryTelemetryService {
     reportStuckTXMHandshakeIfNeeded()
   }
 
-  /// Settings → Privacy flips this. Turning it off closes the SDK, which uninstalls the crash handler and
-  /// drops the client, so nothing else leaves the device this session and every later `SentrySDK` call
-  /// (breadcrumbs, spans, the extension reporter) is a no-op. Turning it on starts the SDK again.
+  /// Settings → Privacy flips this; call it on the main thread (`close()` hops to main synchronously).
+  ///
+  /// Turning it off, in this order: persists the choice (from then on `beforeSend` and `beforeSendSpan` drop
+  /// every event, span and queued envelope), closes the SDK (crash handler and integrations are removed;
+  /// later `SentrySDK` calls are no-ops), then deletes the SDK's on-disk state so nothing captured before the
+  /// opt-out is sent if the user opts in again. A report already being uploaded by the OS network stack
+  /// cannot be recalled. Turning it on starts the SDK again.
+  @MainActor
   static func applyConsent(_ on: Bool) {
     TelemetryConsent.set(on)
     if on {
       configure()
-    } else if SentrySDK.isEnabled {
-      SentrySDK.close()
+    } else {
+      if SentrySDK.isEnabled { SentrySDK.close() }
+      removeSDKDiskState()
+    }
+  }
+
+  /// Directories the SDK keeps in Library/Caches (sentry-cocoa 9.30.1): `io.sentry` holds the envelope queue,
+  /// sessions, breadcrumbs and scope state (SentryFileManagerHelper); `SentryCrash` and `KSCrash` hold crash
+  /// reports waiting for the next launch (SentryCrashIntegration, SentryKSCrash+Integration).
+  static let sdkCacheDirectoryNames = ["io.sentry", "SentryCrash", "KSCrash"]
+
+  /// Deletes the SDK's queued envelopes and pending crash reports. Runs after `close()`, so the SDK holds
+  /// no writers; errors are ignored because a missing directory is the expected case.
+  static func removeSDKDiskState(
+    cachesDirectory: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first,
+    fileManager: FileManager = .default
+  ) {
+    guard let cachesDirectory else { return }
+    for name in sdkCacheDirectoryNames {
+      try? fileManager.removeItem(at: cachesDirectory.appendingPathComponent(name))
     }
   }
 
@@ -298,7 +335,8 @@ enum SentryTelemetryService {
     EmulationPerfSessionRecorder.shared.finishAndReportIfSampled()
     EmulationTelemetryGate.setEmulationActive(false)
     SentrySDK.resumeAppHangTracking()
-    // game_id / jit / cpu_core stay set: a death right after leaving a game is still about that game.
+    // jit / cpu_core (and game_id outside the App Store build) stay set: a death right after leaving a game
+    // is still about that boot.
     addEmulationBreadcrumb("ended")
     SentrySDK.configureScope { $0.setTag(value: "false", key: "emulating") }
 
