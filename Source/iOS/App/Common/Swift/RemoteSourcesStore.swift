@@ -43,7 +43,7 @@ class RemoteSourcesStore: ObservableObject {
 
     Self.log.debug("RemoteSourcesStore: calling hydrate()")
     hydrate()
-    Self.log.debug("RemoteSourcesStore: hydrate() completed, sources count: \(coordinator.sources.count)")
+    Self.log.debug("RemoteSourcesStore: hydrate() completed, sources count: \(self.coordinator.sources.count)")
   }
 
   func addWebDAV(name: String, url: URL, username: String?, password: String?, recursive: Bool, interval: TimeInterval, startPath: String?, enablePreCaching: Bool = false) {
