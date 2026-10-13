@@ -82,7 +82,9 @@ final class EmulationPerfSessionRecorder {
       name: "emulation.session",
       operation: "emulation.session",
       bindToScope: false)
+    #if !APPSTORE
     transaction.setTag(value: gameID.isEmpty ? "unknown" : gameID, key: "game_id")
+    #endif
     transaction.setTag(value: id.uuidString, key: "session_id")
     transaction.setTag(value: consoleTag(for: gameID), key: "platform")
 

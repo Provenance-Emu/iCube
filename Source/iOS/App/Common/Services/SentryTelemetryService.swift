@@ -96,7 +96,12 @@ enum SentryTelemetryService {
   private static var observersInstalled = false
 
   /// Scope tags describing the current boot; persisted onto watchdog-termination events.
+  /// The App Store build never tags the game (see SentryEventScrubber).
+  #if APPSTORE
+  private static let bootTagKeys = ["jit", "cpu_core", "gfx_backend"]
+  #else
   private static let bootTagKeys = ["game_id", "jit", "cpu_core", "gfx_backend"]
+  #endif
   /// Set once the stuck TXM handshake cookie has been reported, so it is sent once per incident.
   private static let txmCookieReportedKey = "icube.sentry.txmHandshakeCookieReported"
 
@@ -111,10 +116,10 @@ enum SentryTelemetryService {
     environment["XCTestConfigurationFilePath"] != nil
   }
 
+  /// Starts the SDK unless the user opted out of crash reports. Safe to call again: it does nothing
+  /// while the SDK is running, and starts it again after `applyConsent(false)` closed it.
   static func configure() {
-    guard !observersInstalled else { return }
-    observersInstalled = true
-    guard !isUnitTestHost() else { return }
+    guard !isUnitTestHost(), TelemetryConsent.isEnabled(), !SentrySDK.isEnabled else { return }
 
     let buildEnvironment = SentryBuildEnvironment.current
 
@@ -166,16 +171,55 @@ enum SentryTelemetryService {
       #endif
       options.enableTimeToFullDisplayTracing = true
       options.swiftAsyncStacktraces = true
+      #if APPSTORE
+      options.enableCaptureFailedRequests = false // failed request URLs can carry user source hosts
+      options.enableFileManagerSwizzling = false // file I/O spans carry container paths
+      options.beforeSend = { event in
+        // Transactions come through here too, with scope and tracer tags merged into `tags`.
+        if let tags = event.tags { event.tags = SentryEventScrubber.scrubTags(tags) }
+        if let message = event.message?.formatted {
+          event.message = SentryMessage(formatted: SentryEventScrubber.scrubMessage(message))
+        }
+        for exception in event.exceptions ?? [] {
+          exception.value = exception.value.map(SentryEventScrubber.scrubMessage)
+        }
+        for crumb in event.breadcrumbs ?? [] {
+          crumb.message = crumb.message.map(SentryEventScrubber.scrubMessage)
+          crumb.setData(value: nil, key: "game_id")
+        }
+        return event
+      }
+      options.beforeSendSpan = { span in
+        for tag in SentryEventScrubber.strippedTags { span.removeTag(key: tag) }
+        return span
+      }
+      #else
       options.enableCaptureFailedRequests = true
       options.enableFileManagerSwizzling = true
+      #endif
       #if DEBUG
       // TODO: Actually add Sentry logs from dolphin's logger
       options.enableLogs = true
       #endif
     }
 
-    installNotificationObservers()
+    if !observersInstalled {
+      observersInstalled = true
+      installNotificationObservers()
+    }
     reportStuckTXMHandshakeIfNeeded()
+  }
+
+  /// Settings → Privacy flips this. Turning it off closes the SDK, which uninstalls the crash handler and
+  /// drops the client, so nothing else leaves the device this session and every later `SentrySDK` call
+  /// (breadcrumbs, spans, the extension reporter) is a no-op. Turning it on starts the SDK again.
+  static func applyConsent(_ on: Bool) {
+    TelemetryConsent.set(on)
+    if on {
+      configure()
+    } else if SentrySDK.isEnabled {
+      SentrySDK.close()
+    }
   }
 
   /// The TXM handshake cookie is flushed to disk before the brk and only cleared when the brk
@@ -220,23 +264,33 @@ enum SentryTelemetryService {
       name: "emulation.boot",
       operation: "emulation.boot",
       bindToScope: false)
+    #if !APPSTORE
     transaction.setTag(value: "pending", key: "game_id")
+    #endif
     bootTransaction = transaction
   }
 
   static func handleEmulationDidStart() {
+    #if !APPSTORE
     let gameID = TVEmulationBridge.currentGameID()
+    #endif
     if let transaction = bootTransaction {
+      #if !APPSTORE
       if !gameID.isEmpty {
         transaction.setTag(value: gameID, key: "game_id")
       }
+      #endif
       transaction.finish(status: .ok)
       bootTransaction = nil
     }
+    #if APPSTORE
+    addEmulationBreadcrumb("started")
+    #else
     addEmulationBreadcrumb("started", data: ["game_id": gameID])
     if !gameID.isEmpty {
       SentrySDK.configureScope { $0.setTag(value: gameID, key: "game_id") }
     }
+    #endif
     EmulationPerfSessionRecorder.shared.begin()
   }
 
