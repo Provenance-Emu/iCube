@@ -30,10 +30,11 @@ final class EmulationPerfSessionRecorder {
     stopTimerLocked()
 
     sessionID = UUID()
+    // Nothing is sampled while the SDK is off (crash reports opted out), so no timer runs for a session that cannot be sent.
     #if DEBUG
-    shouldReport = true
+    shouldReport = SentrySDK.isEnabled
     #else
-    shouldReport = Double.random(in: 0..<1) < SentryTelemetryService.releaseSessionSampleRate
+    shouldReport = SentrySDK.isEnabled && Double.random(in: 0..<1) < SentryTelemetryService.releaseSessionSampleRate
     #endif
 
     startedAt = Date()
