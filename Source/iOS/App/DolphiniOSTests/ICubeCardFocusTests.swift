@@ -3,7 +3,6 @@
 
 #if os(iOS) && DEBUG
 import SwiftUI
-import UIKit
 import XCTest
 
 @testable import iCube
@@ -16,21 +15,28 @@ final class ICubeCardFocusTests: XCTestCase {
   private static let canvas = CGSize(width: 520, height: 760)
 
   func test_extractedEffect_isPixelIdenticalToLegacy() throws {
-    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-    for style in [UIUserInterfaceStyle.light, .dark] {
+    for scheme in [ColorScheme.light, .dark] {
       var legacyByFocus: [Bool: [UInt8]] = [:]
       for focused in [false, true] {
-        let before = try render(Self.legacy(isFocused: focused), style: style, scene: scene)
-        let after = try render(Self.extracted(isFocused: focused), style: style, scene: scene)
+        let before = try render(Self.legacy(isFocused: focused), scheme: scheme)
+        let after = try render(Self.extracted(isFocused: focused), scheme: scheme)
         XCTAssertEqual(before.count, after.count)
         let diffs = zip(before, after).filter { $0 != $1 }.count
-        XCTAssertEqual(diffs, 0, "focused=\(focused) style=\(style.rawValue): \(diffs) bytes differ")
+        XCTAssertEqual(diffs, 0, "focused=\(focused) scheme=\(scheme): \(diffs) bytes differ")
         // Non-vacuity: blank captures would be identical on both sides and pass the check above.
-        XCTAssertGreaterThan(distinctColours(before), 1, "focused=\(focused) style=\(style.rawValue): blank capture")
+        XCTAssertGreaterThan(distinctColours(before), 1, "focused=\(focused) scheme=\(scheme): blank capture")
         legacyByFocus[focused] = before
       }
-      XCTAssertNotEqual(legacyByFocus[true], legacyByFocus[false], "style=\(style.rawValue): focused render equals rest render")
+      XCTAssertNotEqual(legacyByFocus[true], legacyByFocus[false], "scheme=\(scheme): focused render equals rest render")
     }
+  }
+
+  /// The dark pass must really draw the dark asset colours (the ring's `dolphinTint` has a separate
+  /// dark value), or it would only repeat the light comparison.
+  func test_renderResolvesTheSchemeOfAssetColours() throws {
+    let light = try render(Color(.dolphinTint).frame(width: Self.canvas.width, height: Self.canvas.height), scheme: .light)
+    let dark = try render(Color(.dolphinTint).frame(width: Self.canvas.width, height: Self.canvas.height), scheme: .dark)
+    XCTAssertNotEqual(Array(light.prefix(4)), Array(dark.prefix(4)))
   }
 
   private func distinctColours(_ bytes: [UInt8]) -> Int {
@@ -133,57 +139,27 @@ final class ICubeCardFocusTests: XCTestCase {
     .frame(width: canvas.width, height: canvas.height)
   }
 
-  // MARK: Rendering (same window-hosted approach as TouchOverlaySnapshotTests)
+  // MARK: Rendering
 
-  /// Hosts the view in its own window and returns the settled frame's RGBA bytes.
+  /// Rasterises the view offscreen with `ImageRenderer` and returns its pixel bytes.
   ///
-  /// A single capture after a fixed wait flaked under machine load (a 37- and a 73-byte diff on
-  /// otherwise identical renders): `drawHierarchy` caught a frame before SwiftUI's follow-up layout
-  /// or shadow pass had committed on one side only. So animations are off for the whole hosting
-  /// (UIKit and SwiftUI), and the window is captured repeatedly until two consecutive frames are
-  /// byte-identical. The comparison itself stays exact: this only decides *when* to read the pixels.
-  private func render<V: View>(_ view: V, style: UIUserInterfaceStyle, scene: UIWindowScene) throws -> [UInt8] {
-    let animationsWereEnabled = UIView.areAnimationsEnabled
-    UIView.setAnimationsEnabled(false)
-    defer { UIView.setAnimationsEnabled(animationsWereEnabled) }
-
-    let window = UIWindow(windowScene: scene)
-    window.frame = CGRect(origin: .zero, size: Self.canvas)
-    window.overrideUserInterfaceStyle = style
-    let host = UIHostingController(rootView: view.transaction { transaction in
-      transaction.animation = nil
-      transaction.disablesAnimations = true
-    })
-    host.safeAreaRegions = []
-    window.rootViewController = host
-    window.isHidden = false
-    defer { window.isHidden = true }
-    window.layoutIfNeeded()
-    RunLoop.main.run(until: Date().addingTimeInterval(0.15))
-
-    var previous = try capture(window)
-    for _ in 0 ..< Self.settleAttempts {
-      RunLoop.main.run(until: Date().addingTimeInterval(Self.settleInterval))
-      let next = try capture(window)
-      if next == previous { return next }
-      previous = next
-    }
-    XCTFail("style=\(style.rawValue): render did not settle after \(Self.settleAttempts) captures")
-    return previous
-  }
-
-  /// Generous for a loaded machine; the loop exits on the first pair of identical frames, so an
-  /// idle run pays only one extra capture.
-  private static let settleAttempts = 40
-  private static let settleInterval: TimeInterval = 0.05
-
-  private func capture(_ window: UIWindow) throws -> [UInt8] {
-    let format = UIGraphicsImageRendererFormat()
-    format.scale = 2
-    let image = UIGraphicsImageRenderer(size: Self.canvas, format: format).image { _ in
-      window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-    }
-    let data = try XCTUnwrap(image.cgImage?.dataProvider?.data as Data?)
+  /// Not a window plus `drawHierarchy`: that path goes through the render server, which composited
+  /// these large blurred shadows two slightly different ways from run to run (under half an 8-bit
+  /// step, in a band near the card's bottom edge). A capture of the legacy tree then differed from a
+  /// second capture of the same tree as often as from the extracted one. `ImageRenderer` draws the
+  /// same display list on the CPU, so one tree always produces the same bytes and the comparison
+  /// stays exact. Float output (`.extendedLinear`, 16 bits per channel) keeps it at least as
+  /// strict as the half-float window capture was. The background stands in for the hosting
+  /// controller's system background.
+  private func render<V: View>(_ view: V, scheme: ColorScheme) throws -> [UInt8] {
+    let renderer = ImageRenderer(content: view
+      .background(Color(.systemBackground))
+      .environment(\.colorScheme, scheme))
+    renderer.proposedSize = ProposedViewSize(Self.canvas)
+    renderer.scale = 2
+    renderer.colorMode = .extendedLinear
+    let image = try XCTUnwrap(renderer.cgImage)
+    let data = try XCTUnwrap(image.dataProvider?.data as Data?)
     return [UInt8](data)
   }
 }
