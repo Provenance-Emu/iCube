@@ -949,9 +949,8 @@ struct GameGridItem: View {
           Label(L("Favorite"), systemImage: "star")
         }
       }
-      // Ecosystem — push this game to a sibling emulator app (opens a local
-      // share session and hands Provenance a fetch URL; it downloads over
-      // HTTP). iOS-only: see `EcosystemSendButton`.
+      // Ecosystem — hand this game's disc image to Provenance through the
+      // system share sheet. iOS-only: see `EcosystemSendButton`.
       EcosystemSendButton(gameID: item.gameID)
       Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }

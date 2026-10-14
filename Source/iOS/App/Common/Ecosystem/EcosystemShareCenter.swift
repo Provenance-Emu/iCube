@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import Foundation
-import PVContinuity
 import PVLibrarySnapshot
 
 /// One incoming `dolphinios://requestGame` ask, awaiting the user's decision.
@@ -12,11 +11,21 @@ struct EcosystemShareRequest: Identifiable {
     let callbackScheme: String
 }
 
-/// Handles `dolphinios://requestGame` (a peer app wants a game's file set):
-/// surfaces a confirm prompt, and on approval opens a non-advertised
-/// continuity session for the game and answers the peer with a FetchPayload
-/// callback — the peer then downloads over HTTP with the session's bearer
-/// token.
+/// Hands a game's disc image to a sibling app on this device.
+///
+/// Both routes end in the system share sheet
+/// (`EcosystemShareApprovalModifier` presents it): "Send to Provenance" in
+/// the game context menu, and an approved `dolphinios://requestGame` ask from
+/// a peer. The sheet lists every installed app that declares the file's type
+/// (Provenance declares the GameCube and Wii disc types), and iOS copies the
+/// file into that app itself.
+///
+/// This replaced a hand-off where iCube opened a short-lived HTTP session and
+/// the peer downloaded from it after being opened by URL. On one device that
+/// cannot work: opening the peer sends iCube to the background and suspends
+/// the server before the first byte is fetched, so every transfer failed
+/// silently. The share sheet keeps working while iCube is suspended because
+/// the system, not iCube, does the copy, and it has no size limit.
 ///
 /// File transfer to another app is deliberately user-confirmed every time,
 /// even between Joe's own apps — the requesting URL is attacker-forgeable.
@@ -25,21 +34,15 @@ final class EcosystemShareCenter: ObservableObject {
     static let shared = EcosystemShareCenter()
 
     @Published var request: EcosystemShareRequest?
-
-    /// Non-nil when an OUTGOING share couldn't be delivered (the continuity
-    /// session failed to start, or the peer's callback URL wouldn't open).
+    /// The files the share sheet is offering, or nil when no sheet is up.
+    @Published var exportItems: [URL]?
+    /// Non-nil when a share couldn't start (the game's file is gone).
     /// Surfaced as an alert by `EcosystemShareApprovalModifier` so a "Send to
     /// Provenance" tap always produces visible feedback instead of silently
     /// doing nothing.
     @Published var shareError: String?
 
     private init() {}
-
-    /// How long the share session stays up for the peer's download. A
-    /// continue-session (handoff) started meanwhile replaces it — the
-    /// sessionId guard in `endEcosystemShareIfCurrent` keeps this timer from
-    /// killing THAT one.
-    static let shareSessionLifetime: TimeInterval = 30 * 60
 
     /// Entry point from `EcosystemBridge.perform`.
     func handleRequest(gameID: String, callbackScheme: String) {
@@ -61,60 +64,36 @@ final class EcosystemShareCenter: ObservableObject {
     func approve() {
         guard let request else { return }
         self.request = nil
-        beginShare(game: request.game, callbackScheme: request.callbackScheme)
+        offer(game: request.game)
     }
 
-    /// User-initiated push ("Send to Provenance" in the game context menu) —
-    /// the same machinery as an approved incoming request, just started from
-    /// this side. The receiver is stateless (Provenance's
-    /// `EcosystemFetchParser` accepts any `<scheme>://dolphinios?fetch=`
-    /// callback), so no prior handshake is needed. No confirm prompt either:
-    /// the user's tap IS the consent.
-    func send(gameID: String, toScheme scheme: String = EcosystemSchemes.provenanceScheme) {
+    /// User-initiated push ("Send to Provenance" in the game context menu). No
+    /// confirm prompt: the user's tap IS the consent.
+    func send(gameID: String) {
         guard let game = EcosystemBridge.game(forID: gameID) else {
             shareError = "That game isn\u{2019}t in the library snapshot yet. Try again in a moment."
             return
         }
-        beginShare(game: game, callbackScheme: scheme)
+        offer(game: game)
     }
 
-    private func beginShare(game: LibrarySnapshotGame, callbackScheme: String) {
-        Task {
-            guard let (session, candidates) = await ContinuityManager.shared.beginEcosystemShare(gameID: game.id) else {
-                shareError = "Couldn\u{2019}t start the share session for \u{201C}\(game.title)\u{201D}. Please try again."
-                return
-            }
-            scheduleSessionEnd(sessionId: session.sessionId)
-            let payload = EcosystemBridge.FetchPayload(
-                name: game.title,
-                md5: EcosystemBridge.transferId(gameID: game.id, filename: game.filename),
-                bases: candidates.map(\.absoluteString),
-                manifestPath: ContinuityRoutes.manifest,
-                filePath: ContinuityRoutes.file,
-                fileQueryKey: ContinuityRoutes.filePathQueryKey,
-                token: session.token
-            )
-            guard let data = try? JSONEncoder().encode(payload) else { return }
-            EcosystemBridge.openCallback(
-                scheme: callbackScheme,
-                query: "fetch",
-                value: EcosystemBridge.base64url(data)
-            ) { success in
-                guard !success else { return }
-                Task { @MainActor in
-                    EcosystemShareCenter.shared.shareError =
-                        "Couldn\u{2019}t open \(EcosystemShareCenter.peerName(callbackScheme)). Make sure it\u{2019}s installed and up to date, then try again."
-                }
-            }
-        }
+    func finishExport() {
+        exportItems = nil
     }
 
-    /// Ends the share session after its lifetime, unless a newer session
-    /// (another share, or a real handoff) already replaced it.
-    private func scheduleSessionEnd(sessionId: String) {
-        Task {
-            try? await Task.sleep(nanoseconds: UInt64(Self.shareSessionLifetime * 1_000_000_000))
-            await ContinuityManager.shared.endEcosystemShareIfCurrent(sessionId: sessionId)
+    private func offer(game: LibrarySnapshotGame) {
+        guard let items = Self.exportItems(forFilePath: game.filePath) else {
+            shareError = "The file for \u{201C}\(game.title)\u{201D} is missing. Rescan the library and try again."
+            return
         }
+        exportItems = items
+    }
+
+    /// What the share sheet offers for a game: its disc image, or nil when the
+    /// file is not on disk. A game is one file on iCube (every supported disc
+    /// format is single-file), so there is nothing else to bundle.
+    nonisolated static func exportItems(forFilePath path: String) -> [URL]? {
+        guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else { return nil }
+        return [URL(fileURLWithPath: path)]
     }
 }

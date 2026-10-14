@@ -100,11 +100,6 @@ final class EcosystemBridgeTests: XCTestCase {
         XCTAssertEqual(url?.absoluteString, "provenance://dolphinios?games=abc123")
     }
 
-    func test_callbackURL_fetchShape() {
-        let url = EcosystemBridge.callbackURL(scheme: "provenance", query: "fetch", value: "xyz")
-        XCTAssertEqual(url?.absoluteString, "provenance://dolphinios?fetch=xyz")
-    }
-
     // MARK: - base64url
 
     func test_base64url_hasNoPaddingOrUnsafeCharacters() {
@@ -148,26 +143,17 @@ final class EcosystemBridgeTests: XCTestCase {
         XCTAssertNil(EcosystemBridge.makerCode(forGameID: "GAL"))
     }
 
-    // MARK: - Transfer id (FetchPayload.md5)
+    // MARK: - Share sheet items
 
-    func test_transferId_isHexAndCorrectLength() {
-        let id = EcosystemBridge.transferId(gameID: "GALE01", filename: "game.rvz")
-        XCTAssertEqual(id.count, 32)
-        XCTAssertTrue(id.allSatisfy { $0.isHexDigit })
-        XCTAssertEqual(id, id.lowercased())
+    func test_exportItems_isTheGameFile() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("export-\(UUID().uuidString).rvz")
+        try Data([0x01]).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        XCTAssertEqual(EcosystemShareCenter.exportItems(forFilePath: file.path), [file])
     }
 
-    func test_transferId_isStableForSameInputs() {
-        let first = EcosystemBridge.transferId(gameID: "GALE01", filename: "game.rvz")
-        let second = EcosystemBridge.transferId(gameID: "GALE01", filename: "game.rvz")
-        XCTAssertEqual(first, second)
-    }
-
-    func test_transferId_differsForDifferentInputs() {
-        let a = EcosystemBridge.transferId(gameID: "GALE01", filename: "game.rvz")
-        let b = EcosystemBridge.transferId(gameID: "GALE02", filename: "game.rvz")
-        let c = EcosystemBridge.transferId(gameID: "GALE01", filename: "other.rvz")
-        XCTAssertNotEqual(a, b)
-        XCTAssertNotEqual(a, c)
+    func test_exportItems_nilWhenTheFileIsGone() {
+        XCTAssertNil(EcosystemShareCenter.exportItems(forFilePath: "/nonexistent/game.rvz"))
+        XCTAssertNil(EcosystemShareCenter.exportItems(forFilePath: ""))
     }
 }

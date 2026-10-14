@@ -13,17 +13,10 @@ enum EcosystemSchemes {
     /// `requestGame` arrive on.
     static let ownScheme = "dolphinios"
 
-    /// Provenance's base scheme — the default fetch-callback target
-    /// (`provenance://dolphinios?fetch=…`).
+    /// Provenance's scheme: the gameInfo callback target
+    /// (`provenance://dolphinios?games=…`) and the install probe behind
+    /// "Send to Provenance".
     static let provenanceScheme = "provenance"
-
-    /// Capability marker scheme. A Provenance build that understands the
-    /// `?fetch=` API registers THIS scheme in addition to `provenance://`. iCube
-    /// probes the marker (not the base scheme) to tell an up-to-date Provenance
-    /// from an old build that registers `provenance://` but silently ignores
-    /// `?fetch=` — so the "Send to Provenance" affordance stays hidden rather
-    /// than no-opping when tapped. iCube declares this in
-    /// LSApplicationQueriesSchemes; Provenance declares it in its
-    /// CFBundleURLTypes.
-    static let provenanceEcosystemScheme = "provenance-ecosystem"
+    /// iFly's scheme, probed by the Connected Apps settings leaf.
+    static let iflyScheme = "ifly"
 }

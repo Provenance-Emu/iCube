@@ -267,38 +267,7 @@ final class ContinuityManager: ObservableObject {
     ///
     /// Returns the session plus the base URLs the peer should try, or nil when
     /// the game can't be resolved/identified or the web server never came up.
-    func beginEcosystemShare(gameID: String) async -> (session: ContinuitySessionInfo, urlCandidates: [URL])? {
-        guard let sessionServer else { return nil }
-        let items = TVLibraryBridge.currentGames()
-        guard let item = items.first(where: { $0.gameID == gameID }), !item.isDemoItem else { return nil }
-
-        let identity = GameIdentity(gameItem: item)
-        guard identity.hasAnyIdentifier else { return nil }
-
-        await withdrawAdvertisement()
-        servedGameFilePath.value = item.filePath
-        let session = await sessionServer.beginSession(game: identity)
-        activeSession = session
-        lastError = nil
-        NotificationCenter.default.post(name: .continuitySessionDidBegin, object: nil)
-
-        guard let candidates = await Self.awaitServerURLCandidates(), !candidates.isEmpty else {
-            await endHandoff()
-            return nil
-        }
-        return (session, candidates)
-    }
-
-    /// Ends an ecosystem share session, but only if it is still the current
-    /// one — a newer session (another share, or a real handoff) may already
-    /// have replaced it, and ending THAT one out from under it on a stale
-    /// timer would be a bug, not a cleanup.
-    func endEcosystemShareIfCurrent(sessionId: String) async {
-        guard activeSession?.sessionId == sessionId else { return }
-        await endHandoff()
-    }
-
-    // MARK: - Nearby library sharing
+     // MARK: - Nearby library sharing
 
     /// Turns library sharing on or off.
     ///

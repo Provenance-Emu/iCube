@@ -76,6 +76,20 @@ enum SettingsRootModelBuilder {
                                            hostsMenuScreen: true,
                                            makeModel: { DebugRootModelBuilder.make(state: DebugRootState(isIOS: isIOS), scope: debugLeaf, apply: { _ in }) }) { DebugRootView(scope: debugLeaf) })
     }
+    var syncNetwork = [
+        SettingsLeafEntry(id: "web-ui", title: L("Web UI & WebDAV"), icon: "network", description: L("Import games from a computer on the same Wi-Fi.")) { WebUISettingsView() },
+        SettingsLeafEntry(id: "icloud", title: L("iCloud Sync"), icon: "icloud", description: L("Sync saves, states and settings across your devices.")) { CloudSyncSettingsView() },
+        SettingsLeafEntry(id: "nearby", title: L("Nearby Devices"), icon: "antenna.radiowaves.left.and.right", description: L("Continue a game from another device, and manage paired ones.")) { ContinuityBrowseView() },
+    ]
+    if isIOS {
+      syncNetwork.append(contentsOf: [
+        // iOS only: install probes and opening a sibling app need UIApplication.open, which tvOS has no equivalent for.
+        SettingsLeafEntry(id: "connected-apps", title: L("Connected Apps"), icon: "app.connected.to.app.below.fill",
+                          description: L("Provenance and iFly: what is installed and how games move between the apps."),
+                          hostsMenuScreen: true,
+                          makeModel: { ConnectedAppsModelBuilder.make(apps: []) }) { ConnectedAppsSettingsView() },
+      ])
+    }
     return [
       SettingsRootSection(id: "general", header: L("General"), entries: [
         SettingsLeafEntry(id: "general", title: L("General"), icon: "gear", description: L("Dual core, cheats, speed limit and other core options."),
@@ -120,11 +134,7 @@ enum SettingsRootModelBuilder {
                           hostsMenuScreen: true) { ControllersRootView() },
       ]),
       SettingsRootSection(id: "performance", header: L("Performance"), entries: performance),
-      SettingsRootSection(id: "sync-network", header: L("Sync & Network"), entries: [
-        SettingsLeafEntry(id: "web-ui", title: L("Web UI & WebDAV"), icon: "network", description: L("Import games from a computer on the same Wi-Fi.")) { WebUISettingsView() },
-        SettingsLeafEntry(id: "icloud", title: L("iCloud Sync"), icon: "icloud", description: L("Sync saves, states and settings across your devices.")) { CloudSyncSettingsView() },
-        SettingsLeafEntry(id: "nearby", title: L("Nearby Devices"), icon: "antenna.radiowaves.left.and.right", description: L("Continue a game from another device, and manage paired ones.")) { ContinuityBrowseView() },
-      ]),
+      SettingsRootSection(id: "sync-network", header: L("Sync & Network"), entries: syncNetwork),
       SettingsRootSection(id: "privacy", header: L("Privacy"), entries: [
         SettingsLeafEntry(id: "privacy", title: L("Privacy"), icon: "hand.raised", description: L("Crash reports and diagnostics."),
                           hostsMenuScreen: true,

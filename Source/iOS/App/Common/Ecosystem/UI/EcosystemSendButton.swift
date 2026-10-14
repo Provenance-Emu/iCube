@@ -3,22 +3,20 @@
 
 import SwiftUI
 
-/// "Send to Provenance" — push this game to a sibling emulator app the same
-/// way iFly does: open a local share session and hand Provenance a fetch URL
-/// it downloads from over HTTP (the reverse of Provenance asking iCube for a
-/// game).
+/// "Send to Provenance" — hand this game's disc image to Provenance through
+/// the system share sheet (`EcosystemShareCenter.send`), where it appears as
+/// "Copy to Provenance" because Provenance declares the GameCube and Wii disc
+/// types.
 ///
-/// Offered only when a FETCH-CAPABLE Provenance is installed
-/// (`EcosystemBridge.peerCapable()` probes the capability marker scheme, so an
-/// old build that can't handle `?fetch=` doesn't show a button that silently
-/// no-ops) and the game has an id. iOS-only: opening a foreign URL scheme has
-/// no tvOS equivalent, and the call site (`GameGridItem`'s iOS context menu)
-/// never reaches this on tvOS.
+/// Offered only when Provenance is installed (`EcosystemBridge.peerInstalled`
+/// probes its URL scheme) and the game has an id. iOS-only: tvOS has no share
+/// sheet, and the call site (`GameGridItem`'s iOS context menu) never reaches
+/// this on tvOS.
 struct EcosystemSendButton: View {
     let gameID: String
 
     var body: some View {
-        if !gameID.isEmpty, EcosystemBridge.peerCapable() {
+        if !gameID.isEmpty, EcosystemBridge.peerInstalled(scheme: EcosystemSchemes.provenanceScheme) {
             Button {
                 EcosystemShareCenter.shared.send(gameID: gameID)
             } label: {

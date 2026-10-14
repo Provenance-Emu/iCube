@@ -3,11 +3,17 @@
 
 import SwiftUI
 
-/// Confirm prompt for `dolphinios://requestGame` — a peer app (e.g.
-/// Provenance) asked for one of this library's games and their files.
+/// The ecosystem share UI: the confirm prompt for `dolphinios://requestGame`
+/// (a peer app, e.g. Provenance, asked for one of this library's games), the
+/// share sheet that hands the file over, and the error alert.
 ///
-/// An alert rather than a sheet, matching `ContinuityPairingPromptModifier`:
-/// it has to interrupt, and it has exactly two answers.
+/// The prompt is an alert rather than a sheet, matching
+/// `ContinuityPairingPromptModifier`: it has to interrupt, and it has exactly
+/// two answers. The hand-over is the system share sheet, so the user picks
+/// the receiving app ("Copy to Provenance") and iOS copies the file even
+/// after iCube is suspended. tvOS has no share sheet; the routes that reach
+/// `exportItems` are iOS-only (`EcosystemSendButton`, `UIApplication.open`
+/// callbacks), so the sheet is simply not attached there.
 struct EcosystemShareApprovalModifier: ViewModifier {
     @ObservedObject var center: EcosystemShareCenter
 
@@ -31,7 +37,7 @@ struct EcosystemShareApprovalModifier: ViewModifier {
                 Self.sizeString(forPath: request.game.filePath)
             ))
         }
-        // Outgoing "Send to Provenance" failure — so a tap is never a silent no-op.
+        // Share failure — so a tap is never a silent no-op.
         .alert(
             L("Couldn\u{2019}t Share"),
             isPresented: Binding(
@@ -43,6 +49,7 @@ struct EcosystemShareApprovalModifier: ViewModifier {
         } message: {
             Text(center.shareError ?? "")
         }
+        .modifier(ExportSheetModifier(center: center))
     }
 
     private static func sizeString(forPath path: String) -> String {
@@ -54,12 +61,32 @@ struct EcosystemShareApprovalModifier: ViewModifier {
     }
 }
 
+/// The share sheet for `EcosystemShareCenter.exportItems`.
+private struct ExportSheetModifier: ViewModifier {
+    @ObservedObject var center: EcosystemShareCenter
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content.sheet(
+            isPresented: Binding(
+                get: { center.exportItems != nil },
+                set: { if !$0 { center.finishExport() } }
+            )
+        ) {
+            ShareSheet(activityItems: center.exportItems ?? [])
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 extension View {
-    /// Attaches the ecosystem share-approval prompt. Attach once, at the app
-    /// root (see `TVRootView`) — a `requestGame` ask arrives UNSOLICITED, the
-    /// same reasoning `.continuityLibraryPullPrompt()` documents there: a
-    /// modifier scoped to one screen would miss it whenever the owner is
-    /// elsewhere in the app.
+    /// Attaches the ecosystem share prompt, share sheet and error alert.
+    /// Attach once, at the app root (see `TVRootView`) — a `requestGame` ask
+    /// arrives UNSOLICITED, the same reasoning `.continuityLibraryPullPrompt()`
+    /// documents there: a modifier scoped to one screen would miss it whenever
+    /// the owner is elsewhere in the app.
     func ecosystemShareApprovalPrompt() -> some View {
         modifier(EcosystemShareApprovalModifier(center: .shared))
     }

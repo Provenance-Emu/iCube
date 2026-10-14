@@ -1,7 +1,6 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import CryptoKit
 import Foundation
 import PVLibrarySnapshot
 #if os(iOS)
@@ -19,10 +18,10 @@ import UIKit
 ///   `URLRouterService`) / `dolphinios://open?id=<id>` (alias, handled here)
 ///   → launch that game.
 /// - `dolphinios://requestGame?id=<id>&scheme=<cb>` → user-confirmed file
-///   transfer: `EcosystemShareCenter` opens a one-shot continuity session and
-///   replies `<cb>://dolphinios?fetch=<base64url JSON FetchPayload>` so the
-///   peer can download the file set over HTTP with the session's bearer
-///   token.
+///   hand-over: `EcosystemShareCenter` asks, then offers the disc image in
+///   the system share sheet, where the peer appears as a "Copy to" target.
+///   (There is no `fetch` callback: on one device the peer cannot download
+///   from iCube, which is suspended the moment the peer opens.)
 ///
 /// Parsing (`parse`) is plain, synchronous and side-effect free so it can run
 /// on any thread and be unit tested without `@MainActor`. Everything that
@@ -40,20 +39,6 @@ enum EcosystemBridge {
         var developer: String?
         var version: String?
         var iconData: String?
-    }
-
-    /// The requestGame reply: everything the peer needs to pull the game's
-    /// file set from this device's continuity session. Field names are fixed
-    /// by Provenance's `EcosystemFetchPayload`.
-    struct FetchPayload: Codable {
-        var name: String
-        var md5: String
-        /// Base URLs to try, most-preferred first.
-        var bases: [String]
-        var manifestPath: String
-        var filePath: String
-        var fileQueryKey: String
-        var token: String
     }
 
     // MARK: - Incoming requests
@@ -131,15 +116,6 @@ enum EcosystemBridge {
         #endif
     }
 
-    /// Is a *fetch-capable* Provenance installed? Probes the capability
-    /// marker scheme, so an old Provenance (base scheme only) returns false.
-    /// Use this — not `peerInstalled(scheme: EcosystemSchemes.provenanceScheme)`
-    /// — to gate the "Send to Provenance" UI.
-    @MainActor
-    static func peerCapable(_ marker: String = EcosystemSchemes.provenanceEcosystemScheme) -> Bool {
-        peerInstalled(scheme: marker)
-    }
-
     // MARK: - gameInfo reply
 
     /// Games in the gameInfo reply, most-recently-played first, capped — the
@@ -180,20 +156,6 @@ enum EcosystemBridge {
     static func makerCode(forGameID gameID: String) -> String? {
         guard gameID.count >= 6 else { return nil }
         return String(gameID.suffix(2))
-    }
-
-    /// A stable, opaque transfer id for `FetchPayload.md5`: the first 32 hex
-    /// characters (16 bytes) of SHA-256(`gameID + "/" + filename`).
-    ///
-    /// Hashing the disc image itself (which is what `md5` names on iFly's
-    /// side) is not acceptable here — discs run to multiple gigabytes and
-    /// Provenance only checks that the value looks like a hex prefix before
-    /// using it to name the import container, so any stable hex id serves the
-    /// same purpose without reading the file.
-    static func transferId(gameID: String, filename: String) -> String {
-        let digest = SHA256.hash(data: Data("\(gameID)/\(filename)".utf8))
-        let hex = digest.map { String(format: "%02x", $0) }.joined()
-        return String(hex.prefix(32))
     }
 
     // MARK: - Callback plumbing

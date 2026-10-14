@@ -105,11 +105,11 @@
 	<array>
 		<string>stikdebug</string>
 		<string>stikjit</string>
-		<!-- Provenance ecosystem integration: base scheme for launching/callbacks,
-		     plus the capability marker scheme that gates "Send to Provenance"
-		     (see Common/Ecosystem/EcosystemSchemes.swift). -->
+		<!-- Sibling emulator apps (see Common/Ecosystem/EcosystemSchemes.swift):
+		     Provenance for gameInfo callbacks and the "Send to Provenance" probe,
+		     iFly for the Connected Apps settings leaf. -->
 		<string>provenance</string>
-		<string>provenance-ecosystem</string>
+		<string>ifly</string>
 	</array>
 	<key>DOLBuildSource</key>
 	<string>$(DOL_BUILD_SOURCE)</string>
