@@ -5211,8 +5211,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Wii Channels & DLC" = "Wii Channels & DLC";
 "Wii System Files" = "Wii System Files";
 "Your IPL dump, about 2 MB per region." = "Your IPL dump, about 2 MB per region.";
-
-/* tvOS pause: Save States slots */
 "Save Here" = "Save Here";
 "Overwrite" = "Overwrite";
 "Use as Quick Slot" = "Use as Quick Slot";
