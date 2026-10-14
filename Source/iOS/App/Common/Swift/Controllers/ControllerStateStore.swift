@@ -40,7 +40,7 @@ final class ControllerStateStore: NSObject, Sendable {
   /// `isWiiSystem`: the title about to boot, for the pre-boot pass; nil reads the running one
   /// (`isCurrentSystemWii()`, meaningful only once the core runs).
   func snapshot(isWiiSystem: Bool? = nil) -> State {
-    let controllers = GCController.controllers().map { c in
+    let controllers = ControllerManager.shared.controllers.map { c in
       ControllerInfo(
         id: ObjectIdentifier(c),
         vendorName: c.vendorName ?? "",

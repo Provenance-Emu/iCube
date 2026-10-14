@@ -203,7 +203,7 @@ struct LivePlayerScreenIO: PlayerScreenIO {
     case .pad(let qualifier):
       // Only a connected GCController can be picked; the list shows a DSU or disconnected device
       // only as the current one, and picking the current device is a no-op upstream.
-      guard let controller = GCController.controllers().first(where: {
+      guard let controller = ControllerManager.shared.controllers.first(where: {
         (TVControllerMappingBridge.qualifiedName(for: $0) as String) == qualifier
       }) else { return }
       if slot.kind == .gameCube {

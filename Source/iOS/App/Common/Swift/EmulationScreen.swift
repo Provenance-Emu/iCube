@@ -728,7 +728,7 @@ struct EmulationScreen: View {
       }
       #endif
       ControllerManager.shared.unregisterGCOverride(forController: 0)
-      for c in GCController.controllers() {
+      for c in ControllerManager.shared.controllers {
         c.extendedGamepad?.valueChangedHandler = nil
         c.gamepad?.valueChangedHandler = nil
         c.microGamepad?.valueChangedHandler = nil

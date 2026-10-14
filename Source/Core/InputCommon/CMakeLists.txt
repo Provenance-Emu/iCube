@@ -135,6 +135,8 @@ elseif(IOS)
     ControllerInterface/iOS/MFiKeyboard.mm
     ControllerInterface/iOS/Motor.h
     ControllerInterface/iOS/Motor.mm
+    ControllerInterface/iOS/PhysicalProfileMapping.h
+    ControllerInterface/iOS/PhysicalProfileMapping.cpp
     ControllerInterface/iOS/iOS.h
     ControllerInterface/iOS/iOS.mm
     ControllerInterface/iOS/StateManager.h

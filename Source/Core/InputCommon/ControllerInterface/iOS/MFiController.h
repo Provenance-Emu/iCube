@@ -122,6 +122,10 @@ public:
   static void PruneStaleIds(NSArray<GCController*>* live_controllers);
 
 private:
+  // Binds a pad with no extended / micro gamepad through its physical input profile
+  // (PhysicalProfileMapping.h). Returns false when the profile has nothing usable.
+  bool AddPhysicalProfileInputs(GCController* controller);
+
   GCController* m_controller;
   bool m_supports_accelerometer;
   bool m_supports_gyroscope;

@@ -95,7 +95,7 @@ final class PauseGestureTracker {
 
   /// True when a Siri Remote (micro gamepad without an extended profile) exists and holds no player slot.
   private static var siriRemoteIsUnbound: Bool {
-    GCController.controllers().first { $0.microGamepad != nil && $0.extendedGamepad == nil }?.playerIndex == .indexUnset
+    ControllerManager.shared.controllers.first { $0.microGamepad != nil && $0.extendedGamepad == nil }?.playerIndex == .indexUnset
   }
 
   /// State of the most recent `extendedGamepad.buttonMenu` transition, noted

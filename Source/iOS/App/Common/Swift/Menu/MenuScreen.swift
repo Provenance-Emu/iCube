@@ -650,7 +650,7 @@ struct MenuScreen: View {
   /// #3) — keyed by `ObjectIdentifier(GCController)` for `MenuFocusRouter`'s
   /// per-pad latch state.
   private func connectedGamepads() -> [(AnyHashable, GCExtendedGamepad)] {
-    GCController.controllers().compactMap { controller in
+    ControllerManager.shared.controllers.compactMap { controller in
       guard let pad = controller.extendedGamepad else { return nil }
       return (AnyHashable(ObjectIdentifier(controller)), pad)
     }

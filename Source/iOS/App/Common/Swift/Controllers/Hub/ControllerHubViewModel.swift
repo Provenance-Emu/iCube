@@ -57,7 +57,7 @@ struct LiveControllerHubReader: ControllerHubReading {
   func isSideways(forWiimote index: Int) -> Bool { WiimoteSlotOptions.isSideways(forWiimote: index) }
 
   func connectedPads() -> [ConnectedPadState] {
-    GCController.controllers().map { controller in
+    ControllerManager.shared.controllers.map { controller in
       let battery = controller.battery
       let hasLevel = battery.map { $0.batteryLevel >= 0 && $0.batteryState != .unknown } ?? false
       return ConnectedPadState(
@@ -499,7 +499,7 @@ final class ControllerHubViewModel {
   /// Makes one pad visibly and physically react (LED blink, short rumble) so the player can tell
   /// which row is which pad.
   private func identify(qualifier: String) {
-    guard let controller = GCController.controllers().first(where: {
+    guard let controller = ControllerManager.shared.controllers.first(where: {
       (TVControllerMappingBridge.qualifiedName(for: $0) as String) == qualifier
     }) else { return }
     if let light = controller.light {

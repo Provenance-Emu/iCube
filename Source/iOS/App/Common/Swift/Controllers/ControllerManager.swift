@@ -98,6 +98,42 @@ final class ControllerManager: NSObject, ObservableObject {
     reconcile()
   }
 
+  // MARK: Physical-profile wrappers
+
+  /// Wrappers for pads the system exposes with no extended or micro gamepad (the Nintendo
+  /// Switch Online N64 controller on tvOS). Keyed by the real controller. App-side consumers
+  /// (`controllers`, pause routes, menu navigation, the hub) see the wrapper; the core binds
+  /// the real pad itself, and `TVControllerMappingBridge` unwraps before any device lookup.
+  private var physicalProfileWrappers: [ObjectIdentifier: PhysicalProfileController] = [:]
+
+  /// The wrapper standing in for `controller`, creating one when the pad needs it.
+  func physicalProfileWrapper(for controller: GCController) -> GCController {
+    if controller is PhysicalProfileController { return controller }
+    let id = ObjectIdentifier(controller)
+    if let existing = physicalProfileWrappers[id] { return existing }
+    guard PhysicalProfileController.isNeeded(for: controller) else { return controller }
+    let wrapper = PhysicalProfileController(wrapping: controller)
+    physicalProfileWrappers[id] = wrapper
+    NSLog("[INPUT] synthesized extended gamepad for %@ (no extended/micro profile)", controller.vendorName ?? "?")
+    return wrapper
+  }
+
+  /// `GCController.controllers()` with every wrapped pad replaced by its wrapper. Code that
+  /// reads `extendedGamepad` or installs handlers goes through here.
+  var controllers: [GCController] {
+    GCController.controllers().map { physicalProfileWrappers[ObjectIdentifier($0)] ?? $0 }
+  }
+
+  /// What the system exposes for a pad, for a device log: a pad with `extended=0 micro=0`
+  /// reaches a game only through the physical-profile adapter, and its element names are
+  /// what the mapping has to recognise.
+  private func logExposedProfiles(_ controller: GCController) {
+    let elements = controller.physicalInputProfile.elements.keys.sorted().joined(separator: ", ")
+    NSLog("[INPUT] connected %@ (%@): extendedGamepad=%d microGamepad=%d physicalInputProfile.elements=[%@]",
+          controller.vendorName ?? "(nil)", controller.productCategory,
+          controller.extendedGamepad != nil ? 1 : 0, controller.microGamepad != nil ? 1 : 0, elements)
+  }
+
   // MARK: Observing / Publishers
 
   private var observers: [NSObjectProtocol] = []
@@ -181,7 +217,9 @@ final class ControllerManager: NSObject, ObservableObject {
     // Connect/disconnect notifications
     let onConnect = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { [weak self] note in
       guard let self = self else { return }
-      if let c = note.object as? GCController {
+      if let connected = note.object as? GCController {
+        self.logExposedProfiles(connected)
+        let c = self.physicalProfileWrapper(for: connected)
         PauseGestureTracker.shared.noteControllerConnected()
         configureController(c)
         ControllerStyleManager.shared.refreshDetection()
@@ -225,7 +263,10 @@ final class ControllerManager: NSObject, ObservableObject {
     }
     let onDisconnect = NotificationCenter.default.addObserver(forName: .GCControllerDidDisconnect, object: nil, queue: .main) { [weak self] note in
       guard let self = self else { return }
-      let c = note.object as? GCController
+      // A wrapped pad was configured and cached under its wrapper, so release that.
+      let c = (note.object as? GCController).map {
+        self.physicalProfileWrappers.removeValue(forKey: ObjectIdentifier($0)) ?? $0
+      }
       // Auto-pause when an ASSIGNED PHYSICAL controller drops mid-game. A
       // touchscreen-only / unassigned disconnect does nothing. Capture the slot
       // before reconcile() can rewrite the bindings.
@@ -315,7 +356,7 @@ final class ControllerManager: NSObject, ObservableObject {
   /// reads `DOLConfigBridge.mainTouchPadIRMode()` at install time and that
   /// setting can change between games.
   func refreshInputHandlers() {
-    for c in GCController.controllers() { configureController(c) }
+    for c in controllers { configureController(c) }
   }
 
   // MARK: Overrides (GC)

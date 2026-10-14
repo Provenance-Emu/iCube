@@ -480,6 +480,15 @@ func installExtraInputHandlers(_ c: GCController) {
         }
       }
     }
+    // A pad adapted from its physical profile (PhysicalProfileController): its Home button is
+    // the pause button, like the PlayStation / Xbox home buttons above. Start is `buttonMenu`
+    // and reaches the game (GameCube Start / Wii +) through the core's own binding of the pad.
+    if let synthesized = eg as? SynthesizedGamepad {
+      synthesized.buttonHome?.pressedChangedHandler = { _, _, pressed in
+        guard pressed else { return }
+        presentPauseMenu("synthesized.buttonHome")
+      }
+    }
   }
 
   // Home button Apple nonsense fixes

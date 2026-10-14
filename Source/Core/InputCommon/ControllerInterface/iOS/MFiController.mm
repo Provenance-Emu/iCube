@@ -5,9 +5,13 @@
 
 #include <algorithm>
 #include <mutex>
+#include <string>
 #include <vector>
 
+#include "Common/Logging/Log.h"
+#include "Common/MathUtil.h"
 #include "InputCommon/ControllerInterface/iOS/Motor.h"
+#include "InputCommon/ControllerInterface/iOS/PhysicalProfileMapping.h"
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 
 namespace ciface::iOS
@@ -41,8 +45,40 @@ std::mutex s_assigned_ids_mutex;
 std::vector<AssignedId> s_assigned_ids;
 }  // namespace
 
+namespace
+{
+std::vector<std::string> PhysicalElementNames(GCController* controller)
+{
+  std::vector<std::string> names;
+  for (NSString* key in controller.physicalInputProfile.elements)
+    names.push_back(std::string([key UTF8String]));
+  return names;
+}
+
+std::string JoinNames(const std::vector<std::string>& names)
+{
+  std::string joined;
+  for (const auto& name : names)
+  {
+    if (!joined.empty())
+      joined += ", ";
+    joined += name;
+  }
+  return joined;
+}
+}  // namespace
+
 MFiController::MFiController(GCController* controller) : m_controller(controller)
 {
+  // What the system exposes for this pad. A device log with extended=0 micro=0 and the element
+  // list is how a pad the framework ships no gamepad profile for (the Nintendo Switch Online
+  // N64 controller on tvOS 17) is diagnosed; see AddPhysicalProfileInputs.
+  INFO_LOG_FMT(CONTROLLERINTERFACE,
+               "MFi controller '{}' ({}): extended={} micro={} physical elements=[{}]",
+               GetName(), std::string([controller.productCategory UTF8String]),
+               controller.extendedGamepad != nil, controller.microGamepad != nil,
+               JoinNames(PhysicalElementNames(controller)));
+
   if (controller.extendedGamepad != nil)
   {
     GCExtendedGamepad* gamepad = controller.extendedGamepad;
@@ -167,6 +203,13 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
     AddInput(new Button(gamepad.buttonX, "Button X"));
     AddInput(new Button(gamepad.buttonMenu, "Menu"));
   }
+  else if (!AddPhysicalProfileInputs(controller))
+  {
+    WARN_LOG_FMT(CONTROLLERINTERFACE,
+                 "MFi controller '{}' exposes no gamepad profile and its physical profile has "
+                 "no usable direction + face button; it will have no inputs",
+                 GetName());
+  }
 
   if (controller.motion != nil)
   {
@@ -217,6 +260,73 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
     if (engine != nil)
       AddOutput(new Motor(engine, "Rumble"));
   }
+}
+
+// A pad the framework exposes without an extended or micro gamepad still publishes every
+// physical element under `physicalInputProfile.elements`. Bind those straight to the MFi input
+// names the default profiles read, with GameCube / Wii semantics (PhysicalProfileMapping.h), so
+// the pad works without a core-side wrapper object. The C cluster publishes R Stick directions
+// as digital buttons: a pressed C button is a full C-Stick deflection.
+bool MFiController::AddPhysicalProfileInputs(GCController* controller)
+{
+  namespace PP = PhysicalProfile;
+
+  const bool is_n64 = PP::IsN64Pad(GetName(), std::string([controller.productCategory UTF8String]));
+  const PP::Bindings bindings = PP::ResolveBindings(PhysicalElementNames(controller), is_n64);
+  if (!PP::IsUsable(bindings))
+    return false;
+
+  GCPhysicalInputProfile* profile = controller.physicalInputProfile;
+  std::string summary;
+  for (const auto& [name, input] : bindings)
+  {
+    GCControllerElement* element = profile.elements[[NSString stringWithUTF8String:name.c_str()]];
+    if (element == nil)
+      continue;
+
+    if (PP::IsDirection(input))
+    {
+      if (![element isKindOfClass:[GCControllerDirectionPad class]])
+        continue;
+      GCControllerDirectionPad* pad = (GCControllerDirectionPad*)element;
+      if (input == PP::Input::DPad)
+      {
+        AddInput(new Button(pad.up, "D-Pad Up"));
+        AddInput(new Button(pad.down, "D-Pad Down"));
+        AddInput(new Button(pad.left, "D-Pad Left"));
+        AddInput(new Button(pad.right, "D-Pad Right"));
+      }
+      else
+      {
+        const char* side = input == PP::Input::LeftStick ? "L" : "R";
+        AddInput(new Axis(pad.xAxis, 1.0f, std::string(side) + " Stick X+"));
+        AddInput(new Axis(pad.xAxis, -1.0f, std::string(side) + " Stick X-"));
+        AddInput(new Axis(pad.yAxis, 1.0f, std::string(side) + " Stick Y+"));
+        AddInput(new Axis(pad.yAxis, -1.0f, std::string(side) + " Stick Y-"));
+      }
+    }
+    else
+    {
+      if (![element isKindOfClass:[GCControllerButtonInput class]])
+        continue;
+      GCControllerButtonInput* button = (GCControllerButtonInput*)element;
+      const std::string input_name = PP::InputName(input);
+      const bool analog = input == PP::Input::LShoulder || input == PP::Input::RShoulder ||
+                          input == PP::Input::LTrigger || input == PP::Input::RTrigger;
+      if (analog)
+        AddInput(new PressureSensitiveButton(button, input_name));
+      else
+        AddInput(new Button(button, input_name));
+    }
+
+    if (!summary.empty())
+      summary += ", ";
+    summary += name + " -> " + (PP::IsDirection(input) ? "(pad)" : PP::InputName(input));
+  }
+
+  INFO_LOG_FMT(CONTROLLERINTERFACE, "MFi controller '{}': synthesized inputs from physical profile{}: {}",
+               GetName(), is_n64 ? " (N64 autoconfig)" : "", summary);
+  return true;
 }
 
 std::string MFiController::GetName() const
@@ -358,34 +468,25 @@ std::string MFiController::AccelerometerAxis::GetName() const
 
 ControlState MFiController::AccelerometerAxis::GetState() const
 {
-  // The DualShock 4 only returns combined gravity + acceleration.
-  if ([m_motion hasGravityAndUserAcceleration])
-  {
-    GCAcceleration totalAcceleration = [m_motion acceleration];
-    
-    switch (m_plane)
-    {
-    case X:
-      return totalAcceleration.x * m_multiplier;
-    case Y:
-      return totalAcceleration.y * m_multiplier;
-    case Z:
-      return totalAcceleration.z * m_multiplier;
-    }
-  }
-  
-  GCAcceleration acceleration = [m_motion userAcceleration];
-  GCAcceleration gravity = [m_motion gravity];
+  // `acceleration` is the total (gravity + user) acceleration on every controller, whether or
+  // not it can also report the two parts separately. The IMU accelerometer group expects m/s^2
+  // with gravity included (the DSU client and the touch overlay feed it that way); GCMotion
+  // reports g. The old code multiplied userAcceleration by gravity component-wise on pads that
+  // separate them (a near-zero, directionless vector at rest), and returned g on the others, so
+  // the emulated Wii Remote never saw a plausible gravity vector from a PlayStation pad.
+  const GCAcceleration total = [m_motion acceleration];
+  const double scale = m_multiplier * MathUtil::GRAVITY_ACCELERATION;
 
   switch (m_plane)
   {
   case X:
-    return acceleration.x * gravity.x * m_multiplier;
+    return total.x * scale;
   case Y:
-    return acceleration.y * gravity.y * m_multiplier;
+    return total.y * scale;
   case Z:
-    return acceleration.z * gravity.z * m_multiplier;
+    return total.z * scale;
   }
+  return 0;
 }
 
 MFiController::GyroscopeAxis::GyroscopeAxis(GCMotion* motion, MotionPlane plane,

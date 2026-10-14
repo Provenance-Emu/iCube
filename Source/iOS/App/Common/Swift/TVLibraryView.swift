@@ -2702,7 +2702,7 @@ struct TVLibraryView: View {
 #if !os(tvOS)
     let scope = controllerScopeID
     GCController.shouldMonitorBackgroundEvents = false
-    for c in GCController.controllers() {
+    for c in ControllerManager.shared.controllers {
       installPauseMenuHandlers(c)
 
       if let egp = c.extendedGamepad {
@@ -2806,7 +2806,7 @@ struct TVLibraryView: View {
 
   private func teardownControllerNavigation() {
 #if !os(tvOS)
-    for c in GCController.controllers() {
+    for c in ControllerManager.shared.controllers {
       let cid = ObjectIdentifier(c)
       if let egp = c.extendedGamepad {
         if let prev = prevEGPHandlers[cid] {
@@ -2837,7 +2837,7 @@ struct TVLibraryView: View {
   /// game runs, since the tvOS game screen claims no scope of its own.
   private func installTVShoulderStepping() {
     let scope = tvShoulderScopeID
-    for controller in GCController.controllers() {
+    for controller in ControllerManager.shared.controllers {
       controller.extendedGamepad?.valueChangedHandler = { (gamepad: GCExtendedGamepad, element: GCControllerElement) in
         guard ControllerFocusCoordinator.isActiveScope(scope), !TVEmulationBridge.isRunning() else { return }
         if element == gamepad.leftShoulder, gamepad.leftShoulder.isPressed {
@@ -3108,12 +3108,12 @@ private struct SourcePickerView: View {
 #if !os(tvOS)
   private func refreshControllerNav() {
     teardownControllerNav()
-    let active = GCController.controllers().contains { $0.extendedGamepad != nil }
+    let active = ControllerManager.shared.controllers.contains { $0.extendedGamepad != nil }
     controllerNavActive = active
     guard active else { return }
     focusIndex = min(focusIndex, max(0, items.count - 1))
     GCController.shouldMonitorBackgroundEvents = false
-    for c in GCController.controllers() {
+    for c in ControllerManager.shared.controllers {
       guard let egp = c.extendedGamepad else { continue }
       let cid = ObjectIdentifier(c)
       if prevEGPHandlers[cid] == nil { prevEGPHandlers[cid] = egp.valueChangedHandler }
@@ -3148,7 +3148,7 @@ private struct SourcePickerView: View {
   }
 
   private func teardownControllerNav() {
-    for c in GCController.controllers() {
+    for c in ControllerManager.shared.controllers {
       guard let egp = c.extendedGamepad else { continue }
       let cid = ObjectIdentifier(c)
       if let prev = prevEGPHandlers[cid] {

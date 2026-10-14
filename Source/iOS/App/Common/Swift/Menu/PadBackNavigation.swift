@@ -38,7 +38,7 @@ private struct PadBackNavigation: ViewModifier {
   #if os(iOS)
   private func poll() {
     guard pollThrottle.shouldRun(at: CACurrentMediaTime(), emulating: PadPollThrottle.gameIsRunning) else { return }
-    let pads: [(AnyHashable, MenuControllerNav.Input)] = GCController.controllers().compactMap { controller in
+    let pads: [(AnyHashable, MenuControllerNav.Input)] = ControllerManager.shared.controllers.compactMap { controller in
       guard let pad = controller.extendedGamepad else { return nil }
       return (AnyHashable(ObjectIdentifier(controller)), MenuControllerNav.Input(b: pad.buttonB.isPressed))
     }

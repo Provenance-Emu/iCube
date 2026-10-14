@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "TVControllerMappingBridge.h"
+#import "DOLPhysicalProfileBridge.h"
 
 // Dolphin includes
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
@@ -80,6 +81,8 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
 
 + (NSString*)qualifiedNameForController:(GCController*)controller
 {
+  // The core's MFi device holds the real controller, never the app's physical-profile wrapper.
+  controller = [DOLPhysicalProfileBridge baseController:controller];
   std::string qualifier;
   const auto devices = g_controller_interface.GetAllDevices();
   for (const auto& dev : devices)
