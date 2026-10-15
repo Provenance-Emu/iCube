@@ -120,7 +120,7 @@ struct DiscPatchSheet: View {
       LabeledContent(L("Produces a disc of"), value: DiscPatchPlanner.byteString(size))
     }
     if let description = info.description {
-      Text(description).font(.footnote).foregroundStyle(.secondary)
+      Text(description).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
     }
   }
 
@@ -132,7 +132,7 @@ struct DiscPatchSheet: View {
       if let game = model.selectedGame, !showingGames {
         VStack(alignment: .leading, spacing: 4) {
           Text(game.title)
-          Text(game.gameID).font(.footnote).foregroundStyle(.secondary)
+          Text(game.gameID).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
         }
         Button(L("Choose a Different Game")) { showingGames = true }
       } else if model.candidates.isEmpty {
@@ -148,7 +148,7 @@ struct DiscPatchSheet: View {
               VStack(alignment: .leading, spacing: 4) {
                 Text(candidate.title)
                 if model.likelyIDs.contains(candidate.id) {
-                  Text(L("Likely match")).font(.footnote).foregroundStyle(.green)
+                  Text(L("Likely match")).icubeText(.detail).foregroundStyle(.green)
                 }
               }
               Spacer()
@@ -199,7 +199,7 @@ struct DiscPatchSheet: View {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
           Text(title).foregroundStyle(destructive ? .red : .primary)
-          Text(detail).font(.footnote).foregroundStyle(.secondary)
+          Text(detail).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
         }
         Spacer()
         if model.mode == mode { Image(systemName: "checkmark") }
@@ -246,7 +246,7 @@ struct DiscPatchSheet: View {
       VStack(alignment: .leading, spacing: 12) {
         Text(Self.phaseTitle(progress.phase))
         ProgressView(value: progress.fraction)
-        Text(String(format: "%d%%", Int(progress.fraction * 100))).font(.footnote).foregroundStyle(.secondary)
+        Text(String(format: "%d%%", Int(progress.fraction * 100))).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
       }
       Button(L("Cancel"), role: .cancel) { model.cancel() }
     } footer: {

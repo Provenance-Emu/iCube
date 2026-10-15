@@ -65,7 +65,7 @@ struct ModBrowserRoot: View {
 struct ModBrowserAttribution: View {
   var body: some View {
     Text(ModBrowser.attribution)
-      .font(.footnote)
+      .icubeText(.detail)
       .foregroundColor(.secondary)
   }
 }
@@ -315,11 +315,11 @@ struct ModSummaryRow: View {
         Rectangle().fill(Color.secondary.opacity(0.2))
       }
       .frame(width: Self.thumbnailSize, height: Self.thumbnailSize)
-      .clipShape(RoundedRectangle(cornerRadius: 8))
+      .clipShape(RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
       .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
         Text(mod.name).lineLimit(2)
-        Text(subtitle).font(.footnote).foregroundColor(.secondary).lineLimit(1)
+        Text(subtitle).icubeText(.detail).foregroundColor(ICubeDesign.color(.textSecondary)).lineLimit(1)
       }
     }
   }

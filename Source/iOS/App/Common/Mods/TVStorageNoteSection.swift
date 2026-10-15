@@ -10,8 +10,8 @@ struct TVStorageNoteSection: View {
     #if os(tvOS)
     Section {
       Text(L("Apple TV can clear Riivolution packs, saved mods and patched copies when it runs low on space."))
-        .font(.footnote)
-        .foregroundStyle(.secondary)
+        .icubeText(.detail)
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
     }
     #else
     EmptyView()

@@ -137,8 +137,8 @@ struct RiivolutionLaunchView: View {
       Text(L("A mod that does not keep its own save shares the original game's save data, so it can change your existing save. Back up saves you care about."))
       Text(L("Loading-time emulation is turned off while mods are active."))
     }
-    .font(.footnote)
-    .foregroundStyle(.secondary)
+    .icubeText(.detail)
+    .foregroundStyle(ICubeDesign.color(.textSecondary))
   }
 
   // MARK: - Actions

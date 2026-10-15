@@ -75,7 +75,7 @@ struct ModDetailView: View {
     Section {
       if let url = detail.summary.profileURL {
         #if os(tvOS)
-        Text(String(format: L("Open %@ in a browser on another device."), url.absoluteString)).font(.footnote)
+        Text(String(format: L("Open %@ in a browser on another device."), url.absoluteString)).icubeText(.detail)
         #else
         Link(destination: url) { Label(L("Open on GameBanana"), systemImage: "safari") }
         #endif
@@ -93,7 +93,7 @@ struct ModDetailView: View {
             Rectangle().fill(Color.secondary.opacity(0.2)).frame(width: Self.previewHeight * 1.6)
           }
           .frame(height: Self.previewHeight)
-          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .clipShape(RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
           .accessibilityHidden(true)
         }
       }
@@ -144,7 +144,7 @@ struct ModDetailView: View {
     let checklist = detail.licenseChecklist
     if !licence.isEmpty || !checklist.allowed.isEmpty || !checklist.askFirst.isEmpty || !checklist.forbidden.isEmpty {
       Section(L("Licence")) {
-        if !licence.isEmpty { Text(licence).font(.footnote) }
+        if !licence.isEmpty { Text(licence).icubeText(.detail) }
         ForEach(checklist.allowed, id: \.self) { Label($0, systemImage: "checkmark.circle") }
         ForEach(checklist.askFirst, id: \.self) { Label($0, systemImage: "questionmark.circle") }
         ForEach(checklist.forbidden, id: \.self) { Label($0, systemImage: "xmark.circle") }
@@ -159,7 +159,7 @@ struct ModFileRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(file.fileName).lineLimit(2)
-      Text(subtitle).font(.footnote).foregroundColor(.secondary)
+      Text(subtitle).icubeText(.detail).foregroundColor(ICubeDesign.color(.textSecondary))
     }
   }
 
@@ -196,7 +196,7 @@ struct ModFileView: View {
         if !classification.skippedPrograms.isEmpty {
           Section {
             Text(String(format: L("Not installed, and never run: %@"), classification.skippedPrograms.joined(separator: ", ")))
-              .font(.footnote)
+              .icubeText(.detail)
           }
         }
       }
@@ -245,7 +245,7 @@ struct ModFileView: View {
       detail(L("Downloads"), "\(file.downloadCount)")
       if let scan = file.virusScanResult, !scan.isEmpty { detail(L("Virus scan"), scan) }
       ForEach(file.analysisWarnings.keys.sorted(), id: \.self) { key in
-        Text(Self.warningText(kind: key, paths: file.analysisWarnings[key] ?? [])).font(.footnote)
+        Text(Self.warningText(kind: key, paths: file.analysisWarnings[key] ?? [])).icubeText(.detail)
       }
     }
   }
@@ -294,7 +294,7 @@ struct ModFileView: View {
     case .textures(let gameID, let root):
       Section(L("Texture Pack")) {
         Text(String(format: L("Textures for game %@."), gameID))
-        if let warning = ModInstallModel.regionWarning(packID: gameID, ownedID: ownedGame?.gameID) { Text(warning).font(.footnote) }
+        if let warning = ModInstallModel.regionWarning(packID: gameID, ownedID: ownedGame?.gameID) { Text(warning).icubeText(.detail) }
         Button(L("Install Textures")) { model.installTextures(gameID: gameID, root: root) }
           .disabled(model.isInstalling)
       }
@@ -305,7 +305,7 @@ struct ModFileView: View {
           Button(String(format: L("Add Codes to %@"), game.title)) { model.installGecko(file: codesFile) }
             .disabled(model.isInstalling)
         } else {
-          Text(L("Add the game to your library first; Gecko codes are stored per game.")).font(.footnote)
+          Text(L("Add the game to your library first; Gecko codes are stored per game.")).icubeText(.detail)
         }
       }
     case .riivolution(let root):
@@ -317,7 +317,7 @@ struct ModFileView: View {
     case .discPatch(let patches, let suggested):
       Section(L("Disc Patch")) {
         Text(patches.map(\.lastPathComponent).joined(separator: ", "))
-        Text(L("Patches are applied to a copy of your game disc, never to the original unless you choose that.")).font(.footnote)
+        Text(L("Patches are applied to a copy of your game disc, never to the original unless you choose that.")).icubeText(.detail)
         Button(L("Choose a Game to Patch…")) { model.presentDiscPatch(patches, suggestedGameID: suggested) }
       }
     case .unsupported(let reason):

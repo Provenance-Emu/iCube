@@ -40,8 +40,8 @@ struct ModManageView: View {
         Section {
           Text(String(format: L("%@ itself is never deleted here."), model.game.title))
         }
-        .font(.footnote)
-        .foregroundStyle(.secondary)
+        .icubeText(.detail)
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
         TVStorageNoteSection()
       }
       .navigationTitle(L("Manage Patches & Mods"))
