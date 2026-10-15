@@ -86,7 +86,6 @@ final class EngineTests: PatchTestCase {
     private final class TaskBox: @unchecked Sendable {
         private let lock = NSLock()
         private var task: Task<PatchResult, Error>?
-        private var cancelled = false
 
         func set(_ newTask: Task<PatchResult, Error>) {
             lock.lock()
@@ -97,7 +96,6 @@ final class EngineTests: PatchTestCase {
         func cancel() {
             lock.lock()
             task?.cancel()
-            cancelled = task != nil
             lock.unlock()
         }
     }

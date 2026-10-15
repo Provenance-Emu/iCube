@@ -114,7 +114,8 @@ final class XDelta3Tests: PatchTestCase {
         let info = try PatchEngine.inspect(patch: url)
         XCTAssertEqual(info.format, .xdelta3)
         XCTAssertEqual(info.targetSize, UInt64(target.count))
-        XCTAssertEqual(info.sourceSize, UInt64(source.count))
+        XCTAssertNil(info.sourceSize)
+        XCTAssertEqual(info.minimumSourceSize, UInt64(source.count))
         XCTAssertNil(info.sourceCRC32)
     }
 }

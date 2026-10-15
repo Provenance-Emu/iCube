@@ -201,4 +201,41 @@ final class LargeImageTests: PatchTestCase {
         XCTAssertEqual(try bytes(of: outputURL, at: offset + 4_900, count: 8), [UInt8](repeating: 0x5A, count: 8))
         XCTAssertEqual(try bytes(of: outputURL, at: offset + 5_000, count: 4), [0, 0, 0, 0])
     }
+
+    /// RFC 3284 integer: base 128, most significant group first.
+    private func vcdiffInteger(_ value: UInt64) -> [UInt8] {
+        var groups = [UInt8(value & 0x7F)]
+        var rest = value >> 7
+        while rest > 0 {
+            groups.append(UInt8(rest & 0x7F) | 0x80)
+            rest >>= 7
+        }
+        return groups.reversed()
+    }
+
+    func testXDelta3CopiesFromASourceOffsetAboveFourGiB() async throws {
+        let sourceURL = try makeSparseSource()
+        // 32 bytes before a 128 KiB source-block boundary, so the copy spans two blocks above 4 GiB.
+        let position: UInt64 = 33_570 * 131_072 - 32
+        let payload = (0..<64).map { UInt8(0xA0 &+ $0) }
+        let handle = try FileHandle(forWritingTo: sourceURL)
+        try handle.seek(toOffset: position)
+        try handle.write(contentsOf: Data(payload))
+        try handle.close()
+
+        // One window: VCD_SOURCE, segment of 64 bytes at `position`, a single COPY of 64 bytes from address 0.
+        let delta: [UInt8] = [0x40, 0x00, 0x00, 0x02, 0x01, 0x13, 0x40, 0x00]
+        let patch: [UInt8] = [0xD6, 0xC3, 0xC4, 0x00, 0x00, 0x01] + vcdiffInteger(64) + vcdiffInteger(position)
+            + vcdiffInteger(UInt64(delta.count)) + delta
+        let patchURL = try write(patch, named: "big.xdelta")
+        let outputURL = directory.appendingPathComponent("output.bin")
+
+        let info = try PatchEngine.inspect(patch: patchURL)
+        XCTAssertEqual(info.targetSize, 64)
+        XCTAssertEqual(info.minimumSourceSize, position + 64)
+
+        let result = try await PatchEngine.apply(patch: patchURL, source: sourceURL, output: outputURL)
+        XCTAssertEqual(result.bytesWritten, 64)
+        XCTAssertEqual(try read(outputURL), payload)
+    }
 }
