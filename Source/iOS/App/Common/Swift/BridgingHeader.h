@@ -45,5 +45,6 @@
 #import "DOLPhysicalProfileBridge.h"
 #import "DOLControllerSettingsBridge.h"
 #import "DiscImageBridge.h"
+#import "RiivolutionBridge.h"
 #import "NANDImportManager.h"
 #import "ImportFileManager.h"

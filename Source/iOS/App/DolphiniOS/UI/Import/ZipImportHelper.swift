@@ -21,14 +21,22 @@ final class ZipImportResult: NSObject {
   @objc let importedCount: Int
   @objc let skippedExistingCount: Int
   @objc let errorMessage: String?
+  /// Snackbar text when the archive was a Riivolution pack, which installs into `Load/Riivolution/` instead of the library.
+  @objc let installedPackMessage: String?
   /// True when the archive failed to import and was moved to Rejected Imports.
   @objc fileprivate(set) var movedToRejectedImports = false
 
-  init(importedCount: Int, skippedExistingCount: Int, errorMessage: String?) {
+  init(importedCount: Int, skippedExistingCount: Int, errorMessage: String?, installedPackMessage: String? = nil) {
     self.importedCount = importedCount
     self.skippedExistingCount = skippedExistingCount
     self.errorMessage = errorMessage
+    self.installedPackMessage = installedPackMessage
     super.init()
+  }
+
+  /// True when the archive added something: games, games it already had, or a Riivolution pack.
+  @objc var succeeded: Bool {
+    importedCount > 0 || skippedExistingCount > 0 || installedPackMessage != nil
   }
 }
 
@@ -41,13 +49,17 @@ final class ArchiveBatchImportResult: NSObject {
   @objc let failedArchives: Int
   /// How many of `failedArchives` were moved to Rejected Imports; the rest are still in place.
   @objc let rejectedArchives: Int
+  /// One snackbar line per Riivolution pack installed. Packs are not counted in `archivesProcessed`.
+  @objc let installedPackMessages: [String]
 
-  init(archivesProcessed: Int, gamesImported: Int, gamesSkipped: Int, failedArchives: Int, rejectedArchives: Int) {
+  init(archivesProcessed: Int, gamesImported: Int, gamesSkipped: Int, failedArchives: Int, rejectedArchives: Int,
+       installedPackMessages: [String] = []) {
     self.archivesProcessed = archivesProcessed
     self.gamesImported = gamesImported
     self.gamesSkipped = gamesSkipped
     self.failedArchives = failedArchives
     self.rejectedArchives = rejectedArchives
+    self.installedPackMessages = installedPackMessages
     super.init()
   }
 }
@@ -123,8 +135,9 @@ final class ZipImportHelper: NSObject {
       : nil
     let rejected = rejectedSnackbarText(count: batch.rejectedArchives, name: nil, movedAside: true)
     let failed = rejectedSnackbarText(count: batch.failedArchives - batch.rejectedArchives, name: nil, movedAside: false)
-    let lines = [extracted, rejected, failed].compactMap { $0 }
-    return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    let lines = [extracted] + batch.installedPackMessages.map(Optional.some) + [rejected, failed]
+    let text = lines.compactMap { $0 }
+    return text.isEmpty ? nil : text.joined(separator: "\n")
   }
 
   /// Snackbar text for archives that failed to import. `movedAside` says whether they were
@@ -175,12 +188,17 @@ final class ZipImportHelper: NSObject {
   /// Extract a supported archive and import contained disc images into `destinationFolder`.
   @objc(importArchiveAtPath:toFolder:)
   static func importArchive(atPath sourcePath: String, toFolder destinationFolder: String) -> ZipImportResult {
+    importArchive(atPath: sourcePath, toFolder: destinationFolder, riivolutionRoot: RiivolutionLocation.installRoot())
+  }
+
+  /// As `importArchive(atPath:toFolder:)`, with the folder a Riivolution pack installs into.
+  static func importArchive(atPath sourcePath: String, toFolder destinationFolder: String, riivolutionRoot: URL) -> ZipImportResult {
     SentryTelemetryService.trace("import.archive", op: "import.archive", tags: ["path_ext": (sourcePath as NSString).pathExtension]) {
-      importArchiveImpl(atPath: sourcePath, toFolder: destinationFolder)
+      importArchiveImpl(atPath: sourcePath, toFolder: destinationFolder, riivolutionRoot: riivolutionRoot)
     }
   }
 
-  private static func importArchiveImpl(atPath sourcePath: String, toFolder destinationFolder: String) -> ZipImportResult {
+  private static func importArchiveImpl(atPath sourcePath: String, toFolder destinationFolder: String, riivolutionRoot: URL) -> ZipImportResult {
     guard ImportableFileTypes.archiveKind(for: URL(fileURLWithPath: sourcePath)) != nil else {
       return ZipImportResult(importedCount: 0,
                              skippedExistingCount: 0,
@@ -200,7 +218,29 @@ final class ZipImportHelper: NSObject {
       return ZipImportResult(importedCount: 0, skippedExistingCount: 0, errorMessage: failureMessage(for: error))
     }
 
+    if !RiivolutionPackInstaller.packRoots(in: tempDir).isEmpty {
+      return installRiivolutionPack(from: tempDir, archiveName: archiveDisplayName(sourceURL), into: riivolutionRoot)
+    }
     return importSupportedFiles(from: tempDir, toFolder: destinationFolder)
+  }
+
+  /// A pack goes to the virtual SD card, not the library: its files are not games.
+  private static func installRiivolutionPack(from extracted: URL, archiveName: String, into root: URL) -> ZipImportResult {
+    do {
+      let summary = try RiivolutionPackInstaller.install(extractedFolder: extracted, name: archiveName, into: root)
+      return ZipImportResult(importedCount: 0, skippedExistingCount: 0, errorMessage: nil, installedPackMessage: summary.message)
+    } catch {
+      let message = error is ZipEntryScannerError
+        ? failureMessage(for: error)
+        : L("The Riivolution pack couldn't be installed.") + "\n\n\(error.localizedDescription)"
+      return ZipImportResult(importedCount: 0, skippedExistingCount: 0, errorMessage: message)
+    }
+  }
+
+  /// The archive's name without its extension, including the `.tar` of `.tar.gz`.
+  private static func archiveDisplayName(_ url: URL) -> String {
+    let name = url.deletingPathExtension()
+    return (name.pathExtension.lowercased() == "tar" ? name.deletingPathExtension() : name).lastPathComponent
   }
 
   /// Document-picker and legacy entry point — delegates to `importArchive`.
@@ -275,12 +315,16 @@ final class ZipImportHelper: NSObject {
   /// `rejectedImportsFolder(forLibraryFolder: folder)`.
   @objc(processOrphanedArchivesInFolder:)
   static func processOrphanedArchives(inFolder folder: String) -> ArchiveBatchImportResult {
+    processOrphanedArchives(inFolder: folder, riivolutionRoot: RiivolutionLocation.installRoot())
+  }
+
+  static func processOrphanedArchives(inFolder folder: String, riivolutionRoot: URL) -> ArchiveBatchImportResult {
     SentryTelemetryService.trace("import.archive.batch", op: "import.archive", tags: ["source": "orphaned_scan"]) {
-      processOrphanedArchivesImpl(inFolder: folder)
+      processOrphanedArchivesImpl(inFolder: folder, riivolutionRoot: riivolutionRoot)
     }
   }
 
-  private static func processOrphanedArchivesImpl(inFolder folder: String) -> ArchiveBatchImportResult {
+  private static func processOrphanedArchivesImpl(inFolder folder: String, riivolutionRoot: URL) -> ArchiveBatchImportResult {
     let fm = FileManager.default
     let folderURL = URL(fileURLWithPath: folder, isDirectory: true)
     guard fm.fileExists(atPath: folder) else {
@@ -304,10 +348,13 @@ final class ZipImportHelper: NSObject {
     var gamesSkipped = 0
     var failedArchives = 0
     var rejectedArchives = 0
+    var installedPackMessages: [String] = []
 
     for path in archivePaths {
-      guard let result = processArchiveInPlace(atPath: path, libraryFolder: folder) else { continue }
-      if result.importedCount > 0 || result.skippedExistingCount > 0 {
+      guard let result = processArchiveInPlace(atPath: path, libraryFolder: folder, riivolutionRoot: riivolutionRoot) else { continue }
+      if let packMessage = result.installedPackMessage {
+        installedPackMessages.append(packMessage)
+      } else if result.importedCount > 0 || result.skippedExistingCount > 0 {
         archivesProcessed += 1
         gamesImported += result.importedCount
         gamesSkipped += result.skippedExistingCount
@@ -321,7 +368,8 @@ final class ZipImportHelper: NSObject {
                                     gamesImported: gamesImported,
                                     gamesSkipped: gamesSkipped,
                                     failedArchives: failedArchives,
-                                    rejectedArchives: rejectedArchives)
+                                    rejectedArchives: rejectedArchives,
+                                    installedPackMessages: installedPackMessages)
   }
 
   /// Extracts an archive that already sits inside the app's library folder beside its
@@ -334,12 +382,17 @@ final class ZipImportHelper: NSObject {
   @objc(processArchiveInPlaceAtPath:libraryFolder:)
   @discardableResult
   static func processArchiveInPlace(atPath path: String, libraryFolder: String) -> ZipImportResult? {
+    processArchiveInPlace(atPath: path, libraryFolder: libraryFolder, riivolutionRoot: RiivolutionLocation.installRoot())
+  }
+
+  @discardableResult
+  static func processArchiveInPlace(atPath path: String, libraryFolder: String, riivolutionRoot: URL) -> ZipImportResult? {
     guard isArchivePath(path) else { return nil }
 
     let destinationFolder = (path as NSString).deletingLastPathComponent
-    let result = importArchive(atPath: path, toFolder: destinationFolder)
+    let result = importArchive(atPath: path, toFolder: destinationFolder, riivolutionRoot: riivolutionRoot)
 
-    if result.importedCount > 0 || result.skippedExistingCount > 0 {
+    if result.succeeded {
       removeArchiveAtomically(atPath: path)
       return result
     }
@@ -604,7 +657,7 @@ final class ZipImportHelper: NSObject {
             userInfo: [NSLocalizedDescriptionKey: "\(component) support is unavailable in this build."])
   }
 
-  private static func shouldSkipArchiveRelativePath(_ relative: String) -> Bool {
+  static func shouldSkipArchiveRelativePath(_ relative: String) -> Bool {
     let normalized = relative.replacingOccurrences(of: "\\", with: "/").lowercased()
     return normalized.hasPrefix("__macosx/") || normalized.contains("/__macosx/")
       || normalized == ".ds_store" || normalized.hasSuffix("/.ds_store")

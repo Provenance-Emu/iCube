@@ -13,6 +13,8 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
   private var gamesImported = 0
   /// Names of uploads that failed to import, and whether each was moved to Rejected Imports.
   private var rejectedArchives: [(name: String, movedAside: Bool)] = []
+  /// One line per Riivolution pack installed since the last summary.
+  private var installedPackMessages: [String] = []
   /// NAND import notices for the next upload summary (started, keys received, or refused).
   private var nandNotices: [String] = []
   private var nandImportInProgress = false
@@ -49,7 +51,9 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
         return
       }
       lock.lock()
-      if result.importedCount > 0 || result.skippedExistingCount > 0 {
+      if let packMessage = result.installedPackMessage {
+        installedPackMessages.append(packMessage)
+      } else if result.importedCount > 0 || result.skippedExistingCount > 0 {
         archivesProcessed += 1
         gamesImported += result.importedCount
       } else if result.errorMessage != nil {
@@ -187,11 +191,13 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
     let archives = archivesProcessed
     let games = gamesImported
     let rejected = rejectedArchives
+    let packs = installedPackMessages
     let nand = nandNotices
     nandNotices = []
     archivesProcessed = 0
     gamesImported = 0
     rejectedArchives = []
+    installedPackMessages = []
     lock.unlock()
 
     let extracted = archives > 0
@@ -205,7 +211,7 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
     let failedText = ZipImportHelper.rejectedSnackbarText(count: leftInPlace.count,
                                                           name: leftInPlace.first?.name,
                                                           movedAside: false)
-    let lines = [extracted, rejectedText, failedText].compactMap { $0 } + nand
+    let lines = [extracted].compactMap { $0 } + packs + [rejectedText, failedText].compactMap { $0 } + nand
     return lines.isEmpty ? nil : lines.joined(separator: "\n")
   }
 }

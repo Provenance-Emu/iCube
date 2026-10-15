@@ -172,6 +172,8 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 
   // Sweep what an interrupted disc patch left behind (expanded ISOs, half-written copies).
   [DOLDiscPatchSweep sweep];
+  // Single-play mod descriptors (Cache/ModRuns) outlive their game only if the app was killed mid-play.
+  [DOLModDescriptorStore sweepRuns];
 
   [[MsgAlertManager shared] registerHandler];
 
