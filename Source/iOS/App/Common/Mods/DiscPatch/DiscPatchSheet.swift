@@ -185,13 +185,16 @@ struct DiscPatchSheet: View {
         }
       }
       modeRow(.replaceOriginal, title: L("Replace the Original"),
-              detail: L("Overwrites your disc file with the patched one. This cannot be undone."), destructive: true)
+              detail: model.canReplaceOriginal
+                ? L("Overwrites your disc file with the patched one. This cannot be undone.")
+                : DiscPatchPlanner.unverifiedReplacementMessage,
+              destructive: true, enabled: model.canReplaceOriginal)
     } header: {
       Text(L("What to do"))
     }
   }
 
-  private func modeRow(_ mode: DiscPatchMode, title: String, detail: String, destructive: Bool = false) -> some View {
+  private func modeRow(_ mode: DiscPatchMode, title: String, detail: String, destructive: Bool = false, enabled: Bool = true) -> some View {
     Button { model.mode = mode } label: {
       HStack {
         VStack(alignment: .leading, spacing: 4) {
@@ -202,6 +205,7 @@ struct DiscPatchSheet: View {
         if model.mode == mode { Image(systemName: "checkmark") }
       }
     }
+    .disabled(!enabled)
   }
 
   // MARK: - Actions and states

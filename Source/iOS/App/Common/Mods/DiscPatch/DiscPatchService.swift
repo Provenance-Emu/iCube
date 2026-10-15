@@ -159,6 +159,10 @@ final class DiscPatchService: @unchecked Sendable {
       throw DiscPatchError.patch(.unsupportedSecondaryCompression)
     }
 
+    if request.mode == .replaceOriginal, let blocker = DiscPatchPlanner.replacementBlocker(patchCanVerify: patchInfo.canVerifyIntegrity) {
+      throw DiscPatchError.blocked(blocker)
+    }
+
     if !request.ignoreSourceChecksum, let declared = patchInfo.sourceSize, image.plainSizeIsExact, declared != image.plainSize {
       throw DiscPatchError.wrongSourceSize(expected: declared, actual: image.plainSize)
     }
@@ -204,6 +208,10 @@ final class DiscPatchService: @unchecked Sendable {
         throw mapped
       }
       if needsExpansion { discardWork() }
+      // The patch may carry checks that did not run, for example a PPF block check on an image too short for it.
+      if request.mode == .replaceOriginal, let blocker = DiscPatchPlanner.replacementBlocker(patchCanVerify: result.checkedAgainstSource) {
+        throw DiscPatchError.blocked(blocker)
+      }
 
       let targetMismatch = result.ignoredTargetMismatch != nil
       let outcome = try await deliver(plan: plan, request: request, image: image, key: key,

@@ -227,6 +227,16 @@ enum DiscPatchPlanner {
                   plan.destination.lastPathComponent)
   }
 
+  /// Replacing the original is only safe when the patch can prove it was made for that disc: an IPS patch,
+  /// or a PPF or xdelta patch without checks, applies to any disc and may leave a broken one in the original's place.
+  static var unverifiedReplacementMessage: String {
+    L("This patch has no checksum to confirm it was made for this disc, so the original is not replaced. Save a copy instead.")
+  }
+
+  static func replacementBlocker(patchCanVerify: Bool) -> String? {
+    patchCanVerify ? nil : unverifiedReplacementMessage
+  }
+
   // MARK: - Free space
 
   /// Room kept free on top of the files themselves.

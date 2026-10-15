@@ -131,6 +131,11 @@ final class DiscPatchPlannerTests: XCTestCase {
     XCTAssertNil(DiscPatchPlanner.replacementBlocker(plan: plan, exists: { _ in false }))
   }
 
+  func test_replacementNeedsAPatchThatCanVerifyItself() {
+    XCTAssertNil(DiscPatchPlanner.replacementBlocker(patchCanVerify: true))
+    XCTAssertEqual(DiscPatchPlanner.replacementBlocker(patchCanVerify: false), DiscPatchPlanner.unverifiedReplacementMessage)
+  }
+
   func test_fileNamesAreMadeSafe() {
     XCTAssertEqual(DiscPatchPlanner.sanitizedFileName("A/B:C*D"), "A B C D")
     XCTAssertEqual(DiscPatchPlanner.sanitizedFileName("  ..  "), "Patched")

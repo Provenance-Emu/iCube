@@ -57,8 +57,13 @@ final class DiscPatchModel: ObservableObject {
     candidates.first { $0.id == selectedGameID }
   }
 
+  /// Replacing the original needs a patch that can check itself against the disc.
+  var canReplaceOriginal: Bool {
+    patchInfo?.canVerifyIntegrity ?? false
+  }
+
   var canStart: Bool {
-    selectedPatch != nil && patchProblem == nil && selectedGame != nil && !isRunning
+    selectedPatch != nil && patchProblem == nil && selectedGame != nil && !isRunning && (mode != .replaceOriginal || canReplaceOriginal)
   }
 
   // MARK: - Choosing
@@ -80,6 +85,7 @@ final class DiscPatchModel: ObservableObject {
       let info = try PatchEngine.inspect(patch: url)
       patchInfo = info
       patchProblem = nil
+      if mode == .replaceOriginal, !info.canVerifyIntegrity { mode = .saveCopy }
       rank(for: info)
     } catch {
       patchInfo = nil
