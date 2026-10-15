@@ -325,6 +325,23 @@ final class RiivolutionModsTests: XCTestCase {
     XCTAssertEqual(entries(of: software), ["Game.iso"])
   }
 
+  func testAnArchiveWhoseDiscFailsToImportIsKept() throws {
+    let zip = try archive([
+      .init(name: "riivolution/newer.xml", contents: Data(Self.packXML.utf8)),
+      .init(name: "Game.iso", contents: Data("disc".utf8)),
+    ], as: "Bundle.zip")
+    let inLibrary = software.appendingPathComponent("Bundle.zip")
+    try FileManager.default.moveItem(at: zip, to: inLibrary)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: software.path)
+    addTeardownBlock { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: self.software.path) }
+
+    let result = ZipImportHelper.processArchiveInPlace(atPath: inLibrary.path, libraryFolder: software.path, riivolutionRoot: sdRoot)
+
+    XCTAssertNotNil(result?.installedPackMessage)
+    XCTAssertEqual(result?.hadFailures, true)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: inLibrary.path), "the only copy of the disc was deleted")
+  }
+
   func testAPackArchiveWithAnEscapingPathIsRejectedAndInstallsNothing() throws {
     let escape = "riiv-escape-\(UUID().uuidString).txt"
     let escaped = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(escape)

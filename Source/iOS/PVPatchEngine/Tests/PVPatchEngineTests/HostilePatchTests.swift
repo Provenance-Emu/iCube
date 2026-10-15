@@ -44,6 +44,13 @@ final class HostilePatchTests: PatchTestCase {
         return groups.reversed()
     }
 
+    /// One VCDIFF window that copies `sourceSize` bytes of source from `sourcePosition`, with an empty instruction stream.
+    private func vcdiffSourceWindow(sourcePosition: UInt64, sourceSize: UInt64, targetLength: UInt64) -> [UInt8] {
+        let delta = vcdiffInteger(targetLength) + [0x00] + vcdiffInteger(0) + vcdiffInteger(0) + vcdiffInteger(0)
+        return [0xD6, 0xC3, 0xC4, 0x00, 0x00, 0x01] + vcdiffInteger(sourceSize) + vcdiffInteger(sourcePosition)
+            + vcdiffInteger(UInt64(delta.count)) + delta
+    }
+
     private func vcdiff(windowTargetLengths: [UInt64]) -> [UInt8] {
         var bytes: [UInt8] = [0xD6, 0xC3, 0xC4, 0x00, 0x00]
         for length in windowTargetLengths {
@@ -123,6 +130,23 @@ final class HostilePatchTests: PatchTestCase {
         XCTAssertThrowsError(try PatchEngine.inspect(patch: patch)) { error in
             assertCorrupt(error as? PatchError)
         }
+    }
+
+    func testVCDIFFSourceSegmentPastTheSourceIsAnErrorNotACrash() async {
+        for position in [UInt64(1 << 40), UInt64(1) << 63, UInt64.max - 1] {
+            let patch = vcdiffSourceWindow(sourcePosition: position, sourceSize: 1, targetLength: 1)
+            for ignoreSource in [false, true] {
+                let error = await expectPatchError {
+                    _ = try await apply(patch, ext: "xdelta", to: [1, 2, 3, 4], options: PatchOptions(ignoreSourceChecksum: ignoreSource))
+                }
+                XCTAssertNotNil(error, "position \(position), ignoreSource \(ignoreSource)")
+            }
+        }
+    }
+
+    func testVCDIFFSourceSegmentWrappingTheOffsetIsCorrupt() async {
+        let patch = vcdiffSourceWindow(sourcePosition: UInt64.max, sourceSize: 2, targetLength: 1)
+        assertCorrupt(await applyIgnoringSource(patch, ext: "xdelta"))
     }
 
     func testVCDIFFWindowsWithinTheLimitSumUp() throws {
