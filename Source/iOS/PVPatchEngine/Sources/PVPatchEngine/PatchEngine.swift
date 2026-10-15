@@ -58,7 +58,7 @@ public enum PatchEngine {
         case .xdelta3:
             let summary = try VCDIFFScanner.scan(file)
             info.targetSize = summary.targetSize
-            info.sourceSize = summary.requiredSourceSize > 0 ? summary.requiredSourceSize : nil
+            info.minimumSourceSize = summary.requiredSourceSize > 0 ? summary.requiredSourceSize : nil
         }
         return info
     }

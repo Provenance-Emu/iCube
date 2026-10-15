@@ -47,6 +47,8 @@ Behaviour worth knowing:
   `corruptPatch` rather than `truncatedPatch`. IPS, PPF and xdelta3 report `truncatedPatch`.
 - An xdelta3 patch cut exactly between two windows decodes "successfully": VCDIFF carries no total length.
   A patch cut inside a window is caught.
+- `inspect` on an xdelta3 patch reports `targetSize` and `minimumSourceSize` (the furthest source byte any window reads: a
+  lower bound, because VCDIFF does not record the source size); `sourceSize` and the CRC32s are nil.
 - xdelta3 cannot tell a wrong source from a damaged patch: both fail the window adler32 and are reported
   as `sourceMismatch`.
 - UPS requires the source size to equal the input size (forward) or output size (reverse), because a longer
@@ -78,8 +80,11 @@ Measured by the tests on 4.5 GB sparse images: about 6 MiB above the process's s
 ## xdelta3 and licences
 
 `Sources/CXdelta3` is the xdelta3 decoder, unmodified, from `jmacd/xdelta` branch `release3_1_apl` at
-`7508fd2a823443b1f0173ca361620f21d62a7d37` (the binary reports itself as 3.1.1). That branch is the Apache-2.0
-relicensing of the 3.1.0 code; the `v3.1.0` tag itself carries GPL-2.0 headers, so it is not used. The licence
+`7508fd2a823443b1f0173ca361620f21d62a7d37` (the binary reports itself as 3.1.1). The `v3.1.0` tag carries
+GPL-2.0 headers, so it is not used. Compared with the tag, `xdelta3.c`, `xdelta3-decode.h`, `xdelta3-cfgs.h` and
+`xdelta3-lzma.h` differ only in the licence header. The other vendored headers differ by portability edits
+(`xdelta3.h`: Windows guards, a `static_assert` check of the `SIZEOF_*` defines, `extern "C"`, a `PRINTF_ATTRIBUTE`
+fallback; `const` on two checksum-update parameters in `xdelta3-internal.h`) and moved comments. The licence
 text is `Sources/CXdelta3/LICENSE`. Only the files the decoder needs are vendored. The encoder is compiled
 (`xdelta3-fgk.h` does not build without it) but unused. `pv_xd3_shim.c` is a small C facade so Swift never
 sees the `xd3_*` types; it also exposes zlib's `crc32`, which is why the package links `libz`.

@@ -110,8 +110,12 @@ public struct PatchInfo: Sendable, Equatable {
     public var format: PatchFormat
     /// Size of the patch file.
     public var patchSize: UInt64
-    /// Size of the image the patch expects, when the format records it.
+    /// Size of the image the patch expects, when the format records it (BPS, UPS, PPF 2.0).
+    /// nil for xdelta3, whose patches do not record it; see `minimumSourceSize`.
     public var sourceSize: UInt64?
+    /// xdelta3 only: the furthest source byte the patch reads, so the smallest source it can apply to.
+    /// It is a lower bound, not a declared size; do not match it for equality.
+    public var minimumSourceSize: UInt64?
     /// Size of the image the patch produces, when the format records it.
     public var targetSize: UInt64?
     public var sourceCRC32: UInt32?
