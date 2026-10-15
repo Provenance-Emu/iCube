@@ -1,0 +1,23 @@
+{
+  "_aMetadata": {
+    "_nRecordCount": 2,
+    "_nPerpage": 5,
+    "_bIsComplete": true
+  },
+  "_aRecords": [
+    {
+      "_idRow": 5706,
+      "_sName": "Super Smash Bros. Melee",
+      "_sProfileUrl": "https://gamebanana.com/games/5706",
+      "_sBannerUrl": "https://images.gamebanana.com/img/banners/games/5af10d3b584a6.png",
+      "_sIconUrl": "https://images.gamebanana.com/img/ico/games/5addf7585fdc2.png"
+    },
+    {
+      "_idRow": 8932,
+      "_sName": "Godzilla: Destroy All Monsters Melee",
+      "_sProfileUrl": "https://gamebanana.com/games/8932",
+      "_sBannerUrl": "https://images.gamebanana.com/img/banners/games/_.gif",
+      "_sIconUrl": "https://images.gamebanana.com/img/ico/games/6013e4a688963.png"
+    }
+  ]
+}

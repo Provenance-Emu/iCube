@@ -1,0 +1,133 @@
+{
+  "_aMetadata": {
+    "_nRecordCount": 19,
+    "_nPerpage": 15,
+    "_bIsComplete": false
+  },
+  "_aRecords": [
+    {
+      "_idRow": 623246,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Metal Falcon",
+      "_sProfileUrl": "https://gamebanana.com/mods/623246",
+      "_tsDateAdded": 1759030467,
+      "_tsDateModified": 1759030467,
+      "_bHasFiles": true,
+      "_aTags": [],
+      "_aPreviewMedia": {
+        "_aImages": [
+          {
+            "_sType": "screenshot",
+            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+            "_sFile": "68d8acc304100.jpg",
+            "_sFile220": "220-90_68d8acc304100.jpg",
+            "_hFile220": 153,
+            "_wFile220": 220,
+            "_sFile530": "530-90_68d8acc304100.jpg",
+            "_hFile530": 368,
+            "_wFile530": 530,
+            "_sFile100": "100-90_68d8acc304100.jpg",
+            "_hFile100": 69,
+            "_wFile100": 100
+          }
+        ]
+      },
+      "_aSubmitter": {
+        "_idRow": 4733551,
+        "_sName": "alexVariaa",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/4733551",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/68d8708c791d4.png"
+      },
+      "_aGame": {
+        "_idRow": 5706,
+        "_sName": "Super Smash Bros. Melee",
+        "_sProfileUrl": "https://gamebanana.com/games/5706",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/5addf7585fdc2.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Skins",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/9660",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/60b536be7c93d.png"
+      },
+      "_aSubCategory": {
+        "_sName": "Captain Falcon",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/9666",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/5adb3d0881a97.png"
+      },
+      "_sVersion": "",
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_bWasFeatured": false,
+      "_nViewCount": 304,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 331273,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "SMG4 and Nintendofan(or X) mod",
+      "_sProfileUrl": "https://gamebanana.com/mods/331273",
+      "_tsDateAdded": 1635313230,
+      "_tsDateModified": 1635313230,
+      "_bHasFiles": true,
+      "_aTags": [],
+      "_aPreviewMedia": {
+        "_aImages": [
+          {
+            "_sType": "screenshot",
+            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+            "_sCaption": "a collage made of moments with the X skin",
+            "_sFile": "6178e5a43f81e.jpg",
+            "_sFile530": "530-90_6178e5a43f81e.jpg",
+            "_sFile100": "100-90_6178e5a43f81e.jpg",
+            "_sFile220": "220-90_6178e5a43f81e.jpg",
+            "_hFile220": 270,
+            "_wFile220": 220,
+            "_hFile530": 650,
+            "_wFile530": 530,
+            "_hFile100": 122,
+            "_wFile100": 100
+          }
+        ]
+      },
+      "_aSubmitter": {
+        "_idRow": 1776825,
+        "_sName": "MithMoonwalker",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/1776825",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/6024d2a9796d8.png"
+      },
+      "_aGame": {
+        "_idRow": 5706,
+        "_sName": "Super Smash Bros. Melee",
+        "_sProfileUrl": "https://gamebanana.com/games/5706",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/5addf7585fdc2.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Skins",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/9660",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/60b536be7c93d.png"
+      },
+      "_aSubCategory": {
+        "_sName": "Mario",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/9670",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/5ade11623fbb9.png"
+      },
+      "_sVersion": "",
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 1,
+      "_bWasFeatured": false,
+      "_nViewCount": 3324,
+      "_bIsOwnedByAccessor": false
+    }
+  ]
+}

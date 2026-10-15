@@ -1,0 +1,224 @@
+{
+  "_idRow": 40711,
+  "_nStatus": "0",
+  "_bIsPrivate": false,
+  "_bAccessorIsSubmitter": false,
+  "_bIsTrashed": false,
+  "_bIsWithheld": false,
+  "_sName": "Super Smash Bros. Melee 64",
+  "_sCommentsMode": "open",
+  "_tsDateModified": 1631926620,
+  "_tsDateAdded": 1572799341,
+  "_sProfileUrl": "https://gamebanana.com/mods/40711",
+  "_aPreviewMedia": {
+    "_aImages": [
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "5f19af3cab14a.jpg",
+        "_sFile530": "530-90_5f19af3cab14a.jpg",
+        "_sFile100": "100-90_5f19af3cab14a.jpg",
+        "_sFile220": "220-90_5f19af3cab14a.jpg",
+        "_sFile800": "800-90_5f19af3cab14a.jpg"
+      },
+      {
+        "_sType": "screenshot",
+        "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+        "_sFile": "5f19af420ddc3.jpg",
+        "_sFile100": "100-90_5f19af420ddc3.jpg"
+      }
+    ]
+  },
+  "_nUpdatesCount": 1,
+  "_bHasUpdates": true,
+  "_tsDateUpdated": 1595524946,
+  "_nAllTodosCount": 0,
+  "_bHasTodos": false,
+  "_nPostCount": 32,
+  "_aTags": [],
+  "_bCreatedBySubmitter": true,
+  "_bIsPorted": false,
+  "_nThanksCount": 14,
+  "_sInitialVisibility": "show",
+  "_sDownloadUrl": "https://gamebanana.com/mods/download/40711",
+  "_nDownloadCount": 46278,
+  "_aFiles": [
+    {
+      "_idRow": 476085,
+      "_sFile": "super_smash_bros_melee_64_-_july_20.zip",
+      "_nFilesize": 943512349,
+      "_tsDateAdded": 1595519420,
+      "_nDownloadCount": 37931,
+      "_sDownloadUrl": "https://gamebanana.com/dl/476085",
+      "_sMd5Checksum": "05f12a28c7e5cfc027e4ba301270a51d",
+      "_sAnalysisState": "done",
+      "_sAnalysisResult": "ok",
+      "_sAnalysisResultVerbose": "File passed preliminary analysis",
+      "_sAvState": "done",
+      "_sAvResult": "clean",
+      "_bIsArchived": false,
+      "_bHasContents": true,
+      "_aAnalysisWarnings": {
+        "contains_exe": [
+          "Super Smash Bros. Melee 64 - July 2020/xdeltaUI/xdelta.exe",
+          "Super Smash Bros. Melee 64 - July 2020/xdeltaUI/xdeltaUI.exe"
+        ]
+      }
+    }
+  ],
+  "_nSubscriberCount": 27,
+  "_sLicense": "<a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\"><img alt=\"Creative Commons License\" style=\"border-width:0\" src=\"https://i.creativecommons.org/l/by-nc-nd/4.0/88x31.png\" /></a><br />This work is licensed under a <a rel=\"license\" href=\"http://creativecommons.org/licenses/by-nc-nd/4.0/\">Creative Commons Attribution-NonCommercial-NoDerivs 4.0 Unported License</a>.",
+  "_aLicenseChecklist": {
+    "yes": [
+      "Download and install this Mod"
+    ],
+    "ask": [
+      "Redistribute this Mod on other sites",
+      "Modify this Mod and distribute the modified Mod on GameBanana",
+      "Modify this Mod and distribute the modified Mod on another site",
+      "Use parts of this Mod in another Mod and distribute the Mod on GameBanana",
+      "Use parts of this Mod in another Mod and distribute the Mod on another site",
+      "Use this Mod or components of this Mod in adult/NSFW content"
+    ],
+    "no": [
+      "Use this Mod or components of this Mod commercially"
+    ]
+  },
+  "_sDescription": "It's a Bumpin', Bruisin', Brawlin' Bash!",
+  "_bGenerateTableOfContents": false,
+  "_sText": "<span class=\"color_11\"><i>Super Smash Bros. Melee 64</i> is a mod for <i>Super Smash Bros. Melee</i> that looks and sounds a little more like a Nintendo 64 game! This mod requires a legal copy of v1.2/1.02 of <i>Super Smash Bros. Melee</i> and the most recent version of Dolphin Emulator.<br><br><a href=\"https://connorrentz.wixsite.com/ssbm64\" target=\"_blank\">Visit the Super Smash Bros. Melee 64 website to learn more and to see the most updated information about the mod.</a><br><br><b class=\"SelectedElement\">Note: The developer of this mod does not in anyway support GameBanana's decision to support one of its users, Demonslayerx8, after admitting to grooming minors on the internet after substantial evidence of his actions were posted online. Rather than host this mod elsewhere, this page will currently be used as a platform to remind GameBanana's users that communities should take action to hold its members accountable when they exploit and abuse others, especially those who are under the age of consent. If GameBanana respects its community and the victims of this harmful and illegal behavior, it is GameBanana's responsibility to take action by removing Demonslayerx8's account and c",
+  "_bIsObsolete": false,
+  "_nLikeCount": 49,
+  "_nViewCount": 208907,
+  "_sVersion": "",
+  "_bAcceptsDonations": true,
+  "_bShowRipePromo": true,
+  "_aSubmitter": {
+    "_idRow": 1707124,
+    "_sName": "ConnorRentz",
+    "_sUserTitle": "Filmmaker/Modder/Game Research",
+    "_sHonoraryTitle": "",
+    "_tsJoinDate": 1572798247,
+    "_sAvatarUrl": "https://images.gamebanana.com/img/av/5f1857f16d3c8.png",
+    "_sSigUrl": "",
+    "_sProfileUrl": "https://gamebanana.com/members/1707124",
+    "_sPointsUrl": "https://gamebanana.com/members/logs/pointslog/1707124",
+    "_sMedalsUrl": "https://gamebanana.com/members/stats/medals/1707124",
+    "_bIsOnline": false,
+    "_sLocation": "",
+    "_sOnlineTitle": "",
+    "_sOfflineTitle": "",
+    "_nPoints": 975,
+    "_nPointsRank": 106237,
+    "_aNormalMedals": [
+      [
+        "m_age_1.png",
+        "One month a member",
+        "normal",
+        282092
+      ],
+      [
+        "m_age_2.png",
+        "6 months a member",
+        "normal",
+        310153
+      ],
+      [
+        "thanks_recvd_1.png",
+        "Received thanks 5 times",
+        "normal",
+        310327
+      ],
+      [
+        "m_age_3.png",
+        "1 year a member",
+        "normal",
+        472445
+      ],
+      [
+        "m_age_4.png",
+        "2 years a member",
+        "normal",
+        515735
+      ],
+      [
+        "subscribers_1.png",
+        "Reached 10 subscribers",
+        "normal",
+        529152
+      ]
+    ],
+    "_aRareMedals": [],
+    "_aLegendaryMedals": [],
+    "_bHasRipe": false,
+    "_nBuddyCount": 1,
+    "_nSubscriberCount": 16,
+    "_aDonationMethods": [
+      {
+        "_sTitle": "Paypal",
+        "_sValue": "connor_rentz_mrz@live.com",
+        "_sInputType": "text",
+        "_sInputPlaceholder": "Paypal Email...",
+        "_sIconClasses": "MiscIcon PaypalDonateIcon",
+        "_aValidator": {
+          "_regexValidPattern": "@.*?\\.",
+          "_sWarningMessage": "Email looks incorrect"
+        },
+        "_bIsUrl": false
+      }
+    ],
+    "_bAccessorIsBuddy": false,
+    "_bBuddyRequestExistsWithAccessor": false,
+    "_bAccessorIsSubscribed": false,
+    "_aDefaultLicenseChecklist": [
+      "yes",
+      "ask",
+      "ask",
+      "ask",
+      "ask",
+      "ask",
+      "no",
+      "ask"
+    ],
+    "_sDefaultLicense": ""
+  },
+  "_bFollowLinks": true,
+  "_aGame": {
+    "_idRow": 5706,
+    "_sName": "Super Smash Bros. Melee",
+    "_sAbbreviation": "SSBM",
+    "_sProfileUrl": "https://gamebanana.com/games/5706",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/games/5addf7585fdc2.png",
+    "_sBannerUrl": "https://images.gamebanana.com/img/ico/games/5addf7585fdc2.png",
+    "_nSubscriberCount": 824,
+    "_bHasSubmissionQueue": false,
+    "_bAccessorIsSubscribed": false
+  },
+  "_aCategory": {
+    "_idRow": 3790,
+    "_sName": "Modpacks",
+    "_sModelName": "ModCategory",
+    "_sProfileUrl": "https://gamebanana.com/mods/cats/3790",
+    "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/5bc73dfa7c854.png",
+    "_bIsObsolete": false
+  },
+  "_aCredits": [
+    {
+      "_sGroupName": "Key Authors",
+      "_aAuthors": [
+        {
+          "_sRole": "Primary Mod Creator",
+          "_idRow": "1707124",
+          "_sName": "ConnorRentz",
+          "_sProfileUrl": "https://gamebanana.com/members/1707124",
+          "_sAvatarUrl": "https://images.gamebanana.com/img/av/5f1857f16d3c8.png",
+          "_bIsOnline": false
+        },
+        {
+          "_sRole": "Special Thanks and Hybrid 64 Creator",
+          "_sName": "Cjag"
+        }
+      ]
+    }
+  ]
+}

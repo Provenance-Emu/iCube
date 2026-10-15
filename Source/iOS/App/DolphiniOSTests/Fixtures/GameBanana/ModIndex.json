@@ -1,0 +1,124 @@
+{
+  "_aMetadata": {
+    "_nRecordCount": 490,
+    "_bIsComplete": false,
+    "_nPerpage": 3
+  },
+  "_aRecords": [
+    {
+      "_idRow": 40711,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Super Smash Bros. Melee 64",
+      "_sProfileUrl": "https://gamebanana.com/mods/40711",
+      "_tsDateAdded": 1572799341,
+      "_tsDateModified": 1631926620,
+      "_bHasFiles": true,
+      "_aTags": [],
+      "_aPreviewMedia": {
+        "_aImages": [
+          {
+            "_sType": "screenshot",
+            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+            "_sFile": "5f19af3cab14a.jpg",
+            "_sFile530": "530-90_5f19af3cab14a.jpg",
+            "_sFile100": "100-90_5f19af3cab14a.jpg",
+            "_sFile220": "220-90_5f19af3cab14a.jpg",
+            "_sFile800": "800-90_5f19af3cab14a.jpg"
+          },
+          {
+            "_sType": "screenshot",
+            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+            "_sFile": "5f19af420ddc3.jpg",
+            "_sFile100": "100-90_5f19af420ddc3.jpg"
+          }
+        ]
+      },
+      "_aSubmitter": {
+        "_idRow": 1707124,
+        "_sName": "ConnorRentz",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/1707124",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/5f1857f16d3c8.png"
+      },
+      "_aGame": {
+        "_idRow": 5706,
+        "_sName": "Super Smash Bros. Melee",
+        "_sProfileUrl": "https://gamebanana.com/games/5706",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/5addf7585fdc2.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Modpacks",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/3790",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/5bc73dfa7c854.png"
+      },
+      "_sVersion": "",
+      "_tsDateUpdated": 1595524946,
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 49,
+      "_nPostCount": 32,
+      "_bWasFeatured": false,
+      "_nViewCount": 208907,
+      "_bIsOwnedByAccessor": false
+    },
+    {
+      "_idRow": 40702,
+      "_sModelName": "Mod",
+      "_sSingularTitle": "Mod",
+      "_sIconClasses": "SubmissionType Mod",
+      "_sName": "Hybrid 64",
+      "_sProfileUrl": "https://gamebanana.com/mods/40702",
+      "_tsDateAdded": 1561580426,
+      "_tsDateModified": 1626208291,
+      "_bHasFiles": true,
+      "_aTags": [],
+      "_aPreviewMedia": {
+        "_aImages": [
+          {
+            "_sType": "screenshot",
+            "_sBaseUrl": "https://images.gamebanana.com/img/ss/mods",
+            "_sCaption": "Hybrid 64 Banner",
+            "_sFile": "5db48ba08e632.webp",
+            "_sFile220": "220-90_5db48ba08e632.webp",
+            "_sFile530": "5db48ba08e632.webp",
+            "_sFile100": "100-90_5db48ba08e632.webp",
+            "_sFile800": "5db48ba08e632.webp"
+          }
+        ]
+      },
+      "_aSubmitter": {
+        "_idRow": 1692747,
+        "_sName": "Cjag",
+        "_bIsOnline": false,
+        "_bHasRipe": false,
+        "_sProfileUrl": "https://gamebanana.com/members/1692747",
+        "_sAvatarUrl": "https://images.gamebanana.com/img/av/5cedd189b3a55.jpg"
+      },
+      "_aGame": {
+        "_idRow": 5706,
+        "_sName": "Super Smash Bros. Melee",
+        "_sProfileUrl": "https://gamebanana.com/games/5706",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/games/5addf7585fdc2.png"
+      },
+      "_aRootCategory": {
+        "_sName": "Other/Misc",
+        "_sProfileUrl": "https://gamebanana.com/mods/cats/3789",
+        "_sIconUrl": "https://images.gamebanana.com/img/ico/ModCategory/5bc737de3d02e.png"
+      },
+      "_sVersion": "",
+      "_tsDateUpdated": 1613927435,
+      "_bIsObsolete": false,
+      "_sInitialVisibility": "show",
+      "_bHasContentRatings": false,
+      "_nLikeCount": 25,
+      "_nPostCount": 21,
+      "_bWasFeatured": false,
+      "_nViewCount": 72400,
+      "_bIsOwnedByAccessor": false
+    }
+  ]
+}
