@@ -46,5 +46,6 @@
 #import "DOLControllerSettingsBridge.h"
 #import "DiscImageBridge.h"
 #import "RiivolutionBridge.h"
+#import "ModNotifications.h"
 #import "NANDImportManager.h"
 #import "ImportFileManager.h"

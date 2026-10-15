@@ -622,6 +622,8 @@ struct TVLibraryView: View {
   /// Game to present in the SwiftUI properties sheet
   @State private var showPropertiesFor: TVGameItem?
   @State private var showModsFor: TVGameItem?
+  /// Set by the "Play with Mods" sheet's empty state: the browser opens once that sheet is gone.
+  @State private var findModsAfterSheet: TVGameItem?
   /// Game pending deletion confirmation
   @State private var itemPendingDelete: TVGameItem?
   /// Cheat input modal state
@@ -1902,8 +1904,15 @@ struct TVLibraryView: View {
       }
 
       // A disc outside the library (a cached patched copy): `DiscPatchFlow.launch(path:)`.
-      NotificationCenter.default.addObserver(forName: DiscPatchFlow.launchPathNotification, object: nil, queue: .main) { note in
+      NotificationCenter.default.addObserver(forName: .DOLLaunchGameAtPath, object: nil, queue: .main) { note in
         if let item = DiscPatchFlow.claimLaunch(note) { selectGame(item) }
+      }
+
+      // The mod browser installed a Riivolution pack: offer "Play with Mods" for its game.
+      NotificationCenter.default.addObserver(forName: .DOLShowModsForGame, object: nil, queue: .main) { note in
+        guard let gameID = note.userInfo?[ModBrowserPresenter.gameIDKey] as? String,
+              let item = model.games.first(where: { $0.gameID == gameID && !ModdedBoot.isModdedPath($0.filePath) }) else { return }
+        showModsFor = item
       }
 
       // Quick actions
@@ -1941,7 +1950,8 @@ struct TVLibraryView: View {
     .onDisappear {
       func removeAllObservers() {
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil)
-        NotificationCenter.default.removeObserver(self, name: DiscPatchFlow.launchPathNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .DOLLaunchGameAtPath, object: nil)
+        NotificationCenter.default.removeObserver(self, name: .DOLShowModsForGame, object: nil)
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowImportGame"), object: nil)
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSettings"), object: nil)
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
@@ -2029,9 +2039,14 @@ struct TVLibraryView: View {
       Button(L("Cancel")) { SaveStateService.skipResumeOnce = false }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
-      .sheet(item: $showModsFor) { item in
-        RiivolutionLaunchView(item: item, onPlay: playModded(descriptor:), onAddedToLibrary: modAddedToLibrary(descriptor:))
-          .claimsController()
+      .sheet(item: $showModsFor, onDismiss: openPendingModBrowser) { item in
+        RiivolutionLaunchView(
+          item: item,
+          onPlay: playModded(descriptor:),
+          onAddedToLibrary: modAddedToLibrary(descriptor:),
+          onFindMods: { findModsAfterSheet = item }
+        )
+        .claimsController()
       }
       .sheet(item: $showCheatListFor) { item in
         CheatsMenuView(game: item, onBack: { showCheatListFor = nil }).claimsController()
@@ -2564,6 +2579,12 @@ struct TVLibraryView: View {
       return
     }
     selectGame(item)
+  }
+
+  private func openPendingModBrowser() {
+    guard let item = findModsAfterSheet else { return }
+    findModsAfterSheet = nil
+    ModBrowserPresenter.shared.open(game: ModLibraryGame(item: item))
   }
 
   private func modAddedToLibrary(descriptor url: URL) {

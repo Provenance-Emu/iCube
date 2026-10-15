@@ -8,8 +8,8 @@ import Foundation
 /// flows.
 protocol ModInstallHandling {
   /// Installs the Riivolution pack whose `riivolution/` folder lives in `root`, and returns a
-  /// line for the user ("Installed Riivolution pack X (3 options)").
-  func installRiivolutionPack(at root: URL) async throws -> String
+  /// line for the user ("Installed Riivolution pack X (3 options)"). `name` is what the line calls it.
+  func installRiivolutionPack(at root: URL, named name: String) async throws -> String
 
   /// Offers the extracted patch files to the disc-patching flow. Fire and forget: the flow reads
   /// the files after this returns, so the caller must not delete them.

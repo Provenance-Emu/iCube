@@ -13,4 +13,10 @@ enum ModBrowser {
 
   /// A download above this size asks the user to confirm first.
   static let largeDownloadBytes: Int64 = 500 * 1024 * 1024
+
+  /// Whether the bundled catalogue has mods for this game. Entry points show "Find Mods Online" only
+  /// then, so they never open a browser with nothing in it.
+  static func offersMods(forGameID gameID: String) -> Bool {
+    isEnabled && ModGameTable.bundled.entry(forGameID: gameID) != nil
+  }
 }

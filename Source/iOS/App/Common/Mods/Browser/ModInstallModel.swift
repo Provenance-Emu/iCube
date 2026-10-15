@@ -30,6 +30,8 @@ final class ModInstallModel: ObservableObject {
   @Published var offerCustomTextures = false
   /// Set after Gecko codes went in while cheats are off globally.
   @Published var offerCheats = false
+  /// Set after a Riivolution pack went in for a library game, to offer playing with it.
+  @Published var offerPlayWithMods = false
 
   private let handler: any ModInstallHandling
   private let downloader: ModDownloadManager
@@ -173,10 +175,17 @@ final class ModInstallModel: ObservableObject {
     }
   }
 
-  func installRiivolutionPack(root: URL) {
+  func installRiivolutionPack(root: URL, named name: String) {
     perform {
-      self.log.append(try await self.handler.installRiivolutionPack(at: root))
+      self.log.append(try await self.handler.installRiivolutionPack(at: root, named: name))
+      self.offerPlayWithMods = self.ownedGame != nil
     }
+  }
+
+  /// Closes the browser and opens "Play with Mods" for the game the pack was installed for.
+  func playWithMods() {
+    guard let game = ownedGame else { return }
+    ModBrowserPresenter.shared.closeAndShowMods(for: game)
   }
 
   func presentDiscPatch(_ patches: [URL], suggestedGameID: String?) {

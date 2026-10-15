@@ -15,12 +15,11 @@ private struct ModBrowserSheetModifier: ViewModifier {
   let libraryGames: [TVGameItem]
 
   func body(content: Content) -> some View {
-    content.sheet(item: $presenter.request) { request in
+    content.sheet(item: $presenter.request, onDismiss: { presenter.browserDidDismiss() }) { request in
       ModBrowserRoot(
         request: request,
         libraryGames: libraryGames.filter { !$0.isDemoItem }.map(ModLibraryGame.init(item:)),
-        // The one place the browser is built: swap in the real installers here.
-        handler: PendingModInstallHandler()
+        handler: LiveModInstallHandler()
       )
       .claimsController()
     }

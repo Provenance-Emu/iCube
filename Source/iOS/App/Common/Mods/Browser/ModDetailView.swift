@@ -215,6 +215,12 @@ struct ModFileView: View {
     } message: {
       Text(String(format: L("This file is %@. Download it?"), ModInstallModel.formatted(model.largeDownloadBytes ?? file.size)))
     }
+    .alert(L("Play with Mods?"), isPresented: $model.offerPlayWithMods) {
+      Button(L("Play with Mods")) { model.playWithMods() }
+      Button(L("Not Now"), role: .cancel) {}
+    } message: {
+      Text(String(format: L("The pack is installed. Choose its options for %@ now?"), ownedGame?.title ?? ""))
+    }
     .alert(L("Turn On Cheats?"), isPresented: $model.offerCheats) {
       Button(L("Turn On")) { model.enableCheats() }
       Button(L("Not Now"), role: .cancel) {}
@@ -304,7 +310,7 @@ struct ModFileView: View {
     case .riivolution(let root):
       Section(L("Riivolution Pack")) {
         Text(L("Adds a pack you can switch on when you play a game."))
-        Button(L("Install Pack")) { model.installRiivolutionPack(root: root) }
+        Button(L("Install Pack")) { model.installRiivolutionPack(root: root, named: modName) }
           .disabled(model.isInstalling)
       }
     case .discPatch(let patches, let suggested):

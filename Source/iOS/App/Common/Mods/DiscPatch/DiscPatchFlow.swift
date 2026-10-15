@@ -6,8 +6,7 @@ import UIKit
 
 /// Entry points of the disc patching flow.
 enum DiscPatchFlow {
-  /// Posted by `launch(path:)`; the library screen boots the disc in response.
-  static let launchPathNotification = Notification.Name("DOLLaunchGameAtPath")
+  /// `launch(path:)` posts `.DOLLaunchGameAtPath`; the library screen boots the disc in response.
   static let launchPathKey = "filePath"
   private static let launchIDKey = "launchID"
 
@@ -38,7 +37,7 @@ enum DiscPatchFlow {
   /// Boots a disc that is not in the library (a cached patched copy) through the library screen, so it
   /// gets the normal emulation screen, profile and "a game is running" handling.
   nonisolated static func launch(path: String) {
-    NotificationCenter.default.post(name: launchPathNotification, object: nil,
+    NotificationCenter.default.post(name: .DOLLaunchGameAtPath, object: nil,
                                     userInfo: [launchPathKey: path, launchIDKey: UUID().uuidString])
   }
 

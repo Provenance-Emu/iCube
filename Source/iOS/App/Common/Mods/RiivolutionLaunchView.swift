@@ -12,10 +12,12 @@ struct RiivolutionLaunchView: View {
   let onPlay: (URL) -> Void
   /// Called with the descriptor saved into the library, so the library can rescan.
   let onAddedToLibrary: (URL) -> Void
+  /// Opens the online mod browser for this game. The sheet closes itself first.
+  let onFindMods: () -> Void
   @Environment(\.dismiss) private var dismiss
   @State private var failureMessage: String?
 
-  init(item: TVGameItem, onPlay: @escaping (URL) -> Void, onAddedToLibrary: @escaping (URL) -> Void) {
+  init(item: TVGameItem, onPlay: @escaping (URL) -> Void, onAddedToLibrary: @escaping (URL) -> Void, onFindMods: @escaping () -> Void) {
     let game = RiivolutionLaunchModel.Game(
       title: item.title,
       gameID: item.gameID,
@@ -26,6 +28,7 @@ struct RiivolutionLaunchView: View {
     _model = StateObject(wrappedValue: RiivolutionLaunchModel(game: game))
     self.onPlay = onPlay
     self.onAddedToLibrary = onAddedToLibrary
+    self.onFindMods = onFindMods
   }
 
   var body: some View {
@@ -69,6 +72,14 @@ struct RiivolutionLaunchView: View {
       Text(L("No installed Riivolution pack is for this game."))
       Text(L("To install a pack, import its .zip or .7z like a game (Import menu, Files, or Wi-Fi upload). It is unpacked into the Riivolution folder instead of the library."))
         .foregroundStyle(.secondary)
+      if ModBrowser.offersMods(forGameID: model.game.gameID) {
+        Button {
+          dismiss()
+          onFindMods()
+        } label: {
+          Label(L("Find Mods Online"), systemImage: "puzzlepiece.extension")
+        }
+      }
     }
   }
 
