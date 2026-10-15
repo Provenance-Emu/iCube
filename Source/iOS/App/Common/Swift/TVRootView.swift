@@ -50,5 +50,6 @@ struct TVRootView: View {
       // from a peer ecosystem app (e.g. Provenance) arrives UNSOLICITED, so
       // this belongs at the root rather than on any one screen.
       .ecosystemShareApprovalPrompt()
+      .gameTagMessages()
   }
 }

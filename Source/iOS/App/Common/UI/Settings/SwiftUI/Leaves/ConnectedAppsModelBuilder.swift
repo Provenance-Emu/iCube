@@ -16,7 +16,8 @@ enum ConnectedAppsModelBuilder {
     let open: () -> Void
   }
 
-  static func make(apps: [App]) -> MenuModel {
+  /// `scanTag` is nil where NFC tags cannot be read (iPad, tvOS, the simulator); the row is then absent.
+  static func make(apps: [App], scanTag: (() -> Void)? = nil) -> MenuModel {
     let rows = apps.map { app in
       SettingsRow.action(app.id, app.name,
                          app.installed ? L("Installed. Tap to open.") : L("Not installed. Tap to get it."),
@@ -30,6 +31,16 @@ enum ConnectedAppsModelBuilder {
         SettingsRow.caption("send", L("Long-press a game and choose Send to Provenance. The share sheet hands Provenance a copy of the disc image; it imports on its next scan.")),
         SettingsRow.caption("receive", L("When Provenance asks for a game, iCube asks you first, then offers the file the same way.")),
       ]),
-    ])
+    ] + tagSection(scanTag: scanTag))
+  }
+
+  /// Tap-to-play tags: one tag format across iCube, Provenance and iFly; each app launches its own.
+  private static func tagSection(scanTag: (() -> Void)?) -> [MenuSection] {
+    guard let scanTag else { return [] }
+    return [MenuSection(id: "tags", header: L("NFC tags"),
+                        footer: L("Long-press a game and choose Write to NFC Tag. Tapping the tag with your iPhone launches the game; a tag written by Provenance or iFly opens there instead."),
+                        items: [
+      SettingsRow.action("scan-tag", L("Scan NFC Tag"), L("Read a game tag now and launch its game."), icon: "wave.3.right.circle", run: scanTag),
+    ])]
   }
 }
