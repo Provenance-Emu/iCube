@@ -118,4 +118,21 @@ final class XDelta3Tests: PatchTestCase {
         XCTAssertEqual(info.minimumSourceSize, UInt64(source.count))
         XCTAssertNil(info.sourceCRC32)
     }
+
+    func testInspectReportsTheSecondaryCompressor() throws {
+        XCTAssertNil(try PatchEngine.inspect(patch: write(try fixture("basic"), named: "plain.xdelta")).secondaryCompression)
+        XCTAssertEqual(try PatchEngine.inspect(patch: write(try fixture("djw"), named: "djw.xdelta")).secondaryCompression, .djw)
+        XCTAssertEqual(try PatchEngine.inspect(patch: write(try fixture("fgk"), named: "fgk.xdelta")).secondaryCompression, .fgk)
+    }
+
+    func testInspectFlagsLZMAAndUnknownCompressorsAsUnsupported() throws {
+        let lzma = try PatchEngine.inspect(patch: write([0xD6, 0xC3, 0xC4, 0x00, 0x01, 0x02], named: "lzma.xdelta"))
+        XCTAssertEqual(lzma.secondaryCompression, .lzma)
+        XCTAssertEqual(lzma.secondaryCompression?.isSupported, false)
+        let unknown = try PatchEngine.inspect(patch: write([0xD6, 0xC3, 0xC4, 0x00, 0x01, 0x7F], named: "unknown.xdelta"))
+        XCTAssertEqual(unknown.secondaryCompression, .unknown(0x7F))
+        XCTAssertEqual(unknown.secondaryCompression?.isSupported, false)
+        XCTAssertEqual(SecondaryCompression.djw.isSupported, true)
+        XCTAssertEqual(SecondaryCompression.fgk.isSupported, true)
+    }
 }

@@ -24,8 +24,7 @@ enum XDelta3Applier {
         let ignoreSource = inputs.options.ignoreSourceChecksum
 
         let summary = try VCDIFFScanner.scan(patch)
-        if let secondary = summary.secondaryCompressorID,
-           secondary != VCDIFFScanner.djwCompressorID, secondary != VCDIFFScanner.fgkCompressorID {
+        if let secondary = summary.secondaryCompression, !secondary.isSupported {
             throw PatchError.unsupportedSecondaryCompression
         }
         guard summary.largestTargetWindow <= maxTargetWindow else {

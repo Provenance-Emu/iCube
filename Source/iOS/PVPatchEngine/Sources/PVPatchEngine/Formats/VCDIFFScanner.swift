@@ -13,8 +13,8 @@
 import Foundation
 
 struct VCDIFFSummary {
-    /// 1 = DJW, 2 = LZMA, 16 = FGK (xdelta3's numbering). nil when no secondary compressor is declared.
-    var secondaryCompressorID: UInt8?
+    /// nil when no secondary compressor is declared.
+    var secondaryCompression: SecondaryCompression?
     var targetSize: UInt64 = 0
     /// Furthest source byte any window copies from (0 when none do).
     var requiredSourceSize: UInt64 = 0
@@ -24,9 +24,6 @@ struct VCDIFFSummary {
 }
 
 enum VCDIFFScanner {
-    static let djwCompressorID: UInt8 = 1
-    static let fgkCompressorID: UInt8 = 16
-
     private static let sourceFlag: UInt8 = 0x01
     private static let targetFlag: UInt8 = 0x02
     private static let adler32Flag: UInt8 = 0x04
@@ -68,7 +65,7 @@ enum VCDIFFScanner {
         var summary = VCDIFFSummary()
         let indicator = try cursor.byte()
         if indicator & secondaryHeaderFlag != 0 {
-            summary.secondaryCompressorID = try cursor.byte()
+            summary.secondaryCompression = SecondaryCompression(compressorID: try cursor.byte())
         }
         guard indicator & codeTableHeaderFlag == 0 else { throw PatchError.unsupportedFormat }
         if indicator & appHeaderFlag != 0 {

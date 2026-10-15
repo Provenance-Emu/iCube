@@ -105,6 +105,33 @@ extension PatchError: LocalizedError {
     }
 }
 
+/// The secondary compressor an xdelta3 patch's data sections are compressed with.
+public enum SecondaryCompression: Sendable, Equatable {
+    case djw
+    case lzma
+    case fgk
+    /// A compressor id xdelta3 does not define.
+    case unknown(UInt8)
+
+    /// xdelta3's header ids: 1 = DJW, 2 = LZMA, 16 = FGK.
+    init(compressorID: UInt8) {
+        switch compressorID {
+        case 1: self = .djw
+        case 2: self = .lzma
+        case 16: self = .fgk
+        default: self = .unknown(compressorID)
+        }
+    }
+
+    /// Whether the engine can decode it. DJW and FGK are built in; LZMA is not.
+    public var isSupported: Bool {
+        switch self {
+        case .djw, .fgk: return true
+        case .lzma, .unknown: return false
+        }
+    }
+}
+
 /// Metadata a patch declares about itself, read without applying it.
 public struct PatchInfo: Sendable, Equatable {
     public var format: PatchFormat
@@ -116,6 +143,10 @@ public struct PatchInfo: Sendable, Equatable {
     /// xdelta3 only: the furthest source byte the patch reads, so the smallest source it can apply to.
     /// It is a lower bound, not a declared size; do not match it for equality.
     public var minimumSourceSize: UInt64?
+    /// xdelta3 only: the secondary compressor the patch declares; nil when it declares none. Check
+    /// `isSupported` before unpacking a large source, because `apply` reports an unsupported one only
+    /// when it runs.
+    public var secondaryCompression: SecondaryCompression?
     /// Size of the image the patch produces, when the format records it.
     public var targetSize: UInt64?
     public var sourceCRC32: UInt32?

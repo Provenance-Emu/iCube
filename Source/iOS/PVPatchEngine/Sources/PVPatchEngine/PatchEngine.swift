@@ -59,6 +59,7 @@ public enum PatchEngine {
             let summary = try VCDIFFScanner.scan(file)
             info.targetSize = summary.targetSize
             info.minimumSourceSize = summary.requiredSourceSize > 0 ? summary.requiredSourceSize : nil
+            info.secondaryCompression = summary.secondaryCompression
         }
         return info
     }
