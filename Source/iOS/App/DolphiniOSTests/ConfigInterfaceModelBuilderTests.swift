@@ -19,9 +19,9 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
     let recordingIDs = ["recording-watermark"]
     #endif
     XCTAssertEqual(model().allItems.map(\.id),
-                   ["names-db", "covers", "background-style", "show-subtitles", "confirm-on-stop", "panic-handlers", "osd-messages"] + recordingIDs)
+                   ["names-db", "covers", "background-style", "show-subtitles", "show-patched-separately", "confirm-on-stop", "panic-handlers", "osd-messages"] + recordingIDs)
     XCTAssertEqual(model().sections.map(\.header), ["Game List", "Library UI", "General", "Recording"])
-    XCTAssertEqual(model().sections.map(\.items.count), [2, 2, 3, recordingIDs.count])
+    XCTAssertEqual(model().sections.map(\.items.count), [2, 3, 3, recordingIDs.count])
   }
 
   func test_everyRow_hasADescription() {
@@ -31,6 +31,7 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
   func test_everyToggleRow_emitsItsOwnChange() {
     let expected: [(String, (Bool) -> ConfigInterfaceChange)] = [
       ("names-db", { .useNamesDB($0) }), ("covers", { .useCovers($0) }), ("show-subtitles", { .showSubtitles($0) }),
+      ("show-patched-separately", { .showPatchedSeparately($0) }),
       ("confirm-on-stop", { .confirmOnStop($0) }), ("panic-handlers", { .usePanicHandlers($0) }), ("osd-messages", { .osdMessages($0) }),
       ("recording-watermark", { .recordingWatermark($0) }),
     ]
@@ -60,11 +61,11 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
 
   func test_toggleRows_showTheStateValue() {
     var s = ConfigInterfaceState()
-    s.useNamesDB = true; s.useCovers = true; s.showSubtitles = false
+    s.useNamesDB = true; s.useCovers = true; s.showSubtitles = false; s.showPatchedSeparately = false
     s.confirmOnStop = false; s.usePanicHandlers = false; s.osdMessages = false
     let m = model(s)
     let expected: [(String, Bool)] = [
-      ("names-db", true), ("covers", true), ("show-subtitles", false),
+      ("names-db", true), ("covers", true), ("show-subtitles", false), ("show-patched-separately", false),
       ("confirm-on-stop", false), ("panic-handlers", false), ("osd-messages", false),
     ]
     for (id, value) in expected {
@@ -77,6 +78,14 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
     XCTAssertTrue(ConfigInterfaceState.storedShowSubtitles(nil))
     XCTAssertTrue(ConfigInterfaceState.storedShowSubtitles(true))
     XCTAssertFalse(ConfigInterfaceState.storedShowSubtitles(false))
+  }
+
+  func test_unsetPatchedSeparatelyKey_meansOn_storedWins() {
+    XCTAssertTrue(ConfigInterfaceState().showPatchedSeparately)
+    XCTAssertTrue(ConfigInterfaceState.storedShowPatchedSeparately(nil))
+    XCTAssertTrue(ConfigInterfaceState.storedShowPatchedSeparately(true))
+    XCTAssertFalse(ConfigInterfaceState.storedShowPatchedSeparately(false))
+    XCTAssertEqual(ConfigInterfaceDefaultsKey.showPatchedSeparately, "library_show_patched_separately")
   }
 
   func test_recordingDefaults_watermarkOn_cameraOff() {

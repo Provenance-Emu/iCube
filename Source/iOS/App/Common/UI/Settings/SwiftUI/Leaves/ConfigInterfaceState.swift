@@ -3,10 +3,11 @@
 
 import Foundation
 
-/// UserDefaults keys behind the Interface screen. TVLibraryView reads the same two strings through `@AppStorage`.
+/// UserDefaults keys behind the Interface screen. TVLibraryView reads the library ones through `@AppStorage`.
 enum ConfigInterfaceDefaultsKey {
   static let backgroundStyle = "library_background_style"
   static let showSubtitles = "library_show_subtitles"
+  static let showPatchedSeparately = "library_show_patched_separately"
   static let recordingWatermark = "recording_watermark"
   static let recordingCamera = "recording_camera_overlay"
 }
@@ -17,6 +18,7 @@ struct ConfigInterfaceState: Equatable {
   var useCovers = false
   var backgroundStyle = LibraryBackgroundStyle.gradient
   var showSubtitles = true
+  var showPatchedSeparately = true
   var confirmOnStop = true
   var usePanicHandlers = true
   var osdMessages = true
@@ -25,6 +27,9 @@ struct ConfigInterfaceState: Equatable {
 
   /// `@AppStorage` supplied `true` for an unset key; `bool(forKey:)` would read false.
   static func storedShowSubtitles(_ stored: Bool?) -> Bool { stored ?? true }
+
+  /// Patched copies and saved mods get their own tiles until the owner turns that off.
+  static func storedShowPatchedSeparately(_ stored: Bool?) -> Bool { stored ?? true }
 
   /// The watermark is on until the owner turns it off.
   static func storedRecordingWatermark(_ stored: Bool?) -> Bool { stored ?? true }
@@ -36,6 +41,7 @@ enum ConfigInterfaceChange: Equatable {
   case useCovers(Bool)
   case backgroundStyle(LibraryBackgroundStyle)
   case showSubtitles(Bool)
+  case showPatchedSeparately(Bool)
   case confirmOnStop(Bool)
   case usePanicHandlers(Bool)
   case osdMessages(Bool)

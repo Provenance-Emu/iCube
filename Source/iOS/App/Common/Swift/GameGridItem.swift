@@ -20,6 +20,12 @@ struct GameGridItem: View {
   let showCacheInfo: (TVGameItem) -> Void
   let showSaveStates: (TVGameItem) -> Void
   let showMods: (TVGameItem) -> Void
+  let showModManager: (TVGameItem) -> Void
+  /// The patched copies and saved mods made from this game; empty for a modded tile.
+  let moddedVariants: [TVGameItem]
+  /// Set for a patched copy or saved mod tile. The library works it out once per scan: a tile redraws too
+  /// often to resolve folders on every pass.
+  let moddedInfo: ModdedTileInfo?
   let autoPreCacheProgress: Double
   let isAutoPreCaching: Bool
   let showSubtitles: Bool
@@ -39,6 +45,11 @@ struct GameGridItem: View {
   #if os(tvOS)
   @State private var isFocused: Bool = false
   #endif
+
+  /// A patched copy's disc header still names the base game, so its tile is titled after its file.
+  private var tileTitle: String {
+    moddedInfo?.displayName ?? item.title
+  }
 
   /// Determines remote source type and appropriate icon
   private var remoteIconName: String? {
@@ -349,7 +360,7 @@ struct GameGridItem: View {
         Spacer()
 
         // Title. tvOS uses the body role (about 21pt) with no gradient or shadow.
-        Text(item.title.isEmpty ? "Unknown Game" : item.title)
+        Text(tileTitle.isEmpty ? "Unknown Game" : tileTitle)
           #if os(tvOS)
           .icubeText(.body)
           .foregroundStyle(ICubeDesign.color(.textPrimary))
@@ -560,10 +571,12 @@ struct GameGridItem: View {
             .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height, alignment: .topLeading)
             .allowsHitTesting(false)
         }
+
+        ModTileBadge(info: moddedInfo, count: moddedVariants.count)
       }
 
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
-        Text(item.title)
+        Text(tileTitle)
           .icubeText(.body)
           .foregroundStyle(ICubeDesign.color(.textPrimary))
           .lineLimit(2)
@@ -635,12 +648,7 @@ struct GameGridItem: View {
       Button(action: { showSaveStates(item) }) {
         Label(L("View Save States"), systemImage: "clock.arrow.circlepath")
       }
-      if RiivolutionEligibility.isEligible(filePath: item.filePath, platform: Int(item.platform)) {
-        Button(action: { showMods(item) }) {
-          Label(L("Play with Mods…"), systemImage: "puzzlepiece.extension")
-        }
-      }
-      DiscPatchMenuButton(item: item)
+      PatchesAndModsMenu(item: item, variants: moddedVariants, play: select, showMods: showMods, manage: showModManager)
 
       // Cheats menu with tvOS 16 compatibility
       if #available(tvOS 17.0, iOS 14.0, *) {
@@ -719,7 +727,6 @@ struct GameGridItem: View {
           Label(L("Favorite"), systemImage: "star")
         }
       }
-      FindModsButton(item: item)
       Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }
     .zIndex(isFocused ? 1 : 0)
@@ -793,11 +800,13 @@ struct GameGridItem: View {
             .background(.ultraThinMaterial, in: Circle())
             .padding(8)
           }
+
+          ModTileBadge(info: moddedInfo, count: moddedVariants.count)
         }
 
         VStack(alignment: .leading, spacing: 6) {
           // Enhanced title with better typography
-          Text(item.title)
+          Text(tileTitle)
             .font(enhancedHeadlineFont)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
@@ -879,12 +888,7 @@ struct GameGridItem: View {
       Button(action: { showSaveStates(item) }) {
         Label(L("View Save States"), systemImage: "clock.arrow.circlepath")
       }
-      if RiivolutionEligibility.isEligible(filePath: item.filePath, platform: Int(item.platform)) {
-        Button(action: { showMods(item) }) {
-          Label(L("Play with Mods…"), systemImage: "puzzlepiece.extension")
-        }
-      }
-      DiscPatchMenuButton(item: item)
+      PatchesAndModsMenu(item: item, variants: moddedVariants, play: select, showMods: showMods, manage: showModManager)
 
       // Cheats menu with tvOS 16 compatibility
       if #available(tvOS 17.0, iOS 14.0, *) {
@@ -963,7 +967,6 @@ struct GameGridItem: View {
           Label(L("Favorite"), systemImage: "star")
         }
       }
-      FindModsButton(item: item)
       // Ecosystem — hand this game's disc image to Provenance through the
       // system share sheet. iOS-only: see `EcosystemSendButton`.
       EcosystemSendButton(gameID: item.gameID)

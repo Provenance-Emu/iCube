@@ -8,7 +8,7 @@ struct DiscPatchMenuButton: View {
   let item: TVGameItem
 
   var body: some View {
-    if isPatchable {
+    if Self.isOffered(for: item) {
       Button {
         let gameID = item.gameID
         // The menu is still dismissing; presenting in the same turn is dropped.
@@ -21,7 +21,7 @@ struct DiscPatchMenuButton: View {
     }
   }
 
-  private var isPatchable: Bool {
+  static func isOffered(for item: TVGameItem) -> Bool {
     guard !item.isDemoItem, item.filePath.hasPrefix("/"),
           let info = DiscImageBridge.info(forGameItem: item) else { return false }
     return DiscPatchPlanner.refusal(for: DiscPatchImage(info)) == nil

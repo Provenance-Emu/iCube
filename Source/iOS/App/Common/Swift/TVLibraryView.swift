@@ -95,8 +95,15 @@ private extension View {
 
 @MainActor
 final class TVLibraryViewModel: ObservableObject {
-  /// Backing collection of games shown in the grid
+  /// Backing collection of games shown in the grid. Without "Show patched versions as separate library items"
+  /// it leaves out patched copies and saved mods; `allGames` has them.
   @Published var games: [TVGameItem] = []
+  /// Every game the library found, patched copies and saved mods included.
+  @Published private(set) var allGames: [TVGameItem] = []
+  /// Patched copies and saved mods by the game ID of the game they are made from.
+  @Published private(set) var moddedVariantsByGameID: [String: [TVGameItem]] = [:]
+  /// File paths of the patched copies and saved mods, worked out once per scan.
+  private var moddedPaths: Set<String> = []
   /// Indicates whether a metadata rescan is in progress
   @Published var isRescanning: Bool = false
   /// Ensures the initial metadata kick-off runs once
@@ -111,6 +118,7 @@ final class TVLibraryViewModel: ObservableObject {
   @Published var groupsByKey: [String: [TVGameItem]] = [:]
 
   private var cancellables = Set<AnyCancellable>()
+  private var showPatchedSeparately = ModdedLibrary.showsPatchedSeparately()
 
   init() {
     LibraryCoordinator.shared.$games
@@ -214,7 +222,7 @@ final class TVLibraryViewModel: ObservableObject {
     print("TVLibraryViewModel.groupAndDedup(): found \(representatives.count) representatives")
 #endif
     // Sort games alphabetically using fallback to filename when title is empty
-    games = representatives.sorted { (a: TVGameItem, b: TVGameItem) -> Bool in
+    let sorted = representatives.sorted { (a: TVGameItem, b: TVGameItem) -> Bool in
       let at: String = {
         if !a.title.isEmpty { return a.title }
         if let url = URL(string: a.filePath) { return url.deletingPathExtension().lastPathComponent.removingPercentEncoding ?? url.lastPathComponent }
@@ -227,9 +235,30 @@ final class TVLibraryViewModel: ObservableObject {
       }()
       return at.localizedCaseInsensitiveCompare(bt) == .orderedAscending
     }
+    allGames = sorted
+    moddedVariantsByGameID = ModdedLibrary.variantsByGameID(in: sorted)
+    moddedPaths = Set(sorted.map(\.filePath).filter(ModdedLibrary.defaultClassifier))
+    games = ModdedLibrary.visible(sorted, showPatchedSeparately: showPatchedSeparately)
 #if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): final games count: \(games.count)")
 #endif
+  }
+
+  /// Applies the "Show patched versions as separate library items" setting to the grid.
+  func setShowPatchedSeparately(_ value: Bool) {
+    guard value != showPatchedSeparately else { return }
+    showPatchedSeparately = value
+    games = ModdedLibrary.visible(allGames, showPatchedSeparately: value)
+  }
+
+  /// The patched copies and saved mods made from `item`. A patched copy has none of its own.
+  func moddedVariants(for item: TVGameItem) -> [TVGameItem] {
+    moddedPaths.contains(item.filePath) ? [] : moddedVariantsByGameID[item.gameID] ?? []
+  }
+
+  /// How a patched copy or saved mod tile differs from its game; nil for a base game.
+  func moddedInfo(for item: TVGameItem) -> ModdedTileInfo? {
+    ModdedLibrary.tileInfo(path: item.filePath, title: item.title, isModded: { [moddedPaths] in moddedPaths.contains($0) })
   }
 
   func sources(for item: TVGameItem) -> [TVGameItem] {
@@ -270,6 +299,7 @@ struct TVLibraryView: View {
 
   @AppStorage(ConfigInterfaceDefaultsKey.backgroundStyle) private var backgroundStyle: BackgroundStyle = .animated
   @AppStorage(ConfigInterfaceDefaultsKey.showSubtitles) private var showSubtitles: Bool = true
+  @AppStorage(ConfigInterfaceDefaultsKey.showPatchedSeparately) private var showPatchedSeparately: Bool = true
 
   // MARK: - Sort settings (persisted)
 
@@ -618,10 +648,15 @@ struct TVLibraryView: View {
       .onChangeCompat(of: model.games.count) { _, _ in
         if !showPlatformFilterBar { platformFilter = .all }
       }
+      .onChangeCompat(of: showPatchedSeparately) { _, show in
+        model.setShowPatchedSeparately(show)
+      }
   }
   /// Game to present in the SwiftUI properties sheet
   @State private var showPropertiesFor: TVGameItem?
   @State private var showModsFor: TVGameItem?
+  /// Game whose patched copies, saved mods and Riivolution packs are being managed
+  @State private var manageModsFor: TVGameItem?
   /// Set by the "Play with Mods" sheet's empty state: the browser opens once that sheet is gone.
   @State private var findModsAfterSheet: TVGameItem?
   /// Game pending deletion confirmation
@@ -872,6 +907,9 @@ struct TVLibraryView: View {
         }
       },
       showMods: { showModsFor = $0 },
+      showModManager: { manageModsFor = $0 },
+      moddedVariants: model.moddedVariants(for: item),
+      moddedInfo: model.moddedInfo(for: item),
       autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
       isAutoPreCaching: autoPreCacheActive.contains(item.filePath),
       showSubtitles: showSubtitles,
@@ -1910,9 +1948,10 @@ struct TVLibraryView: View {
 
       // The mod browser installed a Riivolution pack: offer "Play with Mods" for its game.
       NotificationCenter.default.addObserver(forName: .DOLShowModsForGame, object: nil, queue: .main) { note in
-        guard let gameID = note.userInfo?[ModBrowserPresenter.gameIDKey] as? String,
-              let item = model.games.first(where: { $0.gameID == gameID && !ModdedBoot.isModdedPath($0.filePath) }) else { return }
-        showModsFor = item
+        guard let gameID = note.userInfo?[ModBrowserPresenter.gameIDKey] as? String else { return }
+        Task { @MainActor in
+          if let item = ModdedLibrary.baseGame(withGameID: gameID, in: model.allGames) { showModsFor = item }
+        }
       }
 
       // Quick actions
@@ -2047,6 +2086,10 @@ struct TVLibraryView: View {
           onFindMods: { findModsAfterSheet = item }
         )
         .claimsController()
+      }
+      .sheet(item: $manageModsFor) { item in
+        ModManageView(item: item, variants: model.moddedVariants(for: item), onChanged: { model.rescan() })
+          .claimsController()
       }
       .sheet(item: $showCheatListFor) { item in
         CheatsMenuView(game: item, onBack: { showCheatListFor = nil }).claimsController()
@@ -2719,9 +2762,8 @@ struct TVLibraryView: View {
   }
 
   private func spotlightLaunchByGameID(_ gameID: String, attempts: Int) {
-    let isBaseGame: (TVGameItem) -> Bool = { $0.gameID == gameID && !ModdedBoot.isModdedPath($0.filePath) }
-    let match = model.games.first(where: isBaseGame)
-    ?? TVLibraryBridge.currentGames().first(where: isBaseGame)
+    let match = ModdedLibrary.baseGame(withGameID: gameID, in: model.games)
+    ?? ModdedLibrary.baseGame(withGameID: gameID, in: TVLibraryBridge.currentGames())
     guard let item = match else {
       if attempts > 0 {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {

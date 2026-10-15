@@ -39,7 +39,7 @@ final class ModBrowserPresenter: ObservableObject {
   @Published var notice: String?
 
   /// userInfo key of `.DOLShowModsForGame`.
-  static let gameIDKey = "gameID"
+  nonisolated static let gameIDKey = "gameID"
 
   /// The game whose "Play with Mods" sheet opens once the browser is gone.
   private var modsGameIDAfterDismiss: String?

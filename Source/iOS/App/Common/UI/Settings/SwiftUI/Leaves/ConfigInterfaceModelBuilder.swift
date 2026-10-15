@@ -22,6 +22,9 @@ enum ConfigInterfaceModelBuilder {
       SettingsRow.toggle("show-subtitles", L("Show Game ID Subtitles"), state.showSubtitles,
                          L("Shows each game's disc ID under its title in the library."),
                          icon: "textformat.123", set: { apply(.showSubtitles($0)) }),
+      SettingsRow.toggle("show-patched-separately", L("Show Patched Versions as Separate Library Items"), state.showPatchedSeparately,
+                         L("Gives each patched copy and saved mod its own tile. Off hides them from the grid; they stay in their game's Patches & Mods menu."),
+                         icon: "square.stack.3d.up", set: { apply(.showPatchedSeparately($0)) }),
     ])
 
     let general = MenuSection(id: "general", header: L("General"), items: [
