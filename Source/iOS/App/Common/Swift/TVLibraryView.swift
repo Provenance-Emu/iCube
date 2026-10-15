@@ -1693,6 +1693,11 @@ struct TVLibraryView: View {
       Button(action: { libraryMenuAction { showSources = true } }) {
         Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
       }
+      if ModBrowser.isEnabled {
+        Button(action: { libraryMenuAction { ModBrowserPresenter.shared.open() } }) {
+          Label(L("Find Mods Online…"), systemImage: "puzzlepiece.extension")
+        }
+      }
     }
   }
 
@@ -2034,6 +2039,7 @@ struct TVLibraryView: View {
       }
     // Sources sheet
       .sheet(isPresented: $showSources) { SourcesView().claimsController() }
+      .modBrowserSheet(libraryGames: model.games)
       .sheet(isPresented: $showWebImportSheet) {
         LibraryWebImportView()
           .claimsController()
