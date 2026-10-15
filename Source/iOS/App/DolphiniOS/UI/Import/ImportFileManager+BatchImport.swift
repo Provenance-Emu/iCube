@@ -105,6 +105,7 @@ private actor ArchiveImportService {
     var importedGames = 0
     var skippedGames = 0
     var extractedArchives = 0
+    var installedPackMessages: [String] = []
     var errors: [String] = []
   }
 
@@ -122,7 +123,9 @@ private actor ArchiveImportService {
       if ImportableFileTypes.isArchiveFile(url) {
         // Picked files live outside the app container: read-only, never extract beside or delete.
         let result = ZipImportHelper.importPickedArchive(at: url, toFolder: softwareFolder)
-        if result.importedCount > 0 || result.skippedExistingCount > 0 {
+        if let packMessage = result.installedPackMessage {
+          outcome.installedPackMessages.append(packMessage)
+        } else if result.succeeded {
           outcome.extractedArchives += 1
           outcome.importedGames += result.importedCount
           outcome.skippedGames += result.skippedExistingCount
@@ -201,6 +204,10 @@ public extension ImportFileManager {
     }
     hideWindow()
 
+    for message in outcome.installedPackMessages {
+      postSnackbar(message)
+    }
+
     if outcome.extractedArchives > 0 {
       postSnackbar(ZipImportHelper.snackbarText(importedCount: outcome.importedGames,
                                                skippedCount: outcome.skippedGames,
@@ -218,7 +225,7 @@ public extension ImportFileManager {
                         message: message + suffix)
     }
 
-    if outcome.importedGames > 0 || outcome.skippedGames > 0 || outcome.extractedArchives > 0 {
+    if outcome.importedGames > 0 || outcome.skippedGames > 0 || outcome.extractedArchives > 0 || !outcome.installedPackMessages.isEmpty {
       NotificationCenter.default.post(
         name: NSNotification.Name("DOLImportFileFinishedNotification"),
         object: self,
