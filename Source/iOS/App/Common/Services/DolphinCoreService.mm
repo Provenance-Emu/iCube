@@ -47,10 +47,19 @@ namespace {
 constexpr auto kTerminateStopTimeout = std::chrono::seconds(3);
 constexpr auto kTerminateStopPoll = std::chrono::milliseconds(5);
 
-/// Runs first inside exit() (see applicationWillTerminate:) and ends the process before static
-/// destructors run.
+/// Runs before the C++ static destructors inside exit(), saves the config, and ends the process.
+///
+/// exit() is reached two ways, both while other threads still run: after willTerminate (the user
+/// swiping the app away), and straight from UIKit's SIGTERM handler, which skips willTerminate and
+/// can land mid-game. The static destructors that follow destroy Config's layers and mutexes; a
+/// dirty Base layer saving itself from its destructor, or any thread still calling Config::Get,
+/// then locks a destroyed mutex and throws "mutex lock failed: Invalid argument" (Sentry ICUBE-G
+/// from willTerminate, ICUBE-FJ from SIGTERM). atexit handlers run in reverse registration order,
+/// so registering this after UICommon::Init (and again in willTerminate) runs it before them.
 void ExitWithoutStaticDestructors()
 {
+  ICubePGOFlush();
+  Config::Save();
   _exit(0);
 }
 
@@ -251,6 +260,10 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
     }
   }
 
+  // After UICommon::Init created Config's layers, so this runs before their destructors when a
+  // SIGTERM sends UIKit straight to exit() mid-game (ICUBE-FJ). See ExitWithoutStaticDestructors.
+  std::atexit(ExitWithoutStaticDestructors);
+
   return YES;
 }
 
@@ -279,9 +292,9 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // old handler ran Core::Shutdown and UICommon::Shutdown here, which destroy Config's layers and
   // the LogManager while controller, library, web server and Swift timer threads still call
   // Config::Get and log. Those threads then locked destroyed mutexes and threw
-  // "mutex lock failed: Invalid argument" (Sentry ICUBE-G/FJ/F9, every event in the background
-  // during termination). The same race followed in exit(), whose C++ static destructors run
-  // while those threads are alive.
+  // "mutex lock failed: Invalid argument" (Sentry ICUBE-G: app in the background, main thread in
+  // -[UIApplication _terminateWithStatus:]). The same race followed in exit(), whose C++ static
+  // destructors run while those threads are alive; see ExitWithoutStaticDestructors.
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
 
