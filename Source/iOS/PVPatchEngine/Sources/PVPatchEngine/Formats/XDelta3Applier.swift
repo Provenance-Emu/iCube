@@ -14,7 +14,7 @@ enum XDelta3Applier {
     static let sourceBlockSize = 128 * 1024
     private static let cachedBlocks = 32
     private static let inputChunkSize = 256 * 1024
-    /// Largest target window the decoder is asked to hold in memory (xdelta3's default is 8 MiB).
+    /// Largest target window the decoder is asked to hold in memory (xdelta3's default is 8 MiB); the scanner rejects bigger ones.
     static let maxTargetWindow: UInt64 = 64 * 1024 * 1024
 
     static func apply(_ inputs: ApplyInputs) throws -> ApplyOutcome {
@@ -26,9 +26,6 @@ enum XDelta3Applier {
         let summary = try VCDIFFScanner.scan(patch)
         if let secondary = summary.secondaryCompression, !secondary.isSupported {
             throw PatchError.unsupportedSecondaryCompression
-        }
-        guard summary.largestTargetWindow <= maxTargetWindow else {
-            throw PatchError.corruptPatch("window of \(summary.largestTargetWindow) bytes exceeds the \(maxTargetWindow) byte limit")
         }
         guard summary.targetSize <= inputs.options.maxOutputSize else { throw PatchError.outputTooLarge }
         if !ignoreSource, source.size < summary.requiredSourceSize {

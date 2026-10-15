@@ -18,7 +18,6 @@ struct VCDIFFSummary {
     var targetSize: UInt64 = 0
     /// Furthest source byte any window copies from (0 when none do).
     var requiredSourceSize: UInt64 = 0
-    var largestTargetWindow: UInt64 = 0
     var windowCount = 0
     var windowsWithAdler32 = 0
 }
@@ -92,9 +91,13 @@ enum VCDIFFScanner {
             guard deltaLength <= patch.size - deltaStart else { throw PatchError.truncatedPatch }
             let targetLength = try cursor.integer()
 
+            guard targetLength <= XDelta3Applier.maxTargetWindow else {
+                throw PatchError.corruptPatch("window of \(targetLength) bytes exceeds the \(XDelta3Applier.maxTargetWindow) byte limit")
+            }
+            let (total, overflow) = summary.targetSize.addingReportingOverflow(targetLength)
+            guard !overflow else { throw PatchError.corruptPatch("VCDIFF target size overflows") }
             summary.windowCount += 1
-            summary.targetSize += targetLength
-            summary.largestTargetWindow = max(summary.largestTargetWindow, targetLength)
+            summary.targetSize = total
             summary.requiredSourceSize = max(summary.requiredSourceSize, sourceEnd)
             if windowIndicator & adler32Flag != 0 { summary.windowsWithAdler32 += 1 }
             cursor.position = deltaStart + deltaLength

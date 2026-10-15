@@ -144,12 +144,15 @@ enum BPSApplier {
                 try reader.stream(length) { bytes, count in try sink.append(bytes, count: count) }
             case .sourceCopy:
                 sourceOffset = try relativeOffset(try reader.readVariableLength(), from: sourceOffset)
+                guard UInt64(sourceOffset) <= header.sourceSize, length <= header.sourceSize - UInt64(sourceOffset) else {
+                    throw PatchError.corruptPatch("BPS SourceCopy reads past the source")
+                }
                 try copyFromSource(at: UInt64(sourceOffset), length: length, inputs.source, sink, scratch)
-                sourceOffset += Int64(length)
+                sourceOffset = try advanced(sourceOffset, by: length)
             case .targetCopy:
                 targetOffset = try relativeOffset(try reader.readVariableLength(), from: targetOffset)
                 try copyFromTarget(at: UInt64(targetOffset), length: length, sink, scratch, fill)
-                targetOffset += Int64(length)
+                targetOffset = try advanced(targetOffset, by: length)
             }
         }
     }
@@ -158,8 +161,15 @@ enum BPSApplier {
         let magnitude = encoded >> 1
         guard magnitude <= UInt64(Int64.max / 2) else { throw PatchError.corruptPatch("BPS offset out of range") }
         let delta = Int64(magnitude)
-        let result = encoded & 1 != 0 ? current - delta : current + delta
-        guard result >= 0 else { throw PatchError.corruptPatch("BPS copy has a negative offset") }
+        let (result, overflow) = encoded & 1 != 0 ? current.subtractingReportingOverflow(delta) : current.addingReportingOverflow(delta)
+        guard !overflow, result >= 0 else { throw PatchError.corruptPatch("BPS copy has an offset out of range") }
+        return result
+    }
+
+    private static func advanced(_ offset: Int64, by length: UInt64) throws -> Int64 {
+        guard let step = Int64(exactly: length) else { throw PatchError.corruptPatch("BPS offset out of range") }
+        let (result, overflow) = offset.addingReportingOverflow(step)
+        guard !overflow else { throw PatchError.corruptPatch("BPS offset out of range") }
         return result
     }
 

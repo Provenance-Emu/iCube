@@ -126,12 +126,14 @@ enum UPSApplier {
         let base = BaseReader(source: inputs.source, baseSize: baseSize)
         let xorBytes = ScratchBuffer(capacity: xorRunLimit)
         let baseBytes = ScratchBuffer(capacity: xorRunLimit)
+        // No hunk lies beyond the larger of the two images, whichever way the patch is applied.
+        let limit = max(header.inputSize, header.outputSize)
         var offset: UInt64 = 0
 
         while reader.remaining > 0 {
             let skip = try reader.readVariableLength()
             let (moved, overflow) = offset.addingReportingOverflow(skip)
-            guard !overflow else { throw PatchError.corruptPatch("UPS hunk offset overflows") }
+            guard !overflow, moved <= limit else { throw PatchError.corruptPatch("UPS hunk offset lies beyond the image") }
             offset = moved
             try emitBase(upTo: min(offset, outputSize), base: base, sink: sink, scratch: baseBytes)
 
@@ -155,8 +157,11 @@ enum UPSApplier {
                     }
                     try sink.append(baseBytes.pointer, count: writable)
                 }
-                offset += UInt64(count)
+                let (end, overflow) = offset.addingReportingOverflow(UInt64(count))
+                guard !overflow, end <= limit else { throw PatchError.corruptPatch("UPS hunk runs beyond the image") }
+                offset = end
             }
+            // The terminator stands for one unchanged byte, which may be the one just past the end.
             offset += 1
         }
         try emitBase(upTo: outputSize, base: base, sink: sink, scratch: baseBytes)
