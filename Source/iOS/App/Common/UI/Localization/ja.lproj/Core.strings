@@ -5255,3 +5255,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The mod settings couldn't be saved." = "The mod settings couldn't be saved.";
 "The modded game couldn't be started." = "The modded game couldn't be started.";
 "Added %@ to your library." = "Added %@ to your library.";
+"A mod that does not keep its own save shares the original game's save data, so it can change your existing save. Back up saves you care about." = "A mod that does not keep its own save shares the original game's save data, so it can change your existing save. Back up saves you care about.";
+"Loading-time emulation is turned off while mods are active." = "Loading-time emulation is turned off while mods are active.";

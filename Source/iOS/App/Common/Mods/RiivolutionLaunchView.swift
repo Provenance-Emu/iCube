@@ -10,12 +10,12 @@ struct RiivolutionLaunchView: View {
   @StateObject private var model: RiivolutionLaunchModel
   /// Boots the descriptor written for this play. The sheet closes itself first.
   let onPlay: (URL) -> Void
-  /// Called after a descriptor was saved into the library, so the library can rescan.
-  let onAddedToLibrary: (String) -> Void
+  /// Called with the descriptor saved into the library, so the library can rescan.
+  let onAddedToLibrary: (URL) -> Void
   @Environment(\.dismiss) private var dismiss
   @State private var failureMessage: String?
 
-  init(item: TVGameItem, onPlay: @escaping (URL) -> Void, onAddedToLibrary: @escaping (String) -> Void) {
+  init(item: TVGameItem, onPlay: @escaping (URL) -> Void, onAddedToLibrary: @escaping (URL) -> Void) {
     let game = RiivolutionLaunchModel.Game(
       title: item.title,
       gameID: item.gameID,
@@ -122,6 +122,8 @@ struct RiivolutionLaunchView: View {
     Section {
       Text(L("Riivolution never changes your disc image: the mods are applied while the game loads."))
       Text(L("Save-state slots are shared with the unmodded game. Resume where you left off is not used for modded games."))
+      Text(L("A mod that does not keep its own save shares the original game's save data, so it can change your existing save. Back up saves you care about."))
+      Text(L("Loading-time emulation is turned off while mods are active."))
     }
     .font(.footnote)
     .foregroundStyle(.secondary)
@@ -139,13 +141,12 @@ struct RiivolutionLaunchView: View {
   }
 
   private func addToLibrary() {
-    let name = model.libraryName
-    guard model.writeLibraryDescriptor() != nil else {
+    guard let url = model.writeLibraryDescriptor() else {
       failureMessage = L("The mod settings couldn't be saved.")
       return
     }
     dismiss()
-    onAddedToLibrary(name)
+    onAddedToLibrary(url)
   }
 }
 

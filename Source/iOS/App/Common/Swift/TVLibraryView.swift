@@ -2020,7 +2020,7 @@ struct TVLibraryView: View {
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
       .sheet(item: $showModsFor) { item in
-        RiivolutionLaunchView(item: item, onPlay: playModded(descriptor:), onAddedToLibrary: modAddedToLibrary(named:))
+        RiivolutionLaunchView(item: item, onPlay: playModded(descriptor:), onAddedToLibrary: modAddedToLibrary(descriptor:))
           .claimsController()
       }
       .sheet(item: $showCheatListFor) { item in
@@ -2555,8 +2555,9 @@ struct TVLibraryView: View {
     selectGame(item)
   }
 
-  private func modAddedToLibrary(named name: String) {
-    postSnackbar(String(format: L("Added %@ to your library."), name))
+  private func modAddedToLibrary(descriptor url: URL) {
+    LibraryAddedDateStore.record(path: url.path)
+    postSnackbar(String(format: L("Added %@ to your library."), url.deletingPathExtension().lastPathComponent))
     model.rescan()
   }
 
