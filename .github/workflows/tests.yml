@@ -31,12 +31,19 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Self-hosted Homebrew is owned by another user: never auto-update or clean up.
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
 jobs:
   test:
     name: iCubeTests (iOS Simulator)
-    # GitHub-hosted, matching build.yml -- see that file's comment on why this
-    # repo has no self-hosted runners any more.
-    runs-on: macos-26
+    # Runner toggle: set the repo variable MACOS_RUNNER_LABELS (JSON array, e.g.
+    # ["self-hosted","studio"]) to run this job on the Mac Studio; leave it unset to use
+    # GitHub-hosted macos-26. Pull requests from forks ALWAYS run on the hosted runner -
+    # never run untrusted fork code on the self-hosted machine.
+    runs-on: ${{ (vars.MACOS_RUNNER_LABELS != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.MACOS_RUNNER_LABELS) || 'macos-26' }}
     # A hung simulator (nextDrawable deadlock class of bug, or a wedged
     # xcodebuild) must not burn hours of runner time silently.
     timeout-minutes: 90
@@ -53,6 +60,30 @@ jobs:
       CCACHE_SLOPPINESS: pch_defines,time_macros,include_file_mtime,include_file_ctime
 
     steps:
+      # Self-hosted only, and FIRST (before checkout): the job-level DEVELOPER_DIR names the
+      # hosted-only Xcode_26.3.app, and a missing Xcode breaks the /usr/bin/git shim that
+      # checkout uses.
+      # The Studio has no sudo for `xcode-select -s`, so Xcode is selected with DEVELOPER_DIR
+      # (written to GITHUB_ENV, which overrides any job-level value). It defaults to
+      # /Applications/Xcode.app (Xcode 27); set the repo variable XCODE_PATH to override.
+      - name: Select Xcode (self-hosted)
+        if: ${{ runner.environment != 'github-hosted' }}
+        env:
+          XCODE_PATH: ${{ vars.XCODE_PATH || '/Applications/Xcode.app' }}
+        run: |
+          set -euo pipefail
+          DEV="$XCODE_PATH/Contents/Developer"
+          if [ ! -d "$DEV" ]; then
+            echo "::error::Xcode not found at $XCODE_PATH on this runner - install it there or set the XCODE_PATH repo variable"
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$DEV" >> "$GITHUB_ENV"
+          # The checkout below runs `git clean -ffdx`, which would wipe a workspace-local
+          # .ccache every run; keep the cache outside the workspace so it persists here.
+          # (CCACHE_BASEDIR keeps hits valid across workspace paths.)
+          echo "CCACHE_DIR=$HOME/Library/Caches/ccache-icube" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$DEV" xcodebuild -version
+
       - uses: actions/checkout@v4
         with:
           submodules: 'recursive'
@@ -81,6 +112,7 @@ jobs:
         run: python3 Project/Scripts/check_localized_keys.py --check
 
       - name: Select Xcode
+        if: ${{ runner.environment == 'github-hosted' }}
         uses: maxim-lobanov/setup-xcode@v1.6.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
@@ -117,7 +149,7 @@ jobs:
       - name: Install ccache
         run: |
           set -euo pipefail
-          brew install ccache
+          command -v ccache >/dev/null || brew install ccache
           bin="$(command -v ccache)"
           {
             echo "CMAKE_C_COMPILER_LAUNCHER=$bin"
@@ -129,7 +161,10 @@ jobs:
 
       # A new key per run so each run saves what it compiled; restore takes the newest entry for
       # this ref, then develop's.
+      # Hosted runners start empty, so they restore/save through actions/cache; the
+      # Studio keeps its ccache on disk (see "Select Xcode (self-hosted)").
       - name: Restore ccache
+        if: ${{ runner.environment == 'github-hosted' }}
         uses: actions/cache@v4
         with:
           path: ${{ env.CCACHE_DIR }}
@@ -307,3 +342,11 @@ jobs:
             ${{ runner.temp }}/iCubeTests.log
           retention-days: 7
           if-no-files-found: warn
+
+      # The Studio is persistent: don't leave the simulator this job booted running.
+      # (Not deleted -- the job picked an existing device, it did not create one.)
+      - name: Shut down the test simulator (self-hosted)
+        if: ${{ always() && runner.environment != 'github-hosted' && steps.pick_sim.outputs.dest != '' }}
+        env:
+          DEST: ${{ steps.pick_sim.outputs.dest }}
+        run: xcrun simctl shutdown "${DEST##*id=}" 2>/dev/null || true

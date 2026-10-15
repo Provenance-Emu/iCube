@@ -3,7 +3,8 @@ name: Lint
 # Lint/format only -- intentionally NOT a build.
 # The xcframework build needs a big self-hosted runner (it OOMs heavy -Ofast TUs);
 # the existing build.yml / release.yml already cover building on [self-hosted, macOS].
-# This job stays cheap and fast on a GitHub-hosted runner so PRs get quick feedback.
+# These jobs stay cheap and fast on a GitHub-hosted runner (the default) so PRs get quick feedback;
+# the MACOS_RUNNER_LABELS toggle can move them to the self-hosted Studio.
 
 on:
   pull_request:
@@ -21,15 +22,43 @@ concurrency:
 # full-tree pass still runs on every push to develop, advisory, as the record of
 # what a one-time format pass would have to touch.
 
+env:
+  # Self-hosted Homebrew is owned by another user: never auto-update or clean up.
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
 jobs:
   swift:
     name: Swift (swiftlint + swiftformat)
-    runs-on: macos-latest
+    # Runner toggle: set the repo variable MACOS_RUNNER_LABELS (JSON array, e.g.
+    # ["self-hosted","studio"]) to run this job on the Mac Studio; leave it unset to use
+    # GitHub-hosted macos-latest. Pull requests from forks ALWAYS run on the hosted runner -
+    # never run untrusted fork code on the self-hosted machine.
+    runs-on: ${{ (vars.MACOS_RUNNER_LABELS != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.MACOS_RUNNER_LABELS) || 'macos-latest' }}
     # Blocking on a pull request (only its changed lines count). Advisory on a push
     # to develop: the tree as a whole is not yet clean against .swiftformat /
     # .swiftlint.yml.
     continue-on-error: ${{ github.event_name != 'pull_request' }}
     steps:
+      # Self-hosted only, and FIRST (before checkout): swiftlint loads SourceKit from the
+      # selected Xcode, so select it explicitly rather than rely on xcode-select state.
+      # The Studio has no sudo for `xcode-select -s`, so Xcode is selected with DEVELOPER_DIR
+      # (written to GITHUB_ENV, which overrides any job-level value). It defaults to
+      # /Applications/Xcode.app (Xcode 27); set the repo variable XCODE_PATH to override.
+      - name: Select Xcode (self-hosted)
+        if: ${{ runner.environment != 'github-hosted' }}
+        env:
+          XCODE_PATH: ${{ vars.XCODE_PATH || '/Applications/Xcode.app' }}
+        run: |
+          set -euo pipefail
+          DEV="$XCODE_PATH/Contents/Developer"
+          if [ ! -d "$DEV" ]; then
+            echo "::error::Xcode not found at $XCODE_PATH on this runner - install it there or set the XCODE_PATH repo variable"
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$DEV" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$DEV" xcodebuild -version
+
       - uses: actions/checkout@v4
         # No submodules: lint doesn't need the Externals/ C++ tree.
 
@@ -85,8 +114,8 @@ jobs:
         run: |
           # Neither tool ships preinstalled on the current macos-latest (macos-26)
           # image; swiftlint was dropped from it, so install both via brew.
-          brew list swiftlint >/dev/null 2>&1 || brew install swiftlint
-          brew list swiftformat >/dev/null 2>&1 || brew install swiftformat
+          command -v swiftlint >/dev/null || brew install swiftlint
+          command -v swiftformat >/dev/null || brew install swiftformat
           swiftlint version
           swiftformat --version
 
@@ -125,7 +154,11 @@ jobs:
 
   clang-format:
     name: clang-format (iCube ObjC/ObjC++/C++)
-    runs-on: macos-latest
+    # Runner toggle: set the repo variable MACOS_RUNNER_LABELS (JSON array, e.g.
+    # ["self-hosted","studio"]) to run this job on the Mac Studio; leave it unset to use
+    # GitHub-hosted macos-latest. Pull requests from forks ALWAYS run on the hosted runner -
+    # never run untrusted fork code on the self-hosted machine.
+    runs-on: ${{ (vars.MACOS_RUNNER_LABELS != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.MACOS_RUNNER_LABELS) || 'macos-latest' }}
     # Blocking on a pull request (only its changed lines count). Advisory on a push
     # to develop: the checked-in iCube ObjC/C++ tree is not yet clang-formatted
     # (~12k violations vs Dolphin's Source/.clang-format).
@@ -146,7 +179,7 @@ jobs:
 
       - name: Install clang-format
         run: |
-          brew list clang-format >/dev/null 2>&1 || brew install clang-format
+          command -v clang-format >/dev/null || brew install clang-format
           clang-format --version
 
       - name: clang-format --dry-run -Werror (Source/iOS)
