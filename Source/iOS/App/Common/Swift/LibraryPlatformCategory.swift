@@ -41,7 +41,7 @@ enum LibraryPlatformCategory: String, CaseIterable, Identifiable, Codable {
 }
 
 /// DiscIO::Platform raw values from Source/Core/DiscIO/Enums.h.
-private enum DiscIOPlatform: Int {
+enum DiscIOPlatform: Int {
   case gameCubeDisc = 0
   case triforce = 1
   case wiiDisc = 2

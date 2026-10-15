@@ -44,5 +44,6 @@
 #import "TVControllerMappingBridge.h"
 #import "DOLPhysicalProfileBridge.h"
 #import "DOLControllerSettingsBridge.h"
+#import "RiivolutionBridge.h"
 #import "NANDImportManager.h"
 #import "ImportFileManager.h"
