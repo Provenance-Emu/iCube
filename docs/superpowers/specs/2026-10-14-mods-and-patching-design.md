@@ -160,6 +160,25 @@ not cleanly possible. Manual slots stay shared; the launch sheet says so in one 
 - tvOS: browse and download work; focus-friendly lists; storage note that tvOS may purge
   `Caches` (the iCube user root there).
 
+## Cross-app UX rules (wave 3, after A/B/C merge)
+
+Relayed from the owner through the iFly session on 2026-10-14, to be identical in iCube,
+iFly and Provenance:
+
+1. Patched-copy placement is chosen per apply (new library entry vs replace original), plus
+   a global setting "Show patched versions as separate library items": on → patched copies
+   (`<Software>/Patched/*`, `<Software>/Mods/*.json`) get their own tiles; off → they are
+   hidden from the grid and listed under the base game (matched by game ID).
+2. Either way the base game's context menu has a "Patches & Mods" section: play each
+   installed patched copy / saved Riivolution preset, Play with Mods… (A), Apply Patch… (B),
+   Find Mods Online (C), Manage (delete copies/presets, remove packs), Import. The base
+   game's tile shows a small badge with the count of installed patched copies + presets.
+3. Soft (read-time) patching where the format allows (Riivolution), patched copy otherwise.
+
+Catalog: a shared curated feed at `provenance-emu.com/patches/catalog.json` is being
+designed by the iFly session (per-system sections, link-out only, no mirroring). iCube's
+browser stays a live GameBanana client for now and can read that feed once it exists.
+
 ## Testing and gates
 
 - `cd Source/iOS/PVPatchEngine && swift test`: per-format fixtures (small synthetic files;
