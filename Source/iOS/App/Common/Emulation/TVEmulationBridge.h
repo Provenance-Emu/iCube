@@ -62,7 +62,8 @@ NS_ASSUME_NONNULL_BEGIN
 // Resume / auto-state. A dedicated "{StateSavesDir}{GameID}.auto" file, separate
 // from the numbered slots, used by "resume where I left off". Uses State::SaveAs/
 // LoadAs directly so it never collides with the slot scheme. autoStateFilePath
-// returns nil when no game is running.
+// returns nil when no game is running, and for a boot of a GameMod descriptor
+// (a patched game shares the vanilla game's id, so it never resumes).
 + (nullable NSString*)autoStateFilePath;
 + (void)saveStateToPath:(NSString*)path wait:(BOOL)wait;
 + (void)loadStateFromPath:(NSString*)path;

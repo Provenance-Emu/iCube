@@ -20,6 +20,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, setter=setIsExternalDisplayConnected:) bool isExternalDisplayConnected;
 
+/// The file the current (or last) boot was given, or nil for a boot that is not from a file (GameCube menu, Wii menu).
+/// A `.json` GameMod descriptor boots a patched game: see `+[TVEmulationBridge autoStateFilePath]`.
+@property (nonatomic, copy, readonly, nullable) NSString* bootedFilePath;
+
 - (void)registerMainDisplayView:(UIView*)mainView;
 - (void)registerExternalDisplayView:(UIView*)externalView;
 - (void)runEmulationWithBootParameter:(EmulationBootParameter*)bootParameter;

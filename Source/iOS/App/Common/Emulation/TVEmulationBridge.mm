@@ -250,6 +250,11 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
 }
 
 + (nullable NSString*)autoStateFilePath {
+  // A GameMod descriptor boots a patched game under the base game's id, so its resume state would collide with the
+  // vanilla game's {GameID}.auto: patched boots neither load nor save one. Both sides treat nil as "no auto-state".
+  NSString* bootedFile = [EmulationCoordinator shared].bootedFilePath;
+  if (bootedFile != nil && [DOLModDescriptorStore isDescriptorAtPath:bootedFile])
+    return nil;
   const std::string game_id = SConfig::GetInstance().GetGameID();
   if (game_id.empty())
     return nil;

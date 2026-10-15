@@ -611,6 +611,8 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
 }
 
 - (void)runEmulationWithBootParameter:(EmulationBootParameter*)bootParameter {
+  _bootedFilePath = bootParameter.bootType == EmulationBootTypeFile ? [bootParameter.path copy] : nil;
+
   // iCube: pre-detect the "boot to GameCube menu but no BIOS/IPL installed" dead launch.
   // A GameCube disc boot is silently re-routed through the GC IPL by BootManager::BootCore exactly
   // when (!Wii && !MAIN_SKIP_IPL && Disc); if no IPL dump is present that boot fails with a generic
