@@ -37,9 +37,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Self-hosted Homebrew is owned by another user: never auto-update or clean up.
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
 jobs:
   build:
-    # GitHub-hosted. This was `[self-hosted, macOS]`, but the repo has ZERO
+    # GitHub-hosted by default (see the runner toggle below). This was `[self-hosted, macOS]`, but the repo had ZERO
     # registered runners: run 33592678140 sat queued for hours with
     # runner=unassigned, and every historical run was eventually cancelled.
     # Nothing has published since 4.1.0beta5 (Sept 2025) as a result.
@@ -51,7 +56,11 @@ jobs:
     # ship, so they presented as compile errors when the real fault was the
     # toolchain. Adding #if guards would have been the wrong fix -- it would
     # delete working iOS 26 code to satisfy a toolchain that should not be in use.
-    runs-on: macos-26
+    # Runner toggle: set the repo variable MACOS_RUNNER_LABELS (JSON array, e.g.
+    # ["self-hosted","studio"]) to run this job on the Mac Studio; leave it unset to use
+    # GitHub-hosted macos-26. Pull requests from forks ALWAYS run on the hosted runner -
+    # never run untrusted fork code on the self-hosted machine.
+    runs-on: ${{ (vars.MACOS_RUNNER_LABELS != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.MACOS_RUNNER_LABELS) || 'macos-26' }}
 
     env:
       # Every slice is built up front, so the app's Build Dolphin Core phase skips its rebuild.
@@ -79,6 +88,26 @@ jobs:
       # with `submodules: recursive`, which is not a cheap ask for a build number.
       XCODE_COMMON_BUILD_ARGS: -workspace Source/iOS/App/iCube.xcworkspace -derivedDataPath "${{ github.workspace }}/build-Xcode" -sdk iphoneos -destination generic/platform=iOS DOL_BUILD_SOURCE="development" CURRENT_PROJECT_VERSION=${{ github.run_number }} CODE_SIGNING_ALLOWED="NO" CODE_SIGNING_REQUIRED="NO"
     steps:
+      # Self-hosted only, and FIRST (before checkout): the job-level DEVELOPER_DIR names the
+      # hosted-only Xcode_26.3.app, and a missing Xcode breaks the /usr/bin/git shim that
+      # checkout uses.
+      # The Studio has no sudo for `xcode-select -s`, so Xcode is selected with DEVELOPER_DIR
+      # (written to GITHUB_ENV, which overrides any job-level value). It defaults to
+      # /Applications/Xcode.app (Xcode 27); set the repo variable XCODE_PATH to override.
+      - name: Select Xcode (self-hosted)
+        if: ${{ runner.environment != 'github-hosted' }}
+        env:
+          XCODE_PATH: ${{ vars.XCODE_PATH || '/Applications/Xcode.app' }}
+        run: |
+          set -euo pipefail
+          DEV="$XCODE_PATH/Contents/Developer"
+          if [ ! -d "$DEV" ]; then
+            echo "::error::Xcode not found at $XCODE_PATH on this runner - install it there or set the XCODE_PATH repo variable"
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$DEV" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$DEV" xcodebuild -version
+
       - uses: actions/checkout@v2
         with:
           submodules: 'recursive'
@@ -106,9 +135,10 @@ jobs:
       # already has them at /opt/homebrew/bin, and BuildiOSXCFramework.py has
       # been succeeding with them.
       - name: Install dpkg
-        run: brew install dpkg
+        run: command -v dpkg-deb >/dev/null || brew install dpkg
 
       - name: Select Xcode
+        if: ${{ runner.environment == 'github-hosted' }}
         uses: maxim-lobanov/setup-xcode@v1.6.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}

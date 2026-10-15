@@ -117,7 +117,11 @@ jobs:
     # searchToolbarBehavior, navigationSubtitle) behind `if #available(iOS 26.0,
     # tvOS 26.0, *)`. An availability guard cannot conjure a symbol the SDK does
     # not ship, so both legs failed to compile until this was pinned.
-    runs-on: macos-26
+    # Runner toggle: set the repo variable MACOS_RUNNER_LABELS (JSON array, e.g.
+    # ["self-hosted","studio"]) to run this job on the Mac Studio; leave it unset to use
+    # GitHub-hosted macos-26. Pull requests from forks ALWAYS run on the hosted runner -
+    # never run untrusted fork code on the self-hosted machine.
+    runs-on: ${{ (vars.MACOS_RUNNER_LABELS != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.MACOS_RUNNER_LABELS) || 'macos-26' }}
     # One platform per job. Two cold archives in a single job is what made
     # Provenance's tvOS leg fail intermittently with no diagnostic.
     strategy:
@@ -132,12 +136,33 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       XCODE_VERSION: '26.3'
     steps:
+      # Self-hosted only, and FIRST (before checkout): the job-level DEVELOPER_DIR names the
+      # hosted-only Xcode_26.3.app, and a missing Xcode breaks the /usr/bin/git shim that
+      # checkout uses.
+      # The Studio has no sudo for `xcode-select -s`, so Xcode is selected with DEVELOPER_DIR
+      # (written to GITHUB_ENV, which overrides any job-level value). It defaults to
+      # /Applications/Xcode.app (Xcode 27); set the repo variable XCODE_PATH to override.
+      - name: Select Xcode (self-hosted)
+        if: ${{ runner.environment != 'github-hosted' }}
+        env:
+          XCODE_PATH: ${{ vars.XCODE_PATH || '/Applications/Xcode.app' }}
+        run: |
+          set -euo pipefail
+          DEV="$XCODE_PATH/Contents/Developer"
+          if [ ! -d "$DEV" ]; then
+            echo "::error::Xcode not found at $XCODE_PATH on this runner - install it there or set the XCODE_PATH repo variable"
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$DEV" >> "$GITHUB_ENV"
+          DEVELOPER_DIR="$DEV" xcodebuild -version
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Setup Xcode
+        if: ${{ runner.environment == 'github-hosted' }}
         uses: maxim-lobanov/setup-xcode@v1.6.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
@@ -265,7 +290,7 @@ jobs:
             -destination "$DEST" \
             -archivePath "$ARCHIVE" \
             CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$BUILD" \
-            -allowProvisioningUpdates "${AUTH[@]}" 2>&1 | tee /tmp/testflight.log
+            -allowProvisioningUpdates "${AUTH[@]}" 2>&1 | tee "$RUNNER_TEMP/testflight.log"
 
           # -allowProvisioningUpdates is required on export too, not just archive:
           # the API key authenticates but does not authorise xcodebuild to create
@@ -275,7 +300,7 @@ jobs:
             -exportPath "$RUNNER_TEMP/export" \
             -exportOptionsPlist ExportOptions/ExportOptions-AppStore.plist \
             -allowProvisioningUpdates "${AUTH[@]}" \
-            CURRENT_PROJECT_VERSION="$BUILD" 2>&1 | tee -a /tmp/testflight.log
+            CURRENT_PROJECT_VERSION="$BUILD" 2>&1 | tee -a "$RUNNER_TEMP/testflight.log"
 
       # Sentry symbolication. Project.swift carries an "Upload Debug Symbols to
       # Sentry" build phase, but it is guarded on `which sentry-cli`, which no
@@ -353,12 +378,18 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: testflight-log-${{ matrix.platform }}
-          path: /tmp/testflight.log
+          path: ${{ runner.temp }}/testflight.log
           retention-days: 3
 
-      - name: Clean up keychain
+      # The Studio is persistent: nothing signing-related may outlive the job. Deleting the
+      # keychain also drops it from the user search list. Provisioning profiles that
+      # -allowProvisioningUpdates downloads are Xcode-managed and left in place.
+      - name: Clean up keychain and signing material
         if: always()
-        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/import.p12" "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP/testflight.log"
+          rm -rf "$RUNNER_TEMP/export" "$RUNNER_TEMP"/iCube-*.xcarchive
 
   # Move the `nightly` marker to the commit that was just shipped. This is what makes the skip check
   # in `plan` mean "nothing new since the last SUCCESSFUL upload" rather than "nothing new today":
