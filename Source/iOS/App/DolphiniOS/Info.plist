@@ -597,6 +597,8 @@
 			</dict>
 		</dict>
 	</array>
+	<key>NFCReaderUsageDescription</key>
+	<string>iCube reads and writes NFC tags that launch a game from your library.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>The microphone stands in for the GameCube Microphone and Wii Speak in games that support them.</string>
 	<key>NSMotionUsageDescription</key>

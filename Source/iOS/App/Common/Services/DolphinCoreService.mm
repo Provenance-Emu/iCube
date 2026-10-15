@@ -37,7 +37,32 @@
 
 #import "PGOFlush.h"
 
+#include <chrono>
+#include <cstdlib>
+#include <thread>
+#include <unistd.h>
+
 namespace {
+/// How long termination waits for the core to stop before saving and exiting anyway.
+constexpr auto kTerminateStopTimeout = std::chrono::seconds(3);
+constexpr auto kTerminateStopPoll = std::chrono::milliseconds(5);
+
+/// Runs before the C++ static destructors inside exit(), saves the config, and ends the process.
+///
+/// exit() is reached two ways, both while other threads still run: after willTerminate (the user
+/// swiping the app away), and straight from UIKit's SIGTERM handler, which skips willTerminate and
+/// can land mid-game. The static destructors that follow destroy Config's layers and mutexes; a
+/// dirty Base layer saving itself from its destructor, or any thread still calling Config::Get,
+/// then locks a destroyed mutex and throws "mutex lock failed: Invalid argument" (Sentry ICUBE-G
+/// from willTerminate, ICUBE-FJ from SIGTERM). atexit handlers run in reverse registration order,
+/// so registering this after UICommon::Init (and again in willTerminate) runs it before them.
+void ExitWithoutStaticDestructors()
+{
+  ICubePGOFlush();
+  Config::Save();
+  _exit(0);
+}
+
 template <typename T>
 static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& value)
 {
@@ -240,6 +265,10 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
     }
   }
 
+  // After UICommon::Init created Config's layers, so this runs before their destructors when a
+  // SIGTERM sends UIKit straight to exit() mid-game (ICUBE-FJ). See ExitWithoutStaticDestructors.
+  std::atexit(ExitWithoutStaticDestructors);
+
   return YES;
 }
 
@@ -260,44 +289,41 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 }
 
 - (void)applicationWillTerminate:(UIApplication*)application {
-  // Flush PGO counters before tearing down the core (no-op on a shipping build).
+  // Flush PGO counters before anything else (no-op on a shipping build).
   ICubePGOFlush();
 
+  // Save what must survive and stop the core, but tear nothing down. The process is about to die
+  // and the system reclaims everything; what it does NOT do is stop our other threads first. The
+  // old handler ran Core::Shutdown and UICommon::Shutdown here, which destroy Config's layers and
+  // the LogManager while controller, library, web server and Swift timer threads still call
+  // Config::Get and log. Those threads then locked destroyed mutexes and threw
+  // "mutex lock failed: Invalid argument" (Sentry ICUBE-G: app in the background, main thread in
+  // -[UIApplication _terminateWithStatus:]). The same race followed in exit(), whose C++ static
+  // destructors run while those threads are alive; see ExitWithoutStaticDestructors.
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
 
     if (Core::IsRunning(system)) {
-      Core::Stop(Core::System::GetInstance());
-
-      // Spin while Core stops
-      while (Core::GetState(Core::System::GetInstance()) != Core::State::Uninitialized) {}
-    }
-
-    Config::Save();
-
-#ifdef USE_RETRO_ACHIEVEMENTS
-    AchievementManager::GetInstance().Shutdown();
-#endif
-
-    Core::Shutdown(system);
-
-    UICommon::ShutdownControllers();
-
-    // UICommon::Shutdown makes LogManager save its live state into Logger.ini. Put back the types
-    // the console-logging mode widened at launch, so the file keeps its own list.
-    if (auto* logManager = Common::Log::LogManager::GetInstance())
-    {
-      for (int type = 0; type < static_cast<int>(Common::Log::LogType::NUMBER_OF_LOGS); ++type)
+      // Stopping flushes memory cards and the save-state worker. iOS allows willTerminate only a
+      // few seconds, so never wait past kTerminateStopTimeout: a core that cannot stop in time
+      // loses nothing it would not lose to the system's own kill.
+      Core::Stop(system);
+      const auto deadline = std::chrono::steady_clock::now() + kTerminateStopTimeout;
+      while (Core::GetState(system) != Core::State::Uninitialized &&
+             std::chrono::steady_clock::now() < deadline)
       {
-        const auto logType = static_cast<Common::Log::LogType>(type);
-        const Config::Info<bool> info{
-            {Config::System::Logger, "Logs", logManager->GetShortName(logType)}, false};
-        logManager->SetEnable(logType, Config::Get(info));
+        std::this_thread::sleep_for(kTerminateStopPoll);
       }
     }
 
-    UICommon::Shutdown();
+    Config::Save();
   });
+
+  // Every other service's willTerminate and Sentry's termination bookkeeping still run: they come
+  // after this method returns. Registered last, this handler is the first to run inside exit(),
+  // so the process ends before any C++ static destructor can race a live thread. The next launch
+  // is a cold start either way.
+  std::atexit(ExitWithoutStaticDestructors);
 }
 
 @end

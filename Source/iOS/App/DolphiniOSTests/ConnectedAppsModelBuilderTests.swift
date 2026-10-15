@@ -28,6 +28,15 @@ final class ConnectedAppsModelBuilderTests: XCTestCase {
     XCTAssertEqual(opened, ["ifly"])
   }
 
+  func test_scanTagRowOnlyWhereTagsCanBeRead() {
+    XCTAssertNil(makeModel(provenance: true, ifly: true).item(id: "scan-tag"))
+    var scanned = 0
+    let model = ConnectedAppsModelBuilder.make(apps: [], scanTag: { scanned += 1 })
+    guard case .action(let run)? = model.item(id: "scan-tag")?.role else { return XCTFail("scan-tag is not an action row") }
+    run()
+    XCTAssertEqual(scanned, 1)
+  }
+
   func test_sharingSectionExplainsBothDirections() {
     let model = makeModel(provenance: false, ifly: false)
     XCTAssertNotNil(model.item(id: "send"))

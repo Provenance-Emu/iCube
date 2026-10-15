@@ -23,7 +23,7 @@ struct ConnectedAppsSettingsView: View {
       .init(id: "ifly", name: "iFly", icon: "circle.circle", installed: iflyInstalled) {
         open(scheme: EcosystemSchemes.iflyScheme, installed: iflyInstalled, store: Self.iflyStoreURL)
       },
-    ]), title: L("Connected Apps"), sync: sync)
+    ], scanTag: GameTagCenter.isAvailable ? { GameTagCenter.shared.scan() } : nil), title: L("Connected Apps"), sync: sync)
   }
 
   private func sync() {

@@ -5,19 +5,11 @@ import Foundation
 
 /// Identifiers for iCube's CloudKit sync, in one place.
 ///
-/// - Important: **The container below is NOT PROVISIONED YET.** It does not exist
-///   in the Apple Developer account, and none of the four `.entitlements` files
-///   request it. Everything in this module is written to degrade cleanly in that
-///   state — see `CloudKitAvailability.containerIsProvisioned`, which is the
-///   single switch that turns CloudKit on once the account work is done.
-///   The entitlements changes are staged, un-applied, in
-///   `docs/cloudkit-entitlements.patch`; applying them before the container
-///   exists breaks code signing for everyone building the app.
+/// - Note: provisioned 2026-10-14 (container created, iCloud enabled on every shipping
+///   App ID, entitlements in all four files; `CloudKitAvailability.containerIsProvisioned`).
 public enum CloudSyncConstants {
 
     /// iCube's CloudKit container. Analogue of iFly's `iCloud.com.joemattiello.iFly`.
-    ///
-    /// Not yet provisioned — see the type doc.
     public static let containerIdentifier = "iCloud.com.joemattiello.iCube"
 
     /// Custom record zone in the **private** database. A custom zone (rather

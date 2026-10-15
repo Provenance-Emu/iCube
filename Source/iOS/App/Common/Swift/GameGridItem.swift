@@ -970,6 +970,14 @@ struct GameGridItem: View {
       // Ecosystem — hand this game's disc image to Provenance through the
       // system share sheet. iOS-only: see `EcosystemSendButton`.
       EcosystemSendButton(gameID: item.gameID)
+      // Tap-to-play tag: writes dolphinios://play?id=<game id> to an NDEF tag (iPhone only).
+      if GameTagCenter.isAvailable, !item.gameID.isEmpty {
+        Button {
+          GameTagCenter.shared.write(gameID: item.gameID, title: item.title)
+        } label: {
+          Label(L("Write to NFC Tag"), systemImage: "wave.3.right.circle")
+        }
+      }
       Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }
     #endif
