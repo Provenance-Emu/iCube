@@ -26,7 +26,12 @@ enum ModDownloadPolicy {
 
   /// Space the system would free for an important download on the volume holding `url`.
   static func availableBytes(at url: URL) -> Int64? {
-    try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
+    #if os(tvOS)
+    // tvOS has no "important usage" capacity.
+    return (try? url.resourceValues(forKeys: [.volumeAvailableCapacityKey]))?.volumeAvailableCapacity.map(Int64.init)
+    #else
+    return try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
+    #endif
   }
 
   /// Lowercase hex MD5 of a file, read in chunks so a multi-gigabyte download costs no memory.

@@ -38,6 +38,21 @@ final class ModContentInstallerTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: textures.appendingPathComponent("GALE01/.DS_Store").path))
   }
 
+  func testOnlyTexturesAndMarkersAreCopied() throws {
+    let pack = scratch.appendingPathComponent("pack")
+    try makeFile("tex1_a.png", in: pack)
+    try makeFile("GALE01.txt", in: pack)
+    try makeFile("all.txt", in: pack)
+    try makeFile("Patcher.exe", in: pack)
+    try makeFile("patch.xdelta", in: pack)
+    try makeFile("readme.txt", in: pack)
+    let textures = scratch.appendingPathComponent("Textures")
+    let result = try ModContentInstaller.installTextures(from: pack, gameID: "GALE01", texturesRoot: textures)
+    XCTAssertEqual(result.filesCopied, 3)
+    let copied = try FileManager.default.contentsOfDirectory(atPath: result.destination.path).sorted()
+    XCTAssertEqual(copied, ["GALE01.txt", "all.txt", "tex1_a.png"])
+  }
+
   func testReinstallingOverwritesInsteadOfFailing() throws {
     let pack = scratch.appendingPathComponent("pack")
     try makeFile("tex1_a.png", in: pack, contents: "new")

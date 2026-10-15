@@ -38,11 +38,14 @@ enum ModContentInstaller {
   }
 
   private static let junkNames: Set<String> = [".DS_Store", "Thumbs.db", "desktop.ini"]
+  private static let textureExtensions: Set<String> = ["png", "dds"]
 
   // MARK: - Textures
 
-  /// Copies the contents of `root` into `<texturesRoot>/<gameID>/`, keeping the folder layout and
-  /// overwriting same-named files (a pack update). Links and macOS resource-fork leftovers are skipped.
+  /// Copies the textures under `root` into `<texturesRoot>/<gameID>/`, keeping the folder layout and
+  /// overwriting same-named files (a pack update). Only images and Dolphin's `<id>.txt` / `all.txt`
+  /// markers are copied: anything else in the archive (programs, patches, readmes) stays behind.
+  /// Links and macOS resource-fork leftovers are skipped.
   static func installTextures(from root: URL, gameID: String, texturesRoot: URL) throws -> TextureResult {
     guard isSafeFolderName(gameID) else { throw CocoaError(.fileWriteInvalidFileName) }
     let fm = FileManager.default
@@ -60,7 +63,7 @@ enum ModContentInstaller {
         continue
       }
       guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
-            values.isRegularFile == true, values.isSymbolicLink != true else { continue }
+            values.isRegularFile == true, values.isSymbolicLink != true, isTextureFile(url) else { continue }
       let relative = url.standardizedFileURL.resolvingSymlinksInPath().pathComponents.dropFirst(sourceComponents.count)
       let target = relative.reduce(destination) { $0.appendingPathComponent($1) }
       try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -70,6 +73,14 @@ enum ModContentInstaller {
     }
     guard copied > 0 else { throw InstallError.emptyTexturePack }
     return TextureResult(filesCopied: copied, destination: destination)
+  }
+
+  private static func isTextureFile(_ url: URL) -> Bool {
+    let ext = url.pathExtension.lowercased()
+    if textureExtensions.contains(ext) { return true }
+    let stem = url.deletingPathExtension().lastPathComponent
+    return ext == "txt" && (stem == "all" || ((stem.count == 3 || stem.count == 6)
+        && stem.allSatisfy { $0.isASCII && ($0.isUppercase || $0.isNumber) }))
   }
 
   /// `Load/Textures` in the user directory, from Dolphin's own path table.

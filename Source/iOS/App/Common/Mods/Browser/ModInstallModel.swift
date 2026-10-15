@@ -28,6 +28,8 @@ final class ModInstallModel: ObservableObject {
   @Published var largeDownloadBytes: Int64?
   /// Set after a texture pack went in while custom textures are off.
   @Published var offerCustomTextures = false
+  /// Set after Gecko codes went in while cheats are off globally.
+  @Published var offerCheats = false
 
   private let handler: any ModInstallHandling
   private let downloader: ModDownloadManager
@@ -146,6 +148,11 @@ final class ModInstallModel: ObservableObject {
     log.append(L("Custom textures are on."))
   }
 
+  func enableCheats() {
+    DOLConfigBridge.setMainEnableCheats(true)
+    log.append(L("Cheats are on."))
+  }
+
   func installGecko(file codesFile: URL) {
     perform {
       guard let game = self.ownedGame else { throw ModContentInstaller.InstallError.geckoNeedsLibraryGame }
@@ -162,6 +169,7 @@ final class ModInstallModel: ObservableObject {
       let stem = (codesFile.lastPathComponent as NSString).deletingPathExtension
       if let mismatch = Self.regionWarning(packID: stem, ownedID: game.gameID) { parts.append(mismatch) }
       self.log.append(parts.joined(separator: " "))
+      if !result.added.isEmpty && !DOLConfigBridge.mainEnableCheats() { self.offerCheats = true }
     }
   }
 

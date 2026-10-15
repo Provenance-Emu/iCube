@@ -13,6 +13,7 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
 
   private static let staleAge: TimeInterval = 7 * 24 * 60 * 60
   private static let idleTimeout: TimeInterval = 60
+  private static let progressStep = 0.01
 
   private final class Job {
     let fileID: Int
@@ -22,6 +23,8 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
     var continuation: CheckedContinuation<URL, Error>?
     /// The outcome, when the transfer ended before the caller began waiting for it.
     var earlyResult: Result<URL, Error>?
+    /// Last fraction handed to `progress`; touched only on the session's serial delegate queue.
+    var reportedFraction = 0.0
     var failure: Error?
     var finishedFile: URL?
 
@@ -135,7 +138,13 @@ extension ModDownloadManager: URLSessionDownloadDelegate {
                   totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
     guard let job = lock.withLock({ jobs[downloadTask.taskIdentifier] }) else { return }
     let total = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : job.expectedBytes
-    if total > 0 { job.progress(min(1, Double(totalBytesWritten) / Double(total))) }
+    guard total > 0 else { return }
+    let fraction = min(1, Double(totalBytesWritten) / Double(total))
+    // A big file reports thousands of times; the UI only needs whole percents.
+    if fraction - job.reportedFraction >= Self.progressStep || fraction == 1 {
+      job.reportedFraction = fraction
+      job.progress(fraction)
+    }
   }
 
   func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {

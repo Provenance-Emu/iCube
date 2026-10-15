@@ -215,6 +215,12 @@ struct ModFileView: View {
     } message: {
       Text(String(format: L("This file is %@. Download it?"), ModInstallModel.formatted(model.largeDownloadBytes ?? file.size)))
     }
+    .alert(L("Turn On Cheats?"), isPresented: $model.offerCheats) {
+      Button(L("Turn On")) { model.enableCheats() }
+      Button(L("Not Now"), role: .cancel) {}
+    } message: {
+      Text(L("Gecko codes only run while cheats are enabled in the settings."))
+    }
     .alert(L("Turn On Custom Textures?"), isPresented: $model.offerCustomTextures) {
       Button(L("Turn On")) { model.enableCustomTextures() }
       Button(L("Not Now"), role: .cancel) {}

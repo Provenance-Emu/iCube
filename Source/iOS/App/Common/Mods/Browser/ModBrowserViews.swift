@@ -281,17 +281,20 @@ struct ModChoiceList: View {
   @Environment(\.dismiss) private var dismiss
 
   var body: some View {
-    List(choices) { choice in
-      Button {
-        onSelect(choice)
-        dismiss()
-      } label: {
-        HStack {
-          Text(choice.title)
-          Spacer()
-          if choice.id == selectedID { Image(systemName: "checkmark").accessibilityLabel(L("Selected")) }
+    List {
+      ForEach(choices) { choice in
+        Button {
+          onSelect(choice)
+          dismiss()
+        } label: {
+          HStack {
+            Text(choice.title)
+            Spacer()
+            if choice.id == selectedID { Image(systemName: "checkmark").accessibilityLabel(L("Selected")) }
+          }
         }
       }
+      Section { ModBrowserAttribution() }
     }
     .navigationTitle(title)
   }
