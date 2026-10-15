@@ -349,6 +349,8 @@ let iCube = Target.target(
         // registry it hangs its HTTP API off.
         .package(product: "PVContinuity"),
         .package(product: "PVHelp"),
+        // Streaming IPS/BPS/UPS/PPF/xdelta3 patcher behind the disc patching flow.
+        .package(product: "PVPatchEngine"),
         // WS-5 CloudKit sync. PVCloudSync depends on PVSyncRules (the shared
         // "what may leave the device" allow-list, also consumed by WS-4), so
         // both are listed in `packages:` below. If WS-4 lands a PVSyncRules
@@ -721,6 +723,7 @@ let project = Project(
         .local(path: "../PVContinuity"),
         .local(path: "../PVSyncRules"),
         .local(path: "../PVHelp"),
+        .local(path: "../PVPatchEngine"),
         .local(path: "../PVLibrarySnapshot"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
