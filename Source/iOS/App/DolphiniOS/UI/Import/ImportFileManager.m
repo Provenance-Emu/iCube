@@ -94,9 +94,16 @@ NSString* const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotif
 
       dispatch_async(dispatch_get_main_queue(), ^{
         if (result.succeeded) {
-          NSString* snackbar = result.installedPackMessage ?: [DOLZipImportHelper snackbarTextForImportedCount:result.importedCount
-                                                                                                  skippedCount:result.skippedExistingCount
-                                                                                             archivesProcessed:1];
+          NSMutableArray<NSString*>* snackbarLines = [NSMutableArray array];
+          if (result.installedPackMessage != nil) {
+            [snackbarLines addObject:result.installedPackMessage];
+          }
+          if (result.importedCount > 0 || result.skippedExistingCount > 0) {
+            [snackbarLines addObject:[DOLZipImportHelper snackbarTextForImportedCount:result.importedCount
+                                                                          skippedCount:result.skippedExistingCount
+                                                                     archivesProcessed:1]];
+          }
+          NSString* snackbar = [snackbarLines componentsJoinedByString:@"\n"];
           [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar"
                                                               object:nil
                                                             userInfo:@{@"text": snackbar}];

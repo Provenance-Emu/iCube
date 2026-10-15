@@ -16,6 +16,15 @@ enum ImportableFileTypes {
     "nkit", "wia", "img", "bin",
   ]
 
+  /// Software extensions that other kinds of file also use: executables and raw dumps that mod packs ship as assets.
+  private static let ambiguousSoftwareExtensions: Set<String> = ["dol", "elf", "bin", "img"]
+
+  /// Returns true when `url` can only be a game: a software file whose extension no mod asset uses.
+  static func isGameImage(_ url: URL) -> Bool {
+    let ext = pathExtension(for: url)
+    return softwareExtensions.contains(ext) && !ambiguousSoftwareExtensions.contains(ext)
+  }
+
   /// Archive formats handled by `ZipImportHelper`.
   static let archiveExtensions: Set<String> = [
     "zip", "7z", "gz", "gzip", "tar", "tgz", "xz", "bz2", "tbz", "tbz2",

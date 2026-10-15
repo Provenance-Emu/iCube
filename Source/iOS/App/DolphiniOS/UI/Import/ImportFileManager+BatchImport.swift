@@ -125,7 +125,8 @@ private actor ArchiveImportService {
         let result = ZipImportHelper.importPickedArchive(at: url, toFolder: softwareFolder)
         if let packMessage = result.installedPackMessage {
           outcome.installedPackMessages.append(packMessage)
-        } else if result.succeeded {
+        }
+        if result.importedCount > 0 || result.skippedExistingCount > 0 {
           outcome.extractedArchives += 1
           outcome.importedGames += result.importedCount
           outcome.skippedGames += result.skippedExistingCount

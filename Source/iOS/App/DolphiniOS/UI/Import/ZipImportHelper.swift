@@ -23,20 +23,28 @@ final class ZipImportResult: NSObject {
   @objc let errorMessage: String?
   /// Snackbar text when the archive was a Riivolution pack, which installs into `Load/Riivolution/` instead of the library.
   @objc let installedPackMessage: String?
+  /// True when a file the archive held could not be moved into the library, so the archive is the only copy left.
+  @objc let hadFailures: Bool
   /// True when the archive failed to import and was moved to Rejected Imports.
   @objc fileprivate(set) var movedToRejectedImports = false
 
-  init(importedCount: Int, skippedExistingCount: Int, errorMessage: String?, installedPackMessage: String? = nil) {
+  init(importedCount: Int, skippedExistingCount: Int, errorMessage: String?, installedPackMessage: String? = nil, hadFailures: Bool = false) {
     self.importedCount = importedCount
     self.skippedExistingCount = skippedExistingCount
     self.errorMessage = errorMessage
     self.installedPackMessage = installedPackMessage
+    self.hadFailures = hadFailures
     super.init()
   }
 
   /// True when the archive added something: games, games it already had, or a Riivolution pack.
   @objc var succeeded: Bool {
     importedCount > 0 || skippedExistingCount > 0 || installedPackMessage != nil
+  }
+
+  /// True when nothing in the archive was skipped or lost, so deleting it loses nothing.
+  var isSafeToDiscardArchive: Bool {
+    succeeded && !hadFailures
   }
 }
 
@@ -218,17 +226,29 @@ final class ZipImportHelper: NSObject {
       return ZipImportResult(importedCount: 0, skippedExistingCount: 0, errorMessage: failureMessage(for: error))
     }
 
-    if !RiivolutionPackInstaller.packRoots(in: tempDir).isEmpty {
-      return installRiivolutionPack(from: tempDir, archiveName: archiveDisplayName(sourceURL), into: riivolutionRoot)
+    guard !RiivolutionPackInstaller.packRoots(in: tempDir).isEmpty else {
+      return importSupportedFiles(from: tempDir, toFolder: destinationFolder)
     }
-    return importSupportedFiles(from: tempDir, toFolder: destinationFolder)
+    return installRiivolutionPack(from: tempDir, archiveName: archiveDisplayName(sourceURL), into: riivolutionRoot, thenImportInto: destinationFolder)
   }
 
-  /// A pack goes to the virtual SD card, not the library: its files are not games.
-  private static func installRiivolutionPack(from extracted: URL, archiveName: String, into root: URL) -> ZipImportResult {
+  /// A pack goes to the virtual SD card, not the library: its files are not games. Installing moves the pack's files out
+  /// of `extracted`, so what is left there is the archive's own software, which is imported beside the pack.
+  private static func installRiivolutionPack(from extracted: URL, archiveName: String, into root: URL,
+                                             thenImportInto destinationFolder: String) -> ZipImportResult {
     do {
       let summary = try RiivolutionPackInstaller.install(extractedFolder: extracted, name: archiveName, into: root)
-      return ZipImportResult(importedCount: 0, skippedExistingCount: 0, errorMessage: nil, installedPackMessage: summary.message)
+      guard !supportedFiles(in: extracted).isEmpty else {
+        return ZipImportResult(importedCount: 0, skippedExistingCount: 0, errorMessage: nil, installedPackMessage: summary.message)
+      }
+      let games = importSupportedFiles(from: extracted, toFolder: destinationFolder)
+      // "Already imported" is not a failure when the pack went in.
+      let alreadyImported = games.importedCount == 0 && games.skippedExistingCount > 0 && !games.hadFailures
+      return ZipImportResult(importedCount: games.importedCount,
+                             skippedExistingCount: games.skippedExistingCount,
+                             errorMessage: alreadyImported ? nil : games.errorMessage,
+                             installedPackMessage: summary.message,
+                             hadFailures: games.hadFailures)
     } catch {
       let message = error is ZipEntryScannerError
         ? failureMessage(for: error)
@@ -354,7 +374,8 @@ final class ZipImportHelper: NSObject {
       guard let result = processArchiveInPlace(atPath: path, libraryFolder: folder, riivolutionRoot: riivolutionRoot) else { continue }
       if let packMessage = result.installedPackMessage {
         installedPackMessages.append(packMessage)
-      } else if result.importedCount > 0 || result.skippedExistingCount > 0 {
+      }
+      if result.importedCount > 0 || result.skippedExistingCount > 0 {
         archivesProcessed += 1
         gamesImported += result.importedCount
         gamesSkipped += result.skippedExistingCount
@@ -392,7 +413,7 @@ final class ZipImportHelper: NSObject {
     let destinationFolder = (path as NSString).deletingLastPathComponent
     let result = importArchive(atPath: path, toFolder: destinationFolder, riivolutionRoot: riivolutionRoot)
 
-    if result.succeeded {
+    if result.isSafeToDiscardArchive {
       removeArchiveAtomically(atPath: path)
       return result
     }
@@ -665,23 +686,26 @@ final class ZipImportHelper: NSObject {
 
   // MARK: - Import extracted files
 
+  private static func supportedFiles(in tempDir: URL) -> [URL] {
+    var supportedFiles: [URL] = []
+    guard let enumerator = FileManager.default.enumerator(at: tempDir,
+                                                          includingPropertiesForKeys: [.isRegularFileKey],
+                                                          options: [.skipsHiddenFiles]) else { return [] }
+    for case let fileURL as URL in enumerator {
+      let isRegular = (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile ?? false
+      guard isRegular else { continue }
+      guard ImportableFileTypes.isSoftwareFile(fileURL) else { continue }
+
+      let relative = fileURL.path.replacingOccurrences(of: tempDir.path + "/", with: "")
+      guard !shouldSkipArchiveRelativePath(relative) else { continue }
+      supportedFiles.append(fileURL)
+    }
+    return supportedFiles
+  }
+
   private static func importSupportedFiles(from tempDir: URL, toFolder destinationFolder: String) -> ZipImportResult {
     let fm = FileManager.default
-    var supportedFiles: [URL] = []
-
-    if let enumerator = fm.enumerator(at: tempDir,
-                                      includingPropertiesForKeys: [.isRegularFileKey],
-                                      options: [.skipsHiddenFiles]) {
-      for case let fileURL as URL in enumerator {
-        let isRegular = (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile ?? false
-        guard isRegular else { continue }
-        guard ImportableFileTypes.isSoftwareFile(fileURL) else { continue }
-
-        let relative = fileURL.path.replacingOccurrences(of: tempDir.path + "/", with: "")
-        guard !shouldSkipArchiveRelativePath(relative) else { continue }
-        supportedFiles.append(fileURL)
-      }
-    }
+    let supportedFiles = supportedFiles(in: tempDir)
 
     guard !supportedFiles.isEmpty else {
       return ZipImportResult(importedCount: 0,
@@ -732,13 +756,15 @@ final class ZipImportHelper: NSObject {
       let detail = moveErrors.isEmpty ? "" : "\n\n" + moveErrors.joined(separator: "\n")
       return ZipImportResult(importedCount: 0,
                              skippedExistingCount: skippedExisting,
-                             errorMessage: "No games from this archive could be imported.\(detail)")
+                             errorMessage: "No games from this archive could be imported.\(detail)",
+                             hadFailures: true)
     }
 
     let errorMessage = moveErrors.isEmpty ? nil : "Some files could not be imported:\n\n" + moveErrors.joined(separator: "\n")
     return ZipImportResult(importedCount: imported,
                            skippedExistingCount: skippedExisting,
-                           errorMessage: errorMessage)
+                           errorMessage: errorMessage,
+                           hadFailures: !moveErrors.isEmpty)
   }
 
   /// Flattens nested archive paths into `Software/` while avoiding basename collisions.

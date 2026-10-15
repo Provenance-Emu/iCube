@@ -5,7 +5,7 @@ import Foundation
 
 /// Installs Riivolution packs into the virtual SD card (`Load/Riivolution/`), the layout Dolphin reads on desktop.
 ///
-/// A pack is any folder holding `riivolution/*.xml`, with the files the XMLs refer to beside it. Most packs are
+/// A pack is any folder holding `riivolution/*.xml`, with the files the XMLs refer to beside it (game images excepted). Most packs are
 /// zipped either with that folder at the top or inside one wrapper folder; both install the same way.
 enum RiivolutionPackInstaller {
   struct Summary: Equatable {
@@ -74,6 +74,8 @@ enum RiivolutionPackInstaller {
       if values.isSymbolicLink == true { throw ZipEntryScannerError.unsafeEntry(relative) }
       guard values.isRegularFile == true else { continue }
       if ZipImportHelper.shouldSkipArchiveRelativePath(relative) || file.lastPathComponent.hasPrefix("._") { continue }
+      // A game image beside the pack is the archive's own content, not an asset the pack refers to.
+      if ImportableFileTypes.isGameImage(file) { continue }
 
       try ZipImportHelper.validateItemPaths([relative])
       let destination = root.appendingPathComponent(normalizedPath(relative))

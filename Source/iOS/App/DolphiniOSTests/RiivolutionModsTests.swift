@@ -249,6 +249,82 @@ final class RiivolutionModsTests: XCTestCase {
     XCTAssertEqual(entries(of: software), [])
   }
 
+  func testAnArchiveWithAPackAndADiscInstallsTheOneAndImportsTheOther() throws {
+    let zip = try archive([
+      .init(name: "riivolution/newer.xml", contents: Data(Self.packXML.utf8)),
+      .init(name: "NewerSMBW/Hud.arc", contents: Data("hud".utf8)),
+      .init(name: "NewerSMBW/Hud.bin", contents: Data("pack asset".utf8)),
+      .init(name: "Game.iso", contents: Data("disc".utf8)),
+    ], as: "Bundle.zip")
+
+    let result = ZipImportHelper.importArchive(atPath: zip.path, toFolder: software.path, riivolutionRoot: sdRoot)
+
+    XCTAssertNil(result.errorMessage)
+    XCTAssertTrue(result.isSafeToDiscardArchive)
+    XCTAssertEqual(result.importedCount, 1)
+    XCTAssertNotNil(result.installedPackMessage)
+    XCTAssertEqual(entries(of: software), ["Game.iso"])
+    XCTAssertEqual(entries(of: sdRoot), ["NewerSMBW", "riivolution"])
+    XCTAssertEqual(entries(of: sdRoot.appendingPathComponent("NewerSMBW")), ["Hud.arc", "Hud.bin"])
+  }
+
+  func testADiscBesideAWrappedPackIsImported() throws {
+    let zip = try archive([
+      .init(name: "Pack/riivolution/newer.xml", contents: Data(Self.packXML.utf8)),
+      .init(name: "Games/Game.iso", contents: Data("disc".utf8)),
+    ], as: "Bundle.zip")
+
+    let result = ZipImportHelper.importArchive(atPath: zip.path, toFolder: software.path, riivolutionRoot: sdRoot)
+
+    XCTAssertEqual(result.importedCount, 1)
+    XCTAssertNotNil(result.installedPackMessage)
+    XCTAssertEqual(entries(of: software), ["Game.iso"])
+  }
+
+  func testAPackWithADiscAlreadyInTheLibraryIsNotAnError() throws {
+    try put("disc", at: "Game.iso", in: software)
+    let zip = try archive([
+      .init(name: "riivolution/newer.xml", contents: Data(Self.packXML.utf8)),
+      .init(name: "Game.iso", contents: Data("disc".utf8)),
+    ], as: "Bundle.zip")
+
+    let result = ZipImportHelper.importArchive(atPath: zip.path, toFolder: software.path, riivolutionRoot: sdRoot)
+
+    XCTAssertNil(result.errorMessage)
+    XCTAssertEqual(result.skippedExistingCount, 1)
+    XCTAssertNotNil(result.installedPackMessage)
+  }
+
+  func testAPackWhoseDiscCannotBeImportedReportsTheFailure() throws {
+    let zip = try archive([
+      .init(name: "riivolution/newer.xml", contents: Data(Self.packXML.utf8)),
+      .init(name: "Game.iso", contents: Data("disc".utf8)),
+    ], as: "Bundle.zip")
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: software.path)
+    addTeardownBlock { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: self.software.path) }
+
+    let result = ZipImportHelper.importArchive(atPath: zip.path, toFolder: software.path, riivolutionRoot: sdRoot)
+
+    XCTAssertNotNil(result.installedPackMessage)
+    XCTAssertNotNil(result.errorMessage)
+    XCTAssertTrue(result.hadFailures)
+    XCTAssertFalse(result.isSafeToDiscardArchive)
+  }
+
+  func testAnArchiveWithAPackAndADiscIsRemovedOnlyAfterBothImport() throws {
+    let zip = try archive([
+      .init(name: "riivolution/newer.xml", contents: Data(Self.packXML.utf8)),
+      .init(name: "Game.iso", contents: Data("disc".utf8)),
+    ], as: "Bundle.zip")
+    let inLibrary = software.appendingPathComponent("Bundle.zip")
+    try FileManager.default.moveItem(at: zip, to: inLibrary)
+
+    let result = ZipImportHelper.processArchiveInPlace(atPath: inLibrary.path, libraryFolder: software.path, riivolutionRoot: sdRoot)
+
+    XCTAssertEqual(result?.importedCount, 1)
+    XCTAssertEqual(entries(of: software), ["Game.iso"])
+  }
+
   func testAPackArchiveWithAnEscapingPathIsRejectedAndInstallsNothing() throws {
     let escape = "riiv-escape-\(UUID().uuidString).txt"
     let escaped = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(escape)
