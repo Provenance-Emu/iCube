@@ -19,6 +19,7 @@ struct GameGridItem: View {
   let showStorageAlert: (String) -> Void
   let showCacheInfo: (TVGameItem) -> Void
   let showSaveStates: (TVGameItem) -> Void
+  let showMods: (TVGameItem) -> Void
   let autoPreCacheProgress: Double
   let isAutoPreCaching: Bool
   let showSubtitles: Bool
@@ -634,6 +635,11 @@ struct GameGridItem: View {
       Button(action: { showSaveStates(item) }) {
         Label(L("View Save States"), systemImage: "clock.arrow.circlepath")
       }
+      if RiivolutionEligibility.isEligible(filePath: item.filePath, platform: Int(item.platform)) {
+        Button(action: { showMods(item) }) {
+          Label(L("Play with Mods…"), systemImage: "puzzlepiece.extension")
+        }
+      }
 
       // Cheats menu with tvOS 16 compatibility
       if #available(tvOS 17.0, iOS 14.0, *) {
@@ -870,6 +876,11 @@ struct GameGridItem: View {
       }
       Button(action: { showSaveStates(item) }) {
         Label(L("View Save States"), systemImage: "clock.arrow.circlepath")
+      }
+      if RiivolutionEligibility.isEligible(filePath: item.filePath, platform: Int(item.platform)) {
+        Button(action: { showMods(item) }) {
+          Label(L("Play with Mods…"), systemImage: "puzzlepiece.extension")
+        }
       }
 
       // Cheats menu with tvOS 16 compatibility

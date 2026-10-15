@@ -162,6 +162,9 @@ final class TVLibraryViewModel: ObservableObject {
   }
 
   private func key(for item: TVGameItem) -> String {
+    // A mod descriptor shares its base game's id but is a different game: grouping it with the base would hide
+    // one of the two tiles and offer the other as an alternate source.
+    if ModDescriptorStore.isDescriptor(path: item.filePath) { return item.filePath }
     // Use filePath as fallback when gameID is empty (common for remote games still being processed)
     let gameID = item.gameID.isEmpty ? item.filePath : item.gameID
     return "\(gameID)|\(item.discNumber)|\(item.revision)"
@@ -619,6 +622,7 @@ struct TVLibraryView: View {
   }
   /// Game to present in the SwiftUI properties sheet
   @State private var showPropertiesFor: TVGameItem?
+  @State private var showModsFor: TVGameItem?
   /// Game pending deletion confirmation
   @State private var itemPendingDelete: TVGameItem?
   /// Cheat input modal state
@@ -866,6 +870,7 @@ struct TVLibraryView: View {
           navigateToSaveStates = GameIDRoute(id: gid)
         }
       },
+      showMods: { showModsFor = $0 },
       autoPreCacheProgress: autoPreCacheProgress[item.filePath] ?? 0.0,
       isAutoPreCaching: autoPreCacheActive.contains(item.filePath),
       showSubtitles: showSubtitles,
@@ -2014,6 +2019,10 @@ struct TVLibraryView: View {
       Button(L("Cancel")) { SaveStateService.skipResumeOnce = false }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
+      .sheet(item: $showModsFor) { item in
+        RiivolutionLaunchView(item: item, onPlay: playModded(descriptor:), onAddedToLibrary: modAddedToLibrary(named:))
+          .claimsController()
+      }
       .sheet(item: $showCheatListFor) { item in
         CheatsMenuView(game: item, onBack: { showCheatListFor = nil }).claimsController()
       }
@@ -2536,6 +2545,25 @@ struct TVLibraryView: View {
     launchGame(item)
   }
 
+  /// Boots a mod descriptor written for one play. It goes through `selectGame` like any library tile, so the
+  /// replace-running-game prompt, the storage check and the game's profile all apply.
+  private func playModded(descriptor url: URL) {
+    guard let item = RiivolutionBridge.gameItemForDescriptor(atPath: url.path) else {
+      postSnackbar(L("The modded game couldn't be started."))
+      return
+    }
+    selectGame(item)
+  }
+
+  private func modAddedToLibrary(named name: String) {
+    postSnackbar(String(format: L("Added %@ to your library."), name))
+    model.rescan()
+  }
+
+  private func postSnackbar(_ text: String) {
+    NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": text])
+  }
+
   private func launchGame(_ item: TVGameItem) {
     // Check for critically low storage before launching any game
     if TVLibraryView.isStorageCriticallyLow() {
@@ -2658,8 +2686,9 @@ struct TVLibraryView: View {
   }
 
   private func spotlightLaunchByGameID(_ gameID: String, attempts: Int) {
-    let match = model.games.first { $0.gameID == gameID }
-    ?? TVLibraryBridge.currentGames().first { $0.gameID == gameID }
+    let isBaseGame: (TVGameItem) -> Bool = { $0.gameID == gameID && !ModDescriptorStore.isDescriptor(path: $0.filePath) }
+    let match = model.games.first(where: isBaseGame)
+    ?? TVLibraryBridge.currentGames().first(where: isBaseGame)
     guard let item = match else {
       if attempts > 0 {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
