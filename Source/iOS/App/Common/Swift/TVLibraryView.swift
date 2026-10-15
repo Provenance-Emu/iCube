@@ -163,7 +163,8 @@ final class TVLibraryViewModel: ObservableObject {
 
   private func key(for item: TVGameItem) -> String {
     // Use filePath as fallback when gameID is empty (common for remote games still being processed)
-    let gameID = item.gameID.isEmpty ? item.filePath : item.gameID
+    // A modded disc (patched copy, mod descriptor) keeps its base game's ID but is its own game.
+    let gameID = item.gameID.isEmpty || ModdedBoot.isModdedPath(item.filePath) ? item.filePath : item.gameID
     return "\(gameID)|\(item.discNumber)|\(item.revision)"
   }
 
@@ -1897,6 +1898,11 @@ struct TVLibraryView: View {
         spotlightLaunchByGameID(gameID, attempts: 10)
       }
 
+      // A disc outside the library (a cached patched copy): `DiscPatchFlow.launch(path:)`.
+      NotificationCenter.default.addObserver(forName: DiscPatchFlow.launchPathNotification, object: nil, queue: .main) { note in
+        if let item = DiscPatchFlow.claimLaunch(note) { selectGame(item) }
+      }
+
       // Quick actions
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DOLShowImportGame"), object: nil, queue: .main) { _ in
 #if os(iOS) || targetEnvironment(macCatalyst)
@@ -1932,6 +1938,7 @@ struct TVLibraryView: View {
     .onDisappear {
       func removeAllObservers() {
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLLaunchGameByGameID"), object: nil)
+        NotificationCenter.default.removeObserver(self, name: DiscPatchFlow.launchPathNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowImportGame"), object: nil)
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("DOLShowSettings"), object: nil)
         NotificationCenter.default.removeObserver(self, name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)

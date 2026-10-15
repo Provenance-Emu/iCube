@@ -250,6 +250,10 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
 }
 
 + (nullable NSString*)autoStateFilePath {
+  // A modded disc shares its base game's ID, so it must neither load nor overwrite the vanilla
+  // game's resume state (see ModdedBoot). nil skips both the save in `stop` and the load on boot.
+  if ([DOLModdedBoot isCurrentBootModded])
+    return nil;
   const std::string game_id = SConfig::GetInstance().GetGameID();
   if (game_id.empty())
     return nil;

@@ -82,7 +82,8 @@ enum ImportableFileTypes {
     }
   }
 
-  /// Expands dropped/picked directories and keeps only importable files.
+  /// Expands dropped/picked directories and keeps only importable files, plus disc patches, which
+  /// the import entry points route to the disc patching flow rather than the library.
   static func filterImportURLs(_ urls: [URL]) -> [URL] {
     var results: [URL] = []
     let fm = FileManager.default
@@ -93,14 +94,14 @@ enum ImportableFileTypes {
         if let enumerator = fm.enumerator(at: url,
                                           includingPropertiesForKeys: [.isRegularFileKey],
                                           options: [.skipsHiddenFiles]) {
-          for case let fileURL as URL in enumerator where isImportableFile(fileURL) {
+          for case let fileURL as URL in enumerator where isImportableFile(fileURL) || DiscPatchPlanner.isPatchFile(fileURL) {
             results.append(fileURL)
           }
         }
         continue
       }
 
-      if isImportableFile(url) {
+      if isImportableFile(url) || DiscPatchPlanner.isPatchFile(url) {
         results.append(url)
       }
     }
@@ -147,7 +148,7 @@ enum ImportableFileTypes {
       append(UTType(identifier))
     }
 
-    for ext in softwareExtensions.union(archiveExtensions) {
+    for ext in softwareExtensions.union(archiveExtensions).union(DiscPatchPlanner.patchExtensions) {
       append(UTType(filenameExtension: ext))
     }
 

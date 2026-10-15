@@ -156,7 +156,8 @@ public extension ImportFileManager {
   /// Imports multiple picked files: archives are extracted automatically and disc images are copied into `Software/`.
   @objc(importFilesAtUrls:)
   func importFiles(at urls: [NSURL]) {
-    let picked = urls as [URL]
+    let (patches, picked) = DiscPatchImportRouter.partition(urls as [URL])
+    if !patches.isEmpty { Task { @MainActor in DiscPatchImportRouter.route(patches) } }
     guard !picked.isEmpty else { return }
 
     if picked.count == 1, !ImportableFileTypes.isArchiveFile(picked[0]) {

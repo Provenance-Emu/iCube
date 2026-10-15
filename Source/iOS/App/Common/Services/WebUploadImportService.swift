@@ -59,6 +59,8 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
       return
     }
 
+    if DiscPatchImportRouter.adoptUpload(atPath: path) { return }
+
     LibraryAddedDateStore.record(path: path)
   }
 
