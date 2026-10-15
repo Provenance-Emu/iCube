@@ -104,6 +104,7 @@ final class TVLibraryViewModel: ObservableObject {
   @Published private(set) var moddedVariantsByGameID: [String: [TVGameItem]] = [:]
   /// File paths of the patched copies and saved mods, worked out once per scan.
   private var moddedPaths: Set<String> = []
+  private var isModded: ModdedLibrary.Classifier { { [moddedPaths] in moddedPaths.contains($0) } }
   /// Indicates whether a metadata rescan is in progress
   @Published var isRescanning: Bool = false
   /// Ensures the initial metadata kick-off runs once
@@ -173,7 +174,7 @@ final class TVLibraryViewModel: ObservableObject {
     // Use filePath as fallback when gameID is empty (common for remote games still being processed).
     // A modded disc (patched copy, mod descriptor) keeps its base game's ID but is its own game: grouping it
     // with the base would hide one of the two tiles and offer the other as an alternate source.
-    let gameID = item.gameID.isEmpty || ModdedBoot.isModdedPath(item.filePath) ? item.filePath : item.gameID
+    let gameID = item.gameID.isEmpty || moddedPaths.contains(item.filePath) ? item.filePath : item.gameID
     return "\(gameID)|\(item.discNumber)|\(item.revision)"
   }
 
@@ -181,6 +182,8 @@ final class TVLibraryViewModel: ObservableObject {
 #if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): processing \(items.count) items")
 #endif
+    // Resolving the folders behind `ModdedBoot.isModdedPath` costs file system calls, so it happens once per item.
+    moddedPaths = Set(items.map(\.filePath).filter(ModdedLibrary.defaultClassifier))
     var grouped: [String: [TVGameItem]] = [:]
     for it in items {
       let itemKey = key(for: it)
@@ -236,9 +239,8 @@ final class TVLibraryViewModel: ObservableObject {
       return at.localizedCaseInsensitiveCompare(bt) == .orderedAscending
     }
     allGames = sorted
-    moddedVariantsByGameID = ModdedLibrary.variantsByGameID(in: sorted)
-    moddedPaths = Set(sorted.map(\.filePath).filter(ModdedLibrary.defaultClassifier))
-    games = ModdedLibrary.visible(sorted, showPatchedSeparately: showPatchedSeparately)
+    moddedVariantsByGameID = ModdedLibrary.variantsByGameID(in: sorted, isModded: isModded)
+    games = ModdedLibrary.visible(sorted, showPatchedSeparately: showPatchedSeparately, isModded: isModded)
 #if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): final games count: \(games.count)")
 #endif
@@ -248,7 +250,7 @@ final class TVLibraryViewModel: ObservableObject {
   func setShowPatchedSeparately(_ value: Bool) {
     guard value != showPatchedSeparately else { return }
     showPatchedSeparately = value
-    games = ModdedLibrary.visible(allGames, showPatchedSeparately: value)
+    games = ModdedLibrary.visible(allGames, showPatchedSeparately: value, isModded: isModded)
   }
 
   /// The patched copies and saved mods made from `item`. A patched copy has none of its own.
@@ -258,7 +260,7 @@ final class TVLibraryViewModel: ObservableObject {
 
   /// How a patched copy or saved mod tile differs from its game; nil for a base game.
   func moddedInfo(for item: TVGameItem) -> ModdedTileInfo? {
-    ModdedLibrary.tileInfo(path: item.filePath, title: item.title, isModded: { [moddedPaths] in moddedPaths.contains($0) })
+    ModdedLibrary.tileInfo(path: item.filePath, title: item.title, isModded: isModded)
   }
 
   func sources(for item: TVGameItem) -> [TVGameItem] {

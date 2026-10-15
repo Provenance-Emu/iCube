@@ -9,7 +9,7 @@ struct TVStorageNoteSection: View {
   var body: some View {
     #if os(tvOS)
     Section {
-      Text(L("Apple TV can clear mods, saved mods and patched copies when it runs low on space."))
+      Text(L("Apple TV can clear Riivolution packs, saved mods and patched copies when it runs low on space."))
         .font(.footnote)
         .foregroundStyle(.secondary)
     }
