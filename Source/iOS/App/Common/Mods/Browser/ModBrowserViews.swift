@@ -97,6 +97,7 @@ struct ModGameListView: View {
         ForEach(otherEntries) { gameRow($0) }
       }
       Section { ModBrowserAttribution() }
+      TVStorageNoteSection()
     }
   }
 
@@ -217,6 +218,7 @@ struct ModListView: View {
         }
       }
       Section { ModBrowserAttribution() }
+      TVStorageNoteSection()
     }
     .navigationTitle(model.entry.name)
     .searchable(text: $model.searchText)

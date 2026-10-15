@@ -46,6 +46,7 @@ struct RiivolutionLaunchView: View {
           launchSection
           notesSection
         }
+        TVStorageNoteSection()
       }
       .navigationTitle(L("Play with Mods"))
       #if !os(tvOS)

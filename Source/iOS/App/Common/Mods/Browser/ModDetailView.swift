@@ -206,6 +206,7 @@ struct ModFileView: View {
         }
       }
       Section { ModBrowserAttribution() }
+      TVStorageNoteSection()
     }
     .navigationTitle(file.fileName)
     .onDisappear { model.cleanUp() }

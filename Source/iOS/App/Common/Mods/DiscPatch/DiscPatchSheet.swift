@@ -35,6 +35,7 @@ struct DiscPatchSheet: View {
             actionSection
           }
         }
+        TVStorageNoteSection()
       }
       .navigationTitle(L("Apply Patch"))
       #if os(iOS)
