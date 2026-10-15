@@ -170,6 +170,9 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   [DOLImportStaging removeStaleStagedImportsInFolder:[UserFolderUtil getSoftwareFolder]];
 #endif
 
+  // Sweep what an interrupted disc patch left behind (expanded ISOs, half-written copies).
+  [DOLDiscPatchSweep sweep];
+
   [[MsgAlertManager shared] registerHandler];
 
   Common::RegisterStringTranslator([](const char* text) {

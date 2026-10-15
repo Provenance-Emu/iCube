@@ -1732,6 +1732,10 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
     return;
   }
 
+  // Recorded here, not at DOLEmulationWillStartNotification: the missing-IPL retry enters the loop
+  // directly. Read by TVEmulationBridge.autoStateFilePath (ModdedBoot).
+  [DOLModdedBoot beginBootAtPath:bootParameter.path];
+
   __block CGFloat renderSurfaceScale = UIScreen.mainScreen.scale;
   dispatch_sync(dispatch_get_main_queue(), ^{
     Core::UndeclareAsHostThread();
@@ -1956,6 +1960,7 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
     _adaptiveClockTimer = nil;
   }
   PerformanceMetrics::SetAdaptiveClockActive(false);
+  [DOLModdedBoot endBoot];
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification object:self userInfo:nil];
 
   _mainDisplayView = nil;

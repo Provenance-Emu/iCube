@@ -634,6 +634,7 @@ struct GameGridItem: View {
       Button(action: { showSaveStates(item) }) {
         Label(L("View Save States"), systemImage: "clock.arrow.circlepath")
       }
+      DiscPatchMenuButton(item: item)
 
       // Cheats menu with tvOS 16 compatibility
       if #available(tvOS 17.0, iOS 14.0, *) {
@@ -871,6 +872,7 @@ struct GameGridItem: View {
       Button(action: { showSaveStates(item) }) {
         Label(L("View Save States"), systemImage: "clock.arrow.circlepath")
       }
+      DiscPatchMenuButton(item: item)
 
       // Cheats menu with tvOS 16 compatibility
       if #available(tvOS 17.0, iOS 14.0, *) {
