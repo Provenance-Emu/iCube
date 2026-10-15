@@ -169,6 +169,13 @@ public enum SaveStateService {
     return .loadAuto(path: auto)
   }
 
+  /// A modded boot has no auto-state (see `ModdedBoot`), so a requested `{GameID}.auto`, which is the vanilla game's
+  /// resume state, is dropped for it. Manual slots stay shared and are kept.
+  static func droppingAutoState(_ path: String?, bootIsModded: Bool) -> String? {
+    guard bootIsModded, let path, URL(fileURLWithPath: path).pathExtension.lowercased() == "auto" else { return path }
+    return nil
+  }
+
   /// If resume is enabled and an auto-state exists for the running title (or a
   /// specific save state was requested via `pendingBootStatePath`), load it.
   /// Returns true if a load was issued. Safe to call right after the game boots
@@ -184,6 +191,7 @@ public enum SaveStateService {
   /// same step is declined instead of repeated.
   @discardableResult
   public static func resumeOrBootIntoPendingState() -> Bool {
+    pendingBootStatePath = droppingAutoState(pendingBootStatePath, bootIsModded: ModdedBoot.isCurrentBootModded)
     let requestedPath = pendingBootStatePath
     let requestedExists = requestedPath.map { FileManager.default.fileExists(atPath: $0) } ?? false
     let autoURL = autoStateURL

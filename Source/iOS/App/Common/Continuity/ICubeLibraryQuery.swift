@@ -17,6 +17,7 @@ struct ICubeLibraryQuery: LibraryQuerying {
         let items = await MainActor.run { TVLibraryBridge.currentGames() }
 
         var best: LocalGameMatch?
+        var bestIsModded = false
         for item in items {
             // A screenshot-mode placeholder has no backing GameFile and must
             // never be offered as a boot target.
@@ -31,13 +32,21 @@ struct ICubeLibraryQuery: LibraryQuerying {
                 gameAbsolutePath: item.filePath,
                 hasLocalSaveState: Self.hasSaveState(gameID: item.gameID)
             )
-            // `IdentityMatchStrength` is Comparable with the strongest case
-            // lowest, so a smaller raw value wins.
-            if best == nil || strength < best!.strength {
-                best = candidate
+            let isModded = ModdedBoot.isModdedPath(item.filePath)
+            if let current = best, !Self.prefers(strength: strength, isModded: isModded, over: (current.strength, bestIsModded)) {
+                continue
             }
+            best = candidate
+            bestIsModded = isModded
         }
         return best
+    }
+
+    /// `IdentityMatchStrength` is Comparable with the strongest case lowest, so a smaller raw value wins. A patched
+    /// copy keeps its base game's ID and so ties with it; the pristine game is the safer thing to hand to a
+    /// continuity handoff, because the handoff's save state belongs to the base game.
+    static func prefers(strength: IdentityMatchStrength, isModded: Bool, over best: (strength: IdentityMatchStrength, isModded: Bool)) -> Bool {
+        strength < best.strength || (strength == best.strength && best.isModded && !isModded)
     }
 
     /// True when any `{GameID}.s{NN}` or `{GameID}.auto` exists locally.

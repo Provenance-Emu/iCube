@@ -247,7 +247,9 @@ struct SaveStateFilmstripView: View {
       TVEmulationBridge.loadState(fromPath: state.path.path)
       return
     }
-    guard let item = TVLibraryBridge.currentGames().first(where: { $0.gameID == gameID }) else {
+    // The base game, not a patched copy or mod descriptor that shares its ID: those do not own the vanilla states.
+    let games = TVLibraryBridge.currentGames()
+    guard let item = ModdedLibrary.baseGame(withGameID: gameID, in: games) ?? games.first(where: { $0.gameID == gameID }) else {
       NSLog("[SaveStates] Boot-into-state requested for %@ but no matching library item was found", gameID)
       return
     }

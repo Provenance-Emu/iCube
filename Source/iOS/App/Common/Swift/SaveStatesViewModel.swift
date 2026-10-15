@@ -8,19 +8,28 @@ final class SaveStatesViewModel: ObservableObject {
   @Published var thumbnails: [UUID: UIImage] = [:]
 
   private let provider: SaveStateProviding
+  private let isCurrentBootModded: () -> Bool
 
-  init(provider: SaveStateProviding? = FilesystemSaveStateProvider()) {
+  init(provider: SaveStateProviding? = FilesystemSaveStateProvider(),
+       isCurrentBootModded: @escaping () -> Bool = { ModdedBoot.isCurrentBootModded }) {
     self.provider = provider ?? FilesystemSaveStateProvider()
+    self.isCurrentBootModded = isCurrentBootModded
+  }
+
+  /// A modded boot shares its base game's ID, and so its `{GameID}.auto`, but must never load or offer it
+  /// (see `ModdedBoot`), so the "Continue" state is left out of the lists while one is running.
+  private func visible(_ items: [SaveStateInfo]) -> [SaveStateInfo] {
+    isCurrentBootModded() ? items.filter { !$0.isAuto } : items
   }
 
   func load(gameID: String) async {
-    let items = await provider.states(for: gameID)
+    let items = visible(await provider.states(for: gameID))
     states = items
     await preloadThumbnails(for: items)
   }
 
   func loadAll() async {
-    let dict = await provider.statesGroupedByGame()
+    let dict = await provider.statesGroupedByGame().mapValues(visible)
     // Sort groups by most recent state date
     let sorted = dict.map { key, value in (key, value) }.sorted { a, b in
       let ad = a.1.first?.modifiedAt ?? a.1.first?.createdAt ?? .distantPast
