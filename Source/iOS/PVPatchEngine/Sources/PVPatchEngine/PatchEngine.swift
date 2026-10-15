@@ -46,6 +46,7 @@ public enum PatchEngine {
             info.targetCRC32 = header.targetCRC32
             info.patchCRC32 = header.patchCRC32
             info.description = text(header.metadata)
+            info.canVerifyIntegrity = true
         case .ups:
             let header = try UPSApplier.readHeader(file)
             info.sourceSize = header.inputSize
@@ -53,6 +54,7 @@ public enum PatchEngine {
             info.sourceCRC32 = header.inputCRC32
             info.targetCRC32 = header.outputCRC32
             info.patchCRC32 = header.patchCRC32
+            info.canVerifyIntegrity = true
         case .ppf:
             try inspectPPF(file, into: &info)
         case .xdelta3:
@@ -60,6 +62,7 @@ public enum PatchEngine {
             info.targetSize = summary.targetSize
             info.minimumSourceSize = summary.requiredSourceSize > 0 ? summary.requiredSourceSize : nil
             info.secondaryCompression = summary.secondaryCompression
+            info.canVerifyIntegrity = summary.windowsWithAdler32 > 0
         }
         return info
     }
@@ -70,9 +73,18 @@ public enum PatchEngine {
         try header.withUnsafeMutableBytes { try reader.readBytes(into: $0.baseAddress!, count: $0.count) }
         let start = Int(PPFApplier.descriptionOffset)
         info.description = text(Data(header[start..<(start + PPFApplier.descriptionLength)]))
-        if try PPFApplier.parseVersion(magic: header) == .v2 {
+        switch try PPFApplier.parseVersion(magic: header) {
+        case .v2:
             let declared = try reader.readLittleEndian(4)
             info.sourceSize = declared > 0 ? declared : nil
+            info.canVerifyIntegrity = try PPFApplier.readBlock(reader).contains { $0 != 0 }
+        case .v3:
+            try reader.skip(1)
+            let hasBlockCheck = try reader.readByte() != 0
+            try reader.skip(2)
+            info.canVerifyIntegrity = try hasBlockCheck && PPFApplier.readBlock(reader).contains { $0 != 0 }
+        default:
+            break
         }
     }
 

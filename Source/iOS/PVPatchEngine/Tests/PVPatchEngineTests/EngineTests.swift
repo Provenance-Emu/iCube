@@ -190,3 +190,57 @@ final class ProgressCollector: @unchecked Sendable {
         return storage
     }
 }
+
+/// Which patches can vouch for the source they are applied to: the rule for overwriting an original.
+final class VerificationTests: PatchTestCase {
+    private let source = FixtureData.xdeltaSource()
+
+    private func fixture(_ name: String) throws -> [UInt8] {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "xdelta", subdirectory: "Fixtures"))
+        return try read(url)
+    }
+
+    private func assertVerification(_ expected: Bool, _ patch: [UInt8], ext: String, source: [UInt8],
+                                    file: StaticString = #filePath, line: UInt = #line) async throws {
+        let info = try PatchEngine.inspect(patch: try write(patch, named: "inspect.\(ext)"))
+        XCTAssertEqual(info.canVerifyIntegrity, expected, "inspect", file: file, line: line)
+        let (result, _) = try await apply(patch, ext: ext, to: source)
+        XCTAssertEqual(result.checkedAgainstSource, expected, "apply", file: file, line: line)
+    }
+
+    func testIPSAndIPS32CannotVerifyAnything() async throws {
+        try await assertVerification(false, IPSBuilder.patch(records: [(0, [9])]), ext: "ips", source: [1, 2, 3])
+        try await assertVerification(false, IPSBuilder.patch(records: [(0, [9])], ips32: true), ext: "ips32", source: [1, 2, 3])
+    }
+
+    func testBPSAndUPSVerifyTheSourceAndTarget() async throws {
+        var bps = BPSBuilder(source: [1, 2, 3])
+        bps.sourceRead(3)
+        try await assertVerification(true, bps.patch(), ext: "bps", source: [1, 2, 3])
+        try await assertVerification(true, UPSBuilder.patch(source: [1, 2, 3], target: [1, 9, 3]), ext: "ups", source: [1, 2, 3])
+    }
+
+    func testPPFVerifiesOnlyWithABlockCheck() async throws {
+        let image = [UInt8](repeating: 7, count: 0x9320 + 1024)
+        let block = [UInt8](repeating: 7, count: 1024)
+        let records: [(offset: UInt64, data: [UInt8])] = [(0, [9])]
+        try await assertVerification(false, PPFBuilder.v1(records: records), ext: "ppf", source: image)
+        try await assertVerification(true, PPFBuilder.v2(sourceSize: UInt32(image.count), block: block, records: records), ext: "ppf", source: image)
+        try await assertVerification(false, PPFBuilder.v2(sourceSize: UInt32(image.count), block: [UInt8](repeating: 0, count: 1024), records: records),
+                                     ext: "ppf", source: image)
+        try await assertVerification(true, PPFBuilder.v3(block: block, records: records), ext: "ppf", source: image)
+        try await assertVerification(false, PPFBuilder.v3(block: nil, records: records), ext: "ppf", source: image)
+    }
+
+    func testXDeltaVerifiesOnlyWithWindowChecksums() async throws {
+        try await assertVerification(true, try fixture("basic"), ext: "xdelta", source: source)
+        try await assertVerification(false, try fixture("nochecksum"), ext: "xdelta", source: source)
+    }
+
+    func testAPatchChecksumAloneDoesNotCountAsAVerifiedSource() {
+        let result = PatchResult(output: directory, bytesWritten: 0, verifiedChecksums: [.patchCRC32(1)], ignoredTargetMismatch: nil)
+        XCTAssertFalse(result.checkedAgainstSource)
+        let empty = PatchResult(output: directory, bytesWritten: 0, verifiedChecksums: [.targetWindowAdler32(windows: 0)], ignoredTargetMismatch: nil)
+        XCTAssertFalse(empty.checkedAgainstSource)
+    }
+}

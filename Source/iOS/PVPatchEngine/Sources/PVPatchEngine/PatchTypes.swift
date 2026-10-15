@@ -154,6 +154,11 @@ public struct PatchInfo: Sendable, Equatable {
     public var patchCRC32: UInt32?
     /// Free text carried by the patch: the PPF description or the BPS metadata.
     public var description: String?
+    /// Whether applying the patch can check the source or the result against something the patch carries:
+    /// a BPS or UPS checksum, a PPF block check, or xdelta3 window checksums. False for IPS and IPS32, and
+    /// for PPF and xdelta3 patches whose author left the checks out. Applying such a patch can silently
+    /// produce a wrong image from the wrong disc, so do not overwrite the only copy of a source with it.
+    public var canVerifyIntegrity = false
 }
 
 /// Knobs for `PatchEngine.apply`.
@@ -215,4 +220,16 @@ public struct PatchResult: Sendable, Equatable {
     public var verifiedChecksums: [VerifiedChecksum]
     /// Set only with `ignoreSourceChecksum` when the result differs from the target the patch describes.
     public var ignoredTargetMismatch: ChecksumMismatch?
+
+    /// Whether the source or the result was checked against the patch and matched. A patch checksum alone
+    /// does not count: it proves the patch file is intact, not that it was made for this source.
+    public var checkedAgainstSource: Bool {
+        verifiedChecksums.contains { check in
+            switch check {
+            case .sourceCRC32, .targetCRC32, .sourceBlockCheck: return true
+            case let .targetWindowAdler32(windows): return windows > 0
+            case .patchCRC32: return false
+            }
+        }
+    }
 }

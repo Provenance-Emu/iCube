@@ -111,7 +111,7 @@ enum PPFApplier {
         return ApplyOutcome(bytesWritten: source.size, verified: verified)
     }
 
-    private static func readBlock(_ reader: PatchStreamReader) throws -> [UInt8] {
+    static func readBlock(_ reader: PatchStreamReader) throws -> [UInt8] {
         var block = [UInt8](repeating: 0, count: blockCheckLength)
         try block.withUnsafeMutableBytes { try reader.readBytes(into: $0.baseAddress!, count: blockCheckLength) }
         return block
