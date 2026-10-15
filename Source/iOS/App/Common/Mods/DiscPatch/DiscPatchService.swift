@@ -153,6 +153,9 @@ final class DiscPatchService: @unchecked Sendable {
     if let refusal = DiscPatchPlanner.refusal(for: image) { throw DiscPatchError.refused(refusal) }
     let patchInfo: PatchInfo
     do { patchInfo = try PatchEngine.inspect(patch: request.patch) } catch { throw Self.map(error) }
+    if patchInfo.format == .xdelta3, Self.usesUnsupportedCompression(request.patch) {
+      throw DiscPatchError.patch(.unsupportedSecondaryCompression)
+    }
 
     if !request.ignoreSourceChecksum, let declared = patchInfo.sourceSize, image.plainSizeIsExact, declared != image.plainSize {
       throw DiscPatchError.wrongSourceSize(expected: declared, actual: image.plainSize)
@@ -368,6 +371,13 @@ final class DiscPatchService: @unchecked Sendable {
       sourcePath: request.source.path, sourceSize: size, sourceModified: modified,
       patchSize: patchInfo.patchSize, patchDigest: try sha256(of: request.patch),
       ignoreSourceChecksum: request.ignoreSourceChecksum)
+  }
+
+  private static func usesUnsupportedCompression(_ patch: URL) -> Bool {
+    guard let handle = try? FileHandle(forReadingFrom: patch) else { return false }
+    defer { try? handle.close() }
+    let header = (try? handle.read(upToCount: DiscPatchPlanner.vcdiffHeaderProbeLength)) ?? Data()
+    return DiscPatchPlanner.xdeltaNeedsUnsupportedCompression(header: [UInt8](header))
   }
 
   private static let digestChunk = 1 << 20

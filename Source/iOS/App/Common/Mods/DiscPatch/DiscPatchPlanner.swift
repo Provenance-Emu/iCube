@@ -294,6 +294,25 @@ enum DiscPatchPlanner {
       .map(\.element)
   }
 
+  // MARK: - xdelta secondary compression
+
+  private static let vcdiffMagicLength = 4
+  private static let vcdiffSecondaryFlag: UInt8 = 0x01
+  /// The secondary compressors the patch engine builds in: DJW and FGK (VCDIFF header ids 1 and 16).
+  private static let supportedSecondaryIDs: Set<UInt8> = [1, 16]
+  /// Bytes of an xdelta3 patch needed to read its compressor: the magic, the indicator and the id.
+  static let vcdiffHeaderProbeLength = vcdiffMagicLength + 2
+
+  /// Whether an xdelta3 patch's header names a secondary compressor the engine lacks (LZMA, which is
+  /// what the xdelta3 command line uses by default). The engine reports that only when it applies the
+  /// patch, after a compressed disc has been unpacked, which is minutes of wasted work; `inspect` does
+  /// not expose it, so the header is read here, before anything is unpacked.
+  static func xdeltaNeedsUnsupportedCompression(header: [UInt8]) -> Bool {
+    guard header.count > vcdiffMagicLength, header[vcdiffMagicLength] & vcdiffSecondaryFlag != 0 else { return false }
+    guard header.count > vcdiffMagicLength + 1 else { return false }
+    return !supportedSecondaryIDs.contains(header[vcdiffMagicLength + 1])
+  }
+
   /// Patch file extensions the flow accepts, lowercase and without the dot.
   static let patchExtensions: [String] = PatchFormat.allFileExtensions
 

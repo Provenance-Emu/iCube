@@ -217,6 +217,26 @@ final class DiscPatchPlannerTests: XCTestCase {
     XCTAssertEqual(ranked.map(\.id), ["c", "a", "b"])
   }
 
+  // MARK: - xdelta compression
+
+  func test_xdeltaWithoutSecondaryCompressionIsSupported() {
+    XCTAssertFalse(DiscPatchPlanner.xdeltaNeedsUnsupportedCompression(header: [0xD6, 0xC3, 0xC4, 0x00, 0x00, 0x00]))
+  }
+
+  func test_xdeltaDJWAndFGKAreSupported() {
+    XCTAssertFalse(DiscPatchPlanner.xdeltaNeedsUnsupportedCompression(header: [0xD6, 0xC3, 0xC4, 0x00, 0x05, 0x01]))
+    XCTAssertFalse(DiscPatchPlanner.xdeltaNeedsUnsupportedCompression(header: [0xD6, 0xC3, 0xC4, 0x00, 0x05, 0x10]))
+  }
+
+  func test_xdeltaLZMAIsNotSupported() {
+    XCTAssertTrue(DiscPatchPlanner.xdeltaNeedsUnsupportedCompression(header: [0xD6, 0xC3, 0xC4, 0x00, 0x05, 0x20]))
+  }
+
+  func test_aShortHeaderIsNotJudged() {
+    XCTAssertFalse(DiscPatchPlanner.xdeltaNeedsUnsupportedCompression(header: [0xD6, 0xC3]))
+    XCTAssertFalse(DiscPatchPlanner.xdeltaNeedsUnsupportedCompression(header: [0xD6, 0xC3, 0xC4, 0x00, 0x05]))
+  }
+
   // MARK: - Patch files
 
   func test_recognisesPatchExtensionsCaseInsensitively() {
