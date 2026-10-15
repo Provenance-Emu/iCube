@@ -17,3 +17,10 @@ extern "C" const char* DolphinGetUserPathC(void) {
     static std::string s_path = File::GetUserPath(D_USER_IDX);
     return s_path.c_str();
 }
+
+extern "C" const char* DolphinGetHiresTexturesPathC(void) {
+    // Not cached across calls: the user directory can still be unset when the browser is first opened.
+    thread_local static std::string s_path;
+    s_path = File::GetUserPath(D_HIRESTEXTURES_IDX);
+    return s_path.c_str();
+}

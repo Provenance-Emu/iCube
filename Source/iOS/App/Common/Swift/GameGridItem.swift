@@ -712,6 +712,7 @@ struct GameGridItem: View {
           Label(L("Favorite"), systemImage: "star")
         }
       }
+      FindModsButton(item: item)
       Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }
     .zIndex(isFocused ? 1 : 0)
@@ -949,6 +950,7 @@ struct GameGridItem: View {
           Label(L("Favorite"), systemImage: "star")
         }
       }
+      FindModsButton(item: item)
       // Ecosystem — hand this game's disc image to Provenance through the
       // system share sheet. iOS-only: see `EcosystemSendButton`.
       EcosystemSendButton(gameID: item.gameID)

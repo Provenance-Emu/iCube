@@ -325,6 +325,8 @@ let iCube = Target.target(
         // Required-reason API declarations for the app itself (extensions ship their own).
         "DolphiniOS/PrivacyInfo.xcprivacy",
         "Project/Assets/cacert.pem",
+        // GameBanana game id <-> Dolphin game ids for the online mod browser (Tools/mods/gen_mod_game_table.py).
+        "Common/Mods/Browser/ModGameTable.json",
         // StikDebug JIT broker script handed off at runtime via the stikdebug:// URL scheme
         // (StikDebugLauncher.swift). Bundled flat so Bundle.main.url(forResource:"icube") resolves.
         "Project/Assets/icube.js",
@@ -522,7 +524,11 @@ let iCubeTests = Target.target(
     infoPlist: .default,
     sources: ["DolphiniOSTests/**/*.swift"],
     // A folder reference (not a glob) keeps `Skins/<name>.deltaskin/` intact inside the test bundle.
-    resources: [.folderReference(path: "DolphiniOSTests/Fixtures/Skins")],
+    resources: [
+        .folderReference(path: "DolphiniOSTests/Fixtures/Skins"),
+        // Recorded GameBanana API responses for GameBananaDecodingTests.
+        .folderReference(path: "DolphiniOSTests/Fixtures/GameBanana"),
+    ],
     dependencies: [
         .target(name: "iCube"),
         // `.target(name: "iCube")` alone doesn't make a package the app links importable here —

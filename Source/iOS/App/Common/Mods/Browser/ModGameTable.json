@@ -1,0 +1,550 @@
+{
+  "version": 1,
+  "games": [
+    {
+      "bananaID": 6533,
+      "name": "Animal Crossing",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b3689eaad540.png",
+      "gameIDs": [
+        "GAFE01",
+        "GAFP01",
+        "GAFU01",
+        "GAFJ01"
+      ]
+    },
+    {
+      "bananaID": 6491,
+      "name": "Animal Crossing: City Folk",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b36abf7617bd.png",
+      "gameIDs": [
+        "RUUE01",
+        "RUUP01",
+        "RUUJ01",
+        "RUUK01"
+      ]
+    },
+    {
+      "bananaID": 9731,
+      "name": "Donkey Kong Country Returns",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/_.gif",
+      "gameIDs": [
+        "SF8E01",
+        "SF8J01",
+        "SF8P01"
+      ]
+    },
+    {
+      "bananaID": 7035,
+      "name": "Donkey Kong: Barrel Blast",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c6c29bac05ec.png",
+      "gameIDs": [
+        "RDKE01",
+        "RDKJ01",
+        "RDKP01"
+      ]
+    },
+    {
+      "bananaID": 8172,
+      "name": "Dragon Ball Z: Budokai Tenkaichi 3",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/685c63dca199a.png",
+      "gameIDs": [
+        "RDSE70",
+        "RDSPAF"
+      ]
+    },
+    {
+      "bananaID": 5899,
+      "name": "F-Zero GX",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/59547444a84f1.png",
+      "gameIDs": [
+        "GFZE01",
+        "GFZJ01",
+        "GFZP01"
+      ]
+    },
+    {
+      "bananaID": 7208,
+      "name": "Fire Emblem: Path of Radiance",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5d5f1c7f310dc.png",
+      "gameIDs": [
+        "GFEE01",
+        "GFEJ01",
+        "GFEP01"
+      ]
+    },
+    {
+      "bananaID": 8600,
+      "name": "Fire Emblem: Radiant Dawn",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/_.gif",
+      "gameIDs": [
+        "RFEE01",
+        "RFEJ01",
+        "RFEP01"
+      ]
+    },
+    {
+      "bananaID": 5776,
+      "name": "Kirby Air Ride",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b29139c6a3c7.png",
+      "gameIDs": [
+        "GKYE01",
+        "GKYJ01",
+        "GKYP01"
+      ]
+    },
+    {
+      "bananaID": 7108,
+      "name": "Kirby's Epic Yarn",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c9829645a103.png",
+      "gameIDs": [
+        "RK5E01",
+        "RK5J01",
+        "RK5K01",
+        "RK5P01"
+      ]
+    },
+    {
+      "bananaID": 6231,
+      "name": "Kirby's Return to Dream Land",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5ad9124884f00.png",
+      "gameIDs": [
+        "SUKE01",
+        "SUKJ01",
+        "SUKK01"
+      ]
+    },
+    {
+      "bananaID": 7120,
+      "name": "Luigi's Mansion",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5ca1070039d69.png",
+      "gameIDs": [
+        "GLME01",
+        "GLMJ01",
+        "GLMP01",
+        "GLMK01"
+      ]
+    },
+    {
+      "bananaID": 5896,
+      "name": "Mario Kart Wii",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5ab857abcc67f.png",
+      "gameIDs": [
+        "RMCE01",
+        "RMCJ01",
+        "RMCP01",
+        "RMCK01"
+      ]
+    },
+    {
+      "bananaID": 6555,
+      "name": "Mario Kart: Double Dash!!",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b43c06fc5790.gif",
+      "gameIDs": [
+        "GM4E01",
+        "GM4J01",
+        "GM4P01",
+        "GM4K01"
+      ]
+    },
+    {
+      "bananaID": 7096,
+      "name": "Mario Party 4",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c91135547bf1.png",
+      "gameIDs": [
+        "GMPE01",
+        "GMPJ01",
+        "GMPP01"
+      ]
+    },
+    {
+      "bananaID": 7095,
+      "name": "Mario Party 5",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c910efd9802f.png",
+      "gameIDs": [
+        "GP5E01",
+        "GP5J01",
+        "GP5P01"
+      ]
+    },
+    {
+      "bananaID": 6291,
+      "name": "Mario Party 6",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5a68d6dd47159.png",
+      "gameIDs": [
+        "GP6E01",
+        "GP6J01",
+        "GP6P01"
+      ]
+    },
+    {
+      "bananaID": 6084,
+      "name": "Mario Party 7",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b27d810419b8.png",
+      "gameIDs": [
+        "GP7E01",
+        "GP7J01",
+        "GP7P01"
+      ]
+    },
+    {
+      "bananaID": 6569,
+      "name": "Mario Party 8",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b4774a6b437d.png",
+      "gameIDs": [
+        "RM8E01",
+        "RM8J01",
+        "RM8P01",
+        "RM8K01"
+      ]
+    },
+    {
+      "bananaID": 6248,
+      "name": "Mario Party 9",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b0c3031550b5.png",
+      "gameIDs": [
+        "SSQE01",
+        "SSQJ01",
+        "SSQP01",
+        "SSQK01"
+      ]
+    },
+    {
+      "bananaID": 6982,
+      "name": "Mario Strikers Charged",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c5f426c94115.png",
+      "gameIDs": [
+        "R4QE01",
+        "R4QJ01",
+        "R4QP01"
+      ]
+    },
+    {
+      "bananaID": 7032,
+      "name": "Mario Super Sluggers",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c697114ed420.png",
+      "gameIDs": [
+        "RMBE01",
+        "RMBJ01"
+      ]
+    },
+    {
+      "bananaID": 6994,
+      "name": "Mario Superstar Baseball",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c6c45fb5cace.png",
+      "gameIDs": [
+        "GYQE01",
+        "GYQP01"
+      ]
+    },
+    {
+      "bananaID": 7801,
+      "name": "Metroid Prime",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5e1d9d4dafac6.png",
+      "gameIDs": [
+        "GM8E01",
+        "GM8J01",
+        "GM8P01",
+        "GM8K01",
+        "R3IJ01"
+      ]
+    },
+    {
+      "bananaID": 7802,
+      "name": "Metroid Prime 2: Echoes",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5e1d9ebcb7870.png",
+      "gameIDs": [
+        "G2ME01",
+        "G2MJ01",
+        "G2MP01",
+        "G2MK01"
+      ]
+    },
+    {
+      "bananaID": 23926,
+      "name": "Metroid Prime 3: Corruption",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/693c63a0330b0.png",
+      "gameIDs": [
+        "RM3E01",
+        "RM3J01",
+        "RM3P01"
+      ]
+    },
+    {
+      "bananaID": 23937,
+      "name": "Metroid Prime Trilogy",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/693f151444881.png",
+      "gameIDs": [
+        "R3ME01",
+        "R3MP01"
+      ]
+    },
+    {
+      "bananaID": 6247,
+      "name": "New Super Mario Bros. Wii",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5a3fb51d8dfcc.png",
+      "gameIDs": [
+        "SMNE01",
+        "SMNJ01",
+        "SMNP01",
+        "SMNK01"
+      ]
+    },
+    {
+      "bananaID": 7030,
+      "name": "Paper Mario: The Thousand-Year Door",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c6861f2d04c2.png",
+      "gameIDs": [
+        "G8ME01",
+        "G8MJ01",
+        "G8MP01",
+        "G8MK01"
+      ]
+    },
+    {
+      "bananaID": 7122,
+      "name": "Pikmin",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c9a3f20a37a5.png",
+      "gameIDs": [
+        "GPIE01",
+        "GPIJ01",
+        "GPIP01",
+        "R9IE01",
+        "R9IJ01",
+        "R9IK01",
+        "R9IP01"
+      ]
+    },
+    {
+      "bananaID": 5788,
+      "name": "Pikmin 2",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/58948d6972384.png",
+      "gameIDs": [
+        "GPVE01",
+        "GPVJ01",
+        "GPVP01",
+        "R92E01",
+        "R92J01",
+        "R92P01"
+      ]
+    },
+    {
+      "bananaID": 17019,
+      "name": "Pokemon Colosseum",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/68195da244023.png",
+      "gameIDs": [
+        "GC6E01",
+        "GC6J01",
+        "GC6P01"
+      ]
+    },
+    {
+      "bananaID": 8519,
+      "name": "Pokemon XD: Gale of Darkness",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/6877cbfba27d9.png",
+      "gameIDs": [
+        "GXXE01",
+        "GXXJ01",
+        "GXXP01"
+      ]
+    },
+    {
+      "bananaID": 5855,
+      "name": "Sonic Adventure 2 Battle",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5a0f1e5849d0c.png",
+      "gameIDs": [
+        "GSNE8P",
+        "GSNP8P",
+        "GSBJ8P"
+      ]
+    },
+    {
+      "bananaID": 6243,
+      "name": "Sonic Colors",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5a3c621a8bc7e.png",
+      "gameIDs": [
+        "SNCE8P",
+        "SNCJ8P"
+      ]
+    },
+    {
+      "bananaID": 8236,
+      "name": "Sonic Riders",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5ed7023a6ba14.png",
+      "gameIDs": [
+        "GXEE8P",
+        "GXEJ8P",
+        "GXEP8P"
+      ]
+    },
+    {
+      "bananaID": 9598,
+      "name": "Sonic Unleashed",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/61c99266ded57.png",
+      "gameIDs": [
+        "RSVE8P",
+        "RSVP8P"
+      ]
+    },
+    {
+      "bananaID": 10530,
+      "name": "Star Fox Adventures",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/608d102cc4aa7.png",
+      "gameIDs": [
+        "GSAE01",
+        "GSAJ01",
+        "GSAP01"
+      ]
+    },
+    {
+      "bananaID": 5950,
+      "name": "Super Mario Galaxy",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b0c4d468b62a.png",
+      "gameIDs": [
+        "RMGE01",
+        "RMGJ01",
+        "RMGP01",
+        "RMGK01"
+      ]
+    },
+    {
+      "bananaID": 6867,
+      "name": "Super Mario Galaxy 2",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c2c0069a27fc.png",
+      "gameIDs": [
+        "SB4E01",
+        "SB4J01",
+        "SB4P01",
+        "SB4K01"
+      ]
+    },
+    {
+      "bananaID": 6995,
+      "name": "Super Mario Strikers",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c6c433bae863.png",
+      "gameIDs": [
+        "G4QE01",
+        "G4QJ01"
+      ]
+    },
+    {
+      "bananaID": 5798,
+      "name": "Super Mario Sunshine",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c78056f5fd9a.png",
+      "gameIDs": [
+        "GMSE01",
+        "GMSJ01",
+        "GMSP01",
+        "GMSK01"
+      ]
+    },
+    {
+      "bananaID": 6576,
+      "name": "Super Paper Mario",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b47f252bea5f.png",
+      "gameIDs": [
+        "R8PE01",
+        "R8PJ01",
+        "R8PP01",
+        "R8PK01"
+      ]
+    },
+    {
+      "bananaID": 5678,
+      "name": "Super Smash Bros. Brawl",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/59ad5fd21f87e.png",
+      "gameIDs": [
+        "RSBE01",
+        "RSBJ01",
+        "RSBP01",
+        "RSBK01"
+      ]
+    },
+    {
+      "bananaID": 5706,
+      "name": "Super Smash Bros. Melee",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5addf7585fdc2.png",
+      "gameIDs": [
+        "GALE01",
+        "GALJ01",
+        "GALP01"
+      ]
+    },
+    {
+      "bananaID": 17580,
+      "name": "The Legend of Zelda: Four Swords Adventures",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/685dd59c1947d.png",
+      "gameIDs": [
+        "G4SE01",
+        "G4SJ01",
+        "G4SP01"
+      ]
+    },
+    {
+      "bananaID": 6305,
+      "name": "The Legend of Zelda: Skyward Sword",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5a751d8ccded1.png",
+      "gameIDs": [
+        "SOUE01",
+        "SOUJ01",
+        "SOUP01",
+        "SOUK01"
+      ]
+    },
+    {
+      "bananaID": 6173,
+      "name": "The Legend of Zelda: The Wind Waker",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c0c1aa84cc19.png",
+      "gameIDs": [
+        "GZLE01",
+        "GZLJ01",
+        "GZLP01"
+      ]
+    },
+    {
+      "bananaID": 6167,
+      "name": "The Legend of Zelda: Twilight Princess",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5a07e2d1d171c.png",
+      "gameIDs": [
+        "GZ2E01",
+        "GZ2J01",
+        "GZ2P01",
+        "RZDE01",
+        "RZDJ01",
+        "RZDP01",
+        "RZDK01"
+      ]
+    },
+    {
+      "bananaID": 6532,
+      "name": "Wii Sports",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b3d1e7886e6b.png",
+      "gameIDs": [
+        "RSPE01",
+        "RSPJ01",
+        "RSPP01",
+        "RSPK01"
+      ]
+    },
+    {
+      "bananaID": 6332,
+      "name": "Wii Sports Resort",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5b4cb176e3bac.png",
+      "gameIDs": [
+        "RZTE01",
+        "RZTJ01",
+        "RZTP01",
+        "RZTK01"
+      ]
+    },
+    {
+      "bananaID": 11610,
+      "name": "Xenoblade Chronicles",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/_.gif",
+      "gameIDs": [
+        "SX4E01",
+        "SX4J01",
+        "SX4P01"
+      ]
+    }
+  ]
+}
