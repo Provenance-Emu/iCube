@@ -34,6 +34,16 @@
       ]
     },
     {
+      "bananaID": 7035,
+      "name": "Donkey Kong: Barrel Blast",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/5c6c29bac05ec.png",
+      "gameIDs": [
+        "RDKE01",
+        "RDKJ01",
+        "RDKP01"
+      ]
+    },
+    {
       "bananaID": 8172,
       "name": "Dragon Ball Z: Budokai Tenkaichi 3",
       "iconURL": "https://images.gamebanana.com/img/ico/games/685c63dca199a.png",
@@ -524,6 +534,16 @@
         "RZTJ01",
         "RZTP01",
         "RZTK01"
+      ]
+    },
+    {
+      "bananaID": 11610,
+      "name": "Xenoblade Chronicles",
+      "iconURL": "https://images.gamebanana.com/img/ico/games/_.gif",
+      "gameIDs": [
+        "SX4E01",
+        "SX4J01",
+        "SX4P01"
       ]
     }
   ]

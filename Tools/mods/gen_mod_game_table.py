@@ -9,7 +9,7 @@ typo cannot ship. Run from anywhere:
     python3 Tools/mods/gen_mod_game_table.py            # rewrite the JSON
     python3 Tools/mods/gen_mod_game_table.py --dry-run  # print what NameMatch returns
 
-A title whose exact GameBanana name is not among the NameMatch results is reported and makes
+A title whose exact GameBanana name is not among the NameMatch results (all pages) is reported and makes
 the run fail: fix its entry (`query` / `banana_name`) instead of taking the first record.
 """
 
@@ -67,7 +67,9 @@ TITLES = [
             entry("Sonic Riders", "GXEE8P GXEJ8P GXEP8P", banana_name="Sonic Riders (GameCube)"),
     entry("Sonic Colors", "SNCE8P SNCJ8P"),
     entry("Sonic Unleashed", "RSVE8P RSVP8P", banana_name="Sonic Unleashed (Wii)"),
+    entry("Xenoblade Chronicles", "SX4E01 SX4J01 SX4P01", query="Xenoblade", banana_name="Xenoblade Chronicles (Wii)"),
     entry("Donkey Kong Country Returns", "SF8E01 SF8J01 SF8P01"),
+    entry("Donkey Kong: Barrel Blast", "RDKE01 RDKJ01 RDKP01", query="Barrel Blast", banana_name="Donkey Kong Barrel Blast"),
     entry("Animal Crossing", "GAFE01 GAFP01 GAFU01 GAFJ01"),
     entry("Animal Crossing: City Folk", "RUUE01 RUUP01 RUUJ01 RUUK01"),
     entry("Mario Party 4", "GMPE01 GMPJ01 GMPP01"),
@@ -92,10 +94,18 @@ TITLES = [
 
 
 def fetch_candidates(query):
-    url = f"{API}?{urllib.parse.urlencode({'_sName': query})}"
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.load(response).get("_aRecords", [])
+    """Every NameMatch result for `query`: the endpoint pages at five records, newest page last."""
+    records, page = [], 1
+    while True:
+        params = urllib.parse.urlencode({"_sName": query, "_nPage": page})
+        request = urllib.request.Request(f"{API}?{params}", headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = json.load(response)
+        records += body.get("_aRecords", [])
+        if body.get("_aMetadata", {}).get("_bIsComplete", True) or not body.get("_aRecords"):
+            return records
+        page += 1
+        time.sleep(REQUEST_GAP_SECONDS)
 
 
 def load_wiitdb():
