@@ -24,7 +24,7 @@ struct GameTagPayload: Equatable {
     /// What this app writes into the text record's `app` field.
     static let ownAppID = "com.joemattiello.iCube"
 
-    /// Sibling apps, by launch-URL scheme.
+    /// Sibling apps, by launch-URL scheme or universal-link host.
     enum Sibling: String, CaseIterable {
         case provenance = "provenance"
         case ifly = "ifly"
@@ -35,7 +35,24 @@ struct GameTagPayload: Equatable {
             case .ifly: return "iFly"
             }
         }
+
+        /// Hosts of the sibling's universal links (Provenance writes
+        /// `https://provenance-emu.com/game/<MD5>`).
+        var hosts: [String] {
+            switch self {
+            case .provenance: return ["provenance-emu.com", "provenance.app"]
+            case .ifly: return ["ifly-emu.com"]
+            }
+        }
+
+        static func matching(host: String) -> Sibling? {
+            allCases.first { sibling in sibling.hosts.contains { host == $0 || host.hasSuffix("." + $0) } }
+        }
     }
+
+    /// Host of this app's universal links; `https://icube-emu.com/play?id=<id>` is
+    /// accepted as our own once the site serves an apple-app-site-association file.
+    static let ownHost = "icube-emu.com"
 
     /// What a scanned tag turned out to be.
     enum Classification: Equatable {
@@ -99,15 +116,24 @@ struct GameTagPayload: Equatable {
     /// Classifies a tag's URI: ours (with the game id), a sibling's, or not a game tag.
     static func classify(_ url: URL) -> Classification {
         guard let scheme = url.scheme?.lowercased() else { return .unknown }
-        if scheme == EcosystemSchemes.ownScheme {
-            guard url.host?.lowercased() == launchHost,
-                  let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-                  let id = components.queryItems?.first(where: { $0.name == launchQueryKey })?.value,
-                  !id.isEmpty else { return .unknown }
+        let host = url.host?.lowercased() ?? ""
+        if scheme == EcosystemSchemes.ownScheme, host == launchHost {
+            return gameID(in: url).map { .own(gameID: $0) } ?? .unknown
+        }
+        if scheme == "https", host == ownHost || host.hasSuffix("." + ownHost) {
+            guard url.path.lowercased() == "/" + launchHost, let id = gameID(in: url) else { return .unknown }
             return .own(gameID: id)
         }
         if let sibling = Sibling(rawValue: scheme) { return .sibling(sibling) }
+        if scheme == "https", let sibling = Sibling.matching(host: host) { return .sibling(sibling) }
         return .unknown
+    }
+
+    private static func gameID(in url: URL) -> String? {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let id = components.queryItems?.first(where: { $0.name == launchQueryKey })?.value,
+              !id.isEmpty else { return nil }
+        return id
     }
 
     /// Rebuilds a payload from the two records a tag carries; nil without a URI.

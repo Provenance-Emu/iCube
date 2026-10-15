@@ -33,6 +33,16 @@ final class GameTagPayloadTests: XCTestCase {
     XCTAssertEqual(GameTagPayload.classify(URL(string: "dolphinios://play")!), .unknown)
   }
 
+  func test_classify_universalLinks_ownAndSibling() {
+    XCTAssertEqual(GameTagPayload.classify(URL(string: "https://icube-emu.com/play?id=GALE01")!), .own(gameID: "GALE01"))
+    XCTAssertEqual(GameTagPayload.classify(URL(string: "https://www.icube-emu.com/play?id=GALE01")!), .own(gameID: "GALE01"))
+    XCTAssertEqual(GameTagPayload.classify(URL(string: "https://icube-emu.com/other")!), .unknown)
+    XCTAssertEqual(GameTagPayload.classify(URL(string: "https://provenance-emu.com/game/0123ABCD")!), .sibling(.provenance))
+    XCTAssertEqual(GameTagPayload.classify(URL(string: "https://provenance.app/game/x")!), .sibling(.provenance))
+    XCTAssertEqual(GameTagPayload.classify(URL(string: "https://ifly-emu.com/open?id=x")!), .sibling(.ifly))
+    XCTAssertEqual(GameTagPayload.classify(URL(string: "https://notprovenance-emu.com/game/x")!), .unknown)
+  }
+
   func test_classify_siblingTags_areNamedNotOpened() {
     XCTAssertEqual(GameTagPayload.classify(URL(string: "provenance://open?md5=abc")!), .sibling(.provenance))
     XCTAssertEqual(GameTagPayload.classify(URL(string: "ifly://open?id=/some/path")!), .sibling(.ifly))
