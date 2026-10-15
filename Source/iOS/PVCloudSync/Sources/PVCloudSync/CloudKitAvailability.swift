@@ -40,17 +40,12 @@ import CloudKit
 /// line to flip once the account work is done.
 public enum CloudKitAvailability {
 
-    /// **Flip to `true` only after both:**
-    /// 1. the container `CloudSyncConstants.containerIdentifier` exists in the
-    ///    Apple Developer account, and
-    /// 2. `docs/cloudkit-entitlements.patch` has been applied to all four
-    ///    entitlements files.
-    ///
-    /// Until then every CloudKit path is off and the app uses
-    /// `InertSyncProvider`. Turning this on early does not produce a broken
-    /// sync — it produces a code-signing failure for everyone building the app,
-    /// and a trap on any build that does get signed.
-    public static let containerIsProvisioned = false
+    /// `true` since 2026-10-14: the container `CloudSyncConstants.containerIdentifier`
+    /// exists and iCloud is enabled on every shipping App ID (checked through the
+    /// App Store Connect API), and all four entitlements files request it. The
+    /// provisioning-profile probe below still turns CloudKit off on a build whose
+    /// profile lacks the container (re-signed sideloads), so this never traps.
+    public static let containerIsProvisioned = true
 
     /// Why CloudKit cannot be used on this build, or `nil` if it can.
     public static func buildLevelUnavailableReason() -> SyncUnavailableReason? {
