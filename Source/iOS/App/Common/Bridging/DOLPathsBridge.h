@@ -20,6 +20,10 @@ const char* DolphinGetStateSavesPathC(void);
 // The caller should copy the string immediately (do not store the pointer).
 const char* DolphinGetUserPathC(void);
 
+// Returns a C string path to Dolphin's custom texture directory (`Load/Textures`), the
+// parent of the per-game `<GameID>/` texture-pack folders. Copy the string immediately.
+const char* DolphinGetHiresTexturesPathC(void);
+
 #ifdef __cplusplus
 }
 #endif
