@@ -5,8 +5,8 @@ import Foundation
 #if canImport(Zip)
 import Zip
 #endif
-#if canImport(PLzmaSDK)
-import PLzmaSDK
+#if canImport(PLzmaShim)
+import PLzmaShim
 #endif
 #if canImport(SWCompression)
 import SWCompression
@@ -537,7 +537,7 @@ final class ZipImportHelper: NSObject {
     #endif
   }
 
-  #if canImport(PLzmaSDK)
+  #if canImport(PLzmaShim)
   private static func extractSevenZip(sourceURL: URL, to tempDir: URL) throws {
     try extractWithPLzma(sourceURL: sourceURL, to: tempDir, fileType: .sevenZ)
   }
@@ -657,7 +657,7 @@ final class ZipImportHelper: NSObject {
   }
 
   private static func extractTarArchive(sourceURL: URL, to tempDir: URL) throws {
-    #if canImport(PLzmaSDK)
+    #if canImport(PLzmaShim)
     try extractWithPLzma(sourceURL: sourceURL, to: tempDir, fileType: .tar)
     #else
     throw archiveUnavailableError("tar")

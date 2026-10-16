@@ -361,7 +361,8 @@ let iCube = Target.target(
         .package(product: "PVCloudSync"),
         .package(product: "PVLibrarySnapshot"),
         .package(product: "Zip"),
-        .package(product: "PLzmaSDK"),
+        // PLzmaSDK, through a local package: see Source/iOS/PLzmaShim/Package.swift.
+        .package(product: "PLzmaShim"),
         .package(product: "SWCompression"),
         .package(product: "UICollectionViewLeftAlignedLayout"),
         .package(product: "AltKit"),
@@ -731,15 +732,11 @@ let project = Project(
         .local(path: "../PVHelp"),
         .local(path: "../PVPatchEngine"),
         .local(path: "../PVLibrarySnapshot"),
+        .local(path: "../PLzmaShim"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
         .local(path: "../PVCloudSync"),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // Pinned by revision (tag 1.6.2), not by version: PLzmaSDK sets -fPIC/-fno-rtti through
-        // unsafeFlags, and Xcode 27 refuses a version-pinned package that does ("cannot be used as
-        // a dependency of this target because it uses unsafe build flags"). SwiftPM still allows
-        // them for revision- and branch-pinned packages. Bump the sha to move to a newer release.
-        .remote(url: "https://github.com/OlehKulykov/PLzmaSDK.git", requirement: .revision("4dbac7ac03ffd7f69ea5b03ec149683a351c37a9")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
