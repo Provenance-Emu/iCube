@@ -198,9 +198,26 @@ extension MenuItem {
       return nil
     }
   }
+
+  /// A tvOS list row whose left/right step its value (a stepper, a cycle row, a compact picker), so a
+  /// left press must stay on the row instead of moving focus to the settings sidebar.
+  var adjustsWithLeftRight: Bool {
+    guard isEnabled else { return false }
+    switch role {
+    case .stepper, .cycle: return true
+    case .picker: return isCompactOnTV
+    default: return false
+    }
+  }
 }
 
 extension MenuModel {
+  /// Whether the row with focus id `focusID` steps with left/right. Exploded picker rows
+  /// (`"<id>#<index>"`) match no item and don't.
+  func adjustsWithLeftRight(focusID: String?) -> Bool {
+    guard let focusID, let item = item(id: focusID) else { return false }
+    return item.adjustsWithLeftRight
+  }
   /// Applies a controller left/right step to the item `id`, resolved from THIS model: a held stepper
   /// repeats up to ~12 times a second, and every step must read the value as it is now, not as it was
   /// when the hold began. A stepper moves on its grid; a picker or cycle row wraps through its options.
