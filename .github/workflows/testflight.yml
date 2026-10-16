@@ -121,7 +121,10 @@ jobs:
     # ["self-hosted","studio"]) to run this job on the Mac Studio; leave it unset to use
     # GitHub-hosted macos-26. Pull requests from forks ALWAYS run on the hosted runner -
     # never run untrusted fork code on the self-hosted machine.
-    runs-on: ${{ (vars.MACOS_RUNNER_LABELS != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.MACOS_RUNNER_LABELS) || 'macos-26' }}
+    # TESTFLIGHT_RUNNER_LABELS, when set, overrides it for this job only: signing needs a
+    # runner in a logged-in GUI session (["self-hosted","studio-gui"]); the Studio's
+    # LaunchDaemon runners (ghrunner) fail every codesign with errSecInternalComponent.
+    runs-on: ${{ ((vars.TESTFLIGHT_RUNNER_LABELS || vars.MACOS_RUNNER_LABELS) != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.TESTFLIGHT_RUNNER_LABELS || vars.MACOS_RUNNER_LABELS) || 'macos-26' }}
     # One platform per job. Two cold archives in a single job is what made
     # Provenance's tvOS leg fail intermittently with no diagnostic.
     strategy:
@@ -257,13 +260,13 @@ jobs:
           done
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
-          # The Studio runs as a LaunchDaemon user (ghrunner) that has never logged in, so it has
-          # no login keychain; codesign then failed with errSecInternalComponent (run
-          # 38851908047). Make the job keychain the default for the job, and remember the old
-          # default so cleanup can restore it on this persistent machine.
-          echo "PREV_DEFAULT_KEYCHAIN=$(security default-keychain -d user | tr -d '" ')" >> "$GITHUB_ENV"
-          security default-keychain -d user -s "$KEYCHAIN"
-          echo "SIGNING_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          # A runner user that has never logged in has no default keychain at all
+          # ("A default keychain could not be found"); give it the job keychain. Each job
+          # recreates the keychain at the same path, so the default stays valid. A user with a
+          # login keychain (the Studio's GUI-session runner) keeps its own default untouched.
+          if ! security default-keychain -d user >/dev/null 2>&1; then
+            security default-keychain -d user -s "$KEYCHAIN"
+          fi
           # Without -v this also lists rejected identities with the reason
           # (e.g. CSSMERR_TP_NOT_TRUSTED), which is what a failure needs.
           security find-identity -p codesigning "$KEYCHAIN"
@@ -317,7 +320,6 @@ jobs:
             -destination "$DEST" \
             -archivePath "$ARCHIVE" \
             CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$BUILD" \
-            OTHER_CODE_SIGN_FLAGS="--keychain $SIGNING_KEYCHAIN" \
             -allowProvisioningUpdates "${AUTH[@]}" 2>&1 | tee "$RUNNER_TEMP/testflight.log"
 
           # -allowProvisioningUpdates is required on export too, not just archive:
@@ -415,9 +417,6 @@ jobs:
       - name: Clean up keychain and signing material
         if: always()
         run: |
-          if [ -n "${PREV_DEFAULT_KEYCHAIN:-}" ]; then
-            security default-keychain -d user -s "$PREV_DEFAULT_KEYCHAIN" 2>/dev/null || true
-          fi
           security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/import.p12" "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP/testflight.log"
           rm -rf "$RUNNER_TEMP/export" "$RUNNER_TEMP"/iCube-*.xcarchive
