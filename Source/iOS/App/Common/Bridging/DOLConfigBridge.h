@@ -142,8 +142,14 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (BOOL)isMainTouchPadIRModeGameOverride;
 
 // Config > Advanced
+/// The engine in effect, including a jitless boot's CurrentRun fallback to the Cached Interpreter.
 + (NSInteger)mainCpuCore;
+/// The user's own engine choice (Base). Settings show and snapshot this one.
++ (NSInteger)mainCpuCoreBase;
+/// Writes Base and saves, also while a game is loaded; outside a game it also drops a CurrentRun copy.
 + (void)setMainCpuCore:(NSInteger)core;
+/// Tests only: the CurrentRun engine a jitless boot sets for its run.
++ (void)setMainCpuCoreCurrentRunForTesting:(NSInteger)core;
 + (BOOL)mainMMU;
 + (void)setMainMMU:(BOOL)enabled;
 + (BOOL)mainPauseOnPanic;

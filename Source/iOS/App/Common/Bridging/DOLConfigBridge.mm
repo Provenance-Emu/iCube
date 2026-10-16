@@ -227,6 +227,11 @@ public:
 {
   Config::RemoveLayer(Config::LayerType::LocalGame);
 }
++ (void)setMainCpuCoreCurrentRunForTesting:(NSInteger)core
+{
+  if (Config::GetLayer(Config::LayerType::CurrentRun))
+    Config::Set(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE, (PowerPC::CPUCore)core);
+}
 
 + (DOLConfigOverride)efbScaleOverride
 {
@@ -392,9 +397,19 @@ static bool HasCurrentRunLayer()
 + (NSInteger)mainCpuCore {
   return (NSInteger)Config::Get(Config::MAIN_CPU_CORE);
 }
++ (NSInteger)mainCpuCoreBase {
+  return (NSInteger)Config::GetBase(Config::MAIN_CPU_CORE);
+}
 + (void)setMainCpuCore:(NSInteger)core {
   INFO_LOG_FMT(POWERPC, "DOLConfigBridge.setMainCpuCore({})", (int)core);
-  Config::SetBaseOrCurrent(Config::MAIN_CPU_CORE, (PowerPC::CPUCore)core);
+  // A jitless boot puts the Cached Interpreter on CurrentRun (EmulationCoordinator) for the whole run.
+  // While a game was loaded (pause menu > Performance), SetBaseOrCurrent therefore wrote the choice to
+  // CurrentRun: it read back as applied, and it was gone when the game ended. The engine is read only
+  // at boot, so the choice always goes to Base. Outside a game any CurrentRun copy goes too, so it
+  // cannot shadow the value just written.
+  Config::SetBase(Config::MAIN_CPU_CORE, (PowerPC::CPUCore)core);
+  if (!Core::IsRunning(Core::System::GetInstance()) && HasCurrentRunLayer())
+    Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE);
   // CPU core is a structural, low-frequency setting and the user A/Bs it often (e.g. the
   // experimental IR core). Persist immediately so the choice survives a relaunch even
   // without a background flush. (See flushSettingsToDisk for the general save-on-background.)
