@@ -19,6 +19,9 @@ struct SettingsSidebarShell: View {
   #endif
   #if os(tvOS)
   @State private var openedAt = Date()
+  /// True while focus is on a pane row that left/right adjust (`settingsPaneHoldsLeft`): the sidebar is
+  /// then not focusable, so left steps the value instead of leaving the row.
+  @State private var paneHoldsLeft = false
   @Environment(\.dismiss) private var dismiss
   #else
   @State private var searchText = ""
@@ -47,7 +50,10 @@ struct SettingsSidebarShell: View {
       sidebar
         .frame(width: sidebarWidth)
         #if os(tvOS)
+        .disabled(paneHoldsLeft)
         .focusSection()
+        // Left from the pane lands on the page it shows, not on whichever entry is level with the row.
+        .defaultFocus($sidebarFocus, selectedID, priority: .userInitiated)
         .onExitCommand(perform: leaveSettings)
         #endif
       #if os(tvOS)
@@ -77,9 +83,12 @@ struct SettingsSidebarShell: View {
       .background { ICubeRoom(style: .gradient) }
       #endif
       // A leaf in the pane is the root of this stack: its Back must return to the sidebar, not dismiss Settings.
-      .environment(\.settingsPaneBack, { sidebarFocus = selectedID })
       #if os(tvOS)
+      .environment(\.settingsPaneBack, backToSidebar)
+      .environment(\.settingsPaneHoldsLeft, { paneHoldsLeft = $0 })
       .focusSection()
+      #else
+      .environment(\.settingsPaneBack, { sidebarFocus = selectedID })
       #endif
     }
     .defaultFocus($sidebarFocus, selectedID ?? sections.first?.entries.first?.id)
@@ -108,9 +117,16 @@ struct SettingsSidebarShell: View {
     dismiss()
   }
 
-  /// Menu with focus in a hand-built leaf (a migrated one routes Back through `settingsPaneBack`).
+  /// Menu in the pane: a hand-built leaf's exit command, or a migrated leaf's `settingsPaneBack`.
+  /// Back from an adjustable row first gives the sidebar its focus back; the focus move waits a
+  /// runloop turn, until the sidebar is focusable again.
   private func backToSidebar() {
-    sidebarFocus = selectedID
+    guard paneHoldsLeft else {
+      sidebarFocus = selectedID
+      return
+    }
+    paneHoldsLeft = false
+    DispatchQueue.main.async { sidebarFocus = selectedID }
   }
   #endif
 

@@ -213,4 +213,36 @@ final class MenuModelTests: XCTestCase {
     XCTAssertEqual(item.currentValueTitle, "Two")
     XCTAssertFalse(MenuModel(sections: [MenuSection(id: "s", items: [item])]).focusableIDs.contains("x"))
   }
+
+  /// On tvOS a left press on these rows steps the value, so the settings shell must keep focus off the
+  /// sidebar while one has focus. Every other row lets left leave for the sidebar.
+  func test_adjustsWithLeftRight_onlyStepperCycleAndCompactPicker() {
+    var number = 100.0
+    var choice: AnyHashable = 1
+    var flag = false
+    let numberBinding = Binding(get: { number }, set: { number = $0 })
+    let choiceBinding = Binding(get: { choice }, set: { choice = $0 })
+    let options: [(String, AnyHashable)] = [("One", 1), ("Two", 2)]
+    let stepper = MenuItem(id: "stepper", title: "S",
+                           role: .stepper(MenuStepper(value: numberBinding, range: 1 ... 400, step: 1, format: { "\($0)" })))
+    let cycle = MenuItem(id: "cycle", title: "C", role: .cycle(options: options, selection: choiceBinding))
+    let compact = MenuItem(id: "compact", title: "P", role: .picker(options: options, selection: choiceBinding), isCompactOnTV: true)
+    let exploded = MenuItem(id: "exploded", title: "E", role: .picker(options: options, selection: choiceBinding))
+    let toggle = MenuItem(id: "toggle", title: "T", role: .toggle(Binding(get: { flag }, set: { flag = $0 })))
+    let action = MenuItem(id: "action", title: "A", role: .action {})
+    let disabledStepper = MenuItem(id: "off", title: "O",
+                                   role: .stepper(MenuStepper(value: numberBinding, range: 1 ... 400, step: 1, format: { "\($0)" })),
+                                   isEnabled: false)
+    let model = MenuModel(sections: [MenuSection(id: "s", items: [stepper, cycle, compact, exploded, toggle, action, disabledStepper])])
+
+    XCTAssertTrue(model.adjustsWithLeftRight(focusID: "stepper"))
+    XCTAssertTrue(model.adjustsWithLeftRight(focusID: "cycle"))
+    XCTAssertTrue(model.adjustsWithLeftRight(focusID: "compact"))
+    XCTAssertFalse(model.adjustsWithLeftRight(focusID: "exploded"))
+    XCTAssertFalse(model.adjustsWithLeftRight(focusID: "exploded#0"), "an exploded picker's option row is a plain button")
+    XCTAssertFalse(model.adjustsWithLeftRight(focusID: "toggle"))
+    XCTAssertFalse(model.adjustsWithLeftRight(focusID: "action"))
+    XCTAssertFalse(model.adjustsWithLeftRight(focusID: "off"), "a disabled row never has focus to hold")
+    XCTAssertFalse(model.adjustsWithLeftRight(focusID: nil))
+  }
 }

@@ -83,7 +83,7 @@ enum PerfAB {
     var bools: [String: Bool] = [:]
     for f in flags { bools[f.key] = f.get() }
     return PerfSnapshot(
-      name: name, bools: bools, cpuEngine: DOLConfigBridge.mainCpuCore(),
+      name: name, bools: bools, cpuEngine: DOLConfigBridge.mainCpuCoreBase(),
       overclockEnable: DOLConfigBridge.mainOverclockEnableBase(), overclockPercent: DOLConfigBridge.mainOverclockPercentBase(),
       viOverclockEnable: DOLConfigBridge.mainViOverclockEnableBase(), viOverclockPercent: DOLConfigBridge.mainViOverclockPercentBase(),
       adaptiveClock: UserDefaults.standard.bool(forKey: PerformanceTuningDefaultsKey.adaptiveClock))

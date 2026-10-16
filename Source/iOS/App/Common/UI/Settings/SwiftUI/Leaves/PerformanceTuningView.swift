@@ -18,7 +18,8 @@ struct PerformanceTuningView: View {
     let defaults = UserDefaults.standard
     var s = PerformanceTuningState()
     s.jitAvailable = JitManager.shared().acquiredJit
-    s.engine = CpuEngine.from(raw: DOLConfigBridge.mainCpuCore())
+    // The user's own engine (Base), not the CurrentRun fallback a jitless boot holds while a game is loaded.
+    s.engine = CpuEngine.from(raw: DOLConfigBridge.mainCpuCoreBase())
     s.mmu = DOLConfigBridge.mainMMU()
     s.adaptiveClock = defaults.bool(forKey: PerformanceTuningDefaultsKey.adaptiveClock)
     s.vertexLoaderMode = VertexLoaderMode.storedRawValue(defaults.object(forKey: PerformanceTuningDefaultsKey.vertexLoaderMode) as? Int)

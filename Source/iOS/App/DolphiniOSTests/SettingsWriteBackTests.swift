@@ -179,6 +179,20 @@ final class SettingsWriteBackTests: XCTestCase {
     XCTAssertEqual(DOLConfigBridge.efbScaleOverride(), .auto)
   }
 
+  /// A jitless boot puts the Cached Interpreter on CurrentRun for the run. Changed from the pause menu,
+  /// the old SetBaseOrCurrent write landed there: the row showed the new engine, and the next game
+  /// booted the old one. The choice must reach Base, and outside a game a CurrentRun copy must go.
+  func testTheEngineChoiceReachesBasePastAJitlessBootCopy() {
+    DOLConfigBridge.setMainCpuCore(CpuEngine.cachedInterpreter.rawValue)
+    DOLConfigBridge.setMainCpuCoreCurrentRunForTesting(CpuEngine.interpreter.rawValue)
+    XCTAssertEqual(DOLConfigBridge.mainCpuCore(), CpuEngine.interpreter.rawValue, "the test host has a CurrentRun layer")
+
+    DOLConfigBridge.setMainCpuCore(CpuEngine.cachedInterpreterIR.rawValue)
+
+    XCTAssertEqual(DOLConfigBridge.mainCpuCoreBase(), CpuEngine.cachedInterpreterIR.rawValue)
+    XCTAssertEqual(DOLConfigBridge.mainCpuCore(), CpuEngine.cachedInterpreterIR.rawValue, "the CurrentRun copy no longer shadows Base")
+  }
+
   /// "Recommended" deletes every CIR key, so each knob follows its compiled default, including
   /// Dynamic Links and NEON paired-single math (both default ON), which the old hand-kept
   /// "recommended" list switched off.

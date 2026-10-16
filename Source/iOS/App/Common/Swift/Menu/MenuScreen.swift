@@ -178,6 +178,7 @@ struct MenuScreen: View {
   /// The last tile that had focus: the help shelf keeps describing it while focus is in an overlay above
   /// the grid (the Exit/Reset confirm), instead of going blank.
   @State private var tvShelfID: String?
+  @Environment(\.settingsPaneHoldsLeft) private var paneHoldsLeft
   #endif
   #endif
 
@@ -823,6 +824,9 @@ struct MenuScreen: View {
       .padding(.horizontal, tvInset.rawValue)
     }
     .buttonStyle(ICubeRowButtonStyle())
+    // A row that left/right adjust keeps a left press: the settings shell takes its sidebar out of focus.
+    .onChange(of: tvFocusedID) { _, id in paneHoldsLeft?(model.adjustsWithLeftRight(focusID: id)) }
+    .onDisappear { paneHoldsLeft?(false) }
     if let first = defaultTVFocusID {
       list.defaultFocus($tvFocusedID, first)
     } else {

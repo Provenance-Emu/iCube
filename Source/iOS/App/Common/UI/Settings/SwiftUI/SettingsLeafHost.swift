@@ -9,12 +9,25 @@ private struct SettingsPaneBackKey: EnvironmentKey {
   static let defaultValue: (() -> Void)? = nil
 }
 
+private struct SettingsPaneHoldsLeftKey: EnvironmentKey {
+  static let defaultValue: ((Bool) -> Void)? = nil
+}
+
 extension EnvironmentValues {
   /// Set by the sidebar shell on its pane: what Back means for a leaf shown in the pane (focus returns
   /// to the sidebar). `nil` outside the shell, where a leaf is pushed and Back pops it.
   var settingsPaneBack: (() -> Void)? {
     get { self[SettingsPaneBackKey.self] }
     set { self[SettingsPaneBackKey.self] = newValue }
+  }
+
+  /// Set by the tvOS sidebar shell on its pane. A list `MenuScreen` calls it with true while focus is
+  /// on a row that left/right adjust, and the shell then takes the sidebar out of focus: otherwise
+  /// the focus engine moved left to the sidebar on the same press that stepped the value down.
+  /// Inherited by pushed sub-leaves, which sit in front of the same sidebar.
+  var settingsPaneHoldsLeft: ((Bool) -> Void)? {
+    get { self[SettingsPaneHoldsLeftKey.self] }
+    set { self[SettingsPaneHoldsLeftKey.self] = newValue }
   }
 }
 
