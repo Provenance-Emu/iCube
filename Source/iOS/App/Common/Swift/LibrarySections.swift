@@ -7,7 +7,6 @@ import Foundation
 struct LibraryGameRef: Equatable, Identifiable {
   /// Game ID, such as `GSRE01`.
   var id: String
-  var platform: LibraryPlatformCategory
 }
 
 /// One horizontal shelf on the tvOS library home.

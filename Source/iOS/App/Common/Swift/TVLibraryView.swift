@@ -893,7 +893,7 @@ struct TVLibraryView: View {
 
   /// Shared grid item builder wired to selection mode and context actions.
   @ViewBuilder
-  private func gameGridItem(for item: TVGameItem) -> some View {
+  private func gameGridItem(for item: TVGameItem, platform: LibraryPlatformCategory? = nil) -> some View {
     GameGridItem(
       item: item,
       select: selectGame,
@@ -927,7 +927,7 @@ struct TVLibraryView: View {
       isSelected: selectedFilePaths.contains(item.filePath),
       onToggleSelection: { toggleSelection(for: item) },
       onEnterSelectionMode: { enterSelectionMode(selecting: item) },
-      platform: LibraryPlatformMapper.category(for: item, override: platformOverrides[item.filePath])
+      platform: platform
     )
   }
 
@@ -1002,12 +1002,6 @@ struct TVLibraryView: View {
     return buckets.count > 1 ? buckets : []
   }
 
-  /// The index letter of the focused game, so the index can mark where the grid is.
-  private func tvCurrentIndexLabel(in games: [TVGameItem]) -> String? {
-    guard let path = focusedFilePath, let item = games.first(where: { $0.filePath == path }) else { return nil }
-    return LibraryScrollIndex.label(for: Self.sortTitle(for: item))
-  }
-
   /// Columns that fit beside the rail, and the gap that spreads them edge to edge of the inset column.
   private func tvGridMetrics(columnWidth: CGFloat) -> (count: Int, spacing: CGFloat) {
     let cardW = LibraryLayout.cardSize.width
@@ -1026,13 +1020,7 @@ struct TVLibraryView: View {
 
   /// Home's shelves with their games resolved.
   private func tvHomeShelves() -> [(spec: LibraryShelfSpec, items: [TVGameItem])] {
-    let overrides = platformOverrides
-    let refs = model.games.map { item in
-      LibraryGameRef(
-        id: item.gameID,
-        platform: LibraryPlatformMapper.category(for: item, override: overrides[item.filePath])
-      )
-    }
+    let refs = model.games.map { LibraryGameRef(id: $0.gameID) }
     let favDict = SharedDefaults.suite.dictionary(forKey: "favorites_by_gameid") ?? [:]
     let favoriteIDs = Set(favDict.compactMap { (key, value) in (value as? Bool) == true ? key : nil })
     let shelves = LibrarySectionBuilder.homeShelves(
@@ -1064,6 +1052,19 @@ struct TVLibraryView: View {
       return .shelf(id: shelf.spec.id, filePath: item.filePath)
     }
     return displayGames.first.map { .grid(filePath: $0.filePath) }
+  }
+
+  /// Remembers the card focused last. A modifier, so reading the focus value does not tie the whole library
+  /// body to every focus move.
+  private struct TVCardFocusMemory: ViewModifier {
+    let focus: FocusState<TVCardFocus?>.Binding
+    @Binding var last: TVCardFocus?
+
+    func body(content: Content) -> some View {
+      content.onChange(of: focus.wrappedValue) { _, value in
+        if let value { last = value }
+      }
+    }
   }
 
   /// Scroll target for a library card, so the card exists (lazy grid) before focus is sent to it.
@@ -1137,9 +1138,7 @@ struct TVLibraryView: View {
     .onChange(of: tvLibraryDestination) { _, destination in
       applyTVLibraryDestination(destination)
     }
-    .onChange(of: tvCardFocus) { _, focus in
-      if let focus { tvLastCardFocus = focus }
-    }
+    .modifier(TVCardFocusMemory(focus: $tvCardFocus, last: $tvLastCardFocus))
     .controllerScope(tvShoulderScopeID)
     .onReceive(ControllerFocusCoordinator.shared.$activeScope) { active in
       if active == tvShoulderScopeID { DispatchQueue.main.async { installTVShoulderStepping() } }
@@ -1160,13 +1159,22 @@ struct TVLibraryView: View {
     let metrics = tvGridMetrics(columnWidth: columnWidth - TVLibraryScrollIndex.width - TVLayout.indexTrailing)
     let buckets = tvScrollIndex(for: displayGames, columns: metrics.count)
     let gridMetrics = buckets.isEmpty ? tvGridMetrics(columnWidth: columnWidth) : metrics
+    // One read of the override store per render, not one per card.
+    let overrides = platformOverrides
+    let platform: (TVGameItem) -> LibraryPlatformCategory = {
+      LibraryPlatformMapper.category(for: $0, override: overrides[$0.filePath])
+    }
+    let indexLabels = buckets.isEmpty ? [:] : Dictionary(
+      displayGames.map { ($0.filePath, LibraryScrollIndex.label(for: Self.sortTitle(for: $0))) },
+      uniquingKeysWith: { first, _ in first }
+    )
     return HStack(alignment: .center, spacing: 0) {
       ScrollView {
         VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xl.rawValue) {
           if tvShowsHomeShelves {
-            libraryHomeShelves(spacing: gridMetrics.spacing)
+            libraryHomeShelves(tvHomeShelves(), spacing: gridMetrics.spacing, platform: platform)
           }
-          tvLibraryGrid(displayGames, metrics: gridMetrics)
+          tvLibraryGrid(displayGames, metrics: gridMetrics, platform: platform)
         }
       }
       .scrollClipDisabled()
@@ -1180,7 +1188,9 @@ struct TVLibraryView: View {
       if !buckets.isEmpty {
         TVLibraryScrollIndex(
           buckets: buckets,
-          currentLabel: tvCurrentIndexLabel(in: displayGames),
+          // A binding, so only the index redraws as focus moves through the grid.
+          focusedPath: $focusedFilePath,
+          label: { indexLabels[$0] },
           onFocusBucket: { bucket in
             // Skim: the grid follows the letter under focus while focus stays on the index.
             withAnimation(ICubeDesign.Motion.selection) {
@@ -1201,9 +1211,13 @@ struct TVLibraryView: View {
   }
 
   /// Home: Recently Played and Favorites as shelves above the full library grid.
-  private func libraryHomeShelves(spacing: CGFloat) -> some View {
+  private func libraryHomeShelves(
+    _ shelves: [(spec: LibraryShelfSpec, items: [TVGameItem])],
+    spacing: CGFloat,
+    platform: @escaping (TVGameItem) -> LibraryPlatformCategory
+  ) -> some View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xl.rawValue) {
-      ForEach(tvHomeShelves(), id: \.spec.id) { shelf in
+      ForEach(shelves, id: \.spec.id) { shelf in
         let items = shelf.items
         VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
           TVLibrarySectionHeader(title: L(shelf.spec.titleKey))
@@ -1212,9 +1226,8 @@ struct TVLibraryView: View {
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: spacing) {
               ForEach(items, id: \.filePath) { item in
-                gameGridItem(for: item)
+                gameGridItem(for: item, platform: platform(item))
                   .focused($tvCardFocus, equals: .shelf(id: shelf.spec.id, filePath: item.filePath))
-                  .zIndex(focusedFilePath == item.filePath ? 1 : 0)
               }
             }
           }
@@ -1224,8 +1237,6 @@ struct TVLibraryView: View {
           .contentMargins(.trailing, TVLayout.contentInset, for: .scrollContent)
         }
         .id(Self.tvScrollID(for: .shelf(id: shelf.spec.id, filePath: "")))
-        // The shelf holding focus paints last, so its card's glow lies over the next shelf, not under it.
-        .zIndex(items.contains { $0.filePath == focusedFilePath } ? 1 : 0)
       }
     }
   }
@@ -1279,7 +1290,11 @@ struct TVLibraryView: View {
 
   /// The library as a vertical grid: every game on Home and All Games, one platform's on a platform view.
   @ViewBuilder
-  private func tvLibraryGrid(_ displayGames: [TVGameItem], metrics: (count: Int, spacing: CGFloat)) -> some View {
+  private func tvLibraryGrid(
+    _ displayGames: [TVGameItem],
+    metrics: (count: Int, spacing: CGFloat),
+    platform: @escaping (TVGameItem) -> LibraryPlatformCategory
+  ) -> some View {
     let columns = Array(
       repeating: GridItem(.fixed(LibraryLayout.cardSize.width), spacing: metrics.spacing, alignment: .top),
       count: metrics.count
@@ -1289,10 +1304,9 @@ struct TVLibraryView: View {
       TVLibrarySectionHeader(title: libraryGridSectionTitle(), accent: libraryGridSectionAccent())
       LazyVGrid(columns: columns, alignment: .leading, spacing: Constants.gridVerticalSpacing) {
         ForEach(displayGames, id: \.filePath) { item in
-          gameGridItem(for: item)
+          gameGridItem(for: item, platform: platform(item))
             .focused($tvCardFocus, equals: .grid(filePath: item.filePath))
             .id(Self.tvGridScrollID(item.filePath))
-            .zIndex(focusedFilePath == item.filePath ? 1 : 0)
         }
       }
     }

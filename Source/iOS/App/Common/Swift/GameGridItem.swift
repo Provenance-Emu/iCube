@@ -628,6 +628,8 @@ struct GameGridItem: View {
     }
     .frame(width: LibraryLayout.cardSize.width)
     .icubeCardFocus(isFocused: isFocused)
+    // The focused card paints over its neighbours, so its lift and glow are never covered by the next card.
+    .zIndex(isFocused ? 1 : 0)
     .focusable(isEnabled) { focused in
       withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
         isFocused = focused

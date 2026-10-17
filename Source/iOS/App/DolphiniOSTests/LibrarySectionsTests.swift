@@ -5,13 +5,13 @@ import XCTest
 @testable import iCube
 
 final class LibrarySectionsTests: XCTestCase {
-  private func games(_ pairs: [(String, LibraryPlatformCategory)]) -> [LibraryGameRef] {
-    pairs.map { LibraryGameRef(id: $0.0, platform: $0.1) }
+  private func games(_ ids: [String]) -> [LibraryGameRef] {
+    ids.map { LibraryGameRef(id: $0) }
   }
 
   func testNoRecentOrFavoritesMeansNoShelves() {
     let shelves = LibrarySectionBuilder.homeShelves(
-      games: games([("G1", .gameCube), ("W1", .wii)]),
+      games: games(["G1", "W1"]),
       favoriteIDs: [],
       lastPlayed: [:]
     )
@@ -27,7 +27,7 @@ final class LibrarySectionsTests: XCTestCase {
       "missing": Date(timeIntervalSince1970: 50)
     ]
     let shelves = LibrarySectionBuilder.homeShelves(
-      games: games([("A", .wii), ("B", .wii), ("C", .wii), ("D", .wii)]),
+      games: games(["A", "B", "C", "D"]),
       favoriteIDs: ["A"],
       lastPlayed: played,
       recentLimit: 2
@@ -39,7 +39,7 @@ final class LibrarySectionsTests: XCTestCase {
 
   func testShelvesNeverListTheLibraryOrItsPlatforms() {
     let shelves = LibrarySectionBuilder.homeShelves(
-      games: games([("G1", .gameCube), ("W1", .wii), ("C1", .wiiWare)]),
+      games: games(["G1", "W1", "C1"]),
       favoriteIDs: ["W1"],
       lastPlayed: ["G1": Date(timeIntervalSince1970: 1)]
     )

@@ -110,11 +110,15 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
     .focusSection()
     .animation(ICubeDesign.Motion.selection, value: isExpanded)
     .onMoveCommand { direction in
-      guard direction == .right, let item = focusedItem, item != .search || !showSearchField else { return }
+      // The open search field counts: tvOS edits it in a full-screen keyboard, so a right press on it is
+      // navigation too.
+      let item = focusedItem
+      let onField = searchFieldFocused
+      guard direction == .right, item != nil || onField else { return }
       // Give the focus engine its turn first; only a press that went nowhere is handed on. With the content
       // disabled behind the rail that is every right press.
       DispatchQueue.main.asyncAfter(deadline: .now() + Self.stuckMoveDelay) {
-        if focusedItem == item { onStuckRight() }
+        if (item != nil && focusedItem == item) || (onField && searchFieldFocused) { onStuckRight() }
       }
     }
     .onChange(of: focusedItem) { _, item in
@@ -305,8 +309,10 @@ struct TVLibraryEdgeFade: View {
 /// under focus shows large beside the index as the jump hint.
 struct TVLibraryScrollIndex: View {
   let buckets: [LibraryIndexBucket]
-  /// Index letter of the game focused in the grid.
-  let currentLabel: String?
+  /// File path of the focused game; the index marks its letter.
+  @Binding var focusedPath: String?
+  /// The index letter for a game's file path.
+  let label: (String) -> String?
   let onFocusBucket: (LibraryIndexBucket) -> Void
   let onSelectBucket: (LibraryIndexBucket) -> Void
 
@@ -318,6 +324,7 @@ struct TVLibraryScrollIndex: View {
   private static let hintSize: CGFloat = ICubeDesign.Spacing.xxl.rawValue + ICubeDesign.Spacing.l.rawValue
 
   var body: some View {
+    let currentLabel = focusedPath.flatMap(label)
     VStack(spacing: 0) {
       ForEach(buckets) { bucket in
         Button { onSelectBucket(bucket) } label: {
