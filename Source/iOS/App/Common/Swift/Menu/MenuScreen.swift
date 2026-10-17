@@ -96,15 +96,20 @@ struct MenuScreen: View {
   var tvHeader: ICubeLeafHeader?
   /// tvOS only: the horizontal inset of the list body. Leaves pass `.xxl`.
   var tvInset: ICubeDesign.Spacing
+  /// tvOS only: take focus when the list appears. An overlay drawn over controls it disables needs this:
+  /// `.defaultFocus` only applies when nothing has focus, and disabling the focused control does not move
+  /// focus, so it stayed on the covered tile and the remote could not reach the overlay's rows.
+  var tvClaimsFocus: Bool
 
   init(model: MenuModel, style: MenuStyle = .list, onBack: (() -> Void)? = nil, modal: MenuModal? = nil,
-       tvHeader: ICubeLeafHeader? = nil, tvInset: ICubeDesign.Spacing = .l) {
+       tvHeader: ICubeLeafHeader? = nil, tvInset: ICubeDesign.Spacing = .l, tvClaimsFocus: Bool = false) {
     self.model = model
     self.style = style
     self.onBack = onBack
     self.modal = modal
     self.tvHeader = tvHeader
     self.tvInset = tvInset
+    self.tvClaimsFocus = tvClaimsFocus
     #if os(iOS)
     _router = State(initialValue: MenuFocusRouter(config: style.navConfig))
     #endif
@@ -303,7 +308,7 @@ struct MenuScreen: View {
         Color.black.opacity(0.55).ignoresSafeArea()
         VStack(alignment: .leading, spacing: 8) {
           Text(picker.title).font(.headline).foregroundStyle(.white)
-          MenuScreen(model: longPressPickerModel, style: .list, onBack: { closeLongPressPicker() })
+          MenuScreen(model: longPressPickerModel, style: .list, onBack: { closeLongPressPicker() }, tvClaimsFocus: true)
             .frame(maxHeight: CGFloat(picker.options.count) * 64 + 24)
         }
         .padding(16)
@@ -827,6 +832,11 @@ struct MenuScreen: View {
     // A row that left/right adjust keeps a left press: the settings shell takes its sidebar out of focus.
     .onChange(of: tvFocusedID) { _, id in paneHoldsLeft?(model.adjustsWithLeftRight(focusID: id)) }
     .onDisappear { paneHoldsLeft?(false) }
+    .onAppear {
+      // Next runloop: the rows must exist before focus can be assigned to one.
+      guard tvClaimsFocus, let first = defaultTVFocusID else { return }
+      DispatchQueue.main.async { tvFocusedID = first }
+    }
     if let first = defaultTVFocusID {
       list.defaultFocus($tvFocusedID, first)
     } else {

@@ -37,7 +37,7 @@ struct ICubeConfirmPanel: View {
         }
         // Intrinsic height: the card is as tall as its rows, however the type scales.
         #if os(tvOS)
-        MenuScreen(model: model, style: .list, onBack: onBack)
+        MenuScreen(model: model, style: .list, onBack: onBack, tvClaimsFocus: true)
           .fixedSize(horizontal: false, vertical: true)
           .focusSection()
         #else
