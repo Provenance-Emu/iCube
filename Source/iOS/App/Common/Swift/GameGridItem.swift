@@ -34,6 +34,8 @@ struct GameGridItem: View {
   var isSelected: Bool = false
   var onToggleSelection: (() -> Void)?
   var onEnterSelectionMode: (() -> Void)?
+  /// The platform the library files this game under, user override included. tvOS labels the card with it.
+  var platform: LibraryPlatformCategory? = nil
 
   @AppStorage("library_disable_artwork") private var disableArtwork: Bool = false
 
@@ -44,6 +46,13 @@ struct GameGridItem: View {
 
   #if os(tvOS)
   @State private var isFocused: Bool = false
+  /// `.disabled` does not reach a `.focusable` view on its own; the library disables its cards while the rail
+  /// holds focus, and the card follows it here.
+  @Environment(\.isEnabled) private var isEnabled
+
+  private var cardPlatform: LibraryPlatformCategory {
+    platform ?? LibraryPlatformMapper.category(for: item)
+  }
   #endif
 
   /// A patched copy's disc header still names the base game, so its tile is titled after its file.
@@ -575,18 +584,22 @@ struct GameGridItem: View {
         ModTileBadge(info: moddedInfo, count: moddedVariants.count)
       }
 
-      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
+      // Title and platform, after iFly's cards: a two-line semibold title over the platform tag in that
+      // platform's colour. The game ID stays in Properties.
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
         Text(tileTitle)
           .icubeText(.body)
+          .fontWeight(.semibold)
           .foregroundStyle(ICubeDesign.color(.textPrimary))
-          .lineLimit(2)
+          // Two lines held even for a short title, so every card in a row ends on the same baseline.
+          .lineLimit(2, reservesSpace: true)
           .multilineTextAlignment(.leading)
 
         if showSubtitles {
           HStack {
-            Text(item.gameID)
+            Text(cardPlatform.displayName)
               .icubeText(.tag)
-              .foregroundStyle(ICubeDesign.color(.textSecondary))
+              .foregroundStyle(ICubeDesign.platformAccent(cardPlatform))
 
             Spacer()
 
@@ -615,7 +628,7 @@ struct GameGridItem: View {
     }
     .frame(width: LibraryLayout.cardSize.width)
     .icubeCardFocus(isFocused: isFocused)
-    .focusable(true) { focused in
+    .focusable(isEnabled) { focused in
       withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
         isFocused = focused
         if focused { focusedFilePath = item.filePath } else if focusedFilePath == item.filePath { focusedFilePath = nil }
