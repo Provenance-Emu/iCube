@@ -147,8 +147,10 @@ struct AddGamesView: View {
   /// no system Handoff, so Nearby is how a game in progress reaches the TV.
   private var continuityRow: some View {
     NavigationLink {
+      // A pushed screen is transparent over the cover, which would show the library through it.
       ContinuityBrowseView()
         .environment(\.icubeLeafParentTitle, L("Add Games"))
+        .background { ICubeRoom(style: .gradient) }
     } label: {
       rowLabel(icon: "iphone.gen3.radiowaves.left.and.right.circle",
                title: L("Continue from Another Device"),
