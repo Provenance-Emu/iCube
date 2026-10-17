@@ -3636,6 +3636,15 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "No to All" = "すべていいえ";
 "Discard" = "廃棄";
 "Restore Defaults" = "デフォルトの復元";
+"Add Games" = "ゲームを追加";
+"Continue from Another Device" = "別のデバイスから続ける";
+"Pick up a game in progress on your other iCube devices" = "ほかのiCubeデバイスでプレイ中のゲームを続けます";
+"QR code for the upload address" = "アップロード先アドレスのQRコード";
+"Resolving network address…" = "ネットワークアドレスを取得中…";
+"Running" = "実行中";
+"Scan the code or open the address in a browser on the same Wi-Fi, then drop in GameCube and Wii games. On a Mac, choose Go › Connect to Server in Finder and connect as Guest." = "コードをスキャンするか、同じWi-Fi上のブラウザでアドレスを開き、ゲームキューブとWiiのゲームをドロップしてください。Macでは、Finderで「移動」›「サーバへ接続」を選び、ゲストとして接続します。";
+"Starting…" = "起動中…";
+"Upload over Wi-Fi" = "Wi-Fi経由でアップロード";
 "Toggle Crop" = "クロッピング 切替";
 "Error: GBA{0} failed to open the BIOS in {1}" = "エラー: GBA{0} は {1} で BIOS を開けませんでした";
 "Error: GBA{0} failed to load the BIOS in {1}" = "エラー: GBA{0} が {1} のBIOSのロードに失敗しました";

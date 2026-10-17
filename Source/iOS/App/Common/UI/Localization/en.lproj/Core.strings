@@ -3614,6 +3614,15 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "No to All" = "No to All";
 "Discard" = "Discard";
 "Restore Defaults" = "Restore Defaults";
+"Add Games" = "Add Games";
+"Continue from Another Device" = "Continue from Another Device";
+"Pick up a game in progress on your other iCube devices" = "Pick up a game in progress on your other iCube devices";
+"QR code for the upload address" = "QR code for the upload address";
+"Resolving network address…" = "Resolving network address…";
+"Running" = "Running";
+"Scan the code or open the address in a browser on the same Wi-Fi, then drop in GameCube and Wii games. On a Mac, choose Go › Connect to Server in Finder and connect as Guest." = "Scan the code or open the address in a browser on the same Wi-Fi, then drop in GameCube and Wii games. On a Mac, choose Go › Connect to Server in Finder and connect as Guest.";
+"Starting…" = "Starting…";
+"Upload over Wi-Fi" = "Upload over Wi-Fi";
 "Toggle Crop" = "Toggle Crop";
 "Error: GBA{0} failed to open the BIOS in {1}" = "Error: GBA{0} failed to open the BIOS in {1}";
 "Error: GBA{0} failed to load the BIOS in {1}" = "Error: GBA{0} failed to load the BIOS in {1}";
