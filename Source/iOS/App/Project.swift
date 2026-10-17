@@ -730,12 +730,14 @@ let project = Project(
         .local(path: "../PVContinuity"),
         .local(path: "../PVSyncRules"),
         .local(path: "../PVHelp"),
-        .local(path: "../PVPatchEngine"),
         .local(path: "../PVLibrarySnapshot"),
         .local(path: "../PLzmaShim"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
         .local(path: "../PVCloudSync"),
+        // Streaming patch engine shared with iFly and Provenance. Change it in that repo, tag a
+        // release, then bump the version here; there is no local copy to edit.
+        .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),

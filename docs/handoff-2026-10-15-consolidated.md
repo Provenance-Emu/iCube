@@ -54,7 +54,7 @@ otherwise.
 ## 4. Mods / patching (shipped, device-unverified)
 
 - Handoff with device tests: `docs/handoff-2026-10-15-mods-patching.md`.
-- **PVPatchEngine** lives at `Source/iOS/PVPatchEngine`. A verbatim copy is in Provenance; iCube is the source of truth.
+- **PVPatchEngine** lives in its own repo, github.com/Provenance-Emu/PVPatchEngine (extracted 2026-10-17 with history). iCube, iFly and Provenance depend on it by URL; change it there and tag a release.
   - iFly consumes it as a local path dependency from this submodule path.
   - Its API is **frozen for iFly**: message the iFly session before changing it or before vendoring LZMA.
 - **Worktrees:** `~/Workspace/icube-mods`, `-riiv`, `-engine`, `-browser`, `-disc` are all merged. Remove them once iFly confirms it no longer reads `~/Workspace/icube-mods`; it said it would repoint. Use `git worktree remove` from the dolphin-ios checkout.
