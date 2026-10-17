@@ -86,8 +86,26 @@ static const double kPreferredSampleRate = 48000.0;
   return _microphoneActive;
 }
 
+/// Serial: activation is a blocking IPC to the audio server, so the main thread never waits on it.
++ (dispatch_queue_t)sessionQueue {
+  static dispatch_queue_t queue;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    queue = dispatch_queue_create("org.dolphin-emu.ios.audio-session", DISPATCH_QUEUE_SERIAL);
+  });
+  return queue;
+}
+
 - (void)setSessionCategory {
   [self registerMicrophoneHookOnce];
+  // Every caller is on the main thread (launch, the mute-switch setting, and the core's microphone
+  // hook, which IOSAudioSession already posts to main asynchronously), and none waits on the result.
+  dispatch_async([AudioSessionManager sessionQueue], ^{
+    [self applySessionCategory];
+  });
+}
+
+- (void)applySessionCategory {
   AVAudioSession* session = [AVAudioSession sharedInstance];
   NSError* error = nil;
 

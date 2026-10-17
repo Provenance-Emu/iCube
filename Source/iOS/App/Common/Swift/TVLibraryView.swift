@@ -2114,10 +2114,18 @@ struct TVLibraryView: View {
     // Sources sheet
       .sheet(isPresented: $showSources) { SourcesView().claimsController() }
       .modBrowserSheet(libraryGames: model.games)
+#if os(tvOS)
+      // Full screen: tvOS 26 draws a `.sheet` as a small centred card, which truncated this screen.
+      .fullScreenCover(isPresented: $showWebImportSheet) {
+        AddGamesView()
+          .claimsController()
+      }
+#else
       .sheet(isPresented: $showWebImportSheet) {
         LibraryWebImportView()
           .claimsController()
       }
+#endif
 #if os(iOS)
       .fileImporter(
         isPresented: $showImportSkylanderPicker,
