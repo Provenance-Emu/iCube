@@ -13,7 +13,12 @@
 namespace Metal
 {
 class Framebuffer;
+class SpatialUpscaler;
 class Texture;
+
+// iCube: adds a completed command buffer's GPU time to the per-frame totals Gfx reports to
+// PerformanceMetrics::SetGPUFrameTimes. upscale marks the MetalFX share. Any thread.
+void AddGPUTime(id<MTLCommandBuffer> buffer, bool upscale);
 
 class Gfx final : public ::AbstractGfx
 {
@@ -71,6 +76,9 @@ public:
                              u32 groupsize_z, u32 groups_x, u32 groups_y, u32 groups_z) override;
   bool BindBackbuffer(const ClearColor& clear_color = {}) override;
   void PresentBackbuffer() override;
+  const AbstractTexture* UpscaleForPresent(const AbstractTexture* source_texture,
+                                           const MathUtil::Rectangle<int>& source_rc,
+                                           u32 out_width, u32 out_height) override;
 
   SurfaceInfo GetSurfaceInfo() const override;
 
@@ -95,6 +103,11 @@ private:
   MRCOwned<id<CAMetalDrawable>> m_drawable;
   std::unique_ptr<Texture> m_bb_texture;
   std::unique_ptr<Framebuffer> m_backbuffer;
+#ifdef ICUBE_METALFX
+  // iCube MetalFX: created on first use where the device supports it.
+  std::unique_ptr<SpatialUpscaler> m_upscaler;
+  bool m_upscaler_unsupported = false;
+#endif
   u32 m_texture_counter = 0;
   u32 m_staging_texture_counter = 0;
   std::array<u32, 4> m_shader_counter = {};

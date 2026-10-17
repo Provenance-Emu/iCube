@@ -86,6 +86,7 @@ void VideoConfig::Refresh()
   iUsePresentDrawable = Config::Get(Config::GFX_MTL_USE_PRESENT_DRAWABLE);
   bAsyncPresent = Config::Get(Config::GFX_ASYNC_PRESENT);
   iBBoxSyncMode = Config::Get(Config::GFX_BBOX_SYNC_MODE);
+  bMetalFXSpatialUpscale = Config::Get(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE);
 
   bWidescreenHack = Config::Get(Config::GFX_WIDESCREEN_HACK);
   aspect_mode = Config::Get(Config::GFX_ASPECT_RATIO);

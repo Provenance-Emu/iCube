@@ -156,6 +156,12 @@ double PerformanceMetrics::GetLastRawFrameTimeMs() const
   return DT_ms(m_fps_counter.GetLastRawDt()).count();
 }
 
+void PerformanceMetrics::SetGPUFrameTimes(double frame_ms, double upscale_ms)
+{
+  m_gpu_frame_ms.store(frame_ms, std::memory_order_relaxed);
+  m_gpu_upscale_ms.store(upscale_ms, std::memory_order_relaxed);
+}
+
 double PerformanceMetrics::GetFrameDtAvgSeconds() const
 {
   return DT_s(m_fps_counter.GetDtAvg()).count();

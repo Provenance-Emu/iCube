@@ -12,6 +12,7 @@
 
 #include "Core/System.h"
 
+#include "VideoBackends/Metal/MTLGfx.h"
 #include "VideoBackends/Metal/MTLObjectCache.h"
 #include "VideoBackends/Metal/MTLPerfQuery.h"
 #include "VideoBackends/Metal/MTLPipeline.h"
@@ -438,6 +439,7 @@ void Metal::StateTracker::FlushEncoders()
   [m_current_render_cmdbuf
       addCompletedHandler:[backref = m_backref, draw = m_current_draw,
                            q = std::move(m_current_perf_query)](id<MTLCommandBuffer> buf) {
+        AddGPUTime(buf, false);  // iCube: GPU frame time
         std::lock_guard<std::mutex> guard(backref->mtx);
         if (StateTracker* tracker = backref->state_tracker)
         {

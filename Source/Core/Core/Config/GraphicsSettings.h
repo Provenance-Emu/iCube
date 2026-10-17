@@ -215,6 +215,9 @@ extern const Info<bool> GFX_ASYNC_PRESENT;
 // iCube bbox readback mode. 0 = Latched (serve a complete 1-frame-stale snapshot, no CPU stall);
 // 1 = ForceSync (block on GPU completion for exact same-frame values). Game-INI overridable.
 extern const Info<int> GFX_BBOX_SYNC_MODE;
+// iCube: upscale the Native (1x) XFB to the screen with MetalFX's spatial scaler (Metal backend,
+// iOS devices that support MetalFX). Off by default; inert at other internal resolutions.
+extern const Info<bool> GFX_MTL_METALFX_SPATIAL_UPSCALE;
 extern const Info<bool> GFX_HACK_FAST_MATH;
 extern const Info<bool> GFX_HACK_GPU_EFB_PEEK_RESOLVE;
 extern const Info<bool> GFX_HACK_NEON_TEXTURE_DECODE;

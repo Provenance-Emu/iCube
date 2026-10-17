@@ -295,6 +295,16 @@ void Presenter::ProcessFrameDumping(u64 ticks) const
     }
     }
 
+    // iCube: with MetalFX on, screenshots and dumps are the upscaled picture the screen shows.
+    const AbstractTexture* source = m_xfb_entry->texture.get();
+    MathUtil::Rectangle<int> source_rect = m_xfb_rect;
+    if (m_upscaled_xfb)
+    {
+      source = m_upscaled_xfb;
+      source_rect = m_upscaled_xfb->GetRect();
+      target_rect = source_rect;
+    }
+
     int width = target_rect.GetWidth();
     int height = target_rect.GetHeight();
 
@@ -319,8 +329,7 @@ void Presenter::ProcessFrameDumping(u64 ticks) const
 
     // TODO: any scaling done by this won't be gamma corrected,
     // we should either apply post processing as well, or port its gamma correction code
-    g_frame_dumper->DumpCurrentFrame(m_xfb_entry->texture.get(), m_xfb_rect, target_rect, ticks,
-                                     m_frame_count);
+    g_frame_dumper->DumpCurrentFrame(source, source_rect, target_rect, ticks, m_frame_count);
   }
 }
 
@@ -903,9 +912,34 @@ void Presenter::RenderXFBToScreen(const MathUtil::Rectangle<int>& target_rc,
   }
 }
 
+const AbstractTexture* Presenter::UpscaleXFBForPresent()
+{
+  // Only the Native (1x) picture is upscaled; stereo and HDR keep the plain path.
+  if (!g_ActiveConfig.bMetalFXSpatialUpscale || !m_xfb_entry ||
+      g_ActiveConfig.stereo_mode != StereoMode::Off || g_ActiveConfig.bHDR ||
+      g_framebuffer_manager->GetEFBScale() != 1)
+  {
+    return nullptr;
+  }
+
+  MathUtil::Rectangle<int> target_rc = GetTargetRectangle();
+  MathUtil::Rectangle<int> source_rc = AdjustForCustomCrop(m_xfb_rect);
+  AdjustRectanglesToFitBounds(&target_rc, &source_rc, m_backbuffer_width, m_backbuffer_height);
+  if (source_rc.GetWidth() <= 0 || source_rc.GetHeight() <= 0 ||
+      target_rc.GetWidth() <= source_rc.GetWidth() || target_rc.GetHeight() <= source_rc.GetHeight())
+  {
+    return nullptr;
+  }
+
+  return g_gfx->UpscaleForPresent(m_xfb_entry->texture.get(), source_rc,
+                                  static_cast<u32>(target_rc.GetWidth()),
+                                  static_cast<u32>(target_rc.GetHeight()));
+}
+
 void Presenter::Present(PresentInfo* present_info)
 {
   m_present_count++;
+  m_upscaled_xfb = nullptr;
 
   if (g_gfx->IsHeadless() || (!m_onscreen_ui && !m_xfb_entry))
     return;
@@ -934,6 +968,8 @@ void Presenter::Present(PresentInfo* present_info)
   UpdateDrawRectangle();
 
   g_gfx->BeginUtilityDrawing();
+  // iCube: the upscaler encodes its own passes, so it runs before the backbuffer pass opens.
+  m_upscaled_xfb = UpscaleXFBForPresent();
   const bool backbuffer_bound = g_gfx->BindBackbuffer({{0.0f, 0.0f, 0.0f, 1.0f}});
 
   // Render the XFB to the screen.
@@ -944,7 +980,17 @@ void Presenter::Present(PresentInfo* present_info)
     MathUtil::Rectangle<int> render_source_rc = AdjustForCustomCrop(m_xfb_rect);
     AdjustRectanglesToFitBounds(&render_target_rc, &render_source_rc, m_backbuffer_width,
                                 m_backbuffer_height);
-    RenderXFBToScreen(render_target_rc, m_xfb_entry->texture.get(), render_source_rc);
+    // A resize inside BindBackbuffer can leave the upscaled picture the wrong size for one frame.
+    if (m_upscaled_xfb &&
+        static_cast<int>(m_upscaled_xfb->GetWidth()) == render_target_rc.GetWidth() &&
+        static_cast<int>(m_upscaled_xfb->GetHeight()) == render_target_rc.GetHeight())
+    {
+      RenderXFBToScreen(render_target_rc, m_upscaled_xfb, m_upscaled_xfb->GetRect());
+    }
+    else
+    {
+      RenderXFBToScreen(render_target_rc, m_xfb_entry->texture.get(), render_source_rc);
+    }
   }
 
   if (m_onscreen_ui)

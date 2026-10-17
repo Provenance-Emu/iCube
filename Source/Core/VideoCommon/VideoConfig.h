@@ -338,6 +338,8 @@ struct VideoConfig final
   // iCube: bbox readback mode. 0 = Latched (no CPU stall, complete 1-frame-stale snapshot),
   // 1 = ForceSync (block for exact same-frame values). Populated in Refresh().
   int iBBoxSyncMode = 0;
+  // iCube: MetalFX spatial upscale of the Native (1x) XFB at present. Populated in Refresh().
+  bool bMetalFXSpatialUpscale = false;
 
   // Enable API validation layers, currently only supported with Vulkan.
   bool bEnableValidationLayer = false;
