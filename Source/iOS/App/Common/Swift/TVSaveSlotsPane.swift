@@ -76,10 +76,14 @@ struct TVSaveSlotsPane: View {
         }
         Button(action: onViewAll) {
           Label(L("View All States"), systemImage: "square.grid.2x2")
-            .icubeText(.body)
+            .icubeText(.nav)
             .foregroundStyle(ICubeDesign.color(.textPrimary))
+            .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
+            .padding(.vertical, ICubeDesign.Spacing.m.rawValue)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .icubeCardSurface(cornerRadius: ICubeDesign.Card.rowCornerRadius)
         }
-        .buttonStyle(ICubeRowButtonStyle())
+        .buttonStyle(ICubeCardButtonStyle())
         .focused($focus, equals: .viewAll)
         Spacer(minLength: 0)
         InfoShelf(text: shelfText(bySlot), value: nil, title: shelfTitle, icon: "square.stack.3d.up")
@@ -126,8 +130,11 @@ struct TVSaveSlotsPane: View {
           .lineLimit(1)
           .minimumScaleFactor(0.8)
       }
+      .padding(ICubeDesign.Spacing.m.rawValue)
+      .icubeCardSurface()
     }
-    .buttonStyle(ICubeTileButtonStyle(minHeight: 0))
+    // iFly's card focus (lift, glows, accent border), as on the pause grid.
+    .buttonStyle(ICubeCardButtonStyle())
     .focused($focus, equals: .slot(slot))
     .simultaneousGesture(LongPressGesture(minimumDuration: Self.longPressDuration).onEnded { _ in
       longPressFired = true

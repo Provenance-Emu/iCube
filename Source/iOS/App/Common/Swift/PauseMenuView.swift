@@ -55,6 +55,8 @@ internal struct PauseMenuView: View {
   }
 
   @State private var showFilmstripSheet: Bool = false
+  /// tvOS: the pause tile focused last, so Back from a pane lands on the tile that opened it.
+  @State private var tvLastFocusID: String?
   /// When the menu first appeared; `BackCoalescer` drops the Back press that opened it.
   @State private var openedAt = Date()
   /// "None" first, then recent presets; backs the Shaders tile's cycle.
@@ -79,6 +81,9 @@ internal struct PauseMenuView: View {
     if showShaders || showContinuitySheet || showFilmstripSheet { return true }
     #if os(iOS)
     if showSettingsSheet || showControllersSheet { return true }
+    #else
+    // tvOS asks with the system confirmation dialog, which can disappear the menu under it like a sheet.
+    if showExitDialog || showResetDialog { return true }
     #endif
     return false
   }
@@ -121,9 +126,15 @@ internal struct PauseMenuView: View {
 
   var body: some View {
     ZStack {
+      #if os(tvOS)
+      // iFly's full-bleed room behind every pane, edge to edge: no black pillars at the sides.
+      ICubeTVRoomBackground(art: game.bannerImage ?? (game.hasCoverArt ? game.coverImage : nil))
+        .environment(\.colorScheme, .dark)
+      #else
       // Full screen black background
       Color.black
         .ignoresSafeArea()
+      #endif
 
       switch pane {
       case .main:
@@ -201,6 +212,7 @@ internal struct PauseMenuView: View {
     }
     #if os(tvOS)
     .focusSection()
+    .environment(\.icubePlatformAccent, platformAccent)
     #endif
     .onChange(of: pane) { _, newPane in
       DispatchQueue.main.async {
@@ -298,21 +310,53 @@ internal struct PauseMenuView: View {
   }
   #endif
 
-  /// One tile-grid root for both platforms: cover column beside the tiles on tvOS, a compact header above them on iOS.
+  /// tvOS: iFly's pause grid (`TVPauseGridView`). iOS: a compact header above the tile grid.
   @ViewBuilder
   private var mainMenu: some View {
+    #if os(tvOS)
+    tvMainMenu
+    #else
+    touchMainMenu
+    #endif
+  }
+
+  #if os(tvOS)
+  private var tvMainMenu: some View {
+    ZStack {
+      TVPauseGridView(model: PauseMenuModelBuilder.tvLayout(pauseMenuModel), lastFocusID: $tvLastFocusID, onBack: {
+        guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
+        onClose()
+      }) {
+        coverColumn
+      }
+      EmulationToastOverlay(barHeight: 0, barVisible: false)
+    }
+    .environment(\.colorScheme, .dark)
+    // The system dialog, as iFly's Quit and Hard Restart: the focus engine owns it, and Menu cancels it.
+    .confirmationDialog(L("Exit Game"), isPresented: $showExitDialog, titleVisibility: .visible) {
+      Button(L("Save & Quit")) { saveAndQuit() }
+      Button(L("Quit"), role: .destructive) { quitGame() }
+      Button(L("Cancel"), role: .cancel) {}
+    } message: {
+      Text(L("Do you want to quit the game? Unsaved progress will be lost."))
+    }
+    .confirmationDialog(L("Reset System"), isPresented: $showResetDialog, titleVisibility: .visible) {
+      Button(L("Reset"), role: .destructive) { resetGame() }
+      Button(L("Cancel"), role: .cancel) {}
+    } message: {
+      Text(L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."))
+    }
+  }
+  #endif
+
+  private var touchMainMenu: some View {
     GeometryReader { proxy in
-      let isTV = platform == .tvos
       let compactHeight = isCompactHeight
-      let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: isTV, isCompactHeight: compactHeight)
+      let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: false, isCompactHeight: compactHeight)
       ZStack {
-        if isTV {
-          tvHeroLayout { tiles(columns: columns, compact: false) }
-        } else {
-          VStack(alignment: .leading, spacing: 8) {
-            compactHeader(isCompactHeight: compactHeight).padding(compactHeight ? 12 : 16)
-            tiles(columns: columns, compact: compactHeight)
-          }
+        VStack(alignment: .leading, spacing: 8) {
+          compactHeader(isCompactHeight: compactHeight).padding(compactHeight ? 12 : 16)
+          tiles(columns: columns, compact: compactHeight)
         }
         // Reset/Exit are in-place `MenuScreen` overlays: each self-claims its own coordinator scope on appear,
         // so the tiles underneath stop reacting for as long as one is up, and unlike a `.sheet` this never
@@ -331,7 +375,7 @@ internal struct PauseMenuView: View {
       // A background, not a ZStack sibling: the scaledToFill backdrop would otherwise widen the ZStack to the
       // image's fill size and push the tile grid several windows wide.
       .frame(width: proxy.size.width, height: proxy.size.height)
-      .background { if isTV { tvBackdrop } else { backdrop } }
+      .background { backdrop }
     }
     // `MenuScreen` row text takes no explicit color; pin the dark-mode values so titles stay legible over the
     // always-dark backdrop whatever the system appearance. `.environment`, not `.preferredColorScheme`, so the
@@ -351,15 +395,12 @@ internal struct PauseMenuView: View {
   private func tiles(columns: Int, compact: Bool) -> some View {
     // Modal while a confirm overlay is up: on tvOS the focus engine can otherwise land back on a tile.
     let confirmUp = showResetDialog || showExitDialog
-    let model = platform == .tvos ? PauseMenuModelBuilder.tvLayout(pauseMenuModel) : pauseMenuModel
-    return MenuScreen(model: model, style: .tiles(columns: columns, compact: compact), onBack: {
+    return MenuScreen(model: pauseMenuModel, style: .tiles(columns: columns, compact: compact), onBack: {
       guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
       onClose()
     })
     .disabled(confirmUp)
     .allowsHitTesting(!confirmUp)
-    .environment(\.icubePlatformAccent, isTV ? platformAccent : nil)
-    .environment(\.icubeShelfHint, isTV ? L("Resume") : nil)
   }
 
   /// The running game's platform (the user's library override wins): tile badges, chips and the hero use its colour.
@@ -368,17 +409,6 @@ internal struct PauseMenuView: View {
   }
 
   private var platformAccent: Color { ICubeDesign.platformAccent(gamePlatform) }
-
-  /// tvOS: the dark room with the game's art as a faint wash and a vignette, not a black screen.
-  private var tvBackdrop: some View {
-    ZStack {
-      ICubeRoom(style: .gradient)
-      Image(uiImage: game.bannerImage ?? game.coverImage)
-        .resizable().scaledToFill().blur(radius: 60).opacity(0.3).ignoresSafeArea().clipped()
-      LinearGradient(colors: [.black.opacity(0.55), .clear, .black.opacity(0.7)], startPoint: .top, endPoint: .bottom)
-        .ignoresSafeArea()
-    }
-  }
 
   private var backdrop: some View {
     ZStack {
@@ -393,11 +423,11 @@ internal struct PauseMenuView: View {
   private var coverColumn: some View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
       heroArt
-        .shadow(color: .black.opacity(0.5), radius: 24, x: 0, y: 14)
+        .shadow(color: .black.opacity(0.5), radius: ICubeDesign.TVPause.heroArtShadowRadius, x: 0, y: ICubeDesign.TVPause.heroArtShadowY)
         .padding(.bottom, ICubeDesign.Spacing.xs.rawValue)
       Label(L("Paused"), systemImage: "pause.fill")
         .icubeText(.nav)
-        .tracking(ICubeDesign.Spacing.xxs.rawValue)
+        .tracking(ICubeDesign.TVPause.pausedTracking)
         .foregroundStyle(platformAccent)
       Text(game.title)
         // Before `icubeText`: the role's own `textCase(nil)` would otherwise sit closer to the text and win.
@@ -415,7 +445,7 @@ internal struct PauseMenuView: View {
   }
 
   /// Hero cover width; the art is always 2:3 (a GameCube/Wii case).
-  private static let heroArtWidth: CGFloat = 260
+  private static let heroArtWidth = ICubeDesign.TVPause.heroArtWidth
 
   /// The cover, filled into a 2:3 case and clipped; without one, the platform's case template on its accent,
   /// never a stretched placeholder glyph. The title is not repeated: it sits right below.
@@ -548,7 +578,6 @@ internal struct PauseMenuView: View {
                           onViewAll: { showFilmstripSheet = true })
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background { tvBackdrop }
         .environment(\.icubePlatformAccent, platformAccent)
         .sheet(isPresented: $showFilmstripSheet) {
           NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
@@ -567,24 +596,22 @@ internal struct PauseMenuView: View {
     #endif
   }
 
-  /// tvOS: the hero column (cover, PAUSED, title) beside `content`, with the pause grid's margins. The grid and
-  /// the Save States pane share it, so switching between them keeps the hero still.
+  /// tvOS Save States: the hero column (cover, PAUSED, title) beside `content`, at the pause grid's hero width and
+  /// margins (`TVPauseGridView`), so opening the pane keeps the hero where it was.
   private func tvHeroLayout<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-    HStack(alignment: .center, spacing: Self.tvHeroGap) {
-      coverColumn.frame(width: Self.tvHeroColumnWidth, alignment: .leading)
+    HStack(alignment: .center, spacing: ICubeDesign.TVPause.heroGap) {
+      coverColumn
+        .frame(width: ICubeDesign.TVPause.heroWidth, alignment: .leading)
+        // The grid's hero is centred above its footer; this pane's shelf sits in `content`, so lift the hero by
+        // the footer band to keep it still when the pane opens.
+        .padding(.bottom, ICubeDesign.TVPause.footerHeight + ICubeDesign.TVPause.footerGap)
       content()
     }
-    .padding(.horizontal, Self.tvHorizontalMargin)
-    .padding(.top, Self.tvTopMargin)
-    .padding(.bottom, Self.tvBottomMargin)
+    .padding(.horizontal, ICubeDesign.TVPause.horizontalMargin)
+    .padding(.top, ICubeDesign.TVPause.topMargin)
+    .padding(.bottom, ICubeDesign.TVPause.bottomMargin)
+    .ignoresSafeArea()
   }
-
-  private static let tvHeroGap: CGFloat = 64
-  private static let tvHeroColumnWidth: CGFloat = 300
-  private static let tvHorizontalMargin: CGFloat = 90
-  /// On top of the tvOS safe area (60 pt top and bottom at 1080p).
-  private static let tvTopMargin: CGFloat = 24
-  private static let tvBottomMargin: CGFloat = 24
 
   // MARK: - Pause menu model
 
@@ -703,12 +730,27 @@ internal struct PauseMenuView: View {
       MenuItem(id: "reset-cancel", title: L("Cancel"), icon: "xmark", role: .action { showResetDialog = false }),
       MenuItem(id: "reset-do", title: L("Reset"), icon: "arrow.counterclockwise.circle", tint: .orange, role: .destructive {
         showResetDialog = false
-        // Same as the console's reset button. It does not reload the auto-resume state, so it is also
-        // the way out of a game that resumed into a bad save.
-        TVEmulationBridge.resetSystem()
-        onClose()
+        resetGame()
       }),
     ])])
+  }
+
+  /// Same as the console's reset button. It does not reload the auto-resume state, so it is also the way out of a
+  /// game that resumed into a bad save.
+  private func resetGame() {
+    TVEmulationBridge.resetSystem()
+    onClose()
+  }
+
+  private func quitGame() {
+    TVEmulationBridge.stop()
+    NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+  }
+
+  /// Saves to the quick slot, then quits.
+  private func saveAndQuit() {
+    SaveStateService.saveSlot(selectedSlot)
+    quitGame()
   }
 
   /// Confirm overlay shown for `showExitDialog` -- Cancel first, matching the
@@ -718,14 +760,11 @@ internal struct PauseMenuView: View {
       MenuItem(id: "exit-cancel", title: L("Cancel"), icon: "xmark", role: .action { showExitDialog = false }),
       MenuItem(id: "exit-quit", title: L("Quit"), icon: "xmark.circle", tint: .red, role: .destructive {
         showExitDialog = false
-        TVEmulationBridge.stop()
-        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+        quitGame()
       }),
       MenuItem(id: "exit-save-quit", title: L("Save & Quit"), icon: "square.and.arrow.down", tint: .blue, role: .action {
         showExitDialog = false
-        SaveStateService.saveSlot(selectedSlot)
-        TVEmulationBridge.stop()
-        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+        saveAndQuit()
       }),
     ])])
   }
