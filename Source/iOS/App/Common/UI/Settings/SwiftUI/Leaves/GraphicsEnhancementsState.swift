@@ -41,7 +41,7 @@ struct GraphicsEnhancementsState: Equatable {
   var efbMaxScale = 6
   /// Set while Auto-IR / thermal (CurrentRun) or the running game's INI outranks the user's own scale.
   var efbOverride: DOLConfigOverride = .none
-  /// MetalFX spatial upscaling of the Native picture; the row exists only where the GPU supports it.
+  /// MetalFX spatial upscaling of the picture to the screen; the row exists only where the GPU supports it.
   var metalFXSupported = false
   var metalFXSpatialUpscale = false
   var widescreenHack = false

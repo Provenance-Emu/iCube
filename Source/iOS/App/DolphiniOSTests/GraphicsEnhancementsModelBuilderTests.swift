@@ -33,10 +33,10 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
     XCTAssertEqual(m.sections[0].items.map(\.id), ["efb-scale", "metalfx-upscale"])
   }
 
-  func test_metalFXRow_liveAtNativeAndAuto_disabledAboveNative() {
-    for (scale, enabled) in [(EfbScaleChoice.native.rawValue, true), (EfbScaleChoice.auto.rawValue, true), (2, false)] {
+  func test_metalFXRow_stacksOnEveryScale() {
+    for scale in [EfbScaleChoice.auto.rawValue, EfbScaleChoice.native.rawValue, 2, 3, 6] {
       let item = model(state { $0.metalFXSupported = true; $0.efbScale = scale }).item(id: "metalfx-upscale")
-      XCTAssertEqual(item?.isEnabled, enabled, "scale \(scale)")
+      XCTAssertEqual(item?.isEnabled, true, "scale \(scale)")
     }
   }
 

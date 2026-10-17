@@ -39,15 +39,21 @@ final class PauseMenuModelBuilderTests: XCTestCase {
       internalResolution: resolution, metalFXSupported: metalFX, audioVolume: volume, engineShortName: "CIR", jitAcquired: false)
   }
 
-  func test_upscaling_offersNativeMetalFX_rightAfterNative_onlyWhereSupported() {
-    let plain = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
-    guard case .cycle(let without, _) = plain.item(id: "upscaling")!.role else { return XCTFail("cycle") }
-    XCTAssertFalse(without.contains { $0.1 == PauseMenuModelBuilder.nativeMetalFX })
+  func test_metalFXTile_followsUpscaling_onlyWhereSupported_andTogglesTheKey() {
+    XCTAssertNil(PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions()).item(id: "metalfx"))
 
-    let model = PauseMenuModelBuilder.make(state: state(resolution: 5, metalFX: true), bindings: bindings(), actions: actions())
+    let metalFX = Box(false)
+    var b = bindings()
+    b.metalFX = Binding(get: { metalFX.value as? Bool ?? false }, set: { metalFX.value = $0 })
+    let model = PauseMenuModelBuilder.make(state: state(metalFX: true), bindings: b, actions: actions())
+    let ids = model.sections.flatMap(\.items).map(\.id)
+    XCTAssertEqual(ids.firstIndex(of: "metalfx"), ids.firstIndex(of: "upscaling").map { $0 + 1 })
+    guard case .toggle(let toggle) = model.item(id: "metalfx")!.role else { return XCTFail("toggle") }
+    toggle.wrappedValue = true
+    XCTAssertEqual(metalFX.value, AnyHashable(true))
+    // The ladder stays plain scales: MetalFX stacks on whichever one is picked.
     guard case .cycle(let scales, _) = model.item(id: "upscaling")!.role else { return XCTFail("cycle") }
-    XCTAssertEqual(scales.map(\.1), [AnyHashable(1), PauseMenuModelBuilder.nativeMetalFX] + [2, 3, 4, 5, 6].map { AnyHashable($0) })
-    XCTAssertEqual(MenuItemRole.cycled(options: scales, current: AnyHashable(1), step: 1), PauseMenuModelBuilder.nativeMetalFX)
+    XCTAssertEqual(scales.map(\.1), [1, 2, 3, 4, 6].map { AnyHashable($0) })
   }
 
   /// A value a settings leaf set off the tile ladder (volume 80, scale 5x) is listed in place, so one press
