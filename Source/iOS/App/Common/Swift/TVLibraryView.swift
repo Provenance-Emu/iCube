@@ -319,6 +319,14 @@ struct TVLibraryView: View {
   @State private var tvLibraryDestination: TVLibraryRailDestination = .home
   /// L1/R1 rail stepping owns this controller scope, so a sheet over the library silences it.
   @State private var tvShoulderScopeID = UUID()
+  /// The library card holding focus. The fast-scroll index writes it to land on the letter it jumped to, and the
+  /// rail to hand focus back to the content when a right press finds nothing beside it.
+  @FocusState private var tvCardFocus: TVCardFocus?
+  /// The last card that held focus, where a right press out of the rail returns to.
+  @State private var tvLastCardFocus: TVCardFocus?
+  /// The rail holds focus. The content is disabled meanwhile: the expanded rail lies over the cards, and a press
+  /// past the rail's first or last row would otherwise drop into them.
+  @State private var tvRailHasFocus = false
 #endif
 
   // MARK: - Multi-select state
@@ -918,11 +926,37 @@ struct TVLibraryView: View {
       selectionMode: isSelectionMode,
       isSelected: selectedFilePaths.contains(item.filePath),
       onToggleSelection: { toggleSelection(for: item) },
-      onEnterSelectionMode: { enterSelectionMode(selecting: item) }
+      onEnterSelectionMode: { enterSelectionMode(selecting: item) },
+      platform: LibraryPlatformMapper.category(for: item, override: platformOverrides[item.filePath])
     )
   }
 
   #if os(tvOS)
+  /// tvOS library geometry. The content column runs under the rail, which floats over it, so expanding the rail
+  /// never reflows the grid and a card scrolled left fades out through the rail's glass instead of stopping at
+  /// a hard edge.
+  private enum TVLayout {
+    /// Gap between the screen edge and the rail (and the column). The rail bleeds past the leading safe area,
+    /// as in iFly.
+    static let railInset = ICubeDesign.Spacing.s.rawValue
+    /// The strip of the column the collapsed rail covers.
+    static let railLane = ICubeDesign.Motion.railCollapsedWidth + ICubeDesign.Spacing.xs.rawValue
+    /// Depth of the soft edge cards scroll out under, at the top, bottom and trailing edge.
+    static let edgeFade = ICubeDesign.Spacing.xl.rawValue
+    /// The leading fade spans the rail lane as well, so a card fades through the glass.
+    static let leadingFade = railLane + edgeFade
+    /// Inset of resting content from the trailing edge: clear of the fade, with room for the focus lift.
+    static let contentInset = ICubeDesign.Spacing.xl.rawValue + ICubeDesign.Spacing.l.rawValue
+    /// Inset of resting content from the column's leading edge: past the rail, then the same clearance.
+    static let leadingInset = railLane + contentInset
+    /// Room under the last row: the fade plus the bottom of the TV's safe area.
+    static let bottomInset = ICubeDesign.Spacing.xxl.rawValue + ICubeDesign.Spacing.xl.rawValue
+    /// Gap between the fast-scroll index and the screen edge.
+    static let indexTrailing = ICubeDesign.Spacing.xl.rawValue
+    /// The index shows once the grid runs past this many rows.
+    static let indexMinimumRows = 2
+  }
+
   /// Platforms that have at least one game, in filter-bar order.
   private var tvRailPlatforms: [LibraryPlatformCategory] {
     let available = LibraryPlatformMapper.availableCategories(in: model.games, overrides: platformOverrides)
@@ -955,71 +989,43 @@ struct TVLibraryView: View {
     isSearching && tvLibraryDestination == .home ? .all : tvLibraryDestination
   }
 
-  private func libraryView_tvOS(_ displayGames: [TVGameItem]) -> some View {
-    HStack(alignment: .top, spacing: ICubeDesign.Spacing.l.rawValue) {
-      TVLibraryRail(
-        destination: $tvLibraryDestination,
-        searchText: $searchText,
-        platforms: tvRailPlatforms,
-        isSelecting: isSelectionMode,
-        onToggleSelect: {
-          if isSelectionMode {
-            exitSelectionMode()
-          } else {
-            isSelectionMode = true
-          }
-        },
-        onSettings: { showSettings = true },
-        importMenu: { libraryImportMenuSection },
-        viewMenu: { libraryViewMenuSection },
-        sortMenu: { sortMenuItems }
-      )
-      GeometryReader { proxy in
-        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
-          ICubeLeafHeader(
-            title: "iCube",
-            subtitle: Self.libraryHeaderSubtitle(destination: libraryHeaderDestination(), count: displayGames.count)
-          )
-          .padding(.horizontal, Constants.gridHorizontalPadding)
-          .animation(ICubeDesign.Motion.selection, value: tvLibraryDestination)
-          .animation(ICubeDesign.Motion.selection, value: displayGames.count)
-          ScrollView {
-            if isSearching || tvLibraryDestination != .home {
-              libraryToolbar_tvOS_main(displayGames, columnWidth: proxy.size.width)
-            } else {
-              libraryHomeShelves()
-            }
-          }
-          .focusSection()
-          libraryBottomChrome
-        }
-        .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-      }
-    }
-    .padding(ICubeDesign.Spacing.l.rawValue)
-    .onAppear {
-      if platformFilter != .all {
-        tvLibraryDestination = .platform(platformFilter)
-      }
-    }
-    .onChange(of: tvLibraryDestination) { _, destination in
-      applyTVLibraryDestination(destination)
-    }
-    .controllerScope(tvShoulderScopeID)
-    .onReceive(ControllerFocusCoordinator.shared.$activeScope) { active in
-      if active == tvShoulderScopeID { DispatchQueue.main.async { installTVShoulderStepping() } }
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
-      installTVShoulderStepping()
-    }
-    .onChange(of: navigateTo == nil) { _, gameClosed in
-      guard gameClosed else { return }
-      DispatchQueue.main.asyncAfter(deadline: .now() + Self.shoulderReinstallDelay) { installTVShoulderStepping() }
-    }
+  /// Scroll target for a grid card. Prefixed so a shelf copy of the same game is never the target.
+  private static func tvGridScrollID(_ filePath: String) -> String {
+    "grid:" + filePath
   }
 
-  /// Home column: Recently Played, Favorites, All Games, then one shelf per platform.
-  private func libraryHomeShelves() -> some View {
+  /// Letter stops for the fast-scroll index: only for a title sort, and only once the grid is long enough
+  /// to need one.
+  private func tvScrollIndex(for games: [TVGameItem], columns: Int) -> [LibraryIndexBucket] {
+    guard sortField == .name, games.count > columns * TVLayout.indexMinimumRows else { return [] }
+    let buckets = LibraryScrollIndex.buckets(titles: games.map { Self.sortTitle(for: $0) })
+    return buckets.count > 1 ? buckets : []
+  }
+
+  /// The index letter of the focused game, so the index can mark where the grid is.
+  private func tvCurrentIndexLabel(in games: [TVGameItem]) -> String? {
+    guard let path = focusedFilePath, let item = games.first(where: { $0.filePath == path }) else { return nil }
+    return LibraryScrollIndex.label(for: Self.sortTitle(for: item))
+  }
+
+  /// Columns that fit beside the rail, and the gap that spreads them edge to edge of the inset column.
+  private func tvGridMetrics(columnWidth: CGFloat) -> (count: Int, spacing: CGFloat) {
+    let cardW = LibraryLayout.cardSize.width
+    let minSpacing = Constants.gridHorizontalSpacing
+    let available = max(cardW, columnWidth - TVLayout.leadingInset - TVLayout.contentInset)
+    let count = effectiveColumnCount(autoFit: max(1, Int((available + minSpacing) / (cardW + minSpacing))))
+    let spread = count > 1 ? (available - CGFloat(count) * cardW) / CGFloat(count - 1) : minSpacing
+    return (count, max(ICubeDesign.Spacing.l.rawValue, spread))
+  }
+
+  /// A focused library card. Home shows a game on a shelf and in the grid, so the two are told apart.
+  enum TVCardFocus: Hashable {
+    case shelf(id: String, filePath: String)
+    case grid(filePath: String)
+  }
+
+  /// Home's shelves with their games resolved.
+  private func tvHomeShelves() -> [(spec: LibraryShelfSpec, items: [TVGameItem])] {
     let overrides = platformOverrides
     let refs = model.games.map { item in
       LibraryGameRef(
@@ -1035,40 +1041,224 @@ struct TVLibraryView: View {
       lastPlayed: LastPlayedStore.all()
     )
     let byID = Dictionary(model.games.map { ($0.gameID, $0) }, uniquingKeysWith: { first, _ in first })
-    return VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
-      ForEach(shelves) { shelf in
-        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
-          TVLibrarySectionHeader(title: L(shelf.titleKey))
-          ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: Constants.gridHorizontalSpacing) {
-              ForEach(shelf.gameIDs, id: \.self) { gameID in
-                if let item = byID[gameID] {
-                  gameGridItem(for: item)
-                }
-              }
-            }
+    return shelves.map { shelf in (shelf, shelf.gameIDs.compactMap { byID[$0] }) }
+  }
+
+  private var tvShowsHomeShelves: Bool {
+    !isSearching && tvLibraryDestination == .home
+  }
+
+  /// Where a right press out of the rail lands when the focus engine finds nothing beside the row: the card
+  /// focused last if it is still shown, otherwise the first card on screen at the top.
+  private func tvRailExitTarget(_ displayGames: [TVGameItem]) -> TVCardFocus? {
+    switch tvLastCardFocus {
+    case .grid(let path) where displayGames.contains(where: { $0.filePath == path }):
+      return tvLastCardFocus
+    case .shelf(let id, let path) where tvShowsHomeShelves
+      && tvHomeShelves().contains(where: { $0.spec.id == id && $0.items.contains { $0.filePath == path } }):
+      return tvLastCardFocus
+    default:
+      break
+    }
+    if tvShowsHomeShelves, let shelf = tvHomeShelves().first(where: { !$0.items.isEmpty }), let item = shelf.items.first {
+      return .shelf(id: shelf.spec.id, filePath: item.filePath)
+    }
+    return displayGames.first.map { .grid(filePath: $0.filePath) }
+  }
+
+  /// Scroll target for a library card, so the card exists (lazy grid) before focus is sent to it.
+  private static func tvScrollID(for focus: TVCardFocus) -> String {
+    switch focus {
+    case .shelf(let id, _): return "shelf:" + id
+    case .grid(let path): return tvGridScrollID(path)
+    }
+  }
+
+  private func libraryView_tvOS(_ displayGames: [TVGameItem]) -> some View {
+    ScrollViewReader { scroller in
+      ZStack(alignment: .topLeading) {
+        GeometryReader { proxy in
+          VStack(alignment: .leading, spacing: 0) {
+            ICubeLeafHeader(
+              title: "iCube",
+              subtitle: Self.libraryHeaderSubtitle(destination: libraryHeaderDestination(), count: displayGames.count)
+            )
+            .padding(.leading, TVLayout.leadingInset)
+            .animation(ICubeDesign.Motion.selection, value: tvLibraryDestination)
+            .animation(ICubeDesign.Motion.selection, value: displayGames.count)
+            tvLibraryScroller(displayGames, columnWidth: proxy.size.width, scroller: scroller)
+            libraryBottomChrome
           }
+          .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+          .focusSection()
+          .disabled(tvRailHasFocus)
         }
+        .padding(.leading, TVLayout.railInset)
+        // Drawn after the column so the expanded rail lies over the faded cards beneath it.
+        TVLibraryRail(
+          destination: $tvLibraryDestination,
+          searchText: $searchText,
+          platforms: tvRailPlatforms,
+          isSelecting: isSelectionMode,
+          onToggleSelect: {
+            if isSelectionMode {
+              exitSelectionMode()
+            } else {
+              isSelectionMode = true
+            }
+          },
+          onSettings: { showSettings = true },
+          importMenu: { libraryImportMenuSection },
+          viewMenu: { libraryViewMenuSection },
+          sortMenu: { sortMenuItems },
+          // The content is disabled while the rail holds focus, so every right press out of the rail lands
+          // here: on the card focused last, or the first one.
+          onStuckRight: {
+            guard let target = tvRailExitTarget(displayGames) else { return }
+            tvRailHasFocus = false
+            scroller.scrollTo(Self.tvScrollID(for: target))
+            // Next runloop: the content has to be enabled, and a lazy card realised, before it can take focus.
+            DispatchQueue.main.async { tvCardFocus = target }
+          },
+          onFocusChange: { tvRailHasFocus = $0 }
+        )
+        .padding(.leading, TVLayout.railInset)
+        .padding(.bottom, ICubeDesign.Spacing.xl.rawValue)
+      }
+    }
+    // The column runs to the screen's side and bottom edges so its fade lands there; `TVLayout` restores the
+    // safe-area margins inside it.
+    .ignoresSafeArea(.container, edges: [.leading, .trailing, .bottom])
+    .onAppear {
+      if platformFilter != .all {
+        tvLibraryDestination = .platform(platformFilter)
+      }
+    }
+    .onChange(of: tvLibraryDestination) { _, destination in
+      applyTVLibraryDestination(destination)
+    }
+    .onChange(of: tvCardFocus) { _, focus in
+      if let focus { tvLastCardFocus = focus }
+    }
+    .controllerScope(tvShoulderScopeID)
+    .onReceive(ControllerFocusCoordinator.shared.$activeScope) { active in
+      if active == tvShoulderScopeID { DispatchQueue.main.async { installTVShoulderStepping() } }
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in
+      installTVShoulderStepping()
+    }
+    .onChange(of: navigateTo == nil) { _, gameClosed in
+      guard gameClosed else { return }
+      DispatchQueue.main.asyncAfter(deadline: .now() + Self.shoulderReinstallDelay) { installTVShoulderStepping() }
+    }
+  }
+
+  /// The scrolling part of the column, with the fast-scroll index beside it when the grid is long. Nothing
+  /// inside clips: the scroll view draws past its bounds and the edge-fade mask is its only edge, so a focused
+  /// card's lift and glow fade out instead of stopping at a box.
+  private func tvLibraryScroller(_ displayGames: [TVGameItem], columnWidth: CGFloat, scroller: ScrollViewProxy) -> some View {
+    let metrics = tvGridMetrics(columnWidth: columnWidth - TVLibraryScrollIndex.width - TVLayout.indexTrailing)
+    let buckets = tvScrollIndex(for: displayGames, columns: metrics.count)
+    let gridMetrics = buckets.isEmpty ? tvGridMetrics(columnWidth: columnWidth) : metrics
+    return HStack(alignment: .center, spacing: 0) {
+      ScrollView {
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xl.rawValue) {
+          if tvShowsHomeShelves {
+            libraryHomeShelves(spacing: gridMetrics.spacing)
+          }
+          tvLibraryGrid(displayGames, metrics: gridMetrics)
+        }
+      }
+      .scrollClipDisabled()
+      .contentMargins(.top, TVLayout.edgeFade, for: .scrollContent)
+      .contentMargins(.bottom, TVLayout.bottomInset, for: .scrollContent)
+      .mask { TVLibraryEdgeFade(leading: TVLayout.leadingFade, depth: TVLayout.edgeFade) }
+      .focusSection()
+      .onAppear { gridColumnCount = gridMetrics.count }
+      .onChangeCompat(of: gridMetrics.count) { _, newVal in gridColumnCount = newVal }
+
+      if !buckets.isEmpty {
+        TVLibraryScrollIndex(
+          buckets: buckets,
+          currentLabel: tvCurrentIndexLabel(in: displayGames),
+          onFocusBucket: { bucket in
+            // Skim: the grid follows the letter under focus while focus stays on the index.
+            withAnimation(ICubeDesign.Motion.selection) {
+              scroller.scrollTo(Self.tvGridScrollID(displayGames[bucket.firstIndex].filePath), anchor: .top)
+            }
+          },
+          onSelectBucket: { bucket in
+            let path = displayGames[bucket.firstIndex].filePath
+            scroller.scrollTo(Self.tvGridScrollID(path), anchor: .top)
+            // Next runloop: the scroll has to realise the lazy cell before it can take focus.
+            DispatchQueue.main.async { tvCardFocus = .grid(filePath: path) }
+          }
+        )
+        .padding(.trailing, TVLayout.indexTrailing)
+        .focusSection()
       }
     }
   }
 
-  /// Shelf title for the tvOS library: accent capsule plus the section type role.
+  /// Home: Recently Played and Favorites as shelves above the full library grid.
+  private func libraryHomeShelves(spacing: CGFloat) -> some View {
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xl.rawValue) {
+      ForEach(tvHomeShelves(), id: \.spec.id) { shelf in
+        let items = shelf.items
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+          TVLibrarySectionHeader(title: L(shelf.spec.titleKey))
+            .padding(.leading, TVLayout.leadingInset)
+            .padding(.trailing, TVLayout.contentInset)
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: spacing) {
+              ForEach(items, id: \.filePath) { item in
+                gameGridItem(for: item)
+                  .focused($tvCardFocus, equals: .shelf(id: shelf.spec.id, filePath: item.filePath))
+                  .zIndex(focusedFilePath == item.filePath ? 1 : 0)
+              }
+            }
+          }
+          // Cards rest clear of the fade and slide out under it; nothing clips them on the way.
+          .scrollClipDisabled()
+          .contentMargins(.leading, TVLayout.leadingInset, for: .scrollContent)
+          .contentMargins(.trailing, TVLayout.contentInset, for: .scrollContent)
+        }
+        .id(Self.tvScrollID(for: .shelf(id: shelf.spec.id, filePath: "")))
+        // The shelf holding focus paints last, so its card's glow lies over the next shelf, not under it.
+        .zIndex(items.contains { $0.filePath == focusedFilePath } ? 1 : 0)
+      }
+    }
+  }
+
+  /// Shelf and grid title for the tvOS library, after iFly's: a glowing bar, then the title in the title
+  /// gradient. A platform view takes that platform's colour.
   private struct TVLibrarySectionHeader: View {
     /// Already-localized shelf title.
     let title: String
+    var accent: Color = ICubeDesign.color(.accent)
+
+    private static let glowOpacity: Double = 0.8
 
     var body: some View {
       HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
-        Capsule()
-          .fill(ICubeDesign.color(.accent))
-          .frame(width: ICubeDesign.Line.focus.rawValue, height: ICubeDesign.Spacing.l.rawValue)
+        ZStack {
+          bar.blur(radius: ICubeDesign.Spacing.xs.rawValue).opacity(Self.glowOpacity)
+          bar
+        }
         Text(title)
           .icubeText(.section)
-          .foregroundStyle(ICubeDesign.color(.textPrimary))
+          .foregroundStyle(
+            LinearGradient(colors: [ICubeDesign.color(.textPrimary), accent], startPoint: .top, endPoint: .bottom)
+          )
         Spacer(minLength: 0)
       }
-      .padding(.horizontal, Constants.gridHorizontalPadding)
+      .zIndex(1)
+    }
+
+    private var bar: some View {
+      Capsule()
+        .fill(accent)
+        .frame(width: ICubeDesign.Line.focus.rawValue + ICubeDesign.Line.hairline.rawValue, height: ICubeDesign.Spacing.l.rawValue)
     }
   }
 
@@ -1080,35 +1270,34 @@ struct TVLibraryView: View {
     }
   }
 
-  /// How many library cards fit across the content column beside the rail.
-  private func tvOSColumnCount(forWidth width: CGFloat) -> Int {
-    let paddingH = Constants.gridHorizontalPadding
-    let spacingH = Constants.gridHorizontalSpacing
-    let cardW = LibraryLayout.cardSize.width
-    let available = max(0, width - (paddingH * 2))
-    let auto = max(1, Int((available + spacingH) / (cardW + spacingH)))
-    return effectiveColumnCount(autoFit: auto)
+  private func libraryGridSectionAccent() -> Color {
+    switch libraryHeaderDestination() {
+    case .home, .all: return ICubeDesign.color(.accent)
+    case .platform(let category): return ICubeDesign.platformAccent(category)
+    }
   }
 
+  /// The library as a vertical grid: every game on Home and All Games, one platform's on a platform view.
   @ViewBuilder
-  private func libraryToolbar_tvOS_main(_ displayGames: [TVGameItem], columnWidth: CGFloat) -> some View {
-    let count = tvOSColumnCount(forWidth: columnWidth)
+  private func tvLibraryGrid(_ displayGames: [TVGameItem], metrics: (count: Int, spacing: CGFloat)) -> some View {
     let columns = Array(
-      repeating: GridItem(.flexible(minimum: LibraryLayout.cardSize.width), spacing: Constants.gridHorizontalSpacing),
-      count: count
+      repeating: GridItem(.fixed(LibraryLayout.cardSize.width), spacing: metrics.spacing, alignment: .top),
+      count: metrics.count
     )
-    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
-      TVLibrarySectionHeader(title: libraryGridSectionTitle())
-      LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
+    // A focused card lifts and glows into the gap, so the header gets the larger one.
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+      TVLibrarySectionHeader(title: libraryGridSectionTitle(), accent: libraryGridSectionAccent())
+      LazyVGrid(columns: columns, alignment: .leading, spacing: Constants.gridVerticalSpacing) {
         ForEach(displayGames, id: \.filePath) { item in
           gameGridItem(for: item)
+            .focused($tvCardFocus, equals: .grid(filePath: item.filePath))
+            .id(Self.tvGridScrollID(item.filePath))
+            .zIndex(focusedFilePath == item.filePath ? 1 : 0)
         }
       }
-      .padding(.horizontal, Constants.gridHorizontalPadding)
-      .padding(.vertical, Constants.gridVerticalPadding)
-      .onAppear { gridColumnCount = count }
-      .onChangeCompat(of: count) { _, newVal in gridColumnCount = newVal }
     }
+    .padding(.leading, TVLayout.leadingInset)
+    .padding(.trailing, TVLayout.contentInset)
   }
   #endif // os(tvOS)
 

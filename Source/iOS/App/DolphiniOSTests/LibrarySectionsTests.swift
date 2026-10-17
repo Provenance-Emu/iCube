@@ -9,13 +9,13 @@ final class LibrarySectionsTests: XCTestCase {
     pairs.map { LibraryGameRef(id: $0.0, platform: $0.1) }
   }
 
-  func testHomeOrderSkipsEmptyRecentAndFavorites() {
+  func testNoRecentOrFavoritesMeansNoShelves() {
     let shelves = LibrarySectionBuilder.homeShelves(
       games: games([("G1", .gameCube), ("W1", .wii)]),
       favoriteIDs: [],
       lastPlayed: [:]
     )
-    XCTAssertEqual(shelves.map(\.id), ["all", "gameCube", "wii"])
+    XCTAssertEqual(shelves.map(\.id), [])
   }
 
   func testRecentIsNewestFirstAndCapped() {
@@ -32,18 +32,49 @@ final class LibrarySectionsTests: XCTestCase {
       lastPlayed: played,
       recentLimit: 2
     )
-    XCTAssertEqual(shelves.map(\.id), ["recent", "favorites", "all"])
+    XCTAssertEqual(shelves.map(\.id), ["recent", "favorites"])
     XCTAssertEqual(shelves[0].gameIDs, ["D", "B"])
     XCTAssertEqual(shelves[1].gameIDs, ["A"])
   }
 
-  func testSinglePlatformOmitsPlatformShelves() {
+  func testShelvesNeverListTheLibraryOrItsPlatforms() {
     let shelves = LibrarySectionBuilder.homeShelves(
-      games: games([("G1", .gameCube), ("G2", .gameCube)]),
-      favoriteIDs: [],
-      lastPlayed: [:]
+      games: games([("G1", .gameCube), ("W1", .wii), ("C1", .wiiWare)]),
+      favoriteIDs: ["W1"],
+      lastPlayed: ["G1": Date(timeIntervalSince1970: 1)]
     )
-    XCTAssertEqual(shelves.map(\.id), ["all"])
+    XCTAssertEqual(shelves.map(\.id), ["recent", "favorites"])
+  }
+
+  func testIndexLabelFoldsCaseAndAccents() {
+    XCTAssertEqual(LibraryScrollIndex.label(for: "zelda"), "Z")
+    XCTAssertEqual(LibraryScrollIndex.label(for: "Énigma"), "E")
+    XCTAssertEqual(LibraryScrollIndex.label(for: "  Metroid"), "M")
+  }
+
+  func testIndexLabelFilesDigitsSymbolsAndOtherScriptsUnderHash() {
+    XCTAssertEqual(LibraryScrollIndex.label(for: "1080° Avalanche"), "#")
+    XCTAssertEqual(LibraryScrollIndex.label(for: "¡Pikmin!"), "#")
+    XCTAssertEqual(LibraryScrollIndex.label(for: "ゼルダの伝説"), "#")
+    XCTAssertEqual(LibraryScrollIndex.label(for: ""), "#")
+  }
+
+  func testBucketsMarkWhereEachLetterStarts() {
+    let buckets = LibraryScrollIndex.buckets(titles: ["1080°", "Animal Crossing", "Amazing", "Bomberman", "Zelda"])
+    XCTAssertEqual(buckets.map(\.label), ["#", "A", "B", "Z"])
+    XCTAssertEqual(buckets.map(\.firstIndex), [0, 1, 3, 4])
+  }
+
+  func testBucketsFollowADescendingSort() {
+    let buckets = LibraryScrollIndex.buckets(titles: ["Zelda", "Mario", "Metroid", "Animal Crossing"])
+    XCTAssertEqual(buckets.map(\.label), ["Z", "M", "A"])
+    XCTAssertEqual(buckets.map(\.firstIndex), [0, 1, 3])
+  }
+
+  func testALabelMetAgainKeepsItsFirstPosition() {
+    let buckets = LibraryScrollIndex.buckets(titles: ["Alpha", "#hash", "Beta", "Another"])
+    XCTAssertEqual(buckets.map(\.label), ["A", "#", "B"])
+    XCTAssertEqual(buckets.map(\.firstIndex), [0, 1, 2])
   }
 
 #if os(tvOS)
