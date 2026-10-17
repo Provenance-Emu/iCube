@@ -189,13 +189,43 @@ final class RemapModelTests: XCTestCase {
     XCTAssertEqual(m.poll([1, 0]), .timedOut)
   }
 
-  func test_timeout_countsListeningPollsOnly() {
+  func test_timeout_countsListeningPollsSeparatelyFromTheReleaseWait() {
     var m = machine(baseline: [1])
-    for _ in 0 ..< 20 { XCTAssertNil(m.poll([1])) } // still waiting for release, no timeout
+    for _ in 0 ..< 9 { XCTAssertNil(m.poll([1])) } // still waiting for release, under the cap
     XCTAssertEqual(m.phase, .waitingForRelease)
     XCTAssertNil(m.poll([0]))
     for _ in 0 ..< 9 { XCTAssertNil(m.poll([0])) }
     XCTAssertEqual(m.poll([0]), .timedOut)
+  }
+
+  /// An input that never lets go (a stuck stick, a button held down) must not wedge the
+  /// session in `waitingForRelease` forever.
+  func test_releaseWait_isBounded() {
+    var m = machine(baseline: [1])
+    for _ in 0 ..< 9 { XCTAssertNil(m.poll([1])) }
+    XCTAssertEqual(m.poll([1]), .timedOut)
+    XCTAssertEqual(m.phase, .finished)
+  }
+
+  /// Switch Pro / DualSense / DualShock report `Accel *` halves scaled by gravity, so one sits
+  /// above the threshold for as long as the pad is held. They are not capturable, so they must
+  /// not count as "held at arm" either, or the release gate never opens.
+  func test_motionInputPinnedHigh_doesNotWedgeTheReleaseGate() {
+    let motion: [Float] = [0, 0, 1.0] // buttonA, buttonB, "Accel Down" resting at ~1 g
+    var m = machine(baseline: motion, capturable: [true, true, false])
+    XCTAssertNil(m.poll(motion))
+    XCTAssertEqual(m.phase, .listening, "the gravity axis must not hold the gate shut")
+    XCTAssertNil(m.poll([1, 0, 1.0]))
+    XCTAssertNil(m.poll([1, 0, 1.0]))
+    XCTAssertEqual(m.poll([1, 0, 1.0]), .captured(inputIndex: 0))
+  }
+
+  func test_motionInputPinnedHigh_stillTimesOutWhenNothingIsPressed() {
+    let motion: [Float] = [0, 0, 1.0]
+    var m = machine(baseline: motion, capturable: [true, true, false])
+    XCTAssertNil(m.poll(motion))
+    for _ in 0 ..< 9 { XCTAssertNil(m.poll(motion)) }
+    XCTAssertEqual(m.poll(motion), .timedOut)
   }
 
   func test_deviceVanished_emptyVectorTimesOutInsteadOfCrashing() {

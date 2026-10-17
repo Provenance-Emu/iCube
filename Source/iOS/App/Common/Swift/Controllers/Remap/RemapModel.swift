@@ -134,11 +134,15 @@ enum RemapExpression {
 /// MFi backend — so one threshold covers digital and analog alike.
 ///
 /// Phases:
-/// 1. `waitingForRelease` — inputs that were already past `threshold` when the
-///    row was armed (the A press that activated it) must fall below
-///    `restEpsilon` first. Touch arming holds nothing, so this passes on the
-///    first poll. On passing, the vector is re-snapshotted as the rest
-///    baseline, which absorbs trigger drift and stick centering error.
+/// 1. `waitingForRelease` — capturable inputs that were already past
+///    `threshold` when the row was armed (the A press that activated it) must
+///    fall below `restEpsilon` first. Touch arming holds nothing, so this
+///    passes on the first poll. On passing, the vector is re-snapshotted as the
+///    rest baseline, which absorbs trigger drift and stick centering error.
+///    Non-capturable inputs never gate: a Switch Pro / DualSense reports an
+///    `Accel *` half pinned near 1.0 by gravity for as long as it is held, and
+///    waiting on that would never end. An input that still never lets go ends
+///    the session with `.timedOut` after `timeoutPolls`, so nothing can wedge it.
 /// 2. `listening` — the input with the largest rise above its rest value that
 ///    stays past `threshold` for `holdPolls` consecutive polls wins. Nothing
 ///    qualifying for `timeoutPolls` polls ends the session with `.timedOut`.
@@ -170,6 +174,7 @@ struct RemapCaptureMachine: Equatable {
   private var candidate: Int?
   private var candidateRun = 0
   private var listeningPolls = 0
+  private var releaseWaitPolls = 0
 
   /// - Parameters:
   ///   - baseline: the input vector at arm time.
@@ -178,7 +183,9 @@ struct RemapCaptureMachine: Equatable {
     self.config = config
     self.capturable = capturable
     self.restBaseline = baseline
-    self.heldAtArm = baseline.map { $0 > config.threshold }
+    self.heldAtArm = baseline.enumerated().map { i, value in
+      value > config.threshold && i < capturable.count && capturable[i]
+    }
   }
 
   /// Advance one tick. Returns a result exactly once, when the session ends.
@@ -188,8 +195,15 @@ struct RemapCaptureMachine: Equatable {
       return nil
 
     case .waitingForRelease:
+      releaseWaitPolls += 1
       for (i, held) in heldAtArm.enumerated() where held {
-        if value(values, i) >= config.restEpsilon { return nil }
+        if value(values, i) >= config.restEpsilon {
+          if releaseWaitPolls >= config.timeoutPolls {
+            phase = .finished
+            return .timedOut
+          }
+          return nil
+        }
       }
       restBaseline = (0 ..< restBaseline.count).map { value(values, $0) }
       phase = .listening
