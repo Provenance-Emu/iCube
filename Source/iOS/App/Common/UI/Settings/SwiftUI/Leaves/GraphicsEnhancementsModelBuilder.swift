@@ -9,11 +9,21 @@ enum GraphicsEnhancementsModelBuilder {
     let msaaOn = state.msaa > MsaaSamples.none.rawValue
 
     // Resolver step #3: while an auto controller or the game drives the key, the manual choice would not apply until the override clears.
-    let resolution = MenuSection(id: "internal-resolution", header: L("Internal Resolution"), items: [
+    var resolutionItems = [
       SettingsRow.cycle("efb-scale", L("Internal Resolution"), efbScaleOptions(maxScale: max(state.efbMaxScale, state.efbScale)), state.efbScale,
             L("Renders the game above native resolution for a sharper image. Higher costs more GPU; on the CPU-bound path 1x–2x is usually plenty."),
             enabled: state.efbOverride == .none, badge: ConfigOverrideBadge.title(for: state.efbOverride), set: { apply(.efbScale($0)) }),
-    ])
+    ]
+    if state.metalFXSupported {
+      // Auto can land on 1x, so the row stays live there too.
+      let atNative = state.efbScale == EfbScaleChoice.native.rawValue || state.efbScale == EfbScaleChoice.auto.rawValue
+      resolutionItems.append(
+        SettingsRow.toggle("metalfx-upscale", L("MetalFX Upscaling"), state.metalFXSpatialUpscale,
+               atNative ? L("Upscales the 1x (Native) picture to the screen with Apple's MetalFX instead of a plain stretch. Sharper than Native for a fraction of 2x's GPU cost; HUD text can look slightly oversharpened.")
+                        : L("Applies only at 1x (Native) internal resolution."),
+               enabled: atNative, set: { apply(.metalFXSpatialUpscale($0)) }))
+    }
+    let resolution = MenuSection(id: "internal-resolution", header: L("Internal Resolution"), items: resolutionItems)
     let filtering = MenuSection(id: "texture-filtering", header: L("Texture Filtering"), items: [
       SettingsRow.cycle("anisotropy", L("Anisotropic Filtering"), GraphicsEnhancementsState.anisotropyLadder.map { (multiplier($0), $0) }, state.anisotropy,
             L("Sharpens textures viewed at steep angles (floors, walls). Cheap on modern GPUs; 4x–16x is a safe quality win."), set: { apply(.anisotropy($0)) }),

@@ -441,6 +441,12 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (NSInteger)gfxEnhanceOutputResampling;
 + (void)setGfxEnhanceOutputResampling:(NSInteger)mode;
 
+// MetalFX spatial upscaling of the Native (1x) picture (Metal backend). Supported is false on
+// Apple TV and on GPUs without MetalFX; the row is hidden there.
++ (BOOL)gfxMetalFXSpatialUpscaleSupported;
++ (BOOL)gfxMetalFXSpatialUpscale;
++ (void)setGfxMetalFXSpatialUpscale:(BOOL)enabled;
+
 // Graphics > Hacks
 + (BOOL)gfxHackEfbAccessEnable;
 + (void)setGfxHackEfbAccessEnable:(BOOL)enabled;

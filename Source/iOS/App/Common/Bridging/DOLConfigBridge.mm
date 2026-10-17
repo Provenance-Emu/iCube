@@ -4,6 +4,7 @@
 #import "DOLConfigBridge.h"
 
 #import <Foundation/Foundation.h>
+#import <Metal/Metal.h>
 
 // C++ includes
 #include "Common/Config/Config.h"
@@ -931,6 +932,21 @@ static bool HasCurrentRunLayer()
 + (NSInteger)gfxEnhanceOutputResampling { return (NSInteger)Config::Get(Config::GFX_ENHANCE_OUTPUT_RESAMPLING); }
 + (void)setGfxEnhanceOutputResampling:(NSInteger)mode { Config::SetBaseOrCurrent(Config::GFX_ENHANCE_OUTPUT_RESAMPLING, static_cast<OutputResamplingMode>((int)mode)); }
 
++ (BOOL)gfxMetalFXSpatialUpscaleSupported {
+  // The core links MetalFX on iOS only, so look the class up instead of linking it here too.
+  static BOOL supported = [] {
+    Class descriptor = NSClassFromString(@"MTLFXSpatialScalerDescriptor");
+    SEL selector = NSSelectorFromString(@"supportsDevice:");
+    id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+    if (!descriptor || !device || ![descriptor respondsToSelector:selector])
+      return NO;
+    return ((BOOL (*)(id, SEL, id<MTLDevice>))[descriptor methodForSelector:selector])(descriptor, selector, device);
+  }();
+  return supported;
+}
++ (BOOL)gfxMetalFXSpatialUpscale { return Config::Get(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE); }
++ (void)setGfxMetalFXSpatialUpscale:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE, (bool)enabled); }
+
 // Graphics > Hacks
 + (BOOL)gfxHackEfbAccessEnable { return Config::Get(Config::GFX_HACK_EFB_ACCESS_ENABLE); }
 + (void)setGfxHackEfbAccessEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_EFB_ACCESS_ENABLE, (bool)enabled); }
@@ -1223,6 +1239,7 @@ static bool HasCurrentRunLayer()
   del(Config::GFX_ENHANCE_ARBITRARY_MIPMAP_DETECTION_THRESHOLD);
   del(Config::GFX_ENHANCE_HDR_OUTPUT);
   del(Config::GFX_ENHANCE_OUTPUT_RESAMPLING);
+  del(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE);
   del(Config::GFX_MSAA);
   del(Config::GFX_SSAA);
 

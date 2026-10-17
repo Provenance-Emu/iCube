@@ -31,12 +31,23 @@ final class PauseMenuModelBuilderTests: XCTestCase {
       requestExit: {}, recenterPointer: {})
   }
 
-  private func state(recenter: Bool = false, cheats: Int = 0, resolution: Int = 1, volume: Int = 100) -> PauseMenuState {
+  private func state(recenter: Bool = false, cheats: Int = 0, resolution: Int = 1, metalFX: Bool = false, volume: Int = 100) -> PauseMenuState {
     PauseMenuState(
       quickSlot: 3, isMuted: false, activeCheatCount: cheats,
       shaderOptions: [("None", ShaderQuickApply.noneValue), ("crt", AnyHashable("/s/crt.slangp"))],
       showsRecenterPointer: recenter,
-      internalResolution: resolution, audioVolume: volume, engineShortName: "CIR", jitAcquired: false)
+      internalResolution: resolution, metalFXSupported: metalFX, audioVolume: volume, engineShortName: "CIR", jitAcquired: false)
+  }
+
+  func test_upscaling_offersNativeMetalFX_rightAfterNative_onlyWhereSupported() {
+    let plain = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    guard case .cycle(let without, _) = plain.item(id: "upscaling")!.role else { return XCTFail("cycle") }
+    XCTAssertFalse(without.contains { $0.1 == PauseMenuModelBuilder.nativeMetalFX })
+
+    let model = PauseMenuModelBuilder.make(state: state(resolution: 5, metalFX: true), bindings: bindings(), actions: actions())
+    guard case .cycle(let scales, _) = model.item(id: "upscaling")!.role else { return XCTFail("cycle") }
+    XCTAssertEqual(scales.map(\.1), [AnyHashable(1), PauseMenuModelBuilder.nativeMetalFX] + [2, 3, 4, 5, 6].map { AnyHashable($0) })
+    XCTAssertEqual(MenuItemRole.cycled(options: scales, current: AnyHashable(1), step: 1), PauseMenuModelBuilder.nativeMetalFX)
   }
 
   /// A value a settings leaf set off the tile ladder (volume 80, scale 5x) is listed in place, so one press

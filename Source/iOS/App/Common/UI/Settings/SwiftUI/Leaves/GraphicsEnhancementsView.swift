@@ -17,6 +17,8 @@ struct GraphicsEnhancementsView: View {
     // The user's own scale (Base), never an Auto-IR / thermal CurrentRun override: this row edits Base.
     s.efbScale = DOLConfigBridge.gfxEfbScaleBase()
     s.efbOverride = DOLConfigBridge.efbScaleOverride()
+    s.metalFXSupported = DOLConfigBridge.gfxMetalFXSpatialUpscaleSupported()
+    s.metalFXSpatialUpscale = DOLConfigBridge.gfxMetalFXSpatialUpscale()
     s.anisotropy = GraphicsEnhancementsState.normalizedAnisotropy(DOLConfigBridge.gfxEnhanceAnisotropySamples())
     s.msaa = GraphicsEnhancementsState.normalizedMsaa(DOLConfigBridge.gfxMsaa())
     s.ssaa = DOLConfigBridge.gfxSsaa()
@@ -37,6 +39,7 @@ struct GraphicsEnhancementsView: View {
     let effects = GraphicsEnhancementsState.sideEffects(of: change, in: state)
     switch change {
     case .efbScale(let v): state.efbScale = v; DOLConfigBridge.setGfxEfbScale(v)
+    case .metalFXSpatialUpscale(let v): state.metalFXSpatialUpscale = v; DOLConfigBridge.setGfxMetalFXSpatialUpscale(v)
     case .anisotropy(let v): state.anisotropy = v; DOLConfigBridge.setGfxEnhanceAnisotropySamples(v)
     case .msaa(let v): state.msaa = v; DOLConfigBridge.setGfxMsaa(v)
     case .ssaa(let v): state.ssaa = v; DOLConfigBridge.setGfxSsaa(v)

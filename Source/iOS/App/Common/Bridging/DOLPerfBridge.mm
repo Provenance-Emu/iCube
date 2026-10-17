@@ -32,6 +32,10 @@
   // and de-dups on change to build a true frame-time distribution / 1%-low.
   const double rawFrameTimeMs = Core::System::GetInstance().GetPerfMetrics().GetLastRawFrameTimeMs();
 
+  // GPU time per presented frame summed over the Metal command buffers, and the MetalFX share.
+  const double gpuFrameMs = Core::System::GetInstance().GetPerfMetrics().GetGPUFrameMs();
+  const double gpuUpscaleMs = Core::System::GetInstance().GetPerfMetrics().GetGPUUpscaleMs();
+
   return @{
     @"fps" : @(fps),
     @"vps" : @(vps),
@@ -39,6 +43,8 @@
     @"maxSpeed" : @(maxSpeed),
     @"frameTimeMs" : @(frameTimeMs),
     @"rawFrameTimeMs" : @(rawFrameTimeMs),
+    @"gpuFrameMs" : @(gpuFrameMs),
+    @"gpuUpscaleMs" : @(gpuUpscaleMs),
   };
 }
 

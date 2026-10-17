@@ -66,6 +66,7 @@ internal struct PauseMenuView: View {
   /// Mirrors of the live Dolphin values behind the Upscaling and Audio tiles; the bridge is read on appear and
   /// written through the bindings, so the cycle tiles redraw without polling.
   @State private var internalResolution: Int = 1
+  @State private var metalFXUpscale: Bool = false
   @State private var audioVolume: Int = 100
   /// The Performance tile badge and the cover-column chip: the engine actually running.
   @State private var engineShortName: String = ""
@@ -111,6 +112,7 @@ internal struct PauseMenuView: View {
 
   private func refreshLiveSettings() {
     internalResolution = TVEmulationBridge.internalResolution()
+    metalFXUpscale = DOLConfigBridge.gfxMetalFXSpatialUpscale()
     audioVolume = TVEmulationBridge.audioVolumePercent()
     refreshEngineState()
   }
@@ -640,11 +642,20 @@ internal struct PauseMenuView: View {
           refreshShaderState()
         }),
       internalResolution: Binding(
-        get: { AnyHashable(internalResolution) },
+        get: {
+          metalFXUpscale && internalResolution == EfbScaleChoice.native.rawValue
+            ? PauseMenuModelBuilder.nativeMetalFX : AnyHashable(internalResolution)
+        },
         set: { value in
-          guard let scale = value as? Int else { return }
+          let metalFX = value == PauseMenuModelBuilder.nativeMetalFX
+          guard let scale = metalFX ? EfbScaleChoice.native.rawValue : value as? Int else { return }
           TVEmulationBridge.setInternalResolution(scale)
           internalResolution = scale
+          // MetalFX only acts at Native, so other scales leave the choice alone; plain Native turns it off.
+          if metalFX || scale == EfbScaleChoice.native.rawValue {
+            DOLConfigBridge.setGfxMetalFXSpatialUpscale(metalFX)
+            metalFXUpscale = metalFX
+          }
         }),
       audioVolume: Binding(
         get: { AnyHashable(audioVolume) },
@@ -669,6 +680,7 @@ internal struct PauseMenuView: View {
       shaderOptions: shaderOptions,
       showsRecenterPointer: Self.showsRecenterPointer,
       internalResolution: internalResolution,
+      metalFXSupported: DOLConfigBridge.gfxMetalFXSpatialUpscaleSupported(),
       audioVolume: audioVolume,
       engineShortName: engineShortName,
       jitAcquired: jitAcquired)
@@ -782,6 +794,8 @@ struct PauseMenuState {
   var showsRecenterPointer: Bool
   /// Dolphin's EFB scale (1 = native, 2 = 2x, ...; 0 = auto) and master volume percent, read by the host.
   var internalResolution: Int = 1
+  /// The device can run MetalFX, so the Upscaling tile offers "Native + MetalFX".
+  var metalFXSupported: Bool = false
   var audioVolume: Int = 100
   /// The engine actually running ("INT", "CIR", "CIR-IR", "JIT"), and whether the JIT was acquired.
   var engineShortName: String = ""
@@ -856,9 +870,16 @@ enum PauseMenuModelBuilder {
     return result
   }
 
-  /// Dolphin's EFB scale 0 is Auto.
-  static func upscalingOptions(including current: Int) -> [(String, AnyHashable)] {
-    options(upscalingOptions, including: current) { $0 == 0 ? L("Auto") : "\($0)x" }
+  /// The Upscaling tile's Native picture upscaled with MetalFX (EFB scale 1 plus the MetalFX key).
+  static let nativeMetalFX = AnyHashable("native-metalfx")
+
+  /// Dolphin's EFB scale 0 is Auto. With MetalFX, "Native + MetalFX" follows Native.
+  static func upscalingOptions(including current: Int, metalFX: Bool = false) -> [(String, AnyHashable)] {
+    var result = options(upscalingOptions, including: current) { $0 == 0 ? L("Auto") : "\($0)x" }
+    if metalFX, let native = result.firstIndex(where: { $0.1 == AnyHashable(EfbScaleChoice.native.rawValue) }) {
+      result.insert((L("Native + MetalFX"), nativeMetalFX), at: native + 1)
+    }
+    return result
   }
 
   static func audioVolumeOptions(including current: Int) -> [(String, AnyHashable)] {
@@ -907,8 +928,11 @@ enum PauseMenuModelBuilder {
       MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .action(actions.openPerfOverlay),
                description: L("Frame rate, CPU and GPU timing drawn over the game.")),
       MenuItem(id: "upscaling", title: L("Upscaling"), icon: "arrow.up.left.and.arrow.down.right", tint: .indigo,
-               role: .cycle(options: upscalingOptions(including: state.internalResolution), selection: bindings.internalResolution),
-               description: L("Internal resolution. Takes effect immediately."),
+               role: .cycle(options: upscalingOptions(including: state.internalResolution, metalFX: state.metalFXSupported),
+                            selection: bindings.internalResolution),
+               description: state.metalFXSupported
+                 ? L("Internal resolution. Native + MetalFX sharpens the 1x picture for little GPU cost. Takes effect immediately.")
+                 : L("Internal resolution. Takes effect immediately."),
                longPress: .action { actions.openSettingsLeaf("graphics-enhancements") }),
       MenuItem(id: "audio", title: L("Audio"), icon: "speaker.wave.2", tint: .cyan,
                role: .cycle(options: audioVolumeOptions(including: state.audioVolume), selection: bindings.audioVolume),
