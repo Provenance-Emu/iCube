@@ -7,7 +7,6 @@ import Foundation
 struct LibraryGameRef: Equatable, Identifiable {
   /// Game ID, such as `GSRE01`.
   var id: String
-  var platform: LibraryPlatformCategory
 }
 
 /// One horizontal shelf on the tvOS library home.
@@ -23,8 +22,8 @@ enum LibrarySectionBuilder {
   /// Cap for Recently Played.
   static let recentLimit = 12
 
-  /// Recently Played, Favorites, All Games, then one shelf per platform when more than one platform is present.
-  /// Empty shelves are omitted. Recently Played is newest first.
+  /// Recently Played, then Favorites. Empty shelves are omitted. Recently Played is newest first.
+  /// The whole library follows them as a grid, and the rail switches platforms, so neither is a shelf.
   static func homeShelves(
     games: [LibraryGameRef],
     favoriteIDs: Set<String>,
@@ -51,31 +50,47 @@ enum LibrarySectionBuilder {
     if !favorites.isEmpty {
       shelves.append(LibraryShelfSpec(id: "favorites", titleKey: "Favorites", gameIDs: favorites))
     }
-
-    if !order.isEmpty {
-      shelves.append(LibraryShelfSpec(id: "all", titleKey: "All Games", gameIDs: order))
-    }
-
-    let present = LibraryPlatformCategory.filterCases.filter { platform in
-      games.contains { $0.platform == platform }
-    }
-    if present.count > 1 {
-      for platform in present {
-        let ids = games.filter { $0.platform == platform && !$0.id.isEmpty }.map(\.id)
-        if !ids.isEmpty {
-          shelves.append(LibraryShelfSpec(id: platform.rawValue, titleKey: titleKey(for: platform), gameIDs: ids))
-        }
-      }
-    }
     return shelves
   }
+}
 
-  private static func titleKey(for platform: LibraryPlatformCategory) -> String {
-    switch platform {
-    case .all: return "All"
-    case .gameCube: return "GameCube"
-    case .wii: return "Wii"
-    case .wiiWare: return "WiiWare"
+/// One stop on the tvOS grid's fast-scroll index: a letter and the first game filed under it.
+struct LibraryIndexBucket: Equatable, Identifiable {
+  var id: String { label }
+  /// `A` to `Z`, or `#` for a title that starts with anything else.
+  var label: String
+  /// Position of the bucket's first game in the displayed order.
+  var firstIndex: Int
+}
+
+/// The letter index beside a title-sorted tvOS grid.
+enum LibraryScrollIndex {
+  /// The bucket for titles that do not start with a Latin letter.
+  static let otherLabel = "#"
+
+  private static let latin: ClosedRange<Unicode.Scalar> = "a"..."z"
+
+  /// The bucket `title` files under. Case and accents are folded, so "Énigma" files under E.
+  static func label(for title: String) -> String {
+    let folded = title
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+    guard let first = folded.unicodeScalars.first, latin.contains(first) else { return otherLabel }
+    return String(first).uppercased()
+  }
+
+  /// Buckets in displayed order. Walks `titles` once and records where each label first appears, so the
+  /// index follows the grid in either sort direction. A label met again later (the sort and the folding
+  /// disagree, as with "#" titles among letters) keeps its first position.
+  static func buckets(titles: [String]) -> [LibraryIndexBucket] {
+    var seen = Set<String>()
+    var result: [LibraryIndexBucket] = []
+    for (index, title) in titles.enumerated() {
+      let bucket = label(for: title)
+      if seen.insert(bucket).inserted {
+        result.append(LibraryIndexBucket(label: bucket, firstIndex: index))
+      }
     }
+    return result
   }
 }
