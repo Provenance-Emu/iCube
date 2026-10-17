@@ -332,16 +332,17 @@ internal struct PauseMenuView: View {
       EmulationToastOverlay(barHeight: 0, barVisible: false)
     }
     .environment(\.colorScheme, .dark)
-    // The system dialog, as iFly's Quit and Hard Restart: the focus engine owns it, and Menu cancels it.
+    // The system dialog, as iFly's Quit and Hard Restart: the focus engine owns it, and Menu cancels it. Each action
+    // clears its flag first: a flag still up when the action closes the menu holds the pause (`isPauseMenuChildPresented`).
     .confirmationDialog(L("Exit Game"), isPresented: $showExitDialog, titleVisibility: .visible) {
-      Button(L("Save & Quit")) { saveAndQuit() }
-      Button(L("Quit"), role: .destructive) { quitGame() }
+      Button(L("Save & Quit")) { showExitDialog = false; saveAndQuit() }
+      Button(L("Quit"), role: .destructive) { showExitDialog = false; quitGame() }
       Button(L("Cancel"), role: .cancel) {}
     } message: {
       Text(L("Do you want to quit the game? Unsaved progress will be lost."))
     }
     .confirmationDialog(L("Reset System"), isPresented: $showResetDialog, titleVisibility: .visible) {
-      Button(L("Reset"), role: .destructive) { resetGame() }
+      Button(L("Reset"), role: .destructive) { showResetDialog = false; resetGame() }
       Button(L("Cancel"), role: .cancel) {}
     } message: {
       Text(L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."))

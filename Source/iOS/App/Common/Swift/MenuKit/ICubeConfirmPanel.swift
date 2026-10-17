@@ -40,9 +40,13 @@ struct ICubeConfirmPanel: View {
         }
         // Intrinsic height: the card is as tall as its rows, however the type scales.
         #if os(tvOS)
-        MenuScreen(model: model, style: .list, onBack: onBack, tvClaimsFocus: true)
-          .fixedSize(horizontal: false, vertical: true)
-          .focusSection()
+        // As tall as its rows when they fit; a long list (the 10 quick slots) scrolls inside the screen instead.
+        ViewThatFits(in: .vertical) {
+          MenuScreen(model: model, style: .list, onBack: onBack, tvClaimsFocus: true)
+            .fixedSize(horizontal: false, vertical: true)
+          MenuScreen(model: model, style: .list, onBack: onBack, tvClaimsFocus: true)
+        }
+        .focusSection()
         #else
         MenuScreen(model: model, style: .grid, onBack: onBack)
           .fixedSize(horizontal: false, vertical: true)
