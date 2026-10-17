@@ -232,7 +232,55 @@ extension MenuModel {
   }
 }
 
+extension MenuItem {
+  /// Activates an item in place: runs an action, flips a toggle, advances a picker or cycle. Returns false, and does
+  /// nothing, for the roles a renderer has to handle itself (push a child, push a destination, a custom row, a
+  /// stepper). Every renderer goes through this, so a tile and a row do the same thing.
+  @discardableResult
+  func activateInPlace() -> Bool {
+    switch role {
+    case .action(let action), .destructive(let action):
+      if isEnabled { action() }
+      return true
+    case .toggle(let binding):
+      if isEnabled { binding.wrappedValue.toggle() }
+      return true
+    case .picker(let options, let selection), .cycle(let options, let selection):
+      if isEnabled, let next = MenuItemRole.cycled(options: options, current: selection.wrappedValue, step: 1) {
+        selection.wrappedValue = next
+      }
+      return true
+    case .navigation, .destination, .custom, .stepper:
+      return false
+    }
+  }
+}
+
+extension MenuModel {
+  /// A long-press picker's rows: one per option, a checkmark on the current one, which is also the focus request.
+  /// Picking an option selects it, then calls `onPick` (which closes the picker).
+  static func optionsPicker(itemID: String, options: [(String, AnyHashable)], selection: Binding<AnyHashable>,
+                            onPick: @escaping () -> Void) -> MenuModel {
+    let items = options.map { option in
+      MenuItem(
+        id: "\(itemID)#\(option.1)", title: option.0,
+        icon: option.1 == selection.wrappedValue ? "checkmark" : nil,
+        role: .action {
+          selection.wrappedValue = option.1
+          onPick()
+        })
+    }
+    let current = options.first { $0.1 == selection.wrappedValue }.map { "\(itemID)#\($0.1)" }
+    return MenuModel(sections: [MenuSection(id: "long-press", items: items)], focusRequest: current)
+  }
+}
+
 extension MenuItemRole {
+  var isDestructive: Bool {
+    if case .destructive = self { return true }
+    return false
+  }
+
   /// The options and selection of a role d-pad left/right steps through (`.picker`, `.cycle`).
   var steppable: (options: [(String, AnyHashable)], selection: Binding<AnyHashable>)? {
     switch self {

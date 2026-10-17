@@ -245,4 +245,51 @@ final class MenuModelTests: XCTestCase {
     XCTAssertFalse(model.adjustsWithLeftRight(focusID: "off"), "a disabled row never has focus to hold")
     XCTAssertFalse(model.adjustsWithLeftRight(focusID: nil))
   }
+
+  // MARK: activateInPlace / optionsPicker
+
+  func test_activateInPlace_runsActionFlipsToggleAndStepsCycle() {
+    var ran = 0
+    XCTAssertTrue(MenuItem(id: "a", title: "a", role: .action { ran += 1 }).activateInPlace())
+    XCTAssertTrue(MenuItem(id: "d", title: "d", role: .destructive { ran += 1 }).activateInPlace())
+    XCTAssertEqual(ran, 2)
+
+    var on = false
+    let toggle = Binding(get: { on }, set: { on = $0 })
+    XCTAssertTrue(MenuItem(id: "t", title: "t", role: .toggle(toggle)).activateInPlace())
+    XCTAssertTrue(on)
+
+    var value = AnyHashable(1)
+    let selection = Binding(get: { value }, set: { value = $0 })
+    let options: [(String, AnyHashable)] = [("One", AnyHashable(1)), ("Two", AnyHashable(2))]
+    XCTAssertTrue(MenuItem(id: "c", title: "c", role: .cycle(options: options, selection: selection)).activateInPlace())
+    XCTAssertEqual(value, AnyHashable(2))
+    XCTAssertTrue(MenuItem(id: "c", title: "c", role: .cycle(options: options, selection: selection)).activateInPlace())
+    XCTAssertEqual(value, AnyHashable(1), "wraps")
+  }
+
+  func test_activateInPlace_disabledItemDoesNothingButIsHandled() {
+    var ran = false
+    XCTAssertTrue(MenuItem(id: "a", title: "a", role: .action { ran = true }, isEnabled: false).activateInPlace())
+    XCTAssertFalse(ran)
+  }
+
+  func test_activateInPlace_leavesPushesToTheRenderer() {
+    XCTAssertFalse(MenuItem(id: "n", title: "n", role: .navigation { MenuModel() }).activateInPlace())
+    XCTAssertFalse(MenuItem(id: "x", title: "x", role: .destination(AnyView(EmptyView()))).activateInPlace())
+  }
+
+  func test_optionsPicker_checksAndFocusesTheCurrentOption_pickSelectsAndCloses() {
+    var value = AnyHashable(2)
+    var closed = false
+    let selection = Binding(get: { value }, set: { value = $0 })
+    let options: [(String, AnyHashable)] = [("One", AnyHashable(1)), ("Two", AnyHashable(2))]
+    let model = MenuModel.optionsPicker(itemID: "ff", options: options, selection: selection, onPick: { closed = true })
+    XCTAssertEqual(model.allItems.map(\.id), ["ff#1", "ff#2"])
+    XCTAssertEqual(model.allItems.map(\.icon), [nil, "checkmark"])
+    XCTAssertEqual(model.focusRequest, "ff#2")
+    model.item(id: "ff#1")?.activateInPlace()
+    XCTAssertEqual(value, AnyHashable(1))
+    XCTAssertTrue(closed)
+  }
 }

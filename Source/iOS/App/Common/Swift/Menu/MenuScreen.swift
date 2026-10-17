@@ -289,16 +289,8 @@ struct MenuScreen: View {
 
   private var longPressPickerModel: MenuModel {
     guard let picker = longPressPicker else { return MenuModel() }
-    let items = picker.options.map { option in
-      MenuItem(
-        id: "\(picker.id)#\(option.1)", title: option.0,
-        icon: option.1 == picker.selection.wrappedValue ? "checkmark" : nil,
-        role: .action {
-          picker.selection.wrappedValue = option.1
-          closeLongPressPicker()
-        })
-    }
-    return MenuModel(sections: [MenuSection(id: "long-press", items: items)])
+    return MenuModel.optionsPicker(itemID: picker.id, options: picker.options, selection: picker.selection,
+                                   onPick: closeLongPressPicker)
   }
 
   @ViewBuilder
@@ -478,16 +470,10 @@ struct MenuScreen: View {
   /// this path is the controller's A and grid cards). `.custom` owns its own gestures; a controller's
   /// A runs its `onCustomActivate`, if it has one.
   private func performActivate(_ item: MenuItem) {
-    guard item.isEnabled else { return }
+    guard item.isEnabled, !item.activateInPlace() else { return }
     switch item.role {
-    case .action(let action), .destructive(let action):
-      action()
-    case .toggle(let binding):
-      binding.wrappedValue.toggle()
-    case .picker(let options, let selection), .cycle(let options, let selection):
-      if let next = MenuItemRole.cycled(options: options, current: selection.wrappedValue, step: 1) {
-        selection.wrappedValue = next
-      }
+    case .action, .destructive, .toggle, .picker, .cycle:
+      break   // `activateInPlace` ran it.
     case .navigation(let makeChild):
       pushedChild = PushedMenu(model: makeChild())
     case .destination(let destinationView):
@@ -833,8 +819,9 @@ struct MenuScreen: View {
     .onChange(of: tvFocusedID) { _, id in paneHoldsLeft?(model.adjustsWithLeftRight(focusID: id)) }
     .onDisappear { paneHoldsLeft?(false) }
     .onAppear {
-      // Next runloop: the rows must exist before focus can be assigned to one.
-      guard tvClaimsFocus, let first = defaultTVFocusID else { return }
+      // Next runloop: the rows must exist before focus can be assigned to one. A picker opens on its current value.
+      let requested = model.focusRequest.flatMap { model.focusableIDs.contains($0) ? $0 : nil }
+      guard tvClaimsFocus, let first = requested ?? defaultTVFocusID else { return }
       DispatchQueue.main.async { tvFocusedID = first }
     }
     if let first = defaultTVFocusID {
