@@ -10,7 +10,8 @@ import SwiftUI
 /// menu's child-presented state.
 struct ICubeConfirmPanel: View {
   let title: String
-  let message: String
+  /// nil for a panel that is only rows (a long-press options picker).
+  let message: String?
   let model: MenuModel
   /// tvOS look: centred, wider, roomier and a darker scrim, so it reads as modal from across the room.
   let isTV: Bool
@@ -29,11 +30,13 @@ struct ICubeConfirmPanel: View {
           Text(title)
             .icubeText(.title)
             .foregroundStyle(ICubeDesign.color(.textPrimary))
-          Text(message)
-            .icubeText(.detail)
-            .foregroundStyle(ICubeDesign.color(.textSecondary))
-            .multilineTextAlignment(isTV ? .center : .leading)
-            .fixedSize(horizontal: false, vertical: true)
+          if let message {
+            Text(message)
+              .icubeText(.detail)
+              .foregroundStyle(ICubeDesign.color(.textSecondary))
+              .multilineTextAlignment(isTV ? .center : .leading)
+              .fixedSize(horizontal: false, vertical: true)
+          }
         }
         // Intrinsic height: the card is as tall as its rows, however the type scales.
         #if os(tvOS)
