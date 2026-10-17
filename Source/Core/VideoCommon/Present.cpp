@@ -914,10 +914,10 @@ void Presenter::RenderXFBToScreen(const MathUtil::Rectangle<int>& target_rc,
 
 const AbstractTexture* Presenter::UpscaleXFBForPresent()
 {
-  // Only the Native (1x) picture is upscaled; stereo and HDR keep the plain path.
+  // Any internal resolution whose picture is still smaller than the screen's; stereo and HDR keep
+  // the plain path.
   if (!g_ActiveConfig.bMetalFXSpatialUpscale || !m_xfb_entry ||
-      g_ActiveConfig.stereo_mode != StereoMode::Off || g_ActiveConfig.bHDR ||
-      g_framebuffer_manager->GetEFBScale() != 1)
+      g_ActiveConfig.stereo_mode != StereoMode::Off || g_ActiveConfig.bHDR)
   {
     return nullptr;
   }

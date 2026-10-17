@@ -1,7 +1,7 @@
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-// iCube: MetalFX spatial upscaling of the Native (1x) XFB at present time. Built only where CMake
+// iCube: MetalFX spatial upscaling of the XFB to the screen picture at present time. Built only where CMake
 // defines ICUBE_METALFX (iOS): Apple TV GPUs don't support MetalFX, and the tvOS slice must not
 // link the framework.
 

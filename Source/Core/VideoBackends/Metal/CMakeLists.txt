@@ -50,7 +50,7 @@ PRIVATE
 
 target_compile_options(videometal PRIVATE -fno-objc-arc)
 
-# iCube: MetalFX spatial upscaling of the Native picture. iOS devices only: Apple TV GPUs don't
+# iCube: MetalFX spatial upscaling of the picture to the screen. iOS devices only: Apple TV GPUs don't
 # support MetalFX (a hard-linked framework the tvOS slice can't load would kill the app in dyld),
 # and the iOS Simulator SDK has no MetalFX at all.
 if(CMAKE_SYSTEM_NAME STREQUAL "iOS" AND EXISTS "${CMAKE_OSX_SYSROOT}/System/Library/Frameworks/MetalFX.framework")
