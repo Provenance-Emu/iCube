@@ -16,6 +16,8 @@ struct SettingsSidebarShell: View {
   @FocusState private var sidebarFocus: String?
   #if !os(tvOS)
   @Environment(\.icube) private var theme
+  @ScaledMetric(relativeTo: .body) private var padSidebarWidth = Layout.sidebarWidthPad
+  @ScaledMetric(relativeTo: .body) private var padIconWidth = Layout.iconWidth
   #endif
   #if os(tvOS)
   @State private var openedAt = Date()
@@ -28,8 +30,12 @@ struct SettingsSidebarShell: View {
   #endif
 
   private enum Layout {
-    static let sidebarWidthTV: CGFloat = 320
-    static let sidebarWidthPad: CGFloat = 240
+    /// Fits the longest uppercase nav label ("PERFORMANCE TUNING") on one line; longer ones wrap.
+    static let sidebarWidthTV: CGFloat = 440
+    /// At the default text size; scales with Dynamic Type, capped at `sidebarMaxFractionPad` of the screen.
+    static let sidebarWidthPad: CGFloat = 280
+    /// Leaves the pane most of the width in split view and at accessibility text sizes; labels wrap instead.
+    static let sidebarMaxFractionPad: CGFloat = 0.38
     static let iconWidth: CGFloat = 28
     static let rowRadius: CGFloat = 10
     static let selectedOpacity = 0.25
@@ -38,7 +44,7 @@ struct SettingsSidebarShell: View {
     static let rowContentSpacing: CGFloat = 12
     static let rowHorizontalPadding: CGFloat = 12
     static let rowVerticalPadding: CGFloat = 10
-    static let listHorizontalPadding: CGFloat = 20
+    static let listHorizontalPadding: CGFloat = 12
     static let listVerticalPadding: CGFloat = 24
   }
 
@@ -48,13 +54,15 @@ struct SettingsSidebarShell: View {
   var body: some View {
     HStack(spacing: 0) {
       sidebar
-        .frame(width: sidebarWidth)
         #if os(tvOS)
+        .frame(width: Layout.sidebarWidthTV)
         .disabled(paneHoldsLeft)
         .focusSection()
         // Left from the pane lands on the page it shows, not on whichever entry is level with the row.
         .defaultFocus($sidebarFocus, selectedID, priority: .userInitiated)
         .onExitCommand(perform: leaveSettings)
+        #else
+        .containerRelativeFrame(.horizontal) { length, _ in min(padSidebarWidth, length * Layout.sidebarMaxFractionPad) }
         #endif
       #if os(tvOS)
       Rectangle().fill(ICubeDesign.color(.hairline)).frame(width: ICubeDesign.Line.hairline.rawValue)
@@ -184,7 +192,8 @@ struct SettingsSidebarShell: View {
                   .frame(width: ICubeDesign.Symbol.railColumn)
                 Text(entry.title)
                   .icubeText(.nav)
-                  .lineLimit(1)
+                  .multilineTextAlignment(.leading)
+                  .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
               }
               .foregroundStyle(isSelected ? ICubeDesign.color(.accent) : ICubeDesign.color(.textPrimary))
@@ -214,8 +223,10 @@ struct SettingsSidebarShell: View {
           ForEach(section.entries) { entry in
             Button { selectedID = entry.id } label: {
               HStack(spacing: Layout.rowContentSpacing) {
-                Image(systemName: entry.icon).frame(width: Layout.iconWidth)
-                Text(entry.title).lineLimit(1)
+                Image(systemName: entry.icon).frame(width: padIconWidth)
+                Text(entry.title)
+                  .multilineTextAlignment(.leading)
+                  .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
               }
               .padding(.horizontal, Layout.rowHorizontalPadding)
@@ -235,12 +246,4 @@ struct SettingsSidebarShell: View {
     }
   }
   #endif
-
-  private var sidebarWidth: CGFloat {
-    #if os(tvOS)
-    Layout.sidebarWidthTV
-    #else
-    Layout.sidebarWidthPad
-    #endif
-  }
 }
