@@ -11,68 +11,69 @@ struct DolphinBlogView: View {
   @State private var selectedPost: BlogPost?
   @State private var refreshing = false
 
+  // A plain screen: Settings > About pushes it onto Settings' own stack, and a NavigationView here made
+  // a second stack inside that one.
   var body: some View {
-    NavigationView {
-      ZStack {
-        // Gradient background
-        LinearGradient(
-          colors: [Color.blue.opacity(0.1), Color.cyan.opacity(0.05)],
-          startPoint: .topLeading,
-          endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+    ZStack {
+      // Gradient background
+      LinearGradient(
+        colors: [Color.blue.opacity(0.1), Color.cyan.opacity(0.05)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+      )
+      .ignoresSafeArea()
 
-        ScrollView {
-          LazyVStack(spacing: 16) {
-            // Header
-            headerView
+      ScrollView {
+        LazyVStack(spacing: 16) {
+          // Header
+          headerView
 
-            // Blog posts
-            if feedManager.isLoading && feedManager.posts.isEmpty {
-              loadingView
-            } else if let error = feedManager.error {
-              errorView(error)
-            } else {
-              ForEach(feedManager.posts) { post in
-                BlogPostCard(post: post) {
-                  selectedPost = post
-                }
+          // Blog posts
+          if feedManager.isLoading && feedManager.posts.isEmpty {
+            loadingView
+          } else if let error = feedManager.error {
+            errorView(error)
+          } else {
+            ForEach(feedManager.posts) { post in
+              BlogPostCard(post: post) {
+                selectedPost = post
               }
-
-              // Footer
-              footerView
             }
+
+            // Footer
+            footerView
           }
-          .padding(.horizontal, 16)
-          .padding(.bottom, 20)
         }
-        .refreshable {
-          await refreshFeed()
+        .padding(.horizontal, 16)
+        .padding(.bottom, 20)
+      }
+      .refreshable {
+        await refreshFeed()
+      }
+    }
+    .navigationTitle("Dolphin Blog")
+    #if !os(tvOS)
+      .navigationBarTitleDisplayMode(.large)
+    #endif
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button(action: {
+            Task { await refreshFeed() }
+          }) {
+            Image(systemName: refreshing ? "arrow.clockwise" : "arrow.clockwise")
+              .rotationEffect(.degrees(refreshing ? 360 : 0))
+              .animation(refreshing ? .linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: refreshing)
+          }
+          .disabled(refreshing)
         }
       }
-      .navigationTitle("Dolphin Blog")
-      #if !os(tvOS)
-        .navigationBarTitleDisplayMode(.large)
-      #endif
-        .toolbar {
-          ToolbarItem(placement: .navigationBarTrailing) {
-            Button(action: {
-              Task { await refreshFeed() }
-            }) {
-              Image(systemName: refreshing ? "arrow.clockwise" : "arrow.clockwise")
-                .rotationEffect(.degrees(refreshing ? 360 : 0))
-                .animation(refreshing ? .linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: refreshing)
-            }
-            .disabled(refreshing)
-          }
-        }
-        .sheet(item: $selectedPost) { post in
-          BlogPostDetailView(post: post)
-        }
-        .task {
-          await loadInitialFeed()
-        }
-    }
+      .sheet(item: $selectedPost) { post in
+        // Its own pad scope, so B closes the post rather than popping the blog out from under it.
+        BlogPostDetailView(post: post).padBackNavigation()
+      }
+      .task {
+        await loadInitialFeed()
+      }
   }
 
   private var headerView: some View {
@@ -574,8 +575,9 @@ struct BlogPostDetailView: View {
   @State private var showingSafari = false
   @State private var logoRotation = 0.0
 
+  // Presented as a sheet, so it brings the stack its title and Done button sit in.
   var body: some View {
-    NavigationView {
+    NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
           // Header with animated dolphin
@@ -783,7 +785,7 @@ struct BlogPostDetailView: View {
 #if DEBUG
 struct DolphinBlogView_Previews: PreviewProvider {
   static var previews: some View {
-    DolphinBlogView()
+    NavigationStack { DolphinBlogView() }
       .preferredColorScheme(.dark)
   }
 }
