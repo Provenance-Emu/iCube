@@ -45,6 +45,13 @@ public:
   // Last raw frame time in ms (per-frame, atomic, any thread). For 1%-low capture.
   double GetLastRawFrameTimeMs() const;
 
+  // iCube: GPU time per presented frame, summed over the backend's command buffers and averaged
+  // over a window, and the part of it spent upscaling for present (MetalFX). Any thread; 0 until
+  // a backend reports (only Metal does).
+  void SetGPUFrameTimes(double frame_ms, double upscale_ms);
+  double GetGPUFrameMs() const { return m_gpu_frame_ms.load(std::memory_order_relaxed); }
+  double GetGPUUpscaleMs() const { return m_gpu_upscale_ms.load(std::memory_order_relaxed); }
+
   // --- iCube adaptive-controller sensors ---
   // Frame-time stability of the *presented* stream (host-thread frame counter), in seconds.
   // Both are flushed every present by DrawImGuiStats() -> UpdateStats(), which runs
@@ -127,6 +134,8 @@ private:
 
   std::atomic<double> m_speed{};
   std::atomic<double> m_max_speed{};
+  std::atomic<double> m_gpu_frame_ms{};
+  std::atomic<double> m_gpu_upscale_ms{};
 
   std::atomic<DT> m_frame_presentation_offset{};
   std::atomic<FrameBufferSize> m_frame_buffer_size{};

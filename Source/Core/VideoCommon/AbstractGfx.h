@@ -167,6 +167,17 @@ public:
   virtual void SelectRightBuffer() {}
   virtual void SelectMainBuffer() {}
 
+  // iCube: upscales source_rc of the XFB to out_width x out_height before it is drawn to the
+  // backbuffer (Metal: MetalFX spatial scaler). Called before BindBackbuffer, outside any render
+  // pass. Returns a texture whose whole extent is the upscaled picture, or nullptr to draw the XFB
+  // as usual. The texture stays valid until the next call.
+  virtual const AbstractTexture* UpscaleForPresent(const AbstractTexture* source_texture,
+                                                   const MathUtil::Rectangle<int>& source_rc,
+                                                   u32 out_width, u32 out_height)
+  {
+    return nullptr;
+  }
+
   // A simple presentation fallback, only used by video software
   virtual void ShowImage(const AbstractTexture* source_texture,
                          const MathUtil::Rectangle<int>& source_rc)

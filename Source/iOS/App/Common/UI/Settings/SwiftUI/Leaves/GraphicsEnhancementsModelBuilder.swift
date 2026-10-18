@@ -9,11 +9,18 @@ enum GraphicsEnhancementsModelBuilder {
     let msaaOn = state.msaa > MsaaSamples.none.rawValue
 
     // Resolver step #3: while an auto controller or the game drives the key, the manual choice would not apply until the override clears.
-    let resolution = MenuSection(id: "internal-resolution", header: L("Internal Resolution"), items: [
+    var resolutionItems = [
       SettingsRow.cycle("efb-scale", L("Internal Resolution"), efbScaleOptions(maxScale: max(state.efbMaxScale, state.efbScale)), state.efbScale,
             L("Renders the game above native resolution for a sharper image. Higher costs more GPU; on the CPU-bound path 1x–2x is usually plenty."),
             enabled: state.efbOverride == .none, badge: ConfigOverrideBadge.title(for: state.efbOverride), set: { apply(.efbScale($0)) }),
-    ])
+    ]
+    if state.metalFXSupported {
+      resolutionItems.append(
+        SettingsRow.toggle("metalfx-upscale", L("MetalFX Upscaling"), state.metalFXSpatialUpscale,
+               L("Upscales the picture to the screen with Apple's MetalFX instead of a plain stretch, at any internal resolution that is still below the screen's. Sharper edges and text, but it costs GPU time that grows with screen size; a higher internal resolution is often cheaper."),
+               set: { apply(.metalFXSpatialUpscale($0)) }))
+    }
+    let resolution = MenuSection(id: "internal-resolution", header: L("Internal Resolution"), items: resolutionItems)
     let filtering = MenuSection(id: "texture-filtering", header: L("Texture Filtering"), items: [
       SettingsRow.cycle("anisotropy", L("Anisotropic Filtering"), GraphicsEnhancementsState.anisotropyLadder.map { (multiplier($0), $0) }, state.anisotropy,
             L("Sharpens textures viewed at steep angles (floors, walls). Cheap on modern GPUs; 4x–16x is a safe quality win."), set: { apply(.anisotropy($0)) }),

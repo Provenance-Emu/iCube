@@ -66,6 +66,7 @@ internal struct PauseMenuView: View {
   /// Mirrors of the live Dolphin values behind the Upscaling and Audio tiles; the bridge is read on appear and
   /// written through the bindings, so the cycle tiles redraw without polling.
   @State private var internalResolution: Int = 1
+  @State private var metalFXUpscale: Bool = false
   @State private var audioVolume: Int = 100
   /// The Performance tile badge and the cover-column chip: the engine actually running.
   @State private var engineShortName: String = ""
@@ -111,6 +112,7 @@ internal struct PauseMenuView: View {
 
   private func refreshLiveSettings() {
     internalResolution = TVEmulationBridge.internalResolution()
+    metalFXUpscale = DOLConfigBridge.gfxMetalFXSpatialUpscale()
     audioVolume = TVEmulationBridge.audioVolumePercent()
     refreshEngineState()
   }
@@ -646,6 +648,9 @@ internal struct PauseMenuView: View {
           TVEmulationBridge.setInternalResolution(scale)
           internalResolution = scale
         }),
+      metalFX: Binding(
+        get: { metalFXUpscale },
+        set: { DOLConfigBridge.setGfxMetalFXSpatialUpscale($0); metalFXUpscale = $0 }),
       audioVolume: Binding(
         get: { AnyHashable(audioVolume) },
         set: { value in
@@ -669,6 +674,7 @@ internal struct PauseMenuView: View {
       shaderOptions: shaderOptions,
       showsRecenterPointer: Self.showsRecenterPointer,
       internalResolution: internalResolution,
+      metalFXSupported: DOLConfigBridge.gfxMetalFXSpatialUpscaleSupported(),
       audioVolume: audioVolume,
       engineShortName: engineShortName,
       jitAcquired: jitAcquired)
@@ -782,6 +788,8 @@ struct PauseMenuState {
   var showsRecenterPointer: Bool
   /// Dolphin's EFB scale (1 = native, 2 = 2x, ...; 0 = auto) and master volume percent, read by the host.
   var internalResolution: Int = 1
+  /// The device can run MetalFX, so the MetalFX tile follows Upscaling.
+  var metalFXSupported: Bool = false
   var audioVolume: Int = 100
   /// The engine actually running ("INT", "CIR", "CIR-IR", "JIT"), and whether the JIT was acquired.
   var engineShortName: String = ""
@@ -795,6 +803,8 @@ struct PauseMenuBindings {
   var quickSlot: Binding<AnyHashable>
   var shader: Binding<AnyHashable>
   var internalResolution: Binding<AnyHashable> = .constant(AnyHashable(1))
+  /// MetalFX upscaling of whatever internal resolution is picked (`gfxMetalFXSpatialUpscale`).
+  var metalFX: Binding<Bool> = .constant(false)
   var audioVolume: Binding<AnyHashable> = .constant(AnyHashable(100))
   /// Screen recording on/off (`RecordingManager`); the Record tile toggles it.
   var recording: Binding<Bool> = .constant(false)
@@ -927,6 +937,12 @@ enum PauseMenuModelBuilder {
       MenuItem(id: "continuity", title: L("Continue Elsewhere"), icon: "arrow.triangle.branch", tint: .teal, role: .action(actions.openContinuity),
                description: L("Hand this game to a nearby device.")),
     ]
+    if state.metalFXSupported, let upscaling = game.firstIndex(where: { $0.id == "upscaling" }) {
+      game.insert(
+        MenuItem(id: "metalfx", title: L("MetalFX"), icon: "sparkles", tint: .indigo, role: .toggle(bindings.metalFX),
+                 description: L("Sharpens the picture where it is stretched to fill the screen. Costs GPU time; raising Upscaling is often cheaper.")),
+        at: upscaling + 1)
+    }
     if state.showsRecenterPointer {
       game.append(MenuItem(id: "recenter-pointer", title: L("Recenter Pointer"), icon: "scope", tint: .green, role: .action(actions.recenterPointer),
                            description: L("Center the Wii pointer on how you hold the device.")))

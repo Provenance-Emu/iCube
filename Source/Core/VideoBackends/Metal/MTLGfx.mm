@@ -6,6 +6,7 @@
 #include "VideoBackends/Metal/MTLBoundingBox.h"
 #include "VideoBackends/Metal/MTLObjectCache.h"
 #include "VideoBackends/Metal/MTLPipeline.h"
+#include "VideoBackends/Metal/MTLSpatialUpscaler.h"
 #include "VideoBackends/Metal/MTLStateTracker.h"
 #include "VideoBackends/Metal/MTLTexture.h"
 #include "VideoBackends/Metal/MTLUtil.h"
@@ -16,11 +17,14 @@
 #include "Common/Logging/Log.h"              // iCube: ERROR_LOG_FMT for the texture-size guard
 #include "Common/StallSignpost.h"            // iCube: ICUBE_STALL_POINT
 #include "Core/Config/GraphicsSettings.h"    // iCube FastMath: GFX_HACK_FAST_MATH
+#include "Core/System.h"                     // iCube: GPU frame times -> PerformanceMetrics
 
 #include "VideoCommon/FramebufferManager.h"
+#include "VideoCommon/PerformanceMetrics.h"
 #include "VideoCommon/Present.h"
 #include "VideoCommon/VideoBackendBase.h"
 
+#include <atomic>
 #include <fstream>
 
 #import <Foundation/Foundation.h>
@@ -46,6 +50,36 @@ Metal::Gfx::Gfx(MRCOwned<CAMetalLayer*> layer) : m_layer(std::move(layer))
 }
 
 Metal::Gfx::~Gfx() = default;
+
+namespace
+{
+// Presents per reported GPU-time average.
+constexpr u32 GPU_TIME_WINDOW = 120;
+std::atomic<u64> s_gpu_ns{0};
+std::atomic<u64> s_upscale_ns{0};
+u32 s_gpu_time_presents = 0;  // Presenting thread only.
+
+void ReportGPUTimes()
+{
+  if (++s_gpu_time_presents < GPU_TIME_WINDOW)
+    return;
+  s_gpu_time_presents = 0;
+  const double frame_ms = static_cast<double>(s_gpu_ns.exchange(0)) / 1e6 / GPU_TIME_WINDOW;
+  const double upscale_ms = static_cast<double>(s_upscale_ns.exchange(0)) / 1e6 / GPU_TIME_WINDOW;
+  Core::System::GetInstance().GetPerfMetrics().SetGPUFrameTimes(frame_ms, upscale_ms);
+}
+}  // namespace
+
+void Metal::AddGPUTime(id<MTLCommandBuffer> buffer, bool upscale)
+{
+  const double seconds = [buffer GPUEndTime] - [buffer GPUStartTime];
+  if (!(seconds > 0))
+    return;
+  const u64 ns = static_cast<u64>(seconds * 1e9);
+  s_gpu_ns.fetch_add(ns, std::memory_order_relaxed);
+  if (upscale)
+    s_upscale_ns.fetch_add(ns, std::memory_order_relaxed);
+}
 
 bool Metal::Gfx::IsHeadless() const
 {
@@ -573,6 +607,28 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
   }
 }
 
+const AbstractTexture* Metal::Gfx::UpscaleForPresent(const AbstractTexture* source_texture,
+                                                     const MathUtil::Rectangle<int>& source_rc,
+                                                     u32 out_width, u32 out_height)
+{
+#ifdef ICUBE_METALFX
+  if (m_upscaler_unsupported)
+    return nullptr;
+  if (!m_upscaler)
+  {
+    if (!SpatialUpscaler::IsSupported())
+    {
+      m_upscaler_unsupported = true;
+      return nullptr;
+    }
+    m_upscaler = std::make_unique<SpatialUpscaler>();
+  }
+  return m_upscaler->Upscale(source_texture, source_rc, out_width, out_height);
+#else
+  return nullptr;
+#endif
+}
+
 void Metal::Gfx::PresentBackbuffer()
 {
   @autoreleasepool
@@ -723,6 +779,7 @@ void Metal::Gfx::PresentBackbuffer()
       m_drawable = nullptr;
     }
     g_state_tracker->FlushEncoders();
+    ReportGPUTimes();
   }
 }
 

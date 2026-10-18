@@ -139,6 +139,15 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 
   // Prefer asynchronous present on iOS/tvOS by default (can be toggled in UI)
   SetBaseIfUnspecified(Config::GFX_ASYNC_PRESENT, true);
+
+#if !TARGET_OS_TV
+  // Internal resolution follows the screen: Auto picks the smallest whole scale whose picture covers
+  // the screen picture (4x on a 12.9" iPad, 3x on an iPhone in landscape, 2x in portrait), where 1x
+  // stretched the 640x528 frame up to 3.7x. The step from 2x to 3x/4x measured 1-3 ms of GPU per
+  // frame on an A12Z and an A18 Pro (docs/perf/2026-10-17-metalfx-spatial.md), and the emulator is
+  // CPU-bound. tvOS keeps 1x: on a 4K TV Auto would pick about 4x on Apple TV GPUs nobody measured.
+  SetBaseIfUnspecified(Config::GFX_EFB_SCALE, EFB_SCALE_AUTO_INTEGRAL);
+#endif
 }
 
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary<UIApplicationLaunchOptionsKey,id>*)launchOptions {
