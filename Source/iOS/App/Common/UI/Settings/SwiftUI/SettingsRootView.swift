@@ -9,17 +9,32 @@ struct SettingsRootView: View {
   @Environment(\.horizontalSizeClass) private var sizeClass
   @Environment(\.dismiss) private var dismiss
   /// A leaf to open first (the DSU deep link, the tvOS `-ICubeSettingsPreview` argument).
-  var initialLeafID: String? = nil
+  let initialLeafID: String?
+  /// Set by a host that presents Settings modally (the library's cover, the pause menu's sheet) for a Close
+  /// button. Settings owns its navigation stack: a host must not wrap it in another one or push it onto
+  /// one, or Back on a leaf pops Settings too.
+  let onClose: (() -> Void)?
   @State private var jumpToLeafID: String?
   @State private var jumpToControllersRequested = false
   /// Built once: the entries' closures are stable across body evaluations, and `pushed` compares by id.
-  @State private var sections = SettingsRootView.makeSections()
+  @State private var sections: [SettingsRootSection]
   #if os(iOS)
   @State private var searchText = ""
   @State private var pushed: SettingsLeafEntry?
   /// Search exists on iOS only, so tvOS never builds the index.
   @State private var searchIndex: SettingsSearchIndex?
   #endif
+
+  init(initialLeafID: String? = nil, onClose: (() -> Void)? = nil) {
+    self.initialLeafID = initialLeafID
+    self.onClose = onClose
+    let sections = Self.makeSections()
+    _sections = State(initialValue: sections)
+    #if os(iOS)
+    // The iPhone stack starts with the leaf on it rather than pushing it once the sheet is up.
+    _pushed = State(initialValue: initialLeafID.flatMap { id in sections.flatMap(\.entries).first { $0.id == id } })
+    #endif
+  }
 
   private static func makeSections() -> [SettingsRootSection] {
     #if os(iOS)
@@ -49,7 +64,7 @@ struct SettingsRootView: View {
       SettingsSidebarShell(sections: sections, searchIndex: nil, jumpToLeafID: $jumpToLeafID)
       #else
       if usesSidebar {
-        SettingsSidebarShell(sections: sections, searchIndex: searchIndex, jumpToLeafID: $jumpToLeafID)
+        SettingsSidebarShell(sections: sections, searchIndex: searchIndex, jumpToLeafID: $jumpToLeafID, onClose: onClose)
       } else {
         phoneList
       }
@@ -80,9 +95,16 @@ struct SettingsRootView: View {
         }
       }
       .navigationTitle(L("Settings"))
+      // Opened on a leaf, this list is first laid out by the pop back to it, and a large title then
+      // never settles: the navigation bar and the list re-adjust each other's insets forever and the
+      // app hangs. An inline title has no collapse to settle.
+      .navigationBarTitleDisplayMode(initialLeafID == nil ? .automatic : .inline)
       .searchable(text: $searchText, prompt: L("Search Settings"))
       .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
+        ToolbarItemGroup(placement: .navigationBarTrailing) {
+          if let onClose {
+            Button(L("Close"), action: onClose)
+          }
           SettingsResetAllButton { Text(L("Reset All")) }
         }
       }
