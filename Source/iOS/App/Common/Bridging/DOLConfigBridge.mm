@@ -1311,6 +1311,11 @@ static bool HasCurrentRunLayer()
   Config::SetBase(Config::MAIN_FAST_DISC_SPEED, true);
   Config::SetBase(Config::MAIN_DSP_THREAD, true);
   Config::SetBase(Config::GFX_HACK_IMMEDIATE_XFB, true);
+#if !TARGET_OS_TV
+  // Internal resolution compiles to 1x; iCube's iOS default is Auto (fit the screen), see
+  // DolphinCoreService.
+  Config::SetBase(Config::GFX_EFB_SCALE, EFB_SCALE_AUTO_INTEGRAL);
+#endif
 
   // Fastmem compiles to true, which is wrong on a device without it. Seed both keys the way
   // DolphinCoreService does at launch instead of leaving them on the compiled value until then.
@@ -1531,7 +1536,11 @@ static NSString* BaseLayerKeyName(const Config::Location& location)
     case 1:
       safe_delete(Config::MAIN_GFX_BACKEND);
       safe_delete(Config::GFX_VSYNC);
+#if TARGET_OS_TV
       safe_delete(Config::GFX_EFB_SCALE);
+#else
+      Config::SetBase(Config::GFX_EFB_SCALE, EFB_SCALE_AUTO_INTEGRAL);  // iOS default: fit the screen
+#endif
       safe_delete(Config::GFX_WIDESCREEN_HACK);
       safe_delete(Config::GFX_DISABLE_FOG);
       safe_delete(Config::GFX_ASYNC_PRESENT);
