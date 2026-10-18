@@ -3,14 +3,34 @@
 
 import SwiftUI
 
+/// What Menu does with focus in the sidebar. The pane can still show a page pushed from its leaf: focus
+/// lands in the sidebar when that page has nothing focusable yet (Help while it loads) or after Left from
+/// it. Leaving Settings then closed it from two levels deep; Back pops that page instead.
+enum SettingsSidebarBack: Equatable {
+  case popPane
+  case leaveSettings
+  /// The release of the press that opened Settings (`BackCoalescer`).
+  case ignore
+
+  /// - Parameters:
+  ///   - paneDepth: pages pushed on top of the pane's leaf.
+  ///   - honorsPress: whether `BackCoalescer` lets this press close Settings.
+  static func action(paneDepth: Int, honorsPress: Bool) -> SettingsSidebarBack {
+    if paneDepth > 0 { return .popPane }
+    return honorsPress ? .leaveSettings : .ignore
+  }
+}
+
 /// tvOS and iPad (regular width): a sidebar of leaf pages grouped under section headers, and the selected
 /// leaf in the pane. The sidebar is its own focus section; right enters the pane. Back (Menu / B) from a
-/// leaf returns to the sidebar; Menu at the sidebar leaves Settings (through `BackCoalescer`, so the press
-/// that opened Settings cannot close it again).
+/// leaf returns to the sidebar; Menu at the sidebar pops a page still pushed in the pane, and otherwise
+/// leaves Settings (through `BackCoalescer`, so the press that opened Settings cannot close it again).
 struct SettingsSidebarShell: View {
   let sections: [SettingsRootSection]
   let searchIndex: SettingsSearchIndex?
   @Binding var jumpToLeafID: String?
+  /// iPad in the pause menu's sheet: the Close button `SettingsRootView` was given.
+  var onClose: (() -> Void)? = nil
 
   @State private var selectedID: String?
   @FocusState private var sidebarFocus: String?
@@ -22,6 +42,7 @@ struct SettingsSidebarShell: View {
   /// True while focus is on a pane row that left/right adjust (`settingsPaneHoldsLeft`): the sidebar is
   /// then not focusable, so left steps the value instead of leaving the row.
   @State private var paneHoldsLeft = false
+  @State private var paneNavigation = SettingsPaneNavigation()
   @Environment(\.dismiss) private var dismiss
   #else
   @State private var searchText = ""
@@ -67,6 +88,7 @@ struct SettingsSidebarShell: View {
             // Only the pane's root leaf: a sub-leaf pushed from it is a different view, so Menu pops it natively.
             #if os(tvOS)
             .onExitCommand(perform: backToSidebar)
+            .background { SettingsPaneNavigationReader(navigation: paneNavigation) }
             #endif
         } else {
           #if os(tvOS)
@@ -111,10 +133,15 @@ struct SettingsSidebarShell: View {
   }
 
   #if os(tvOS)
-  /// Menu with focus in the sidebar: leave Settings, unless it is the release of the press that opened it.
+  /// Menu with focus in the sidebar: pop a page still pushed in the pane, else leave Settings unless it is
+  /// the release of the press that opened it.
   private func leaveSettings() {
-    guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
-    dismiss()
+    switch SettingsSidebarBack.action(paneDepth: paneNavigation.depth,
+                                      honorsPress: BackCoalescer.shouldHonor(openedAt: openedAt, now: Date())) {
+    case .popPane: paneNavigation.pop()
+    case .leaveSettings: dismiss()
+    case .ignore: break
+    }
   }
 
   /// Menu in the pane: a hand-built leaf's exit command, or a migrated leaf's `settingsPaneBack`.
@@ -146,6 +173,11 @@ struct SettingsSidebarShell: View {
       }
       .navigationTitle(L("Settings"))
       .searchable(text: $searchText, prompt: L("Search Settings"))
+      .toolbar {
+        if let onClose {
+          ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close"), action: onClose) }
+        }
+      }
     }
     #else
     sidebarList
@@ -244,3 +276,45 @@ struct SettingsSidebarShell: View {
     #endif
   }
 }
+
+#if os(tvOS)
+/// The pane's navigation controller, reached from its root leaf. SwiftUI exposes neither the depth nor a pop
+/// for pages pushed with `NavigationLink(destination:)` or `navigationDestination(item:)`, and the sidebar
+/// is outside the stack, so it cannot use their `dismiss`. A UIKit pop is the one the back button does.
+final class SettingsPaneNavigation {
+  fileprivate weak var controller: UINavigationController?
+
+  var depth: Int { max((controller?.viewControllers.count ?? 1) - 1, 0) }
+
+  func pop() { controller?.popViewController(animated: true) }
+}
+
+/// Records the navigation controller while the root leaf is on screen. It has to be found then: SwiftUI
+/// tears this view down once a pushed page covers the leaf.
+private struct SettingsPaneNavigationReader: UIViewRepresentable {
+  let navigation: SettingsPaneNavigation
+
+  final class Anchor: UIView {
+    var navigation: SettingsPaneNavigation?
+
+    override func didMoveToWindow() {
+      super.didMoveToWindow()
+      guard window != nil,
+            let controller = sequence(first: self as UIResponder, next: { $0.next })
+              .lazy.compactMap({ $0 as? UINavigationController }).first else { return }
+      navigation?.controller = controller
+    }
+  }
+
+  func makeUIView(context: Context) -> Anchor {
+    let view = Anchor()
+    view.isUserInteractionEnabled = false
+    view.navigation = navigation
+    return view
+  }
+
+  func updateUIView(_ view: Anchor, context: Context) {
+    view.navigation = navigation
+  }
+}
+#endif
