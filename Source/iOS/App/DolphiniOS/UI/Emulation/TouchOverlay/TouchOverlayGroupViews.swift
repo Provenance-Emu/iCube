@@ -62,7 +62,6 @@ struct TouchOverlayButtonClusterView: View {
         },
         onChange: { id, down in
           guard let control = controls.first(where: { $0.id == id }) else { return }
-          if down { TouchOverlayHaptics.impact() }
           switch control.kind {
           case .button(let raw):
             TCManagerInterface.setButtonStateFor(raw, controller: deviceId, state: down)
@@ -91,6 +90,12 @@ struct TouchOverlayButtonClusterView: View {
       )
       .frame(width: groupSize.width, height: groupSize.height)
       .allowsHitTesting(!isEditing)
+    }
+    .onChange(of: pressed) { oldValue, newValue in
+      // Once per touch event, however many controls it pressed (two fingers landing together).
+      if TouchHapticRules.pressesSomethingNew(previous: oldValue, now: newValue) {
+        TouchOverlayHaptics.play(.press)
+      }
     }
     .onChange(of: isEditing) { _, editing in
       guard editing else { return }
@@ -168,7 +173,7 @@ struct TouchOverlayDPadView: View {
         TCManagerInterface.setButtonStateFor(write.id, controller: deviceId, state: write.pressed)
       }
       if oldValue.isEmpty, !newValue.isEmpty {
-        TouchOverlayHaptics.impact()
+        TouchOverlayHaptics.play(.press)
       }
     }
     .onChange(of: isEditing) { _, editing in
@@ -181,8 +186,8 @@ struct TouchOverlayDPadView: View {
 /// The analog stick: a single-touch tracker (design §3, §6.4) whose knob follows the finger and
 /// writes the four half-axis values through `TouchOverlayInput.stickWrites` — bit-for-bit the
 /// `TCJoystick` convention, which must NOT be "cleaned up" to match the IR/IMU conventions
-/// (§6.4). No haptics: `TCJoystick` has none, and firing one on every move sample would be exactly
-/// the per-move-sample cost §3 warns against.
+/// (§6.4). Haptics follow `StickHapticTracker`: a light tap on touch-down and one softer tap when the
+/// knob reaches the rim, never one per move sample (the cost §3 warns against).
 struct TouchOverlayStickView: View {
   let baseId: Int
   let deviceId: Int
@@ -195,6 +200,8 @@ struct TouchOverlayStickView: View {
   @State private var knob = TouchOverlayKnobPosition()
   /// Changes only when a drag starts or ends: it lights the base's rim.
   @State private var dragging = false
+  /// A reference, like `knob`: the tracker updates on every move sample.
+  @State private var haptics = TouchOverlayStickHaptics()
 
   private var maxDistance: CGFloat { groupSize.width * TouchOverlayInput.stickTravelFraction }
 
@@ -213,10 +220,12 @@ struct TouchOverlayStickView: View {
           let axes = TouchOverlayInput.stickAxes(touch: location, center: center, maxDistance: maxDistance)
           knob.offset = CGSize(width: axes.x * maxDistance, height: axes.y * maxDistance)
           send(x: axes.x, y: axes.y)
+          haptics.update(axes: CGPoint(x: axes.x, y: axes.y))
         } else {
           if dragging { dragging = false }
           knob.offset = .zero
           send(x: 0, y: 0)
+          haptics.update(axes: nil)
         }
       }
       .allowsHitTesting(!isEditing)
@@ -227,6 +236,7 @@ struct TouchOverlayStickView: View {
       dragging = false
       knob.offset = .zero
       send(x: 0, y: 0)
+      haptics.update(axes: nil)
     }
   }
 
@@ -290,17 +300,6 @@ struct TouchOverlayButtonArtView: View, Equatable {
 
   var body: some View {
     TouchOverlayArt.button(controlId: controlId, shape: shape, variant: variant, pressed: pressed)
-  }
-}
-
-/// The overlay's press haptic. One generator for the app, rather than a new
-/// `UIImpactFeedbackGenerator` allocated with every control view struct (each parent re-render).
-@MainActor
-enum TouchOverlayHaptics {
-  private static let generator = UIImpactFeedbackGenerator(style: .medium)
-
-  static func impact() {
-    generator.impactOccurred()
   }
 }
 #endif

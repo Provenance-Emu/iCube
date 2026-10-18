@@ -7,6 +7,9 @@ import UIKit
 class TCJoystick: UIView, UIGestureRecognizerDelegate {
   @IBInspectable var joystickType: Int = 10 // default: GC stick
   var port: Int = 0
+  #if os(iOS)
+  private let haptics = TouchOverlayStickHaptics()
+  #endif
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -64,6 +67,9 @@ class TCJoystick: UIView, UIGestureRecognizerDelegate {
     if gesture.state == .ended || gesture.state == .cancelled || gesture.state == .failed {
       // Reset to center
       point = convert(center, from: superview)
+      #if os(iOS)
+      haptics.update(axes: nil)
+      #endif
     } else {
       // Get points
       point = gesture.location(in: self)
@@ -89,6 +95,10 @@ class TCJoystick: UIView, UIGestureRecognizerDelegate {
       // Based on Android's getAxisValues()
       let axises = (y: yDiff / maxDistance, x: xDiff / maxDistance)
       joyAxises = [min(axises.y, 0), min(axises.y, 1), min(axises.x, 0), min(axises.x, 1)]
+      #if os(iOS)
+      // The pan begins once the finger has moved a few points, so the touch-down tap lands then.
+      haptics.update(axes: CGPoint(x: axises.x, y: axises.y))
+      #endif
     }
 
     // Send axises values
