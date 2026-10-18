@@ -264,13 +264,11 @@ internal struct PauseMenuView: View {
     }
     #if os(iOS)
     .sheet(isPresented: $showSettingsSheet) {
-      NavigationStack {
-        SettingsRootView(initialLeafID: settingsSheetLeafID)
-          .navigationTitle(L("Settings"))
-          .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showSettingsSheet = false } } }
-      }
-      .pauseClaim("settings")
-      .claimsController()
+      // Not wrapped in a NavigationStack: Settings owns its stack, and a second one around it left a leaf
+      // opened directly (a tile's long-press) on screen with neither Back nor B able to pop it.
+      SettingsRootView(initialLeafID: settingsSheetLeafID, onClose: { showSettingsSheet = false })
+        .pauseClaim("settings")
+        .claimsController()
     }
     .sheet(isPresented: $showControllersSheet) {
       NavigationStack {
