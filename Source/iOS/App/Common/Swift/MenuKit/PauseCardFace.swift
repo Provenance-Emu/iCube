@@ -33,18 +33,26 @@ struct PauseCardFace: View {
     return ZStack(alignment: .topTrailing) {
       Group {
         if compact {
-          // The value sits inline at the trailing edge: a short card has no corner to spare for it.
+          // A short card has no corner to spare: the value is a line under a one-line title.
           HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
             glyph
-            title.multilineTextAlignment(.leading)
+            VStack(alignment: .leading, spacing: 1) {
+              title(lines: value == nil ? 2 : 1)
+                .multilineTextAlignment(.leading)
+              if let value {
+                Text(value)
+                  .icubeText(.tag)
+                  .lineLimit(1)
+                  .foregroundStyle(focused ? .white : platformAccent ?? ICubeDesign.color(.accent))
+              }
+            }
             Spacer(minLength: 0)
-            if let value { PauseValueChip(text: value, focused: focused) }
           }
           .padding(.horizontal, ICubeDesign.Spacing.s.rawValue)
         } else {
           VStack(spacing: Metrics.glyphTitleSpacing) {
             glyph
-            title.multilineTextAlignment(.center)
+            title(lines: 2).multilineTextAlignment(.center)
           }
           .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
           // A narrow card keeps the chip's corner clear, on every card of the grid so the glyphs line up.
@@ -78,14 +86,14 @@ struct PauseCardFace: View {
     }
   }
 
-  private var title: some View {
+  private func title(lines: Int) -> some View {
     // The size first: the font closest to the text wins, and the role still sets case and tracking.
     Text(item.title)
       .font(large ? Metrics.largeTitleFont : Metrics.titleFont)
       .icubeText(.nav)
-      .lineLimit(2)
-      // Two lines and a gentle floor: a lower floor shrank long titles below legibility.
-      .minimumScaleFactor(Metrics.titleMinimumScale)
+      .lineLimit(lines)
+      // A gentle floor: a lower one shrank long titles below legibility. A compact card's one line may go further.
+      .minimumScaleFactor(compact ? Metrics.compactTitleMinimumScale : Metrics.titleMinimumScale)
   }
 }
 
@@ -210,6 +218,7 @@ extension ICubeDesign {
     /// scroll under the hero above.
     static let scrollInset: CGFloat = 14
     static let titleMinimumScale: CGFloat = 0.85
+    static let compactTitleMinimumScale: CGFloat = 0.7
     static let shelfMinimumScale: CGFloat = 0.8
     static let disabledOpacity: Double = 0.45
     static let focusedChipOpacity: Double = 0.35
