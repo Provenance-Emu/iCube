@@ -11,6 +11,7 @@ struct TVRootView: View {
                     game: PauseMenuView.previewGame())
         .debugPane(Self.argument(after: "-ICubePausePane", in: args))
         .debugFocus(Self.argument(after: "-ICubePauseFocus", in: args))
+        .debugLongPress(Self.argument(after: "-ICubePauseLongPress", in: args))
     } else if let leaf = Self.argument(after: "-ICubeSettingsPreview", in: args) {
       // `-ICubeSettingsRow <rowID>` also lands on one row, as a pause tile's long-press does.
       SettingsRootView(initialLeafID: leaf, initialRowID: Self.argument(after: "-ICubeSettingsRow", in: args))

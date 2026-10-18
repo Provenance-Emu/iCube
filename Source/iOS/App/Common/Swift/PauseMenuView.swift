@@ -34,6 +34,9 @@ internal struct PauseMenuView: View {
   /// `-ICubePauseFocus <slot-N|view-all>`: where the Save States pane's focus lands, so a screenshot can show a
   /// focused tile (simctl cannot press the remote). Parsed by `TVSaveSlotsPane.debugFocus`.
   var debugInitialFocus: String?
+  /// `-ICubePauseLongPress <tileID>`: run that tile's long-press once the menu is up (e.g. Upscaling opens Settings on
+  /// its row), so a simulator screenshot shows the real sheet path.
+  var debugLongPressTileID: String?
   #endif
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
@@ -196,6 +199,9 @@ internal struct PauseMenuView: View {
         case "exit": showExitDialog = true
         default: break
         }
+        if let id = debugLongPressTileID, case .action(let run)? = pauseMenuModel.item(id: id)?.effectiveLongPress {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1) { run() }
+        }
       }
       #endif
     }
@@ -306,6 +312,7 @@ internal struct PauseMenuView: View {
   #if DEBUG
   func debugPane(_ pane: String?) -> PauseMenuView { var copy = self; copy.debugInitialPane = pane; return copy }
   func debugFocus(_ focus: String?) -> PauseMenuView { var copy = self; copy.debugInitialFocus = focus; return copy }
+  func debugLongPress(_ tileID: String?) -> PauseMenuView { var copy = self; copy.debugLongPressTileID = tileID; return copy }
 
   #endif
 

@@ -1574,6 +1574,12 @@ struct EmulationScreen: View {
     efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
     efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
     anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
+    // The pause and quick menus' Performance HUD tile flips these while the panel is closed.
+    showFPSQuick = DOLConfigBridge.gfxShowFPS()
+    showVPSQuick = DOLConfigBridge.gfxShowVPS()
+    showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
+    showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
+    overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
   }
 
   // Resolver step #3: small "Auto" / "Game" pill shown next to a perf control whose key is currently

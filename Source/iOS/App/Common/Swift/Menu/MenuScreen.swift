@@ -187,6 +187,8 @@ struct MenuScreen: View {
   @State private var gridColumnCount = 1
   /// A settings deep link's row, tinted for a moment after it is scrolled into view (`revealRowTarget`).
   @State private var highlightedID: String?
+  /// The deep-linked row: where a pad's focus starts when one first shows up (`tick`), instead of the first row.
+  @State private var revealedRowID: String?
   /// `.cards`: the card touched last, which the help shelf describes when no controller has focus.
   @State private var lastTouchedID: String?
   private static let rowRevealDelay: TimeInterval = 0.35
@@ -530,6 +532,7 @@ struct MenuScreen: View {
   /// tvOS; otherwise the first poll would seed focus on the first row and scroll back up to it.
   private func revealRowTarget(_ proxy: ScrollViewProxy) {
     guard let id = rowTarget?.take(from: model.allItems.map(\.id)) else { return }
+    revealedRowID = id
     if !connectedGamepads().isEmpty { focusedID = id }
     DispatchQueue.main.asyncAfter(deadline: .now() + Self.rowRevealDelay) {
       withAnimation { proxy.scrollTo(id, anchor: .center) }
@@ -794,9 +797,9 @@ struct MenuScreen: View {
     // seeded in `.onAppear`, so a touch-only session shows no tint. A brand
     // new pad emits no events on its first tick (it gets `resync`ed, see
     // `MenuFocusRouter.update(padInputs:...)`), so `result.focusedID` stays
-    // whatever was passed in; fall back to the model's first item exactly
+    // whatever was passed in; fall back to a deep-linked row, else the model's first item exactly
     // once, the same moment the single-pad path used to seed it.
-    focusedID = result.focusedID ?? model.focusableIDs.first
+    focusedID = result.focusedID ?? revealedRowID ?? model.focusableIDs.first
     if let id = result.longActivatedID, let item = model.item(id: id) {
       runLongPress(item)
       // The nav path never fires the Button action, so nothing consumes the suppression.
