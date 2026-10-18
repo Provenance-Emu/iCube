@@ -98,6 +98,10 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
   SetBaseIfUnspecified(Config::GFX_HACK_IMMEDIATE_XFB, true);
+  // Texture Cache Accuracy: Fast (0 samples) instead of the fork's Medium (128).
+  SetBaseIfUnspecified(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES, 0);
+  // "Ignore Format Changes" off: emulate EFB format changes.
+  SetBaseIfUnspecified(Config::GFX_HACK_EFB_EMULATE_FORMAT_CHANGES, true);
   // GFX_HACK_VI_SKIP: do NOT default ON on this rebaseline. VISkip lets the throttle DROP VI
   // interrupts (VideoInterface.cpp:987 early-returns before asserting IR_INT) whenever the core
   // lags >~20ms, as a catch-up. On HEAD's lean CachedInterpreter, CPU-heavy titles run
