@@ -526,9 +526,11 @@ struct MenuScreen: View {
   }
 
   /// A settings deep link's row (`settingsRowTarget`): scroll it to the middle and tint it for a moment. The delay
-  /// lets a just-pushed list lay its rows out first.
+  /// lets a just-pushed list lay its rows out first. With a pad connected the row also takes the pad's focus, as on
+  /// tvOS; otherwise the first poll would seed focus on the first row and scroll back up to it.
   private func revealRowTarget(_ proxy: ScrollViewProxy) {
     guard let id = rowTarget?.take(from: model.allItems.map(\.id)) else { return }
+    if !connectedGamepads().isEmpty { focusedID = id }
     DispatchQueue.main.asyncAfter(deadline: .now() + Self.rowRevealDelay) {
       withAnimation { proxy.scrollTo(id, anchor: .center) }
       highlightedID = id

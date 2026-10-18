@@ -15,6 +15,13 @@ struct PauseCardFace: View {
   var compact = false
   @Environment(\.icubeCardFocused) private var focused
   @Environment(\.icubePlatformAccent) private var platformAccent
+  #if os(iOS)
+  @Environment(\.horizontalSizeClass) private var sizeClass
+  /// An iPad has the room for bigger cards.
+  private var large: Bool { sizeClass == .regular && !compact }
+  #else
+  private var large: Bool { false }
+  #endif
 
   private typealias Metrics = ICubeDesign.PauseCard
 
@@ -26,31 +33,33 @@ struct PauseCardFace: View {
     return ZStack(alignment: .topTrailing) {
       Group {
         if compact {
+          // The value sits inline at the trailing edge: a short card has no corner to spare for it.
           HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
             glyph
             title.multilineTextAlignment(.leading)
             Spacer(minLength: 0)
+            if let value { PauseValueChip(text: value, focused: focused) }
           }
           .padding(.horizontal, ICubeDesign.Spacing.s.rawValue)
-          // Clear of the value chip, which sits in the top-trailing corner.
-          .padding(.top, value == nil ? 0 : Metrics.compactChipClearance)
         } else {
           VStack(spacing: Metrics.glyphTitleSpacing) {
             glyph
             title.multilineTextAlignment(.center)
           }
           .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
+          // A narrow card keeps the chip's corner clear, on every card of the grid so the glyphs line up.
+          .padding(.top, prominent ? 0 : Metrics.chipClearance)
         }
       }
       .foregroundStyle(foreground)
       .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-      if let value {
+      if !compact, let value {
         PauseValueChip(text: value, focused: focused)
           .padding(Metrics.chipInset)
       }
     }
-    .frame(height: Metrics.height(prominent: prominent, compact: compact))
+    .frame(height: Metrics.height(prominent: prominent, compact: compact, large: large))
     .icubeCardSurface(cornerRadius: Metrics.cornerRadius)
     .opacity(item.isEnabled ? 1 : Metrics.disabledOpacity)
     .accessibilityElement(children: .combine)
@@ -65,14 +74,14 @@ struct PauseCardFace: View {
   @ViewBuilder private var glyph: some View {
     if let icon = item.icon {
       Image(systemName: icon)
-        .font(.system(size: Metrics.glyphSize(prominent: prominent, compact: compact), weight: .medium))
+        .font(.system(size: Metrics.glyphSize(prominent: prominent, compact: compact, large: large), weight: .medium))
     }
   }
 
   private var title: some View {
     // The size first: the font closest to the text wins, and the role still sets case and tracking.
     Text(item.title)
-      .font(Metrics.titleFont)
+      .font(large ? Metrics.largeTitleFont : Metrics.titleFont)
       .icubeText(.nav)
       .lineLimit(2)
       // Two lines and a gentle floor: a lower floor shrank long titles below legibility.
@@ -164,6 +173,7 @@ extension ICubeDesign {
     static let glyphTitleSpacing: CGFloat = Spacing.s.rawValue
     static let chipInset: CGFloat = Spacing.s.rawValue
     static let titleFont: Font = ICubeDesign.standard.font(.nav)
+    static let largeTitleFont: Font = titleFont
     static let shelfBodyFont: Font = ICubeDesign.standard.font(.body)
     static let shelfHeight: CGFloat = TVPause.footerHeight
     static let shelfCornerRadius: CGFloat = TVPause.footerCornerRadius
@@ -171,12 +181,16 @@ extension ICubeDesign {
     static let shelfGlyphColumn: CGFloat = IconBadge.size
     static let shelfSpacing: CGFloat = Spacing.l.rawValue
     static let shelfHorizontalPadding: CGFloat = Spacing.l.rawValue
+    /// A TV card is wide enough that the chip never reaches the centred glyph.
+    static let chipClearance: CGFloat = 0
+    static let shelfFillOpacity: Double = TVPause.footerFillOpacity
     #else
     static let cornerRadius: CGFloat = 16
     static let glyphTitleSpacing: CGFloat = Spacing.xs.rawValue
     static let chipInset: CGFloat = 6
     /// 13 pt display face: "PERFORMANCE HUD" fits a third of an iPhone in two lines.
     static let titleFont: Font = ICubeDesign.displayFont(size: 13, relativeTo: .footnote)
+    static let largeTitleFont: Font = ICubeDesign.displayFont(size: 15, relativeTo: .subheadline)
     static let shelfBodyFont: Font = .subheadline
     static let shelfHeight: CGFloat = 64
     static let shelfCornerRadius: CGFloat = 14
@@ -184,6 +198,10 @@ extension ICubeDesign {
     static let shelfGlyphColumn: CGFloat = 28
     static let shelfSpacing: CGFloat = Spacing.s.rawValue
     static let shelfHorizontalPadding: CGFloat = Spacing.m.rawValue
+    /// A phone card is about as wide as the chip plus the glyph: the glyph and title sit below the chip's row.
+    static let chipClearance: CGFloat = 18
+    /// Cards scroll under the shelf on a phone, so it is nearly opaque.
+    static let shelfFillOpacity: Double = 0.92
     #endif
     /// iOS card grid (`MenuStyle.cards`); tvOS spaces its grid with `TVPause`.
     static let gridSpacing: CGFloat = 12
@@ -191,28 +209,29 @@ extension ICubeDesign {
     /// Room inside the cards' scroll view for the focus scale and glow. Small on a phone: the band also lets cards
     /// scroll under the hero above.
     static let scrollInset: CGFloat = 14
-    static let compactChipClearance: CGFloat = 10
     static let titleMinimumScale: CGFloat = 0.85
     static let shelfMinimumScale: CGFloat = 0.8
     static let disabledOpacity: Double = 0.45
     static let focusedChipOpacity: Double = 0.35
-    static let shelfFillOpacity: Double = TVPause.footerFillOpacity
     static let shelfBorderOpacity: Double = TVPause.footerBorderOpacity
 
-    static func height(prominent: Bool, compact: Bool) -> CGFloat {
+    /// `large`: an iPad (regular width).
+    static func height(prominent: Bool, compact: Bool, large: Bool) -> CGFloat {
       #if os(tvOS)
       return prominent ? TVPause.primaryTileHeight : TVPause.tileHeight
       #else
       if compact { return prominent ? 60 : 54 }
-      return prominent ? 96 : 84
+      if large { return prominent ? 136 : 124 }
+      return prominent ? 104 : 96
       #endif
     }
 
-    static func glyphSize(prominent: Bool, compact: Bool) -> CGFloat {
+    static func glyphSize(prominent: Bool, compact: Bool, large: Bool) -> CGFloat {
       #if os(tvOS)
       return prominent ? Symbol.tilePrimary.rawValue : Symbol.tile.rawValue
       #else
       if compact { return 17 }
+      if large { return prominent ? 32 : 28 }
       return prominent ? 26 : 22
       #endif
     }
