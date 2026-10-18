@@ -302,6 +302,17 @@ extension MenuItemRole {
   static func selectedTitle(options: [(String, AnyHashable)], current: AnyHashable) -> String? {
     options.first { $0.1 == current }?.0
   }
+
+  /// A cycle with more options than this is a dropdown menu in an iOS settings list: tapping through
+  /// several values to reach one commits each on the way. Two-value rows keep tap-to-flip; tvOS rows
+  /// and pause-menu tiles keep cycling.
+  static let iOSListMenuThreshold = 2
+
+  /// Whether an iOS settings list shows this role as a dropdown menu instead of tap-to-cycle.
+  var showsAsMenuInIOSList: Bool {
+    if case .cycle(let options, _) = self { return options.count > Self.iOSListMenuThreshold }
+    return false
+  }
 }
 
 // MARK: - Lookup
