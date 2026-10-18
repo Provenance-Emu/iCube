@@ -15,7 +15,7 @@
 
 const size_t DOLFastmemRegionSize = 0x400000000;
 
-+ (FastmemManager*)shared {
++ (FastmemManager* _Nonnull)shared {
   static FastmemManager* sharedInstance = nil;
   static dispatch_once_t onceToken;
 
@@ -26,7 +26,7 @@ const size_t DOLFastmemRegionSize = 0x400000000;
   return sharedInstance;
 }
 
-- (id)init {
+- (instancetype)init {
   if (self = [super init]) {
     vm_address_t addr = 0;
     kern_return_t retval = vm_allocate(mach_task_self(), &addr, DOLFastmemRegionSize, VM_FLAGS_ANYWHERE);
