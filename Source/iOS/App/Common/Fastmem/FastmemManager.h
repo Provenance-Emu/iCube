@@ -7,7 +7,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface FastmemManager : NSObject
 
-+ (FastmemManager*)shared;
++ (FastmemManager* _Nonnull)shared;
 
 @property (readonly) bool fastmemAvailable;
 

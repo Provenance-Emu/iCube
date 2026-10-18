@@ -179,6 +179,16 @@ final class MenuModelTests: XCTestCase {
     XCTAssertEqual(MenuItemRole.cycled(options: options, current: AnyHashable(999), step: 1), AnyHashable(-1))
   }
 
+  func test_iOSList_cycleOfMoreThanTwoOptions_isADropdown_twoStillFlip() {
+    let two: [(String, AnyHashable)] = [("Off", 0), ("On", 1)]
+    let three: [(String, AnyHashable)] = [("Low", 0), ("Mid", 1), ("High", 2)]
+    XCTAssertFalse(MenuItemRole.cycle(options: two, selection: .constant(AnyHashable(0))).showsAsMenuInIOSList)
+    XCTAssertTrue(MenuItemRole.cycle(options: three, selection: .constant(AnyHashable(0))).showsAsMenuInIOSList)
+    // Only cycles switch: a picker is already a menu, a toggle stays a switch.
+    XCTAssertFalse(MenuItemRole.picker(options: three, selection: .constant(AnyHashable(0))).showsAsMenuInIOSList)
+    XCTAssertFalse(MenuItemRole.toggle(.constant(true)).showsAsMenuInIOSList)
+  }
+
   func test_stepper_currentValueTitle_usesTheFormat() {
     let stepper = MenuStepper(value: .constant(100), range: 1 ... 400, step: 5, format: { "\(Int($0))%" })
     XCTAssertEqual(MenuItem(id: "clock", title: "CPU Clock", role: .stepper(stepper)).currentValueTitle, "100%")

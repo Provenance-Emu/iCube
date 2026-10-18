@@ -116,6 +116,10 @@ private:
 
   void ProcessFrameDumping(u64 ticks) const;
 
+  // iCube: the backend's upscaled copy of the XFB for this frame, or nullptr (see
+  // AbstractGfx::UpscaleForPresent).
+  const AbstractTexture* UpscaleXFBForPresent();
+
   void OnBackBufferSizeChanged();
 
   // Scales a raw XFB resolution to the target (display) aspect ratio,
@@ -154,6 +158,8 @@ private:
   RcTcacheEntry m_xfb_entry;
   // Internal resolution multiplier scaled XFB size
   MathUtil::Rectangle<int> m_xfb_rect{0, 0, MAX_XFB_WIDTH, MAX_XFB_HEIGHT};
+  // iCube: this frame's upscaled XFB (owned by the backend), or nullptr; frame dumps use it.
+  const AbstractTexture* m_upscaled_xfb = nullptr;
 
   // Tracking of XFB textures so we don't render duplicate frames.
   u64 m_last_xfb_id = std::numeric_limits<u64>::max();

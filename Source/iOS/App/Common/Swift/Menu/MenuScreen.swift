@@ -563,14 +563,9 @@ struct MenuScreen: View {
       case .toggle(let binding):
         Toggle(isOn: binding) { rowLabel(item) }
       case .picker(let options, let selection):
-        Picker(selection: Binding(get: { selection.wrappedValue }, set: { selection.wrappedValue = $0 })) {
-          ForEach(options, id: \.1) { option in
-            Text(option.0).tag(option.1)
-          }
-        } label: {
-          rowLabel(item)
-        }
-        .pickerStyle(.menu)
+        menuPicker(item, options: options, selection: selection)
+      case .cycle(let options, let selection) where item.role.showsAsMenuInIOSList:
+        menuPicker(item, options: options, selection: selection)
       case .destination(let destinationView):
         NavigationLink { destinationView.clearingSettingsPaneBack() } label: { rowLabel(item) }
       case .custom(let customView):
@@ -590,6 +585,17 @@ struct MenuScreen: View {
     .disabled(!item.isEnabled)
     .id(item.id)
     .listRowBackground(focusedID == item.id || highlightedID == item.id ? Color.accentColor.opacity(0.22) : nil)
+  }
+
+  private func menuPicker(_ item: MenuItem, options: [(String, AnyHashable)], selection: Binding<AnyHashable>) -> some View {
+    Picker(selection: Binding(get: { selection.wrappedValue }, set: { selection.wrappedValue = $0 })) {
+      ForEach(options, id: \.1) { option in
+        Text(option.0).tag(option.1)
+      }
+    } label: {
+      rowLabel(item)
+    }
+    .pickerStyle(.menu)
   }
 
   // MARK: iOS — tiles style

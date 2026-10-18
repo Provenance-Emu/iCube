@@ -27,6 +27,28 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
     XCTAssertEqual(model().sections.map(\.header), ["Internal Resolution", "Texture Filtering", "Enhancements", "Compatibility"])
   }
 
+  func test_metalFXRow_onlyWhereSupported_rightAfterTheScale() {
+    XCTAssertNil(model().item(id: "metalfx-upscale"))
+    let m = model(state { $0.metalFXSupported = true })
+    XCTAssertEqual(m.sections[0].items.map(\.id), ["efb-scale", "metalfx-upscale"])
+  }
+
+  func test_metalFXRow_stacksOnEveryScale() {
+    for scale in [EfbScaleChoice.auto.rawValue, EfbScaleChoice.native.rawValue, 2, 3, 6] {
+      let item = model(state { $0.metalFXSupported = true; $0.efbScale = scale }).item(id: "metalfx-upscale")
+      XCTAssertEqual(item?.isEnabled, true, "scale \(scale)")
+    }
+  }
+
+  func test_metalFXRow_emitsItsOwnChange() {
+    guard case .toggle(let binding)? = model(state { $0.metalFXSupported = true }).item(id: "metalfx-upscale")?.role else {
+      return XCTFail("metalfx-upscale is not a toggle")
+    }
+    binding.wrappedValue = true
+    XCTAssertEqual(changes, [.metalFXSpatialUpscale(true)])
+    XCTAssertEqual(GraphicsEnhancementsState.sideEffects(of: .metalFXSpatialUpscale(true), in: GraphicsEnhancementsState()), [])
+  }
+
   func test_thresholdRow_appearsAfterDetection() {
     let m = model(state { $0.arbitraryMipmapDetection = true })
     XCTAssertEqual(m.allItems.count, 13)

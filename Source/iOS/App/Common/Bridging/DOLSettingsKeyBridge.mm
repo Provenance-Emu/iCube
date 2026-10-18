@@ -417,6 +417,12 @@ t[@"cirGatherPipeCopyFusion"] = mk(DOLSettingTypeBool, NO,
       ^(id v){ [DOLConfigBridge setGfxWidescreenHack:CoerceBool(v)]; },
       MakeLayerGetter(Config::GFX_WIDESCREEN_HACK), MakeResetBlock(Config::GFX_WIDESCREEN_HACK.GetLocation()));
 
+    t[@"gfxMetalFXSpatialUpscale"] = mk(DOLSettingTypeBool, YES,
+      ^id{ return @([DOLConfigBridge gfxMetalFXSpatialUpscale]); },
+      ^(id v){ [DOLConfigBridge setGfxMetalFXSpatialUpscale:CoerceBool(v)]; },
+      MakeLayerGetter(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE),
+      MakeResetBlock(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE.GetLocation()));
+
     t[@"gfxDisableFog"] = mk(DOLSettingTypeBool, YES,
       ^id{ return @([DOLConfigBridge gfxDisableFog]); },
       ^(id v){ [DOLConfigBridge setGfxDisableFog:CoerceBool(v)]; },

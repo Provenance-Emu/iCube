@@ -290,6 +290,9 @@ const Info<bool> GFX_ASYNC_PRESENT{{System::GFX, "Settings", "AsyncPresent"},
 // ForceSync. Supersedes the old GFX_ASYNC_PRESENT branch in Metal::BoundingBox::Read.
 const Info<int> GFX_BBOX_SYNC_MODE{{System::GFX, "Settings", "BBoxSyncMode"}, 0};
 
+const Info<bool> GFX_MTL_METALFX_SPATIAL_UPSCALE{
+    {System::GFX, "Settings", "MetalFXSpatialUpscale"}, false};
+
 const Info<bool> GFX_HACK_FAST_MATH{{System::GFX, "Hacks", "FastMath"}, true};
 
 const Info<bool> GFX_HACK_GPU_EFB_PEEK_RESOLVE{{System::GFX, "Hacks", "GPUEFBPeekResolve"}, false};

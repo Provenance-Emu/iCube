@@ -33,13 +33,31 @@ final class PauseMenuModelBuilderTests: XCTestCase {
       requestExit: {}, recenterPointer: {})
   }
 
-  private func state(recenter: Bool = false, cheats: Int = 0, resolution: Int = 1, volume: Int = 100,
+  private func state(recenter: Bool = false, cheats: Int = 0, resolution: Int = 1, metalFX: Bool = false, volume: Int = 100,
                      jit: Bool = false, nextEngine: CpuEngine = .cachedInterpreter) -> PauseMenuState {
     PauseMenuState(
       quickSlot: 3, isMuted: false, activeCheatCount: cheats,
       shaderOptions: [("None", ShaderQuickApply.noneValue), ("crt", AnyHashable("/s/crt.slangp"))],
       showsRecenterPointer: recenter,
-      internalResolution: resolution, audioVolume: volume, engineShortName: "CIR", jitAcquired: jit, nextEngine: nextEngine.rawValue)
+      internalResolution: resolution, metalFXSupported: metalFX, audioVolume: volume, engineShortName: "CIR", jitAcquired: jit,
+      nextEngine: nextEngine.rawValue)
+  }
+
+  func test_metalFXTile_followsUpscaling_onlyWhereSupported_andTogglesTheKey() {
+    XCTAssertNil(PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions()).item(id: "metalfx"))
+
+    let metalFX = Box(false)
+    var b = bindings()
+    b.metalFX = Binding(get: { metalFX.value as? Bool ?? false }, set: { metalFX.value = $0 })
+    let model = PauseMenuModelBuilder.make(state: state(metalFX: true), bindings: b, actions: actions())
+    let ids = model.sections.flatMap(\.items).map(\.id)
+    XCTAssertEqual(ids.firstIndex(of: "metalfx"), ids.firstIndex(of: "upscaling").map { $0 + 1 })
+    guard case .toggle(let toggle) = model.item(id: "metalfx")!.role else { return XCTFail("toggle") }
+    toggle.wrappedValue = true
+    XCTAssertEqual(metalFX.value, AnyHashable(true))
+    // The ladder stays plain scales: MetalFX stacks on whichever one is picked.
+    guard case .cycle(let scales, _) = model.item(id: "upscaling")!.role else { return XCTFail("cycle") }
+    XCTAssertEqual(scales.map(\.1), [1, 2, 3, 4, 6].map { AnyHashable($0) })
   }
 
   /// A value a settings leaf set off the tile ladder (volume 80, scale 5x) is listed in place, so one press

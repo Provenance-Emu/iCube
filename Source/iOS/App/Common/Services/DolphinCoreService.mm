@@ -98,6 +98,10 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM, true);
   SetBaseIfUnspecified(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM, true);
   SetBaseIfUnspecified(Config::GFX_HACK_IMMEDIATE_XFB, true);
+  // Texture Cache Accuracy: Fast (0 samples) instead of the fork's Medium (128).
+  SetBaseIfUnspecified(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES, 0);
+  // "Ignore Format Changes" off: emulate EFB format changes.
+  SetBaseIfUnspecified(Config::GFX_HACK_EFB_EMULATE_FORMAT_CHANGES, true);
   // GFX_HACK_VI_SKIP: do NOT default ON on this rebaseline. VISkip lets the throttle DROP VI
   // interrupts (VideoInterface.cpp:987 early-returns before asserting IR_INT) whenever the core
   // lags >~20ms, as a catch-up. On HEAD's lean CachedInterpreter, CPU-heavy titles run
@@ -135,6 +139,15 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 
   // Prefer asynchronous present on iOS/tvOS by default (can be toggled in UI)
   SetBaseIfUnspecified(Config::GFX_ASYNC_PRESENT, true);
+
+#if !TARGET_OS_TV
+  // Internal resolution follows the screen: Auto picks the smallest whole scale whose picture covers
+  // the screen picture (4x on a 12.9" iPad, 3x on an iPhone in landscape, 2x in portrait), where 1x
+  // stretched the 640x528 frame up to 3.7x. The step from 2x to 3x/4x measured 1-3 ms of GPU per
+  // frame on an A12Z and an A18 Pro (docs/perf/2026-10-17-metalfx-spatial.md), and the emulator is
+  // CPU-bound. tvOS keeps 1x: on a 4K TV Auto would pick about 4x on Apple TV GPUs nobody measured.
+  SetBaseIfUnspecified(Config::GFX_EFB_SCALE, EFB_SCALE_AUTO_INTEGRAL);
+#endif
 }
 
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary<UIApplicationLaunchOptionsKey,id>*)launchOptions {

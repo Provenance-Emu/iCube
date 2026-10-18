@@ -18,6 +18,20 @@ struct SkinOverlayInput {
   enum Hit: Hashable {
     case item(Int)
     case direction(item: Int, Direction)
+
+    /// The skin item the hit belongs to.
+    var itemIndex: Int {
+      switch self {
+      case .item(let index), .direction(let index, _): return index
+      }
+    }
+  }
+
+  /// Whether going from `previous` to `now` presses an item that was not held: a button, or a d-pad
+  /// with no direction held. Rolling a held d-pad to another direction, or a release, does not, so the
+  /// press haptic plays once per item like the Swift-drawn overlay's (`TouchHapticRules`).
+  static func pressesNewItem(from previous: Set<Hit>, to now: Set<Hit>) -> Bool {
+    TouchHapticRules.pressesSomethingNew(previous: Set(previous.map(\.itemIndex)), now: Set(now.map(\.itemIndex)))
   }
 
   enum Channel: Int, Hashable {
@@ -71,7 +85,7 @@ struct SkinOverlayInput {
     }
 
     /// `touch` is in `hitFrame`-local coordinates; nil is a release (centred).
-    private func axes(touch: CGPoint?) -> (x: CGFloat, y: CGFloat) {
+    func axes(touch: CGPoint?) -> (x: CGFloat, y: CGFloat) {
       guard let touch else { return (0, 0) }
       return TouchOverlayInput.stickAxes(touch: touch, center: center, maxDistance: travel)
     }
