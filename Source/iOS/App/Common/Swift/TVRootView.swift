@@ -7,12 +7,13 @@ struct TVRootView: View {
     // settings leaf, `-ICubeAddGamesPreview` the Add Games screen, for simulator screenshots (Scripts/tvos_screens.sh).
     let args = ProcessInfo.processInfo.arguments
     if args.contains("-ICubePausePreview") {
-      PauseMenuView(selectedSlot: .constant(1), onClose: {}, onShowSettings: {}, platform: .tvos,
+      PauseMenuView(selectedSlot: .constant(1), onClose: {}, platform: .tvos,
                     game: PauseMenuView.previewGame())
         .debugPane(Self.argument(after: "-ICubePausePane", in: args))
         .debugFocus(Self.argument(after: "-ICubePauseFocus", in: args))
     } else if let leaf = Self.argument(after: "-ICubeSettingsPreview", in: args) {
-      SettingsRootView(initialLeafID: leaf)
+      // `-ICubeSettingsRow <rowID>` also lands on one row, as a pause tile's long-press does.
+      SettingsRootView(initialLeafID: leaf, initialRowID: Self.argument(after: "-ICubeSettingsRow", in: args))
     } else if args.contains("-ICubeAddGamesPreview") {
       addGamesPreview
     } else {

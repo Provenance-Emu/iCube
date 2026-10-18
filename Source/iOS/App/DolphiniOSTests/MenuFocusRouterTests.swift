@@ -743,4 +743,33 @@ final class MenuFocusRouterTests: XCTestCase {
     let model = MenuModel(sections: [MenuSection(id: "s", items: [item("a"), item("c")])])
     XCTAssertEqual(MenuFocusRouter.reconcile(focusedID: "b", previousOrder: ["a", "b", "c"], model: model, requestedID: "nope"), "c", "falls back to the same-index rule")
   }
+
+  // MARK: Cards (`MenuStyle.cards`)
+
+  /// The pause cards on three columns: a headerless primary row of four, then a headed grid.
+  ///
+  ///     r s x e
+  ///     a b c
+  ///     d
+  private func cardsModel() -> MenuModel {
+    MenuModel(sections: [
+      MenuSection(id: "primary", items: ["r", "s", "x", "e"].map { item($0) }),
+      MenuSection(id: "options", header: "Options", items: ["a", "b", "c", "d"].map { item($0) }),
+    ])
+  }
+
+  private func cardsMove(_ id: String?, rowStep: Int = 0, columnStep: Int = 0) -> String? {
+    MenuFocusRouter.gridMove(id, rowStep: rowStep, columnStep: columnStep, columns: 3, headerlessSectionIsOneRow: true, in: cardsModel())
+  }
+
+  func test_cards_headerlessSection_isOneRow() {
+    XCTAssertEqual(cardsMove("x", columnStep: 1), "e", "the fourth primary card is in the same row")
+    XCTAssertEqual(cardsMove("e", rowStep: 1), "c", "down from the fourth lands on the nearest card below")
+    XCTAssertEqual(cardsMove("a", rowStep: -1), "r")
+    XCTAssertEqual(cardsMove("c", rowStep: 1), "d")
+  }
+
+  func test_grid_withoutTheFlag_stillWrapsAHeaderlessSection() {
+    XCTAssertEqual(MenuFocusRouter.gridMove("x", rowStep: 1, columnStep: 0, columns: 3, in: cardsModel()), "e")
+  }
 }

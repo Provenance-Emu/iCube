@@ -19,22 +19,36 @@ enum MenuStyle: Equatable {
   /// Pause-overlay tiles (unified menu UX spec §5): `columns` per row, an `InfoShelf` beneath, rendered
   /// natively on BOTH platforms (unlike `.grid`/`.list`, which tvOS flattens to a `List`).
   case tiles(columns: Int, compact: Bool = false)
+  /// The iPhone and iPad pause screen, on iFly's pause cards: a headerless section is one row of prominent cards,
+  /// each headed section a `columns`-wide grid under an accent header, with the help shelf beneath. `compact` is
+  /// iPhone landscape. tvOS draws its pause screen with `TVPauseGridView` instead.
+  case cards(columns: Int, compact: Bool = false)
 
   var columns: Int {
     switch self {
-    case .tiles(let columns, _): return max(1, columns)
+    case .tiles(let columns, _), .cards(let columns, _): return max(1, columns)
     case .grid, .list: return 1
     }
   }
 
   var isCompactTiles: Bool {
-    if case .tiles(_, let compact) = self { return compact }
-    return false
+    switch self {
+    case .tiles(_, let compact), .cards(_, let compact): return compact
+    case .grid, .list: return false
+    }
+  }
+
+  /// Tiles and cards: left/right always move focus, and A acts on release so a hold can open the long-press.
+  var isTileGrid: Bool {
+    switch self {
+    case .tiles, .cards: return true
+    case .grid, .list: return false
+    }
   }
 
   var navConfig: MenuControllerNav.Config {
     var config = MenuControllerNav.Config()
-    if case .tiles = self { config.activateOnRelease = true }
+    if isTileGrid { config.activateOnRelease = true }
     return config
   }
 }
@@ -146,6 +160,8 @@ struct MenuScreen: View {
   }
 
   @State private var pushedDestination: PushedDestination?
+  /// The row a settings deep link asked for; the first list showing it takes it.
+  @Environment(\.settingsRowTarget) private var rowTarget
 
   #if os(iOS)
   /// Owns one `MenuControllerNav` per connected extended gamepad (D18 engine
@@ -169,6 +185,12 @@ struct MenuScreen: View {
   /// `.grid` only: how many columns `gridBody` is drawing right now, so the d-pad moves through
   /// the grid as drawn (up/down a row, left/right within a row). 1 for `.list`.
   @State private var gridColumnCount = 1
+  /// A settings deep link's row, tinted for a moment after it is scrolled into view (`revealRowTarget`).
+  @State private var highlightedID: String?
+  /// `.cards`: the card touched last, which the help shelf describes when no controller has focus.
+  @State private var lastTouchedID: String?
+  private static let rowRevealDelay: TimeInterval = 0.35
+  private static let rowHighlightDuration: TimeInterval = 1.6
   /// Single shared 60 Hz publisher rather than a per-instance `Timer`. This
   /// matters for correctness, not just efficiency: a `Timer(... ) { tick() }`
   /// closure captures `self` — and therefore `model`, a `let` — from
@@ -233,9 +255,10 @@ struct MenuScreen: View {
     case .grid: gridBody
     case .list: listBody
     case .tiles: tilesBody
+    case .cards: cardsBody
     }
     #else
-    if case .tiles = style {
+    if style.isTileGrid {
       if let first = tvInitialFocusID {
         tvTilesBody.defaultFocus($tvFocusedID, first)
       } else {
@@ -498,6 +521,20 @@ struct MenuScreen: View {
       .onChange(of: focusedID) { _, id in
         if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
       }
+      .onAppear { revealRowTarget(proxy) }
+    }
+  }
+
+  /// A settings deep link's row (`settingsRowTarget`): scroll it to the middle and tint it for a moment. The delay
+  /// lets a just-pushed list lay its rows out first.
+  private func revealRowTarget(_ proxy: ScrollViewProxy) {
+    guard let id = rowTarget?.take(from: model.allItems.map(\.id)) else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.rowRevealDelay) {
+      withAnimation { proxy.scrollTo(id, anchor: .center) }
+      highlightedID = id
+      DispatchQueue.main.asyncAfter(deadline: .now() + Self.rowHighlightDuration) {
+        withAnimation { if highlightedID == id { highlightedID = nil } }
+      }
     }
   }
 
@@ -547,7 +584,7 @@ struct MenuScreen: View {
     }
     .disabled(!item.isEnabled)
     .id(item.id)
-    .listRowBackground(focusedID == item.id ? Color.accentColor.opacity(0.22) : nil)
+    .listRowBackground(focusedID == item.id || highlightedID == item.id ? Color.accentColor.opacity(0.22) : nil)
   }
 
   // MARK: iOS — tiles style
@@ -581,6 +618,61 @@ struct MenuScreen: View {
   }
 
   private var focusedItem: MenuItem? { focusedID.flatMap { model.item(id: $0) } }
+
+  // MARK: iOS — cards style (pause screen)
+
+  private var cardsBody: some View {
+    let columns = style.columns
+    typealias Metrics = ICubeDesign.PauseCard
+    return ScrollViewReader { proxy in
+      ScrollView(.vertical, showsIndicators: false) {
+        VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
+          ForEach(model.sections) { section in
+            if let header = section.header {
+              ICubeAccentHeader(text: header)
+              LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Metrics.gridSpacing), count: columns),
+                        spacing: Metrics.gridSpacing) {
+                ForEach(section.items) { item in card(item, prominent: false, isLead: false) }
+              }
+            } else {
+              HStack(spacing: Metrics.gridSpacing) {
+                ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
+                  card(item, prominent: true, isLead: index == 0)
+                }
+              }
+            }
+          }
+        }
+        // Room for the focus scale and glow inside the scroll view's clip, cancelled outside so the cards stay put.
+        .padding(Metrics.scrollInset)
+      }
+      .padding(-Metrics.scrollInset)
+      .safeAreaInset(edge: .bottom, spacing: Metrics.gridSpacing) {
+        PauseHelpShelf(item: focusedItem ?? lastTouchedID.flatMap { model.item(id: $0) },
+                       placeholder: L("Tap a tile to use it. Long-press for all of its options."))
+      }
+      .onChange(of: focusedID) { _, id in
+        if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+      }
+    }
+  }
+
+  private func card(_ item: MenuItem, prominent: Bool, isLead: Bool) -> some View {
+    Button {
+      lastTouchedID = item.id
+      activateFromButton(item)
+    } label: {
+      PauseCardFace(item: item, prominent: prominent, isLead: isLead, compact: style.isCompactTiles)
+    }
+    .buttonStyle(ICubeCardButtonStyle(isFocusedOverride: focusedID == item.id))
+    .disabled(!item.isEnabled)
+    .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+      lastTouchedID = item.id
+      runLongPress(item)
+    })
+    .id(item.id)
+    .accessibilityIdentifier("pause.tile.\(item.id)")
+  }
 
   // MARK: iOS — grid style (pause-menu card look, §5 token table)
 
@@ -673,11 +765,12 @@ struct MenuScreen: View {
     let columnCount: Int
     switch style {
     case .grid: columnCount = gridColumnCount
-    case .tiles: columnCount = style.columns
+    case .tiles, .cards: columnCount = style.columns
     case .list: columnCount = 1
     }
-    let stepsPickersInGrid: Bool
-    if case .tiles = style { stepsPickersInGrid = false } else { stepsPickersInGrid = true }
+    let stepsPickersInGrid = !style.isTileGrid
+    let headerlessSectionIsOneRow: Bool
+    if case .cards = style { headerlessSectionIsOneRow = true } else { headerlessSectionIsOneRow = false }
 
     if let modal {
       // Rows are frozen; A/B drive the modal instead, through the SAME
@@ -694,7 +787,7 @@ struct MenuScreen: View {
 
     let result = router.update(
       padInputs: padInputs, at: time, model: model, focusedID: focusedID, isActive: isActive,
-      columns: columnCount, stepsPickersInGrid: stepsPickersInGrid)
+      columns: columnCount, stepsPickersInGrid: stepsPickersInGrid, headerlessSectionIsOneRow: headerlessSectionIsOneRow)
     // Focus only ever appears once a controller is actually present — never
     // seeded in `.onAppear`, so a touch-only session shows no tint. A brand
     // new pad emits no events on its first tick (it gets `resync`ed, see
@@ -819,6 +912,12 @@ struct MenuScreen: View {
     .onChange(of: tvFocusedID) { _, id in paneHoldsLeft?(model.adjustsWithLeftRight(focusID: id)) }
     .onDisappear { paneHoldsLeft?(false) }
     .onAppear {
+      // A settings deep link's row takes focus (the shell leaves the sidebar alone while one is pending).
+      if let target = rowTarget?.take(from: model.allItems.map(\.id)), let item = model.item(id: target) {
+        let id = tvFocusID(for: item)
+        DispatchQueue.main.async { tvFocusedID = id }
+        return
+      }
       // Next runloop: the rows must exist before focus can be assigned to one. A picker opens on its current value.
       let requested = model.focusRequest.flatMap { model.focusableIDs.contains($0) ? $0 : nil }
       guard tvClaimsFocus, let first = requested ?? defaultTVFocusID else { return }
@@ -858,10 +957,15 @@ struct MenuScreen: View {
   /// the plain `item.id`, so that id is the target.
   private var defaultTVFocusID: String? {
     guard let firstID = model.focusableIDs.first, let item = model.item(id: firstID) else { return nil }
+    return tvFocusID(for: item)
+  }
+
+  /// The focus id of `item`'s row: an exploded picker's first option row, else the item's own id.
+  private func tvFocusID(for item: MenuItem) -> String {
     if case .picker(let options, _) = item.role, !options.isEmpty, !item.isCompactOnTV {
       return "\(item.id)#0"
     }
-    return firstID
+    return item.id
   }
 
   @ViewBuilder

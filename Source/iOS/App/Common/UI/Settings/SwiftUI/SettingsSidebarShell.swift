@@ -11,6 +11,8 @@ struct SettingsSidebarShell: View {
   let sections: [SettingsRootSection]
   let searchIndex: SettingsSearchIndex?
   @Binding var jumpToLeafID: String?
+  /// A deep link's row: while one is pending, focus goes to that row in the pane instead of the sidebar entry.
+  @Environment(\.settingsRowTarget) private var rowTarget
 
   @State private var selectedID: String?
   @FocusState private var sidebarFocus: String?
@@ -106,7 +108,7 @@ struct SettingsSidebarShell: View {
   private func consumeJump() {
     guard let id = jumpToLeafID, entries.contains(where: { $0.id == id }) else { jumpToLeafID = nil; return }
     selectedID = id
-    sidebarFocus = id
+    if rowTarget?.isPending != true { sidebarFocus = id }
     jumpToLeafID = nil
   }
 

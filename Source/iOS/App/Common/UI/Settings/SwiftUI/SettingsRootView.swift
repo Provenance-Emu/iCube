@@ -10,6 +10,11 @@ struct SettingsRootView: View {
   @Environment(\.dismiss) private var dismiss
   /// A leaf to open first (the DSU deep link, the tvOS `-ICubeSettingsPreview` argument).
   var initialLeafID: String? = nil
+  /// A row inside `initialLeafID` to bring into view (a pause tile's long-press). Scrolled to and tinted on iOS,
+  /// focused on tvOS.
+  var initialRowID: String? = nil
+  /// Created on the first appearance when there is a row to reach; the leaf's `MenuScreen` takes it once.
+  @State private var rowTarget: SettingsRowTarget?
   @State private var jumpToLeafID: String?
   @State private var jumpToControllersRequested = false
   /// Built once: the entries' closures are stable across body evaluations, and `pushed` compares by id.
@@ -58,7 +63,11 @@ struct SettingsRootView: View {
     #if os(tvOS)
     .background { ICubeRoom(style: .gradient) }
     #endif
-    .onAppear { if jumpToLeafID == nil { jumpToLeafID = initialLeafID } }
+    .environment(\.settingsRowTarget, rowTarget)
+    .onAppear {
+      if rowTarget == nil, let initialRowID { rowTarget = SettingsRowTarget(rowID: initialRowID) }
+      if jumpToLeafID == nil { jumpToLeafID = initialLeafID }
+    }
     .onReceive(NotificationCenter.default.publisher(for: .dolSettingsSelectControllers)) { _ in
       jumpToLeafID = "controllers"
       jumpToControllersRequested = true

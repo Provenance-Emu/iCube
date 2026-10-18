@@ -9,21 +9,28 @@ import SwiftUI
 /// The card face draws its own fill and border from that value (`icubeCardSurface`), so the glow wraps exactly the
 /// face. The glows are the running game's platform accent (`icubePlatformAccent`) and the app accent.
 struct ICubeCardButtonStyle: ButtonStyle {
+  /// iOS has no focus engine for a game pad: `MenuScreen` passes the polled focus here.
+  var isFocusedOverride: Bool? = nil
+
   func makeBody(configuration: Configuration) -> some View {
-    ICubeCardFocus(configuration: configuration)
+    ICubeCardFocus(configuration: configuration, isFocusedOverride: isFocusedOverride)
   }
 
   /// Focus is read here: a struct-level `@Environment(\.isFocused)` does not update on tvOS.
   private struct ICubeCardFocus: View {
     let configuration: Configuration
-    @Environment(\.isFocused) private var isFocused
+    let isFocusedOverride: Bool?
+    @Environment(\.isFocused) private var environmentFocused
     @Environment(\.icubePlatformAccent) private var platformAccent
+
+    private var isFocused: Bool { isFocusedOverride ?? environmentFocused }
 
     var body: some View {
       let scale = isFocused ? ICubeDesign.Card.focusScale : 1
       let primary = platformAccent ?? ICubeDesign.color(.accent)
       configuration.label
-        .environment(\.icubeCardFocused, isFocused)
+        // A touch press lights the face like focus does: the only feedback a finger gets.
+        .environment(\.icubeCardFocused, isFocused || configuration.isPressed)
         .scaleEffect(configuration.isPressed ? scale * ICubeDesign.Card.pressedScale : scale)
         .shadow(color: primary.opacity(isFocused ? ICubeDesign.Card.primaryGlowOpacity : 0),
                 radius: ICubeDesign.Card.primaryGlowRadius, y: ICubeDesign.Card.primaryGlowY)
