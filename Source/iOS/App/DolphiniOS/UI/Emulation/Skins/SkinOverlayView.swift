@@ -197,10 +197,13 @@ private struct SkinTouchLayer: View {
         pressed: $pressed,
         onBegan: { locations in
           // App actions (menu, quick save/load) fire on touch-down only; a finger sliding onto them does nothing.
+          var acted = false
           for location in locations {
             guard let item = input.actionItem(at: location) else { continue }
             for action in input.actions(ofItem: item) { onAction(action) }
+            acted = true
           }
+          if acted { TouchOverlayHaptics.play(.press) }
         }
       )
       ForEach(input.sticks, id: \.itemIndex) { stick in
@@ -228,8 +231,9 @@ private struct SkinTouchLayer: View {
       case .axis: TCManagerInterface.setAxisValueFor(write.id, controller: deviceId, value: write.axisValue)
       }
     }
-    // Like `TouchOverlayDPadView`: once per press, not on every direction or button change while held.
-    if previous.isEmpty, !now.isEmpty { TouchOverlayHaptics.impact() }
+    // Once per newly pressed item, like the Swift-drawn overlay's clusters: pressing A while holding the
+    // d-pad plays, rolling the held d-pad to another direction does not.
+    if SkinOverlayInput.pressesNewItem(from: previous, to: now) { TouchOverlayHaptics.play(.press) }
   }
 }
 
@@ -268,6 +272,8 @@ private struct SkinStickView: View, Equatable {
   /// Bumped when the skin library changes (an import can replace this skin's files under the same
   /// name), so the knob art is resolved again once instead of keeping the old image.
   @State private var libraryGeneration = 0
+  /// A reference, like `knob`: the tracker updates on every move sample.
+  @State private var haptics = TouchOverlayStickHaptics()
 
   static func == (lhs: SkinStickView, rhs: SkinStickView) -> Bool {
     lhs.stick == rhs.stick && lhs.directory == rhs.directory && lhs.deviceId == rhs.deviceId
@@ -288,6 +294,8 @@ private struct SkinStickView: View, Equatable {
         for write in stick.writes(touch: location) {
           TCManagerInterface.setAxisValueFor(write.id, controller: deviceId, value: write.value)
         }
+        let axes = location.map { stick.axes(touch: $0) }
+        haptics.update(axes: axes.map { CGPoint(x: $0.x, y: $0.y) })
       }
     }
     .frame(width: stick.hitFrame.width, height: stick.hitFrame.height, alignment: .topLeading)
