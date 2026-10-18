@@ -10,9 +10,9 @@ struct SettingsRootView: View {
   @Environment(\.dismiss) private var dismiss
   /// A leaf to open first (the DSU deep link, the tvOS `-ICubeSettingsPreview` argument).
   let initialLeafID: String?
-  /// Set by a host that presents Settings modally (the pause menu's sheet) for a Close button. Settings
-  /// owns its navigation stack: a host must not wrap it in another one, or a leaf opened directly
-  /// could not be popped.
+  /// Set by a host that presents Settings modally (the library's cover, the pause menu's sheet) for a Close
+  /// button. Settings owns its navigation stack: a host must not wrap it in another one or push it onto
+  /// one, or Back on a leaf pops Settings too.
   let onClose: (() -> Void)?
   @State private var jumpToLeafID: String?
   @State private var jumpToControllersRequested = false

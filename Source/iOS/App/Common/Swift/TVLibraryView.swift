@@ -561,21 +561,6 @@ struct TVLibraryView: View {
   #endif
 #endif
 
-  // MARK: - Computed Bindings (extracted to prevent compiler timeout)
-
-  private struct NavigationItem: Identifiable, Hashable {
-    let id = UUID()
-  }
-
-#if os(iOS) || targetEnvironment(macCatalyst)
-  private var settingsBinding: Binding<NavigationItem?> {
-    Binding(
-      get: { navigateToSettings ? NavigationItem() : nil },
-      set: { navigateToSettings = ($0 != nil) }
-    )
-  }
-#endif
-
   // MARK: - Navigation Configuration (extracted to prevent compiler timeout)
 
   @ViewBuilder
@@ -620,9 +605,10 @@ struct TVLibraryView: View {
       .navigationBarTitleDisplayMode(.large)
 #endif
 #if os(iOS) || targetEnvironment(macCatalyst)
-      .navigationDestinationItemCompat(item: settingsBinding) { _ in
-        SettingsRootView()
-          .navigationBarTitleDisplayMode(.inline)
+      // Presented, not pushed: Settings brings its own NavigationStack, and inside the library's stack the
+      // chevron on a leaf popped Settings along with it, straight back to the library.
+      .fullScreenCover(isPresented: $navigateToSettings) {
+        SettingsRootView(onClose: { navigateToSettings = false })
       }
       .toolbar { ToolbarItem(placement: .bottomBar) { RemoteScanProgressView() } }
       // Search moved into the combined bottom `LibrarySearchFilterBar` (see
@@ -737,7 +723,7 @@ struct TVLibraryView: View {
   @State private var showImportSoftwarePicker = false
   @State private var showImportNANDPicker = false
   @State private var showImportSkylanderPicker = false
-  /// Navigate to settings as a push on iOS
+  /// Settings, presented full screen on iOS
   @State private var navigateToSettings = false
   /// Controller navigation repeat throttle
   @State private var lastNavMoveTime: TimeInterval = 0
