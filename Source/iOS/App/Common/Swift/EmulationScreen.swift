@@ -256,9 +256,6 @@ struct EmulationScreen: View {
   @State private var showQuickMenu = false
   @ObservedObject private var recorder = RecordingManager.shared
   @State private var selectedSlot = 1
-  @State private var showSettings = false
-  /// Leaf to open when Settings is presented from a pause tile's long-press; nil opens the root.
-  @State private var settingsLeafID: String?
   @AppStorage("ui_show_dsu_debug_hud") private var showDSUDebugHUD: Bool = {
     #if DEBUG
     return true
@@ -573,17 +570,10 @@ struct EmulationScreen: View {
         .zIndex(5)
       }
     }
-    .fullScreenCover(isPresented: $showSettings, onDismiss: { settingsLeafID = nil }) {
-      SettingsRootView(initialLeafID: settingsLeafID)
-        .pauseClaim("settings")
-        .interactiveDismissDisabled(true)
-    }
     .fullScreenCover(isPresented: $showPauseMenu) {
       PauseMenuView(
         selectedSlot: $selectedSlot,
         onClose: { showPauseMenu = false },
-        onShowSettings: { showSettings = true },
-        onShowSettingsLeaf: { id in settingsLeafID = id; showSettings = true },
         onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
         platform: .tvos,
         game: game
@@ -1101,13 +1091,10 @@ struct EmulationScreen: View {
       guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
       TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
     }
-    .modifier(SettingsNavigationFallback(showSettings: $showSettings, leafID: $settingsLeafID))
     .fullScreenCover(isPresented: $showPauseMenu) {
       PauseMenuView(
         selectedSlot: $selectedSlot,
         onClose: { showPauseMenu = false },
-        onShowSettings: { showSettings = true },
-        onShowSettingsLeaf: { id in settingsLeafID = id; showSettings = true },
         onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
         platform: .ios,
         game: game
@@ -1545,7 +1532,6 @@ struct EmulationScreen: View {
     layoutEditPadKind = pads.programmaticPadKind() ?? (pads.isWii ? .wiiRemote : .gameCube)
     showControllerSettings = false
     showPauseMenu = false
-    showSettings = false
     // The covered-root guard in PauseMenuView.onDisappear cannot see this teardown (its Controllers sheet is
     // still up), so the menu's own tokens go here. User and disconnect pauses stay.
     PauseArbiter.shared.release(reason: PauseArbiter.Reason.pauseMenu)
@@ -1588,6 +1574,12 @@ struct EmulationScreen: View {
     efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
     efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
     anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
+    // The pause and quick menus' Performance HUD tile flips these while the panel is closed.
+    showFPSQuick = DOLConfigBridge.gfxShowFPS()
+    showVPSQuick = DOLConfigBridge.gfxShowVPS()
+    showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
+    showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
+    overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
   }
 
   // Resolver step #3: small "Auto" / "Game" pill shown next to a perf control whose key is currently
@@ -1728,26 +1720,6 @@ struct EmulationScreen: View {
     log.debug("[INPUT] Currently connected controllers: \(controllers.count)")
     for (idx, c) in controllers.enumerated() {
       log.debug("[INPUT] #\(idx) vendor=\(c.vendorName ?? "(nil)", privacy: .private) category=\(c.productCategory) extended=\(c.extendedGamepad != nil) micro=\(c.microGamepad != nil)")
-    }
-  }
-}
-
-private struct SettingsNavigationFallback: ViewModifier {
-  @Binding var showSettings: Bool
-  @Binding var leafID: String?
-  func body(content: Content) -> some View {
-    Group {
-      content
-        .navigationDestination(isPresented: $showSettings) {
-          SettingsRootView(initialLeafID: leafID)
-            .pauseClaim("settings")
-          #if !os(tvOS)
-            .navigationBarTitleDisplayMode(.inline)
-          #endif
-        }
-        .onChange(of: showSettings) { _, isShown in
-          if !isShown { leafID = nil }
-        }
     }
   }
 }

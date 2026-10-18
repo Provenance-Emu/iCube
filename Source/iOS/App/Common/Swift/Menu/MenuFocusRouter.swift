@@ -49,7 +49,8 @@ struct MenuFocusRouter {
     focusedID: String?,
     isActive: Bool,
     columns: Int = 1,
-    stepsPickersInGrid: Bool = true
+    stepsPickersInGrid: Bool = true,
+    headerlessSectionIsOneRow: Bool = false
   ) -> MenuFocusUpdate {
     guard isActive else {
       nav.resync(input, at: time)
@@ -57,7 +58,7 @@ struct MenuFocusRouter {
     }
     return MenuFocusRouter.apply(
       nav.update(input, at: time), model: model, focusedID: focusedID, columns: columns, stepsPickersInGrid: stepsPickersInGrid,
-      adjustOrigin: &adjustOrigin)
+      headerlessSectionIsOneRow: headerlessSectionIsOneRow, adjustOrigin: &adjustOrigin)
   }
 
   /// Multi-pad variant (D18 gap: "MenuScreen listens only to the first
@@ -93,7 +94,8 @@ struct MenuFocusRouter {
     focusedID: String?,
     isActive: Bool,
     columns: Int = 1,
-    stepsPickersInGrid: Bool = true
+    stepsPickersInGrid: Bool = true,
+    headerlessSectionIsOneRow: Bool = false
   ) -> MenuFocusUpdate {
     let connected = Set(padInputs.map(\.0))
     navByPad = navByPad.filter { connected.contains($0.key) }
@@ -118,7 +120,8 @@ struct MenuFocusRouter {
       navByPad[padID] = padNav
       var origin = adjustOriginByPad[padID]
       let padResult = MenuFocusRouter.apply(
-        events, model: model, focusedID: current, columns: columns, stepsPickersInGrid: stepsPickersInGrid, adjustOrigin: &origin)
+        events, model: model, focusedID: current, columns: columns, stepsPickersInGrid: stepsPickersInGrid,
+        headerlessSectionIsOneRow: headerlessSectionIsOneRow, adjustOrigin: &origin)
       adjustOriginByPad[padID] = origin
       current = padResult.focusedID
       if activated == nil { activated = padResult.activatedID }
@@ -160,6 +163,7 @@ struct MenuFocusRouter {
     focusedID: String?,
     columns: Int = 1,
     stepsPickersInGrid: Bool = true,
+    headerlessSectionIsOneRow: Bool = false,
     adjustOrigin: inout String?
   ) -> MenuFocusUpdate {
     var current = focusedID
@@ -171,7 +175,8 @@ struct MenuFocusRouter {
       switch event {
       case .move(let step):
         current = columns > 1
-          ? MenuFocusRouter.gridMove(current, rowStep: step, columnStep: 0, columns: columns, in: model)
+          ? MenuFocusRouter.gridMove(current, rowStep: step, columnStep: 0, columns: columns,
+                                     headerlessSectionIsOneRow: headerlessSectionIsOneRow, in: model)
           : MenuFocusRouter.move(current, by: step, in: model)
       case .jumpSection(let step):
         if let existing = current, let jumped = model.firstFocusableID(sectionOffsetFrom: existing, by: step) {
@@ -187,7 +192,8 @@ struct MenuFocusRouter {
         didGoBack = true
       case .adjust(let step):
         if columns > 1, !stepsPickersInGrid || !MenuFocusRouter.isPicker(current, in: model) {
-          current = MenuFocusRouter.gridMove(current, rowStep: 0, columnStep: step, columns: columns, in: model)
+          current = MenuFocusRouter.gridMove(current, rowStep: 0, columnStep: step, columns: columns,
+                                             headerlessSectionIsOneRow: headerlessSectionIsOneRow, in: model)
         } else if let current {
           adjust = (current, step)
           adjustOrigin = current
@@ -229,14 +235,17 @@ struct MenuFocusRouter {
   ///   card. If that card is disabled, the nearest enabled one in the row; a row with none is
   ///   skipped. Clamped at the first/last row.
   /// - No current focus (or a focus the model no longer has): the first focusable item, as `move`.
-  static func gridMove(_ focusedID: String?, rowStep: Int, columnStep: Int, columns: Int, in model: MenuModel) -> String? {
-    let columns = max(1, columns)
+  /// - `headerlessSectionIsOneRow`: a section without a header is one row however many items it has (the pause
+  ///   cards' primary row, drawn as a single `HStack`).
+  static func gridMove(_ focusedID: String?, rowStep: Int, columnStep: Int, columns: Int,
+                       headerlessSectionIsOneRow: Bool = false, in model: MenuModel) -> String? {
     var rows: [[MenuItem]] = []
     for section in model.sections {
+      let width = headerlessSectionIsOneRow && section.header == nil ? max(1, section.items.count) : max(1, columns)
       var start = 0
       while start < section.items.count {
-        rows.append(Array(section.items[start ..< min(start + columns, section.items.count)]))
-        start += columns
+        rows.append(Array(section.items[start ..< min(start + width, section.items.count)]))
+        start += width
       }
     }
     guard let focusedID,

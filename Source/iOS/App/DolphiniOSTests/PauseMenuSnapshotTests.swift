@@ -30,7 +30,7 @@ final class PauseMenuSnapshotTests: XCTestCase {
     try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
     let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
     for (name, size) in Self.sizes {
-      let view = PauseMenuView(selectedSlot: .constant(3), onClose: {}, onShowSettings: {}, platform: .ios, game: PauseMenuView.previewGame())
+      let view = PauseMenuView(selectedSlot: .constant(3), onClose: {}, platform: .ios, game: PauseMenuView.previewGame())
       let image = render(view, size: size, scene: scene)
       try XCTUnwrap(image.pngData()).write(to: outputDir.appendingPathComponent("pause-\(name).png"))
     }

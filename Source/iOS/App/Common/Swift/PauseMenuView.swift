@@ -11,9 +11,6 @@ internal enum PlatformKind { case ios, tvos }
 internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
   let onClose: () -> Void
-  let onShowSettings: () -> Void
-  /// Opens Settings straight on a leaf (a tile's long-press or the Performance tile); wired by `EmulationScreen`.
-  var onShowSettingsLeaf: (String) -> Void = { _ in }
   var onShowPerfOverlay: () -> Void = {}
   let platform: PlatformKind
   let game: TVGameItem
@@ -37,13 +34,18 @@ internal struct PauseMenuView: View {
   /// `-ICubePauseFocus <slot-N|view-all>`: where the Save States pane's focus lands, so a screenshot can show a
   /// focused tile (simctl cannot press the remote). Parsed by `TVSaveSlotsPane.debugFocus`.
   var debugInitialFocus: String?
+  /// `-ICubePauseLongPress <tileID>`: run that tile's long-press once the menu is up (e.g. Upscaling opens Settings on
+  /// its row), so a simulator screenshot shows the real sheet path.
+  var debugLongPressTileID: String?
   #endif
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
   @State private var showShaders: Bool = false
-  @State private var showSettingsSheet: Bool = false
-  /// The leaf the iOS Settings sheet opens on; nil opens the root.
-  @State private var settingsSheetLeafID: String?
+  /// Settings over the pause menu (a sheet on iOS, a cover on tvOS), opened by the Settings tile or a tile's
+  /// long-press. The menu presents it itself: a second cover from `EmulationScreen` cannot show while this one is up.
+  @State private var showSettings: Bool = false
+  /// Where Settings opens; nil opens the root.
+  @State private var settingsLink: SettingsDeepLink?
   @State private var showControllersSheet: Bool = false
   /// Recenter Pointer is offered for a running Wii title on iOS, where touch or the gyro drives it.
   private static var showsRecenterPointer: Bool {
@@ -68,9 +70,13 @@ internal struct PauseMenuView: View {
   @State private var internalResolution: Int = 1
   @State private var metalFXUpscale: Bool = false
   @State private var audioVolume: Int = 100
-  /// The Performance tile badge and the cover-column chip: the engine actually running.
+  /// The cover-column chip: the engine actually running.
   @State private var engineShortName: String = ""
   @State private var jitAcquired: Bool = false
+  /// The Performance tile's value: the engine the next launch uses (`CpuEngine` raw value).
+  @State private var nextEngine: Int = CpuEngine.cachedInterpreter.rawValue
+  /// Mirror of `PerfHUDToggle.isOn` behind the Performance HUD tile.
+  @State private var perfHUDOn: Bool = false
   @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   /// True while any sheet, full-screen cover, or non-main pane owned by this menu is
@@ -79,9 +85,9 @@ internal struct PauseMenuView: View {
   /// them should resume the game underneath.
   private var isPauseMenuChildPresented: Bool {
     if pane != .main { return true }
-    if showShaders || showContinuitySheet || showFilmstripSheet { return true }
+    if showShaders || showContinuitySheet || showFilmstripSheet || showSettings { return true }
     #if os(iOS)
-    if showSettingsSheet || showControllersSheet { return true }
+    if showControllersSheet { return true }
     #else
     // tvOS asks with the system confirmation dialog, which can disappear the menu under it like a sheet.
     if showExitDialog || showResetDialog { return true }
@@ -108,12 +114,14 @@ internal struct PauseMenuView: View {
   private func refreshEngineState() {
     jitAcquired = JitManager.shared().acquiredJit
     engineShortName = CpuEngine.resolved(stored: CpuEngine.from(raw: DOLConfigBridge.mainCpuCore()), acquiredJit: jitAcquired).shortName
+    nextEngine = CpuEngine.resolved(stored: CpuEngine.from(raw: DOLConfigBridge.mainCpuCoreBase()), acquiredJit: jitAcquired).rawValue
   }
 
   private func refreshLiveSettings() {
     internalResolution = TVEmulationBridge.internalResolution()
     metalFXUpscale = DOLConfigBridge.gfxMetalFXSpatialUpscale()
     audioVolume = TVEmulationBridge.audioVolumePercent()
+    perfHUDOn = PerfHUDToggle.isOn
     refreshEngineState()
   }
 
@@ -193,6 +201,9 @@ internal struct PauseMenuView: View {
         case "exit": showExitDialog = true
         default: break
         }
+        if let id = debugLongPressTileID, case .action(let run)? = pauseMenuModel.item(id: id)?.effectiveLongPress {
+          DispatchQueue.main.asyncAfter(deadline: .now() + 1) { run() }
+        }
       }
       #endif
     }
@@ -265,10 +276,10 @@ internal struct PauseMenuView: View {
       .claimsController()
     }
     #if os(iOS)
-    .sheet(isPresented: $showSettingsSheet) {
+    .sheet(isPresented: $showSettings, onDismiss: settingsClosed) {
       // Not wrapped in a NavigationStack: Settings owns its stack, and a second one around it left a leaf
       // opened directly (a tile's long-press) on screen with neither Back nor B able to pop it.
-      SettingsRootView(initialLeafID: settingsSheetLeafID, onClose: { showSettingsSheet = false })
+      SettingsRootView(initialLeafID: settingsLink?.leafID, initialRowID: settingsLink?.rowID, onClose: { showSettings = false })
         .pauseClaim("settings")
         .claimsController()
     }
@@ -279,6 +290,13 @@ internal struct PauseMenuView: View {
       }
       .pauseClaim("controllers")
       .claimsController()
+    }
+    #else
+    // Menu at the sidebar closes it (`SettingsSidebarShell`); the pause menu is underneath again.
+    .fullScreenCover(isPresented: $showSettings, onDismiss: settingsClosed) {
+      SettingsRootView(initialLeafID: settingsLink?.leafID, initialRowID: settingsLink?.rowID)
+        .pauseClaim("settings")
+        .interactiveDismissDisabled(true)
     }
     #endif
     // WS-4 sender surface. Unconditional (not #if os(iOS)): tvOS has no system
@@ -294,16 +312,15 @@ internal struct PauseMenuView: View {
   #if DEBUG
   func debugPane(_ pane: String?) -> PauseMenuView { var copy = self; copy.debugInitialPane = pane; return copy }
   func debugFocus(_ focus: String?) -> PauseMenuView { var copy = self; copy.debugInitialFocus = focus; return copy }
+  func debugLongPress(_ tileID: String?) -> PauseMenuView { var copy = self; copy.debugLongPressTileID = tileID; return copy }
 
   #endif
 
   // Add pull-down to dismiss for iOS
   #if os(iOS)
-  init(selectedSlot: Binding<Int>, onClose: @escaping () -> Void, onShowSettings: @escaping () -> Void, onShowSettingsLeaf: @escaping (String) -> Void = { _ in }, onShowPerfOverlay: @escaping () -> Void = {}, platform: PlatformKind, game: TVGameItem) {
+  init(selectedSlot: Binding<Int>, onClose: @escaping () -> Void, onShowPerfOverlay: @escaping () -> Void = {}, platform: PlatformKind, game: TVGameItem) {
     self._selectedSlot = selectedSlot
     self.onClose = onClose
-    self.onShowSettings = onShowSettings
-    self.onShowSettingsLeaf = onShowSettingsLeaf
     self.onShowPerfOverlay = onShowPerfOverlay
     self.platform = platform
     self.game = game
@@ -323,7 +340,7 @@ internal struct PauseMenuView: View {
   #if os(tvOS)
   private var tvMainMenu: some View {
     ZStack {
-      TVPauseGridView(model: PauseMenuModelBuilder.tvLayout(pauseMenuModel), lastFocusID: $tvLastFocusID, onBack: {
+      TVPauseGridView(model: PauseMenuModelBuilder.primaryLayout(pauseMenuModel), lastFocusID: $tvLastFocusID, onBack: {
         guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
         onClose()
       }) {
@@ -353,12 +370,34 @@ internal struct PauseMenuView: View {
   private var touchMainMenu: some View {
     GeometryReader { proxy in
       let compactHeight = isCompactHeight
-      let columns = PauseTileLayout.columns(forWidth: proxy.size.width, isTV: false, isCompactHeight: compactHeight)
+      let hero = PauseTileLayout.touchHero(width: proxy.size.width, isCompactHeight: compactHeight)
+      let columns = PauseTileLayout.cardColumns(forGridWidth: proxy.size.width - hero.columnWidth - hero.gap - 2 * Touch.margin)
       ZStack {
-        VStack(alignment: .leading, spacing: 8) {
-          compactHeader(isCompactHeight: compactHeight).padding(compactHeight ? 12 : 16)
-          tiles(columns: columns, compact: compactHeight)
+        Group {
+          if hero.columnWidth > 0 {
+            HStack(alignment: .top, spacing: hero.gap) {
+              VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
+                closeButton
+                PauseHeroView(game: game, layout: compactHeight ? .textOnly : .column(artWidth: Touch.heroArtWidth),
+                              engineChip: engineChipText, jitAcquired: jitAcquired)
+                Spacer(minLength: 0)
+              }
+              .frame(width: hero.columnWidth, alignment: .leading)
+              tiles(columns: columns, compact: compactHeight)
+            }
+          } else {
+            VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+              HStack(alignment: .top, spacing: ICubeDesign.Spacing.s.rawValue) {
+                PauseHeroView(game: game, layout: .banner, engineChip: engineChipText, jitAcquired: jitAcquired)
+                Spacer(minLength: 0)
+                closeButton
+              }
+              tiles(columns: columns, compact: compactHeight)
+            }
+          }
         }
+        .padding(.horizontal, Touch.margin)
+        .padding(.top, Touch.topMargin)
         // Reset/Exit are in-place `MenuScreen` overlays: each self-claims its own coordinator scope on appear,
         // so the tiles underneath stop reacting for as long as one is up, and unlike a `.sheet` this never
         // touches `isPauseMenuChildPresented`.
@@ -373,15 +412,37 @@ internal struct PauseMenuView: View {
         }
         EmulationToastOverlay(barHeight: 0, barVisible: false)
       }
-      // A background, not a ZStack sibling: the scaledToFill backdrop would otherwise widen the ZStack to the
-      // image's fill size and push the tile grid several windows wide.
       .frame(width: proxy.size.width, height: proxy.size.height)
-      .background { backdrop }
+      // A background, not a ZStack sibling: the fill-scaled art would otherwise widen the ZStack past the window.
+      .background { ICubeTVRoomBackground(art: game.bannerImage ?? (game.hasCoverArt ? game.coverImage : nil)) }
     }
     // `MenuScreen` row text takes no explicit color; pin the dark-mode values so titles stay legible over the
-    // always-dark backdrop whatever the system appearance. `.environment`, not `.preferredColorScheme`, so the
+    // always-dark room whatever the system appearance. `.environment`, not `.preferredColorScheme`, so the
     // Settings/Controllers/Shaders sheets opened from here are unaffected.
     .environment(\.colorScheme, .dark)
+    .environment(\.icubePlatformAccent, platformAccent)
+  }
+
+  /// iPhone/iPad pause screen geometry.
+  private enum Touch {
+    static let margin: CGFloat = 16
+    static let topMargin: CGFloat = 8
+    static let heroArtWidth: CGFloat = 180
+  }
+
+  private var closeButton: some View {
+    Button(action: onClose) {
+      Label(L("Close"), systemImage: "xmark")
+        .labelStyle(.iconOnly)
+        .font(.system(size: 15, weight: .bold))
+        .foregroundStyle(ICubeDesign.color(.textPrimary))
+        .frame(width: 36, height: 36)
+        .background(Circle().fill(ICubeDesign.Card.surface.opacity(ICubeDesign.Card.restFillOpacity)))
+        .overlay(Circle().strokeBorder(ICubeDesign.color(.accent).opacity(ICubeDesign.Card.restBorderOpacity),
+                                       lineWidth: ICubeDesign.Line.hairline.rawValue))
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(L("Close"))
   }
 
   /// True for iPhone landscape; never on tvOS.
@@ -396,7 +457,7 @@ internal struct PauseMenuView: View {
   private func tiles(columns: Int, compact: Bool) -> some View {
     // Modal while a confirm overlay is up: on tvOS the focus engine can otherwise land back on a tile.
     let confirmUp = showResetDialog || showExitDialog
-    return MenuScreen(model: pauseMenuModel, style: .tiles(columns: columns, compact: compact), onBack: {
+    return MenuScreen(model: PauseMenuModelBuilder.primaryLayout(pauseMenuModel), style: .cards(columns: columns, compact: compact), onBack: {
       guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
       onClose()
     })
@@ -411,103 +472,22 @@ internal struct PauseMenuView: View {
 
   private var platformAccent: Color { ICubeDesign.platformAccent(gamePlatform) }
 
-  private var backdrop: some View {
-    ZStack {
-      Image(uiImage: game.bannerImage ?? game.coverImage)
-        .resizable().scaledToFill().blur(radius: 24).opacity(0.5).ignoresSafeArea().clipped()
-      LinearGradient(colors: [.black.opacity(0.85), .black.opacity(0.35), .black.opacity(0.85)], startPoint: .top, endPoint: .bottom)
-        .ignoresSafeArea()
-    }
-  }
+  /// "JIT ON" while the JIT is acquired, otherwise the engine that is running (INT, CIR, CIR-IR).
+  private var engineChipText: String { jitAcquired ? L("JIT ON") : engineShortName }
 
   /// tvOS hero (iFly layout, iCube tokens): cover, PAUSED in accent, the game title in the display face, its ID.
   private var coverColumn: some View {
-    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
-      heroArt
-        .shadow(color: .black.opacity(0.5), radius: ICubeDesign.TVPause.heroArtShadowRadius, x: 0, y: ICubeDesign.TVPause.heroArtShadowY)
-        .padding(.bottom, ICubeDesign.Spacing.xs.rawValue)
-      Label(L("Paused"), systemImage: "pause.fill")
-        .icubeText(.nav)
-        .tracking(ICubeDesign.TVPause.pausedTracking)
-        .foregroundStyle(platformAccent)
-      Text(game.title)
-        // Before `icubeText`: the role's own `textCase(nil)` would otherwise sit closer to the text and win.
-        .textCase(.uppercase)
-        .icubeText(.title)
-        .foregroundStyle(LinearGradient(colors: [ICubeDesign.color(.textPrimary), platformAccent], startPoint: .top, endPoint: .bottom))
-        .lineLimit(3)
-        .minimumScaleFactor(0.6)
-        .fixedSize(horizontal: false, vertical: true)
-      Text(game.gameID)
-        .icubeText(.tag)
-        .foregroundStyle(ICubeDesign.color(.textSecondary))
-      engineChip
-    }
-  }
-
-  /// Hero cover width; the art is always 2:3 (a GameCube/Wii case).
-  private static let heroArtWidth = ICubeDesign.TVPause.heroArtWidth
-
-  /// The cover, filled into a 2:3 case and clipped; without one, the platform's case template on its accent,
-  /// never a stretched placeholder glyph. The title is not repeated: it sits right below.
-  private var heroArt: some View {
-    let shape = RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous)
-    return ZStack {
-      if game.hasCoverArt {
-        Image(uiImage: game.coverImage).resizable().scaledToFill()
-      } else {
-        shape.fill(platformAccent.opacity(ICubeDesign.IconBadge.tintOpacity))
-        Image(LibraryGameSystem.from(item: game).templateImageName)
-          .resizable().scaledToFill()
-          .opacity(0.5)
-      }
-    }
-    .frame(width: Self.heroArtWidth, height: Self.heroArtWidth * 3 / 2)
-    .clipShape(shape)
-    .overlay(shape.stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue))
-  }
-
-  /// "JIT ON" while the JIT is acquired, otherwise the engine that is running (INT, CIR, CIR-IR).
-  private var engineChip: some View {
-    Text(jitAcquired ? L("JIT ON") : engineShortName)
-      .icubeText(.tag)
-      .foregroundStyle(ICubeDesign.color(.textPrimary))
-      .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
-      .padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
-      .background(Capsule().fill(jitAcquired ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface)))
-  }
-
-  @ViewBuilder
-  private func compactHeader(isCompactHeight: Bool) -> some View {
-    HStack(alignment: .center, spacing: 12) {
-      if !isCompactHeight {
-        Image(uiImage: game.coverImage)
-          .resizable().aspectRatio(2.0 / 3.0, contentMode: .fit).frame(width: 56)
-          .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-      }
-      if isCompactHeight {
-        Text(game.title).font(.headline).foregroundStyle(.white).lineLimit(1)
-        Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
-        engineChip
-      } else {
-        VStack(alignment: .leading, spacing: 2) {
-          Text(game.title).font(.headline).foregroundStyle(.white).lineLimit(1)
-          HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
-            Text(game.gameID).font(.caption).foregroundStyle(.white.opacity(0.7))
-            engineChip
-          }
-        }
-      }
-      Spacer()
-      Button(L("Close")) { onClose() }
-        .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
-        .padding(.horizontal, 14).padding(.vertical, isCompactHeight ? 4 : 8)
-        .background(Capsule().fill(.ultraThinMaterial))
-        .buttonStyle(.plain)
-    }
+    PauseHeroView(game: game, layout: .column(artWidth: ICubeDesign.TVPause.heroArtWidth),
+                  engineChip: engineChipText, jitAcquired: jitAcquired)
   }
 
   private var isTV: Bool { platform == .tvos }
+
+  /// Settings may have changed what the tiles show (volume, scale, the engine).
+  private func settingsClosed() {
+    settingsLink = nil
+    refreshLiveSettings()
+  }
 
   private func confirmOverlay(title: String, message: String, model: MenuModel, onBack: @escaping () -> Void) -> some View {
     ICubeConfirmPanel(title: title, message: message, model: model, isTV: isTV, onBack: onBack)
@@ -656,7 +636,19 @@ internal struct PauseMenuView: View {
           TVEmulationBridge.setAudioVolumePercent(percent)
           audioVolume = percent
         }),
-      recording: Binding(get: { recorder.isRecording }, set: { RecordingToggle.set($0) }))
+      recording: Binding(get: { recorder.isRecording }, set: { RecordingToggle.set($0) }),
+      perfHUD: Binding(get: { perfHUDOn }, set: { on in
+        PerfHUDToggle.set(on)
+        perfHUDOn = on
+      }),
+      cpuEngine: Binding(
+        get: { AnyHashable(nextEngine) },
+        set: { value in
+          guard let raw = value as? Int else { return }
+          DOLConfigBridge.setMainCpuCore(raw)
+          nextEngine = raw
+          EmulationToast.post(String(format: L("%@ from the next launch"), CpuEngine.from(raw: raw).shortName))
+        }))
   }
 
   private func refreshShaderState() {
@@ -675,7 +667,8 @@ internal struct PauseMenuView: View {
       metalFXSupported: DOLConfigBridge.gfxMetalFXSpatialUpscaleSupported(),
       audioVolume: audioVolume,
       engineShortName: engineShortName,
-      jitAcquired: jitAcquired)
+      jitAcquired: jitAcquired,
+      nextEngine: nextEngine)
     let actions = PauseMenuActions(
       resume: { PauseArbiter.shared.userResume(); onClose() },
       quickSave: { _ = QuickSlot.save(slot: selectedSlot) },
@@ -699,20 +692,12 @@ internal struct PauseMenuView: View {
       openShaders: { showShaders = true },
       openContinuity: { showContinuitySheet = true },
       openSettings: {
-        #if os(iOS)
-        settingsSheetLeafID = nil
-        showSettingsSheet = true
-        #else
-        onShowSettings()
-        #endif
+        settingsLink = nil
+        showSettings = true
       },
-      openSettingsLeaf: { id in
-        #if os(iOS)
-        settingsSheetLeafID = id
-        showSettingsSheet = true
-        #else
-        onShowSettingsLeaf(id)
-        #endif
+      openSettingsLeaf: { link in
+        settingsLink = link
+        showSettings = true
       },
       openPerfOverlay: { onClose(); onShowPerfOverlay() },
       requestReset: { showResetDialog = true },
@@ -792,6 +777,8 @@ struct PauseMenuState {
   /// The engine actually running ("INT", "CIR", "CIR-IR", "JIT"), and whether the JIT was acquired.
   var engineShortName: String = ""
   var jitAcquired: Bool = false
+  /// The engine the next launch uses (`CpuEngine` raw value): the Performance tile's value.
+  var nextEngine: Int = CpuEngine.cachedInterpreter.rawValue
 }
 
 /// Live bindings for the in-place tiles. Writing one applies immediately; the host rebuilds the model.
@@ -806,6 +793,10 @@ struct PauseMenuBindings {
   var audioVolume: Binding<AnyHashable> = .constant(AnyHashable(100))
   /// Screen recording on/off (`RecordingManager`); the Record tile toggles it.
   var recording: Binding<Bool> = .constant(false)
+  /// Dolphin's on-screen stats (`PerfHUDToggle`); the Performance HUD tile toggles them.
+  var perfHUD: Binding<Bool> = .constant(false)
+  /// The CPU engine for the next launch (`CpuEngine` raw value); the Performance tile cycles it.
+  var cpuEngine: Binding<AnyHashable> = .constant(AnyHashable(CpuEngine.cachedInterpreter.rawValue))
 }
 
 struct PauseMenuActions {
@@ -819,8 +810,8 @@ struct PauseMenuActions {
   var openShaders: () -> Void
   var openContinuity: () -> Void
   var openSettings: () -> Void
-  /// Opens Settings on the leaf with this id (`SettingsRootView(initialLeafID:)`).
-  var openSettingsLeaf: (String) -> Void = { _ in }
+  /// Opens Settings on a leaf, scrolled to a row (`PauseMenuModelBuilder.settingsLinks`).
+  var openSettingsLeaf: (SettingsDeepLink) -> Void = { _ in }
   var openPerfOverlay: () -> Void
   var requestReset: () -> Void
   var requestExit: () -> Void
@@ -829,19 +820,42 @@ struct PauseMenuActions {
 
 /// Unified menu UX spec §5: Quick / Game / System. Shared by iOS and tvOS.
 enum PauseMenuModelBuilder {
-  /// The tvOS session row, in order (iFly layout): big tiles above the Options grid.
-  static let tvPrimaryIDs = ["resume", "save-states", "reset", "exit"]
+  /// The session row, in order (iFly layout): big tiles above the Options grid.
+  static let primaryIDs = ["resume", "save-states", "reset", "exit"]
 
-  /// tvOS regroup of `make`'s tiles: one headerless primary row, then every other tile, in order, under Options.
-  /// A headerless section is what `MenuScreen` draws as the tall primary row.
-  static func tvLayout(_ model: MenuModel) -> MenuModel {
+  /// The pause screen's regroup of `make`'s tiles, on every platform: one headerless primary row, then every other
+  /// tile, in order, under Options. A headerless section is what `TVPauseGridView` and `MenuStyle.cards` draw as the
+  /// tall primary row.
+  static func primaryLayout(_ model: MenuModel) -> MenuModel {
     let all = model.sections.flatMap(\.items)
-    let primary = tvPrimaryIDs.compactMap { id in all.first { $0.id == id } }
-    let options = all.filter { !tvPrimaryIDs.contains($0.id) }
+    let primary = primaryIDs.compactMap { id in all.first { $0.id == id } }
+    let options = all.filter { !primaryIDs.contains($0.id) }
     return MenuModel(sections: [
       MenuSection(id: "primary", items: primary),
       MenuSection(id: "options", header: L("Options"), items: options),
     ])
+  }
+
+  /// Tile → the Settings leaf and row its long-press opens. Every other tile acts in place or opens its own page
+  /// (Save States, Cheats, Controllers, Continue Elsewhere, the shader picker); Settings opens the root.
+  static let settingsLinks: [String: SettingsDeepLink] = [
+    "upscaling": SettingsDeepLink(leafID: "graphics-enhancements", rowID: "efb-scale"),
+    "audio": SettingsDeepLink(leafID: "audio", rowID: "volume"),
+    "performance": SettingsDeepLink(leafID: "performance-tuning", rowID: "cpu-engine"),
+  ]
+
+  /// The long-press that opens `tile`'s Settings link.
+  private static func settingsLongPress(_ tile: String, _ actions: PauseMenuActions) -> MenuLongPress? {
+    guard let link = settingsLinks[tile] else { return nil }
+    return .action { actions.openSettingsLeaf(link) }
+  }
+
+  /// The Performance tile's engines: the recommended ones for this run (the JIT only when it was acquired). The
+  /// plain Interpreter stays in Settings, one step away from a slow next launch; when it is the stored engine it is
+  /// listed so the badge stays honest.
+  static func engineOptions(jitAcquired: Bool, including current: Int) -> [(String, AnyHashable)] {
+    let ladder: [CpuEngine] = jitAcquired ? [.jitARM64, .cachedInterpreter, .cachedInterpreterIR] : [.cachedInterpreter, .cachedInterpreterIR]
+    return options(ladder.map { ($0.shortName, AnyHashable($0.rawValue)) }, including: current) { CpuEngine.from(raw: $0).shortName }
   }
 
   static let fastForwardOff: AnyHashable = AnyHashable(-1)
@@ -912,20 +926,21 @@ enum PauseMenuModelBuilder {
     var game: [MenuItem] = [
       MenuItem(id: "save-states", title: L("Save States"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates),
                description: L("Save, load and browse every slot.")),
-      MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .action(actions.openPerfOverlay),
-               description: L("Frame rate, CPU and GPU timing drawn over the game.")),
+      MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .toggle(bindings.perfHUD),
+               description: L("Frame rate and speed drawn over the game. Long-press for every performance control."),
+               longPress: .action(actions.openPerfOverlay)),
       MenuItem(id: "upscaling", title: L("Upscaling"), icon: "arrow.up.left.and.arrow.down.right", tint: .indigo,
                role: .cycle(options: upscalingOptions(including: state.internalResolution), selection: bindings.internalResolution),
-               description: L("Internal resolution. Takes effect immediately."),
-               longPress: .action { actions.openSettingsLeaf("graphics-enhancements") }),
+               description: L("Internal resolution. Takes effect immediately. Long-press for the graphics settings."),
+               longPress: settingsLongPress("upscaling", actions)),
       MenuItem(id: "audio", title: L("Audio"), icon: "speaker.wave.2", tint: .cyan,
                role: .cycle(options: audioVolumeOptions(including: state.audioVolume), selection: bindings.audioVolume),
-               description: L("Game volume. Long-press for audio settings."),
-               longPress: .action { actions.openSettingsLeaf("audio") }),
-      MenuItem(id: "performance", title: L("Performance"), icon: "gauge.with.dots.needle.67percent", tint: .orange,
-               role: .action { actions.openSettingsLeaf("performance-tuning") },
-               badge: state.engineShortName.isEmpty ? nil : state.engineShortName,
-               description: L("CPU engine and speed tuning.")),
+               description: L("Game volume. Long-press for the audio settings."),
+               longPress: settingsLongPress("audio", actions)),
+      MenuItem(id: "performance", title: L("CPU Engine"), icon: "gauge.with.dots.needle.67percent", tint: .orange,
+               role: .cycle(options: engineOptions(jitAcquired: state.jitAcquired, including: state.nextEngine), selection: bindings.cpuEngine),
+               description: L("The CPU engine from the next launch. Long-press for Performance Tuning."),
+               longPress: settingsLongPress("performance", actions)),
       MenuItem(id: "cheats", title: L("Cheats"), icon: "star.circle", tint: .yellow, role: .action(actions.openCheats),
                badge: state.activeCheatCount > 0 ? "\(state.activeCheatCount)" : nil,
                description: L("Enable Gecko and Action Replay codes for this game.")),
@@ -987,7 +1002,8 @@ enum QuickMenuHost {
       }),
       quickSlot: Binding(get: { AnyHashable(selectedSlot.wrappedValue) }, set: { if let slot = $0 as? Int { selectedSlot.wrappedValue = slot } }),
       shader: .constant(ShaderQuickApply.noneValue),
-      recording: Binding(get: { RecordingManager.shared.isRecording }, set: { RecordingToggle.set($0) }))
+      recording: Binding(get: { RecordingManager.shared.isRecording }, set: { RecordingToggle.set($0) }),
+      perfHUD: Binding(get: { PerfHUDToggle.isOn }, set: { PerfHUDToggle.set($0) }))
   }
 
   static func actions(selectedSlot: Binding<Int>, openPerfOverlay: @escaping () -> Void) -> PauseMenuActions {
@@ -1053,7 +1069,6 @@ extension PauseMenuView {
   PauseMenuView(
     selectedSlot: .constant(1),
     onClose: {},
-    onShowSettings: {},
     platform: .ios,
     game: PauseMenuView.previewGame()
   )
@@ -1063,7 +1078,6 @@ extension PauseMenuView {
   PauseMenuView(
     selectedSlot: .constant(1),
     onClose: {},
-    onShowSettings: {},
     platform: .ios,
     game: PauseMenuView.previewGame()
   )

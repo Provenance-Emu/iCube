@@ -6,26 +6,23 @@ import XCTest
 
 @testable import iCube
 
-/// Spec §5.1: 6 columns on tvOS, 3 on an iPhone in portrait, 4 in landscape, 4–6 on iPad by width.
+/// The pause screen's cards: 4 columns on tvOS; on iPhone and iPad the hero placement and the grid width decide.
 final class PauseTileLayoutTests: XCTestCase {
-  func test_tv_isAlwaysSix() {
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 1920, isTV: true), 4)
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 100, isTV: true), 4)
+  func test_tv_isFour() {
+    XCTAssertEqual(PauseTileLayout.tvColumns, 4)
   }
 
-  func test_phonePortrait_three_landscape_four() {
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 393, isTV: false), 3)
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 852, isTV: false), 4)
+  func test_hero_bannerOnAPhoneInPortrait_columnElsewhere() {
+    XCTAssertEqual(PauseTileLayout.touchHero(width: 402, isCompactHeight: false), PauseTileLayout.bannerHero)
+    XCTAssertEqual(PauseTileLayout.touchHero(width: 874, isCompactHeight: true), PauseTileLayout.compactHeightHero)
+    XCTAssertEqual(PauseTileLayout.touchHero(width: 1032, isCompactHeight: false), PauseTileLayout.iPadHero)
+    XCTAssertEqual(PauseTileLayout.touchHero(width: 1376, isCompactHeight: false), PauseTileLayout.iPadHero)
   }
 
-  func test_ipad_fourToSixByWidth() {
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 744, isTV: false), 4)
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 1024, isTV: false), 5)
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 1366, isTV: false), 6)
-  }
-
-  func test_compactHeight_wideWindowGetsSixColumns() {
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 852, isTV: false, isCompactHeight: true), 6)
-    XCTAssertEqual(PauseTileLayout.columns(forWidth: 852, isTV: false, isCompactHeight: false), 4)
+  func test_cardColumns_byGridWidth() {
+    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 370), 3, "iPhone portrait")
+    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 528), 4, "iPhone landscape beside the hero")
+    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 752), 4, "iPad portrait beside the hero")
+    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 1096), 5, "iPad landscape beside the hero")
   }
 }

@@ -69,6 +69,8 @@ extension ICubeDesign {
 
   /// The full-bleed room behind the tvOS pause screen and its panes (`ICubeTVRoomBackground`).
   enum TVRoom {
+    /// The screen the numbers below are for (a 1080p TV, in points); other screens scale them.
+    static let referenceSize = CGSize(width: 1920, height: 1080)
     static let vignetteStartRadius: CGFloat = 200
     static let vignetteEndRadius: CGFloat = 1400
     static let vignetteOpacity: Double = 0.55

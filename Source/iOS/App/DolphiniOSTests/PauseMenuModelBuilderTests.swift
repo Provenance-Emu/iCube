@@ -11,7 +11,7 @@ import XCTest
 final class PauseMenuModelBuilderTests: XCTestCase {
   private final class Box { var value: AnyHashable; init(_ v: AnyHashable) { value = v } }
 
-  private func bindings(ff: Box = Box(PauseMenuModelBuilder.fastForwardOff), slot: Box = Box(3), muted: Box = Box(false), shader: Box = Box(ShaderQuickApply.noneValue), resolution: Box = Box(1), volume: Box = Box(100), recording: Box = Box(false)) -> PauseMenuBindings {
+  private func bindings(ff: Box = Box(PauseMenuModelBuilder.fastForwardOff), slot: Box = Box(3), muted: Box = Box(false), shader: Box = Box(ShaderQuickApply.noneValue), resolution: Box = Box(1), volume: Box = Box(100), recording: Box = Box(false), perfHUD: Box = Box(false), engine: Box = Box(CpuEngine.cachedInterpreter.rawValue)) -> PauseMenuBindings {
     PauseMenuBindings(
       mute: Binding(get: { muted.value as? Bool ?? false }, set: { muted.value = $0 }),
       fastForward: Binding(get: { ff.value }, set: { ff.value = $0 }),
@@ -19,7 +19,9 @@ final class PauseMenuModelBuilderTests: XCTestCase {
       shader: Binding(get: { shader.value }, set: { shader.value = $0 }),
       internalResolution: Binding(get: { resolution.value }, set: { resolution.value = $0 }),
       audioVolume: Binding(get: { volume.value }, set: { volume.value = $0 }),
-      recording: Binding(get: { recording.value as? Bool ?? false }, set: { recording.value = $0 }))
+      recording: Binding(get: { recording.value as? Bool ?? false }, set: { recording.value = $0 }),
+      perfHUD: Binding(get: { perfHUD.value as? Bool ?? false }, set: { perfHUD.value = $0 }),
+      cpuEngine: Binding(get: { engine.value }, set: { engine.value = $0 }))
   }
 
   private var log: [String] = []
@@ -27,16 +29,18 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     PauseMenuActions(
       resume: { self.log.append("resume") }, quickSave: { self.log.append("save") }, quickLoad: { self.log.append("load") },
       screenshot: { self.log.append("shot") }, openSaveStates: {}, openCheats: {}, openControllers: {},
-      openShaders: { self.log.append("shaders") }, openContinuity: {}, openSettings: {}, openSettingsLeaf: { self.log.append("leaf:\($0)") }, openPerfOverlay: { self.log.append("perf") }, requestReset: {},
+      openShaders: { self.log.append("shaders") }, openContinuity: {}, openSettings: {}, openSettingsLeaf: { self.log.append("leaf:\($0.leafID)#\($0.rowID ?? "")") }, openPerfOverlay: { self.log.append("perf") }, requestReset: {},
       requestExit: {}, recenterPointer: {})
   }
 
-  private func state(recenter: Bool = false, cheats: Int = 0, resolution: Int = 1, metalFX: Bool = false, volume: Int = 100) -> PauseMenuState {
+  private func state(recenter: Bool = false, cheats: Int = 0, resolution: Int = 1, metalFX: Bool = false, volume: Int = 100,
+                     jit: Bool = false, nextEngine: CpuEngine = .cachedInterpreter) -> PauseMenuState {
     PauseMenuState(
       quickSlot: 3, isMuted: false, activeCheatCount: cheats,
       shaderOptions: [("None", ShaderQuickApply.noneValue), ("crt", AnyHashable("/s/crt.slangp"))],
       showsRecenterPointer: recenter,
-      internalResolution: resolution, metalFXSupported: metalFX, audioVolume: volume, engineShortName: "CIR", jitAcquired: false)
+      internalResolution: resolution, metalFXSupported: metalFX, audioVolume: volume, engineShortName: "CIR", jitAcquired: jit,
+      nextEngine: nextEngine.rawValue)
   }
 
   func test_metalFXTile_followsUpscaling_onlyWhereSupported_andTogglesTheKey() {
@@ -101,13 +105,25 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(on.item(id: "record")?.badge, "REC")
   }
 
-  func test_perfHUD_tile_isInGameSection_andCallsOpenPerfOverlay() {
-    let m = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+  /// The tile toggles the HUD in place; the full Performance Controls panel is its long-press.
+  func test_perfHUD_tile_togglesTheHUD_andLongPressOpensPerfOverlay() {
+    let hud = Box(false)
+    let m = PauseMenuModelBuilder.make(state: state(), bindings: bindings(perfHUD: hud), actions: actions())
     let item = m.item(id: "perf-hud")!
     XCTAssertEqual(m.section(containing: "perf-hud")?.id, "game")
-    guard case .action(let run) = item.role else { return XCTFail("perf-hud is not an action") }
+    XCTAssertEqual(item.currentValueTitle, "Off")
+    item.activateInPlace()
+    XCTAssertEqual(hud.value, AnyHashable(true))
+    XCTAssertEqual(log, [])
+    guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("long press") }
     run()
     XCTAssertEqual(log, ["perf"])
+  }
+
+  func test_perfHUDToggle_onDrawsFPSAndSpeed_offClearsEverything() {
+    XCTAssertEqual(PerfHUDToggle.flags(on: true), PerfHUDToggle.Flags(fps: true, speed: true))
+    XCTAssertFalse(PerfHUDToggle.flags(on: false).isOn)
+    XCTAssertTrue(PerfHUDToggle.Flags(graphs: true).isOn, "any stat drawn counts as on")
   }
 
   func test_upscaling_cyclesResolutions_andLongPressOpensGraphicsLeaf() {
@@ -122,7 +138,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(resolution.value, AnyHashable(4))
     guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("long press") }
     run()
-    XCTAssertEqual(log, ["leaf:graphics-enhancements"])
+    XCTAssertEqual(log, ["leaf:graphics-enhancements#efb-scale"])
   }
 
   func test_audio_cyclesVolumes_andLongPressOpensAudioLeaf() {
@@ -136,16 +152,32 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(volume.value, AnyHashable(25))
     guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("long press") }
     run()
-    XCTAssertEqual(log, ["leaf:audio"])
+    XCTAssertEqual(log, ["leaf:audio#volume"])
   }
 
-  func test_performance_opensTuningLeaf_withEngineBadge() {
-    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+  /// The tile cycles the engine for the next launch in place; long-press opens Performance Tuning on the engine row.
+  func test_performance_cyclesNextEngine_andLongPressOpensTuningOnEngineRow() {
+    let engine = Box(CpuEngine.cachedInterpreter.rawValue)
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(engine: engine), actions: actions())
     let item = model.item(id: "performance")!
-    XCTAssertEqual(item.badge, "CIR")
-    guard case .action(let run) = item.role else { return XCTFail("action") }
+    XCTAssertEqual(item.currentValueTitle, "CIR")
+    item.activateInPlace()
+    XCTAssertEqual(engine.value, AnyHashable(CpuEngine.cachedInterpreterIR.rawValue))
+    XCTAssertEqual(log, [])
+    guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("long press") }
     run()
-    XCTAssertEqual(log, ["leaf:performance-tuning"])
+    XCTAssertEqual(log, ["leaf:performance-tuning#cpu-engine"])
+  }
+
+  func test_engineOptions_offerTheJITOnlyWhenAcquired_andKeepAStoredInterpreterHonest() {
+    XCTAssertEqual(PauseMenuModelBuilder.engineOptions(jitAcquired: false, including: CpuEngine.cachedInterpreter.rawValue).map(\.0),
+                   ["CIR", "CIR-IR"])
+    XCTAssertEqual(PauseMenuModelBuilder.engineOptions(jitAcquired: true, including: CpuEngine.jitARM64.rawValue).map(\.0),
+                   ["JIT", "CIR", "CIR-IR"])
+    let interpreter = PauseMenuModelBuilder.engineOptions(jitAcquired: false, including: CpuEngine.interpreter.rawValue)
+    XCTAssertEqual(interpreter.map(\.0), ["INT", "CIR", "CIR-IR"])
+    XCTAssertEqual(MenuItemRole.cycled(options: interpreter, current: AnyHashable(CpuEngine.interpreter.rawValue), step: 1),
+                   AnyHashable(CpuEngine.cachedInterpreter.rawValue))
   }
 
   func test_everyTile_hasADescription() {
@@ -225,9 +257,9 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     }
   }
 
-  func test_tvLayout_primaryRowThenOptions_keepsEveryTileOnce() {
+  func test_primaryLayout_primaryRowThenOptions_keepsEveryTileOnce() {
     let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
-    let tv = PauseMenuModelBuilder.tvLayout(model)
+    let tv = PauseMenuModelBuilder.primaryLayout(model)
     XCTAssertEqual(tv.sections.map(\.id), ["primary", "options"])
     XCTAssertNil(tv.sections[0].header)
     XCTAssertEqual(tv.sections[0].items.map(\.id), ["resume", "save-states", "reset", "exit"])

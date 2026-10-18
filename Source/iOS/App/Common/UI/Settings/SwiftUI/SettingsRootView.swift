@@ -10,10 +10,15 @@ struct SettingsRootView: View {
   @Environment(\.dismiss) private var dismiss
   /// A leaf to open first (the DSU deep link, the tvOS `-ICubeSettingsPreview` argument).
   let initialLeafID: String?
+  /// A row inside `initialLeafID` to bring into view (a pause tile's long-press). Scrolled to and tinted on iOS,
+  /// focused on tvOS.
+  let initialRowID: String?
   /// Set by a host that presents Settings modally (the library's cover, the pause menu's sheet) for a Close
   /// button. Settings owns its navigation stack: a host must not wrap it in another one or push it onto
   /// one, or Back on a leaf pops Settings too.
   let onClose: (() -> Void)?
+  /// The row for the leaf's `MenuScreen` to take, once. Made in `init`: the iPhone stack starts with the leaf on it.
+  @State private var rowTarget: SettingsRowTarget?
   @State private var jumpToLeafID: String?
   @State private var jumpToControllersRequested = false
   /// Built once: the entries' closures are stable across body evaluations, and `pushed` compares by id.
@@ -21,13 +26,18 @@ struct SettingsRootView: View {
   #if os(iOS)
   @State private var searchText = ""
   @State private var pushed: SettingsLeafEntry?
+  /// An iPad form sheet lays the sidebar out first, at a passing regular width, and its leaf takes the row.
+  @State private var sidebarShown = false
+  @State private var phoneRearmedRow = false
   /// Search exists on iOS only, so tvOS never builds the index.
   @State private var searchIndex: SettingsSearchIndex?
   #endif
 
-  init(initialLeafID: String? = nil, onClose: (() -> Void)? = nil) {
+  init(initialLeafID: String? = nil, initialRowID: String? = nil, onClose: (() -> Void)? = nil) {
     self.initialLeafID = initialLeafID
+    self.initialRowID = initialRowID
     self.onClose = onClose
+    _rowTarget = State(initialValue: initialRowID.map { SettingsRowTarget(rowID: $0) })
     let sections = Self.makeSections()
     _sections = State(initialValue: sections)
     #if os(iOS)
@@ -65,6 +75,7 @@ struct SettingsRootView: View {
       #else
       if usesSidebar {
         SettingsSidebarShell(sections: sections, searchIndex: searchIndex, jumpToLeafID: $jumpToLeafID, onClose: onClose)
+          .onAppear { sidebarShown = true }
       } else {
         phoneList
       }
@@ -73,6 +84,7 @@ struct SettingsRootView: View {
     #if os(tvOS)
     .background { ICubeRoom(style: .gradient) }
     #endif
+    .environment(\.settingsRowTarget, rowTarget)
     .onAppear { if jumpToLeafID == nil { jumpToLeafID = initialLeafID } }
     .onReceive(NotificationCenter.default.publisher(for: .dolSettingsSelectControllers)) { _ in
       jumpToLeafID = "controllers"
@@ -108,11 +120,20 @@ struct SettingsRootView: View {
           SettingsResetAllButton { Text(L("Reset All")) }
         }
       }
-      .navigationDestination(item: $pushed) { entry in entry.pushedView() }
+      // The row target is handed on explicitly, so a pushed leaf gets it whichever stack ends up hosting the push.
+      .navigationDestination(item: $pushed) { entry in entry.pushedView().environment(\.settingsRowTarget, rowTarget) }
       // DSU-add deep link (dolphinios://dsu/add, legacy dsu://) opens the DSU server list, where the server it just added shows.
       .navigationDestination(isPresented: $jumpToControllersRequested) { DSUSettingsView().padBackNavigation() }
     }
     .onChange(of: jumpToLeafID, initial: true) { _, _ in consumePhoneJump() }
+    .onAppear(perform: rearmRowAfterSidebar)
+  }
+
+  /// The phone list the iPad sheet settles on gets the row again if that passing sidebar's leaf took it.
+  private func rearmRowAfterSidebar() {
+    guard sidebarShown, !phoneRearmedRow, let initialRowID, rowTarget?.isPending == false else { return }
+    phoneRearmedRow = true
+    rowTarget = SettingsRowTarget(rowID: initialRowID)
   }
 
   /// `initialLeafID` (the pause menu's tiles and long-presses) pushes that leaf. The DSU link pushes the
