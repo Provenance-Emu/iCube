@@ -1,5 +1,12 @@
 # iCube handoff (2026-10-10)
 
+## App Store release planning — 2026-10-19
+
+Start release work at [docs/app-store/RELEASE-PLAN.md](app-store/RELEASE-PLAN.md) and [tracker #51](https://github.com/Provenance-Emu/iCube/issues/51). [Milestone 1](https://github.com/Provenance-Emu/iCube/milestone/1) contains R1–R8 (#52–#59): tvOS UX, settings, production user-data sync, ROM/library interoperability with Provenance, stability, submission. The [execution roadmap](superpowers/plans/2026-10-19-icube-release-readiness.md) starts with baseline and scope review. Owner quality bar: fast/reliable, clean UI with no known unresolved UI/UX defects, working settings/sync/save states/library editing/library sharing. R7 #58 and R8 #59 make save states and editing explicit gates. Detailed transport scope remains open; no submission acceptance or current device-test pass is implied.
+
+Corrections to older notes: CloudKit is enabled in source/entitlements since October 14; Production/device convergence still needs evidence. Existing user-data CloudKit deliberately excludes ROMs. Nearby ROM sharing and same-device share-sheet export are separate paths; Provenance already has an iCube dialect in PVLibrarySharing. Folder access, automatic mirroring and cross-app native-save scope remain owner decisions. Historical unverified checks and old test counts do not establish current candidate readiness.
+
+
 This is the current state of the tvOS / iPad UI redo and the pause-lifecycle work, and the next steps. Read `AGENTS.md` first, then this file.
 
 ## What the owner wants (priority order)

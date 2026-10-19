@@ -1,0 +1,8 @@
+[mcp_servers.icube]
+command = "uv"
+args = [
+    "--directory",
+    "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/Tools/mcp",
+    "run",
+    "icube-debug-mcp",
+]
