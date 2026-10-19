@@ -19,7 +19,7 @@ enum CoverMirror {
 
   /// Skips files that already exist. Safe to call from any queue.
   static func mirror(_ jobs: [CoverJob]) {
-    guard let dir = LibrarySnapshotAppGroup.mediaDirectory else {
+    guard let dir = ICubeSnapshot.appGroup.mediaDirectory else {
       _ = unavailableLogged
       return
     }

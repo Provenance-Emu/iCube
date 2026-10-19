@@ -18,12 +18,12 @@ import PVHelp
 final class HelpPresentationBridge: NSObject {
   /// Presents the GameCube BIOS (IPL) guide. Safe to call from any thread.
   @objc static func presentBIOSGuide() {
-    presentWikiPage(path: WikiConstants.Paths.biosRequirements, title: L("BIOS Requirements"))
+    presentWikiPage(path: ICubeWiki.Paths.biosRequirements, title: L("BIOS Requirements"))
   }
 
   /// Presents the "Install Your Own Wii System Files" guide. Safe to call from any thread.
   @objc static func presentWiiSystemFilesGuide() {
-    presentWikiPage(path: WikiConstants.Paths.wiiSystemFiles, title: L("Install Wii System Files"))
+    presentWikiPage(path: ICubeWiki.Paths.wiiSystemFiles, title: L("Install Wii System Files"))
   }
 
   @objc static func presentWikiPage(path: String, title: String) {

@@ -143,7 +143,7 @@ enum SpotlightSnapshotIndexer {
     return snapshot.byGameID.values.map { game in
       let attr = CSSearchableItemAttributeSet(contentType: discType)
       attr.title = game.title
-      var lines: [String] = [game.platform.displayName]
+      var lines: [String] = [game.icubePlatform.displayName]
       if let region = game.region, !region.isEmpty { lines.append(region) }
       if let gametdbID = game.gametdbID, !gametdbID.isEmpty { lines.append(gametdbID) }
       attr.contentDescription = lines.joined(separator: " • ")

@@ -19,7 +19,7 @@ enum QuickActionsUpdater {
             UIApplicationShortcutItem(
                 type: shortcutType,
                 localizedTitle: game.title,
-                localizedSubtitle: game.platform.displayName,
+                localizedSubtitle: game.icubePlatform.displayName,
                 icon: UIApplicationShortcutIcon(systemImageName: "gamecontroller"),
                 userInfo: ["id": game.id as NSString]
             )

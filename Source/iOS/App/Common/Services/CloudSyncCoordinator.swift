@@ -227,10 +227,10 @@ final class CloudSyncCoordinator: ObservableObject {
     /// one carrying the reason. Never optional at the call site: the sync path
     /// runs unchanged either way and simply finds nothing to do.
     private static func makeProvider(deviceIdentifier: String) -> any SyncProvider {
-        if let reason = CloudKitAvailability.buildLevelUnavailableReason() {
+        if let reason = CloudKitAvailability.buildLevelUnavailableReason(for: ICubeCloudSync.configuration) {
             return InertSyncProvider(reason: reason)
         }
-        if let cloudKit = CloudKitSyncProvider(deviceIdentifier: deviceIdentifier) {
+        if let cloudKit = CloudKitSyncProvider(configuration: ICubeCloudSync.configuration, deviceIdentifier: deviceIdentifier) {
             return cloudKit
         }
         return InertSyncProvider(reason: .entitlementMissing)
@@ -760,7 +760,7 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     func refreshAvailability() async {
-        if let buildReason = CloudKitAvailability.buildLevelUnavailableReason() {
+        if let buildReason = CloudKitAvailability.buildLevelUnavailableReason(for: ICubeCloudSync.configuration) {
             unavailableReason = buildReason
             return
         }

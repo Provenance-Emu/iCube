@@ -140,7 +140,7 @@ struct SaveStateFilmstripView: View {
     }
     .sheet(isPresented: $showIncompatibleHelp) {
       NavigationStack {
-        WikiPageView(path: WikiConstants.Paths.saveStateCompatibility, title: L("Save State Compatibility"))
+        WikiPageView(path: ICubeWiki.Paths.saveStateCompatibility, title: L("Save State Compatibility"))
           .toolbar {
             ToolbarItem(placement: .cancellationAction) {
               Button(L("Close")) { showIncompatibleHelp = false }

@@ -83,7 +83,7 @@ enum DebugRootModelBuilder {
     // In-app (not Safari): works on tvOS and offline, since the guide is bundled (see WikiContentProvider).
     items.append(SettingsRow.destination("jit-guide", L("JIT Setup Guide"),
                                          L("What JIT does, why iOS 26 needs a debugger to switch it on, and what to expect without it."),
-                                         view: AnyView(WikiPageView(path: WikiConstants.Paths.jitGuide, title: L("JIT Setup Guide")).padBackNavigation())))
+                                         view: AnyView(WikiPageView(path: ICubeWiki.Paths.jitGuide, title: L("JIT Setup Guide")).padBackNavigation())))
     items.append(status("fastmem-available", L("Fastmem"), L("Whether this device can provide the fast memory-access path."),
                         badge: h.fastmemAvailable ? L("Available") : L("Not Available")))
     return MenuSection(id: "environment", header: L("Environment"), items: items)

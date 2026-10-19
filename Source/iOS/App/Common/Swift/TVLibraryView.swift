@@ -2237,7 +2237,7 @@ struct TVLibraryView: View {
 #else
     .sheet(isPresented: $showWiiSystemFilesHelp) {
       NavigationStack {
-        WikiPageView(path: WikiConstants.Paths.wiiSystemFiles, title: L("Install Wii System Files"))
+        WikiPageView(path: ICubeWiki.Paths.wiiSystemFiles, title: L("Install Wii System Files"))
 #if os(iOS)
           .toolbar {
             ToolbarItem(placement: .cancellationAction) {

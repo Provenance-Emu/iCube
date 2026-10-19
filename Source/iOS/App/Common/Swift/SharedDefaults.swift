@@ -8,7 +8,7 @@ enum SharedDefaults {
   /// last-played written here land in one suite.
   static var suite: UserDefaults { DOLSharedUserDefaults() }
 
-  static var isAppGroupBacked: Bool { LibrarySnapshotAppGroup.isAvailable }
+  static var isAppGroupBacked: Bool { ICubeSnapshot.appGroup.isAvailable }
 
   private static let migratedKey = "shared_defaults_migrated_v1"
   static let migratedKeys = ["favorites_by_gameid", "library_added_dates_v1", "last_played_v1"]

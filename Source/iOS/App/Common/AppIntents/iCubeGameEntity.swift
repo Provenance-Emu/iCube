@@ -17,7 +17,7 @@ struct iCubeGameEntity: AppEntity, Identifiable {
     init(snapshotGame game: LibrarySnapshotGame) {
         self.id = game.id
         self.title = game.title
-        self.platformName = game.platform.displayName
+        self.platformName = game.icubePlatform.displayName
     }
 
     var displayRepresentation: DisplayRepresentation {

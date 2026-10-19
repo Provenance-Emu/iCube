@@ -8,7 +8,7 @@ import XCTest
 
 final class WikiHelpViewModelTests: XCTestCase {
   func test_storeBuildWithoutJIT_hidesTheJitGuide() {
-    XCTAssertEqual(WikiHelpViewModel.hiddenPaths(isAppStore: true, jitSupported: false), [WikiConstants.Paths.jitGuide])
+    XCTAssertEqual(WikiHelpViewModel.hiddenPaths(isAppStore: true, jitSupported: false), [ICubeWiki.Paths.jitGuide])
   }
 
   func test_storeBuildWithJIT_showsTheJitGuide() {

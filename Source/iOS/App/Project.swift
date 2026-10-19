@@ -280,6 +280,7 @@ let iCube = Target.target(
         // In the original pbxproj it is a membershipEXCEPTION on the appex's "Activity" synchronized
         // folder — i.e. EXCLUDED from the appex, kept in the app. So it stays in the app glob.
         .glob("Common/**/*.{swift,h}"),
+        .glob("Shared/Snapshot/**/*.swift"),
         // PGOFlush.c (the iCube PGO profile-flush shim) is the only plain C source in the app.
         // The {m,mm} globs below don't match *.c, so include it explicitly. Unconditional: the
         // shim must build on both iOS and tvOS (its weak __llvm_profile_* refs no-op on a
@@ -332,6 +333,7 @@ let iCube = Target.target(
         "Project/Assets/icube.js",
         .folderReference(path: "../../../Data/Sys"),
         .folderReference(path: "Project/Assets/compiled_shaders"),
+        .folderReference(path: "Common/Resources/WikiContent"),
     ],
     entitlements: nil, // per-config via CODE_SIGN_ENTITLEMENTS in appConfigs
     scripts: preScripts + [uploadDsymScript],
@@ -472,6 +474,7 @@ let liveActivity = Target.target(
     infoPlist: .file(path: "Live Activity/Info.plist"),
     sources: [
         .glob("Live Activity/**/*.swift"),
+        .glob("Shared/Snapshot/**/*.swift"),
         // WS-A (RecentGamesWidget) resolves the TODO below: GameActivityAttributes, referenced by
         // Live_ActivityLiveActivity.swift, is defined only in GameActivity.swift. That file only
         // needs Foundation + ActivityKit (no bridging header, no app-only types), so it compiles
@@ -537,6 +540,7 @@ let iCubeTests = Target.target(
         // `.target(name: "iCube")` alone doesn't make a package the app links importable here —
         // AppIntentsTests needs `LibrarySnapshot`/`LibrarySnapshotGame` fixtures directly.
         .package(product: "PVLibrarySnapshot"),
+        .package(product: "PVHelp"),
         // SkinLibraryTests zips the skin fixture with `Zip.zipFiles`.
         .package(product: "Zip"),
     ],
@@ -588,7 +592,7 @@ func extensionTarget(
         bundleId: "com.joemattiello.iCube.\(suffix)", // placeholder; real per-config ids in extensionConfigs
         deploymentTargets: deploymentTargets,
         infoPlist: infoPlist,
-        sources: sources,
+        sources: .init(globs: sources.globs + [.glob("Shared/Snapshot/**/*.swift")]),
         resources: resources,
         entitlements: .file(path: extensionEntitlements),
         dependencies: [.package(product: "PVLibrarySnapshot")] + frameworks.map { .sdk(name: $0, type: .framework) },
@@ -726,15 +730,18 @@ let project = Project(
         disableSynthesizedResourceAccessors: true
     ),
     packages: [
-        .local(path: "../PVWebServer"),
-        .local(path: "../PVContinuity"),
-        .local(path: "../PVSyncRules"),
-        .local(path: "../PVHelp"),
-        .local(path: "../PVLibrarySnapshot"),
+        // Shared packages are maintained and tested in their own repositories.
+        .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.0")),
+        // Keep this wrapper local: Xcode rejects PLzmaSDK unsafe build flags
+        // across a remote package boundary (see PLzmaShim/Package.swift).
         .local(path: "../PLzmaShim"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
-        .local(path: "../PVCloudSync"),
+        .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.0.0")),
         // Streaming patch engine shared with iFly and Provenance. Change it in that repo, tag a
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),

@@ -136,7 +136,7 @@ enum EcosystemBridge {
                     titleName: game.title,
                     titleId: game.id,
                     developer: makerCode(forGameID: game.id),
-                    version: game.platform.displayName,
+                    version: game.icubePlatform.displayName,
                     iconData: nil
                 )
             }

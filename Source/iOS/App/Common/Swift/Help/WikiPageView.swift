@@ -66,7 +66,7 @@ struct WikiPageView: View {
     }
     .accessibilityLabel(L("View on Web"))
     .sheet(isPresented: $showSafari) {
-      SafariView(url: WikiConstants.webURL(for: path))
+      SafariView(url: ICubeWiki.webURL(for: path))
     }
   }
 #endif
