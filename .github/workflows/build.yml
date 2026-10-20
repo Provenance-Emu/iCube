@@ -182,6 +182,38 @@ jobs:
           restore-keys: |
             dolphin-xcf-${{ runner.os }}-
 
+      # Run 39389325141 exhausted the Studio disk while archiving the fourth
+      # required slice. Check capacity before starting the core, keeping all
+      # four slices and the static dependency configuration unchanged.
+      - name: Check core build disk space
+        env:
+          DOL_MIN_FREE_DISK_GB: ${{ vars.DOL_MIN_FREE_DISK_GB || '20' }}
+        run: |
+          set -euo pipefail
+          df -h .
+          python3 - <<'PY'
+          import os
+          import shutil
+
+          try:
+              minimum_gib = int(os.environ["DOL_MIN_FREE_DISK_GB"])
+              if minimum_gib <= 0:
+                  raise ValueError("must be positive")
+          except (KeyError, ValueError):
+              print("::error::DOL_MIN_FREE_DISK_GB must be a positive integer (GiB); the default is 20.")
+              raise SystemExit(1)
+
+          workspace = os.environ.get("GITHUB_WORKSPACE", ".")
+          free_bytes = shutil.disk_usage(workspace).free
+          required_bytes = minimum_gib * 1024 ** 3
+          print(f"Core build disk budget: {free_bytes / 1024 ** 3:.2f} GiB free; {minimum_gib} GiB required at {workspace}.")
+          if free_bytes < required_bytes:
+              print("::error::Insufficient runner disk space for the four-slice core build and app archives. "
+                    "Reclaim approved CI intermediates or increase runner capacity before retrying. "
+                    "The minimum is configurable with the DOL_MIN_FREE_DISK_GB repository variable.")
+              raise SystemExit(1)
+          PY
+
       - name: Build PVlibDolphin xcframework
         id: dolphinbuild
         run: |

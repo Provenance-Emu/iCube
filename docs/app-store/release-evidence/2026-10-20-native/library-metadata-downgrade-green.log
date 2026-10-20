@@ -1,0 +1,1 @@
+PVSyncRules 1.0.1 / PVCloudSync 82ff294: retained same-account live index row=1; local scanner shard rows=0; actual CloudKit decoder drops shard=true; normal planner steps=0; injected gameProfile remote-only step=download; inferred tombstones=0.
