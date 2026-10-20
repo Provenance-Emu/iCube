@@ -324,6 +324,9 @@ jobs:
             CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$BUILD" \
             -allowProvisioningUpdates "${AUTH[@]}" 2>&1 | tee "$RUNNER_TEMP/testflight.log"
 
+          python3 Source/iOS/App/Project/Scripts/check_swiftui_compatibility.py \
+            "$ARCHIVE/Products/Applications/iCube.app/iCube"
+
           # -allowProvisioningUpdates is required on export too, not just archive:
           # the API key authenticates but does not authorise xcodebuild to create
           # or download profiles, and a fresh runner has none installed.

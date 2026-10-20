@@ -14,6 +14,15 @@ import XCTest
 final class ICubeCardFocusTests: XCTestCase {
   private static let canvas = CGSize(width: 520, height: 760)
 
+  /// Resolve the real production card's associated body metadata, as SwiftUI
+  /// does when the first library row appears. An unreachable fallback used to
+  /// embed OS-26-only TupleContent here, crashing iOS 17/18 before any menu opened.
+  func test_cardBodyMetadataDoesNotRequireOS26TupleContent() {
+    let bodyType = String(reflecting: GameGridItem.Body.self)
+    XCTAssertTrue(bodyType.contains("SwiftUI"), "Expected concrete SwiftUI body metadata: \(bodyType)")
+    XCTAssertFalse(bodyType.contains("TupleContent"), "Library startup must resolve on iOS 17/18: \(bodyType)")
+  }
+
   func test_extractedEffect_isPixelIdenticalToLegacy() throws {
     for scheme in [ColorScheme.light, .dark] {
       var legacyByFocus: [Bool: [UInt8]] = [:]

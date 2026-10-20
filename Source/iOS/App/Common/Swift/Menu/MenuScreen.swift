@@ -695,7 +695,7 @@ struct MenuScreen: View {
     VStack(alignment: .leading, spacing: MenuGridLayout.spacing) {
       ForEach(model.sections) { section in
         if let header = section.header {
-          Text(header).font(.headline).foregroundStyle(.white)
+          Text(header).icubeText(.section).foregroundStyle(ICubeDesign.color(.textPrimary))
         }
         ForEach(section.items) { item in gridCard(item) }
       }

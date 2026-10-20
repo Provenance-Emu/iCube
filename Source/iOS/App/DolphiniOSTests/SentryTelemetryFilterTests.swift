@@ -82,3 +82,50 @@ final class SentryUnitTestHostTests: XCTestCase {
     XCTAssertTrue(SentryTelemetryService.isUnitTestHost())
   }
 }
+
+final class SentryTraceSamplingPolicyTests: XCTestCase {
+  private func rate(_ name: String, operation: String? = nil, active: Bool = true,
+                    consent: Bool = true, debug: Bool = false) -> Double {
+    SentryTraceSamplingPolicy.rate(name: name, operation: operation ?? name,
+                                  emulationActive: active, consentEnabled: consent, isDebug: debug)
+  }
+
+  func testBootRemainsSampleableAfterWillStartClosesEmulationGate() {
+    XCTAssertEqual(rate("emulation.boot"), 0.2)
+    XCTAssertEqual(rate("emulation.boot", debug: true), 1)
+  }
+
+  func testAdmittedSessionSummaryIsNotSampledAgainBeforeDidEndClearsGate() {
+    // Recorder already admits 10% of Release sessions; its summary precedes gate reopening.
+    XCTAssertEqual(rate("emulation.session"), 1)
+    XCTAssertEqual(rate("emulation.session", active: false), 1)
+  }
+
+  func testOtherActiveEmulationTracesStaySuppressedEvenInDebug() {
+    for name in ["ui.load", "http.client", "emulation", "emulation.boot.child", "emulation.session.child"] {
+      XCTAssertEqual(rate(name), 0, name)
+      XCTAssertEqual(rate(name, debug: true), 0, name)
+    }
+  }
+
+  func testSummaryAllowanceRequiresExactNameAndOperation() {
+    XCTAssertEqual(rate("emulation.session", operation: "http.client"), 0)
+    XCTAssertEqual(rate("ui.load", operation: "emulation.session"), 0)
+    XCTAssertEqual(rate("emulation.boot", operation: "ui.load"), 0)
+    XCTAssertEqual(rate("ui.load", operation: "emulation.boot"), 0)
+  }
+
+  func testConsentAlwaysWinsIncludingSummariesAfterEmulationEnds() {
+    for name in ["emulation.boot", "emulation.session", "ui.load"] {
+      for active in [true, false] {
+        XCTAssertEqual(rate(name, active: active, consent: false), 0)
+        XCTAssertEqual(rate(name, active: active, consent: false, debug: true), 0)
+      }
+    }
+  }
+
+  func testOrdinaryIdleSamplingKeepsExistingRates() {
+    XCTAssertEqual(rate("ui.load", active: false), 0.2)
+    XCTAssertEqual(rate("ui.load", active: false, debug: true), 1)
+  }
+}

@@ -231,6 +231,9 @@ archive_and_upload() {
     # API key authenticates but does not authorise xcodebuild to create or
     # download profiles. Omitting it here is what broke Provenance's export step
     # (fixed there in 27c3aba0a4).
+    run python3 "$APP_DIR/Project/Scripts/check_swiftui_compatibility.py" \
+        "$archive/Products/Applications/iCube.app/iCube"
+
     log "Uploading $platform to App Store Connect…"
     run xcodebuild -exportArchive \
         -archivePath "$archive" \

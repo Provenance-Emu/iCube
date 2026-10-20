@@ -86,6 +86,25 @@ enum SentryBreadcrumbFilter {
   }
 }
 
+/// Pure trace policy, kept independent of SDK startup and random session admission.
+enum SentryTraceSamplingPolicy {
+  static let releaseTraceSampleRate = 0.2
+
+  static func rate(name: String, operation: String, emulationActive: Bool,
+                   consentEnabled: Bool, isDebug: Bool) -> Double {
+    guard consentEnabled else { return 0 }
+    // The recorder already admits 10% of Release sessions. Sample its one summary
+    // once, even though DidEnd reports it before reopening the emulation gate.
+    if name == "emulation.session", operation == "emulation.session" { return 1 }
+    // WillStart closes the gate before creating this bounded boot transaction.
+    if name == "emulation.boot", operation == "emulation.boot" {
+      return isDebug ? 1 : releaseTraceSampleRate
+    }
+    if emulationActive { return 0 }
+    return isDebug ? 1 : releaseTraceSampleRate
+  }
+}
+
 /// Central Sentry configuration, emulation-aware sampling, and manual trace helpers.
 enum SentryTelemetryService {
   private static let emulationDidStart = Notification.Name("DOLEmulationDidStartNotification")
@@ -106,7 +125,7 @@ enum SentryTelemetryService {
   private static let txmCookieReportedKey = "icube.sentry.txmHandshakeCookieReported"
 
   /// Production trace sample rate when the emulator core is not running.
-  private static let releaseTraceSampleRate = 0.2
+  private static let releaseTraceSampleRate = SentryTraceSamplingPolicy.releaseTraceSampleRate
   /// Fraction of emulation sessions that upload FPS summaries in Release.
   static let releaseSessionSampleRate = 0.10
 
@@ -152,15 +171,18 @@ enum SentryTelemetryService {
       #endif
 
       options.tracesSampleRate = NSNumber(value: releaseTraceSampleRate)
-      options.tracesSampler = { _ in
-        if EmulationTelemetryGate.isEmulationActive {
-          return NSNumber(value: 0.0)
-        }
+      options.tracesSampler = { context in
         #if DEBUG
-        return NSNumber(value: 1.0)
+        let isDebug = true
         #else
-        return NSNumber(value: releaseTraceSampleRate)
+        let isDebug = false
         #endif
+        return NSNumber(value: SentryTraceSamplingPolicy.rate(
+          name: context.transactionContext.name,
+          operation: context.transactionContext.operation,
+          emulationActive: EmulationTelemetryGate.isEmulationActive,
+          consentEnabled: TelemetryConsent.isEnabled(),
+          isDebug: isDebug))
       }
 
       options.enableAutoPerformanceTracing = true
