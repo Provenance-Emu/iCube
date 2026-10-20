@@ -98,6 +98,8 @@ final class TVLibraryViewModel: ObservableObject {
   /// Backing collection of games shown in the grid. Without "Show patched versions as separate library items"
   /// it leaves out patched copies and saved mods; `allGames` has them.
   @Published var games: [TVGameItem] = []
+  /// Invalidates same-reference cards after a metadata projection changes.
+  @Published private(set) var metadataRevision: UInt = 0
   /// Every game the library found, patched copies and saved mods included.
   @Published private(set) var allGames: [TVGameItem] = []
   /// Patched copies and saved mods by the game ID of the game they are made from.
@@ -179,6 +181,7 @@ final class TVLibraryViewModel: ObservableObject {
   }
 
   private func groupAndDedup(items: [TVGameItem]) {
+    metadataRevision &+= 1
 #if DEBUG
     print("TVLibraryViewModel.groupAndDedup(): processing \(items.count) items")
 #endif
@@ -437,6 +440,7 @@ struct TVLibraryView: View {
         if item.countryName.lowercased().contains(needle) { return true }
         if item.gametdbID.lowercased().contains(needle) { return true }
         if item.filePath.lowercased().contains(needle) { return true }
+        if item.libraryTags.contains(where: { $0.localizedCaseInsensitiveContains(q) }) { return true }
         return false
       }
     }
@@ -652,6 +656,7 @@ struct TVLibraryView: View {
   }
   /// Game to present in the SwiftUI properties sheet
   @State private var showPropertiesFor: TVGameItem?
+  @State private var editLibraryMetadataFor: TVGameItem?
   @State private var showModsFor: TVGameItem?
   /// Game whose patched copies, saved mods and Riivolution packs are being managed
   @State private var manageModsFor: TVGameItem?
@@ -923,7 +928,9 @@ struct TVLibraryView: View {
       isSelected: selectedFilePaths.contains(item.filePath),
       onToggleSelection: { toggleSelection(for: item) },
       onEnterSelectionMode: { enterSelectionMode(selecting: item) },
-      platform: platform
+      editLibraryMetadata: { editLibraryMetadataFor = $0 },
+      platform: platform,
+      metadataRevision: model.metadataRevision
     )
   }
 
@@ -2293,6 +2300,7 @@ struct TVLibraryView: View {
       Button(L("Cancel")) { SaveStateService.skipResumeOnce = false }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
+      .sheet(item: $editLibraryMetadataFor) { LibraryMetadataEditor(item: $0).claimsController() }
       .sheet(item: $showModsFor, onDismiss: openPendingModBrowser) { item in
         RiivolutionLaunchView(
           item: item,

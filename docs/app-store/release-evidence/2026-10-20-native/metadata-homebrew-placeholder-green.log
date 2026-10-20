@@ -1,0 +1,66 @@
+Building for debugging...
+[Computing dependencies]
+[Starting]
+[1 / 5]
+[2 / 6] iCube
+[3 / 7] iCube
+[7 / 9] iCube
+[9 / 10] iCube
+[10 / 11] iCubeTests-product
+[11 / 12] iCubeTests-product
+[12 / 12] iCubeTests-product
+Build complete! (9.66 sec)
+Test Suite 'All tests' started at 2026-10-20 02:35:39.347.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 02:35:39.353.
+Test Suite 'LibraryMetadataServiceTests' started at 2026-10-20 02:35:39.353.
+Test Case '-[iCubeTests.LibraryMetadataServiceTests testSyntheticHomebrewIDsCannotClaimDiscIdentity]' started.
+Test Case '-[iCubeTests.LibraryMetadataServiceTests testSyntheticHomebrewIDsCannotClaimDiscIdentity]' passed (0.001 seconds).
+Test Suite 'LibraryMetadataServiceTests' passed at 2026-10-20 02:35:39.354.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'LibraryMetadataStoreTests' started at 2026-10-20 02:35:39.354.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testAllMaximumFieldValuesRoundTripAndBlankTitleClearsOnlyTitle]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testAllMaximumFieldValuesRoundTripAndBlankTitleClearsOnlyTitle]' passed (0.022 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testClearWritesTimestampedNullTombstonesAndClockRollbackCannotResurrect]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testClearWritesTimestampedNullTombstonesAndClockRollbackCannotResurrect]' passed (0.013 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testCloudValidationChecksBoundsTypesAndShardIdentity]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testCloudValidationChecksBoundsTypesAndShardIdentity]' passed (0.112 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testCorruptReloadAndCommitPreserveMemoryAndCorruptBytes]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testCorruptReloadAndCommitPreserveMemoryAndCorruptBytes]' passed (0.005 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testDiscRevisionAndContentHashIdentitiesDoNotAlias]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testDiscRevisionAndContentHashIdentitiesDoNotAlias]' passed (0.005 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testDiscSerialCaseAndWhitespaceDoNotSplitTheSameGame]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testDiscSerialCaseAndWhitespaceDoNotSplitTheSameGame]' passed (0.001 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testEachGameWritesOnlyItsOwnShard]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testEachGameWritesOnlyItsOwnShard]' passed (0.008 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testInvalidEditsPreservePreviousFileAndMemory]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testInvalidEditsPreservePreviousFileAndMemory]' passed (0.010 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testMalformedKnownRecordReloadKeepsPreviousValidProjection]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testMalformedKnownRecordReloadKeepsPreviousValidProjection]' passed (0.041 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testMissingShardDuringSessionPreservesUneditedFieldsOnNextCommit]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testMissingShardDuringSessionPreservesUneditedFieldsOnNextCommit]' passed (0.018 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testNoOpDraftDoesNotStampOrRewriteAnyRecord]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testNoOpDraftDoesNotStampOrRewriteAnyRecord]' passed (0.058 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testOnlyChangedFieldsOverwriteConcurrentDiskEdits]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testOnlyChangedFieldsOverwriteConcurrentDiskEdits]' passed (0.047 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testReloadInvalidatesCachedProjectionAfterAnotherStoreCommits]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testReloadInvalidatesCachedProjectionAfterAnotherStoreCommits]' passed (0.021 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testRepeatedDraftReadsShareTheImmutableCoverBufferUntilMetadataChanges]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testRepeatedDraftReadsShareTheImmutableCoverBufferUntilMetadataChanges]' passed (0.009 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testTitleCoverTagsCommitAndReopenWithNormalizedValues]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testTitleCoverTagsCommitAndReopenWithNormalizedValues]' passed (0.016 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testUncommittedDraftHasNoSideEffects]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testUncommittedDraftHasNoSideEffects]' passed (0.010 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testUnknownRootRecordsAndKnownRecordFieldsSurviveSave]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testUnknownRootRecordsAndKnownRecordFieldsSurviveSave]' passed (0.007 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testWriteFailurePreservesPriorRecordAndSurfacesError]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testWriteFailurePreservesPriorRecordAndSurfacesError]' passed (0.014 seconds).
+Test Suite 'LibraryMetadataStoreTests' passed at 2026-10-20 02:35:39.790.
+	 Executed 18 tests, with 0 failures (0 unexpected) in 0.418 (0.436) seconds
+Test Suite 'iCubeTests.xctest' passed at 2026-10-20 02:35:39.790.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.419 (0.438) seconds
+Test Suite 'All tests' passed at 2026-10-20 02:35:39.790.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.419 (0.443) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.

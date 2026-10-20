@@ -62,14 +62,14 @@ struct ContinuityBrowseView: View {
                     return AnyView(ContinuityTrustedPeerDetailView(peer: peer))
                 },
                 sharing: AnyView(ContinuityLibrarySharingView()),
-                done: { dismiss() }
+                done: { dismiss() },
+                automaticCopy: AnyView(NearbyLibraryMirrorView())
             ),
             style: .list,
             onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
             tvHeader: SettingsLeafScreen.header(title: L("Nearby"), parentTitle: parentTitle),
             tvInset: .xxl
         )
-        .continuityPairingPrompt()
         .continuityLibraryPullPrompt()
         .task {
             manager.startBrowsing()
@@ -104,6 +104,9 @@ struct ContinuityBrowseView: View {
             // things on it (the switch, the per-device grants, the excluded
             // games) and each needs its own focus target on tvOS.
             Section(header: Text(L("This Device"))) {
+                NavigationLink(destination: NearbyLibraryMirrorView()) {
+                    Label(L("Automatic Game Copying"), systemImage: "arrow.down.circle")
+                }
                 NavigationLink(destination: ContinuityLibrarySharingView()) {
                     HStack {
                         Label(L("Share My Library"), systemImage: "square.stack.3d.up")
@@ -137,7 +140,6 @@ struct ContinuityBrowseView: View {
         // is not mutually exclusive with looking at someone else's), so an
         // incoming pairing request has to be answerable from here too — and so
         // does a peer asking to copy a game.
-        .continuityPairingPrompt()
         .continuityLibraryPullPrompt()
         .task {
             manager.startBrowsing()
@@ -241,6 +243,7 @@ private struct ContinuityPeerDetailView: View {
             }
         }
         .navigationTitle(peer.serviceName)
+        .onDisappear { controller.cancel() }
     }
 
     @ViewBuilder
@@ -250,6 +253,7 @@ private struct ContinuityPeerDetailView: View {
             Text(L("Ready")).foregroundColor(.secondary)
         case .authenticating:
             Text(L("Connecting…")).foregroundColor(.secondary)
+            Button(L("Cancel"), role: .destructive) { controller.cancel() }
         case .awaitingPairing:
             // A code entry field and a submit button are separate rows: on tvOS
             // a row holding both would collapse into one focus target and the
@@ -264,9 +268,11 @@ private struct ContinuityPeerDetailView: View {
             Button(L("Cancel"), role: .destructive) { controller.cancel() }
         case .fetchingManifest:
             Text(L("Asking the other device to save…")).foregroundColor(.secondary)
+            Button(L("Cancel"), role: .destructive) { controller.cancel() }
         case .pulling(let progress):
             Text(progress.currentFile.relativePath).foregroundColor(.secondary)
             ProgressView(value: progress.fractionComplete)
+            Button(L("Cancel"), role: .destructive) { controller.cancel() }
         case .finished(let outcome):
             Text(Self.describe(outcome))
         }

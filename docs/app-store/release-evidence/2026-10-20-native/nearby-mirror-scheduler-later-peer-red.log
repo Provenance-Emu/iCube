@@ -1,0 +1,43 @@
+Building for debugging...
+[2 / 4] iCubeTests-product
+[4 / 6] iCubeTests-product
+[10 / 11] iCubeTests-product
+Build complete! (2.81 sec)
+Test Suite 'All tests' started at 2026-10-20 01:58:24.449.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 01:58:24.450.
+Test Suite 'NearbyLibraryMirrorTests' started at 2026-10-20 01:58:24.450.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testBackgroundAndEmulationCancelAnActiveCopy]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testBackgroundAndEmulationCancelAnActiveCopy]' passed (0.001 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testBackgroundEmulationAndMissingPeerWaitThenResume]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testBackgroundEmulationAndMissingPeerWaitThenResume]' passed (0.000 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testCancelledPollCallbackCannotRestartDisabledSubscription]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testCancelledPollCallbackCannotRestartDisabledSubscription]' passed (0.000 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testCopyFailureIsActionableAndExplicitRetryResumes]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testCopyFailureIsActionableAndExplicitRetryResumes]' passed (0.003 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testDisableRejectsLateCompletionAndCancelsImmediately]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testDisableRejectsLateCompletionAndCancelsImmediately]' passed (0.000 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence]' passed (0.000 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testOptInRequiresTrustAndNeverPairsUnknownPeers]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testOptInRequiresTrustAndNeverPairsUnknownPeers]' passed (0.001 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testRapidDisableReenableWaitsForPreviousPhysicalCopyToFinish]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testRapidDisableReenableWaitsForPreviousPhysicalCopyToFinish]' passed (0.001 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testRepeatedDiscoveryEventsDoNotStartConcurrentCopies]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testRepeatedDiscoveryEventsDoNotStartConcurrentCopies]' passed (0.001 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testTrustRevocationDisablesSubscriptionAndRejectsLateCompletion]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testTrustRevocationDisablesSubscriptionAndRejectsLateCompletion]' passed (0.000 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testUnavailableLaterPeerDoesNotLeaveFinishedPassShowingCopying]' started.
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testUnavailableLaterPeerDoesNotLeaveFinishedPassShowingCopying] : failed - Scheduler did not reach the expected state
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testUnavailableLaterPeerDoesNotLeaveFinishedPassShowingCopying]' failed (2.709 seconds).
+Test Suite 'NearbyLibraryMirrorTests' failed at 2026-10-20 01:58:27.169.
+	 Executed 11 tests, with 1 failure (0 unexpected) in 2.717 (2.719) seconds
+Test Suite 'iCubeTests.xctest' failed at 2026-10-20 01:58:27.169.
+	 Executed 11 tests, with 1 failure (0 unexpected) in 2.717 (2.719) seconds
+Test Suite 'All tests' failed at 2026-10-20 01:58:27.169.
+	 Executed 11 tests, with 1 failure (0 unexpected) in 2.717 (2.720) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - iCubeTests (XCTest)

@@ -1,0 +1,34 @@
+Test Suite 'All tests' started at 2026-10-20 02:25:34.869.
+Test Suite 'LibraryRefresh.xctest' started at 2026-10-20 02:25:34.874.
+Test Suite 'LibraryCoordinatorDeferralTests' started at 2026-10-20 02:25:34.874.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_backgroundMetadataNotificationPublishesOnMainActor]' started.
+<unknown>:0: error: -[LibraryRefresh.LibraryCoordinatorDeferralTests test_backgroundMetadataNotificationPublishesOnMainActor] : Asynchronous wait failed: Exceeded timeout of 2 seconds, with unfulfilled expectations: "published after background metadata notification".
+/tmp/icube-library-release/library-refresh/Tests.swift:127: error: -[LibraryRefresh.LibraryCoordinatorDeferralTests test_backgroundMetadataNotificationPublishesOnMainActor] : XCTAssertEqual failed: ("0") is not equal to ("1")
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_backgroundMetadataNotificationPublishesOnMainActor]' failed (8.168 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_endingWithALocalRefreshOwedAndADebouncePendingReloadsOnce]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_endingWithALocalRefreshOwedAndADebouncePendingReloadsOnce]' passed (1.673 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_endingWithinTheDebounceWindowReloadsOnce]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_endingWithinTheDebounceWindowReloadsOnce]' passed (1.037 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_firstLoadAlwaysRuns]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_firstLoadAlwaysRuns]' passed (0.000 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_initialRescanWaitsForTheSessionToEnd]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_initialRescanWaitsForTheSessionToEnd]' passed (0.000 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangePublishesUpdatedLibraryWhenIdle]' started.
+/tmp/icube-library-release/library-refresh/Tests.swift:98: error: -[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangePublishesUpdatedLibraryWhenIdle] : XCTAssertEqual failed: ("0") is not equal to ("1")
+/tmp/icube-library-release/library-refresh/Tests.swift:99: error: -[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangePublishesUpdatedLibraryWhenIdle] : XCTAssertEqual failed: ("0") is not equal to ("1") - Publishing triggers the existing model's regroup/search/sort pipeline
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangePublishesUpdatedLibraryWhenIdle]' failed (0.530 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangesDuringEmulationDeferAndPublishOnceAtEnd]' started.
+/tmp/icube-library-release/library-refresh/Tests.swift:108: error: -[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangesDuringEmulationDeferAndPublishOnceAtEnd] : XCTAssertTrue failed
+/tmp/icube-library-release/library-refresh/Tests.swift:110: error: -[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangesDuringEmulationDeferAndPublishOnceAtEnd] : XCTAssertEqual failed: ("0") is not equal to ("1")
+/tmp/icube-library-release/library-refresh/Tests.swift:112: error: -[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangesDuringEmulationDeferAndPublishOnceAtEnd] : XCTAssertEqual failed: ("0") is not equal to ("1")
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangesDuringEmulationDeferAndPublishOnceAtEnd]' failed (1.039 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_reloadIsHeldDuringEmulationAndRunsOnceAtTheEnd]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_reloadIsHeldDuringEmulationAndRunsOnceAtTheEnd]' passed (0.001 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_reloadRunsImmediatelyWhenIdle]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_reloadRunsImmediatelyWhenIdle]' passed (0.001 seconds).
+Test Suite 'LibraryCoordinatorDeferralTests' failed at 2026-10-20 02:25:47.326.
+	 Executed 9 tests, with 7 failures (0 unexpected) in 12.449 (12.452) seconds
+Test Suite 'LibraryRefresh.xctest' failed at 2026-10-20 02:25:47.326.
+	 Executed 9 tests, with 7 failures (0 unexpected) in 12.449 (12.452) seconds
+Test Suite 'All tests' failed at 2026-10-20 02:25:47.326.
+	 Executed 9 tests, with 7 failures (0 unexpected) in 12.449 (12.457) seconds

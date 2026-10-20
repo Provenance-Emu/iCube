@@ -1,0 +1,584 @@
+Harness: /tmp/icube-sharing-controller-tests
+Building for debugging...
+[Computing dependencies]
+[Using on-disk description]
+[1 / 1]
+[1 / 12] PVContinuityTests-product
+[2 / 11] Host
+[7 / 24] Host
+[9 / 24] Host
+[10 / 24] Host
+[14 / 25] Host
+[15 / 25] Host
+[18 / 27] Host
+[20 / 26] ControllerTests-product
+[22 / 28] ControllerTests-product
+[26 / 30] ControllerTests-product
+[28 / 30] ControllerTests-product
+Build complete! (7.06 sec)
+Test Suite 'All tests' started at 2026-10-20 02:26:18.045.
+Test Suite 'PVContinuityTests.xctest' started at 2026-10-20 02:26:18.047.
+Test Suite 'AdvertisementCodecTests' started at 2026-10-20 02:26:18.047.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testActivityTypeIsTheICubeOne]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testActivityTypeIsTheICubeOne]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testADecodedRedactedAdvertisementRequiresPairing]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testADecodedRedactedAdvertisementRequiresPairing]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testAMalformedTXTDecodesToNilRatherThanAHalfBuiltPeer]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testAMalformedTXTDecodesToNilRatherThanAHalfBuiltPeer]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testAnAdvertisementWithNoURLsDecodesWithNoURLs]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testAnAdvertisementWithNoURLsDecodesWithNoURLs]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testAnUnredactedAdvertisementDoesCarryItsToken]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testAnUnredactedAdvertisementDoesCarryItsToken]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testAPresenceAdvertWithNoGameRoundTrips]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testAPresenceAdvertWithNoGameRoundTrips]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testARedactedAdvertisementPublishesNoTokenKeyAtAll]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testARedactedAdvertisementPublishesNoTokenKeyAtAll]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testLongDisplayNamesAreTruncatedToFitATXTString]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testLongDisplayNamesAreTruncatedToFitATXTString]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testNoTXTValueLeaksTheTokenAnywhere]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testNoTXTValueLeaksTheTokenAnywhere]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testOnlyTheFirstFourURLCandidatesArePublished]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testOnlyTheFirstFourURLCandidatesArePublished]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testRedactionRemovesTheToken]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testRedactionRemovesTheToken]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testServiceTypeIsTheICubeOne]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testServiceTypeIsTheICubeOne]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testTXTRoundTrip]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testTXTRoundTrip]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testURLCandidatesStopAtTheFirstGap]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testURLCandidatesStopAtTheFirstGap]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testUserActivityDecodeRejectsForeignPayloads]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testUserActivityDecodeRejectsForeignPayloads]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testUserActivityRoundTrip]' started.
+Test Case '-[PVContinuityTests.AdvertisementCodecTests testUserActivityRoundTrip]' passed (0.001 seconds).
+Test Suite 'AdvertisementCodecTests' passed at 2026-10-20 02:26:18.059.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.009 (0.012) seconds
+Test Suite 'BearerTokenValidatorTests' started at 2026-10-20 02:26:18.059.
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testAHeaderWithoutTheBearerSchemeIsRejected]' started.
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testAHeaderWithoutTheBearerSchemeIsRejected]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testAMissingHeaderIsRejected]' started.
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testAMissingHeaderIsRejected]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testAPrefixOfTheTokenIsRejected]' started.
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testAPrefixOfTheTokenIsRejected]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testMintedTokensAreDistinct]' started.
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testMintedTokensAreDistinct]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testMintedTokensAreLongAndURLSafe]' started.
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testMintedTokensAreLongAndURLSafe]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testTheCorrectTokenValidates]' started.
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testTheCorrectTokenValidates]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testTheEmptyTokenDoesNotOpenTheDoor]' started.
+Test Case '-[PVContinuityTests.BearerTokenValidatorTests testTheEmptyTokenDoesNotOpenTheDoor]' passed (0.000 seconds).
+Test Suite 'BearerTokenValidatorTests' passed at 2026-10-20 02:26:18.061.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'ByteRangeRequestTests' started at 2026-10-20 02:26:18.061.
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testARangeEndPastTheFileIsClampedNotRejected]' started.
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testARangeEndPastTheFileIsClampedNotRejected]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testARangeStartingPastTheFileIsUnsatisfiable]' started.
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testARangeStartingPastTheFileIsUnsatisfiable]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testClosedRange]' started.
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testClosedRange]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testMalformedHeadersParseAsNilSoTheWholeFileIsServed]' started.
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testMalformedHeadersParseAsNilSoTheWholeFileIsServed]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testMultiRangeIsDeliberatelyUnsupported]' started.
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testMultiRangeIsDeliberatelyUnsupported]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testNegativeOffsetsAreRejected]' started.
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testNegativeOffsetsAreRejected]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testOpenEndedRange]' started.
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testOpenEndedRange]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testResumingAtExactlyTheFileLengthIsUnsatisfiable]' started.
+Test Case '-[PVContinuityTests.ByteRangeRequestTests testResumingAtExactlyTheFileLengthIsUnsatisfiable]' passed (0.000 seconds).
+Test Suite 'ByteRangeRequestTests' passed at 2026-10-20 02:26:18.064.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'ContinuityFileKindTests' started at 2026-10-20 02:26:18.064.
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testGameFileIsNotClassifiedAsRequiredToResume]' started.
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testGameFileIsNotClassifiedAsRequiredToResume]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testGameFileIsTheOnlyKindWithNoSyncableCounterpart]' started.
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testGameFileIsTheOnlyKindWithNoSyncableCounterpart]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testGameFileSortsLastSoAPartialTransferKeepsTheSaves]' started.
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testGameFileSortsLastSoAPartialTransferKeepsTheSaves]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testOnlyHandoffCategoriesLiftIntoAKind]' started.
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testOnlyHandoffCategoriesLiftIntoAKind]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testOnlyStateKindsAreRequiredToResume]' started.
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testOnlyStateKindsAreRequiredToResume]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testPullPriorityDelegatesToSyncRules]' started.
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testPullPriorityDelegatesToSyncRules]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testSupportedSyncableTypesRoundTrip]' started.
+Test Case '-[PVContinuityTests.ContinuityFileKindTests testSupportedSyncableTypesRoundTrip]' passed (0.000 seconds).
+Test Suite 'ContinuityFileKindTests' passed at 2026-10-20 02:26:18.067.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'ContinuityPeerIdentityTests' started at 2026-10-20 02:26:18.067.
+Test Case '-[PVContinuityTests.ContinuityPeerIdentityTests testAnIdentityRoundTripsThroughItsPrivateKeyData]' started.
+Test Case '-[PVContinuityTests.ContinuityPeerIdentityTests testAnIdentityRoundTripsThroughItsPrivateKeyData]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuityPeerIdentityTests testCorruptKeyMaterialThrowsRatherThanSilentlyMintingANewIdentity]' started.
+Test Case '-[PVContinuityTests.ContinuityPeerIdentityTests testCorruptKeyMaterialThrowsRatherThanSilentlyMintingANewIdentity]' passed (0.001 seconds).
+Test Suite 'ContinuityPeerIdentityTests' passed at 2026-10-20 02:26:18.069.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'ContinuitySessionServerTests' started at 2026-10-20 02:26:18.069.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testActivateIsIdempotent]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testActivateIsIdempotent]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testActivateRegistersExactlyTheSessionRoutes]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testActivateRegistersExactlyTheSessionRoutes]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testAManifestListedFileIsServedAsAStreamedFileBody]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testAManifestListedFileIsServedAsAStreamedFileBody]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testAnUnsatisfiableRangeIs416]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testAnUnsatisfiableRangeIs416]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testARangeRequestIsAnsweredWith206AndAContentRange]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testARangeRequestIsAnsweredWith206AndAContentRange]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testAuthorizationHeaderLookupIsCaseInsensitive]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testAuthorizationHeaderLookupIsCaseInsensitive]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testBeginningASecondSessionInvalidatesTheFirstToken]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testBeginningASecondSessionInvalidatesTheFirstToken]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testEndingASessionClosesTheRoutes]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testEndingASessionClosesTheRoutes]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testMintFailureIsReportedRatherThanSwallowed]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testMintFailureIsReportedRatherThanSwallowed]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testMintingAddsTheStateToTheManifest]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testMintingAddsTheStateToTheManifest]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testMintingInvalidatesAManifestFetchedBeforeIt]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testMintingInvalidatesAManifestFetchedBeforeIt]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testOnlyManifestListedPathsAreServable]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testOnlyManifestListedPathsAreServable]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testRoutesAnswer401WithoutTheSessionToken]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testRoutesAnswer401WithoutTheSessionToken]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testRoutesAnswer401WithTheWrongToken]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testRoutesAnswer401WithTheWrongToken]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testRoutesAnswer404BeforeASessionIsOpen]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testRoutesAnswer404BeforeASessionIsOpen]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testTheFileRouteRequiresAPathParameter]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testTheFileRouteRequiresAPathParameter]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testTheManifestIsServedWithTheCorrectToken]' started.
+Test Case '-[PVContinuityTests.ContinuitySessionServerTests testTheManifestIsServedWithTheCorrectToken]' passed (0.001 seconds).
+Test Suite 'ContinuitySessionServerTests' passed at 2026-10-20 02:26:18.095.
+	 Executed 17 tests, with 0 failures (0 unexpected) in 0.023 (0.026) seconds
+Test Suite 'FallbackMachineTests' started at 2026-10-20 02:26:18.095.
+Test Case '-[PVContinuityTests.FallbackMachineTests testActionableErrorsSurviveUnchanged]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testActionableErrorsSurviveUnchanged]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testAnUnverifiedStateDoesNotCountAsPulled]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testAnUnverifiedStateDoesNotCountAsPulled]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testAPartialGameTransferCanNeverBoot]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testAPartialGameTransferCanNeverBoot]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testEvenAuthAndVersionFailuresDegradeToALocalBoot]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testEvenAuthAndVersionFailuresDegradeToALocalBoot]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testEveryInputCombinationProducesAnActionableOutcome]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testEveryInputCombinationProducesAnActionableOutcome]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testGameMissingAndNothingPulledFails]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testGameMissingAndNothingPulledFails]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testLocalGameWithLocalStateBootsFromTheLatestLocalState]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testLocalGameWithLocalStateBootsFromTheLatestLocalState]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testLocalGameWithNoStateAnywhereBootsFresh]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testLocalGameWithNoStateAnywhereBootsFresh]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testMissingNonEssentialsDowngradeToPartialAndAreReported]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testMissingNonEssentialsDowngradeToPartialAndAreReported]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testPulledStateWithAFullyPulledGameProceeds]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testPulledStateWithAFullyPulledGameProceeds]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testPulledStateWithALocalGameProceeds]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testPulledStateWithALocalGameProceeds]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testTheLadderDoesNotDependOnWhichStageFailed]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testTheLadderDoesNotDependOnWhichStageFailed]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.FallbackMachineTests testTransportErrorsAreRewrittenToInsufficientToBoot]' started.
+Test Case '-[PVContinuityTests.FallbackMachineTests testTransportErrorsAreRewrittenToInsufficientToBoot]' passed (0.001 seconds).
+Test Suite 'FallbackMachineTests' passed at 2026-10-20 02:26:18.101.
+	 Executed 13 tests, with 0 failures (0 unexpected) in 0.004 (0.006) seconds
+Test Suite 'FileLibraryGrantStoreTests' started at 2026-10-20 02:26:18.101.
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testADeniedGrantIsRememberedRatherThanAbsent]' started.
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testADeniedGrantIsRememberedRatherThanAbsent]' passed (0.003 seconds).
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testAllGrantsListsEveryDecisionSoTheOwnerCanUndoThem]' started.
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testAllGrantsListsEveryDecisionSoTheOwnerCanUndoThem]' passed (0.003 seconds).
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testAnUnknownPeerHasNoGrant]' started.
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testAnUnknownPeerHasNoGrant]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testGrantsAreSeparateFromTrust]' started.
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testGrantsAreSeparateFromTrust]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testGrantsRoundTrip]' started.
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testGrantsRoundTrip]' passed (0.003 seconds).
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testRemovingAGrantRestoresTheNeverAskedState]' started.
+Test Case '-[PVContinuityTests.FileLibraryGrantStoreTests testRemovingAGrantRestoresTheNeverAskedState]' passed (0.007 seconds).
+Test Suite 'FileLibraryGrantStoreTests' passed at 2026-10-20 02:26:18.122.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.020 (0.021) seconds
+Test Suite 'FileTrustStoreTests' started at 2026-10-20 02:26:18.122.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testAddAndLookUp]' started.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testAddAndLookUp]' passed (0.005 seconds).
+Test Case '-[PVContinuityTests.FileTrustStoreTests testAMissingFileReadsAsAnEmptyStoreRatherThanThrowing]' started.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testAMissingFileReadsAsAnEmptyStoreRatherThanThrowing]' passed (0.003 seconds).
+Test Case '-[PVContinuityTests.FileTrustStoreTests testNewestPeerSortsFirst]' started.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testNewestPeerSortsFirst]' passed (0.006 seconds).
+Test Case '-[PVContinuityTests.FileTrustStoreTests testOnlyPublicKeyMaterialIsPersisted]' started.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testOnlyPublicKeyMaterialIsPersisted]' passed (0.008 seconds).
+Test Case '-[PVContinuityTests.FileTrustStoreTests testReAddingAPeerReplacesRatherThanDuplicates]' started.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testReAddingAPeerReplacesRatherThanDuplicates]' passed (0.008 seconds).
+Test Case '-[PVContinuityTests.FileTrustStoreTests testRemoveAll]' started.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testRemoveAll]' passed (0.007 seconds).
+Test Case '-[PVContinuityTests.FileTrustStoreTests testRevocationTakesEffectImmediately]' started.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testRevocationTakesEffectImmediately]' passed (0.007 seconds).
+Test Case '-[PVContinuityTests.FileTrustStoreTests testTrustSurvivesAFreshStoreOverTheSameFile]' started.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testTrustSurvivesAFreshStoreOverTheSameFile]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.FileTrustStoreTests testUnknownPeerIsNil]' started.
+Test Case '-[PVContinuityTests.FileTrustStoreTests testUnknownPeerIsNil]' passed (0.006 seconds).
+Test Suite 'FileTrustStoreTests' passed at 2026-10-20 02:26:18.179.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.053 (0.057) seconds
+Test Suite 'GameIdentityTests' started at 2026-10-20 02:26:18.179.
+Test Case '-[PVContinuityTests.GameIdentityTests testBothUnknownDiscAndRevisionStillCountsAsExact]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testBothUnknownDiscAndRevisionStillCountsAsExact]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testCRC32AloneIsNeverAMatch]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testCRC32AloneIsNeverAMatch]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testDifferentDiscOfTheSameTitleIsOnlyAFamilyMatch]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testDifferentDiscOfTheSameTitleIsOnlyAFamilyMatch]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testDifferentRevisionOfTheSameTitleIsOnlyAFamilyMatch]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testDifferentRevisionOfTheSameTitleIsOnlyAFamilyMatch]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testEmptyIdentifiersDoNotMatchEachOther]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testEmptyIdentifiersDoNotMatchEachOther]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testGameIDIsNormalizedToUppercase]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testGameIDIsNormalizedToUppercase]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testHasAnyIdentifier]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testHasAnyIdentifier]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testHashesAreNormalizedToLowercase]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testHashesAreNormalizedToLowercase]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testMatchingMD5PromotesAFamilyMatchToAContentMatch]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testMatchingMD5PromotesAFamilyMatchToAContentMatch]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testMD5MatchesAcrossDifferentGameIDs]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testMD5MatchesAcrossDifferentGameIDs]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testNilDiscIsTreatedAsDiscZero]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testNilDiscIsTreatedAsDiscZero]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testNoSharedIdentifierIsNoMatch]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testNoSharedIdentifierIsNoMatch]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testOneSideKnowingTheRevisionAndTheOtherNotIsAFamilyMatch]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testOneSideKnowingTheRevisionAndTheOtherNotIsAFamilyMatch]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testSameIDSameDiscSameRevisionIsExact]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testSameIDSameDiscSameRevisionIsExact]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testStableKeyFallsBackThroughMD5ThenName]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testStableKeyFallsBackThroughMD5ThenName]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.GameIdentityTests testStableKeySeparatesDiscsAndRevisions]' started.
+Test Case '-[PVContinuityTests.GameIdentityTests testStableKeySeparatesDiscsAndRevisions]' passed (0.000 seconds).
+Test Suite 'GameIdentityTests' passed at 2026-10-20 02:26:18.190.
+	 Executed 16 tests, with 0 failures (0 unexpected) in 0.007 (0.011) seconds
+Test Suite 'LibraryManifestTests' started at 2026-10-20 02:26:18.190.
+Test Case '-[PVContinuityTests.LibraryManifestTests testCatalogCarriesNoPlayHistory]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testCatalogCarriesNoPlayHistory]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.LibraryManifestTests testCatalogRejectsUnsupportedVersion]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testCatalogRejectsUnsupportedVersion]' passed (0.005 seconds).
+Test Case '-[PVContinuityTests.LibraryManifestTests testCatalogRoundTrips]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testCatalogRoundTrips]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.LibraryManifestTests testExcludedGameHasNoManifestEvenWhenRequestedDirectly]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testExcludedGameHasNoManifestEvenWhenRequestedDirectly]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.LibraryManifestTests testExcludedGameIsAbsentFromTheServedCatalog]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testExcludedGameIsAbsentFromTheServedCatalog]' passed (0.009 seconds).
+Test Case '-[PVContinuityTests.LibraryManifestTests testHandoffManifestDoesCarryOwnerSaveDataForContrast]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testHandoffManifestDoesCarryOwnerSaveDataForContrast]' passed (0.008 seconds).
+Test Case '-[PVContinuityTests.LibraryManifestTests testLibraryManifestCarriesNoOwnerSaveData]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testLibraryManifestCarriesNoOwnerSaveData]' passed (0.003 seconds).
+Test Case '-[PVContinuityTests.LibraryManifestTests testLibraryUserDataKindsIsEmptyAndHandoffIsNot]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testLibraryUserDataKindsIsEmptyAndHandoffIsNot]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.LibraryManifestTests testMislabelledDescriptorIsRefused]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testMislabelledDescriptorIsRefused]' passed (0.008 seconds).
+Test Case '-[PVContinuityTests.LibraryManifestTests testUnknownKeyAndExcludedKeyAreIndistinguishable]' started.
+Test Case '-[PVContinuityTests.LibraryManifestTests testUnknownKeyAndExcludedKeyAreIndistinguishable]' passed (0.005 seconds).
+Test Suite 'LibraryManifestTests' passed at 2026-10-20 02:26:18.238.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.043 (0.048) seconds
+Test Suite 'LibraryServerTests' started at 2026-10-20 02:26:18.238.
+Test Case '-[PVContinuityTests.LibraryServerTests testActivateIsIdempotent]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testActivateIsIdempotent]' passed (0.006 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testAllowAlwaysPersistsEverything]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testAllowAlwaysPersistsEverything]' passed (0.012 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testAskPerGameBrowsesSilently]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testAskPerGameBrowsesSilently]' passed (0.006 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testAskPerGameDenyOnceRefusesWithoutPersisting]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testAskPerGameDenyOnceRefusesWithoutPersisting]' passed (0.009 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testAskPerGamePromptsOnceAndThenRemembersForThatGame]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testAskPerGamePromptsOnceAndThenRemembersForThatGame]' passed (0.004 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testAuthNonceIsSingleUse]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testAuthNonceIsSingleUse]' passed (0.006 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testBearerTokenParsingIsCaseInsensitiveAndRejectsGarbage]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testBearerTokenParsingIsCaseInsensitiveAndRejectsGarbage]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testBrowsingWithoutATokenIs401]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testBrowsingWithoutATokenIs401]' passed (0.005 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testDeniedPeerIsRefusedEvenThoughItIsStillPaired]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testDeniedPeerIsRefusedEvenThoughItIsStillPaired]' passed (0.006 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testDenyAlwaysPersistsAndIsListedForReview]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testDenyAlwaysPersistsAndIsListedForReview]' passed (0.022 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testDenyingMidSessionInvalidatesTheLiveToken]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testDenyingMidSessionInvalidatesTheLiveToken]' passed (0.009 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testDeviceThatDoesNotShareServesNothing]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testDeviceThatDoesNotShareServesNothing]' passed (0.006 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testEverythingBrowsesWithoutPrompting]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testEverythingBrowsesWithoutPrompting]' passed (0.004 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testEverythingPullsWithoutPrompting]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testEverythingPullsWithoutPrompting]' passed (0.005 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testExcludedGame404sOnEveryRouteThatNamesIt]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testExcludedGame404sOnEveryRouteThatNamesIt]' passed (0.009 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testFileRouteRequiresBothKeyAndPath]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testFileRouteRequiresBothKeyAndPath]' passed (0.003 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testFileRouteServesOnlyPathsTheManifestDescribes]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testFileRouteServesOnlyPathsTheManifestDescribes]' passed (0.005 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testLibraryFileURLCarriesBothKeyAndPath]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testLibraryFileURLCarriesBothKeyAndPath]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testPeerWithNoGrantDefaultsToAskPerGame]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testPeerWithNoGrantDefaultsToAskPerGame]' passed (0.004 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testRegistersEveryLibraryRoute]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testRegistersEveryLibraryRoute]' passed (0.018 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testRevokingTrustTakesEffectOnTheVeryNextRequest]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testRevokingTrustTakesEffectOnTheVeryNextRequest]' passed (0.021 seconds).
+Test Case '-[PVContinuityTests.LibraryServerTests testUnpairedPeerCannotAuthenticate]' started.
+Test Case '-[PVContinuityTests.LibraryServerTests testUnpairedPeerCannotAuthenticate]' passed (0.004 seconds).
+Test Suite 'LibraryServerTests' passed at 2026-10-20 02:26:18.411.
+	 Executed 22 tests, with 0 failures (0 unexpected) in 0.166 (0.174) seconds
+Test Suite 'ManifestBuilderTests' started at 2026-10-20 02:26:18.411.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testABIOSDumpIsDropped]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testABIOSDumpIsDropped]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAFileWhosePathClassifiesAsADifferentCategoryIsDropped]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAFileWhosePathClassifiesAsADifferentCategoryIsDropped]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAGameFileIsNeverPermittedThroughTheUserDataPath]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAGameFileIsNeverPermittedThroughTheUserDataPath]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAMislabelledDescriptorIsDropped]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAMislabelledDescriptorIsDropped]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAnOversizedFileIsDropped]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAnOversizedFileIsDropped]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAPathSyncRulesRejectsIsDropped]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAPathSyncRulesRejectsIsDropped]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAPermittedUserDataFilePasses]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testAPermittedUserDataFilePasses]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testBuildFiltersOutAProvidersOverBroadEnumeration]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testBuildFiltersOutAProvidersOverBroadEnumeration]' passed (0.004 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testTheGameFileCanBeOmittedWhenTheReceiverAlreadyHasIt]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testTheGameFileCanBeOmittedWhenTheReceiverAlreadyHasIt]' passed (0.006 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testTheGlobalConfigIsNotPartOfAHandoffPayload]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testTheGlobalConfigIsNotPartOfAHandoffPayload]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestBuilderTests testTheMintedStateIsNotAlsoListedAsAnOrdinaryFile]' started.
+Test Case '-[PVContinuityTests.ManifestBuilderTests testTheMintedStateIsNotAlsoListedAsAnOrdinaryFile]' passed (0.018 seconds).
+Test Suite 'ManifestBuilderTests' passed at 2026-10-20 02:26:18.443.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.030 (0.032) seconds
+Test Suite 'ManifestCodecTests' started at 2026-10-20 02:26:18.443.
+Test Case '-[PVContinuityTests.ManifestCodecTests testAllDescriptorsIncludesTheSaveState]' started.
+Test Case '-[PVContinuityTests.ManifestCodecTests testAllDescriptorsIncludesTheSaveState]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ManifestCodecTests testAllDescriptorsOmitsTheSaveStateWhenNoneWasMinted]' started.
+Test Case '-[PVContinuityTests.ManifestCodecTests testAllDescriptorsOmitsTheSaveStateWhenNoneWasMinted]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestCodecTests testAnUnsupportedVersionIsRejectedAtDecodeTime]' started.
+Test Case '-[PVContinuityTests.ManifestCodecTests testAnUnsupportedVersionIsRejectedAtDecodeTime]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ManifestCodecTests testDescriptorLookupIsAnExactPathMatch]' started.
+Test Case '-[PVContinuityTests.ManifestCodecTests testDescriptorLookupIsAnExactPathMatch]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestCodecTests testEncodingIsStableAcrossCalls]' started.
+Test Case '-[PVContinuityTests.ManifestCodecTests testEncodingIsStableAcrossCalls]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.ManifestCodecTests testGarbageDoesNotDecode]' started.
+Test Case '-[PVContinuityTests.ManifestCodecTests testGarbageDoesNotDecode]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.ManifestCodecTests testRoundTrip]' started.
+Test Case '-[PVContinuityTests.ManifestCodecTests testRoundTrip]' passed (0.001 seconds).
+Test Suite 'ManifestCodecTests' passed at 2026-10-20 02:26:18.450.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.005 (0.006) seconds
+Test Suite 'PairingMathTests' started at 2026-10-20 02:26:18.450.
+Test Case '-[PVContinuityTests.PairingMathTests testAMalformedPublicKeyIsRejectedRatherThanCrashing]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testAMalformedPublicKeyIsRejectedRatherThanCrashing]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.PairingMathTests testAnAuthSignatureCannotBeRelayedToAnotherServer]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testAnAuthSignatureCannotBeRelayedToAnotherServer]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.PairingMathTests testAnAuthSignatureIsBoundToItsNonce]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testAnAuthSignatureIsBoundToItsNonce]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.PairingMathTests testAuthSignatureVerifies]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testAuthSignatureVerifies]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.PairingMathTests testAValidProofVerifies]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testAValidProofVerifies]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.PairingMathTests testEveryTranscriptFieldIsBoundIntoTheProof]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testEveryTranscriptFieldIsBoundIntoTheProof]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.PairingMathTests testNoncesAreThirtyTwoBytesAndDistinct]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testNoncesAreThirtyTwoBytesAndDistinct]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.PairingMathTests testPairingCodeIsSixDigitsZeroPadded]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testPairingCodeIsSixDigitsZeroPadded]' passed (0.003 seconds).
+Test Case '-[PVContinuityTests.PairingMathTests testTheWrongCodeFails]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testTheWrongCodeFails]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.PairingMathTests testTranscriptCarriesAVersionPrefix]' started.
+Test Case '-[PVContinuityTests.PairingMathTests testTranscriptCarriesAVersionPrefix]' passed (0.000 seconds).
+Test Suite 'PairingMathTests' passed at 2026-10-20 02:26:18.458.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
+Test Suite 'PairingServerTests' started at 2026-10-20 02:26:18.458.
+Test Case '-[PVContinuityTests.PairingServerTests testABadSignatureConsumesTheNonceAndIsRejected]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testABadSignatureConsumesTheNonceAndIsRejected]' passed (0.027 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testActivateIsIdempotent]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testActivateIsIdempotent]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testActivateRegistersThePairingAndAuthRoutes]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testActivateRegistersThePairingAndAuthRoutes]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testADeclinedPairingIs403AndStoresNoTrust]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testADeclinedPairingIs403AndStoresNoTrust]' passed (0.011 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testAHangingPromptStillAnswers202RatherThanBlockingTheRoute]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testAHangingPromptStillAnswers202RatherThanBlockingTheRoute]' passed (0.002 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testAMalformedBodyIs400]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testAMalformedBodyIs400]' passed (0.012 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testAnApprovedPairingWithTheRightCodeYieldsTheSessionToken]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testAnApprovedPairingWithTheRightCodeYieldsTheSessionToken]' passed (0.021 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testANonceIsSingleUse]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testANonceIsSingleUse]' passed (0.058 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testAnUnknownPairingIdIs410]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testAnUnknownPairingIdIs410]' passed (0.011 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testAnUnpairedPeerCannotStartAuth]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testAnUnpairedPeerCannotStartAuth]' passed (0.030 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testAPairedPeerAuthenticatesSilently]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testAPairedPeerAuthenticatesSilently]' passed (0.048 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testASuccessfulPairingPersistsTheClientsPublicKey]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testASuccessfulPairingPersistsTheClientsPublicKey]' passed (0.020 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testATokenIsNotHandedOutWhenNoSessionIsLive]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testATokenIsNotHandedOutWhenNoSessionIsLive]' passed (0.052 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testAWrongCodeIs401AndIsRetryable]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testAWrongCodeIs401AndIsRetryable]' passed (0.069 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testRevocationAlsoBlocksAnAuthAlreadyInFlight]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testRevocationAlsoBlocksAnAuthAlreadyInFlight]' passed (0.033 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testRevokingTrustTakesEffectOnTheVeryNextRequest]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testRevokingTrustTakesEffectOnTheVeryNextRequest]' passed (0.059 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testTheCodeDiesAfterThreeWrongAttempts]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testTheCodeDiesAfterThreeWrongAttempts]' passed (0.039 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testThePromptSeesTheCodeAndThePeerName]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testThePromptSeesTheCodeAndThePeerName]' passed (0.020 seconds).
+Test Case '-[PVContinuityTests.PairingServerTests testTooManyInFlightPairingsIs429]' started.
+Test Case '-[PVContinuityTests.PairingServerTests testTooManyInFlightPairingsIs429]' passed (0.012 seconds).
+Test Suite 'PairingServerTests' passed at 2026-10-20 02:26:19.047.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 0.525 (0.589) seconds
+Test Suite 'PullFailureTranslationTests' started at 2026-10-20 02:26:19.047.
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testACompletedGameFileWithNothingRequiredMissingIsComplete]' started.
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testACompletedGameFileWithNothingRequiredMissingIsComplete]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testACompletedResumeStateAlsoCountsAsUsable]' started.
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testACompletedResumeStateAlsoCountsAsUsable]' passed (0.017 seconds).
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testACompletedSaveStateIsReportedUsable]' started.
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testACompletedSaveStateIsReportedUsable]' passed (0.012 seconds).
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testAMissingGameFileMeansTheGameIsNotComplete]' started.
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testAMissingGameFileMeansTheGameIsNotComplete]' passed (0.003 seconds).
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testNothingMissingButNothingPulledIsNotCompleteEither]' started.
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testNothingMissingButNothingPulledIsNotCompleteEither]' passed (0.003 seconds).
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testOptionalMissingFilesAreFilteredOutOfTheReportedMissingSet]' started.
+Test Case '-[PVContinuityTests.PullFailureTranslationTests testOptionalMissingFilesAreFilteredOutOfTheReportedMissingSet]' passed (0.000 seconds).
+Test Suite 'PullFailureTranslationTests' passed at 2026-10-20 02:26:19.100.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.037 (0.053) seconds
+Test Suite 'PullerTests' started at 2026-10-20 02:26:19.100.
+Test Case '-[PVContinuityTests.PullerTests testA401OnTheManifestSurfacesAsTokenRejected]' started.
+Test Case '-[PVContinuityTests.PullerTests testA401OnTheManifestSurfacesAsTokenRejected]' passed (0.125 seconds).
+Test Case '-[PVContinuityTests.PullerTests testA404OnTheManifestSurfacesAsNoActiveSession]' started.
+Test Case '-[PVContinuityTests.PullerTests testA404OnTheManifestSurfacesAsNoActiveSession]' passed (0.014 seconds).
+Test Case '-[PVContinuityTests.PullerTests testAChecksumMismatchIsRejectedAndTheFileNeverAppears]' started.
+Test Case '-[PVContinuityTests.PullerTests testAChecksumMismatchIsRejectedAndTheFileNeverAppears]' passed (0.013 seconds).
+Test Case '-[PVContinuityTests.PullerTests testAFilePresentButDifferingIsStillPulled]' started.
+Test Case '-[PVContinuityTests.PullerTests testAFilePresentButDifferingIsStillPulled]' passed (0.007 seconds).
+Test Case '-[PVContinuityTests.PullerTests testAFullPullLandsEveryFileAtItsManifestPath]' started.
+Test Case '-[PVContinuityTests.PullerTests testAFullPullLandsEveryFileAtItsManifestPath]' passed (0.025 seconds).
+Test Case '-[PVContinuityTests.PullerTests testAMidTransferFailureReportsWhatCompletedAndWhatDidNot]' started.
+Test Case '-[PVContinuityTests.PullerTests testAMidTransferFailureReportsWhatCompletedAndWhatDidNot]' passed (0.054 seconds).
+Test Case '-[PVContinuityTests.PullerTests testAnInterruptedTransferLeavesAPartialFileForRangeResume]' started.
+Test Case '-[PVContinuityTests.PullerTests testAnInterruptedTransferLeavesAPartialFileForRangeResume]' passed (0.025 seconds).
+Test Case '-[PVContinuityTests.PullerTests testAnUnsupportedManifestVersionSurfacesLoudly]' started.
+Test Case '-[PVContinuityTests.PullerTests testAnUnsupportedManifestVersionSurfacesLoudly]' passed (0.010 seconds).
+Test Case '-[PVContinuityTests.PullerTests testARetryResumesFromThePartialAndCompletes]' started.
+Test Case '-[PVContinuityTests.PullerTests testARetryResumesFromThePartialAndCompletes]' passed (0.039 seconds).
+Test Case '-[PVContinuityTests.PullerTests testMintAndFetchManifestUsesThePOSTMintRoute]' started.
+Test Case '-[PVContinuityTests.PullerTests testMintAndFetchManifestUsesThePOSTMintRoute]' passed (0.004 seconds).
+Test Case '-[PVContinuityTests.PullerTests testNoPartialFileIsLeftBehindAfterASuccessfulPull]' started.
+Test Case '-[PVContinuityTests.PullerTests testNoPartialFileIsLeftBehindAfterASuccessfulPull]' passed (0.017 seconds).
+Test Case '-[PVContinuityTests.PullerTests testPlanOrdersSmallAndEssentialFilesBeforeTheDiscImage]' started.
+Test Case '-[PVContinuityTests.PullerTests testPlanOrdersSmallAndEssentialFilesBeforeTheDiscImage]' passed (0.004 seconds).
+Test Case '-[PVContinuityTests.PullerTests testPlanSkipsFilesAlreadyPresentWithMatchingChecksums]' started.
+Test Case '-[PVContinuityTests.PullerTests testPlanSkipsFilesAlreadyPresentWithMatchingChecksums]' passed (0.013 seconds).
+Test Case '-[PVContinuityTests.PullerTests testProgressIsReportedAcrossTheWholePlanNotPerFile]' started.
+Test Case '-[PVContinuityTests.PullerTests testProgressIsReportedAcrossTheWholePlanNotPerFile]' passed (0.010 seconds).
+Test Case '-[PVContinuityTests.PullerTests testTotalBytesNeededCountsOnlyWhatWillTransfer]' started.
+Test Case '-[PVContinuityTests.PullerTests testTotalBytesNeededCountsOnlyWhatWillTransfer]' passed (0.002 seconds).
+Test Suite 'PullerTests' passed at 2026-10-20 02:26:19.468.
+	 Executed 15 tests, with 0 failures (0 unexpected) in 0.363 (0.367) seconds
+Test Suite 'SaveStateDescriptorTests' started at 2026-10-20 02:26:19.468.
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testAStemIsUsedVerbatimAndNotDerivedFromAnythingElse]' started.
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testAStemIsUsedVerbatimAndNotDerivedFromAnythingElse]' passed (0.005 seconds).
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testRelativePathIsRootedAtStateSaves]' started.
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testRelativePathIsRootedAtStateSaves]' passed (0.001 seconds).
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testResumeStateProducesAResumeStateDescriptor]' started.
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testResumeStateProducesAResumeStateDescriptor]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testResumeStateUsesTheAutoExtension]' started.
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testResumeStateUsesTheAutoExtension]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testSlotFileNameMatchesDolphinsMakeStateFilename]' started.
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testSlotFileNameMatchesDolphinsMakeStateFilename]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testSlottedStateProducesASaveStateDescriptor]' started.
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testSlottedStateProducesASaveStateDescriptor]' passed (0.000 seconds).
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testTheProducedPathIsClassifiedAsExpectedBySyncRules]' started.
+Test Case '-[PVContinuityTests.SaveStateDescriptorTests testTheProducedPathIsClassifiedAsExpectedBySyncRules]' passed (0.000 seconds).
+Test Suite 'SaveStateDescriptorTests' passed at 2026-10-20 02:26:19.476.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.007 (0.008) seconds
+Test Suite 'PVContinuityTests.xctest' passed at 2026-10-20 02:26:19.476.
+	 Executed 208 tests, with 0 failures (0 unexpected) in 1.306 (1.429) seconds
+Test Suite 'All tests' passed at 2026-10-20 02:26:19.476.
+	 Executed 208 tests, with 0 failures (0 unexpected) in 1.306 (1.431) seconds
+Test Suite 'All tests' started at 2026-10-20 02:26:20.050.
+Test Suite 'ControllerTests.xctest' started at 2026-10-20 02:26:20.067.
+Test Suite 'ContinuityControllerTests' started at 2026-10-20 02:26:20.067.
+Test Case '-[ControllerTests.ContinuityControllerTests testAdvertisedHostIdentityMismatchCannotProceedToPairing]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testAdvertisedHostIdentityMismatchCannotProceedToPairing]' passed (0.036 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testAutomaticBrowseAllowsExistingTrust]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testAutomaticBrowseAllowsExistingTrust]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testAutomaticBrowseNeverPairsAnUnknownOrRevokedPeer]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testAutomaticBrowseNeverPairsAnUnknownOrRevokedPeer]' passed (0.002 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledCopyCannotRegisterWhenManifestReturnsLate]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledCopyCannotRegisterWhenManifestReturnsLate]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledDownloadCannotFinalizeEvenIfDelegateReturnsSuccess]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledDownloadCannotFinalizeEvenIfDelegateReturnsSuccess]' passed (0.009 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledLibraryApprovalFinishesWithoutUserResponse]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledLibraryApprovalFinishesWithoutUserResponse]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledPairingApprovalFinishesWithoutUserResponse]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledPairingApprovalFinishesWithoutUserResponse]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledQueuedCopyFinishesBeforeActiveTransfer]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledQueuedCopyFinishesBeforeActiveTransfer]' passed (0.071 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' passed (0.009 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledUnapprovedPairingDoesNotRememberHost]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledUnapprovedPairingDoesNotRememberHost]' passed (0.006 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testConcurrentCopiesSerializeAndReuseVerifiedDestination]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testConcurrentCopiesSerializeAndReuseVerifiedDestination]' passed (0.442 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCopiedFileURLsIncludeEveryRegisteredROM]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCopiedFileURLsIncludeEveryRegisteredROM]' passed (0.016 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testDifferingROMCollisionPreservesExistingFile]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testDifferingROMCollisionPreservesExistingFile]' passed (0.018 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testDigestCacheAvoidsRehashingUnchangedFile]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testDigestCacheAvoidsRehashingUnchangedFile]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testDigestCacheDetectsSameSizeWriteEvenWhenMtimeIsPreserved]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testDigestCacheDetectsSameSizeWriteEvenWhenMtimeIsPreserved]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testDigestCacheSupportsConcurrentReadersOfTheSameFile]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testDigestCacheSupportsConcurrentReadersOfTheSameFile]' passed (0.010 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testDigestChangedDuringHashIsNotPublishedAndStableRetrySucceeds]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testDigestChangedDuringHashIsNotPublishedAndStableRetrySucceeds]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testIdleHandoffPairingStillRemembersApprovedHost]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testIdleHandoffPairingStillRemembersApprovedHost]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLatePairingResponderCannotClearReplacementPrompt]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLatePairingResponderCannotClearReplacementPrompt]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryApprovalHonorsFirstResponseAndIgnoresLateReplacementAnswer]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryApprovalHonorsFirstResponseAndIgnoresLateReplacementAnswer]' passed (0.002 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryPairing404AuthenticatesAndBrowsesWithoutHandoff]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryPairing404AuthenticatesAndBrowsesWithoutHandoff]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' passed (0.007 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingSelectedPeerCanBrowseAndChangedSelectionCannotReuseToken]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingSelectedPeerCanBrowseAndChangedSelectionCannotReuseToken]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testOnlyLibraryFileUsesApprovalTransport]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testOnlyLibraryFileUsesApprovalTransport]' passed (0.009 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testReceiptCannotSkipSameKeySameSizeChangedRemoteHashAndCollision]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testReceiptCannotSkipSameKeySameSizeChangedRemoteHashAndCollision]' passed (0.014 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testReceiptRequiresEveryLocalROMIncludingSecondaryFiles]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testReceiptRequiresEveryLocalROMIncludingSecondaryFiles]' passed (0.021 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testSelectedPeerMismatchRejectsHandoffAuthBeforeManifest]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testSelectedPeerMismatchRejectsHandoffAuthBeforeManifest]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testSelectedPeerMismatchRejectsLibraryAuthBeforeCatalog]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testSelectedPeerMismatchRejectsLibraryAuthBeforeCatalog]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testSuccessfulHandoffPairingRemembersHost]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testSuccessfulHandoffPairingRemembersHost]' passed (0.008 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testSuccessfulLibraryPairingRemembersApprovedHostExactlyOnce]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testSuccessfulLibraryPairingRemembersApprovedHostExactlyOnce]' passed (0.007 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testWrongPairingCodeCanBeRetried]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testWrongPairingCodeCanBeRetried]' passed (0.008 seconds).
+Test Suite 'ContinuityControllerTests' passed at 2026-10-20 02:26:20.842.
+	 Executed 35 tests, with 0 failures (0 unexpected) in 0.763 (0.775) seconds
+Test Suite 'ControllerTests.xctest' passed at 2026-10-20 02:26:20.842.
+	 Executed 35 tests, with 0 failures (0 unexpected) in 0.763 (0.775) seconds
+Test Suite 'All tests' passed at 2026-10-20 02:26:20.842.
+	 Executed 35 tests, with 0 failures (0 unexpected) in 0.763 (0.792) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.

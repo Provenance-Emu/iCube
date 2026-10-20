@@ -68,7 +68,11 @@ final class CloudSyncLifecycleService: NSObject, UIApplicationDelegate {
                       let type = SyncableFileType(rawValue: raw) else { return }
                 switch type {
                 case .libraryState: LibraryStateStore.shared.reloadAfterSync()
-                case .gameProfile: GameProfiles.shared.reloadAfterSync()
+                case .gameProfile:
+                    if let path = note.userInfo?[CloudSyncCoordinator.relativePathKey] as? String,
+                       SyncClassifier.isLibraryMetadataShard(relativePath: path) {
+                        LibraryMetadataService.reloadAfterSync()
+                    } else { GameProfiles.shared.reloadAfterSync() }
                 default: break
                 }
             }
@@ -104,6 +108,9 @@ final class ICubeCloudSyncBootGate: NSObject {
         guard SyncLocalIOGate.shared.finishCoreDrain(generation: generation) else { return }
         Task { @MainActor in
             await CloudSyncCoordinator.shared.handleCoreDidDrain(generation: generation)
+            guard SyncLocalIOGate.shared.isCurrentDrain(generation) else { return }
+            ContinuityManager.shared.libraryMirror.environmentChanged()
+            LibraryMetadataService.resumeContentIdentityWarming()
         }
     }
 

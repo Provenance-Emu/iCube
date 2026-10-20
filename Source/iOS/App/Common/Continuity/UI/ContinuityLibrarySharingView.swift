@@ -55,7 +55,6 @@ struct ContinuityLibrarySharingView: View {
             tvHeader: SettingsLeafScreen.header(title: L("Share My Library"), parentTitle: parentTitle),
             tvInset: .xxl
         )
-        .continuityPairingPrompt()
         .continuityLibraryPullPrompt()
         .task {
             await manager.refreshTrustedPeers()
@@ -137,7 +136,6 @@ struct ContinuityLibrarySharingView: View {
             }
         }
         .navigationTitle(L("Share My Library"))
-        .continuityPairingPrompt()
         .continuityLibraryPullPrompt()
         .task {
             await manager.refreshTrustedPeers()

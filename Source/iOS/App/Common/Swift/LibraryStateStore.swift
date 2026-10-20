@@ -11,8 +11,8 @@ import PVCloudSync
 /// Favorites and last-played also live in the shared `UserDefaults` suite, where
 /// TopShelf, the snapshot writer and the Objective-C favorites toggle read and
 /// write them. This store keeps the two in step: it imports from the suite at
-/// init and whenever `FavoritesChanged` fires, and `reloadAfterSync()` writes a
-/// merged document back into the suite so every existing reader keeps working.
+/// init (missing records only) and whenever `FavoritesChanged` fires.
+/// `reloadAfterSync()` writes a merged document back into the suite so every existing reader keeps working.
 final class LibraryStateStore {
   static let shared = LibraryStateStore()
 
@@ -22,10 +22,20 @@ final class LibraryStateStore {
 
   private static let favoritesKey = "favorites_by_gameid"
 
-  private let lock = NSLock()
+  // Sync's scanner transaction and every store instance use the same short lock.
+  // It never spans network I/O; recursive acquisition permits store helpers.
+  private static let fileAccessLock = NSRecursiveLock()
+  private let lock = LibraryStateStore.fileAccessLock
+
+  static func withFileAccess<T>(_ operation: () throws -> T) rethrows -> T {
+    fileAccessLock.lock()
+    defer { fileAccessLock.unlock() }
+    return try operation()
+  }
   private let fileURL: URL?
   private let defaults: UserDefaults
   private let deviceID: String
+  private var lastMirroredFavorites: [String: Bool] = [:]
   private var document: LibraryStateDocument
   private var observer: NSObjectProtocol?
 
@@ -40,7 +50,8 @@ final class LibraryStateStore {
     self.deviceID = deviceID
     self.document = LibraryStateDocument()
     self.document = Self.load(from: fileURL)
-    importFromSharedDefaults()
+    importFromSharedDefaults(onlyMissingFavorites: true)
+    reloadAfterSync()
     observer = NotificationCenter.default.addObserver(
       forName: Self.favoritesChangedNotification, object: nil, queue: nil
     ) { [weak self] note in
@@ -100,8 +111,12 @@ final class LibraryStateStore {
 
   func setFavorite(_ value: Bool, gameID: String, at date: Date = Date()) {
     mutate(gameID) { state in
-      state.favorite = .init(value: value, updatedAt: Self.wholeSeconds(date))
+      guard state.favorite?.value != value else { return }
+      // Whole-second serialization must still order rapid favorite/unfavorite edits.
+      let stamp = max(Self.wholeSeconds(date), state.favorite.map { $0.updatedAt.addingTimeInterval(1) } ?? .distantPast)
+      state.favorite = .init(value: value, updatedAt: stamp)
     }
+    reloadAfterSync()
   }
 
   /// Raises last-played to `date` if it is later than what is recorded.
@@ -116,17 +131,22 @@ final class LibraryStateStore {
   /// Pulls favorites and last-played out of the suite. A favorite that differs
   /// from the document's value is stamped `now`; last-played takes the later
   /// date. Saves only when something changed.
-  func importFromSharedDefaults(now: Date = Date()) {
+  func importFromSharedDefaults(now: Date = Date(), onlyMissingFavorites: Bool = false) {
     let favorites = defaults.dictionary(forKey: Self.favoritesKey) as? [String: Bool] ?? [:]
     let lastPlayed = LastPlayedStore.all(in: defaults)
     let stamp = Self.wholeSeconds(now)
     lock.lock()
     defer { lock.unlock() }
-    var changed = false
+    let current = LibraryStateDocument.merge(document, Self.load(from: fileURL))
+    var changed = current != document
+    document = current
     for (gameID, value) in favorites where !gameID.isEmpty {
+      // A notification for one local edit must not restamp unrelated stale
+      // mirror values over remote edits committed just before the reload.
+      guard onlyMissingFavorites || lastMirroredFavorites[gameID] != value else { continue }
       var state = document.games[gameID] ?? .init()
-      if state.favorite?.value != value {
-        state.favorite = .init(value: value, updatedAt: stamp)
+      if state.favorite?.value != value && (!onlyMissingFavorites || state.favorite == nil) {
+        state.favorite = .init(value: value, updatedAt: max(stamp, state.favorite.map { $0.updatedAt.addingTimeInterval(1) } ?? .distantPast))
         document.games[gameID] = state
         changed = true
       }
@@ -139,15 +159,21 @@ final class LibraryStateStore {
       document.games[gameID] = state
       changed = true
     }
+    lastMirroredFavorites = favorites
     if changed { saveLocked() }
   }
 
   /// Call after sync wrote a merged `library_state.json`: reloads it, copies
   /// favorites and later last-played dates into the suite, and posts
   /// `FavoritesChanged` (with `object: self`) so UI and snapshot writers refresh.
+  /// Retain in-memory edits if a transfer used an older snapshot of this file.
   func reloadAfterSync() {
     lock.lock()
-    document = Self.load(from: fileURL)
+    let disk = Self.load(from: fileURL)
+    let merged = LibraryStateDocument.merge(document, disk)
+    document = merged
+    // Preserve edits made during a transfer and recover missing/purged files.
+    if merged != disk { saveLocked() }
     var favorites = defaults.dictionary(forKey: Self.favoritesKey) as? [String: Bool] ?? [:]
     var lastPlayed = LastPlayedStore.all(in: defaults)
     var played: [String: TimeInterval] = [:]
@@ -158,13 +184,13 @@ final class LibraryStateStore {
         played[gameID] = date.timeIntervalSince1970
       }
     }
-    lock.unlock()
-
+    lastMirroredFavorites = favorites
     defaults.set(favorites, forKey: Self.favoritesKey)
     if !played.isEmpty {
       let merged = lastPlayed.mapValues { $0.timeIntervalSince1970 }
       defaults.set(merged, forKey: LastPlayedStore.key)
     }
+    lock.unlock()
     NotificationCenter.default.post(name: Self.favoritesChangedNotification, object: self)
   }
 
@@ -180,6 +206,9 @@ final class LibraryStateStore {
     guard !gameID.isEmpty else { return }
     lock.lock()
     defer { lock.unlock() }
+    // A sync commit may have finished before its UI reload notification arrives.
+    // Always incorporate its file before a new local edit can write stale memory.
+    document = LibraryStateDocument.merge(document, Self.load(from: fileURL))
     var state = document.games[gameID] ?? .init()
     let before = state
     change(&state)
@@ -192,6 +221,7 @@ final class LibraryStateStore {
   private func saveLocked() {
     guard let fileURL else { return }
     do {
+      try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
       try document.encoded().write(to: fileURL, options: .atomic)
     } catch {
       NSLog("[LibraryStateStore] save failed: \(error)")

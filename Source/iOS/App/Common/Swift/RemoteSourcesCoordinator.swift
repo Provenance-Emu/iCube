@@ -596,12 +596,19 @@ final class LibraryCoordinator: ObservableObject {
       }
     }
 
-    NotificationCenter.default.publisher(for: NSNotification.Name("RemoteLibraryUpdated"))
-      .sink { [weak self] _ in
-        Self.log.debug("LibraryCoordinator: RemoteLibraryUpdated notification received")
-        self?.triggerReload()
-      }
-      .store(in: &cancellables)
+    for name in ["RemoteLibraryUpdated", "GameFileMetadataUpdated"] {
+      NotificationCenter.default.publisher(for: NSNotification.Name(name))
+        .sink { @Sendable [weak self] _ in
+          // Preserve immediate main-thread delivery so an emulation end inside
+          // the debounce window can consume pending work exactly once.
+          if Thread.isMainThread {
+            MainActor.assumeIsolated { self?.triggerReload() }
+          } else {
+            Task { @MainActor [weak self] in self?.triggerReload() }
+          }
+        }
+        .store(in: &cancellables)
+    }
 
     reloadSubject
       .debounce(for: .milliseconds(200), scheduler: RunLoop.main)
@@ -673,5 +680,10 @@ final class LibraryCoordinator: ObservableObject {
       return
     }
     games = gamesProvider()
+    // A forced first load can publish mid-session; hashing still waits for idle.
+    // The service separately checks the physical core gate and cancels on boot.
+    if !emulationState.isActive {
+      LibraryMetadataService.warmContentIdentities(for: games)
+    }
   }
 }

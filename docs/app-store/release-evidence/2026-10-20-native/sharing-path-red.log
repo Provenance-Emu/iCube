@@ -1,0 +1,49 @@
+Harness: /tmp/icube-sharing-controller-tests
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 182]
+[Planning deferred tasks]
+[2 / 6] Host
+[4 / 7] Host
+[5 / 8] Host
+[17 / 21] Host
+[20 / 22] ControllerTests-product
+[22 / 24] ControllerTests-product
+[28 / 29] ControllerTests-product
+[31 / 31] ControllerTests-product
+Build complete! (4.35 sec)
+Test Suite 'All tests' started at 2026-10-20 01:52:19.194.
+Test Suite 'ControllerTests.xctest' started at 2026-10-20 01:52:19.196.
+Test Suite 'ContinuityControllerTests' started at 2026-10-20 01:52:19.196.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:125: error: -[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate] : XCTAssertEqual failed: ("finished(PVContinuity.ContinuityOutcome.bootFresh)") is not equal to ("finished(PVContinuity.ContinuityOutcome.failed(PVContinuity.ContinuityError.cancelled))")
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:126: error: -[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate] : XCTAssertTrue failed
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:127: error: -[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate] : XCTAssertTrue failed
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' failed (4.948 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:77: error: -[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing] : XCTAssertEqual failed: ("failed("That device isn\'t sharing its library with this one.")") is not equal to ("awaitingPairing")
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' failed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:86: error: -[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied] : XCTAssertEqual failed: ("[]") is not equal to ("["/var/folders/kt/kx_ps_px15bf__n8tfjnp2f00000gn/T/8EAF26C6-1E6B-42C3-8E56-7960AA4EC70D/Software/example.iso"]")
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' failed (0.007 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:99: error: -[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes] : failed - Accepted unsafe path: ../outside.iso
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:99: error: -[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes] : failed - Accepted unsafe path: /tmp/outside.iso
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:99: error: -[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes] : failed - Accepted unsafe path: escape/outside.iso
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:99: error: -[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes] : failed - Accepted unsafe path: Software/../outside.iso
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:99: error: -[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes] : failed - Accepted unsafe path:
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' failed (0.008 seconds).
+Test Suite 'ContinuityControllerTests' failed at 2026-10-20 01:52:24.169.
+	 Executed 5 tests, with 10 failures (0 unexpected) in 4.972 (4.974) seconds
+Test Suite 'ControllerTests.xctest' failed at 2026-10-20 01:52:24.169.
+	 Executed 5 tests, with 10 failures (0 unexpected) in 4.972 (4.974) seconds
+Test Suite 'All tests' failed at 2026-10-20 01:52:24.169.
+	 Executed 5 tests, with 10 failures (0 unexpected) in 4.972 (4.975) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - ControllerTests (XCTest)

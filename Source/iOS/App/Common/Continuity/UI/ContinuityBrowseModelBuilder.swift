@@ -14,7 +14,7 @@ struct ContinuityPeerSummary: Equatable {
 enum ContinuityBrowseModelBuilder {
   static func make(peers: [ContinuityPeerSummary], trusted: [(id: String, name: String)], sharesLibrary: Bool, showsDone: Bool,
                    peerDetail: @escaping (String) -> AnyView, trustedDetail: @escaping (String) -> AnyView,
-                   sharing: AnyView, done: @escaping () -> Void) -> MenuModel {
+                   sharing: AnyView, done: @escaping () -> Void, automaticCopy: AnyView? = nil) -> MenuModel {
     var sections: [MenuSection] = []
     let peerRows: [MenuItem] = peers.isEmpty
       ? [SettingsRow.caption("looking", L("Looking for other devices running iCube on this network…"))]
@@ -27,7 +27,12 @@ enum ContinuityBrowseModelBuilder {
     var shareRow = SettingsRow.destination("share-library", L("Share My Library"), L("Let paired devices browse and copy this device's games."),
                                            icon: "square.stack.3d.up", view: sharing)
     shareRow.badge = sharesLibrary ? L("On") : L("Off")
-    sections.append(MenuSection(id: "this-device", header: L("This Device"), items: [shareRow]))
+    var deviceRows = [shareRow]
+    if let automaticCopy {
+      deviceRows.append(SettingsRow.destination("automatic-copy", L("Automatic Game Copying"),
+        L("Automatically copy new games from paired nearby devices."), icon: "arrow.down.circle", view: automaticCopy))
+    }
+    sections.append(MenuSection(id: "this-device", header: L("This Device"), items: deviceRows))
     if !trusted.isEmpty {
       sections.append(MenuSection(id: "paired", header: L("Paired Devices"), items: trusted.map {
         SettingsRow.destination("trusted-\($0.id)", $0.name, L("When this device was paired, and forget it."), icon: "checkmark.shield", view: trustedDetail($0.id))

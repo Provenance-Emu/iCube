@@ -1,0 +1,92 @@
+Building for debugging...
+[Pre-planning 1 / 66]
+[Planning deferred tasks]
+[8 / 31]
+[9 / 32] iCube
+[18 / 68]
+[19 / 68]
+[21 / 68]
+[24 / 68]
+[26 / 68]
+[28 / 68]
+[31 / 68]
+[33 / 68]
+[35 / 68]
+[37 / 68]
+[40 / 68]
+[41 / 68]
+[42 / 68]
+[43 / 68]
+[45 / 68] iCube
+[51 / 66] iCube
+[55 / 66] iCubeTests-product
+[70 / 104]
+[76 / 104]
+[79 / 104]
+[81 / 104]
+[84 / 104]
+[85 / 104]
+[86 / 104]
+[87 / 104]
+[88 / 104]
+[89 / 104]
+[90 / 104]
+[93 / 104] iCubeTests-product
+[98 / 104] iCubeTests-product
+[100 / 104] iCubeTests-product
+[103 / 104] iCubeTests-product
+Build complete! (17.38 sec)
+Test Suite 'All tests' started at 2026-10-20 01:56:57.316.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 01:56:57.317.
+Test Suite 'NearbyLibraryMirrorTests' started at 2026-10-20 01:56:57.317.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testBackgroundEmulationAndMissingPeerWaitThenResume]' started.
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:125: error: -[iCubeTests.NearbyLibraryMirrorTests testBackgroundEmulationAndMissingPeerWaitThenResume] : XCTAssertEqual failed: ("disabled") is not equal to ("waiting")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:127: error: -[iCubeTests.NearbyLibraryMirrorTests testBackgroundEmulationAndMissingPeerWaitThenResume] : XCTAssertEqual failed: ("disabled") is not equal to ("waiting")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:129: error: -[iCubeTests.NearbyLibraryMirrorTests testBackgroundEmulationAndMissingPeerWaitThenResume] : XCTAssertEqual failed: ("disabled") is not equal to ("waiting")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testBackgroundEmulationAndMissingPeerWaitThenResume] : failed - Scheduler did not reach the expected state
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testBackgroundEmulationAndMissingPeerWaitThenResume]' failed (4.792 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testCopyFailureIsActionableAndExplicitRetryResumes]' started.
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testCopyFailureIsActionableAndExplicitRetryResumes] : failed - Scheduler did not reach the expected state
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:154: error: -[iCubeTests.NearbyLibraryMirrorTests testCopyFailureIsActionableAndExplicitRetryResumes] : XCTAssertEqual failed: ("[]") is not equal to ("["disc1"]")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testCopyFailureIsActionableAndExplicitRetryResumes] : failed - Scheduler did not reach the expected state
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:157: error: -[iCubeTests.NearbyLibraryMirrorTests testCopyFailureIsActionableAndExplicitRetryResumes] : XCTAssertEqual failed: ("[]") is not equal to ("["disc1", "disc1", "disc2"]")
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testCopyFailureIsActionableAndExplicitRetryResumes]' failed (0.175 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testDisableRejectsLateCompletionAndCancelsImmediately]' started.
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testDisableRejectsLateCompletionAndCancelsImmediately] : failed - Scheduler did not reach the expected state
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:113: error: -[iCubeTests.NearbyLibraryMirrorTests testDisableRejectsLateCompletionAndCancelsImmediately] : XCTAssertEqual failed: ("0") is not equal to ("1")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:118: error: -[iCubeTests.NearbyLibraryMirrorTests testDisableRejectsLateCompletionAndCancelsImmediately] : XCTAssertEqual failed: ("[]") is not equal to ("["disc1"]")
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testDisableRejectsLateCompletionAndCancelsImmediately]' failed (0.131 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence]' started.
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence] : failed - Scheduler did not reach the expected state
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:81: error: -[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence] : XCTAssertEqual failed: ("[]") is not equal to ("["disc1", "disc2"]")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:82: error: -[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence] : XCTAssertEqual failed: ("nil") is not equal to ("Optional(60.0)")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence] : failed - Scheduler did not reach the expected state
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:87: error: -[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence] : XCTAssertEqual failed: ("[]") is not equal to ("["disc1", "disc2", "disc1", "revision2"]")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence] : failed - Scheduler did not reach the expected state
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:91: error: -[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence] : XCTAssertEqual failed: ("[]") is not equal to ("["disc2", "revision2", "disc1"]")
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence]' failed (0.581 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testOptInRequiresTrustAndNeverPairsUnknownPeers]' started.
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testOptInRequiresTrustAndNeverPairsUnknownPeers]' passed (0.023 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testRepeatedDiscoveryEventsDoNotStartConcurrentCopies]' started.
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testRepeatedDiscoveryEventsDoNotStartConcurrentCopies] : failed - Scheduler did not reach the expected state
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:101: error: -[iCubeTests.NearbyLibraryMirrorTests testRepeatedDiscoveryEventsDoNotStartConcurrentCopies] : XCTAssertEqual failed: ("[]") is not equal to ("["disc1"]")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testRepeatedDiscoveryEventsDoNotStartConcurrentCopies] : failed - Scheduler did not reach the expected state
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:104: error: -[iCubeTests.NearbyLibraryMirrorTests testRepeatedDiscoveryEventsDoNotStartConcurrentCopies] : XCTAssertEqual failed: ("[]") is not equal to ("["disc1", "disc2"]")
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testRepeatedDiscoveryEventsDoNotStartConcurrentCopies]' failed (0.326 seconds).
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testTrustRevocationDisablesSubscriptionAndRejectsLateCompletion]' started.
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:63: error: -[iCubeTests.NearbyLibraryMirrorTests testTrustRevocationDisablesSubscriptionAndRejectsLateCompletion] : failed - Scheduler did not reach the expected state
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:142: error: -[iCubeTests.NearbyLibraryMirrorTests testTrustRevocationDisablesSubscriptionAndRejectsLateCompletion] : XCTAssertEqual failed: ("0") is not equal to ("1")
+/private/tmp/icube-nearby-mirror-audit/Tests/iCubeTests/NearbyLibraryMirrorTests.swift:146: error: -[iCubeTests.NearbyLibraryMirrorTests testTrustRevocationDisablesSubscriptionAndRejectsLateCompletion] : XCTAssertEqual failed: ("[]") is not equal to ("["disc1"]")
+Test Case '-[iCubeTests.NearbyLibraryMirrorTests testTrustRevocationDisablesSubscriptionAndRejectsLateCompletion]' failed (0.039 seconds).
+Test Suite 'NearbyLibraryMirrorTests' failed at 2026-10-20 01:57:03.387.
+	 Executed 7 tests, with 25 failures (0 unexpected) in 6.068 (6.070) seconds
+Test Suite 'iCubeTests.xctest' failed at 2026-10-20 01:57:03.387.
+	 Executed 7 tests, with 25 failures (0 unexpected) in 6.068 (6.070) seconds
+Test Suite 'All tests' failed at 2026-10-20 01:57:03.387.
+	 Executed 7 tests, with 25 failures (0 unexpected) in 6.068 (6.071) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - iCubeTests (XCTest)

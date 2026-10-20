@@ -63,13 +63,15 @@ struct ICubeContinuityFileProvider: ContinuityFileProviding {
     }
 
     func fileURL(for descriptor: FileDescriptor) async throws -> URL {
-        ContinuityPaths.absoluteURL(forRelativePath: descriptor.relativePath)
+        try ContinuityPaths.validatedURL(forRelativePath: descriptor.relativePath)
     }
 
     // MARK: - Receiving
 
     func localStatus(of descriptor: FileDescriptor) async -> LocalFileStatus {
-        let url = ContinuityPaths.absoluteURL(forRelativePath: descriptor.relativePath)
+        guard let url = try? ContinuityPaths.validatedURL(forRelativePath: descriptor.relativePath) else {
+            return .missing
+        }
         guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
 
         // Size first: it is O(1) and rules out most mismatches without hashing
@@ -87,7 +89,18 @@ struct ICubeContinuityFileProvider: ContinuityFileProviding {
         // The same relative path as on the source device, under THIS device's
         // User directory. Save states bind to games by filename stem and memory
         // cards bind by directory, so the layout has to survive the trip.
-        ContinuityPaths.absoluteURL(forRelativePath: descriptor.relativePath)
+        let destination = try ContinuityPaths.validatedURL(forRelativePath: descriptor.relativePath)
+        // The puller writes a sibling .part before verification. A preexisting
+        // symlink at that staging path must satisfy the same confinement rule.
+        _ = try ContinuityPaths.validatedURL(forRelativePath: descriptor.relativePath + ".part")
+        if descriptor.kind == .gameFile,
+           FileManager.default.fileExists(atPath: destination.path),
+           await localStatus(of: descriptor) != .presentMatching {
+            // Two revisions, discs or formats can have the same filename.
+            // Receiving a peer's image must never replace the local owner's.
+            throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: destination.path])
+        }
+        return destination
     }
 
     // MARK: - Enumeration helpers

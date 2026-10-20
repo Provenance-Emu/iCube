@@ -1,0 +1,36 @@
+Harness: /tmp/icube-sharing-controller-tests
+Building for debugging...
+[Provisioning 7 / 7]
+[2 / 7] Host
+[3 / 8] Host
+[9 / 13] Host
+[11 / 13] ControllerTests-product
+[13 / 15] ControllerTests-product
+[18 / 19] ControllerTests-product
+Build complete! (2.26 sec)
+Test Suite 'All tests' started at 2026-10-20 01:51:36.131.
+Test Suite 'ControllerTests.xctest' started at 2026-10-20 01:51:36.132.
+Test Suite 'ContinuityControllerTests' started at 2026-10-20 01:51:36.132.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:103: error: -[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate] : XCTAssertEqual failed: ("finished(PVContinuity.ContinuityOutcome.bootFresh)") is not equal to ("finished(PVContinuity.ContinuityOutcome.failed(PVContinuity.ContinuityError.cancelled))")
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:104: error: -[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate] : XCTAssertTrue failed
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:105: error: -[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate] : XCTAssertTrue failed
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' failed (1.337 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:77: error: -[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing] : XCTAssertEqual failed: ("failed("That device isn\'t sharing its library with this one.")") is not equal to ("awaitingPairing")
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' failed (0.002 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:86: error: -[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied] : XCTAssertEqual failed: ("[]") is not equal to ("["/var/folders/kt/kx_ps_px15bf__n8tfjnp2f00000gn/T/D0A3C6D3-3B88-4D3B-8821-C4BD5F262988/Software/example.iso"]")
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' failed (0.003 seconds).
+Test Suite 'ContinuityControllerTests' failed at 2026-10-20 01:51:37.475.
+	 Executed 3 tests, with 5 failures (0 unexpected) in 1.343 (1.343) seconds
+Test Suite 'ControllerTests.xctest' failed at 2026-10-20 01:51:37.476.
+	 Executed 3 tests, with 5 failures (0 unexpected) in 1.343 (1.344) seconds
+Test Suite 'All tests' failed at 2026-10-20 01:51:37.476.
+	 Executed 3 tests, with 5 failures (0 unexpected) in 1.343 (1.345) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - ControllerTests (XCTest)

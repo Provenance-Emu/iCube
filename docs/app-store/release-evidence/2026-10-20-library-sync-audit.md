@@ -1,0 +1,114 @@
+# Library metadata, user-data sync and cache-loss audit — October 20
+
+Source changes after beta `1792472425`; no installed build, device, CloudKit account or Production database was mutated. Nearby import and automatic ROM mirroring are both owner-required release scope. The owner clarified automatic mirroring means **nearby while both apps are open**. Off-LAN CloudKit ROM support is future context, not a release requirement. The present user-data CloudKit provider deliberately excludes ROMs.
+
+## Repairs and controlled evidence
+
+Native macOS XCTest compiled the production coordinator, gate, LibraryStateStore, LastPlayedStore and checked-out PVCloudSync/PVSyncRules modules. Controlled providers supply bytes/errors and suspended network completion. Adapters replace only app platform paths/device identity/shared-defaults singleton, and prepend the app's normally implicit Combine import to the copied coordinator. No UIKit/Objective-C bridge, real CloudKit provider transfer or installed app was exercised.
+
+- Red: a local launch edit made while document download suspended was overwritten (`3` became `1`); a newer malformed remote document replaced a valid local document; missing local file plus surviving sync index planned a remote tombstone. [Raw red](2026-10-20-native/sync-metadata-red.log).
+- Red: startup promoted a stale defaults favorite over a persisted timestamp; reload discarded in-memory counters and missing/malformed files lost memory. [Store red](2026-10-20-native/sync-metadata-store-red.log).
+- Green: **39 XCTest cases, zero failures**, including all previous account epochs, local-I/O/core leases, conflicts, private INI and recovery tests. [Raw final](2026-10-20-native/sync-metadata-green.log). New checks also cover notification before failed upload and recreation of a purged Profiles directory.
+
+The coordinator executes a single scanner actor read/merge/write transaction after the network returns, under the same short recursive file lock as LibraryStateStore mutations (no network await under this lock). Local library mutations merge the current disk before saving, so edits just before the reload notification also retain a committed remote record. It preserves both copies when merge decoding fails, and notifies the store immediately after writing merged local bytes even if the subsequent upload fails. Store startup migrates only missing favorite records, mirrors authoritative disk values back to defaults, and merges memory with disk on reload. Store writes recreate a removed parent directory. Direct `setFavorite` now updates the defaults mirror and posts the refresh notification; both direct and defaults favorite edits within one second retain ordered timestamps. Unrelated defaults changes cannot restamp stale mirror values over a just-committed remote edit.
+
+GameProfiles follow-up: profile reads/mutations and scanner commits now share this lock, profile mutations adopt the latest disk document before changing their target record, reload merges memory with disk, and profile writes use atomic replacement. Reset still preserves Nearby Sharing exclusion and performs the existing runtime reset outside the file lock. No lock spans a network request.
+
+The exact scanner-write interleaving is exercised with a FileManager barrier just before the scanner atomic replacement and an actual concurrent GameProfiles writer. Baseline writer completed inside the scanner commit and the user's `irMode=3` reverted to `1`; fixed writer waits and retains both local edit and remote game. Baseline initializer is changed only to inject a test file URL; production logic is otherwise taken from HEAD. [Original profile red](2026-10-20-native/sync-profile-red.log), [exact concurrent commit red](2026-10-20-native/sync-profile-commit-red.log).
+
+**Final expanded suite: 47 XCTest cases, zero failures**, including all preceding 39, seven profile cases, and the actual concurrent scanner/profile case. [Final result](2026-10-20-native/sync-profile-green.log). Platform adapters additionally replace DOL/PointerMode/runtime bridge methods for compiling the full production GameProfiles on macOS; they do not establish runtime reset/core behavior. Harness: `/tmp/icube-cloud-audit/build-profile-safety.py`; new integrated tests: `GameProfileSyncTests.swift`.
+
+**Reset resurrection reproduced, then repaired:** the pinned profile merger unions game keys, and the baseline reset removed a key without a timestamped delete. Its peer's old profile therefore returned after merging. An excluded baseline reset retained exclusion without a new stamp, so an older peer's stamped full record also won. Root subsequently authorized the bounded app record extension: optional `isReset` plus `updatedAt` carries a stamped empty record through the existing opaque merger, retaining sharing exclusion. Runtime lookup falls back to recommendations, saved-profile status hides reset records, and a later edit clears reset status. The upgraded-app regression now expects old-peer merge to retain the reset. Saving a graphics snapshot with no explicit sharing choice also preserves an existing sharing exclusion; the dedicated sharing setter can still clear it. [Reset red](2026-10-20-native/sync-profile-reset-red.log), [reset green](2026-10-20-native/sync-profile-reset-green.log). Device convergence and older-app UI compatibility remain unverified.
+
+On tvOS the planner receives an empty planning index: a missing cache file causes a download, never an inferred local deletion/tombstone. Remote explicit tombstones still apply to unchanged local files; the durable index remains available for account binding, recovery and statistics. Consequence: deleting a local synced file on tvOS does not propagate deletion to other devices and can be restored from cloud. This is deliberate purge-safe behavior until explicit durable user-delete intent is implemented. Missing index is already additive on every platform. Cold-launch memory that was never successfully uploaded cannot be reconstructed from an absent file.
+
+Checked package revisions (read-only): PVCloudSync `82ff294c772c79029312fda12a943760b934c9de`, PVSyncRules `223d78c829e9456b7f135cca5b594d62f1c63d63`, PVContinuity `9dae36f45f181b5ca357672e0dd99d165eb18223`, under `shared-package-recovery/icube-derived/SourcePackages/checkouts`. Harness lives at `/tmp/icube-cloud-audit/build-metadata-safety.py`; persistent test sources are `CloudSyncSafetyTests.swift` and `LibraryStateStoreTests.swift` in `DolphiniOSTests`. Tuist regeneration is required before integrated execution of the new test file.
+
+## Actual category matrix
+
+Global CloudKit sync defaults **off**. When enabled, categories below are bidirectional within iCube's private `iCloud.com.joemattiello.iCube` / `iCubeUserData` / `iCubeUserFile` provider. No per-category on/off switches exist for the always-on rows. Sizes are scanner admission limits, not a promise that a transfer succeeds.
+
+| Data | Shipped path/rule | Default when sync enabled / merge | Current evidence/blocker |
+|---|---|---|---|
+| Favorites, recent, launch/play counters | `Profiles/library_state.json` | On; field merge: timestamped favorite, max recent, per-device max counters | Native merge/store tests; Production pair convergence open |
+| Custom title/artwork/tags | App-owned `Profiles/LibraryMetadata/<SHA256(identity)>.json` | On; opaque per-field timestamp document via `.gameProfile` engine bucket; 1 MiB/shard, 256 KiB/cover | Model + app controlled provider + actual offline CloudKit decoder verified; device convergence open |
+| Native progress | `GC/**/*.raw`, `.gci`; Wii title `data/**` plus SYSCONF; `GBA/Saves/**` | On; whole-file; 64 MiB cap each | Controlled provider safety only; native compatibility and device convergence open |
+| Emulator states, resume, metadata, thumbnails | `StateSaves/*.sNN`, `.auto`, `.json`, `.png` | On; whole-file; 64 MiB each | State-version/build compatibility and device save/load open; payloads/siblings transfer independently |
+| Global config and controllers | `Config/*.ini` | On; whole-file; 64 MiB | `RetroAchievements.ini`, `DSUClient.ini` excluded at app boundary in both directions, including tombstones/conflicts; legacy cloud records not purged |
+| Per-game config/cheats | `GameSettings/*.ini` | On; whole-file; 64 MiB | Cheats share same INI; no independent cheat category |
+| Game profiles | `Profiles/game_profiles.json` | On; keyed timestamp document | Serialized owner/scanner source transactions and native race tests; stamped reset record regression passes; device runtime integration open |
+| Touch layouts, skins | `Profiles/touch_overlay_layout*.json`; `Skins/selection.json` and skin folders | On; whole-file; skin 32 MiB, layouts 64 MiB | Device relevance/compatibility still requires acceptance |
+| GameCube IPL | `GC/IPL.bin`, region IPL | Off opt-in; 4 MiB | Firmware toggle; device acceptance open |
+| Wii channels, DLC/content | recognized channel title types, tickets, `shared1` | Off opt-in; 256 MiB each | Channels toggle; full-NAND toggle implies channels |
+| Wii system/NAND remainder | remaining allowed Wii trees excluding transient tmp/import | Off opt-in; 256 MiB each | Full NAND toggle; shared ownership safety tested with gate, device acceptance open |
+| ROMs, caches, dumps, logs, load packs, shaders, screenshots | Hard excluded dirs/extensions | Never via user-data provider | Separate automatic ROM transport required |
+
+Large-files-over-Wi-Fi-only defaults **on**, but pinned `isLarge` means only firmware/channels/system NAND. Save states, memory cards and skins do not wait for unconstrained networking under that switch.
+
+Metadata identity is **GameID only** for favorites/recent/counters; new custom title/cover/tag shards use the app model's GameID/disc/revision identity or a supplied SHA-256 content identity for homebrew. Revisions/discs with the same ID intentionally share these fields today. Nearby catalog identity is stronger (`id:<GameID>|d<disc>|r<revision>`), while Provenance cloud ROM identity is an uppercase file MD5. None of these is a demonstrated universal metadata identity contract.
+
+## Direction and transport matrix
+
+| Direction | Actual current mechanism | Boundary / blocker |
+|---|---|---|
+| iCube ↔ iCube metadata/progress, iPhone/iPad/tvOS | Private user-data CloudKit | Source safety and controlled provider tests; signed Production pair/device convergence remains open |
+| iCube → iCube ROM | Paired `_icube-continuity._tcp`, catalog/manifest v1, explicit copy | No subscription, durable automatic transfer queue or off-LAN transport found in current browse controller/manager |
+| iCube ↔ Provenance nearby ROM | Provenance PVLibrarySharing iCube dialect | Serving app foreground/reconnect and each direction require device proof; library manifests are ROM-only |
+| iCube ↔ Provenance same-device ROM | Deep links + user-mediated file export/import | Separate path; sender HTTP availability cannot be assumed after suspension |
+| iCube ↔ Provenance library edits/progress | No implemented convergence contract | Sibling entitlements alone do not map identity, records or native-save ownership; emulator states cannot be assumed portable |
+| Automatic nearby ROM mirroring across installs/apps | Required while both apps are open; currently unimplemented in iCube | Reuse existing catalog/manifest/puller under an opt-in subscription and durable queue; this requirement is not closed by manual nearby copy |
+
+Provenance's as-built cross-app sharing spec explicitly says ROM files only; same-iCloud nearby saves remain blocked on the shared `ic` identity container/salt decision. That concerns nearby automatic trust and does not prevent a separately authorized same-user private CloudKit reader.
+
+## Existing off-LAN reuse candidate (read-only research)
+
+Provenance has a real ROM provider in `PVLibrary/Sources/PVLibrary/Cloud Sync/iCloud/CloudKit/CloudKitRomsSyncer.swift` and a schema in adjacent `CloudKitSchema.swift`. Its actual database is `CKContainer(...).privateCloudDatabase` (despite a stale schema comment saying public), with default-zone `ROM` records named `rom_<MD5>`. The primary container normally is `iCloud.org.provenance-emu.provenance`; Info.plist can override it and DEBUG defaults to `iCloud.org.provenance-emu.provenance.dev`. Release fallback to the dev container is read-only and may be inaccessible. Source iCube AppStore/NJB entitlements already list the Provenance production container; actual distribution-signed access requires verification.
+
+Existing fields include `md5`, `systemIdentifier`, `fileData` CKAsset, `isArchive`, `originalFilename`, `relatedFilenames`, `relativePath`, `isDeleted`, title/statistics and custom-art asset. The record ID generator does not normalize by itself; callers uppercase MD5.
+
+A bounded first adapter could query only GC/Wii metadata, show remote entries, download assets into contained staging, verify the full-ROM digest, and register complete files using iCube's existing importer. Keep it read-only initially: treat remote deleted records as unavailable sources, preserve acquired local copies, ignore Provenance path strings as destination authority, and do not write favorites/counters/art back until ownership/merge rules are agreed. Existing Nearby client/puller remains the resumable LAN path; durable subscription selection, deduplication by content, retry/cancel, quota/disk failures, boot ownership and cache-purge recovery are still required for automatic operation.
+
+**Future off-LAN large-ROM limitation (not current release blocker):** Provenance upload currently hard-rejects a primary file above **500 MiB** (`CloudKitRomsSyncer.swift`, upload section around lines 905–917). Many GameCube/Wii images exceed this application cap. Thus a consumer of the existing schema alone cannot satisfy complete off-LAN GC/Wii mirroring. The current foreground-nearby release design can retain existing Range/SHA-256 transport and avoids this CloudKit cap. Reusing an external content server/WebDAV source can move large ROMs if the source is configured; a universal CloudKit solution needs a separately reviewed chunked manifest/assets contract (or verified alternative) and a Provenance writer change. No backend/schema/Provenance edits were made here.
+
+
+## Final app-owned library edit sync integration
+
+Published reviewed dependency **PVSyncRules 1.0.2**, commit `692ca3a1a84cb713c42bf775d5558c97d0bf05d3`, on authoritative `main`. Annotated tag object `329d3932d8d5501062445c090eb2df6da9ce2858`; both remote main and tag peel were verified. Only the exact canonical metadata-shard classifier and three regression cases were committed/pushed in the owned `/tmp/icube-library-release/PVSyncRules` clone. No SPM cache was edited and PVCloudSync was not republished.
+
+The first app-only scanner proposal was insufficient: actual pinned CloudKitSyncProvider rejects any incoming record whose path classifier rejects. The unchanged **real provider's offline CKRecord decoder** reproduces this drop before the rules update and admits bounded canonical shards afterward. The existing `gameProfile` raw category is an engine merge bucket only; emulator profiles remain a separate app model/file. No new CloudKit record type, zone, or backend was introduced.
+
+- Rules: **37 native XCTest cases passed**. Exact case/prefix, 64 lower-case hexadecimal filename, no nested/dot/traversal variants, and 1 MiB cap are covered; the existing game-profile document limit is preserved. [Red](2026-10-20-native/sync-classifier-red.log), [green](2026-10-20-native/sync-classifier-green.log).
+- Existing PVCloudSync plus added offline decoder case: **105 native XCTest cases passed**. These use real CKRecord mapping and actual scanner/planner/mergers without a network, account, container initialization or Production schema mutation. [Red](2026-10-20-native/sync-provider-decoder-red.log), [green](2026-10-20-native/sync-provider-decoder-green.log). Fixture sources and native package runner are retained in [package fixtures](2026-10-20-native/library-sync-package-fixtures/).
+- **Final app suite: 56 native XCTest cases passed**, zero failures. [Final raw result](2026-10-20-native/sync-library-edits-green.log). The coordinator suite includes shard upload/download, notification relative path, independent-field merge and null clears; rejects malformed/wrong-identity/oversized/forged-category/checksum-invalid remote input. A paused actual scanner commit excludes a concurrent actual metadata-store write and retains the remote tag plus the local title edit. First download also merges a local document created while the network was suspended and records the committed checksum.
+
+The entire initial scanner pass now holds a local-I/O lease, including hashing: a core boot waits for that scan to drain, and the scan never holds the lease across provider network work. Notification relative paths route metadata shards to LibraryMetadataService rather than GameProfiles. Settings names the grouped bucket “Game Profiles and Library Edits” and explicitly includes custom titles/covers/tags. The new model validation checks both field bounds and shard filename/identity linkage before committing cloud bytes. The normal package scanner and writer handle the reviewed path; no app-only classifier bypass was added.
+
+These results do not establish installed UIKit lifecycle routing, signed Production CloudKit convergence, account access on real devices, or cross-app custom-metadata compatibility. Those remain release gates.
+
+
+## Physical core-drain wake for automatic nearby mirroring
+
+The UI's emulation-ended event can arrive before the physical core releases its files, leaving the mirror service waiting while discovery stays unchanged. After an accepted `ICubeCloudSyncBootGate.finishCoreDrain`, the MainActor task now awaits the cloud coordinator's drain delivery, rechecks the exact current drain generation, and calls the nearby mirror's `environmentChanged()`.
+
+The native seam compiles the actual BootGate implementation extracted unchanged from `CloudSyncLifecycleService.swift`, the actual coordinator/gate and a recording ContinuityManager mirror adapter. It reproduces the missing wake with the preceding BootGate implementation. Cases cover UI end while the gate remains closed, accepted physical-drain delivery, rejected stale worker drain, and a new boot superseding an already queued drain. This establishes callback and generation behavior only; UIKit lifecycle delivery and the actual Bonjour/mirror scheduler remain separate integration gates. [Baseline red](2026-10-20-native/sync-drain-mirror-red.log).
+
+Final expanded native suite: **59 XCTest cases passed, zero failures**, including the preceding 56 plus three drain-delivery cases. [Final green](2026-10-20-native/sync-drain-mirror-green.log).
+
+
+## Library UI publication after metadata changes
+
+A source review found that metadata changes posted `GameFileMetadataUpdated`, while the library coordinator subscribed only to `RemoteLibraryUpdated`; remote title/cover/tag edits could therefore leave the observed grid unchanged until another UI interaction. The coordinator now observes both notifications through its existing debounce/reload pipeline. Main-thread posts retain immediate delivery (so a game ending inside the debounce window consumes pending work once); background posts hop to MainActor. Reloads remain deferred during an active emulation session.
+
+The native harness extracts the actual LibraryCoordinator class and its actual nine XCTest cases from the repository, compiles the full production EmulationState, and replaces only UIKit game values/bridge, logging and telemetry adapters. The three new cases reproduce missing metadata publication, missing deferred reload, and missing main-thread publication from a background post before the fix. The tests verify the publisher feeding the existing UI model, not rendered UIKit card/search/sort behavior. [Red](2026-10-20-native/sync-library-refresh-red.log). The native harness is retained alongside the other package fixtures.
+
+Final coordinator refresh result: **9 XCTest cases passed, zero failures**, including existing debounce/emulation-deferral regressions and all three metadata-notification cases. [Green](2026-10-20-native/sync-library-refresh-green.log).
+
+
+## Homebrew content-identity warm wiring
+
+After publishing the current library, LibraryCoordinator requests `LibraryMetadataService.warmContentIdentities(for:)` only when its own injected EmulationState is idle. A forced first load still displays during a session without starting hashing; deferred reload requests warming after session end. The service separately owns its physical-core check, bounded background hashing, cancellation and receipt persistence.
+
+Native call-seam coverage: **12 XCTest cases passed**, zero failures: the preceding nine coordinator regressions plus three recording-service fixture cases for idle load, forced mid-game load and deferred reload after end. [Baseline red](2026-10-20-native/sync-library-warm-wiring-red.log), [green](2026-10-20-native/sync-library-warm-wiring-green.log). This proves the coordinator invokes the intended service at the intended UI-state boundary; it does not execute UIKit service hashing or establish foreground/physical-core retry behavior.
+
+
+The accepted/current physical-drain callback also calls `LibraryMetadataService.resumeContentIdentityWarming()` beside the mirror wake, after cloud drain delivery and the generation recheck. The native BootGate seam records both callbacks: **59 cases pass, zero failures**; baseline fails the missing homebrew-resume assertion, while stale/superseded generations call neither service. [Resume red](2026-10-20-native/sync-homebrew-drain-resume-red.log), [green](2026-10-20-native/sync-homebrew-drain-resume-green.log). The recording adapter proves callback routing only; the UIKit service's actual stat-bound hashing, foreground filtering and cancellation are owned and verified separately.

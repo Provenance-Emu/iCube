@@ -81,8 +81,8 @@ enum CloudSyncModelBuilder {
       SettingsRow.caption("scope-3", "✓ " + L("Wii save data")),
       SettingsRow.caption("scope-4", "✓ " + L("Settings, per-game settings and cheats")),
       SettingsRow.caption("scope-5", "✗ " + L("Games are never uploaded")),
-      SettingsRow.caption("scope-6", "✗ " + L("Cover art is not uploaded — it is re-downloaded instead")),
-      SettingsRow.caption("scope-7", "✗ " + L("System firmware is never uploaded")),
+      SettingsRow.caption("scope-6", "✓ " + L("Custom titles, covers and classification tags")),
+      SettingsRow.caption("scope-7", "✓ " + L("Firmware and Wii channels sync only when enabled")),
     ]))
     return MenuModel(sections: sections)
   }

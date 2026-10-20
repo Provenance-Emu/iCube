@@ -1,0 +1,29 @@
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 66]
+[Planning deferred tasks]
+[4 / 21]
+[6 / 15] iCubeTests-product
+[8 / 17] iCubeTests-product
+[12 / 16] iCubeTests-product
+[14 / 16] iCubeTests-product
+[15 / 16] iCubeTests-product
+[16 / 16] iCubeTests-product
+Build complete! (8.42 sec)
+Test Suite 'Selected tests' started at 2026-10-20 02:34:27.424.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 02:34:27.426.
+Test Suite 'LibraryMetadataServiceTests' started at 2026-10-20 02:34:27.426.
+Test Case '-[iCubeTests.LibraryMetadataServiceTests testSyntheticHomebrewIDsCannotClaimDiscIdentity]' started.
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataServiceTests.swift:13: error: -[iCubeTests.LibraryMetadataServiceTests testSyntheticHomebrewIDsCannotClaimDiscIdentity] : XCTAssertNil failed: "Identity(rawValue: "game:PFVOS05PV04+:0:0")" - <unknown>
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataServiceTests.swift:13: error: -[iCubeTests.LibraryMetadataServiceTests testSyntheticHomebrewIDsCannotClaimDiscIdentity] : XCTAssertNil failed: "Identity(rawValue: "game:PFVOS05PV04+:0:0")" -  <UNKNOWN>
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataServiceTests.swift:13: error: -[iCubeTests.LibraryMetadataServiceTests testSyntheticHomebrewIDsCannotClaimDiscIdentity] : XCTAssertNil failed: "Identity(rawValue: "game:SUQtU0FNRU5BTUU=:0:0")" - ID-SameName
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataServiceTests.swift:13: error: -[iCubeTests.LibraryMetadataServiceTests testSyntheticHomebrewIDsCannotClaimDiscIdentity] : XCTAssertNil failed: "Identity(rawValue: "game:SUQtQU5PVEhFUi5ET0w=:0:0")" - id-another.dol
+Test Case '-[iCubeTests.LibraryMetadataServiceTests testSyntheticHomebrewIDsCannotClaimDiscIdentity]' failed (4.913 seconds).
+Test Suite 'LibraryMetadataServiceTests' failed at 2026-10-20 02:34:32.340.
+	 Executed 1 test, with 4 failures (0 unexpected) in 4.913 (4.913) seconds
+Test Suite 'iCubeTests.xctest' failed at 2026-10-20 02:34:32.340.
+	 Executed 1 test, with 4 failures (0 unexpected) in 4.913 (4.913) seconds
+Test Suite 'Selected tests' failed at 2026-10-20 02:34:32.340.
+	 Executed 1 test, with 4 failures (0 unexpected) in 4.913 (4.916) seconds
+Note: Some test targets reported failures:
+  - iCubeTests (XCTest)

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "TVGameItem.h"
+#import "Swift.h"
 
 #import "SharedDefaults.h"
 #import "GameFilePtrWrapper.h"
@@ -44,6 +45,13 @@
             _title = @"<null GameFile>";
             _filePath = @"<null>";
             _id = @"<null>";
+            // Even an invalid core handle crosses the nonnull Swift metadata
+            // bridge through title/cover/tags getters. Keep that model valid.
+            _gameID = @"";
+            _countryName = @"";
+            _makerLong = @"";
+            _gametdbID = @"";
+            _coverImage = [UIImage imageNamed:@"NoCover"] ?: [UIImage new];
             return self;
         }
 
@@ -196,10 +204,12 @@
 }
 
 - (NSString *)id { return _id; }
-- (NSString *)title { return _title; }
+- (NSString *)title { return [LibraryMetadataService customTitleFor:self] ?: _title; }
 - (NSString *)filePath { return _filePath; }
 - (BOOL)isNKit { return _isNKit; }
-- (UIImage *)coverImage { return _coverImage; }
+- (UIImage *)coverImage { return [LibraryMetadataService customCoverFor:self] ?: _coverImage; }
+- (UIImage *)originalCoverImage { return _coverImage; }
+- (NSArray<NSString *> *)libraryTags { return [LibraryMetadataService tagsFor:self]; }
 - (UIImage * _Nullable)bannerImage { return _bannerImage; }
 - (GameFilePtrWrapper *)wrapper { return _wrapper; }
 - (NSString *)gameID { return _gameID; }
@@ -213,7 +223,7 @@
 - (NSUInteger)fileSize { return _fileSize; }
 - (NSInteger)platform { return _platform; }
 - (BOOL)isDemoItem { return _demoItem; }
-- (BOOL)hasCoverArt { return _hasCoverArt; }
+- (BOOL)hasCoverArt { return [LibraryMetadataService customCoverFor:self] != nil || _hasCoverArt; }
 
 - (BOOL)isFavorite {
     if (!_gameID) return NO;

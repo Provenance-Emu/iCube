@@ -1,0 +1,62 @@
+Harness: /tmp/icube-sharing-controller-tests
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 182]
+[Planning deferred tasks]
+[2 / 32] ContinuityControllerHarness_PVWebServer
+[6 / 19] Host
+[11 / 26] Host
+[12 / 26] Host
+[13 / 26] Host
+[14 / 25] Host
+[18 / 28] Host
+[20 / 28] Host
+[22 / 28] ControllerTests-product
+[24 / 30] ControllerTests-product
+[28 / 32] ControllerTests-product
+[30 / 32] ControllerTests-product
+[32 / 32] ControllerTests-product
+Build complete! (7.07 sec)
+Test Suite 'All tests' started at 2026-10-20 02:01:37.222.
+Test Suite 'ControllerTests.xctest' started at 2026-10-20 02:01:37.223.
+Test Suite 'ContinuityControllerTests' started at 2026-10-20 02:01:37.223.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledCopyCannotRegisterWhenManifestReturnsLate]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledCopyCannotRegisterWhenManifestReturnsLate]' passed (0.008 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledLibraryApprovalFinishesWithoutUserResponse]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:123: error: -[ControllerTests.ContinuityControllerTests testCancelledLibraryApprovalFinishesWithoutUserResponse] : XCTAssertTrue failed - Cancellation must finish without an owner response
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:124: error: -[ControllerTests.ContinuityControllerTests testCancelledLibraryApprovalFinishesWithoutUserResponse] : XCTAssertNil failed: "PendingLibraryPullPrompt(id: F5768E9D-50B6-46E6-98EE-A6F5745179BF, peerName: "peer", gameName: "game", respond: (Function))"
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledLibraryApprovalFinishesWithoutUserResponse]' failed (5.026 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledPairingApprovalFinishesWithoutUserResponse]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:97: error: -[ControllerTests.ContinuityControllerTests testCancelledPairingApprovalFinishesWithoutUserResponse] : XCTAssertTrue failed - Cancellation must finish without an owner response
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:98: error: -[ControllerTests.ContinuityControllerTests testCancelledPairingApprovalFinishesWithoutUserResponse] : XCTAssertNil failed: "PendingPairingPrompt(id: A225BA04-8959-4F15-B2E6-5C1AF3C95EE4, peerName: "peer", code: "123456", respond: (Function))"
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledPairingApprovalFinishesWithoutUserResponse]' failed (0.035 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testDifferingROMCollisionPreservesExistingFile]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testDifferingROMCollisionPreservesExistingFile]' passed (0.018 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles]' passed (0.006 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryPairing404AuthenticatesAndBrowsesWithoutHandoff]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryPairing404AuthenticatesAndBrowsesWithoutHandoff]' passed (0.011 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' passed (0.015 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testWrongPairingCodeCanBeRetried]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testWrongPairingCodeCanBeRetried]' passed (0.003 seconds).
+Test Suite 'ContinuityControllerTests' failed at 2026-10-20 02:01:42.362.
+	 Executed 12 tests, with 4 failures (0 unexpected) in 5.136 (5.139) seconds
+Test Suite 'ControllerTests.xctest' failed at 2026-10-20 02:01:42.363.
+	 Executed 12 tests, with 4 failures (0 unexpected) in 5.136 (5.139) seconds
+Test Suite 'All tests' failed at 2026-10-20 02:01:42.363.
+	 Executed 12 tests, with 4 failures (0 unexpected) in 5.136 (5.141) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - ControllerTests (XCTest)

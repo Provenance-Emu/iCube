@@ -95,7 +95,7 @@ struct ICubeLibraryProvider: ContinuityLibraryProviding {
     }
 
     func fileURL(for descriptor: FileDescriptor) async throws -> URL {
-        ContinuityPaths.absoluteURL(forRelativePath: descriptor.relativePath)
+        try ContinuityPaths.validatedURL(forRelativePath: descriptor.relativePath)
     }
 
     // MARK: - Helpers

@@ -1,0 +1,49 @@
+Building for debugging...
+[Computing dependencies]
+[1 / 6] iCubeTests-product
+[2 / 6] iCubeTests-product
+[4 / 8] iCubeTests-product
+[10 / 12] iCubeTests-product
+[12 / 12] iCubeTests-product
+Build complete! (4.92 sec)
+Test Suite 'All tests' started at 2026-10-20 02:07:31.107.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 02:07:31.117.
+Test Suite 'LibraryMetadataStoreTests' started at 2026-10-20 02:07:31.117.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testAllMaximumFieldValuesRoundTripAndBlankTitleClearsOnlyTitle]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testAllMaximumFieldValuesRoundTripAndBlankTitleClearsOnlyTitle]' passed (0.028 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testClearWritesTimestampedNullTombstonesAndClockRollbackCannotResurrect]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testClearWritesTimestampedNullTombstonesAndClockRollbackCannotResurrect]' passed (0.014 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testCorruptReloadAndCommitPreserveMemoryAndCorruptBytes]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testCorruptReloadAndCommitPreserveMemoryAndCorruptBytes]' passed (0.012 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testDiscRevisionAndContentHashIdentitiesDoNotAlias]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testDiscRevisionAndContentHashIdentitiesDoNotAlias]' passed (0.007 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testInvalidEditsPreservePreviousFileAndMemory]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testInvalidEditsPreservePreviousFileAndMemory]' passed (0.002 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testMalformedKnownRecordReloadKeepsPreviousValidProjection]' started.
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataStoreTests.swift:140: error: -[iCubeTests.LibraryMetadataStoreTests testMalformedKnownRecordReloadKeepsPreviousValidProjection] : XCTAssertThrowsError failed: did not throw an error
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataStoreTests.swift:141: error: -[iCubeTests.LibraryMetadataStoreTests testMalformedKnownRecordReloadKeepsPreviousValidProjection] : XCTAssertEqual failed: threw error "invalidRecord("title")"
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testMalformedKnownRecordReloadKeepsPreviousValidProjection]' failed (3.572 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testNoOpDraftDoesNotStampOrRewriteAnyRecord]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testNoOpDraftDoesNotStampOrRewriteAnyRecord]' passed (0.003 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testOnlyChangedFieldsOverwriteConcurrentDiskEdits]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testOnlyChangedFieldsOverwriteConcurrentDiskEdits]' passed (0.007 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testTitleCoverTagsCommitAndReopenWithNormalizedValues]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testTitleCoverTagsCommitAndReopenWithNormalizedValues]' passed (0.004 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testUncommittedDraftHasNoSideEffects]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testUncommittedDraftHasNoSideEffects]' passed (0.001 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testUnknownRootRecordsAndKnownRecordFieldsSurviveSave]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testUnknownRootRecordsAndKnownRecordFieldsSurviveSave]' passed (0.006 seconds).
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testWriteFailurePreservesPriorRecordAndSurfacesError]' started.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testWriteFailurePreservesPriorRecordAndSurfacesError]' passed (0.003 seconds).
+Test Suite 'LibraryMetadataStoreTests' failed at 2026-10-20 02:07:34.779.
+	 Executed 12 tests, with 2 failures (1 unexpected) in 3.658 (3.662) seconds
+Test Suite 'iCubeTests.xctest' failed at 2026-10-20 02:07:34.779.
+	 Executed 12 tests, with 2 failures (1 unexpected) in 3.658 (3.662) seconds
+Test Suite 'All tests' failed at 2026-10-20 02:07:34.779.
+	 Executed 12 tests, with 2 failures (1 unexpected) in 3.658 (3.672) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - iCubeTests (XCTest)

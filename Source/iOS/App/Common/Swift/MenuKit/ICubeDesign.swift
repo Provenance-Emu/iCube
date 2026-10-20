@@ -127,6 +127,14 @@ struct ICubeDesign {
     case hairline = 1, focus = 4
   }
 
+  enum LibraryArtwork {
+    #if os(tvOS)
+    static let editorPreviewHeight: CGFloat = 320
+    #else
+    static let editorPreviewHeight: CGFloat = 220
+    #endif
+  }
+
   // MARK: Motion (spec §2.7)
 
   enum Motion {

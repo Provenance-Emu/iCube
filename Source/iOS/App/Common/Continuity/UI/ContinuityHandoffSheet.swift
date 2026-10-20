@@ -56,15 +56,12 @@ struct ContinuityHandoffSheet: View {
             }
             .navigationTitle(L("Continue On Another Device"))
         }
-        // A peer that pairs with this device does so while this sheet is up,
-        // because this is the device that is serving. The prompt belongs here.
-        .continuityPairingPrompt()
     }
 }
 
 // MARK: - Pairing prompt
 
-/// Presents the incoming-pairing prompt wherever it is attached.
+/// Presents incoming pairing from the app root, which owns the single alert.
 ///
 /// An alert rather than a sheet: it has to interrupt, it carries a code the
 /// user reads aloud, and it has exactly two answers. `.alert` gives a usable
@@ -88,7 +85,7 @@ private struct ContinuityPairingPromptModifier: ViewModifier {
             Button(L("Don't Allow"), role: .cancel) { prompt.respond(false) }
         } message: { prompt in
             Text(String(
-                format: L("%@ wants to continue your game. Read this code out to confirm it's them:\n\n%@\n\n%@"),
+                format: L("%@ wants to pair with this device. Read this code out to confirm it's them:\n\n%@\n\n%@"),
                 prompt.peerName,
                 prompt.code,
                 ContinuityManager.transportSecurityNotice
@@ -98,7 +95,7 @@ private struct ContinuityPairingPromptModifier: ViewModifier {
 }
 
 extension View {
-    /// Attach on any screen that can be live while this device is serving.
+    /// Attach once at the app root so library-only hosts can approve pairing.
     func continuityPairingPrompt() -> some View {
         modifier(ContinuityPairingPromptModifier())
     }

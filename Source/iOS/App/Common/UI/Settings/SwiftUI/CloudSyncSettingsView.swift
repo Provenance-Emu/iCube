@@ -157,8 +157,7 @@ struct CloudSyncSettingsView: View {
             Label(L("Favorites, last played and play time"), systemImage: "checkmark")
             Label(L("Games are never uploaded"), systemImage: "xmark")
                 .foregroundStyle(.secondary)
-            Label(L("Cover art is not uploaded — it is re-downloaded instead"), systemImage: "xmark")
-                .foregroundStyle(.secondary)
+            Label(L("Custom titles, covers and classification tags"), systemImage: "checkmark")
         }
     }
 
@@ -341,7 +340,7 @@ struct CloudSyncSettingsView: View {
         case .gbaSave: return L("GBA Saves")
         case .config: return L("Settings")
         case .gameSettings: return L("Per-Game Settings & Cheats")
-        case .gameProfile: return L("Game Profiles")
+        case .gameProfile: return L("Game Profiles and Library Edits")
         case .touchOverlayLayout: return L("Touch Controls Layout")
         case .libraryState: return L("Favorites & Play Stats")
         case .skin: return L("Controller Skins")

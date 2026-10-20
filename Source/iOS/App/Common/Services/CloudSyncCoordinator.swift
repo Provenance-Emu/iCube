@@ -67,6 +67,7 @@ final class CloudSyncCoordinator: ObservableObject {
     /// raw value. Stores that own those files reload on it.
     static let documentDidChangeNotification = Notification.Name("CloudSyncDocumentDidChangeNotification")
     static let fileTypeKey = "fileType"
+    static let relativePathKey = "relativePath"
 
     /// These whole files contain account credentials or device-local network endpoints.
     /// Keep the pinned package classifier unchanged; apply this app privacy boundary in both directions.
@@ -79,6 +80,15 @@ final class CloudSyncCoordinator: ObservableObject {
         }
         let path = components.joined(separator: "/")
         return path != "config/retroachievements.ini" && path != "config/dsuclient.ini"
+    }
+
+    private static func isEligibleMetadata(_ metadata: SyncableFileMetadata) -> Bool {
+        guard isEligibleForCloudSync(relativePath: metadata.relativePath) else { return false }
+        if SyncClassifier.isLibraryMetadataShard(relativePath: metadata.relativePath) {
+            return metadata.fileType == .gameProfile && metadata.fileSize >= 0 &&
+                metadata.fileSize <= SyncClassifier.libraryMetadataMaxFileSizeBytes
+        }
+        return true
     }
 
     // MARK: - Observable state
@@ -484,6 +494,20 @@ final class CloudSyncCoordinator: ObservableObject {
         heldForWiFiCount = 0
     }
 
+    /// A cache purge is indistinguishable from a local deletion on tvOS.
+    /// Infer deletes only on durable storage; explicit remote tombstones still apply.
+    static func planningIndex(_ index: SyncIndexSnapshot, purgeableStorage: Bool) -> SyncIndexSnapshot {
+        purgeableStorage ? .empty : index
+    }
+
+    private static var usesPurgeableStorage: Bool {
+        #if os(tvOS)
+        return true
+        #else
+        return false
+        #endif
+    }
+
     // MARK: - The sync run
 
     private func runSync(trigger: SyncTrigger) async {
@@ -497,8 +521,13 @@ final class CloudSyncCoordinator: ObservableObject {
         // Scan first, and unconditionally. The local inventory is the half that
         // does not need a cloud, so the settings pane can show what *would*
         // sync on a build with no container at all.
-        let local = await scanner.scanLocalFiles(policy: policy)
-            .filter { Self.isEligibleForCloudSync(relativePath: $0.relativePath) }
+        let local: [SyncableFileMetadata]
+        do {
+            local = try await withLocalIO(generation: generation) {
+                await scanner.scanLocalFiles(policy: policy)
+                    .filter { Self.isEligibleForCloudSync(relativePath: $0.relativePath) }
+            }
+        } catch { return }
         guard canContinueTransfer(generation: generation) else { return }
         rebuildMetadataCache(from: local)
         refreshStatistics()
@@ -517,7 +546,7 @@ final class CloudSyncCoordinator: ObservableObject {
             let snapshot = try await provider.fetchRemoteSnapshot()
             guard canContinueTransfer(generation: generation) else { return }
             remote = RemoteSyncSnapshot(
-                files: snapshot.files.filter { Self.isEligibleForCloudSync(relativePath: $0.relativePath) },
+                files: snapshot.files.filter { Self.isEligibleMetadata($0) },
                 tombstones: snapshot.tombstones.filter { Self.isEligibleForCloudSync(relativePath: $0.relativePath) },
                 cursor: snapshot.cursor)
         } catch {
@@ -550,7 +579,8 @@ final class CloudSyncCoordinator: ObservableObject {
         let steps = planner.plan(
             local: local,
             remote: remote,
-            index: SyncIndexSnapshot(entries: storedIndex.entries.filter { Self.isEligibleForCloudSync(relativePath: $0.key) }),
+            index: Self.planningIndex(SyncIndexSnapshot(entries: storedIndex.entries.filter { Self.isEligibleForCloudSync(relativePath: $0.key) }),
+                                      purgeableStorage: Self.usesPurgeableStorage),
             policy: policy,
             now: now,
             deviceIdentifier: SyncDeviceIdentity.deviceIdentifier()
@@ -654,7 +684,7 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     func recordConflict(_ conflict: SyncConflict) {
-        guard Self.isEligibleForCloudSync(relativePath: conflict.metadata.relativePath) else { return }
+        guard Self.isEligibleMetadata(conflict.metadata) else { return }
         let existing = pendingConflicts.firstIndex { $0.metadata.relativePath == conflict.metadata.relativePath }
         if let existing {
             let previous = pendingConflicts[existing]
@@ -687,23 +717,25 @@ final class CloudSyncCoordinator: ObservableObject {
         index: SyncIndexStore,
         generation requestedGeneration: TransferEpoch? = nil
     ) async -> Bool {
-        guard Self.isEligibleForCloudSync(relativePath: metadata.relativePath) else { return false }
+        guard Self.isEligibleMetadata(metadata) else { return false }
         let generation = requestedGeneration ?? captureTransferEpoch()
         var working = metadata
         working.syncStatus = .uploading
         metadataCache[working.relativePath] = working
         do {
             let data = try await withLocalIO(generation: generation) {
-                try await scanner.readFile(relativePath: metadata.relativePath)
+                try await scanner.readAppFile(relativePath: metadata.relativePath)
             }
             try requireTransferAccess(generation: generation)
-            try await provider.upload(metadata: metadata, data: data)
+            working.checksum = SyncChecksum.sha256Hex(data)
+            working.fileSize = Int64(data.count)
+            try await provider.upload(metadata: working, data: data)
             try requireTransferAccess(generation: generation)
             working.syncStatus = .synced
             working.lastSyncDate = Date()
             working.lastError = nil
             metadataCache[working.relativePath] = working
-            await index.record(path: metadata.relativePath, checksum: metadata.checksum, lastModified: metadata.lastModified)
+            await index.record(path: working.relativePath, checksum: working.checksum, lastModified: working.lastModified)
             addEvent(.upload, file: metadata.relativePath, message: "Uploaded (\(reason.rawValue))")
             return true
         } catch is TransferDeferred {
@@ -730,7 +762,7 @@ final class CloudSyncCoordinator: ObservableObject {
         userSelectedRemote: Bool = false,
         generation requestedGeneration: TransferEpoch? = nil
     ) async -> Bool {
-        guard Self.isEligibleForCloudSync(relativePath: metadata.relativePath) else { return false }
+        guard Self.isEligibleMetadata(metadata) else { return false }
         let generation = requestedGeneration ?? captureTransferEpoch()
         var working = metadata
         working.syncStatus = .downloading
@@ -744,18 +776,19 @@ final class CloudSyncCoordinator: ObservableObject {
             try requireTransferAccess(generation: generation)
             let data = try await provider.download(metadata: metadata)
             guard !data.isEmpty else { throw SyncProviderError.invalidData }
-            try await withLocalIO(generation: generation) {
-                try await scanner.writeFile(relativePath: metadata.relativePath, data: data,
-                                            modificationDate: metadata.lastModified)
+            let committed = try await withLocalIO(generation: generation) {
+                try await scanner.commitDownloadedDocument(metadata: metadata, data: data)
             }
+            working.checksum = SyncChecksum.sha256Hex(committed)
+            working.fileSize = Int64(committed.count)
             try requireTransferAccess(generation: generation)
             working.syncStatus = .synced
             working.lastSyncDate = Date()
             working.lastError = nil
             metadataCache[working.relativePath] = working
-            await index.record(path: metadata.relativePath, checksum: metadata.checksum, lastModified: metadata.lastModified)
+            await index.record(path: working.relativePath, checksum: working.checksum, lastModified: working.lastModified)
             addEvent(.download, file: metadata.relativePath, message: "Downloaded from iCloud")
-            notifyIfDocument(metadata.fileType)
+            notifyIfDocument(metadata.fileType, relativePath: metadata.relativePath)
             return true
         } catch is TransferDeferred {
             return false
@@ -772,9 +805,8 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     /// Field-level merge for `library_state.json` and `game_profiles.json`.
-    /// Neither side is discarded and no conflict is raised. If either copy is
-    /// unreadable the merge cannot run, and the newer copy wins instead — a
-    /// corrupt file must not block sync forever.
+    /// Neither side is discarded. An unreadable copy defers the merge so a
+    /// newer corrupt document cannot destroy the other device's valid data.
     private func merge(
         local: SyncableFileMetadata,
         remote: SyncableFileMetadata,
@@ -783,8 +815,7 @@ final class CloudSyncCoordinator: ObservableObject {
         index: SyncIndexStore,
         generation requestedGeneration: TransferEpoch? = nil
     ) async {
-        guard Self.isEligibleForCloudSync(relativePath: local.relativePath),
-              Self.isEligibleForCloudSync(relativePath: remote.relativePath) else { return }
+        guard Self.isEligibleMetadata(local), Self.isEligibleMetadata(remote) else { return }
         let generation = requestedGeneration ?? captureTransferEpoch()
         guard let merger = DocumentMergers.merger(for: local.fileType) else {
             // Should not happen: the planner only emits .merge for document kinds.
@@ -798,23 +829,22 @@ final class CloudSyncCoordinator: ObservableObject {
 
         let path = local.relativePath
         do {
-            let localData = try await withLocalIO(generation: generation) {
-                try await scanner.readFile(relativePath: path)
-            }
             let remoteData = try await provider.download(metadata: remote)
             try requireTransferAccess(generation: generation)
-            let merged: Data
+            if SyncClassifier.isLibraryMetadataShard(relativePath: path), !remote.checksum.isEmpty,
+               SyncChecksum.sha256Hex(remoteData) != remote.checksum { throw SyncProviderError.invalidData }
+            let committed: (data: Data, changed: Bool)
             do {
-                merged = try merger.merge(local: localData, remote: remoteData)
-            } catch {
-                addEvent(.error, file: path, message: "Could not merge; keeping the newer copy (\(error.localizedDescription))")
-                if local.lastModified >= remote.lastModified {
-                    await upload(local, reason: .contentChanged, scanner: scanner, provider: provider, index: index, generation: generation)
-                } else {
-                    await download(remote, scanner: scanner, provider: provider, index: index, generation: generation)
+                committed = try await withLocalIO(generation: generation) {
+                    try await scanner.mergeCurrentDocument(relativePath: path, remoteData: remoteData, merger: merger)
                 }
+            } catch {
+                addEvent(.error, file: path, message: "Could not merge; both copies preserved (\(error.localizedDescription))")
                 return
             }
+            let merged = committed.data
+            let localChanged = committed.changed
+            if localChanged { notifyIfDocument(local.fileType, relativePath: path) }
 
             let now = Date()
             var result = local
@@ -825,12 +855,6 @@ final class CloudSyncCoordinator: ObservableObject {
             result.lastSyncDate = now
             result.lastError = nil
 
-            let localChanged = merged != localData
-            if localChanged {
-                try await withLocalIO(generation: generation) {
-                    try await scanner.writeFile(relativePath: path, data: merged, modificationDate: now)
-                }
-            }
             try requireTransferAccess(generation: generation)
             if merged != remoteData {
                 try await provider.upload(metadata: result, data: merged)
@@ -839,7 +863,6 @@ final class CloudSyncCoordinator: ObservableObject {
             metadataCache[path] = result
             await index.record(path: path, checksum: result.checksum, lastModified: now, syncedAt: now)
             addEvent(.info, file: path, message: localChanged ? "Merged changes from another device" : "Merged this device's changes into iCloud")
-            if localChanged { notifyIfDocument(local.fileType) }
         } catch is TransferDeferred {
             return
         } catch {
@@ -853,12 +876,12 @@ final class CloudSyncCoordinator: ObservableObject {
         }
     }
 
-    private func notifyIfDocument(_ type: SyncableFileType) {
+    private func notifyIfDocument(_ type: SyncableFileType, relativePath: String) {
         guard type.mergeKind == .document else { return }
         NotificationCenter.default.post(
             name: Self.documentDidChangeNotification,
             object: self,
-            userInfo: [Self.fileTypeKey: type.rawValue]
+            userInfo: [Self.fileTypeKey: type.rawValue, Self.relativePathKey: relativePath]
         )
     }
 
@@ -866,7 +889,7 @@ final class CloudSyncCoordinator: ObservableObject {
 
     @discardableResult
     func resolve(_ conflict: SyncConflict, as resolution: ConflictResolution) async -> SyncConflictResolutionResult {
-        guard Self.isEligibleForCloudSync(relativePath: conflict.metadata.relativePath) else {
+        guard Self.isEligibleMetadata(conflict.metadata) else {
             pendingConflicts.removeAll { !Self.isEligibleForCloudSync(relativePath: $0.metadata.relativePath) }
             metadataCache.removeValue(forKey: conflict.metadata.relativePath)
             refreshStatistics()
@@ -953,7 +976,7 @@ final class CloudSyncCoordinator: ObservableObject {
         index: SyncIndexStore,
         generation requestedGeneration: TransferEpoch? = nil
     ) async -> Bool {
-        guard Self.isEligibleForCloudSync(relativePath: conflict.metadata.relativePath) else { return false }
+        guard Self.isEligibleMetadata(conflict.metadata) else { return false }
         let generation = requestedGeneration ?? captureTransferEpoch()
         let relativePath = conflict.metadata.relativePath
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
@@ -1142,6 +1165,53 @@ private extension SyncPlanStep {
             return local.fileType
         case .markSynced, .conflict, .writeTombstone, .trashLocal, .markDeleted:
             return nil
+        }
+    }
+}
+
+// A single scanner actor call keeps read/merge/write non-suspending. The shared
+// store lock also excludes favorite/counter writers running on other threads.
+private extension UserDataScanner {
+    func validateAppDocument(relativePath: String, data: Data) throws {
+        if SyncClassifier.isLibraryMetadataShard(relativePath: relativePath) {
+            try LibraryMetadataStore.validateDocument(data: data, filename: (relativePath as NSString).lastPathComponent)
+        }
+    }
+
+    func readAppFile(relativePath: String) throws -> Data {
+        let data = try readFile(relativePath: relativePath)
+        try validateAppDocument(relativePath: relativePath, data: data)
+        return data
+    }
+
+    func commitDownloadedDocument(metadata: SyncableFileMetadata, data: Data) throws -> Data {
+        try LibraryStateStore.withFileAccess {
+            let path = metadata.relativePath
+            try validateAppDocument(relativePath: path, data: data)
+            if SyncClassifier.isLibraryMetadataShard(relativePath: path), !metadata.checksum.isEmpty,
+               SyncChecksum.sha256Hex(data) != metadata.checksum { throw SyncProviderError.invalidData }
+            var committed = data
+            // A local document may have been created during the network request.
+            if metadata.fileType.mergeKind == .document, fileExists(relativePath: path),
+               let merger = DocumentMergers.merger(for: metadata.fileType) {
+                committed = try merger.merge(local: readAppFile(relativePath: path), remote: data)
+                try validateAppDocument(relativePath: path, data: committed)
+            }
+            try writeFile(relativePath: path, data: committed, modificationDate: metadata.lastModified)
+            return committed
+        }
+    }
+
+    func mergeCurrentDocument(relativePath: String, remoteData: Data,
+                              merger: any DocumentMerger) throws -> (data: Data, changed: Bool) {
+        try LibraryStateStore.withFileAccess {
+            try validateAppDocument(relativePath: relativePath, data: remoteData)
+            let local = try readAppFile(relativePath: relativePath)
+            let merged = try merger.merge(local: local, remote: remoteData)
+            try validateAppDocument(relativePath: relativePath, data: merged)
+            let changed = merged != local
+            if changed { try writeFile(relativePath: relativePath, data: merged, modificationDate: Date()) }
+            return (merged, changed)
         }
     }
 }

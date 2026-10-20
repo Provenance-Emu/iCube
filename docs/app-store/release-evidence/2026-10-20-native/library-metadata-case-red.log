@@ -1,0 +1,20 @@
+Building for debugging...
+[2 / 6] iCubeTests-product
+[4 / 8] iCubeTests-product
+[10 / 12] iCubeTests-product
+Build complete! (2.54 sec)
+Test Suite 'Selected tests' started at 2026-10-20 02:13:12.227.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 02:13:12.228.
+Test Suite 'LibraryMetadataStoreTests' started at 2026-10-20 02:13:12.228.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testDiscSerialCaseAndWhitespaceDoNotSplitTheSameGame]' started.
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataStoreTests.swift:212: error: -[iCubeTests.LibraryMetadataStoreTests testDiscSerialCaseAndWhitespaceDoNotSplitTheSameGame] : XCTAssertEqual failed: ("Optional(iCube.LibraryMetadataStore.Identity(rawValue: "game:Z3NyZTAx:0:0"))") is not equal to ("Optional(iCube.LibraryMetadataStore.Identity(rawValue: "game:R1NSRTAx:0:0"))")
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataStoreTests.swift:213: error: -[iCubeTests.LibraryMetadataStoreTests testDiscSerialCaseAndWhitespaceDoNotSplitTheSameGame] : XCTAssertEqual failed: ("Optional("7f254f2a386359e08f54e0f2d1b38fbbb6555fafd65342927f9f4cab1b9fc55e.json")") is not equal to ("Optional("563b9655bdbd10c90681361fdc41430ebc7edac43ad6e181dd1973d50224220c.json")")
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testDiscSerialCaseAndWhitespaceDoNotSplitTheSameGame]' failed (1.285 seconds).
+Test Suite 'LibraryMetadataStoreTests' failed at 2026-10-20 02:13:13.514.
+	 Executed 1 test, with 2 failures (0 unexpected) in 1.285 (1.286) seconds
+Test Suite 'iCubeTests.xctest' failed at 2026-10-20 02:13:13.514.
+	 Executed 1 test, with 2 failures (0 unexpected) in 1.285 (1.286) seconds
+Test Suite 'Selected tests' failed at 2026-10-20 02:13:13.514.
+	 Executed 1 test, with 2 failures (0 unexpected) in 1.285 (1.287) seconds
+Note: Some test targets reported failures:
+  - iCubeTests (XCTest)

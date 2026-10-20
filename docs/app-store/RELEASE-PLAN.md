@@ -1,6 +1,6 @@
 # iCube 1.0 release plan
 
-Updated: 2026-10-19. **Status: owner quality requirements recorded; detailed transport/scope decisions remain open. No candidate is accepted for submission.**
+Updated: 2026-10-20. **Status: owner quality requirements recorded; detailed transport/scope decisions remain open. No candidate is accepted for submission.**
 Baseline inspected: `8bad720220` on `develop`. No app builds or device tests were run for this planning pass.
 
 Subsequent execution evidence: [tvOS/settings audit](release-evidence/2026-10-19-tvos-audit.md), [TestFlight report and resolution decision](release-evidence/2026-10-19-testflight-user-report.md). The owner requested removing performance-driven resolution changes while keeping fixed scales and Auto (Fit Window); Native is the release default. Track removal in [#62](https://github.com/Provenance-Emu/iCube/issues/62), missing Default ISO controls in [#60](https://github.com/Provenance-Emu/iCube/issues/60), and manual disc swapping in [#61](https://github.com/Provenance-Emu/iCube/issues/61). These reports distinguish verified local results from pending shipping/device gates; none closes candidate acceptance.
@@ -26,7 +26,7 @@ Acceptance translates that bar into evidence:
 - **Functional completeness:** settings, sync, save states, library editing and library sharing each need end-to-end acceptance. Save-state and editing gates are R7 and R8 below; they cannot be closed by a screenshot or unit-test pass alone.
 - **Release integrity:** keep the entire tested candidate identity with the evidence, and repeat affected checks after changes. Do not quietly defer a required feature to meet a date.
 
-The owner has specified outcomes, not an automatic-ROM transport or cross-app save-state compatibility promise. Those implementation/scope choices remain explicit in the decision list.
+The owner requires manual transfers and automatic nearby ROM mirroring with both apps open. Cross-app save-state compatibility remains an explicit decision; it is not implied by ROM copying.
 
 ## Evidence and corrections to older plans
 
@@ -96,7 +96,7 @@ Treat the following as distinct user journeys:
 | iCube ↔ Provenance on different devices | Provenance's iCube dialect via `PVLibrarySharing` | Verify each supported direction with both apps in the foreground during serving; show suspension/reconnect guidance. |
 | iCube ↔ Provenance on one iPhone/iPad | URL browse/play/request + system share sheet | Browse/play and user-confirmed import with visible completion/error; do not depend on a backgrounded sender's HTTP server. |
 | Shared folder without ROM copies on iOS/iPadOS | Provenance picker; missing iCube scan-root integration | Decision required: launch requirement or explicit later milestone. |
-| Automatic/off-LAN ROM mirroring | No verified complete path in this audit | Decision required; do not call manual nearby copy automatic sync. |
+| Automatic nearby ROM mirroring | Owner requires this alongside explicit browse/import; both apps open | Implement opt-in per-peer automatic copying using the existing paired library transport; [design](../superpowers/specs/2026-10-20-nearby-library-mirroring-design.md). Off-LAN mirroring is not required. |
 | Cross-app saves/settings | Separate from ROM transfer; shared entitlements are insufficient | Compatibility and ownership contract required before claiming cross-app progress sync. |
 
 - [ ] Ratify minimum behavior for each row. Publish a supported/unsupported direction matrix including Apple TV; never promise a Files picker or iCloud Drive solution there.
@@ -148,6 +148,8 @@ Locate owning save-state bridge, pause-slot and automatic-state code during base
 
 Owner: library implementer; final acceptance by product owner on all form factors.
 
+**Owner-confirmed scope, October 20:** custom titles, cover artwork and searchable classification tags must ship, alongside favorites, deletion and platform assignment. The current implementation stores per-game edits in independently merged JSON shards for iCube user-data sync. Manual and automatic ROM copying are separate from metadata convergence; Provenance title/cover/tag convergence remains an interoperability acceptance gate until its contract and receiver are verified.
+
 - [ ] Enumerate every edit action actually offered by each platform, including metadata/title/artwork, favorites, multi-selection/batch actions and removal where present. Record intended persistence and sync scope per field; list unsupported actions explicitly instead of assuming parity.
 - [ ] Exercise edit, commit, cancel, reopen, rescan and relaunch. The library card, details, search, sort/filter and favorite/recent views show consistent results without duplicates or lost edits.
 - [ ] Verify batch selection targets the intended games after filtering/sorting, and focus/selection returns predictably when the action ends. Empty and large libraries remain responsive.
@@ -171,7 +173,7 @@ R1 and R2 share focus/navigation code: coordinate changes. R3/R4 share identity/
 
 ## Decisions for the owner
 
-1. What is the minimum ROM/library experience at launch: explicit nearby copies, a shared local folder, automatic mirroring, or a defined combination? Proposed default: validate existing nearby and same-device copy first; retain folder/mirroring as explicit scope decisions.
+1. **Resolved October 20:** explicit nearby browse/import **and automatic nearby ROM mirroring** are required, with apps open. Shared-folder zero-copy access remains a separate decision; off-LAN ROM mirroring is outside this requirement.
 2. Must progress move between Provenance and iCube at launch, or only between iCube installs? If yes, native saves need a separate cross-app ownership/compatibility contract.
 3. Must iOS and tvOS launch together? Proposed default: one coordinated release, without delaying critical stability fixes for existing testers.
 4. Which oldest hardware and representative games define acceptable no-JIT performance? Define measurements and expectations before final acceptance.

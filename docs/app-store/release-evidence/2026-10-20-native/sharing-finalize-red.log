@@ -1,0 +1,65 @@
+Harness: /tmp/icube-sharing-controller-tests
+Building for debugging...
+[Computing dependencies]
+[Constructing description]
+[Pre-planning 1 / 182]
+[Planning deferred tasks]
+[1 / 1]
+[2 / 23] PVWebServer
+[6 / 19] Host
+[6 / 20] Host
+[11 / 28] Host
+[12 / 28] Host
+[14 / 27] Host
+[19 / 27] Host
+[20 / 30] Host
+[22 / 30] Host
+[24 / 30] ControllerTests-product
+[26 / 32] ControllerTests-product
+[30 / 34] ControllerTests-product
+[32 / 34] ControllerTests-product
+[34 / 34] ControllerTests-product
+Build complete! (9.82 sec)
+Test Suite 'All tests' started at 2026-10-20 02:04:50.134.
+Test Suite 'ControllerTests.xctest' started at 2026-10-20 02:04:50.139.
+Test Suite 'ContinuityControllerTests' started at 2026-10-20 02:04:50.139.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledCopyCannotRegisterWhenManifestReturnsLate]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledCopyCannotRegisterWhenManifestReturnsLate]' passed (0.029 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledDownloadCannotFinalizeEvenIfDelegateReturnsSuccess]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:253: error: -[ControllerTests.ContinuityControllerTests testCancelledDownloadCannotFinalizeEvenIfDelegateReturnsSuccess] : XCTAssertFalse failed
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:254: error: -[ControllerTests.ContinuityControllerTests testCancelledDownloadCannotFinalizeEvenIfDelegateReturnsSuccess] : XCTAssertTrue failed
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledDownloadCannotFinalizeEvenIfDelegateReturnsSuccess]' failed (5.074 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledLibraryApprovalFinishesWithoutUserResponse]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledLibraryApprovalFinishesWithoutUserResponse]' passed (0.002 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledPairingApprovalFinishesWithoutUserResponse]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledPairingApprovalFinishesWithoutUserResponse]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testDifferingROMCollisionPreservesExistingFile]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testDifferingROMCollisionPreservesExistingFile]' passed (0.016 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryPairing404AuthenticatesAndBrowsesWithoutHandoff]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryPairing404AuthenticatesAndBrowsesWithoutHandoff]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' passed (0.005 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testWrongPairingCodeCanBeRetried]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testWrongPairingCodeCanBeRetried]' passed (0.003 seconds).
+Test Suite 'ContinuityControllerTests' failed at 2026-10-20 02:04:55.297.
+	 Executed 13 tests, with 2 failures (0 unexpected) in 5.154 (5.158) seconds
+Test Suite 'ControllerTests.xctest' failed at 2026-10-20 02:04:55.297.
+	 Executed 13 tests, with 2 failures (0 unexpected) in 5.154 (5.158) seconds
+Test Suite 'All tests' failed at 2026-10-20 02:04:55.297.
+	 Executed 13 tests, with 2 failures (0 unexpected) in 5.154 (5.163) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - ControllerTests (XCTest)

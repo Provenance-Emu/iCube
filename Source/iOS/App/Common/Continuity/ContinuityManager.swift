@@ -45,6 +45,8 @@ final class ContinuityManager: ObservableObject {
     @Published private(set) var activeSession: ContinuitySessionInfo?
     /// Paired devices, refreshed whenever trust changes.
     @Published private(set) var trustedPeers: [TrustedPeer] = []
+    private(set) var hasLoadedTrustedPeers = false
+    lazy var libraryMirror = NearbyLibraryMirrorService(manager: self)
     /// The last thing that went wrong on the serving side, for the handoff
     /// sheet to show. Nil clears it.
     @Published private(set) var lastError: String?
@@ -61,7 +63,7 @@ final class ContinuityManager: ObservableObject {
     @Published private(set) var libraryGrants: [String: ContinuityLibraryGrant] = [:]
 
     struct PendingPairingPrompt: Identifiable {
-        let id = UUID()
+        let id: UUID
         let peerName: String
         let code: String
         let respond: (Bool) -> Void
@@ -73,7 +75,7 @@ final class ContinuityManager: ObservableObject {
     /// every browse would train the owner to dismiss the prompt reflexively,
     /// which is exactly what would make this one worthless.
     struct PendingLibraryPullPrompt: Identifiable {
-        let id = UUID()
+        let id: UUID
         let peerName: String
         let gameName: String
         let respond: (ContinuityLibraryPullDecision) -> Void
@@ -98,6 +100,10 @@ final class ContinuityManager: ObservableObject {
     private var holdsLibraryServerSession = false
     private let browser = ContinuityBrowser()
     private var browseTask: Task<Void, Never>?
+    private var browserStopTask: Task<Void, Never>?
+    private var browseGeneration: UInt64 = 0
+    private var manualBrowsing = false
+    private var mirrorBrowsing = false
 
     /// Absolute path of the disc image currently being offered.
     ///
@@ -391,30 +397,74 @@ final class ContinuityManager: ObservableObject {
     // MARK: - Browsing
 
     func startBrowsing() {
+        manualBrowsing = true
+        reconcileBrowsing()
+    }
+
+    func setMirrorBrowsingRequired(_ required: Bool) {
+        guard mirrorBrowsing != required else { return }
+        mirrorBrowsing = required
+        reconcileBrowsing()
+    }
+
+    private func reconcileBrowsing() {
+        guard manualBrowsing || mirrorBrowsing else {
+            browseGeneration &+= 1
+            browseTask?.cancel()
+            browseTask = nil
+            let previousStop = browserStopTask
+            browserStopTask = Task { [browser] in
+                await previousStop?.value
+                await browser.stop()
+            }
+            discoveredPeers = []
+            return
+        }
         guard browseTask == nil else { return }
+        browseGeneration &+= 1
+        let generation = browseGeneration
+        let stop = browserStopTask
         browseTask = Task { [browser] in
+            await stop?.value
+            guard !Task.isCancelled, self.browseGeneration == generation else { return }
+            self.browserStopTask = nil
             for await peers in await browser.peers() {
-                await MainActor.run { self.discoveredPeers = peers }
+                await MainActor.run {
+                    guard !Task.isCancelled, self.browseGeneration == generation else { return }
+                    self.discoveredPeers = peers
+                    self.libraryMirror.environmentChanged()
+                }
             }
         }
     }
 
     func stopBrowsing() {
-        browseTask?.cancel()
-        browseTask = nil
-        Task { [browser] in await browser.stop() }
-        discoveredPeers = []
+        manualBrowsing = false
+        reconcileBrowsing()
     }
 
     // MARK: - Trust
 
     func refreshTrustedPeers() async {
         trustedPeers = await trustStore.allPeers()
+        hasLoadedTrustedPeers = true
+        libraryMirror.environmentChanged()
+    }
+
+    /// Keep the approved host on the receiving device too, so outgoing pairing
+    /// appears in Paired Devices and can be chosen as an automatic-copy source.
+    func rememberPairedHost(_ handle: ContinuityPairingClient.PairingHandle) async {
+        guard !handle.serverId.isEmpty, handle.serverId != identity.id,
+              handle.serverPublicKey.count == 32 else { return }
+        await trustStore.add(TrustedPeer(id: handle.serverId, name: handle.serverName,
+                                         publicKey: handle.serverPublicKey))
+        await refreshTrustedPeers()
     }
 
     /// Revokes a peer. Takes effect on that peer's very next request — the
     /// pairing server reads the store live rather than caching it.
     func revokeTrust(peerId: String) async {
+        libraryMirror.setEnabled(false, for: peerId)
         await trustStore.removePeer(withId: peerId)
         await grantStore.removeGrant(forPeerId: peerId)
         // Drop the peer's library token and cached pull approvals too, or a
@@ -426,6 +476,7 @@ final class ContinuityManager: ObservableObject {
     }
 
     func revokeAllTrust() async {
+        libraryMirror.disableAll()
         await trustStore.removeAll()
         await grantStore.removeAll()
         await libraryServer?.forgetAllPeers()
@@ -440,19 +491,17 @@ final class ContinuityManager: ObservableObject {
     /// The server races this against the pairing lifetime, so a prompt that is
     /// never answered resolves as a decline rather than wedging the seam.
     fileprivate func awaitPairingApproval(peerName: String, code: String) async -> Bool {
-        await withCheckedContinuation { continuation in
-            // A second request while one prompt is up declines immediately
-            // rather than replacing the visible code — swapping the code out
-            // from under a user mid-read is how a legitimate pairing fails.
-            guard pendingPairing == nil else {
-                continuation.resume(returning: false)
-                return
-            }
-            pendingPairing = PendingPairingPrompt(peerName: peerName, code: code) { [weak self] approved in
-                self?.pendingPairing = nil
-                continuation.resume(returning: approved)
-            }
+        // Do not replace a code the owner is already reading.
+        guard !Task.isCancelled, pendingPairing == nil else { return false }
+        let approval = ContinuityApprovalRequest(cancellationValue: false) { [weak self] id in
+            guard self?.pendingPairing?.id == id else { return }
+            self?.pendingPairing = nil
         }
+        pendingPairing = PendingPairingPrompt(
+            id: approval.id, peerName: peerName, code: code,
+            respond: { approval.resolve($0) }
+        )
+        return await approval.wait()
     }
 
     /// Presents the per-pull approval prompt and suspends until the user
@@ -461,25 +510,22 @@ final class ContinuityManager: ObservableObject {
     fileprivate func awaitLibraryPullApproval(
         peerName: String, gameName: String
     ) async -> ContinuityLibraryPullDecision {
-        await withCheckedContinuation { continuation in
-            // A second request while one prompt is up is declined for now
-            // rather than replacing the visible one. `.denyOnce` and not
-            // `.denyAlways`: the peer did nothing wrong, it was merely second
-            // in the queue, and it must be able to ask again.
-            guard pendingLibraryPull == nil else {
-                continuation.resume(returning: .denyOnce)
-                return
-            }
-            pendingLibraryPull = PendingLibraryPullPrompt(
-                peerName: peerName, gameName: gameName
-            ) { [weak self] decision in
-                self?.pendingLibraryPull = nil
-                if decision == .allowAlways || decision == .denyAlways {
-                    Task { await self?.refreshLibraryGrants() }
-                }
-                continuation.resume(returning: decision)
-            }
+        guard !Task.isCancelled, pendingLibraryPull == nil else { return .denyOnce }
+        let approval = ContinuityApprovalRequest<ContinuityLibraryPullDecision>(
+            cancellationValue: .denyOnce
+        ) { [weak self] id in
+            guard self?.pendingLibraryPull?.id == id else { return }
+            self?.pendingLibraryPull = nil
         }
+        pendingLibraryPull = PendingLibraryPullPrompt(
+            id: approval.id, peerName: peerName, gameName: gameName,
+            respond: { approval.resolve($0) }
+        )
+        let decision = await approval.wait()
+        if decision == .allowAlways || decision == .denyAlways {
+            Task { await self.refreshLibraryGrants() }
+        }
+        return decision
     }
 
     // MARK: - Device description

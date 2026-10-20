@@ -1,0 +1,53 @@
+Harness: /tmp/icube-sharing-controller-tests
+Building for debugging...
+[Computing dependencies]
+[3 / 12] Host
+[8 / 18] Host
+[10 / 18] Host
+[12 / 22] Host
+[15 / 21] ControllerTests-product
+[17 / 23] ControllerTests-product
+[21 / 25] ControllerTests-product
+[23 / 25] ControllerTests-product
+[24 / 25] ControllerTests-product
+[25 / 25] ControllerTests-product
+Build complete! (5.05 sec)
+Test Suite 'All tests' started at 2026-10-20 01:57:06.860.
+Test Suite 'ControllerTests.xctest' started at 2026-10-20 01:57:06.861.
+Test Suite 'ContinuityControllerTests' started at 2026-10-20 01:57:06.861.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledCopyCannotRegisterWhenManifestReturnsLate]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledCopyCannotRegisterWhenManifestReturnsLate]' passed (0.010 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testCancelledReceiveCannotLaunchWhenManifestReturnsLate]' passed (0.002 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testDifferingROMCollisionPreservesExistingFile]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testDifferingROMCollisionPreservesExistingFile]' passed (0.013 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles]' started.
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:152: error: -[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles] : XCTAssertTrue failed
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:153: error: -[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles] : XCTAssertFalse failed
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:154: error: -[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles] : XCTAssertFalse failed
+/private/tmp/icube-sharing-controller-tests/Tests/ContinuityControllerTests.swift:155: error: -[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles] : failed - Library copy must reject user data
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryCopyRejectsUserDataBeforeWritingAnyFiles]' failed (1.966 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryOnlyUnknownPeerOffersPairing]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryPairing404AuthenticatesAndBrowsesWithoutHandoff]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testLibraryPairing404AuthenticatesAndBrowsesWithoutHandoff]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testMatchingExistingFileIsRegisteredBeforeReportingCopied]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderAllowsOrdinarySoftwareAndStatePaths]' passed (0.004 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testProviderRejectsTraversalAbsoluteAndSymlinkEscapes]' passed (0.003 seconds).
+Test Case '-[ControllerTests.ContinuityControllerTests testWrongPairingCodeCanBeRetried]' started.
+Test Case '-[ControllerTests.ContinuityControllerTests testWrongPairingCodeCanBeRetried]' passed (0.006 seconds).
+Test Suite 'ContinuityControllerTests' failed at 2026-10-20 01:57:08.877.
+	 Executed 10 tests, with 4 failures (0 unexpected) in 2.014 (2.016) seconds
+Test Suite 'ControllerTests.xctest' failed at 2026-10-20 01:57:08.877.
+	 Executed 10 tests, with 4 failures (0 unexpected) in 2.014 (2.016) seconds
+Test Suite 'All tests' failed at 2026-10-20 01:57:08.877.
+	 Executed 10 tests, with 4 failures (0 unexpected) in 2.014 (2.018) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - ControllerTests (XCTest)

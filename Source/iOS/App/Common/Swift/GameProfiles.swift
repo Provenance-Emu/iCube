@@ -1,4 +1,5 @@
 import Foundation
+import PVCloudSync
 
 struct GameProfile: Codable {
   var shaderPresetPath: String?
@@ -27,18 +28,24 @@ struct GameProfile: Codable {
   /// game and keeps the entry with the newer stamp; an unstamped entry counts
   /// as oldest. Set by `GameProfiles` on every write — never by hand.
   var updatedAt: Date?
+  /// A stamped empty record carries an explicit reset through keyed LWW merge.
+  /// Optional for compatibility with profiles written before reset convergence.
+  var isReset: Bool?
 }
 
 final class GameProfiles {
   static let shared = GameProfiles()
 
+  private let fileURLOverride: URL?
   private var profiles: [String: GameProfile] = [:] // GameID -> profile
 
-  private init() {
+  init(fileURL: URL? = nil) {
+    fileURLOverride = fileURL
     load()
   }
 
   private func profilesFileURL() -> URL? {
+    if let fileURLOverride { return fileURLOverride }
     let base = UserFolderUtil.getUserFolder()
     let dir = URL(fileURLWithPath: base).appendingPathComponent("Profiles", isDirectory: true)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -46,45 +53,78 @@ final class GameProfiles {
   }
 
   private func load() {
+    LibraryStateStore.withFileAccess { loadLatestLocked() }
+  }
+
+  /// Caller holds the shared document lock, also used by the scanner commit.
+  /// Adopt disk edits without discarding more recent unsaved memory on reload.
+  private func loadLatestLocked() {
     guard let url = profilesFileURL(), FileManager.default.fileExists(atPath: url.path) else { return }
     do {
-      let data = try Data(contentsOf: url)
-      profiles = try JSONDecoder().decode([String: GameProfile].self, from: data)
+      let disk = try Data(contentsOf: url)
+      let memory = try JSONEncoder().encode(profiles)
+      let merged = try KeyedTimestampDocumentMerger(timestampKey: "updatedAt").merge(local: memory, remote: disk)
+      profiles = try JSONDecoder().decode([String: GameProfile].self, from: merged)
     } catch {
       print("[Profiles] Failed to load: \(error)")
     }
   }
 
-  func save() {
+  private func saveLocked() {
     guard let url = profilesFileURL() else { return }
     do {
-      let data = try JSONEncoder().encode(profiles)
-      try data.write(to: url)
+      try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.sortedKeys]
+      try encoder.encode(profiles).write(to: url, options: .atomic)
     } catch {
       print("[Profiles] Failed to save: \(error)")
     }
   }
 
+  func save() {
+    LibraryStateStore.withFileAccess {
+      loadLatestLocked()
+      saveLocked()
+    }
+  }
+
   func hasSavedProfile(for gameID: String) -> Bool {
-    return profiles[gameID] != nil
+    LibraryStateStore.withFileAccess { profiles[gameID] != nil && profiles[gameID]?.isReset != true }
   }
 
   func profile(for gameID: String) -> GameProfile? {
-    if let p = profiles[gameID] { return p }
-    return recommendedProfile(for: gameID)
+    LibraryStateStore.withFileAccess {
+      if let saved = profiles[gameID], saved.isReset != true { return saved }
+      return recommendedProfile(for: gameID)
+    }
+  }
+
+  private func nextStamp(for gameID: String) -> Date {
+    max(Date(), profiles[gameID]?.updatedAt?.addingTimeInterval(0.001) ?? .distantPast)
   }
 
   func setProfile(_ profile: GameProfile, for gameID: String) {
-    var stamped = profile
-    stamped.updatedAt = Date()
-    profiles[gameID] = stamped
-    save()
+    LibraryStateStore.withFileAccess {
+      loadLatestLocked()
+      var stamped = profile
+      // Graphics snapshots do not own the user's sharing decision.
+      if stamped.excludedFromNearbySharing == nil {
+        stamped.excludedFromNearbySharing = profiles[gameID]?.excludedFromNearbySharing
+      }
+      stamped.updatedAt = nextStamp(for: gameID)
+      stamped.isReset = nil
+      profiles[gameID] = stamped
+      saveLocked()
+    }
   }
 
-  /// iCloud sync merged `game_profiles.json` and wrote the result: pick it up.
+  /// Adopt a sync commit while retaining more recent local records.
   func reloadAfterSync() {
-    profiles.removeAll()
-    load()
+    LibraryStateStore.withFileAccess {
+      loadLatestLocked()
+      saveLocked()
+    }
   }
 
   // MARK: - Nearby Sharing exclusion
@@ -98,7 +138,7 @@ final class GameProfiles {
   /// the user has to opt into at the device level anyway.
   func isExcludedFromNearbySharing(gameID: String) -> Bool {
     guard !gameID.isEmpty else { return false }
-    return profiles[gameID]?.excludedFromNearbySharing == true
+    return LibraryStateStore.withFileAccess { profiles[gameID]?.excludedFromNearbySharing == true }
   }
 
   /// Sets (or clears) the exclusion, preserving every other profile field.
@@ -108,17 +148,22 @@ final class GameProfiles {
   /// toggled twice should leave no trace.
   func setExcludedFromNearbySharing(_ excluded: Bool, forGameID gameID: String) {
     guard !gameID.isEmpty else { return }
-    var profile = profiles[gameID] ?? GameProfile()
-    profile.excludedFromNearbySharing = excluded ? true : nil
-    profile.updatedAt = Date()
-    profiles[gameID] = profile
-    save()
+    LibraryStateStore.withFileAccess {
+      loadLatestLocked()
+      var profile = profiles[gameID] ?? GameProfile()
+      profile.excludedFromNearbySharing = excluded ? true : nil
+      profile.updatedAt = nextStamp(for: gameID)
+      profiles[gameID] = profile
+      saveLocked()
+    }
   }
 
   /// Every GameID the user has excluded. Backs the review list in Settings, so
   /// an exclusion made from a long-press months ago is still findable.
   func excludedFromNearbySharingGameIDs() -> [String] {
-    profiles.filter { $0.value.excludedFromNearbySharing == true }.keys.sorted()
+    LibraryStateStore.withFileAccess {
+      profiles.filter { $0.value.excludedFromNearbySharing == true }.keys.sorted()
+    }
   }
 
   func clearProfile(for gameID: String) {
@@ -127,14 +172,16 @@ final class GameProfiles {
     // exclusion is about what leaves the device, and silently re-sharing a
     // game because the user reset its graphics settings is not a trade they
     // agreed to.
-    let wasExcluded = profiles[gameID]?.excludedFromNearbySharing
-    profiles.removeValue(forKey: gameID)
-    if wasExcluded == true {
-      var preserved = GameProfile()
-      preserved.excludedFromNearbySharing = true
-      profiles[gameID] = preserved
+    LibraryStateStore.withFileAccess {
+      loadLatestLocked()
+      let wasExcluded = profiles[gameID]?.excludedFromNearbySharing
+      var reset = GameProfile()
+      reset.updatedAt = nextStamp(for: gameID)
+      reset.isReset = true
+      reset.excludedFromNearbySharing = wasExcluded == true ? true : nil
+      profiles[gameID] = reset
+      saveLocked()
     }
-    save()
     // Reset runtime-affecting settings to defaults that won’t surprise the user
     // Do not change global user prefs except those we might have overridden
     DOLConfigBridge.setGfxWidescreenHack(false)

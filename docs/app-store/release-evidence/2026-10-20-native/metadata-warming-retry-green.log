@@ -1,0 +1,1 @@
+PASS: eligible foreground retry waits for cancelled hash and resumes exactly once

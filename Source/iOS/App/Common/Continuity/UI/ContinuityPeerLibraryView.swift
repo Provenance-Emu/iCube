@@ -19,6 +19,7 @@ struct ContinuityPeerLibraryView: View {
     @StateObject private var controller = ContinuityLibraryBrowseController(
         identity: ContinuityManager.shared.identity
     )
+    @State private var pairingCode = ""
 
     var body: some View {
         List {
@@ -31,6 +32,18 @@ struct ContinuityPeerLibraryView: View {
                 Section {
                     Text(L("Looking at what this device is sharing…"))
                         .foregroundColor(.secondary)
+                    Button(L("Cancel"), role: .destructive) { controller.cancel() }
+                }
+
+            case .awaitingPairing:
+                Section {
+                    Text(L("Enter the 6-digit code shown on the other device."))
+                    TextField(L("000000"), text: $pairingCode)
+                    Button(L("Pair")) {
+                        Task { await controller.submitPairingCode(pairingCode) }
+                    }
+                    .disabled(pairingCode.count != 6 || !pairingCode.allSatisfy(\.isNumber))
+                    Button(L("Cancel"), role: .destructive) { controller.cancel() }
                 }
 
             case .browsing(let entries):
@@ -67,6 +80,7 @@ struct ContinuityPeerLibraryView: View {
                     } else {
                         Text(L("Asking the other device…")).foregroundColor(.secondary)
                     }
+                    Button(L("Cancel"), role: .destructive) { controller.cancel() }
                 }
 
             case .copied(let entry):
@@ -88,6 +102,7 @@ struct ContinuityPeerLibraryView: View {
         }
         .navigationTitle(peerName)
         .task { await controller.load(from: advertisement) }
+        .onDisappear { controller.cancel() }
     }
 
     private static func transferred(_ progress: PullProgress) -> String {

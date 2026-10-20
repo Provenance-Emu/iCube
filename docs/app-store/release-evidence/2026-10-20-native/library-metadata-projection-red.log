@@ -1,0 +1,21 @@
+Building for debugging...
+[1 / 5]
+[2 / 6] iCubeTests-product
+[4 / 8] iCubeTests-product
+[10 / 12] iCubeTests-product
+[12 / 12] iCubeTests-product
+Build complete! (2.94 sec)
+Test Suite 'Selected tests' started at 2026-10-20 02:16:06.997.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 02:16:06.998.
+Test Suite 'LibraryMetadataStoreTests' started at 2026-10-20 02:16:06.998.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testRepeatedDraftReadsShareTheImmutableCoverBufferUntilMetadataChanges]' started.
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataStoreTests.swift:226: error: -[iCubeTests.LibraryMetadataStoreTests testRepeatedDraftReadsShareTheImmutableCoverBufferUntilMetadataChanges] : XCTAssertEqual failed: ("Optional(0x0000000b2c810000)") is not equal to ("Optional(0x0000000b2c854000)")
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testRepeatedDraftReadsShareTheImmutableCoverBufferUntilMetadataChanges]' failed (1.035 seconds).
+Test Suite 'LibraryMetadataStoreTests' failed at 2026-10-20 02:16:08.034.
+	 Executed 1 test, with 1 failure (0 unexpected) in 1.035 (1.035) seconds
+Test Suite 'iCubeTests.xctest' failed at 2026-10-20 02:16:08.034.
+	 Executed 1 test, with 1 failure (0 unexpected) in 1.035 (1.035) seconds
+Test Suite 'Selected tests' failed at 2026-10-20 02:16:08.034.
+	 Executed 1 test, with 1 failure (0 unexpected) in 1.035 (1.037) seconds
+Note: Some test targets reported failures:
+  - iCubeTests (XCTest)

@@ -1,0 +1,3 @@
+Ordinary browse timed out after 16.045112013816833s: serverUnreachable(detail: Optional("The request timed out."))
+Approval route returned 3 verified fixture bytes after 69.41452896595001s
+PASS actual app wrapper preserves fast browse and waits beyond60s for owner approval

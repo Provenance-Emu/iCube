@@ -1,0 +1,21 @@
+Another instance of SwiftPM is already running using '/private/tmp/icube-library-metadata-audit/.build', waiting until that process has finished execution...Building for debugging...
+[Computing dependencies]
+[Starting]
+[1 / 5]
+Build complete! (0.99 sec)
+Test Suite 'Selected tests' started at 2026-10-20 02:05:26.124.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 02:05:26.127.
+Test Suite 'LibraryMetadataStoreTests' started at 2026-10-20 02:05:26.127.
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testTitleCoverTagsCommitAndReopenWithNormalizedValues]' started.
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataStoreTests.swift:31: error: -[iCubeTests.LibraryMetadataStoreTests testTitleCoverTagsCommitAndReopenWithNormalizedValues] : XCTAssertEqual failed: ("Optional("  My Game \n")") is not equal to ("Optional("My Game")")
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataStoreTests.swift:32: error: -[iCubeTests.LibraryMetadataStoreTests testTitleCoverTagsCommitAndReopenWithNormalizedValues] : XCTAssertEqual failed: ("[" RPG ", "rpg", "Co-op", ""]") is not equal to ("["RPG", "Co-op"]")
+/private/tmp/icube-library-metadata-audit/Tests/iCubeTests/LibraryMetadataStoreTests.swift:34: error: -[iCubeTests.LibraryMetadataStoreTests testTitleCoverTagsCommitAndReopenWithNormalizedValues] : XCTAssertEqual failed: ("Draft(title: nil, coverData: nil, tags: [])") is not equal to ("Draft(title: Optional("  My Game \n"), coverData: Optional(3 bytes), tags: [" RPG ", "rpg", "Co-op", ""])")
+Test Case '-[iCubeTests.LibraryMetadataStoreTests testTitleCoverTagsCommitAndReopenWithNormalizedValues]' failed (4.898 seconds).
+Test Suite 'LibraryMetadataStoreTests' failed at 2026-10-20 02:05:31.026.
+	 Executed 1 test, with 3 failures (0 unexpected) in 4.898 (4.899) seconds
+Test Suite 'iCubeTests.xctest' failed at 2026-10-20 02:05:31.027.
+	 Executed 1 test, with 3 failures (0 unexpected) in 4.898 (4.899) seconds
+Test Suite 'Selected tests' failed at 2026-10-20 02:05:31.027.
+	 Executed 1 test, with 3 failures (0 unexpected) in 4.898 (4.903) seconds
+Note: Some test targets reported failures:
+  - iCubeTests (XCTest)

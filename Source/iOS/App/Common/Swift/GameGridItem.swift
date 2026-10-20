@@ -35,8 +35,11 @@ struct GameGridItem: View {
   var isSelected: Bool = false
   var onToggleSelection: (() -> Void)?
   var onEnterSelectionMode: (() -> Void)?
+  var editLibraryMetadata: ((TVGameItem) -> Void)?
   /// The platform the library files this game under, user override included. tvOS labels the card with it.
   var platform: LibraryPlatformCategory? = nil
+  /// Changes without replacing the card identity, preserving focus/selection.
+  var metadataRevision: UInt = 0
 
   @AppStorage("library_disable_artwork") private var disableArtwork: Bool = false
 
@@ -58,7 +61,7 @@ struct GameGridItem: View {
 
   /// A patched copy's disc header still names the base game, so its tile is titled after its file.
   private var tileTitle: String {
-    moddedInfo?.displayName ?? item.title
+    LibraryMetadataService.customTitle(for: item) ?? moddedInfo?.displayName ?? item.title
   }
 
   /// Determines remote source type and appropriate icon
@@ -657,6 +660,11 @@ struct GameGridItem: View {
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
       }
+      if let editLibraryMetadata, !item.isDemoItem {
+        Button { editLibraryMetadata(item) } label: {
+          Label(L("Edit Library Details"), systemImage: "pencil")
+        }
+      }
       if DefaultISOLibraryAction.isOffered(for: item) {
         Button(action: { setDefaultISO(item) }) {
           Label(L("Set as Default ISO"), systemImage: "opticaldisc")
@@ -897,6 +905,11 @@ struct GameGridItem: View {
       }
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
+      }
+      if let editLibraryMetadata, !item.isDemoItem {
+        Button { editLibraryMetadata(item) } label: {
+          Label(L("Edit Library Details"), systemImage: "pencil")
+        }
       }
       if DefaultISOLibraryAction.isOffered(for: item) {
         Button(action: { setDefaultISO(item) }) {

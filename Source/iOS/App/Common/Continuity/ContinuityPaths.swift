@@ -27,6 +27,26 @@ enum ContinuityPaths {
         userRoot.appendingPathComponent(relativePath)
     }
 
+    /// Resolves an untrusted wire path only when both its spelling and its
+    /// real destination stay within this install's User directory.
+    static func validatedURL(forRelativePath relativePath: String) throws -> URL {
+        let components = relativePath.split(separator: "/", omittingEmptySubsequences: false)
+        guard !relativePath.isEmpty, !relativePath.contains("\0"),
+              components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
+            throw CocoaError(.fileReadInvalidFileName)
+        }
+        let root = userRoot.standardizedFileURL.resolvingSymlinksInPath()
+        let prefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        var candidate = root
+        // Resolve each ancestor separately: Foundation can leave a parent's
+        // symlink unresolved when the final file does not exist yet.
+        for component in components {
+            candidate = candidate.appendingPathComponent(String(component)).resolvingSymlinksInPath()
+            guard candidate.path.hasPrefix(prefix) else { throw CocoaError(.fileReadInvalidFileName) }
+        }
+        return candidate
+    }
+
     /// User-directory-relative path for an absolute one, or nil when the file
     /// lies outside the User directory entirely.
     ///
@@ -53,16 +73,14 @@ enum ContinuityPaths {
         kind: ContinuityFileKind,
         required: Bool = true
     ) -> FileDescriptor? {
-        let url = absoluteURL(forRelativePath: relativePath)
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let size = attributes[.size] as? Int64,
-              let hash = try? ContinuityHash.sha256Hex(ofFileAt: url) else { return nil }
+        guard let url = try? validatedURL(forRelativePath: relativePath) else { return nil }
+        guard let digest = try? ContinuityFileDigestCache.shared.digest(at: url) else { return nil }
         return FileDescriptor(
             kind: kind,
             relativePath: relativePath,
-            sha256: hash,
-            size: size,
-            modifiedAt: attributes[.modificationDate] as? Date,
+            sha256: digest.sha256,
+            size: digest.fingerprint.size,
+            modifiedAt: digest.fingerprint.modifiedAt,
             required: required
         )
     }

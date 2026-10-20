@@ -1,0 +1,27 @@
+Test Suite 'All tests' started at 2026-10-20 02:27:24.910.
+Test Suite 'LibraryRefresh.xctest' started at 2026-10-20 02:27:24.914.
+Test Suite 'LibraryCoordinatorDeferralTests' started at 2026-10-20 02:27:24.914.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_backgroundMetadataNotificationPublishesOnMainActor]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_backgroundMetadataNotificationPublishesOnMainActor]' passed (0.223 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_endingWithALocalRefreshOwedAndADebouncePendingReloadsOnce]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_endingWithALocalRefreshOwedAndADebouncePendingReloadsOnce]' passed (1.706 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_endingWithinTheDebounceWindowReloadsOnce]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_endingWithinTheDebounceWindowReloadsOnce]' passed (1.039 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_firstLoadAlwaysRuns]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_firstLoadAlwaysRuns]' passed (0.002 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_initialRescanWaitsForTheSessionToEnd]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_initialRescanWaitsForTheSessionToEnd]' passed (0.001 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangePublishesUpdatedLibraryWhenIdle]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangePublishesUpdatedLibraryWhenIdle]' passed (0.524 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangesDuringEmulationDeferAndPublishOnceAtEnd]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_metadataChangesDuringEmulationDeferAndPublishOnceAtEnd]' passed (1.051 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_reloadIsHeldDuringEmulationAndRunsOnceAtTheEnd]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_reloadIsHeldDuringEmulationAndRunsOnceAtTheEnd]' passed (0.000 seconds).
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_reloadRunsImmediatelyWhenIdle]' started.
+Test Case '-[LibraryRefresh.LibraryCoordinatorDeferralTests test_reloadRunsImmediatelyWhenIdle]' passed (0.000 seconds).
+Test Suite 'LibraryCoordinatorDeferralTests' passed at 2026-10-20 02:27:29.468.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 4.548 (4.554) seconds
+Test Suite 'LibraryRefresh.xctest' passed at 2026-10-20 02:27:29.468.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 4.548 (4.554) seconds
+Test Suite 'All tests' passed at 2026-10-20 02:27:29.468.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 4.548 (4.559) seconds

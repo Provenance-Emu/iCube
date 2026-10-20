@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import os
+import Combine
 import XCTest
 
 @testable import iCube
@@ -187,12 +188,14 @@ final class RemoteSourcesCoordinatorDeferralTests: XCTestCase {
 @MainActor
 final class LibraryCoordinatorDeferralTests: XCTestCase {
   private var state: EmulationState!
+  private var center: NotificationCenter!
   private var loads = 0
   private var coordinator: LibraryCoordinator!
 
   override func setUp() {
     super.setUp()
-    state = EmulationState(center: NotificationCenter())
+    center = NotificationCenter()
+    state = EmulationState(center: center)
     loads = 0
     coordinator = LibraryCoordinator(emulationState: state, gamesProvider: { [unowned self] in
       self.loads += 1
@@ -270,6 +273,44 @@ final class LibraryCoordinatorDeferralTests: XCTestCase {
     rescanDone?()
     wait(0.6)
     XCTAssertEqual(ownLoads, 1, "the rescan's completion is the single reload")
+  }
+
+  func test_metadataChangePublishesUpdatedLibraryWhenIdle() {
+    var publications = 0
+    let subscription = coordinator.$games.dropFirst().sink { _ in publications += 1 }
+    defer { subscription.cancel() }
+    NotificationCenter.default.post(name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
+    wait(0.5)
+    XCTAssertEqual(loads, 1)
+    XCTAssertEqual(publications, 1, "Publishing triggers the existing model's regroup/search/sort pipeline")
+  }
+
+  func test_metadataChangesDuringEmulationDeferAndPublishOnceAtEnd() {
+    center.post(name: EmulationState.willStartName, object: nil)
+    NotificationCenter.default.post(name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
+    NotificationCenter.default.post(name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
+    wait(0.5)
+    XCTAssertEqual(loads, 0)
+    XCTAssertTrue(coordinator.needsReload)
+    center.post(name: EmulationState.didEndName, object: NSObject())
+    XCTAssertEqual(loads, 1)
+    wait(0.5)
+    XCTAssertEqual(loads, 1)
+  }
+
+  func test_backgroundMetadataNotificationPublishesOnMainActor() async {
+    await Task.detached {
+      NotificationCenter.default.post(name: NSNotification.Name("GameFileMetadataUpdated"), object: nil)
+    }.value
+    let published = expectation(description: "published after background metadata notification")
+    var subscription: AnyCancellable?
+    subscription = coordinator.$games.dropFirst().sink { _ in
+      XCTAssertTrue(Thread.isMainThread)
+      published.fulfill()
+    }
+    defer { subscription?.cancel() }
+    await fulfillment(of: [published], timeout: 2)
+    XCTAssertEqual(loads, 1)
   }
 
   func test_initialRescanWaitsForTheSessionToEnd() {

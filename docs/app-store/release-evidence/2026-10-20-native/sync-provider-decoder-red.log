@@ -1,0 +1,250 @@
+Test Suite 'All tests' started at 2026-10-20 02:12:33.578.
+Test Suite 'PVCloudSyncTests.xctest' started at 2026-10-20 02:12:33.580.
+Test Suite 'CanonicalRelativePathTests' started at 2026-10-20 02:12:33.580.
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testDeeplyNestedFile]' started.
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testDeeplyNestedFile]' passed (0.002 seconds).
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testDirectChild]' started.
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testDirectChild]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testFileIsTheRootReturnsNil]' started.
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testFileIsTheRootReturnsNil]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testFileOutsideRootReturnsNil]' started.
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testFileOutsideRootReturnsNil]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testMixedPrivateVarAndVarFormsResolveToTheSameRelativePath]' started.
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testMixedPrivateVarAndVarFormsResolveToTheSameRelativePath]' passed (0.002 seconds).
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testRootPathRecurringInsideTheRelativePortionIsOnlyStrippedOnce]' started.
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testRootPathRecurringInsideTheRelativePortionIsOnlyStrippedOnce]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testSiblingWithPrefixedNameIsNotTreatedAsInsideTheRoot]' started.
+Test Case '-[PVCloudSyncTests.CanonicalRelativePathTests testSiblingWithPrefixedNameIsNotTreatedAsInsideTheRoot]' passed (0.001 seconds).
+Test Suite 'CanonicalRelativePathTests' passed at 2026-10-20 02:12:33.590.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'CloudKitRecordMappingTests' started at 2026-10-20 02:12:33.590.
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testLibraryMetadataShardPassesActualProviderDecoder]' started.
+/tmp/icube-library-release/PVCloudSync/Tests/PVCloudSyncTests/CloudKitRecordMappingTests.swift:94: error: -[PVCloudSyncTests.CloudKitRecordMappingTests testLibraryMetadataShardPassesActualProviderDecoder] : failed - real CloudKit record decoder discarded the library metadata shard
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testLibraryMetadataShardPassesActualProviderDecoder]' failed (0.747 seconds).
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testLiveRecordMapsToMetadata]' started.
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testLiveRecordMapsToMetadata]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testOptInRecordsStillMap]' started.
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testOptInRecordsStillMap]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testTombstoneExpiry]' started.
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testTombstoneExpiry]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testTombstoneRecordMapsToTombstone]' started.
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testTombstoneRecordMapsToTombstone]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testTombstoneWithoutDeletedAtFallsBackToLastModified]' started.
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testTombstoneWithoutDeletedAtFallsBackToLastModified]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testUnclassifiablePathsAreDropped]' started.
+Test Case '-[PVCloudSyncTests.CloudKitRecordMappingTests testUnclassifiablePathsAreDropped]' passed (0.001 seconds).
+Test Suite 'CloudKitRecordMappingTests' failed at 2026-10-20 02:12:34.341.
+	 Executed 7 tests, with 1 failure (0 unexpected) in 0.750 (0.751) seconds
+Test Suite 'DocumentMergerTests' started at 2026-10-20 02:12:34.341.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testEmptyStateDetection]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testEmptyStateDetection]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testFavoriteTieBreaksTowardsTrue]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testFavoriteTieBreaksTowardsTrue]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testISO8601AndNumericStampsCompare]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testISO8601AndNumericStampsCompare]' passed (0.004 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testKeyedMergeKeepsNewerEntryPerKeyAndUnionsTheRest]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testKeyedMergeKeepsNewerEntryPerKeyAndUnionsTheRest]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testKeyedMergerIsCommutativeAssociativeIdempotent]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testKeyedMergerIsCommutativeAssociativeIdempotent]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testLibraryStateEncodingIsCanonicalAndRoundTrips]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testLibraryStateEncodingIsCanonicalAndRoundTrips]' passed (0.003 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testLibraryStateMergerIsCommutativeAssociativeIdempotent]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testLibraryStateMergerIsCommutativeAssociativeIdempotent]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testLibraryStateMergeRules]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testLibraryStateMergeRules]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testNonObjectInputIsRejected]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testNonObjectInputIsRejected]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testOnlyDocumentCategoriesHaveMergers]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testOnlyDocumentCategoriesHaveMergers]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testUnstampedEntryLosesToAnyStampedOne]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testUnstampedEntryLosesToAnyStampedOne]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testUnstampedTieIsDeterministic]' started.
+Test Case '-[PVCloudSyncTests.DocumentMergerTests testUnstampedTieIsDeterministic]' passed (0.000 seconds).
+Test Suite 'DocumentMergerTests' passed at 2026-10-20 02:12:34.355.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.012 (0.014) seconds
+Test Suite 'SyncIndexStoreTests' started at 2026-10-20 02:12:34.355.
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testBindingToADifferentAccountWipesTheIndex]' started.
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testBindingToADifferentAccountWipesTheIndex]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testCorruptFileIsTreatedAsEmptyNotFatal]' started.
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testCorruptFileIsTreatedAsEmptyNotFatal]' passed (0.003 seconds).
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testMarkDeletedOnUnknownPathCreatesADeadEntry]' started.
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testMarkDeletedOnUnknownPathCreatesADeadEntry]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testMissingFileIsAnEmptyIndex]' started.
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testMissingFileIsAnEmptyIndex]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testResetRemovesTheFile]' started.
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testResetRemovesTheFile]' passed (0.002 seconds).
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testRoundTrip]' started.
+Test Case '-[PVCloudSyncTests.SyncIndexStoreTests testRoundTrip]' passed (0.002 seconds).
+Test Suite 'SyncIndexStoreTests' passed at 2026-10-20 02:12:34.365.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.009 (0.010) seconds
+Test Suite 'SyncLifecyclePolicyTests' started at 2026-10-20 02:12:34.365.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testDisabledIgnoresEveryTrigger]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testDisabledIgnoresEveryTrigger]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testDisablingMidRunClearsDeferredWork]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testDisablingMidRunClearsDeferredWork]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testEachTriggerStartsASyncCarryingItsReason]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testEachTriggerStartsASyncCarryingItsReason]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testEmulationEndingWithNothingPendingDoesNotSync]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testEmulationEndingWithNothingPendingDoesNotSync]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testEmulationStartingWithNoRunInFlightDoesNotDefer]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testEmulationStartingWithNoRunInFlightDoesNotDefer]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testEnablingStartsASyncAndDisablingShutsDown]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testEnablingStartsASyncAndDisablingShutsDown]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testInFlightSyncIsAbortedWhenEmulationStartsThenFlushedOnStop]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testInFlightSyncIsAbortedWhenEmulationStartsThenFlushedOnStop]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testLongSequenceNeverSyncsWhileEmulating]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testLongSequenceNeverSyncsWhileEmulating]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testRedundantEnabledChangeIsANoOp]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testRedundantEnabledChangeIsANoOp]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testTriggersDuringARunCoalesceIntoOneFlush]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testTriggersDuringARunCoalesceIntoOneFlush]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testTriggersWhileEmulatingAreDeferredNotRun]' started.
+Test Case '-[PVCloudSyncTests.SyncLifecyclePolicyTests testTriggersWhileEmulatingAreDeferredNotRun]' passed (0.000 seconds).
+Test Suite 'SyncLifecyclePolicyTests' passed at 2026-10-20 02:12:34.369.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+Test Suite 'SyncPlannerDeleteTests' started at 2026-10-20 02:12:34.370.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLiveRecordBeatsTombstoneForTheSamePath]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLiveRecordBeatsTombstoneForTheSamePath]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalMatchingTombstoneChecksumGoesToTrash]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalMatchingTombstoneChecksumGoesToTrash]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalNewerThanTombstoneUndeletes]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalNewerThanTombstoneUndeletes]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalOlderThanTombstoneWithDifferentBytesIsAConflict]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalOlderThanTombstoneWithDifferentBytesIsAConflict]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalPresentRemoteAbsentUploadsWhetherOrNotIndexed]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalPresentRemoteAbsentUploadsWhetherOrNotIndexed]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalWithinToleranceOfTombstoneUsesChecksum]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testLocalWithinToleranceOfTombstoneUsesChecksum]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testMergedDocumentIgnoresTombstone]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testMergedDocumentIgnoresTombstone]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testMergedDocumentWithDifferentBytesMerges]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testMergedDocumentWithDifferentBytesMerges]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testMergedDocumentWithSameBytesIsSynced]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testMergedDocumentWithSameBytesIsSynced]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testOptInCategoriesAreInvisibleInBothDirectionsWhenOff]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testOptInCategoriesAreInvisibleInBothDirectionsWhenOff]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testPlanIsDeterministicAcrossInputOrder]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testPlanIsDeterministicAcrossInputOrder]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyAlreadyMarkedDeletedDownloads]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyAlreadyMarkedDeletedDownloads]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyIndexedWithChangedChecksumRestores]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyIndexedWithChangedChecksumRestores]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyIndexedWithSameChecksumWritesTombstone]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyIndexedWithSameChecksumWritesTombstone]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyMergedDocumentDeletedLocallyIsFetchedAgain]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyMergedDocumentDeletedLocallyIsFetchedAgain]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyWithoutIndexDownloads]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testRemoteOnlyWithoutIndexDownloads]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testTombstoneForAlreadyDeletedPathIsSilent]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testTombstoneForAlreadyDeletedPathIsSilent]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testTombstoneForIndexedLivePathMarksDeleted]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testTombstoneForIndexedLivePathMarksDeleted]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testTombstoneForUnknownPathIsSilent]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testTombstoneForUnknownPathIsSilent]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testTombstoneWithoutChecksumNeverDeletes]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerDeleteTests testTombstoneWithoutChecksumNeverDeletes]' passed (0.000 seconds).
+Test Suite 'SyncPlannerDeleteTests' passed at 2026-10-20 02:12:34.378.
+	 Executed 20 tests, with 0 failures (0 unexpected) in 0.006 (0.009) seconds
+Test Suite 'SyncPlannerTests' started at 2026-10-20 02:12:34.378.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testAnEmptyLocalChecksumDoesNotCountAsAMatch]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testAnEmptyLocalChecksumDoesNotCountAsAMatch]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testIdenticalChecksumSkipsTransferEvenWithDistantMtimes]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testIdenticalChecksumSkipsTransferEvenWithDistantMtimes]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testLocalOnlyFilesUpload]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testLocalOnlyFilesUpload]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testNearIdenticalMtimesSkipTransfer]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testNearIdenticalMtimesSkipTransfer]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testNewerLocalUploads]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testNewerLocalUploads]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testNewerRemoteDownloads]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testNewerRemoteDownloads]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testPlanIsDeterministicAndUploadsBeforeRemoteOnlyDownloads]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testPlanIsDeterministicAndUploadsBeforeRemoteOnlyDownloads]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testRemoteOnlyFilesDownload]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testRemoteOnlyFilesDownload]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testSimultaneousDifferentContentBecomesAConflict]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testSimultaneousDifferentContentBecomesAConflict]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testWithoutAnIndexNoStepEverDeletesAnything]' started.
+Test Case '-[PVCloudSyncTests.SyncPlannerTests testWithoutAnIndexNoStepEverDeletesAnything]' passed (0.000 seconds).
+Test Suite 'SyncPlannerTests' passed at 2026-10-20 02:12:34.383.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.003 (0.005) seconds
+Test Suite 'SyncRetryPolicyTests' started at 2026-10-20 02:12:34.383.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testAttemptZeroIsRejected]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testAttemptZeroIsRejected]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testComputedBackoffIsCapped]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testComputedBackoffIsCapped]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testNetworkFailuresGetAShorterBudgetThanThrottling]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testNetworkFailuresGetAShorterBudgetThanThrottling]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testNonPositiveServerRetryAfterFallsBackToBackoff]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testNonPositiveServerRetryAfterFallsBackToBackoff]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testPermanentFailuresNeverRetry]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testPermanentFailuresNeverRetry]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testRateLimitGivesUpAfterTheAttemptBudget]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testRateLimitGivesUpAfterTheAttemptBudget]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testRateLimitHonoursServerRetryAfterInsteadOfBackoff]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testRateLimitHonoursServerRetryAfterInsteadOfBackoff]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testRateLimitWithoutServerHintUsesExponentialBackoff]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testRateLimitWithoutServerHintUsesExponentialBackoff]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testRecordChangedNeverRetries]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testRecordChangedNeverRetries]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testServerRetryAfterIsClampedSoANonsenseValueCannotWedgeSync]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testServerRetryAfterIsClampedSoANonsenseValueCannotWedgeSync]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testUnknownFailuresRetryExactlyOnce]' started.
+Test Case '-[PVCloudSyncTests.SyncRetryPolicyTests testUnknownFailuresRetryExactlyOnce]' passed (0.000 seconds).
+Test Suite 'SyncRetryPolicyTests' passed at 2026-10-20 02:12:34.387.
+	 Executed 11 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+Test Suite 'SyncTrashTests' started at 2026-10-20 02:12:34.387.
+Test Case '-[PVCloudSyncTests.SyncTrashTests testDeleteForGood]' started.
+Test Case '-[PVCloudSyncTests.SyncTrashTests testDeleteForGood]' passed (0.007 seconds).
+Test Case '-[PVCloudSyncTests.SyncTrashTests testMoveListRestore]' started.
+Test Case '-[PVCloudSyncTests.SyncTrashTests testMoveListRestore]' passed (0.005 seconds).
+Test Case '-[PVCloudSyncTests.SyncTrashTests testNewestFirstAndPurge]' started.
+Test Case '-[PVCloudSyncTests.SyncTrashTests testNewestFirstAndPurge]' passed (0.007 seconds).
+Test Case '-[PVCloudSyncTests.SyncTrashTests testRestoreRefusesToEscapeTheUserRoot]' started.
+Test Case '-[PVCloudSyncTests.SyncTrashTests testRestoreRefusesToEscapeTheUserRoot]' passed (0.003 seconds).
+Test Case '-[PVCloudSyncTests.SyncTrashTests testScannerMovesThroughTrash]' started.
+Test Case '-[PVCloudSyncTests.SyncTrashTests testScannerMovesThroughTrash]' passed (0.003 seconds).
+Test Suite 'SyncTrashTests' passed at 2026-10-20 02:12:34.413.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.025 (0.026) seconds
+Test Suite 'TimestampConflictResolverTests' started at 2026-10-20 02:12:34.413.
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testDifferingChecksumInsideTheWindowEscalatesToManual]' started.
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testDifferingChecksumInsideTheWindowEscalatesToManual]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testExactlyAtTheThresholdResolvesByTimestamp]' started.
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testExactlyAtTheThresholdResolvesByTimestamp]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testIdenticalChecksumInsideTheWindowResolvesToLocal]' started.
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testIdenticalChecksumInsideTheWindowResolvesToLocal]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testOutsideTheWindowNewerWins]' started.
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testOutsideTheWindowNewerWins]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testTheWindowIsSymmetric]' started.
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testTheWindowIsSymmetric]' passed (0.000 seconds).
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testThresholdIsConfigurable]' started.
+Test Case '-[PVCloudSyncTests.TimestampConflictResolverTests testThresholdIsConfigurable]' passed (0.000 seconds).
+Test Suite 'TimestampConflictResolverTests' passed at 2026-10-20 02:12:34.415.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.002 (0.002) seconds
+Test Suite 'UserDataScannerTests' started at 2026-10-20 02:12:34.415.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testChecksumIsStableAndChangesWithContent]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testChecksumIsStableAndChangesWithContent]' passed (0.011 seconds).
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testEmptyFilesAreSkipped]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testEmptyFilesAreSkipped]' passed (0.002 seconds).
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testICubeStoresAndSkinsAreScanned]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testICubeStoresAndSkinsAreScanned]' passed (0.008 seconds).
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testMissingRootIsEmptyNotAnError]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testMissingRootIsEmptyNotAnError]' passed (0.001 seconds).
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testNoRomArtworkOrFirmwareIsEverScanned]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testNoRomArtworkOrFirmwareIsEverScanned]' passed (0.010 seconds).
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testOptInCategoriesFollowPolicy]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testOptInCategoriesFollowPolicy]' passed (0.062 seconds).
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testRelativePathsAreRootRelativeWithNoLeadingSlash]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testRelativePathsAreRootRelativeWithNoLeadingSlash]' passed (0.062 seconds).
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testScanPicksUpEverySyncableCategory]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testScanPicksUpEverySyncableCategory]' passed (0.032 seconds).
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testWriteRejectsPathsTheClassifierWouldNeverAllow]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testWriteRejectsPathsTheClassifierWouldNeverAllow]' passed (0.007 seconds).
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testWriteStampsTheSourceModificationDate]' started.
+Test Case '-[PVCloudSyncTests.UserDataScannerTests testWriteStampsTheSourceModificationDate]' passed (0.005 seconds).
+Test Suite 'UserDataScannerTests' passed at 2026-10-20 02:12:34.625.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 0.199 (0.209) seconds
+Test Suite 'PVCloudSyncTests.xctest' failed at 2026-10-20 02:12:34.625.
+	 Executed 105 tests, with 1 failure (0 unexpected) in 1.020 (1.045) seconds
+Test Suite 'All tests' failed at 2026-10-20 02:12:34.625.
+	 Executed 105 tests, with 1 failure (0 unexpected) in 1.020 (1.046) seconds

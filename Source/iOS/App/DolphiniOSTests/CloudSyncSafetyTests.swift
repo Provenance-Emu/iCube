@@ -16,7 +16,9 @@ private actor SafetySyncProvider: SyncProvider {
   private var startWaiter: CheckedContinuation<Void, Never>?
   private var payloadWaiter: CheckedContinuation<Data, Never>?
   private var downloads = 0
+  private var payload = Data("remote".utf8)
   private var uploadedPaths: [String] = []
+  private var uploadedData: [String: Data] = [:]
   private var remoteSnapshot = RemoteSyncSnapshot()
   private var snapshotWaiter: CheckedContinuation<RemoteSyncSnapshot, Never>?
   private var didSuspendSnapshot = false
@@ -26,6 +28,7 @@ private actor SafetySyncProvider: SyncProvider {
   func accountIdentity() async -> String? { "safety-account" }
   func upload(metadata: SyncableFileMetadata, data: Data) async throws {
     uploadedPaths.append(metadata.relativePath)
+    uploadedData[metadata.relativePath] = data
     if mode == .uploadFailure { throw SyncProviderError.uploadFailed("Expected failure") }
   }
   func download(metadata: SyncableFileMetadata) async throws -> Data {
@@ -35,15 +38,17 @@ private actor SafetySyncProvider: SyncProvider {
     startWaiter?.resume()
     startWaiter = nil
     if mode == .suspended { return await withCheckedContinuation { payloadWaiter = $0 } }
-    return Data("remote".utf8)
+    return payload
   }
   func waitUntilDownloading() async {
     if downloading { return }
     await withCheckedContinuation { startWaiter = $0 }
   }
-  func finishDownload() { payloadWaiter?.resume(returning: Data("remote".utf8)); payloadWaiter = nil }
+  func finishDownload() { payloadWaiter?.resume(returning: payload); payloadWaiter = nil }
+  func setPayload(_ data: Data) { payload = data }
   func downloadCount() -> Int { downloads }
   func uploads() -> [String] { uploadedPaths }
+  func uploadedBytes(path: String) -> Data? { uploadedData[path] }
   func setSnapshot(_ snapshot: RemoteSyncSnapshot) { remoteSnapshot = snapshot }
   func fetchRemoteSnapshot() async throws -> RemoteSyncSnapshot {
     if mode == .suspendedSnapshot && !didSuspendSnapshot {
@@ -62,6 +67,24 @@ private actor SafetySyncProvider: SyncProvider {
   func writeTombstone(_ tombstone: SyncTombstone) async throws {}
   func purgeExpiredTombstones(olderThan cutoff: Date) async throws {}
   func purgeAllData() async throws {}
+}
+
+// Pauses the actual scanner write immediately before its atomic replacement.
+private final class CommitBarrierFileManager: FileManager, @unchecked Sendable {
+  let entered = DispatchSemaphore(value: 0)
+  let release = DispatchSemaphore(value: 0)
+  private let stateLock = NSLock()
+  private var armed = false
+  private var pauseLeaf = "Profiles"
+  func arm(atLeaf leaf: String = "Profiles") { stateLock.lock(); armed = true; pauseLeaf = leaf; stateLock.unlock() }
+  override func fileExists(atPath path: String) -> Bool {
+    stateLock.lock()
+    let pause = armed && URL(fileURLWithPath: path).lastPathComponent == pauseLeaf
+    if pause { armed = false }
+    stateLock.unlock()
+    if pause { entered.signal(); _ = release.wait(timeout: .now() + 5) }
+    return super.fileExists(atPath: path)
+  }
 }
 
 @MainActor
@@ -109,6 +132,292 @@ final class CloudSyncSafetyTests: XCTestCase {
       try? FileManager.default.removeItem(at: root)
     }
     return Fixture(root: root, file: file, conflict: conflict, provider: provider, index: index, trash: trash, coordinator: coordinator, gate: gate)
+  }
+
+  private func metadataShard(_ mode: SafetySyncProvider.Mode) throws -> (Fixture, LibraryMetadataStore.Identity, String) {
+    let identity = LibraryMetadataStore.Identity.game(gameID: "TEST01", discNumber: 0, revision: 0)!
+    let path = "Profiles/LibraryMetadata/" + identity.fileName
+    return (try fixture(mode, path: path), identity, path)
+  }
+
+  private func shardBytes(identity: LibraryMetadataStore.Identity, field: String, value: Any, stamp: Double = 100) throws -> Data {
+    try JSONSerialization.data(withJSONObject: [identity.rawValue + ":" + field: ["updatedAt": stamp, "value": value]], options: [.sortedKeys])
+  }
+
+  private func shardMetadata(path: String, bytes: Data, type: SyncableFileType = .gameProfile) -> SyncableFileMetadata {
+    SyncableFileMetadata(relativePath: path, lastModified: Date(), fileSize: Int64(bytes.count),
+      checksum: SyncChecksum.sha256Hex(bytes), fileType: type)
+  }
+
+  func testInitialScannerLeaseDrainsBeforeCoreBootCanOpenFiles() async throws {
+    let f = try fixture(.success)
+    let barrier = CommitBarrierFileManager()
+    let coordinator = CloudSyncCoordinator(network: StaticNetworkState.unconstrained, enabled: true,
+      scanner: UserDataScanner(rootDirectory: f.root, fileManager: barrier), provider: f.provider,
+      index: f.index, trash: f.trash, localIOGate: f.gate)
+    addTeardownBlock { await coordinator.handle(.enabledChanged(false)) }
+    barrier.arm(atLeaf: f.root.lastPathComponent)
+    await coordinator.syncNow()
+    let entered = await Task.detached { barrier.entered.wait(timeout: .now() + 3) }.value
+    XCTAssertEqual(entered, .success)
+    let generation = f.gate.beginEmulation()
+    let drained = DispatchSemaphore(value: 0)
+    DispatchQueue.global().async { f.gate.waitForLocalIO(); drained.signal() }
+    XCTAssertEqual(drained.wait(timeout: .now() + 0.05), .timedOut)
+    barrier.release.signal()
+    let didDrain = await Task.detached { drained.wait(timeout: .now() + 3) }.value
+    XCTAssertEqual(didDrain, .success)
+    await coordinator.waitForCurrentSyncCompletion()
+    let uploads = await f.provider.uploads()
+    XCTAssertTrue(uploads.isEmpty)
+    XCTAssertTrue(f.gate.finishCoreDrain(generation: generation))
+  }
+
+  func testLibraryEditStoreWriterWaitsForSyncCommitAndKeepsIndependentRemoteTags() async throws {
+    let (f, identity, path) = try metadataShard(.suspended)
+    try FileManager.default.removeItem(at: f.file)
+    let store = try LibraryMetadataStore(directoryURL: f.file.deletingLastPathComponent(), withFileAccess: { operation in
+      try LibraryStateStore.withFileAccess(operation)
+    })
+    let baseline = LibraryMetadataStore.Draft(title: "Original")
+    _ = try store.commit(baseline, baseline: .init(), for: identity)
+    let remote = try shardBytes(identity: identity, field: "tags", value: ["Remote Tag"])
+    await f.provider.setPayload(remote)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [shardMetadata(path: path, bytes: remote)]))
+    let barrier = CommitBarrierFileManager()
+    let coordinator = CloudSyncCoordinator(network: StaticNetworkState.unconstrained, enabled: true,
+      scanner: UserDataScanner(rootDirectory: f.root, fileManager: barrier), provider: f.provider,
+      index: f.index, trash: f.trash, localIOGate: f.gate)
+    addTeardownBlock { await coordinator.handle(.enabledChanged(false)) }
+    await coordinator.syncNow()
+    await f.provider.waitUntilDownloading()
+    barrier.arm(atLeaf: "LibraryMetadata")
+    await f.provider.finishDownload()
+    let entered = await Task.detached { barrier.entered.wait(timeout: .now() + 3) }.value
+    XCTAssertEqual(entered, .success)
+    let finished = DispatchSemaphore(value: 0)
+    DispatchQueue.global().async {
+      defer { finished.signal() }
+      do { _ = try store.commit(.init(title: "Edited"), baseline: baseline, for: identity) }
+      catch { XCTFail("Unexpected metadata commit error: \(error)") }
+    }
+    XCTAssertEqual(finished.wait(timeout: .now() + 0.05), .timedOut)
+    barrier.release.signal()
+    await coordinator.waitForCurrentSyncCompletion()
+    XCTAssertEqual(finished.wait(timeout: .now() + 1), .success)
+    try store.reload()
+    let draft = try store.draft(for: identity)
+    XCTAssertEqual(draft.title, "Edited")
+    XCTAssertEqual(draft.tags, ["Remote Tag"])
+  }
+
+  func testLibraryEditShardUploadsThroughExistingDocumentProvider() async throws {
+    let (f, identity, path) = try metadataShard(.success)
+    let bytes = try shardBytes(identity: identity, field: "title", value: "Custom Title")
+    try bytes.write(to: f.file)
+    await f.coordinator.syncNow()
+    await f.coordinator.waitForCurrentSyncCompletion()
+    let uploaded = await f.provider.uploadedBytes(path: path)
+    XCTAssertEqual(uploaded, bytes)
+  }
+
+  func testLibraryEditShardDownloadNotifiesItsRelativePath() async throws {
+    let (f, identity, path) = try metadataShard(.success)
+    try FileManager.default.removeItem(at: f.file)
+    let bytes = try shardBytes(identity: identity, field: "title", value: "Custom Title")
+    await f.provider.setPayload(bytes)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [shardMetadata(path: path, bytes: bytes)]))
+    let notification = expectation(forNotification: CloudSyncCoordinator.documentDidChangeNotification,
+      object: f.coordinator) { note in note.userInfo?[CloudSyncCoordinator.relativePathKey] as? String == path }
+    await f.coordinator.syncNow()
+    await f.coordinator.waitForCurrentSyncCompletion()
+    await fulfillment(of: [notification], timeout: 1)
+    XCTAssertEqual(try Data(contentsOf: f.file), bytes)
+  }
+
+  func testFirstDownloadMergesLibraryEditsCreatedWhileNetworkSuspends() async throws {
+    let (f, identity, path) = try metadataShard(.suspended)
+    try FileManager.default.removeItem(at: f.file)
+    let remote = try shardBytes(identity: identity, field: "title", value: "Remote Title")
+    await f.provider.setPayload(remote)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [shardMetadata(path: path, bytes: remote)]))
+    await f.coordinator.syncNow()
+    await f.provider.waitUntilDownloading()
+    let created = try shardBytes(identity: identity, field: "tags", value: ["Local Tag"])
+    try created.write(to: f.file)
+    await f.provider.finishDownload()
+    await f.coordinator.waitForCurrentSyncCompletion()
+    let committed = try Data(contentsOf: f.file)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: committed) as? [String: [String: Any]])
+    XCTAssertEqual(object[identity.rawValue + ":title"]?["value"] as? String, "Remote Title")
+    XCTAssertEqual(object[identity.rawValue + ":tags"]?["value"] as? [String], ["Local Tag"])
+    let index = await f.index.snapshot()
+    XCTAssertEqual(index[path]?.checksum, SyncChecksum.sha256Hex(committed))
+  }
+
+  func testLibraryEditMergeRetainsIndependentFieldsAndClearTombstones() async throws {
+    let (f, identity, path) = try metadataShard(.success)
+    let local = try shardBytes(identity: identity, field: "title", value: "Local Title")
+    let remote = try JSONSerialization.data(withJSONObject: [
+      identity.rawValue + ":tags": ["updatedAt": 200, "value": ["Racing"]],
+      identity.rawValue + ":cover": ["updatedAt": 200, "value": NSNull()]
+    ], options: [.sortedKeys])
+    try local.write(to: f.file)
+    await f.provider.setPayload(remote)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [shardMetadata(path: path, bytes: remote)]))
+    await f.coordinator.syncNow()
+    await f.coordinator.waitForCurrentSyncCompletion()
+    let merged = try Data(contentsOf: f.file)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: merged) as? [String: [String: Any]])
+    XCTAssertEqual(object[identity.rawValue + ":title"]?["value"] as? String, "Local Title")
+    XCTAssertEqual(object[identity.rawValue + ":tags"]?["value"] as? [String], ["Racing"])
+    XCTAssertTrue(object[identity.rawValue + ":cover"]?["value"] is NSNull)
+    let uploaded = await f.provider.uploadedBytes(path: path)
+    XCTAssertEqual(uploaded, merged)
+  }
+
+  func testMalformedOrWrongIdentityLibraryEditDownloadCannotReplaceGoodLocal() async throws {
+    for remoteIdentity in [false, true] {
+      let (f, identity, path) = try metadataShard(.success)
+      let local = try shardBytes(identity: identity, field: "title", value: "Good")
+      try local.write(to: f.file)
+      let remote = remoteIdentity
+        ? try shardBytes(identity: .game(gameID: "OTHER1", discNumber: 0, revision: 0)!, field: "title", value: "Wrong Identity")
+        : Data("broken".utf8)
+      await f.provider.setPayload(remote)
+      await f.provider.setSnapshot(RemoteSyncSnapshot(files: [shardMetadata(path: path, bytes: remote)]))
+      await f.coordinator.syncNow()
+      await f.coordinator.waitForCurrentSyncCompletion()
+      XCTAssertEqual(try Data(contentsOf: f.file), local)
+      let uploaded = await f.provider.uploads()
+      XCTAssertTrue(uploaded.isEmpty)
+    }
+  }
+
+  func testLibraryEditFirstDownloadRejectsMalformedOversizeAndForgedCategory() async throws {
+    for mode in ["malformed", "oversize", "category", "checksum"] {
+      let (f, identity, path) = try metadataShard(.success)
+      try FileManager.default.removeItem(at: f.file)
+      let bytes = mode == "malformed" ? Data("broken".utf8) : try shardBytes(identity: identity, field: "title", value: "Good")
+      var metadata = shardMetadata(path: path, bytes: bytes, type: mode == "category" ? .saveState : .gameProfile)
+      if mode == "oversize" { metadata.fileSize = 1_048_577 }
+      if mode == "checksum" { metadata.checksum = "mismatch" }
+      await f.provider.setPayload(bytes)
+      await f.provider.setSnapshot(RemoteSyncSnapshot(files: [metadata]))
+      await f.coordinator.syncNow()
+      await f.coordinator.waitForCurrentSyncCompletion()
+      XCTAssertFalse(FileManager.default.fileExists(atPath: f.file.path), mode)
+    }
+  }
+
+  func testProfileWriterWaitsForSyncCommitAndPreservesBothGames() async throws {
+    let f = try fixture(.suspended, path: "Profiles/game_profiles.json")
+    try JSONEncoder().encode([String: GameProfile]()).write(to: f.file)
+    let store = GameProfiles(fileURL: f.file)
+    store.setProfile(GameProfile(irMode: 1), for: "LOCAL")
+    var remote = GameProfile(irMode: 2)
+    remote.updatedAt = Date()
+    let bytes = try JSONEncoder().encode(["REMOTE": remote])
+    await f.provider.setPayload(bytes)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [SyncableFileMetadata(
+      relativePath: "Profiles/game_profiles.json", lastModified: Date(), fileSize: Int64(bytes.count),
+      checksum: SyncChecksum.sha256Hex(bytes), fileType: .gameProfile)]))
+    let barrier = CommitBarrierFileManager()
+    let coordinator = CloudSyncCoordinator(network: StaticNetworkState.unconstrained, enabled: true,
+      scanner: UserDataScanner(rootDirectory: f.root, fileManager: barrier), provider: f.provider,
+      index: f.index, trash: f.trash, localIOGate: f.gate)
+    addTeardownBlock { await coordinator.handle(.enabledChanged(false)) }
+    await coordinator.syncNow()
+    await f.provider.waitUntilDownloading()
+    barrier.arm()
+    await f.provider.finishDownload()
+    let entered = await Task.detached { barrier.entered.wait(timeout: .now() + 3) }.value
+    XCTAssertEqual(entered, .success)
+    let writerStarted = DispatchSemaphore(value: 0)
+    let writerFinished = DispatchSemaphore(value: 0)
+    DispatchQueue.global().async {
+      writerStarted.signal()
+      store.setProfile(GameProfile(irMode: 3), for: "LOCAL")
+      writerFinished.signal()
+    }
+    XCTAssertEqual(writerStarted.wait(timeout: .now() + 1), .success)
+    XCTAssertEqual(writerFinished.wait(timeout: .now() + 0.05), .timedOut,
+      "Local store writes must wait for the scanner document commit")
+    barrier.release.signal()
+    await coordinator.waitForCurrentSyncCompletion()
+    XCTAssertEqual(writerFinished.wait(timeout: .now() + 1), .success)
+    store.reloadAfterSync()
+    XCTAssertEqual(store.profile(for: "LOCAL")?.irMode, 3)
+    XCTAssertEqual(store.profile(for: "REMOTE")?.irMode, 2)
+  }
+
+  func testLibraryMergePreservesEditMadeWhileRemoteDownloadSuspends() async throws {
+    let f = try fixture(.suspended, path: "Profiles/library_state.json")
+    let original = LibraryStateDocument(games: ["TEST01": .init(launches: ["local": 1])])
+    try original.encoded().write(to: f.file)
+    let remote = LibraryStateDocument(games: ["REMOTE": .init(launches: ["remote": 2])])
+    let remoteBytes = try remote.encoded()
+    await f.provider.setPayload(remoteBytes)
+    let metadata = SyncableFileMetadata(relativePath: "Profiles/library_state.json", lastModified: Date(),
+      fileSize: Int64(remoteBytes.count), checksum: SyncChecksum.sha256Hex(remoteBytes), fileType: .libraryState)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [metadata]))
+    await f.coordinator.syncNow()
+    await f.provider.waitUntilDownloading()
+    var edited = original
+    edited.games["TEST01"]?.launches["local"] = 3
+    try edited.encoded().write(to: f.file, options: .atomic)
+    await f.provider.finishDownload()
+    await f.coordinator.waitForCurrentSyncCompletion()
+    let result = try LibraryStateDocument.decode(Data(contentsOf: f.file))
+    XCTAssertEqual(result.games["TEST01"]?.totalLaunches, 3)
+    XCTAssertEqual(result.games["REMOTE"]?.totalLaunches, 2)
+  }
+
+  func testMalformedNewerRemoteDocumentCannotReplaceValidLocalDocument() async throws {
+    let f = try fixture(.success, path: "Profiles/library_state.json")
+    let bytes = try LibraryStateDocument(games: ["TEST01": .init(launches: ["local": 3])]).encoded()
+    try bytes.write(to: f.file)
+    let malformed = Data("malformed".utf8)
+    await f.provider.setPayload(malformed)
+    let metadata = SyncableFileMetadata(relativePath: "Profiles/library_state.json", lastModified: Date().addingTimeInterval(300),
+      fileSize: Int64(malformed.count), checksum: SyncChecksum.sha256Hex(malformed), fileType: .libraryState)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [metadata]))
+    await f.coordinator.syncNow()
+    await f.coordinator.waitForCurrentSyncCompletion()
+    XCTAssertEqual(try Data(contentsOf: f.file), bytes)
+    let uploads = await f.provider.uploads()
+    XCTAssertTrue(uploads.isEmpty, "Neither copy may be destroyed on an undecodable merge")
+    XCTAssertTrue(f.coordinator.recentEvents.contains { $0.message.contains("merge") || $0.message.contains("Merge") })
+  }
+
+  func testMergedDocumentNotifiesOwnerEvenWhenUploadFails() async throws {
+    let f = try fixture(.uploadFailure, path: "Profiles/library_state.json")
+    try LibraryStateDocument(games: ["LOCAL": .init(launches: ["local": 1])]).encoded().write(to: f.file)
+    let remote = try LibraryStateDocument(games: ["REMOTE": .init(launches: ["remote": 1])]).encoded()
+    await f.provider.setPayload(remote)
+    let metadata = SyncableFileMetadata(relativePath: "Profiles/library_state.json", lastModified: Date(),
+      fileSize: Int64(remote.count), checksum: SyncChecksum.sha256Hex(remote), fileType: .libraryState)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [metadata]))
+    let notification = expectation(forNotification: CloudSyncCoordinator.documentDidChangeNotification,
+      object: f.coordinator) { note in
+        note.userInfo?[CloudSyncCoordinator.fileTypeKey] as? String == SyncableFileType.libraryState.rawValue
+      }
+    await f.coordinator.syncNow()
+    await f.coordinator.waitForCurrentSyncCompletion()
+    await fulfillment(of: [notification], timeout: 1)
+    let saved = try LibraryStateDocument.decode(Data(contentsOf: f.file))
+    XCTAssertEqual(Set(saved.games.keys), ["LOCAL", "REMOTE"])
+  }
+
+  func testPurgeableStoragePlanningRestoresMissingFileWithSurvivingIndex() async throws {
+    let f = try fixture(.success)
+    let metadata = f.conflict.metadata
+    await f.index.record(path: metadata.relativePath, checksum: metadata.checksum, lastModified: metadata.lastModified)
+    let snapshot = await f.index.snapshot()
+    let purgeSafe = CloudSyncCoordinator.planningIndex(snapshot, purgeableStorage: true)
+    let steps = SyncPlanner().plan(local: [], remote: RemoteSyncSnapshot(files: [metadata]), index: purgeSafe, policy: .default)
+    XCTAssertEqual(steps, [.download(metadata)])
+    XCTAssertEqual(CloudSyncCoordinator.planningIndex(snapshot, purgeableStorage: false), snapshot)
   }
 
   private let privateConfigPaths = ["Config/RetroAchievements.ini", "Config/DSUClient.ini"]

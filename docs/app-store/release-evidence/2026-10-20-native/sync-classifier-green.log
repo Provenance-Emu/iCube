@@ -1,0 +1,89 @@
+Test Suite 'All tests' started at 2026-10-20 02:13:23.229.
+Test Suite 'PVSyncRulesTests.xctest' started at 2026-10-20 02:13:23.231.
+Test Suite 'LibraryMetadataClassifierTests' started at 2026-10-20 02:13:23.231.
+Test Case '-[PVSyncRulesTests.LibraryMetadataClassifierTests testBoundedCanonicalLibraryMetadataShardUsesDocumentBucket]' started.
+Test Case '-[PVSyncRulesTests.LibraryMetadataClassifierTests testBoundedCanonicalLibraryMetadataShardUsesDocumentBucket]' passed (0.002 seconds).
+Test Case '-[PVSyncRulesTests.LibraryMetadataClassifierTests testExistingGameProfilesRetainTheirExistingLimit]' started.
+Test Case '-[PVSyncRulesTests.LibraryMetadataClassifierTests testExistingGameProfilesRetainTheirExistingLimit]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.LibraryMetadataClassifierTests testLibraryMetadataRejectsNoncanonicalNamesAndPaths]' started.
+Test Case '-[PVSyncRulesTests.LibraryMetadataClassifierTests testLibraryMetadataRejectsNoncanonicalNamesAndPaths]' passed (0.000 seconds).
+Test Suite 'LibraryMetadataClassifierTests' passed at 2026-10-20 02:13:23.234.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'SyncClassifierTests' started at 2026-10-20 02:13:23.234.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testArtworkIsNotSynced]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testArtworkIsNotSynced]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testConfigAndPerGameSettings]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testConfigAndPerGameSettings]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testGameCubeMemoryCards]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testGameCubeMemoryCards]' passed (0.001 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testGBASaves]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testGBASaves]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testICubeProfileStores]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testICubeProfileStores]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testIPLIsOptInFirmware]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testIPLIsOptInFirmware]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testMergedDocumentsNeverPropagateDeletes]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testMergedDocumentsNeverPropagateDeletes]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testNoROMIsEverSyncable]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testNoROMIsEverSyncable]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testOnlyStatesAreRequiredToResume]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testOnlyStatesAreRequiredToResume]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testOptInCategoriesAreExactlyTheLargeOnes]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testOptInCategoriesAreExactlyTheLargeOnes]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testPathNormalization]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testPathNormalization]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testPruningNeverHidesASyncableFile]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testPruningNeverHidesASyncableFile]' passed (0.001 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testPullPriorityIsTotalAndPutsMetadataFirst]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testPullPriorityIsTotalAndPutsMetadataFirst]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testRestOfNANDIsOptInSystem]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testRestOfNANDIsOptInSystem]' passed (0.002 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testResumeStateAndSiblings]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testResumeStateAndSiblings]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSaveStateSlots]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSaveStateSlots]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testShouldDescendAllowsSyncableTrees]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testShouldDescendAllowsSyncableTrees]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testShouldDescendSkipsExcludedTrees]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testShouldDescendSkipsExcludedTrees]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSizeCapDoesNotWidenTheAllowList]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSizeCapDoesNotWidenTheAllowList]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSizeCapIsPerCategory]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSizeCapIsPerCategory]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSizeCapRejectsOversizeEvenWhenPathIsAllowed]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSizeCapRejectsOversizeEvenWhenPathIsAllowed]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSkins]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testSkins]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testUnknownPathsDefaultToNotSyncing]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testUnknownPathsDefaultToNotSyncing]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testWiiChannelsAndDLCAreOptIn]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testWiiChannelsAndDLCAreOptIn]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testWiiSavesAreAlwaysOnAndSeparateFromTheNAND]' started.
+Test Case '-[PVSyncRulesTests.SyncClassifierTests testWiiSavesAreAlwaysOnAndSeparateFromTheNAND]' passed (0.000 seconds).
+Test Suite 'SyncClassifierTests' passed at 2026-10-20 02:13:23.247.
+	 Executed 25 tests, with 0 failures (0 unexpected) in 0.010 (0.013) seconds
+Test Suite 'SyncPolicyTests' started at 2026-10-20 02:13:23.247.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testChannelsSwitchDoesNotImplyNAND]' started.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testChannelsSwitchDoesNotImplyNAND]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testClassifierIgnoresPolicyButCombinedHelperHonoursIt]' started.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testClassifierIgnoresPolicyButCombinedHelperHonoursIt]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testCodableRoundTrip]' started.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testCodableRoundTrip]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testDefaultAllowsEveryAlwaysOnCategoryAndNoOptInOne]' started.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testDefaultAllowsEveryAlwaysOnCategoryAndNoOptInOne]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testFirmwareSwitchOnlyAffectsFirmware]' started.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testFirmwareSwitchOnlyAffectsFirmware]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testNANDSwitchImpliesChannels]' started.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testNANDSwitchImpliesChannels]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testPolicyAwareDescentKeepsTitleTree]' started.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testPolicyAwareDescentKeepsTitleTree]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testPolicyAwareDescentPrunesTicketAndShared1WhenOff]' started.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testPolicyAwareDescentPrunesTicketAndShared1WhenOff]' passed (0.000 seconds).
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testWiFiRuleAppliesToLargeCategoriesOnly]' started.
+Test Case '-[PVSyncRulesTests.SyncPolicyTests testWiFiRuleAppliesToLargeCategoriesOnly]' passed (0.000 seconds).
+Test Suite 'SyncPolicyTests' passed at 2026-10-20 02:13:23.250.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.002 (0.003) seconds
+Test Suite 'PVSyncRulesTests.xctest' passed at 2026-10-20 02:13:23.250.
+	 Executed 37 tests, with 0 failures (0 unexpected) in 0.014 (0.020) seconds
+Test Suite 'All tests' passed at 2026-10-20 02:13:23.250.
+	 Executed 37 tests, with 0 failures (0 unexpected) in 0.014 (0.022) seconds
