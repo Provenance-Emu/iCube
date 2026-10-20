@@ -61,7 +61,7 @@ final class LibraryMetadataService: NSObject {
     return LibraryMetadataStore.Identity.contentHash(receipt.sha256)
   }
 
-  private static func discIdentity(for item: TVGameItem) -> LibraryMetadataStore.Identity? {
+  static func discIdentity(for item: TVGameItem) -> LibraryMetadataStore.Identity? {
     // DiscIO::Platform::ELFOrDOL is 4. Its ID-<basename> and <unknown> values
     // identify filenames/placeholders, never the actual executable contents.
     guard item.platform != 4 else { return nil }

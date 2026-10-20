@@ -1,0 +1,43 @@
+{
+  "commit": "6e89d5cec662d8f3bd61413da51daaad8108319b",
+  "toolchain": "Xcode 27.1 Apple Swift 6.4 (swiftlang-6.4.0.34.1)",
+  "source_integrity": "1151 archive entries matched Git blob contents after tests",
+  "parent_status_unchanged": true,
+  "tests": {
+    "PVLibrarySharing": {
+      "passed": 140,
+      "failed": 0,
+      "jobs": 2,
+      "log": "provenance-pvlibrarysharing-xcode-swift.log"
+    },
+    "import_queue_claim": {
+      "passed": 4,
+      "failed": 0,
+      "log": "provenance-import-queue-claim-xcode-swift.log"
+    },
+    "nearby_import_completion": {
+      "passed": 7,
+      "failed": 0,
+      "log": "provenance-nearby-import-completion-xcode-swift.log"
+    }
+  },
+  "swift_parse": {
+    "files": 20,
+    "failures": 0,
+    "log": "provenance-swift-parse.log"
+  },
+  "swiftlint": {
+    "exit": 0,
+    "warnings": 54,
+    "serious": 0,
+    "changed_line_warnings": 7,
+    "log": "provenance-swiftlint-commit-config.log",
+    "details": "provenance-swiftlint-changed-lines.json"
+  },
+  "limitations": [
+    "Native macOS harnesses do not establish integrated PVUI/PVLibrary iOS/tvOS compilation or real-device transfer convergence.",
+    "Initial logs marked fresh used PATH Swift 5.3 and fail tools-version requirements; xcode-swift logs supersede them.",
+    "Initial unconfigured lint log used incidental ancestor configuration; commit-config log supersedes it.",
+    "No SDK app build, trust bypass, push, or PR performed."
+  ]
+}

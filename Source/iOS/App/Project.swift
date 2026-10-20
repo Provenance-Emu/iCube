@@ -528,7 +528,7 @@ let iCubeTests = Target.target(
     bundleId: "com.joemattiello.iCubeTests",
     deploymentTargets: .multiplatform(iOS: "17.0"),
     infoPlist: .default,
-    sources: ["DolphiniOSTests/**/*.swift"],
+    sources: ["DolphiniOSTests/**/*.swift", "DolphiniOSTests/**/*.mm"],
     // A folder reference (not a glob) keeps `Skins/<name>.deltaskin/` intact inside the test bundle.
     resources: [
         .folderReference(path: "DolphiniOSTests/Fixtures/Skins"),

@@ -5515,3 +5515,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Turn Off Automatic Copying" = "Turn Off Automatic Copying";
 "Use Original Cover" = "Use Original Cover";
 "Waiting for a paired device with both apps open. Copying pauses during gameplay." = "Waiting for a paired device with both apps open. Copying pauses during gameplay.";
+"Edits apply to identical files, including renamed copies." = "Edits apply to identical files, including renamed copies.";

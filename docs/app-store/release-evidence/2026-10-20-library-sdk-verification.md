@@ -1,0 +1,31 @@
+# Library editing SDK verification — October 20, 2026
+
+## iOS
+
+Fresh integrated `iCube (NJB)` Debug build-for-testing succeeded with Xcode 27.1, arm64 simulator, existing four-slice core and PVSyncRules 1.0.2. The complete suite executed **2,130 tests: 2,124 passed, six opt-in snapshots skipped, zero failures** on the dedicated iOS 27.1 simulator. [Machine-readable XCTest summary](2026-10-20-library-sdk-results.json).
+
+This includes all eight `LibraryMetadataServiceTests`, all 32 `LibraryMetadataStoreTests` and `TVGameItemInvalidTests.testEmptyCoreHandleKeepsOriginalFallbackAndSafeMetadataGetters`. Tuist previously included Swift test files only; `Project.swift` now also includes Objective-C++ `.mm` regressions. The SDK caught the inaccessible Swift-subclass initializer in the fixture; the test now uses the real DEBUG `TVGameItem` initializer and redirects only its test-file path with KVC.
+
+The initial no-signing simulator launch correctly failed on unsigned MoltenVK. Local simulator products were ad-hoc signed and deep-verified before execution. Two disposable iOS 26.5 audit simulators subsequently had installation/bootstrap problems; the final full-suite result above is from a separate dedicated iOS 27.1 simulator, not a claim about those failed attempts. No device/distribution signature was changed.
+
+Historical scratch evidence (no longer retained locally; the parsed XCTest summary above is retained): `/tmp/icube-tvos-audit-2026-10-19/library-objc-tests-build.log`, `library-final-ios-sdk27.log` and `library-final-ios-sdk27.xcresult`. Use the generated `iCube (NJB)_iphonesimulator27.1-arm64.xctestrun` with `xcodebuild test-without-building`, serial testing and an explicitly chosen compatible simulator to reproduce.
+
+## tvOS
+
+The integrated Debug tvOS simulator build and external `ICubeTVAudit` harness compile successfully. The inert library-only DOL fixture was never booted.
+
+Rendered testing reproduced an unwanted selection side effect: long Select both opened the native context menu and selected the game. Removing the competing tvOS long-press selection gesture, and providing the existing Select Games action inside that menu, preserves explicit selection. The dedicated rendered regression **passed**: opening the menu does not select; Select Games selects exactly once; short Select in established selection mode only deselects and does not launch. iOS gesture handling is unchanged. Scratch result: `library-tv-context-fixed.xcresult`, case `testContextMenuSelectGamesSelectsOnceAndShortSelectOnlyTogglesSelection`.
+
+Several early harness assertions were incorrect and are not product failures: homebrew display names include `.dol`; native context actions are table cells rather than buttons; a focused SwiftUI card exposes focus on its platform subtitle; Form buttons expose it on their parent table cells; returning from a card to the rail requires Left. The current harness uses these observed accessibility semantics and records failure trees/screenshots.
+
+Rendered title/tag Save–Cancel–reopen–relaunch **passed** in `library-tv-final-editor.xcresult` (149.558 seconds), including cleanup through Save. The same run repeated the successful selection regression (32.101 seconds).
+
+**Fresh Back result:** `testBackDiscardsDraftAndReturnsFocusToInvokingTile` passed in 45.099 seconds with the original application Back handler and corrected keyboard-settling checks (`build/release-audit/2026-10-20-library/bounded-checks.xcresult`).
+
+**Fresh cover results:** cover URL Save/reopen/clear passed in 99.330 seconds and oversized input rejection passed in 51.138 seconds (`build/release-audit/2026-10-20-library/cover-focus-checks.xcresult`). The preview is now focusable on tvOS, allowing the remote to inspect the complete image. Screenshot review then caught a separate card-rendering defect: the editor persisted the 32×32 custom image, but the library card's size heuristic replaced it with a template. Fresh integrated iOS and tvOS builds succeeded after the final fix. The card now respects an explicit decoded custom cover before applying the existing fetched-art placeholder heuristic, preserving small custom pixel art; the stronger grid-level rendered check passed in **99.931 seconds**, including saved-card and cleared-card artwork signatures (`build/release-audit/2026-10-20-library/cover-grid-final.xcresult`). Screenshot review and the preceding failing card assertion established the defect independently from editor persistence. The owner subsequently requested fullscreen tvOS editor presentation; that layout change is next.
+
+The Provenance receiver is isolated and pushed as [draft PR #3753](https://github.com/Provenance-Emu/Provenance/pull/3753), commit `6e89d5cec6`, targeting `develop`. Fresh host validation of that exact exported commit: **151 passed, zero failures** (140 sharing, four importer claims, seven completion receipts); 20 changed Swift files parse. The committed SwiftLint configuration passes with 54 warnings and zero serious violations. No unrelated parent checkout/index changes were included. SDK/device gates remain open.
+
+## Remaining release gates
+
+These checks do not establish real-device Production CloudKit convergence, Provenance SDK/device acceptance, cross-app title/cover/tag convergence, or TestFlight upload of this library wave. [CI disk](2026-10-20-ci-core-disk-preflight.md) and [simulator toolchain](2026-10-20-ci-simulator-toolchain.md) remain separate runner constraints. The latter requires administrator-authorized Xcode setup; noninteractive sudo was unavailable. Xcode MCP initially disconnected, then recovered. Opening the `PVUI` directory (rather than its generated `.swiftpm` workspace) succeeded. The isolated PVUI simulator build stopped at the changed `BuildEnvPlugin` fingerprint trust gate before source compilation. Its source was inspected; UI access to the trust prompt is blocked by the locked Mac. No validation bypass or counterpart SDK pass is claimed. Build log: `/var/folders/kt/kx_ps_px15bf__n8tfjnp2f00000gn/T/ActionArtifacts/default/BuildProject/BuildProject-Log-20261020-053408.txt`.

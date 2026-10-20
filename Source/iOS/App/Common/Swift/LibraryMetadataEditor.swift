@@ -28,8 +28,10 @@ struct LibraryMetadataEditor: View {
         Section(header: Text(L("Title"))) {
           TextField(item.title, text: $title)
           Text(L("Leave blank to use the original title."))
-          if !item.gameID.isEmpty {
+          if LibraryMetadataService.discIdentity(for: item) != nil {
             Text(L("Edits apply to copies with the same game ID, disc and revision."))
+          } else {
+            Text(L("Edits apply to identical files, including renamed copies."))
           }
         }
         .disabled(busy || identity == nil)
@@ -43,6 +45,9 @@ struct LibraryMetadataEditor: View {
             .resizable().scaledToFit()
             .frame(maxHeight: ICubeDesign.LibraryArtwork.editorPreviewHeight)
             .accessibilityLabel(L("Cover preview"))
+            #if os(tvOS)
+            .focusable()
+            #endif
           #if os(iOS)
           Button(L("Choose Cover Image")) { showImageImporter = true }
           #endif

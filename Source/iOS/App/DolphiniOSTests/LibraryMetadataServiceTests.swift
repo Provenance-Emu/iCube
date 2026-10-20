@@ -15,17 +15,14 @@ final class LibraryMetadataServiceTests: XCTestCase {
   }
 
   #if canImport(UIKit)
-  /// A real game-model object with an injected getter, leaving production
-  /// initializers/ivars untouched. Its bytes are real files, not hash doubles.
-  private final class LocalGame: TVGameItem {
-    var localPath = ""
-    override var filePath: String { localPath }
-  }
-
+  /// The DEBUG game initializer supplies immutable metadata. KVC redirects only
+  /// its backing-file fixture, avoiding a Swift subclass of an Objective-C type
+  /// whose designated C++ wrapper initializer is unavailable to Swift.
   @MainActor private func game(path: URL, gameID: String = "<unknown>", platform: Int = 4) -> TVGameItem {
-    let item = LocalGame(demoTitle: "Unit Test Homebrew", gameID: gameID, platform: platform,
+    let item = TVGameItem(demoTitle: "Unit Test Homebrew", gameID: gameID, platform: platform,
                          maker: "Unit Test", countryName: "USA", fileSize: 3, accentHue: 0.1)
-    item.localPath = path.path
+    item.setValue(path.path, forKey: "filePath")
+    XCTAssertEqual(item.filePath, path.path)
     return item
   }
 

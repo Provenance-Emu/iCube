@@ -5537,3 +5537,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Turn Off Automatic Copying" = "自動コピーをオフにする";
 "Use Original Cover" = "元のカバーを使用";
 "Waiting for a paired device with both apps open. Copying pauses during gameplay." = "両方のアプリを開いたペアリング済みデバイスを待っています。ゲームプレイ中はコピーを一時停止します。";
+"Edits apply to identical files, including renamed copies." = "同じ内容のファイルには、名前を変更しても編集内容が適用されます。";

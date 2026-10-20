@@ -209,6 +209,9 @@ struct GameGridItem: View {
     // Global override: when enabled, always use the system templates (no artwork)
     if disableArtwork { return true }
 
+    // User-selected artwork can be small pixel art; size is not a placeholder signal.
+    if LibraryMetadataService.customCover(for: item) != nil { return false }
+
     // This is a heuristic - check if the cover image is the default "NoCover" placeholder
     let image = item.coverImage
     let desc = image.description.lowercased()
@@ -642,7 +645,8 @@ struct GameGridItem: View {
     }
     .overlay(selectionOverlay)
     .onTapGesture { handlePrimaryAction() }
-    .onLongPressGesture(minimumDuration: 0.5) { enterSelectionMode() }
+    // Native tvOS context menus own long Select. A competing long-press
+    // gesture also selected the game while the menu was opening.
     .onPlayPauseCommand {
       if selectionMode { handlePrimaryAction() } else { select(item) }
     }
@@ -663,6 +667,11 @@ struct GameGridItem: View {
       if let editLibraryMetadata, !item.isDemoItem {
         Button { editLibraryMetadata(item) } label: {
           Label(L("Edit Library Details"), systemImage: "pencil")
+        }
+      }
+      if !selectionMode {
+        Button(action: { enterSelectionMode() }) {
+          Label(L("Select Games"), systemImage: "checkmark.circle")
         }
       }
       if DefaultISOLibraryAction.isOffered(for: item) {
