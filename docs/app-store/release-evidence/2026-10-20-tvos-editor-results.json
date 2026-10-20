@@ -1,0 +1,90 @@
+{
+  "platform": "tvOS Simulator 26.5",
+  "simulator": "59214C60-C1D5-460F-91DC-BA425B4868C4",
+  "runs": {
+    "tv-editor-final": {
+      "cases": [
+        {
+          "name": "testBackDiscardsDraftAndReturnsFocusToInvokingTile",
+          "result": "passed",
+          "seconds": 44.554
+        },
+        {
+          "name": "testContextMenuSelectGamesSelectsOnceAndShortSelectOnlyTogglesSelection",
+          "result": "passed",
+          "seconds": 19.2
+        },
+        {
+          "name": "testCoverURLSaveReopenAndClear",
+          "result": "passed",
+          "seconds": 77.654
+        },
+        {
+          "name": "testEditorUsesFullScreenPresentation",
+          "result": "failed",
+          "seconds": 23.766
+        },
+        {
+          "name": "testOversizedCoverURLRejectedWithoutChangingDraft",
+          "result": "passed",
+          "seconds": 38.532
+        },
+        {
+          "name": "testTitleTagsSaveCancelReopenAndRelaunch",
+          "result": "passed",
+          "seconds": 102.835
+        }
+      ],
+      "passed": 5,
+      "failed": 1
+    },
+    "tv-editor-acceptance": {
+      "cases": [
+        {
+          "name": "testBackDiscardsDraftAndReturnsFocusToInvokingTile",
+          "result": "passed",
+          "seconds": 44.796
+        },
+        {
+          "name": "testCoverURLSaveReopenAndClear",
+          "result": "passed",
+          "seconds": 82.211
+        },
+        {
+          "name": "testEditorUsesFullScreenPresentation",
+          "result": "passed",
+          "seconds": 26.213
+        }
+      ],
+      "passed": 3,
+      "failed": 0
+    },
+    "tv-editor-ink-red": {
+      "cases": [
+        {
+          "name": "testEditorUsesFullScreenPresentation",
+          "result": "failed",
+          "seconds": 23.633
+        }
+      ],
+      "passed": 0,
+      "failed": 1
+    },
+    "tv-editor-ink-green": {
+      "cases": [
+        {
+          "name": "testEditorUsesFullScreenPresentation",
+          "result": "passed",
+          "seconds": 28.124
+        }
+      ],
+      "passed": 1,
+      "failed": 0
+    }
+  },
+  "sourceSha256": {
+    "Source/iOS/App/Common/Swift/LibraryMetadataEditor.swift": "c73c1a35f0d53a30e86387399021bdb96883f601f6e13c77afcd0af09c4d610b",
+    "Source/iOS/App/Common/Swift/TVLibraryView.swift": "cdb215a1c442e43ce41cc76f17867f1a3c616faa8cf4d864454fc7a518081e29",
+    "Tools/release-audit/TVLibraryEditingAuditTests.swift": "1aeada77aad741b1a1d219dcda2133813296c0a0f6579a827adc9dd9e03076c1"
+  }
+}

@@ -2300,7 +2300,11 @@ struct TVLibraryView: View {
       Button(L("Cancel")) { SaveStateService.skipResumeOnce = false }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
+      #if os(tvOS)
+      .fullScreenCover(item: $editLibraryMetadataFor) { LibraryMetadataEditor(item: $0).claimsController() }
+      #else
       .sheet(item: $editLibraryMetadataFor) { LibraryMetadataEditor(item: $0).claimsController() }
+      #endif
       .sheet(item: $showModsFor, onDismiss: openPendingModBrowser) { item in
         RiivolutionLaunchView(
           item: item,

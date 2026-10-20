@@ -69,6 +69,30 @@ final class TVLibraryEditingAuditTests: XCTestCase {
     XCTAssertTrue(app.staticTexts[original].waitForExistence(timeout: 10))
   }
 
+  func testEditorUsesFullScreenPresentation() throws {
+    try openEditor(tileTitle: original)
+    let field = app.textFields.element(boundBy: 0)
+    let preview = app.images["Cover preview"]
+    try require(NSPredicate { _, _ in field.hasFocus }, timeout: 5, evidence: "initial-title-focus-missing")
+    XCTAssertGreaterThan(field.frame.width, app.frame.width * 0.4,
+      "tvOS editor fields are constrained to a narrow sheet")
+    XCTAssertLessThan(preview.frame.maxX, field.frame.minX,
+      "Artwork and editable fields overlap")
+    XCTAssertTrue(app.frame.contains(app.buttons["Save"].frame), "Save must remain visible")
+    XCTAssertTrue(app.frame.contains(app.buttons["Cancel"].frame), "Cancel must remain visible")
+    assertFocusedPromptReadable(field)
+    record("fullscreen-library-editor")
+    for (name, emptyField) in [("tags", app.textFields["Tags separated by commas"]),
+                               ("cover-url", app.textFields["Cover image URL"])] {
+      try focus(emptyField)
+      XCTAssertTrue(app.frame.contains(emptyField.frame), "Focused field extends offscreen")
+      assertFocusedPromptReadable(emptyField)
+      record("fullscreen-empty-" + name)
+    }
+    XCUIRemote.shared.press(.menu)
+    try assertInvokingTileFocused(original)
+  }
+
   func testBackDiscardsDraftAndReturnsFocusToInvokingTile() throws {
     try openEditor(tileTitle: original)
     let originalTitle = editableValue(app.textFields.element(boundBy: 0))
@@ -222,7 +246,9 @@ final class TVLibraryEditingAuditTests: XCTestCase {
       var movement = direction
       if current.exists, target.width > 0, target.height > 0 {
         let origin = current.frame
-        if abs(target.midY - origin.midY) > 20 { movement = target.midY < origin.midY ? .up : .down }
+        if target.minX >= origin.maxX { movement = .right }
+        else if target.maxX <= origin.minX { movement = .left }
+        else if abs(target.midY - origin.midY) > 20 { movement = target.midY < origin.midY ? .up : .down }
         else if abs(target.midX - origin.midX) > 20 { movement = target.midX < origin.midX ? .left : .right }
       }
       XCUIRemote.shared.press(movement)
@@ -301,20 +327,12 @@ final class TVLibraryEditingAuditTests: XCTestCase {
 
   private func visibleCoverPixels() throws -> [UInt8] {
     let image = app.images["Cover preview"]
-    let cell = app.cells.containing(.image, identifier: "Cover preview").firstMatch
-    try focus(cell)
     var previous: CGRect?
     var stable = 0
     let visible = NSPredicate { _, _ in
-      guard image.exists, self.isFocused(cell), self.app.tables.firstMatch.exists else { return false }
-      var viewport = self.app.tables.firstMatch.frame.intersection(self.app.frame)
-      let navigation = self.app.navigationBars.firstMatch
-      if navigation.exists {
-        let top = max(viewport.minY, navigation.frame.maxY)
-        viewport = CGRect(x: viewport.minX, y: top, width: viewport.width, height: max(0, viewport.maxY - top))
-      }
+      guard image.exists else { return false }
       let frame = image.frame
-      let contained = frame.width >= 100 && frame.height >= 100 && viewport.contains(frame)
+      let contained = frame.width >= 100 && frame.height >= 100 && self.app.frame.contains(frame)
       stable = contained && previous == frame ? stable + 1 : 0
       previous = frame
       return stable >= 2
@@ -346,15 +364,32 @@ final class TVLibraryEditingAuditTests: XCTestCase {
       "Cleared artwork does not match the original rendered preview")
   }
 
-  private func pixels(_ element: XCUIElement) -> [UInt8] {
+  private func assertFocusedPromptReadable(_ field: XCUIElement) {
+    let sample = pixels(field, width: 256, height: 64)
+    guard sample.count == 256 * 64 * 4 else { XCTFail("Missing focused prompt pixels"); return }
+    var dark = 0
+    var light = 0
+    // Exclude the pill corners/border; inspect glyphs on its central light surface.
+    for y in 16..<48 {
+      for x in 13..<243 {
+        let offset = (y * 256 + x) * 4
+        if sample[offset] < 100 && sample[offset + 1] < 100 && sample[offset + 2] < 120 { dark += 1 }
+        if sample[offset] > 210 && sample[offset + 1] > 210 && sample[offset + 2] > 210 { light += 1 }
+      }
+    }
+    XCTAssertGreaterThan(light, 230 * 32 / 2, "Expected native light focus surface")
+    XCTAssertGreaterThan(dark, 8, "Focused empty prompt is washed out against its light surface")
+  }
+
+  private func pixels(_ element: XCUIElement, width: Int = 32, height: Int = 32) -> [UInt8] {
     // Compare rendered pixels, avoiding PNG container/compression differences.
     guard let image = element.screenshot().image.cgImage else { XCTFail("No preview pixels"); return [] }
-    var bytes = [UInt8](repeating: 0, count: 32 * 32 * 4)
+    var bytes = [UInt8](repeating: 0, count: width * height * 4)
     bytes.withUnsafeMutableBytes { storage in
-      let context = CGContext(data: storage.baseAddress, width: 32, height: 32,
-        bitsPerComponent: 8, bytesPerRow: 32 * 4, space: CGColorSpaceCreateDeviceRGB(),
+      let context = CGContext(data: storage.baseAddress, width: width, height: height,
+        bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-      context.draw(image, in: CGRect(x: 0, y: 0, width: 32, height: 32))
+      context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
     }
     return bytes
   }

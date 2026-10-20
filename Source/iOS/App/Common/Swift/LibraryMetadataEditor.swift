@@ -22,7 +22,41 @@ struct LibraryMetadataEditor: View {
   @State private var coverTask: Task<Void, Never>?
   @State private var presentation = UUID()
 
+  #if os(tvOS)
+  private enum TVField: Hashable { case title, tags, coverURL }
+  @FocusState private var focusedField: TVField?
+  #endif
+
   var body: some View {
+    Group {
+      #if os(tvOS)
+      tvEditor
+      #else
+      touchEditor
+      #endif
+    }
+    .task(id: loadGeneration) { await load() }
+    .onChange(of: cover) { _, data in coverPreview = data.flatMap(LibraryMetadataService.coverImage) }
+    .onDisappear {
+      presentation = UUID()
+      coverTask?.cancel()
+    }
+    #if os(tvOS)
+    .onExitCommand { if !saving { cancelAndDismiss() } }
+    #endif
+    #if os(iOS)
+    .interactiveDismissDisabled(saving)
+    .fileImporter(isPresented: $showImageImporter, allowedContentTypes: [.image]) { result in
+      switch result {
+      case .success(let url): loadCoverFile(url)
+      case .failure(let failure): error = failure.localizedDescription
+      }
+    }
+    #endif
+  }
+
+  #if os(iOS)
+  private var touchEditor: some View {
     NavigationStack {
       Form {
         Section(header: Text(L("Title"))) {
@@ -73,25 +107,133 @@ struct LibraryMetadataEditor: View {
       .disabled(saving)
       .navigationTitle(L("Edit Library Details"))
     }
-    .task(id: loadGeneration) { await load() }
-    .onChange(of: cover) { _, data in coverPreview = data.flatMap(LibraryMetadataService.coverImage) }
-    .onDisappear {
-      presentation = UUID()
-      coverTask?.cancel()
-    }
-    #if os(tvOS)
-    .onExitCommand { if !saving { cancelAndDismiss() } }
-    #endif
-    #if os(iOS)
-    .interactiveDismissDisabled(saving)
-    .fileImporter(isPresented: $showImageImporter, allowedContentTypes: [.image]) { result in
-      switch result {
-      case .success(let url): loadCoverFile(url)
-      case .failure(let failure): error = failure.localizedDescription
-      }
-    }
-    #endif
   }
+  #endif
+
+  #if os(tvOS)
+  private var tvEditor: some View {
+    ZStack {
+      Color(uiColor: ICubeDesign.roomStops[0]).ignoresSafeArea()
+      ICubeRoom(style: .gradient)
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+        ICubeLeafHeader(title: L("Edit Library Details"), subtitle: item.title)
+        HStack(alignment: .top, spacing: ICubeDesign.Spacing.xl.rawValue) {
+          VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
+            Text(L("Cover Artwork")).icubeText(.section)
+            Image(uiImage: coverPreview ?? item.originalCoverImage)
+              .resizable().scaledToFit()
+              .frame(width: ICubeDesign.LibraryArtwork.editorPreviewHeight,
+                     height: ICubeDesign.LibraryArtwork.editorPreviewHeight)
+              .accessibilityLabel(L("Cover preview"))
+            Button(L("Use Original Cover")) { cover = nil }
+              .icubeText(.nav)
+              .buttonStyle(ICubeRowButtonStyle())
+              .focusEffectDisabled()
+              .disabled(busy || identity == nil)
+          }
+          .frame(width: ICubeDesign.LibraryArtwork.editorPreviewHeight)
+          .focusSection()
+          ScrollView {
+            VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+              VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
+                tvField(L("Title"), placeholder: item.title, text: $title, field: .title)
+                tvHelp(L("Leave blank to use the original title."))
+                if LibraryMetadataService.discIdentity(for: item) != nil {
+                  tvHelp(L("Edits apply to copies with the same game ID, disc and revision."))
+                } else {
+                  tvHelp(L("Edits apply to identical files, including renamed copies."))
+                }
+              }
+              VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
+                tvField(L("Classification Tags"), placeholder: L("Tags separated by commas"), text: $tags, field: .tags)
+                tvHelp(L("Separate tags with commas. Tags are searchable in the library."))
+              }
+              VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+                tvField(L("Cover image URL"), placeholder: L("Cover image URL"), text: $coverURL, field: .coverURL)
+                Button(L("Load Cover from URL")) { loadCoverURL() }
+                  .icubeText(.nav)
+                  .buttonStyle(ICubeRowButtonStyle())
+                  .focusEffectDisabled()
+                  .disabled(busy || identity == nil || coverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                tvHelp(L("Cover images are copied into your library edits; the source URL is not saved or synced."))
+              }
+            }
+            // Leave space for the focus ring and scale outside the field bounds.
+            .padding(ICubeDesign.Spacing.m.rawValue)
+          }
+          .focusSection()
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        if let error {
+          HStack(alignment: .top, spacing: ICubeDesign.Spacing.l.rawValue) {
+            Text(error)
+              .icubeText(.body)
+              .foregroundStyle(ICubeDesign.color(.destructive))
+              .fixedSize(horizontal: false, vertical: true)
+            if identity == nil {
+              Button(L("Retry")) { loadGeneration += 1 }
+                .icubeText(.nav)
+                .buttonStyle(ICubeRowButtonStyle())
+                .focusEffectDisabled()
+                .disabled(busy)
+            }
+          }
+        }
+        if busy { ProgressView().tint(ICubeDesign.color(.accent)) }
+        HStack(spacing: ICubeDesign.Spacing.l.rawValue) {
+          Button(L("Save")) { save() }
+            .disabled(identity == nil || busy)
+          Button(L("Cancel"), role: .cancel) { cancelAndDismiss() }
+            .disabled(saving)
+        }
+        .icubeText(.nav)
+        .buttonStyle(ICubeRowButtonStyle())
+        .focusEffectDisabled()
+        .focusSection()
+      }
+      .foregroundStyle(ICubeDesign.color(.textPrimary))
+      .padding(ICubeDesign.Spacing.xl.rawValue)
+    }
+    .defaultFocus($focusedField, .title, priority: .userInitiated)
+    .task(id: identity) {
+      // Request focus from the enabled field's rendered view, after identity loading.
+      guard identity != nil, !busy, !saving else { return }
+      focusedField = .title
+    }
+  }
+
+  private func tvField(_ label: String, placeholder: String, text: Binding<String>, field: TVField) -> some View {
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+      Text(label).icubeText(.section)
+      TextField(placeholder, text: text,
+                prompt: Text(placeholder).foregroundStyle(focusedField == field ? tvFocusedPromptColor : ICubeDesign.color(.textSecondary)))
+        .textFieldStyle(.plain)
+        .icubeText(.title)
+        .focused($focusedField, equals: field)
+        .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
+        .padding(.vertical, ICubeDesign.Spacing.s.rawValue)
+        .background(RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue)
+          .fill(ICubeDesign.color(.rowSurface)))
+        .overlay(RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue)
+          .stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue))
+        .focusEffectDisabled()
+        .disabled(busy || identity == nil)
+    }
+  }
+
+  // The native tvOS focused input has a light surface, even in a dark room.
+  private var tvFocusedPromptColor: Color {
+    Color(uiColor: ICubeDesign.uiColor(.textPrimary)
+      .resolvedColor(with: UITraitCollection(userInterfaceStyle: .light)))
+  }
+
+  private func tvHelp(_ text: String) -> some View {
+    Text(text)
+      .icubeText(.body)
+      .foregroundStyle(ICubeDesign.color(.textSecondary))
+      .fixedSize(horizontal: false, vertical: true)
+  }
+  #endif
 
   @MainActor
   private func load() async {
