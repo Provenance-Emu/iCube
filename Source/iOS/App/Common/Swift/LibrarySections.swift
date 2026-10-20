@@ -30,7 +30,10 @@ enum LibrarySectionBuilder {
     lastPlayed: [String: Date],
     recentLimit: Int = recentLimit
   ) -> [LibraryShelfSpec] {
-    let order = games.map(\.id).filter { !$0.isEmpty }
+    // Shelves resolve by game ID to one representative file. Disc/revision copies
+    // must not repeat that same card (and its selection/delete target).
+    var seen = Set<String>()
+    let order = games.map(\.id).filter { !$0.isEmpty && seen.insert($0).inserted }
     let known = Set(order)
     var shelves: [LibraryShelfSpec] = []
 

@@ -44,6 +44,19 @@ final class LocalGameDeleterTests: XCTestCase {
     }
 
     @MainActor
+    func test_delete_duplicateLibraryEntriesRemoveEachFileOnce() async throws {
+        let first = try makeGame("disc1.iso")
+        let second = try makeGame("disc2.iso")
+
+        let outcome = await LocalGameDeleter.delete(paths: [first, second, first])
+
+        XCTAssertEqual(outcome.deleted, [first, second])
+        XCTAssertTrue(outcome.failures.isEmpty, "A repeated library path must not become a false failure")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: first))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: second))
+    }
+
+    @MainActor
     func test_delete_reportsAFailureAndKeepsGoing() async throws {
         let missing = folder.appendingPathComponent("missing.iso").path
         let present = try makeGame("present.iso")

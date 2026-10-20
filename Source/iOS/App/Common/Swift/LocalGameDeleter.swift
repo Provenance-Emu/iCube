@@ -21,7 +21,8 @@ enum LocalGameDeleter {
   ) async -> Outcome {
     await Task.detached(priority: .userInitiated) {
       var outcome = Outcome()
-      for path in paths {
+      var seen = Set<String>()
+      for path in paths where seen.insert(path).inserted {
         do {
           try remove(path)
           outcome.deleted.append(path)

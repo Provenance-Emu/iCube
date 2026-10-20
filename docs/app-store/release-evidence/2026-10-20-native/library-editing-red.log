@@ -1,0 +1,88 @@
+Building for debugging...
+[Pre-planning 1 / 66]
+[Planning deferred tasks]
+[27 / 50]
+[28 / 51] iCube
+[37 / 88]
+[38 / 88]
+[40 / 88]
+[43 / 88]
+[45 / 88]
+[46 / 88]
+[47 / 88]
+[50 / 88]
+[51 / 88]
+[53 / 88]
+[54 / 88]
+[56 / 88]
+[59 / 88]
+[60 / 88]
+[61 / 88]
+[62 / 88]
+[65 / 88] iCube
+[73 / 88] iCube
+[75 / 88] iCube
+[78 / 89] iCubeTests-product
+[92 / 128]
+[95 / 128]
+[96 / 128]
+[100 / 128]
+[102 / 128]
+[104 / 128]
+[106 / 128]
+[107 / 128]
+[108 / 128]
+[109 / 128]
+[110 / 128]
+[111 / 128]
+[112 / 128]
+[113 / 128]
+[117 / 128] iCubeTests-product
+[122 / 128] iCubeTests-product
+[124 / 128] iCubeTests-product
+[127 / 128] iCubeTests-product
+Build complete! (25.31 sec)
+Test Suite 'All tests' started at 2026-10-20 01:49:59.855.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 01:49:59.857.
+Test Suite 'LibrarySectionsTests' started at 2026-10-20 01:49:59.857.
+Test Case '-[iCubeTests.LibrarySectionsTests testALabelMetAgainKeepsItsFirstPosition]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testALabelMetAgainKeepsItsFirstPosition]' passed (0.001 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testBucketsFollowADescendingSort]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testBucketsFollowADescendingSort]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testBucketsMarkWhereEachLetterStarts]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testBucketsMarkWhereEachLetterStarts]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testDiscAndRevisionDuplicatesAppearOnceInFavorites]' started.
+/private/tmp/icube-library-editing-audit/Tests/iCubeTests/LibrarySectionsTests.swift:19: error: -[iCubeTests.LibrarySectionsTests testDiscAndRevisionDuplicatesAppearOnceInFavorites] : XCTAssertEqual failed: ("Optional(["G1", "W1", "G1", "W1", "C1"])") is not equal to ("Optional(["G1", "W1", "C1"])")
+Test Case '-[iCubeTests.LibrarySectionsTests testDiscAndRevisionDuplicatesAppearOnceInFavorites]' failed (1.335 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testIndexLabelFilesDigitsSymbolsAndOtherScriptsUnderHash]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testIndexLabelFilesDigitsSymbolsAndOtherScriptsUnderHash]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testIndexLabelFoldsCaseAndAccents]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testIndexLabelFoldsCaseAndAccents]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testNoRecentOrFavoritesMeansNoShelves]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testNoRecentOrFavoritesMeansNoShelves]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testRecentIsNewestFirstAndCapped]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testRecentIsNewestFirstAndCapped]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testShelvesNeverListTheLibraryOrItsPlatforms]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testShelvesNeverListTheLibraryOrItsPlatforms]' passed (0.000 seconds).
+Test Suite 'LibrarySectionsTests' failed at 2026-10-20 01:50:01.196.
+	 Executed 9 tests, with 1 failure (0 unexpected) in 1.338 (1.339) seconds
+Test Suite 'LocalGameDeleterTests' started at 2026-10-20 01:50:01.196.
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_duplicateLibraryEntriesRemoveEachFileOnce]' started.
+/private/tmp/icube-library-editing-audit/Tests/iCubeTests/LocalGameDeleterTests.swift:54: error: -[iCubeTests.LocalGameDeleterTests test_delete_duplicateLibraryEntriesRemoveEachFileOnce] : XCTAssertTrue failed - A repeated library path must not become a false failure
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_duplicateLibraryEntriesRemoveEachFileOnce]' failed (0.005 seconds).
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_removesFilesOffTheMainThread]' started.
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_removesFilesOffTheMainThread]' passed (0.002 seconds).
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_reportsAFailureAndKeepsGoing]' started.
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_reportsAFailureAndKeepsGoing]' passed (0.002 seconds).
+Test Suite 'LocalGameDeleterTests' failed at 2026-10-20 01:50:01.205.
+	 Executed 3 tests, with 1 failure (0 unexpected) in 0.009 (0.009) seconds
+Test Suite 'iCubeTests.xctest' failed at 2026-10-20 01:50:01.205.
+	 Executed 12 tests, with 2 failures (0 unexpected) in 1.346 (1.348) seconds
+Test Suite 'All tests' failed at 2026-10-20 01:50:01.205.
+	 Executed 12 tests, with 2 failures (0 unexpected) in 1.346 (1.350) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
+Note: Some test targets reported failures:
+  - iCubeTests (XCTest)

@@ -9,6 +9,16 @@ final class LibrarySectionsTests: XCTestCase {
     ids.map { LibraryGameRef(id: $0) }
   }
 
+  func testDiscAndRevisionDuplicatesAppearOnceInFavorites() {
+    let shelves = LibrarySectionBuilder.homeShelves(
+      games: games(["G1", "W1", "G1", "", "W1", "C1"]),
+      favoriteIDs: ["G1", "W1", "C1", ""],
+      lastPlayed: [:]
+    )
+    XCTAssertEqual(shelves.count, 1)
+    XCTAssertEqual(shelves.first?.gameIDs, ["G1", "W1", "C1"])
+  }
+
   func testNoRecentOrFavoritesMeansNoShelves() {
     let shelves = LibrarySectionBuilder.homeShelves(
       games: games(["G1", "W1"]),

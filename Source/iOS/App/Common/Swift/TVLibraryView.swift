@@ -3301,10 +3301,11 @@ struct TVLibraryView: View {
     exitSelectionMode()
     Task { @MainActor in
       let outcome = await LocalGameDeleter.delete(paths: localPaths)
-      let notDeleted = skippedRemote + outcome.failures.count
       if !outcome.deleted.isEmpty { model.rescan() }
-      if notDeleted > 0 {
-        showSnackbar("\(notDeleted) \(L("remote items could not be deleted."))")
+      if let failure = outcome.failures.first {
+        showSnackbar(String(format: L("Delete failed: %1$@"), failure.message))
+      } else if skippedRemote > 0 {
+        showSnackbar("\(skippedRemote) \(L("remote items could not be deleted."))")
       } else if !outcome.deleted.isEmpty {
         showSnackbar("\(L("Deleted")) \(outcome.deleted.count) \(L("games."))")
       }

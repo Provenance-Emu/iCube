@@ -1,0 +1,47 @@
+Building for debugging...
+[1 / 5]
+[2 / 6] iCube
+[3 / 7] iCube
+[8 / 12] iCube
+[11 / 12] iCubeTests-product
+Build complete! (1.66 sec)
+Test Suite 'All tests' started at 2026-10-20 01:50:15.822.
+Test Suite 'iCubeTests.xctest' started at 2026-10-20 01:50:15.823.
+Test Suite 'LibrarySectionsTests' started at 2026-10-20 01:50:15.823.
+Test Case '-[iCubeTests.LibrarySectionsTests testALabelMetAgainKeepsItsFirstPosition]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testALabelMetAgainKeepsItsFirstPosition]' passed (0.001 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testBucketsFollowADescendingSort]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testBucketsFollowADescendingSort]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testBucketsMarkWhereEachLetterStarts]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testBucketsMarkWhereEachLetterStarts]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testDiscAndRevisionDuplicatesAppearOnceInFavorites]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testDiscAndRevisionDuplicatesAppearOnceInFavorites]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testIndexLabelFilesDigitsSymbolsAndOtherScriptsUnderHash]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testIndexLabelFilesDigitsSymbolsAndOtherScriptsUnderHash]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testIndexLabelFoldsCaseAndAccents]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testIndexLabelFoldsCaseAndAccents]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testNoRecentOrFavoritesMeansNoShelves]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testNoRecentOrFavoritesMeansNoShelves]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testRecentIsNewestFirstAndCapped]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testRecentIsNewestFirstAndCapped]' passed (0.000 seconds).
+Test Case '-[iCubeTests.LibrarySectionsTests testShelvesNeverListTheLibraryOrItsPlatforms]' started.
+Test Case '-[iCubeTests.LibrarySectionsTests testShelvesNeverListTheLibraryOrItsPlatforms]' passed (0.000 seconds).
+Test Suite 'LibrarySectionsTests' passed at 2026-10-20 01:50:15.827.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.003 (0.004) seconds
+Test Suite 'LocalGameDeleterTests' started at 2026-10-20 01:50:15.827.
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_duplicateLibraryEntriesRemoveEachFileOnce]' started.
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_duplicateLibraryEntriesRemoveEachFileOnce]' passed (0.003 seconds).
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_removesFilesOffTheMainThread]' started.
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_removesFilesOffTheMainThread]' passed (0.002 seconds).
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_reportsAFailureAndKeepsGoing]' started.
+Test Case '-[iCubeTests.LocalGameDeleterTests test_delete_reportsAFailureAndKeepsGoing]' passed (0.003 seconds).
+Test Suite 'LocalGameDeleterTests' passed at 2026-10-20 01:50:15.835.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.008 (0.008) seconds
+Test Suite 'iCubeTests.xctest' passed at 2026-10-20 01:50:15.835.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.010 (0.012) seconds
+Test Suite 'All tests' passed at 2026-10-20 01:50:15.835.
+	 Executed 12 tests, with 0 failures (0 unexpected) in 0.010 (0.013) seconds
+􀟈  Test run started.
+􀄵  Testing Library Version: 2084
+􀄵  Target Platform: arm64e-apple-macos14.0
+􁁛  Test run with 0 tests in 0 suites passed after 0.001 seconds.
