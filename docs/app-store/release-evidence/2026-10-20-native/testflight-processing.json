@@ -1,0 +1,41 @@
+{
+  "checkedAt": "2026-10-20T05:42:35.401437+00:00",
+  "app": "6752685822",
+  "sourceCheckpoint": "87b3d34ee1a6a66e72b7cc3648e22df66822fb5b",
+  "builds": [
+    {
+      "platform": "IOS",
+      "build": "1792472425",
+      "version": "1.0.0",
+      "id": "1b61843e-cd2c-4a2f-94a8-f741690e1c87",
+      "processingState": "VALID",
+      "groups": [
+        "Friends and Family",
+        "Internal",
+        "Moderators",
+        "Patrons",
+        "Public Website"
+      ],
+      "betaReviewState": "APPROVED",
+      "internalBuildState": "IN_BETA_TESTING",
+      "externalBuildState": "IN_BETA_TESTING"
+    },
+    {
+      "platform": "TV_OS",
+      "build": "1792472425",
+      "version": "1.0.0",
+      "id": "ec7a6d6f-0927-48e2-8f49-54bc98ce511d",
+      "processingState": "VALID",
+      "groups": [
+        "Friends and Family",
+        "Internal",
+        "Moderators",
+        "Patrons",
+        "Public Website"
+      ],
+      "betaReviewState": "APPROVED",
+      "internalBuildState": "IN_BETA_TESTING",
+      "externalBuildState": "IN_BETA_TESTING"
+    }
+  ]
+}

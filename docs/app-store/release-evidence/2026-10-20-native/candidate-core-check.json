@@ -1,0 +1,25 @@
+{
+  "result": "passed",
+  "artifacts": [
+    {
+      "binary": "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/build/xcframework/PVlibDolphin.xcframework/tvos-arm64/PVlibDolphin-tvos.framework/PVlibDolphin-tvos",
+      "bytes": 27164440,
+      "sha256": "2ee4d913857ca687501dbe9a1e89ded21833c3ed10342c1f166c7e8338af00b2"
+    },
+    {
+      "binary": "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/build/xcframework/PVlibDolphin.xcframework/ios-arm64/PVlibDolphin-ios.framework/PVlibDolphin-ios",
+      "bytes": 27189216,
+      "sha256": "5bf7265d10c4d802a229ba784fe521a8c67cb24d005510c36f48bc211d18b964"
+    },
+    {
+      "binary": "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/build/xcframework/PVlibDolphin.xcframework/tvos-arm64-simulator/PVlibDolphin-tvos-sim.framework/PVlibDolphin-tvos-sim",
+      "bytes": 27310616,
+      "sha256": "33071de6e049adf4dd8cccc5622980abc1df771e42741935abd141f0428cf50c"
+    },
+    {
+      "binary": "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/build/xcframework/PVlibDolphin.xcframework/ios-arm64-simulator/PVlibDolphin-ios-sim.framework/PVlibDolphin-ios-sim",
+      "bytes": 27316712,
+      "sha256": "022e62bbc1c20c5388579a666e66a4cd5a06a8e1f622a157fe324860f8b21ee9"
+    }
+  ]
+}

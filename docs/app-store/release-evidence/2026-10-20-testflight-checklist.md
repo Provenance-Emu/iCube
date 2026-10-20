@@ -1,6 +1,6 @@
 # iOS and tvOS beta test checklist
 
-Candidate build number: **1792472425**, version **1.0.0**. Archive/upload status is tracked in [blocker evidence](2026-10-20-release-blocker-fixes.md); this checklist does not mean the build is available yet.
+Candidate build number: **1792472425**, version **1.0.0**. Both platforms are uploaded and VALID in App Store Connect, assigned to Internal and external beta groups; both internal and external states are IN_BETA_TESTING with Beta App Review APPROVED. See [processing status](2026-10-20-native/testflight-processing.json) and [blocker evidence](2026-10-20-release-blocker-fixes.md).
 
 Use legally obtained disc images and a disposable save slot for failure/recovery checks. Record platform, hardware, OS, game, build, and exact steps for each failure.
 

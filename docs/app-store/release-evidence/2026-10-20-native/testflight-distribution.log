@@ -1,0 +1,25 @@
+IOS build 1792472425: NOT_YET_VISIBLE
+TV_OS build 1792472425: NOT_YET_VISIBLE
+IOS build 1792472425: VALID
+build 1792472425 (IOS) is VALID: id=1b61843e-cd2c-4a2f-94a8-f741690e1c87 groups=['Internal'] review=None nonExemptEncryption=False
+target groups: ['Patrons', 'Moderators', 'Friends and Family', 'Public Website']
+to add: ['Patrons', 'Moderators', 'Friends and Family', 'Public Website']
+set What to Test
+added to 'Patrons'
+added to 'Moderators'
+added to 'Friends and Family'
+added to 'Public Website'
+submitted for Beta App Review
+IOS: distribution completed
+TV_OS build 1792472425: VALID
+build 1792472425 (TV_OS) is VALID: id=ec7a6d6f-0927-48e2-8f49-54bc98ce511d groups=['Internal'] review=None nonExemptEncryption=False
+target groups: ['Patrons', 'Moderators', 'Friends and Family', 'Public Website']
+to add: ['Patrons', 'Moderators', 'Friends and Family', 'Public Website']
+set What to Test
+added to 'Patrons'
+added to 'Moderators'
+added to 'Friends and Family'
+added to 'Public Website'
+submitted for Beta App Review
+TV_OS: distribution completed
+BOTH PLATFORMS VALID AND DISTRIBUTED

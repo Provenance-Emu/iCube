@@ -1,0 +1,64 @@
+{
+  "source_checkpoint": "87b3d34ee1a6a66e72b7cc3648e22df66822fb5b",
+  "checks": [
+    {
+      "result": "passed",
+      "artifacts": [
+        {
+          "binary": "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/build/archives/iCube-ios-1792472425.xcarchive/Products/Applications/iCube.app/Frameworks/PVlibDolphin-ios.framework/PVlibDolphin-ios",
+          "bytes": 27260816,
+          "sha256": "c0fef11cecff817986f84bae6d9aec2e849b4cb1b6b7e1c6ffbb4a6f0cd1fc2f"
+        }
+      ]
+    },
+    {
+      "archive": "build/archives/iCube-ios-1792472425.xcarchive",
+      "app": "build/archives/iCube-ios-1792472425.xcarchive/Products/Applications/iCube.app",
+      "bundle": "com.joemattiello.iCube",
+      "build": "1792472425",
+      "version": "1.0.0",
+      "platforms": [
+        "iPhoneOS"
+      ],
+      "executable_sha256": "382c19f8c739f2f82a1fca7368c4808073b57c3355453cbde25dcb647c7f3ca0",
+      "entitlements": {
+        "application-identifier": "S32Z3HMYVQ.com.joemattiello.iCube",
+        "aps-environment": "development",
+        "com.apple.developer.associated-domains": [
+          "applinks:icube-emu.com"
+        ],
+        "com.apple.developer.icloud-container-identifiers": [
+          "iCloud.com.joemattiello.iCube",
+          "iCloud.com.joemattiello.iFly",
+          "iCloud.org.provenance-emu.provenance"
+        ],
+        "com.apple.developer.icloud-services": [
+          "CloudDocuments",
+          "CloudKit"
+        ],
+        "com.apple.developer.kernel.extended-virtual-addressing": true,
+        "com.apple.developer.kernel.increased-memory-limit": true,
+        "com.apple.developer.nfc.readersession.formats": [
+          "TAG"
+        ],
+        "com.apple.developer.sustained-execution": true,
+        "com.apple.developer.team-identifier": "S32Z3HMYVQ",
+        "com.apple.developer.ubiquity-container-identifiers": [
+          "iCloud.com.joemattiello.iCube",
+          "iCloud.com.joemattiello.iFly",
+          "iCloud.org.provenance-emu.provenance"
+        ],
+        "com.apple.developer.ubiquity-kvstore-identifier": "S32Z3HMYVQ.com.joemattiello.iCube",
+        "com.apple.security.application-groups": [
+          "group.com.joemattiello.icube",
+          "group.org.provenance-emu.provenance"
+        ],
+        "get-task-allow": true,
+        "keychain-access-groups": [
+          "S32Z3HMYVQ.com.joemattiello.shared"
+        ]
+      },
+      "result": "passed"
+    }
+  ]
+}

@@ -39,3 +39,13 @@ Owner requested iOS and tvOS test builds/TestFlight. App Store Connect app ident
 An additional privacy regression was reproduced and repaired: `Config/RetroAchievements.ini` and `Config/DSUClient.ini` are excluded from local/remote sync scans, transfers, remote tombstones and manual conflict resolution. The 26 native sync tests pass with no failures; [log](2026-10-20-native/sync-private-config-green.log). Historical cloud records are not purged by this change. Final integrated app/archive validation remains pending.
 
 Final four-slice core rebuild succeeded. All primary and packaged frameworks export the three save-completion APIs, and packaged cores pass the retired adaptive-resolution content check. The privacy filter passed independent source review. Candidate build `1792472425` is being archived serially for iOS and tvOS; upload is still pending. Device steps are recorded in the [beta checklist](2026-10-20-testflight-checklist.md).
+
+## Uploaded beta candidate
+
+Both local App Store archives and signed/embedded-core audits passed. Version **1.0.0**, build **1792472425**, uploaded successfully for iOS at 01:36 EDT and tvOS at 01:38 EDT on October 20. Source is checkpointed in `87b3d34ee1a6a66e72b7cc3648e22df66822fb5b`; the archive audit records executable and core hashes. The local iOS archive began before that checkpoint commit and contains the captured source changes; embedded revision labels alone are not an artifact identity.
+
+The redundant [CI run](https://github.com/Provenance-Emu/iCube/actions/runs/39373841343) was cancelled after both local uploads succeeded, while it was still rebuilding cores. It was not a failed archive/upload. Upload results (trailing whitespace normalized) and archive audits are retained under [native evidence](2026-10-20-native/).
+
+Apple export emitted non-blocking missing-framework-dSYM warnings (Dolphin, Sentry; MoltenVK on iOS). Matching iOS and tvOS Dolphin core dSYMs and source companions were uploaded separately to Sentry; seven debug information files were found and four missing files uploaded. This does not remove Apple’s archive warning or supply unavailable third-party dSYMs.
+
+Fresh App Store Connect checks confirm **both platforms VALID** for build **1792472425**, assigned to Internal plus Patrons, Moderators, Friends and Family, and Public Website. What to Test is set; Beta App Review is **APPROVED** and both internal and external build states are **IN_BETA_TESTING**. See [processing and group evidence](2026-10-20-native/testflight-processing.json). Both platforms are ready for internal and external testers. Device/gameplay acceptance remains open.

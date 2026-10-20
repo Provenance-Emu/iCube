@@ -1,0 +1,13 @@
+> Found 7 debug information files
+  WARN    2026-10-20 01:36:55.661759 -04:00 Source exceeded maximum item size limit (3188137). /Applications/Xcode_27_1.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/21/include/arm_neon.h
+  WARN    2026-10-20 01:36:55.754975 -04:00 Source exceeded maximum item size limit (3188137). /Applications/Xcode_27_1.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/21/include/arm_neon.h
+> Resolved source code for 7 debug information files
+> Prepared debug information files for upload
+> Uploading completed in 1.009s
+> Uploaded 4 missing debug information files
+> File upload complete:
+
+  UPLOADED 36e0430e-808e-3918-ae69-a5c9043738bb (Contents/Resources/DWARF/libdolphin.dylib; arm64 debug companion)
+  UPLOADED ebfe2f6a-21ca-3e25-9d65-8c2b8c8023fd (Contents/Resources/DWARF/libdolphin.dylib; arm64 sources)
+  UPLOADED ebfe2f6a-21ca-3e25-9d65-8c2b8c8023fd (Contents/Resources/DWARF/libdolphin.dylib; arm64 debug companion)
+  UPLOADED 36e0430e-808e-3918-ae69-a5c9043738bb (Contents/Resources/DWARF/libdolphin.dylib; arm64 sources)

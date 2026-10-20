@@ -1,0 +1,53 @@
+{
+  "source_checkpoint": "87b3d34ee1a6a66e72b7cc3648e22df66822fb5b",
+  "checks": [
+    {
+      "result": "passed",
+      "artifacts": [
+        {
+          "binary": "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/build/archives/iCube-tvos-1792472425.xcarchive/Products/Applications/iCube.app/Frameworks/PVlibDolphin-tvos.framework/PVlibDolphin-tvos",
+          "bytes": 27395152,
+          "sha256": "d3f4032e79f226357665a2aeb9f46ee279fdcf35d91a8c70b50df6d83f9df7c4"
+        }
+      ]
+    },
+    {
+      "archive": "build/archives/iCube-tvos-1792472425.xcarchive",
+      "app": "build/archives/iCube-tvos-1792472425.xcarchive/Products/Applications/iCube.app",
+      "bundle": "com.joemattiello.iCube",
+      "build": "1792472425",
+      "version": "1.0.0",
+      "platforms": [
+        "AppleTVOS"
+      ],
+      "executable_sha256": "0503e8b1a1d2de1c409f4e1e4c5c055ba5c6239486a089d5faf36e8cbb68a53c",
+      "entitlements": {
+        "application-identifier": "S32Z3HMYVQ.com.joemattiello.iCube",
+        "aps-environment": "development",
+        "com.apple.developer.associated-domains": [
+          "applinks:icube-emu.com"
+        ],
+        "com.apple.developer.icloud-container-identifiers": [
+          "iCloud.com.joemattiello.iCube",
+          "iCloud.com.joemattiello.iFly",
+          "iCloud.org.provenance-emu.provenance"
+        ],
+        "com.apple.developer.icloud-services": [
+          "CloudKit"
+        ],
+        "com.apple.developer.kernel.extended-virtual-addressing": true,
+        "com.apple.developer.team-identifier": "S32Z3HMYVQ",
+        "com.apple.developer.ubiquity-kvstore-identifier": "S32Z3HMYVQ.com.joemattiello.iCube",
+        "com.apple.security.application-groups": [
+          "group.com.joemattiello.icube",
+          "group.org.provenance-emu.provenance"
+        ],
+        "get-task-allow": true,
+        "keychain-access-groups": [
+          "S32Z3HMYVQ.com.joemattiello.shared"
+        ]
+      },
+      "result": "passed"
+    }
+  ]
+}
