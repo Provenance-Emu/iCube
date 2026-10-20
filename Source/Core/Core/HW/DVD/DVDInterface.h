@@ -142,6 +142,11 @@ public:
   void SetDisc(std::unique_ptr<DiscIO::VolumeDisc> disc,
                std::optional<std::vector<std::string>> auto_disc_change_paths);
   bool IsDiscInside() const;
+  // Read with the same CPU-thread discipline as ChangeDisc, including after loading a save state.
+  bool HasPendingDiscChange(const Core::CPUThreadGuard&) const
+  {
+    return !m_disc_path_to_insert.empty();
+  }
   void EjectDisc(const Core::CPUThreadGuard& guard, EjectCause cause);
   void ChangeDisc(const Core::CPUThreadGuard& guard, const std::vector<std::string>& paths);
   void ChangeDisc(const Core::CPUThreadGuard& guard, const std::string& new_path);

@@ -25,16 +25,14 @@ enum TVLibraryRailDestination: Hashable {
 #if os(tvOS)
 
 /// Collapsible left rail for the tvOS library. Icon-only until a row is focused.
-struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
+struct TVLibraryRail: View {
   @Binding var destination: TVLibraryRailDestination
   @Binding var searchText: String
+  @Binding var presentedMenu: TVToolbarSheet?
   let platforms: [LibraryPlatformCategory]
   let isSelecting: Bool
   let onToggleSelect: () -> Void
   let onSettings: () -> Void
-  @ViewBuilder var importMenu: () -> ImportMenu
-  @ViewBuilder var viewMenu: () -> ViewMenu
-  @ViewBuilder var sortMenu: () -> SortMenu
   /// A right press left focus on a rail row. The library disables its content while the rail holds focus (the
   /// expanded rail lies over the cards, and up or down would otherwise slip into them), so it moves focus into
   /// the content itself.
@@ -94,9 +92,15 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
         selected: isSelecting,
         action: onToggleSelect
       )
-      menuRow(icon: .symbol("square.and.arrow.down"), title: L("Import"), item: .importGames, menu: importMenu)
-      menuRow(icon: .symbol("slider.horizontal.3"), title: L("View"), item: .view, menu: viewMenu)
-      menuRow(icon: .symbol("arrow.up.arrow.down"), title: L("Sort"), item: .sort, menu: sortMenu)
+      libraryRow(icon: .symbol("square.and.arrow.down"), title: L("Import"), item: .importGames, selected: false) {
+        presentedMenu = .importGames
+      }
+      libraryRow(icon: .symbol("slider.horizontal.3"), title: L("View"), item: .view, selected: false) {
+        presentedMenu = .view
+      }
+      libraryRow(icon: .symbol("arrow.up.arrow.down"), title: L("Sort"), item: .sort, selected: false) {
+        presentedMenu = .sort
+      }
       libraryRow(icon: .symbol("gearshape.fill"), title: L("Settings"), item: .settings, selected: false, action: onSettings)
     }
     .padding(.vertical, ICubeDesign.Spacing.l.rawValue)
@@ -109,6 +113,15 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
     .modifier(TVLibraryRailPanel())
     .focusSection()
     .animation(ICubeDesign.Motion.selection, value: isExpanded)
+    .onChange(of: presentedMenu) { previous, current in
+      guard current == nil else { return }
+      switch previous {
+      case .importGames: focusedItem = .importGames
+      case .view: focusedItem = .view
+      case .sort: focusedItem = .sort
+      case .system, .none: break
+      }
+    }
     .onMoveCommand { direction in
       // The open search field counts: tvOS edits it in a full-screen keyboard, so a right press on it is
       // navigation too.
@@ -174,20 +187,7 @@ struct TVLibraryRail<ImportMenu: View, ViewMenu: View, SortMenu: View>: View {
       rowLabel(icon: icon, title: title, selected: selected)
     }
     .buttonStyle(TVLibraryRailButtonStyle(isSelected: selected))
-    .focused($focusedItem, equals: item)
-  }
-
-  private func menuRow<MenuContent: View>(
-    icon: RailIcon,
-    title: String,
-    item: Item,
-    @ViewBuilder menu: () -> MenuContent
-  ) -> some View {
-    Menu(content: menu) {
-      rowLabel(icon: icon, title: title)
-    }
-    .menuStyle(.button)
-    .buttonStyle(TVLibraryRailButtonStyle())
+    .accessibilityLabel(title)
     .focused($focusedItem, equals: item)
   }
 

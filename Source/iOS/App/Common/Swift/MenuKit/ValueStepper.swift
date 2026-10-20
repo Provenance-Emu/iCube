@@ -23,22 +23,28 @@ struct ValueStepper: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      Slider(
-        value: Binding(
-          get: { dragValue ?? stepper.value.wrappedValue },
-          set: { newValue in
-            if isDragging { dragValue = newValue } else { stepper.value.wrappedValue = newValue }
-          }),
-        in: stepper.range, step: stepper.step,
-        onEditingChanged: { editing in
-          isDragging = editing
-          if !editing, let finished = dragValue {
-            stepper.value.wrappedValue = finished
-            dragValue = nil
+      // A single valid value (for example compiler threads on a two-core device)
+      // cannot form a Slider: SwiftUI requires a positive stride across its range.
+      if stepper.range.lowerBound < stepper.range.upperBound {
+        Slider(
+          value: Binding(
+            get: { dragValue ?? stepper.value.wrappedValue },
+            set: { newValue in
+              if isDragging { dragValue = newValue } else { stepper.value.wrappedValue = newValue }
+            }),
+          in: stepper.range, step: stepper.step,
+          onEditingChanged: { editing in
+            isDragging = editing
+            if !editing, let finished = dragValue {
+              stepper.value.wrappedValue = finished
+              dragValue = nil
+            }
           }
-        }
-      )
-      .accessibilityLabel(title)
+        )
+        .accessibilityLabel(title)
+      } else {
+        Spacer(minLength: 0)
+      }
       Text(stepper.format(dragValue ?? stepper.value.wrappedValue)).monospacedDigit()
         .frame(minWidth: Self.valueMinWidth, alignment: .trailing)
     }

@@ -7,6 +7,23 @@ import XCTest
 @testable import iCube
 
 final class DebugRootModelBuilderTests: XCTestCase {
+  func testReadOnlyEnvironmentHasStatusWithoutDeveloperActions() {
+    let model = DebugRootModelBuilder.make(state: populated, scope: .environmentOnly) { _ in
+      XCTFail("Read-only information must not write settings")
+    }
+    XCTAssertEqual(model.sections.map(\.id), ["environment"])
+    XCTAssertNotNil(model.item(id: "user-folder"))
+    XCTAssertNotNil(model.item(id: "fastmem-available"))
+    XCTAssertTrue(model.allItems.filter { $0.id != "user-folder" }.allSatisfy { !$0.isEnabled })
+    XCTAssertEqual(model.item(id: "user-folder")?.isEnabled, true)
+    guard case .destination? = model.item(id: "user-folder")?.role else { return XCTFail("Full path must be readable") }
+    for id in ["perf-bench", "fastmem", "enable-jit-stikdebug", "retry-jit-authorization", "jit-guide", "console-logging"] {
+      XCTAssertNil(model.item(id: id), id)
+    }
+  }
+  func testUserFolderCannotOpenBeforeItsPathIsAvailable() {
+    XCTAssertEqual(model().item(id: "user-folder")?.isEnabled, false)
+  }
   private var changes: [DebugRootChange] = []
   private func model(_ state: DebugRootState = DebugRootState()) -> MenuModel {
     DebugRootModelBuilder.make(state: state) { self.changes.append($0) }

@@ -16,9 +16,6 @@ enum GraphicsGeneralModelBuilder {
       SettingsRow.toggle("vsync", L("V-Sync"), state.vSync,
              L("Syncs presentation to the display refresh to remove tearing. On iOS the compositor already syncs, so this has little effect; leave ON."),
              set: { apply(.vSync($0)) }),
-      SettingsRow.toggle("auto-ir-osd", L("Show Auto IR OSD"), state.showAutoIrOSD,
-             L("Shows the resolution Auto Internal Resolution picks each frame as an on-screen overlay. Diagnostic only."),
-             set: { apply(.showAutoIrOSD($0)) }),
       SettingsRow.toggle("triple-buffering", L("Triple Buffering"), state.tripleBuffering,
              L("Adds a third frame buffer to smooth pacing at a small latency/memory cost. Default ON; turn off only if you want minimum latency."),
              set: { apply(.tripleBuffering($0)) }),
@@ -31,18 +28,6 @@ enum GraphicsGeneralModelBuilder {
       SettingsRow.toggle("async-present", L("Asynchronous Present"), state.asyncPresent,
              L("Presents finished frames on a background thread so the CPU thread isn't blocked waiting on the display. Helps on the CPU-bound interpreter; default ON."),
              set: { apply(.asyncPresent($0)) }),
-      SettingsRow.toggle("auto-ir", L("Enable Auto Internal Resolution"), state.autoIR,
-             L("Dynamically scales internal resolution between Min and Max to hold the Target FPS. Useful when scenes are GPU-bound; has no benefit when the CPU is the limit (the usual case on iCube)."),
-             set: { apply(.autoIR($0)) }),
-      SettingsRow.cycle("target-fps", L("Target FPS"), TargetFPS.allCases.map { ($0.label, $0) }, state.targetFPS,
-            L("Frame rate Auto Internal Resolution tries to hold by adjusting the render scale. Only used when Auto IR is on."),
-            set: { apply(.targetFPS($0)) }),
-      SettingsRow.cycle("min-scale", L("Min Scale"), InternalScale.allCases.map { ($0.label, $0) }, state.minScale,
-            L("Lowest internal resolution Auto IR will drop to when struggling. 1x is native GameCube/Wii resolution."),
-            set: { apply(.minScale($0)) }),
-      SettingsRow.cycle("max-scale", L("Max Scale"), InternalScale.allCases.map { ($0.label, $0) }, state.maxScale,
-            L("Highest internal resolution Auto IR will raise to when there's headroom. Higher looks sharper but costs GPU."),
-            set: { apply(.maxScale($0)) }),
     ]
     if state.isIOS {
       general.append(

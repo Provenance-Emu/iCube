@@ -1005,6 +1005,20 @@ struct MenuScreen: View {
     case .picker(let options, let selection) where item.isCompactOnTV:
       tvCompactPicker(item, options: options, selection: selection)
     case .picker(let options, let selection):
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+        Text(item.title)
+          .icubeText(.nav)
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
+          .accessibilityAddTraits(.isHeader)
+        if let description = item.description {
+          Text(description)
+            .icubeText(.detail)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
+      .padding(.vertical, ICubeDesign.Spacing.xs.rawValue)
       ForEach(Array(options.enumerated()), id: \.offset) { index, option in
         let selected = option.1 == selection.wrappedValue
         Button {

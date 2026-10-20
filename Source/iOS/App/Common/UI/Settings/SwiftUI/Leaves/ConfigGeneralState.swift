@@ -18,6 +18,7 @@ struct ConfigGeneralState: Equatable {
   var cheats = false
   var overrideRegion = false
   var autoDiscChange = false
+  var defaultISO = DefaultISOSelectionState()
   var fastDiscSpeed = false
   var resumeWhereLeftOff = false
   var speedLimitPercent = 0

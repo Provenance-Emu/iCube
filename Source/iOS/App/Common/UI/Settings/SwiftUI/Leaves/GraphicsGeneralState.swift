@@ -23,15 +23,10 @@ struct GraphicsGeneralState: Equatable {
   var backend = GraphicsBackend.metal
   var aspect = AspectRatio.auto
   var vSync = false
-  var showAutoIrOSD = false
   var tripleBuffering = true
   var forceScaleOneNonProMotion = false
   var overscanFullscreen = false
   var asyncPresent = false
-  var autoIR = false
-  var targetFPS = TargetFPS.fps60
-  var minScale = InternalScale.x1_0
-  var maxScale = InternalScale.x2_0
   var frameCap = GraphicsGeneralState.systemDefaultFrameCap
   var instantReplay = false
   var saveClipsToPhotos = false
@@ -71,15 +66,10 @@ enum GraphicsGeneralChange: Equatable {
   case backend(GraphicsBackend)
   case aspect(AspectRatio)
   case vSync(Bool)
-  case showAutoIrOSD(Bool)
   case tripleBuffering(Bool)
   case forceScaleOneNonProMotion(Bool)
   case overscanFullscreen(Bool)
   case asyncPresent(Bool)
-  case autoIR(Bool)
-  case targetFPS(TargetFPS)
-  case minScale(InternalScale)
-  case maxScale(InternalScale)
   case frameCap(Int)
   case instantReplay(Bool)
   case saveClipsToPhotos(Bool)

@@ -67,7 +67,7 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
     XCTAssertEqual(item?.badge, L("Game"))
   }
 
-  func test_efbScale_disabledAndBadgedAuto_whenAutoIRDrivesIt() {
+  func test_efbScale_disabledAndBadgedAuto_whenRuntimeOverridesIt() {
     let item = model(state { $0.efbOverride = .auto }).item(id: "efb-scale")
     XCTAssertEqual(item?.isEnabled, false)
     XCTAssertEqual(item?.badge, L("Auto"))
@@ -183,13 +183,13 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
     GraphicsEnhancementsState.sideEffects(of: change, in: state { $0.ssaa = ssaa })
   }
 
-  func test_sideEffects_autoScaleLeavesAutoIRAlone() {
+  func test_sideEffects_fitWindowHasNoAdaptiveController() {
     XCTAssertEqual(effects(.efbScale(0)), [])
   }
 
-  func test_sideEffects_aFixedScaleTurnsAutoIROff() {
-    XCTAssertEqual(effects(.efbScale(1)), [.autoIROff])
-    XCTAssertEqual(effects(.efbScale(4)), [.autoIROff])
+  func test_sideEffects_fixedScalesHaveNoAdaptiveController() {
+    XCTAssertEqual(effects(.efbScale(1)), [])
+    XCTAssertEqual(effects(.efbScale(4)), [])
   }
 
   func test_sideEffects_msaaToNoneClearsSSAAOnlyWhenItIsOn() {
@@ -204,8 +204,7 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
     XCTAssertEqual(effects(.arbitraryMipmapThreshold(1)), [])
   }
 
-  func test_sideEffects_theTwoRulesAreIndependent() {
+  func test_sideEffects_scaleChangesDoNotClearSSAA() {
     XCTAssertFalse(effects(.efbScale(2), ssaa: true).contains(.clearSSAA), "a scale pick does not clear SSAA")
-    XCTAssertFalse(effects(.msaa(1), ssaa: true).contains(.autoIROff), "MSAA does not touch Auto-IR")
   }
 }

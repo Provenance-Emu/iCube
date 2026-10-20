@@ -3,6 +3,10 @@
 Updated: 2026-10-19. **Status: owner quality requirements recorded; detailed transport/scope decisions remain open. No candidate is accepted for submission.**
 Baseline inspected: `8bad720220` on `develop`. No app builds or device tests were run for this planning pass.
 
+Subsequent execution evidence: [tvOS/settings audit](release-evidence/2026-10-19-tvos-audit.md), [TestFlight report and resolution decision](release-evidence/2026-10-19-testflight-user-report.md). The owner requested removing performance-driven resolution changes while keeping fixed scales and Auto (Fit Window); Native is the release default. Track removal in [#62](https://github.com/Provenance-Emu/iCube/issues/62), missing Default ISO controls in [#60](https://github.com/Provenance-Emu/iCube/issues/60), and manual disc swapping in [#61](https://github.com/Provenance-Emu/iCube/issues/61). These reports distinguish verified local results from pending shipping/device gates; none closes candidate acceptance.
+
+The continuing implementation and native failure-injection results are recorded in [release blocker fixes](release-evidence/2026-10-20-release-blocker-fixes.md) and the [live execution ledger](../superpowers/plans/2026-10-19-release-blocker-fix-ledger.md). Final platform/device acceptance remains open.
+
 ## Start here
 
 This is the release's scope and acceptance contract. GitHub's release tracker and child issues hold live status, assignments, blockers and evidence. Tracker: [#51](https://github.com/Provenance-Emu/iCube/issues/51). Milestone: [iCube 1.0 release readiness](https://github.com/Provenance-Emu/iCube/milestone/1). Workstreams: [R1 #52](https://github.com/Provenance-Emu/iCube/issues/52), [R2 #53](https://github.com/Provenance-Emu/iCube/issues/53), [R3 #54](https://github.com/Provenance-Emu/iCube/issues/54), [R4 #55](https://github.com/Provenance-Emu/iCube/issues/55), [R5 #56](https://github.com/Provenance-Emu/iCube/issues/56), [R6 #57](https://github.com/Provenance-Emu/iCube/issues/57). [R7 #58](https://github.com/Provenance-Emu/iCube/issues/58), [R8 #59](https://github.com/Provenance-Emu/iCube/issues/59). The execution roadmap is [here](../superpowers/plans/2026-10-19-icube-release-readiness.md). LLM memory is a pointer to these records, not another task database.
@@ -172,7 +176,7 @@ R1 and R2 share focus/navigation code: coordinate changes. R3/R4 share identity/
 3. Must iOS and tvOS launch together? Proposed default: one coordinated release, without delaying critical stability fixes for existing testers.
 4. Which oldest hardware and representative games define acceptable no-JIT performance? Define measurements and expectations before final acceptance.
 
-No deadline, pricing/Plus model or automatic-ROM backend is assumed. The earlier request for a polished launch remains context, not a waiver for remaining usability defects. Planning and issue creation are authorized; product implementation starts after scope review.
+No deadline, pricing/Plus model or automatic-ROM backend is assumed. The earlier request for a polished launch remains context, not a waiver for remaining usability defects. The owner subsequently authorized tvOS/settings auditing and fixes, including subagent execution. Implementation and verification are in progress in the [blocker fix ledger](../superpowers/plans/2026-10-19-release-blocker-fix-ledger.md); the unresolved product contract decisions above still need evidence or an owner decision before candidate acceptance.
 
 ## Evidence and maintenance rules
 

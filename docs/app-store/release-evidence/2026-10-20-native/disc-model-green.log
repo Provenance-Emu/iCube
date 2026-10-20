@@ -1,0 +1,14 @@
+HOST MODEL EVIDENCE ONLY — actual unchanged production PauseMenuModelBuilder.make and primaryLayout
+Shared model IDs: ["resume", "quick-save", "quick-load", "fast-forward", "mute", "screenshot", "record", "save-states", "change-disc", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers", "continuity", "settings", "reset", "exit"]
+PASS: manual Change Disc reachable
+PASS: stop default confirms
+PASS: stop enabled confirms
+PASS: stop disabled stops exactly once
+PASS: GC eligibility excludes non-disc remote demo and missing
+PASS: Wii compatibility
+PASS: file URL decoding and dedup
+PASS: nonlocal paths rejected
+PASS: Cancel never selects a disc
+PASS: Picker uses selected absolute path
+PASS: Empty picker explains absence and keeps Cancel
+HOST MODEL/POLICY EVIDENCE ONLY; no ObjC bridge, app build, simulator, or gameplay pass implied

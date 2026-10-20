@@ -15,6 +15,7 @@ struct ControllerHubView: View {
 
   @State private var viewModel: ControllerHubViewModel
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.icubeLeafParentTitle) private var parentTitle
 
   /// - Parameters:
   ///   - onBack: B (iOS) / Menu (tvOS) at the hub's root. nil pops or dismisses the hub. A host
@@ -35,7 +36,9 @@ struct ControllerHubView: View {
       onBack: {
         viewModel.flushPending()
         (onBack ?? { dismiss() })()
-      }
+      },
+      tvHeader: SettingsLeafScreen.header(title: L("Controllers"), parentTitle: parentTitle),
+      tvInset: .xxl
     )
     // The menu has the request once this render is out; carrying it until then (not dropping it on
     // the next reload) is what lets a later reload in the same turn not lose it.
@@ -43,7 +46,9 @@ struct ControllerHubView: View {
       guard request != nil else { return }
       DispatchQueue.main.async { viewModel.consumeFocusRequest() }
     }
+    #if os(iOS)
     .navigationTitle(L("Controllers"))
+    #endif
     // A pushed player screen covers this one: stop on disappear, reload on the way back.
     .onAppear { viewModel.start() }
     .onDisappear { viewModel.stop() }

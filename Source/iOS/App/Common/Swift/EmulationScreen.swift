@@ -291,6 +291,11 @@ struct EmulationScreen: View {
   @State private var obsAssignmentsChanged: NSObjectProtocol?
   @State private var obsWiiOverlayLayoutChanged: NSObjectProtocol?
   @State private var showExitConfirm = false
+  @State private var quitSaveFailure: UserQuitSaveFailure?
+  @State private var quitRequestInFlight = false
+  @State private var quitExpectedGameID = ""
+  @State private var quitExpectedSessionIdentifier: UInt64 = 0
+  @State private var quitSavePauseToken: PauseArbiter.Token?
   @State private var showShaderSheet = false
   @State private var showShaderParams = false
   @State private var showFXSheet = false
@@ -332,7 +337,7 @@ struct EmulationScreen: View {
   @State private var showGraphsQuick: Bool = false
   @State private var overlayStatsQuick: Bool = false
   @State private var stateCopied: Bool = false
-  // Resolver step #3 badge: set while an auto controller (adaptive clock / Auto-IR / thermal, on
+  // Resolver step #3 badge: set while an auto controller (adaptive clock, on
   // CurrentRun) or the running game's INI outranks the user's own Base value of the key. Loaded
   // alongside the other perf state at overlay-open; the manual control is disabled and an "Auto" /
   // "Game" badge shown while set, so the control can't author a silently-shadowed Base value.
@@ -547,7 +552,7 @@ struct EmulationScreen: View {
             autoBadge(efbOverride)
             Spacer()
             TVIntStepperOverlay(value: efbScaleQuickBinding, range: 0 ... efbMaxScaleQuick, step: 1)
-              // Resolver step #3: while Auto-IR / thermal drives GFX_EFB_SCALE (CurrentRun), the
+              // Resolver step #3: while a game or explicit runtime override drives GFX_EFB_SCALE, the
               // manual stepper is disabled; it shows the user's Base scale.
               .disabled(efbOverride != .none)
           }
@@ -1404,19 +1409,10 @@ struct EmulationScreen: View {
     }
     .alert("Exit Game?", isPresented: $showExitConfirm) {
       Button("Save & Quit") {
-        SaveStateService.saveSlot(selectedSlot)
-        TVEmulationBridge.stop()
-        #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
-        GameActivityManager.end()
-        #endif
-        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+        runTopBarQuit(.numberedSlot)
       }
       Button("Quit", role: .destructive) {
-        TVEmulationBridge.stop()
-        #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
-        GameActivityManager.end()
-        #endif
-        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+        quitFromTopBar()
       }
       Button("Continue", role: .cancel) {
         #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
@@ -1426,6 +1422,20 @@ struct EmulationScreen: View {
       }
     } message: {
       Text("Do you want to stop the current game and return to the library?")
+    }
+    .alert(L("Couldn't save before quitting"), isPresented: Binding(
+      get: { quitSaveFailure != nil }, set: { if !$0 && !quitRequestInFlight { cancelTopBarQuitFailure() } })) {
+      if let failure = quitSaveFailure {
+        Button(L("Retry")) { retryTopBarQuit(failure) }
+        Button(L("Quit Without Saving"), role: .destructive) {
+          if TVEmulationBridge.stopWithoutSavingForUser(expectedSessionIdentifier: quitExpectedSessionIdentifier) {
+            finishQuitFromTopBar()
+          } else { cancelTopBarQuitFailure() }
+        }
+        Button(L("Cancel"), role: .cancel) { cancelTopBarQuitFailure() }
+      }
+    } message: {
+      Text(L("Retry the save or choose Quit Without Saving. Unsaved progress will be lost."))
     }
     // Claim controller ownership for as long as the game is on screen. The
     // library is only *covered*, not dismissed, so SwiftUI never sends it an
@@ -1437,7 +1447,7 @@ struct EmulationScreen: View {
 
   // Adaptive-clock (auto) live toggle + VI-skip mode picker, shared across all perf-overlay layouts.
   // Resolver step #3: refresh the perf-overlay state from the live config whenever the overlay is
-  // opened. The auto controllers (adaptive clock / Auto-IR / thermal) only write CurrentRun once
+  // opened. The auto controllers (adaptive clock) only write CurrentRun once
   // gameplay is underway — AFTER the one-time onAppear load — so re-reading here is what makes the
   // "Auto" badge appear and the manual controls disable when the user opens the overlay mid-game.
 
@@ -1469,6 +1479,10 @@ struct EmulationScreen: View {
         userOverrideTouchControls = false
         controllerManager.choosePlayer1(qualifier, isWii: isWiiSystem)
       })
+      .disabled(quitRequestInFlight)
+      .overlay {
+        if quitRequestInFlight { ProgressView(L("Saving…")) }
+      }
   }
 
   /// The top bar's Player 1 section: the on-screen controls and every connected pad, the current one checked.
@@ -1485,12 +1499,15 @@ struct EmulationScreen: View {
   /// True while anything the bar opened (or the pause menu) is on screen; the bar must not hide under it.
   private var topBarChildPresented: Bool {
     showPerfOverlay || showShaderSheet || showShaderParams || showFXSheet || showControllerSettings
-      || showPauseMenu || showExitConfirm || showSkyImporter || showSkyClearPicker
+      || showPauseMenu || showExitConfirm || quitSaveFailure != nil || quitRequestInFlight || showSkyImporter || showSkyClearPicker
   }
 
   private func openFromTopBar(_ destination: TopBarDestination) {
+    guard !quitRequestInFlight else { return }
     switch destination {
-    case .exitConfirm: showExitConfirm = true
+    case .exitConfirm:
+      UserStopRequest.handle(confirmOnStop: DOLConfigBridge.mainConfirmOnStop(),
+                             confirm: { showExitConfirm = true }, stop: quitFromTopBar)
     case .perfOverlay:
       refreshPerfOverlayState()
       showPerfOverlay = true
@@ -1505,6 +1522,61 @@ struct EmulationScreen: View {
     case .skylanderImport: showSkyImporter = true
     case .skylanderClear: showSkyClearPicker = true
     }
+  }
+
+  private func quitFromTopBar() {
+    runTopBarQuit(.finalizing(savedStatePath: nil))
+  }
+
+  private func retryTopBarQuit(_ operation: UserQuitSaveFailure) {
+    runTopBarQuit(operation, expectedGameID: quitExpectedGameID, expectedSessionIdentifier: quitExpectedSessionIdentifier)
+  }
+
+  private func runTopBarQuit(_ operation: UserQuitSaveFailure, expectedGameID: String? = nil,
+                             expectedSessionIdentifier: UInt64? = nil) {
+    guard !quitRequestInFlight else { return }
+    let expected = expectedGameID ?? TVEmulationBridge.currentGameID()
+    let session = expectedSessionIdentifier ?? TVEmulationBridge.currentSessionIdentifier()
+    quitExpectedGameID = expected
+    quitExpectedSessionIdentifier = session
+    quitSaveFailure = nil
+    quitRequestInFlight = true
+    if quitSavePauseToken == nil { quitSavePauseToken = PauseArbiter.shared.claim("quit-save") }
+    let slot = selectedSlot
+    Task { @MainActor in
+      let outcome: UserQuitAttemptResult
+      switch operation {
+      case .numberedSlot:
+        outcome = await SaveStateService.saveAndStopForUserAsync(slot, expectedGameID: expected, expectedSessionIdentifier: session)
+      case .finalizing(let path):
+        outcome = await SaveStateService.stopForUserAsync(savedStatePath: path, expectedGameID: expected, expectedSessionIdentifier: session)
+          ? .stopped : .failed(operation)
+      }
+      quitRequestInFlight = false
+      switch outcome {
+      case .stopped: finishQuitFromTopBar()
+      case .failed(let failure):
+        if session == TVEmulationBridge.currentSessionIdentifier() { quitSaveFailure = failure }
+        else { cancelTopBarQuitFailure() }
+      }
+    }
+  }
+
+  private func cancelTopBarQuitFailure() {
+    quitSaveFailure = nil
+    if let token = quitSavePauseToken {
+      PauseArbiter.shared.release(token)
+      quitSavePauseToken = nil
+    }
+    isPaused = TVEmulationBridge.isPaused()
+  }
+
+  private func finishQuitFromTopBar() {
+    quitSaveFailure = nil
+    #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+    GameActivityManager.end()
+    #endif
+    NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
   }
 
   /// The settings sheet claimed a pause on open; release that claim (the game resumes only if nothing else
@@ -1552,16 +1624,14 @@ struct EmulationScreen: View {
   }
   #endif
 
-  /// The quick IR control: writes Base only when the player moves it, and turns Auto-IR off for an
-  /// explicit scale, since both drive GFX_EFB_SCALE (same rule as the Settings picker, step #6).
+  /// The quick IR control writes the user's Base scale only when the player moves it.
   private var efbScaleQuickBinding: Binding<Int> {
     $efbScaleQuick.onSet { newScale in
       DOLConfigBridge.setGfxEfbScale(newScale)
-      if newScale != 0 { DOLConfigBridge.setGfxAutoIREnable(false) }
     }
   }
 
-  /// Seeds the quick controls from the user's own values (Base). The adaptive clock and Auto-IR write
+  /// Seeds the quick controls from the user's own values (Base). The adaptive clock writes
   /// CurrentRun; seeding from the resolved value let those reach Base through the controls' writers.
   private func refreshPerfOverlayState() {
     ocEnabled = DOLConfigBridge.mainOverclockEnableBase()

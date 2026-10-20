@@ -18,6 +18,8 @@
 #include <atomic>
 #include <mutex>
 #include "Core/HW/ProcessorInterface.h"
+#include "Core/HW/DVD/DVDInterface.h"
+#include "DiscIO/VolumeDisc.h"
 #include "Core/Host.h"
 #include "Core/Core.h"
 #include "Core/System.h"
@@ -26,6 +28,7 @@
 #include "Core/TimePlayed.h"
 #include "Common/FileUtil.h"
 #include "Common/Version.h"
+#include "Common/HookableEvent.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/Config/GraphicsSettings.h"
 #include "Common/Config/Config.h"
@@ -88,6 +91,29 @@ static bool StateOperationAllowed(Core::System& system, const char* operation)
   return false;
 }
 
+// Core transitions fire synchronously, before a new boot can reuse the same game ID. App-level
+// DidStart notifications run later on main and cannot safely distinguish a pending same-title save.
+static std::atomic<uint64_t> s_stateSessionIdentifier{1};
+static uint64_t CurrentStateSessionIdentifier() {
+  static const auto hook = Core::AddOnStateChangedCallback([](Core::State state) {
+    if (state == Core::State::Starting || state == Core::State::Stopping || state == Core::State::Uninitialized)
+      s_stateSessionIdentifier.fetch_add(1);
+  });
+  (void)hook;
+  return s_stateSessionIdentifier.load();
+}
+
+@interface TVSaveStateSnapshot ()
+@property (nonatomic, readwrite, copy) NSString* filePath;
+@property (nonatomic, readwrite, copy) NSString* gameID;
+@property (nonatomic, readwrite) NSInteger playTimeSeconds;
+@property (nonatomic, readwrite, copy) NSDate* savedAt;
+@property (nonatomic, readwrite) uint64_t sessionIdentifier;
+@end
+
+@implementation TVSaveStateSnapshot
+@end
+
 @implementation TVEmulationBridge
 
 + (void)runWithBootParameter:(EmulationBootParameter*)param {
@@ -95,20 +121,82 @@ static bool StateOperationAllowed(Core::System& system, const char* operation)
 }
 
 + (void)stop {
-  // Resume-where-left-off: persist the dedicated auto-state (blocking) BEFORE the
-  // CPU thread is torn down, so the next launch can continue from here. Gated on
-  // the user toggle; default off means this is a no-op. The auto-state lives in its
-  // own "{GameID}.auto" file and never touches numbered save slots.
+  // Programmatic replacement/debug stops keep their stop-always behavior. User Quit uses the
+  // result-bearing entrypoint below so a failed auto-save can be retried or explicitly discarded.
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"resume_where_left_off"]) {
     NSString* autoPath = [self autoStateFilePath];
     if (autoPath.length > 0 && StateOperationAllowed(Core::System::GetInstance(), "auto-state save")) {
-      State::SaveAs(Core::System::GetInstance(), std::string(autoPath.UTF8String));  // 2603: no wait flag
+      if (![self saveStateToPath:autoPath wait:YES])
+        NSLog(@"[SaveState] Auto-state save failed during programmatic stop");
     }
   }
-  // A clean exit is proof the resume/boot-into-state load earlier this session (if
-  // any) did not take the app down, so it is safe to auto-resume again next launch.
+  [self stopWithoutSaving];
+}
+
++ (void)stopWithoutSaving {
   [BootWatchdog clear];
   Host_Message(HostMessageID::WMUserStop);
+}
+
++ (BOOL)stopWithoutSavingForUserExpectedSessionIdentifier:(uint64_t)session {
+  const Core::CPUThreadGuard guard(Core::System::GetInstance());
+  if (session != CurrentStateSessionIdentifier())
+    return NO;
+  [self stopWithoutSaving];
+  return YES;
+}
+
++ (BOOL)stopForUserWithSavedStatePath:(NSString*)savedStatePath {
+  return [self stopForUserWithSavedStatePath:savedStatePath expectedGameID:nil];
+}
+
++ (BOOL)stopForUserWithSavedStatePath:(NSString*)savedStatePath expectedGameID:(NSString*)expectedGameID {
+  return [self stopForUserWithSavedStatePath:savedStatePath expectedGameID:expectedGameID expectedSessionIdentifier:CurrentStateSessionIdentifier()];
+}
+
++ (uint64_t)currentSessionIdentifier {
+  return CurrentStateSessionIdentifier();
+}
+
++ (BOOL)stopForUserWithSavedStatePath:(NSString*)savedStatePath expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session {
+  auto& system = Core::System::GetInstance();
+  NSString* autoPath = nil;
+  std::future<bool> completion;
+  {
+    const Core::CPUThreadGuard guard(system);
+    if (session != CurrentStateSessionIdentifier() ||
+        (expectedGameID.length > 0 && ![[self currentGameID] isEqualToString:expectedGameID]))
+      return NO;
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"resume_where_left_off"] && Core::IsRunning(system)) {
+      autoPath = [self autoStateFilePath];
+      if (autoPath.length > 0 && savedStatePath.length == 0)
+        completion = State::SaveAsWithResult(system, std::string(autoPath.fileSystemRepresentation));
+    }
+  } // The CPU is free while the worker commits or a confirmed snapshot is copied.
+  if (completion.valid() && !completion.get())
+    return NO;
+  NSString* temporary = nil;
+  if (autoPath.length > 0 && savedStatePath.length > 0 && ![savedStatePath isEqualToString:autoPath]) {
+    temporary = [autoPath stringByAppendingFormat:@".%@.tmp", NSUUID.UUID.UUIDString];
+    if (!File::CopyRegularFile(savedStatePath.fileSystemRepresentation, temporary.fileSystemRepresentation)) {
+      if (File::Exists(temporary.fileSystemRepresentation))
+        File::Delete(temporary.fileSystemRepresentation);
+      return NO;
+    }
+  }
+  const Core::CPUThreadGuard guard(system);
+  if (session != CurrentStateSessionIdentifier() ||
+      (expectedGameID.length > 0 && ![[self currentGameID] isEqualToString:expectedGameID])) {
+    if (temporary && File::Exists(temporary.fileSystemRepresentation))
+      File::Delete(temporary.fileSystemRepresentation);
+    return NO;
+  }
+  if (temporary && !File::Rename(temporary.fileSystemRepresentation, autoPath.fileSystemRepresentation)) {
+    File::Delete(temporary.fileSystemRepresentation);
+    return NO;
+  }
+  [self stopWithoutSaving];
+  return YES;
 }
 
 // Generation of the newest pause/resume request. An async job runs only if it is still the newest, so a
@@ -182,6 +270,44 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   return Core::GetState(Core::System::GetInstance()) == Core::State::Paused;
 }
 
++ (TVDiscChangeResult)changeDiscAtPath:(NSString*)path {
+  // Never eject before validating: stale library entries and non-disc launchers must leave the
+  // current disc untouched. The Swift picker filters first; this is the authoritative recheck.
+  BOOL directory = NO;
+  NSFileManager* files = NSFileManager.defaultManager;
+  if (!path.isAbsolutePath || ![files fileExistsAtPath:path isDirectory:&directory] || directory ||
+      ![files isReadableFileAtPath:path]) {
+    return TVDiscChangeResultFileUnavailable;
+  }
+  const std::string disc_path(path.fileSystemRepresentation);
+  const auto disc = DiscIO::CreateDisc(disc_path);
+  if (!disc || (disc->GetVolumeType() != DiscIO::Platform::GameCubeDisc &&
+                disc->GetVolumeType() != DiscIO::Platform::WiiDisc)) {
+    return TVDiscChangeResultInvalidDisc;
+  }
+
+  auto& system = Core::System::GetInstance();
+  if (!Core::IsRunning(system))
+    return TVDiscChangeResultNoRunningGame;
+
+  // Upstream's Qt frontend uses this guard too. It locks the CPU/core, temporarily assumes CPU
+  // thread ownership and restores the prior stepping state; it does not resume behind the menu.
+  const Core::CPUThreadGuard guard(system);
+  if (!Core::IsRunning(system))
+    return TVDiscChangeResultNoRunningGame;
+  if ((disc->GetVolumeType() == DiscIO::Platform::WiiDisc) != system.IsWii())
+    return TVDiscChangeResultIncompatibleSystem;
+
+  auto& dvd = system.GetDVDInterface();
+  if (dvd.HasPendingDiscChange(guard))
+    return TVDiscChangeResultPendingInsertion;
+
+  // The string overload retains the core's auto-disc list/index when this is one of its discs,
+  // and follows upstream's normal invalidation when manually inserting a different title.
+  dvd.ChangeDisc(guard, disc_path);
+  return TVDiscChangeResultScheduled;
+}
+
 + (BOOL)hasQueuedPauseRequest {
   return s_pauseSettledGeneration.load() < s_pauseRequestGeneration.load();
 }
@@ -206,11 +332,45 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
 }
 
 + (BOOL)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait {
-  (void)wait;  // 2603: State::Save lost its wait flag (always synchronous now)
-  if (!StateOperationAllowed(Core::System::GetInstance(), "slot save"))
-    return NO;
-  State::Save(Core::System::GetInstance(), (int)slot);
-  return YES;
+  (void)wait;  // Success always means committed, including callers of the old wait:NO API.
+  return [self saveStateSnapshotToSlot:slot] != nil;
+}
+
++ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot {
+  return [self saveStateSnapshotToSlot:slot expectedGameID:nil];
+}
+
++ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(NSString*)expectedGameID {
+  return [self saveStateSnapshotToSlot:slot expectedGameID:expectedGameID expectedSessionIdentifier:CurrentStateSessionIdentifier()];
+}
+
++ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session {
+  auto& system = Core::System::GetInstance();
+  if (slot <= 0 || static_cast<uint64_t>(slot) > UINT32_MAX ||
+      !StateOperationAllowed(system, "slot save"))
+    return nil;
+  TVSaveStateSnapshot* snapshot = nil;
+  std::future<bool> completion;
+  {
+    const Core::CPUThreadGuard guard(system);
+    if (!StateOperationAllowed(system, "slot save"))
+      return nil;
+    NSString* gameID = [self currentGameID];
+    if (session != CurrentStateSessionIdentifier() ||
+        (expectedGameID.length > 0 && ![gameID isEqualToString:expectedGameID]))
+      return nil;
+    NSString* path = [self stateFilePathForSlot:slot];
+    if (path.length == 0 || gameID.length == 0)
+      return nil;
+    snapshot = [TVSaveStateSnapshot new];
+    snapshot.filePath = path;
+    snapshot.gameID = gameID;
+    snapshot.savedAt = NSDate.date;
+    snapshot.sessionIdentifier = session;
+    snapshot.playTimeSeconds = [self currentGamePlayTimeSeconds];
+    completion = State::SaveAsWithResult(system, std::string(path.fileSystemRepresentation));
+  } // Metadata capture and serialization were atomic; waiting for disk never holds the CPU lock.
+  return completion.get() ? snapshot : nil;
 }
 
 + (BOOL)isStateOperationAllowed {
@@ -262,13 +422,11 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   return [NSString stringWithFormat:@"%@%@.auto", dir, gid];
 }
 
-+ (void)saveStateToPath:(NSString*)path wait:(BOOL)wait {
-  if (path.length == 0)
-    return;
-  (void)wait;  // 2603: SaveAs lost its wait flag
-  if (!StateOperationAllowed(Core::System::GetInstance(), "path save"))
-    return;
-  State::SaveAs(Core::System::GetInstance(), std::string(path.UTF8String));
++ (BOOL)saveStateToPath:(NSString*)path wait:(BOOL)wait {
+  (void)wait;
+  if (path.length == 0 || !StateOperationAllowed(Core::System::GetInstance(), "path save"))
+    return NO;
+  return State::SaveAsAndWait(Core::System::GetInstance(), std::string(path.fileSystemRepresentation));
 }
 
 + (void)loadStateFromPath:(NSString*)path {

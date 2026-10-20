@@ -22,7 +22,7 @@ internal struct PauseMenuView: View {
     /// grid (`SaveStateFilmstripView`) -- previously iOS-only.
     case filmstrip
   }
-  private enum Pane { case main, saves, cheats, controllers }
+  private enum Pane { case main, saves, cheats, controllers, discs }
   /// The quick-slot picker's slots, numbered as the UI shows them.
   static let saveSlots = 1 ... PauseMenuModelBuilder.slotCount
   @State private var pane: Pane = .main
@@ -40,6 +40,10 @@ internal struct PauseMenuView: View {
   #endif
   @State private var showExitDialog: Bool = false
   @State private var showResetDialog: Bool = false
+  @State private var quitSaveFailure: UserQuitSaveFailure?
+  @State private var quitRequestInFlight = false
+  @State private var quitExpectedGameID = ""
+  @State private var quitExpectedSessionIdentifier: UInt64 = 0
   @State private var showShaders: Bool = false
   /// Settings over the pause menu (a sheet on iOS, a cover on tvOS), opened by the Settings tile or a tile's
   /// long-press. The menu presents it itself: a second cover from `EmulationScreen` cannot show while this one is up.
@@ -84,6 +88,7 @@ internal struct PauseMenuView: View {
   /// can report an onDisappear on the outer ZStack while it is on screen, and none of
   /// them should resume the game underneath.
   private var isPauseMenuChildPresented: Bool {
+    if quitSaveFailure != nil { return true }
     if pane != .main { return true }
     if showShaders || showContinuitySheet || showFilmstripSheet || showSettings { return true }
     #if os(iOS)
@@ -156,6 +161,8 @@ internal struct PauseMenuView: View {
       case .cheats:
         CheatsMenuView(game: game, onBack: { pane = .main })
           .onAppear { NSLog("[PAUSE] Cheats menu appeared") }
+      case .discs:
+        DiscChangePicker(games: TVLibraryBridge.currentGames(), isWii: TVEmulationBridge.isCurrentSystemWii(), onBack: { pane = .main })
       #if os(tvOS)
       case .controllers:
         // Menu at the hub's root returns to the pause menu (`onBack`, through MenuScreen's own
@@ -168,6 +175,13 @@ internal struct PauseMenuView: View {
       case .controllers:
         mainMenu
       #endif
+      }
+    }
+    .overlay {
+      if quitRequestInFlight {
+        ProgressView(L("Saving…"))
+          .padding(ICubeDesign.Spacing.l.rawValue)
+          .icubePanel()
       }
     }
     .onAppear {
@@ -199,6 +213,7 @@ internal struct PauseMenuView: View {
         case "controllers": pane = .controllers
         case "reset": showResetDialog = true
         case "exit": showExitDialog = true
+        case "discs": pane = .discs
         default: break
         }
         if let id = debugLongPressTileID, case .action(let run)? = pauseMenuModel.item(id: id)?.effectiveLongPress {
@@ -242,6 +257,8 @@ internal struct PauseMenuView: View {
           focused = .back
         case .controllers:
           focused = .back
+        case .discs:
+          break
         }
       }
     }
@@ -250,11 +267,13 @@ internal struct PauseMenuView: View {
     }
     #if os(tvOS)
     .onExitCommand {
+      guard !quitRequestInFlight else { return }
       // At .main the tile grid's own onBack closes (coalesced), and the confirm overlays handle theirs.
       if pane != .main { pane = .main }
     }
     // Spec §5.3: Play/Pause on the remote resumes, from any pane.
     .onPlayPauseCommand {
+      guard !quitRequestInFlight else { return }
       PauseArbiter.shared.userResume()
       onClose()
     }
@@ -341,6 +360,7 @@ internal struct PauseMenuView: View {
   private var tvMainMenu: some View {
     ZStack {
       TVPauseGridView(model: PauseMenuModelBuilder.primaryLayout(pauseMenuModel), lastFocusID: $tvLastFocusID, onBack: {
+        guard !quitRequestInFlight else { return }
         guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
         onClose()
       }) {
@@ -363,6 +383,16 @@ internal struct PauseMenuView: View {
       Button(L("Cancel"), role: .cancel) {}
     } message: {
       Text(L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."))
+    }
+    .confirmationDialog(L("Couldn't save before quitting"), isPresented: Binding(
+      get: { quitSaveFailure != nil }, set: { if !$0 { quitSaveFailure = nil } }), titleVisibility: .visible) {
+      if let failure = quitSaveFailure {
+        Button(L("Retry")) { quitSaveFailure = nil; retryQuit(failure) }
+        Button(L("Quit Without Saving"), role: .destructive) { quitSaveFailure = nil; quitWithoutSaving() }
+        Button(L("Cancel"), role: .cancel) { quitSaveFailure = nil }
+      }
+    } message: {
+      Text(L("Retry the save or choose Quit Without Saving. Unsaved progress will be lost."))
     }
   }
   #endif
@@ -410,6 +440,14 @@ internal struct PauseMenuView: View {
           confirmOverlay(title: L("Exit Game"), message: L("Do you want to quit the game? Unsaved progress will be lost."),
                          model: exitConfirmModel, onBack: { showExitDialog = false })
         }
+        if let failure = quitSaveFailure {
+          confirmOverlay(title: L("Couldn't save before quitting"),
+                         message: L("Retry the save or choose Quit Without Saving. Unsaved progress will be lost."),
+                         model: UserQuitFailureModelBuilder.make(cancel: { quitSaveFailure = nil },
+                           retry: { quitSaveFailure = nil; retryQuit(failure) },
+                           quitWithoutSaving: { quitSaveFailure = nil; self.quitWithoutSaving() }),
+                         onBack: { quitSaveFailure = nil })
+        }
         EmulationToastOverlay(barHeight: 0, barVisible: false)
       }
       .frame(width: proxy.size.width, height: proxy.size.height)
@@ -431,7 +469,7 @@ internal struct PauseMenuView: View {
   }
 
   private var closeButton: some View {
-    Button(action: onClose) {
+    Button(action: { if !quitRequestInFlight { onClose() } }) {
       Label(L("Close"), systemImage: "xmark")
         .labelStyle(.iconOnly)
         .font(.system(size: 15, weight: .bold))
@@ -456,8 +494,9 @@ internal struct PauseMenuView: View {
 
   private func tiles(columns: Int, compact: Bool) -> some View {
     // Modal while a confirm overlay is up: on tvOS the focus engine can otherwise land back on a tile.
-    let confirmUp = showResetDialog || showExitDialog
+    let confirmUp = showResetDialog || showExitDialog || quitSaveFailure != nil || quitRequestInFlight
     return MenuScreen(model: PauseMenuModelBuilder.primaryLayout(pauseMenuModel), style: .cards(columns: columns, compact: compact), onBack: {
+      guard !quitRequestInFlight else { return }
       guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
       onClose()
     })
@@ -512,15 +551,13 @@ internal struct PauseMenuView: View {
               }
             }
             Section(header: Text(L("Actions"))) {
-              Button { SaveStateService.saveSlot(selectedSlot)
-                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Saved to Slot %d"), selectedSlot)])
-              } label: {
+              Button { QuickSlot.save(slot: selectedSlot) } label: {
                 HStack { Image(systemName: ControllerGlyphs.glyphName(for: "confirm", set: ControllerStyleManager.shared.current()))
                   Text(String(format: L("Save to Slot %d"), selectedSlot))
                 }
               }
               Button { TVEmulationBridge.loadState(fromSlot: selectedSlot)
-                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Loaded Slot %d"), selectedSlot)])
+                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Loading Slot %d"), selectedSlot)])
               } label: {
                 HStack { Image(systemName: "arrow.down.circle")
                   Text(String(format: L("Load Slot %d"), selectedSlot))
@@ -701,15 +738,22 @@ internal struct PauseMenuView: View {
       },
       openPerfOverlay: { onClose(); onShowPerfOverlay() },
       requestReset: { showResetDialog = true },
-      requestExit: { showExitDialog = true },
+      requestExit: requestExit,
       recenterPointer: {
         #if os(iOS)
         TCDeviceMotion.requestPointerRecenter()
         PauseArbiter.shared.userResume()
         onClose()
         #endif
-      })
-    return PauseMenuModelBuilder.make(state: state, bindings: pauseMenuBindings, actions: actions)
+      },
+      openDiscPicker: { pane = .discs })
+    var model = PauseMenuModelBuilder.make(state: state, bindings: pauseMenuBindings, actions: actions)
+    if quitRequestInFlight {
+      for section in model.sections.indices {
+        for item in model.sections[section].items.indices { model.sections[section].items[item].isEnabled = false }
+      }
+    }
+    return model
   }
 
   /// Confirm overlay shown for `showResetDialog` -- Cancel first (the safe,
@@ -732,15 +776,56 @@ internal struct PauseMenuView: View {
     onClose()
   }
 
+  private func requestExit() {
+    guard !quitRequestInFlight else { return }
+    UserStopRequest.handle(confirmOnStop: DOLConfigBridge.mainConfirmOnStop(),
+                           confirm: { showExitDialog = true }, stop: quitGame)
+  }
+
   private func quitGame() {
-    TVEmulationBridge.stop()
-    NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+    runQuit(.finalizing(savedStatePath: nil), expectedGameID: TVEmulationBridge.currentGameID())
   }
 
   /// Saves to the quick slot, then quits.
   private func saveAndQuit() {
-    SaveStateService.saveSlot(selectedSlot)
-    quitGame()
+    runQuit(.numberedSlot, expectedGameID: TVEmulationBridge.currentGameID())
+  }
+
+  private func retryQuit(_ operation: UserQuitSaveFailure) {
+    runQuit(operation, expectedGameID: quitExpectedGameID, expectedSessionIdentifier: quitExpectedSessionIdentifier)
+  }
+
+  private func runQuit(_ operation: UserQuitSaveFailure, expectedGameID: String, expectedSessionIdentifier: UInt64? = nil) {
+    guard !quitRequestInFlight else { return }
+    quitRequestInFlight = true
+    quitExpectedGameID = expectedGameID
+    let session = expectedSessionIdentifier ?? TVEmulationBridge.currentSessionIdentifier()
+    quitExpectedSessionIdentifier = session
+    quitSaveFailure = nil
+    let slot = selectedSlot
+    Task { @MainActor in
+      let outcome: UserQuitAttemptResult
+      switch operation {
+      case .numberedSlot:
+        outcome = await SaveStateService.saveAndStopForUserAsync(slot, expectedGameID: expectedGameID, expectedSessionIdentifier: session)
+      case .finalizing(let savedPath):
+        outcome = await SaveStateService.stopForUserAsync(savedStatePath: savedPath, expectedGameID: expectedGameID, expectedSessionIdentifier: session)
+          ? .stopped : .failed(operation)
+      }
+      quitRequestInFlight = false
+      switch outcome {
+      case .stopped:
+        NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+      case .failed(let failure):
+        if session == TVEmulationBridge.currentSessionIdentifier() { quitSaveFailure = failure }
+      }
+    }
+  }
+
+  private func quitWithoutSaving() {
+    if TVEmulationBridge.stopWithoutSavingForUser(expectedSessionIdentifier: quitExpectedSessionIdentifier) {
+      NotificationCenter.default.post(name: Notification.Name("DOLEmulationRequestExitToLibrary"), object: nil)
+    }
   }
 
   /// Confirm overlay shown for `showExitDialog` -- Cancel first, matching the
@@ -816,6 +901,7 @@ struct PauseMenuActions {
   var requestReset: () -> Void
   var requestExit: () -> Void
   var recenterPointer: () -> Void
+  var openDiscPicker: () -> Void = {}
 }
 
 /// Unified menu UX spec §5: Quick / Game / System. Shared by iOS and tvOS.
@@ -926,6 +1012,8 @@ enum PauseMenuModelBuilder {
     var game: [MenuItem] = [
       MenuItem(id: "save-states", title: L("Save States"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates),
                description: L("Save, load and browse every slot.")),
+      MenuItem(id: "change-disc", title: L("Change Disc"), icon: "opticaldisc", role: .action(actions.openDiscPicker),
+               description: L("Insert another local disc without restarting the game.")),
       MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .toggle(bindings.perfHUD),
                description: L("Frame rate and speed drawn over the game. Long-press for every performance control."),
                longPress: .action(actions.openPerfOverlay)),

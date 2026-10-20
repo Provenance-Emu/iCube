@@ -1,0 +1,4 @@
+EXPECTED RED: payload write failure preserves current state; current=HEADERPARTIAL
+EXPECTED RED: close failure preserves current state; current=HEADERCOMPLETE
+EXPECTED RED: promotion failure preserves current state; current=MISSING
+HOST FAULT-INJECTION EVIDENCE ONLY: unchanged production writer; storage/IO adapters inject deterministic failures

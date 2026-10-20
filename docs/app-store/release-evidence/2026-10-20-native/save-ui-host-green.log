@@ -1,0 +1,1 @@
+PASS: actual QuickSlot async orchestration returns before completion, captures tap ID/slot, blocks duplicate serialization, waits for truthful success, suppresses replaced-session callback and surfaces failed save

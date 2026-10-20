@@ -22,6 +22,8 @@ struct ConfigGeneralView: View {
     s.cheats = DOLConfigBridge.mainEnableCheats()
     s.overrideRegion = DOLConfigBridge.mainOverrideRegionSettings()
     s.autoDiscChange = DOLConfigBridge.mainAutoDiscChange()
+    s.defaultISO = DefaultISOSelectionState(path: DOLConfigBridge.defaultISOSelectionPath(),
+                                           available: DOLConfigBridge.defaultISOSelectionIsAvailable())
     s.fastDiscSpeed = DOLConfigBridge.mainFastDiscSpeed()
     s.resumeWhereLeftOff = defaults.bool(forKey: ConfigGeneralDefaultsKey.resumeWhereLeftOff)
     s.speedLimitPercent = DOLConfigBridge.mainEmulationSpeedPercent()

@@ -1,0 +1,3 @@
+HOST MINTER EVIDENCE ONLY: actual production minter; failed save injected with real stale slot99 file
+PASS: failed save rejects stale slot99 without a descriptor
+Hash calls: 0

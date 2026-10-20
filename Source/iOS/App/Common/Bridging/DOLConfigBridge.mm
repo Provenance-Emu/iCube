@@ -42,6 +42,8 @@
 
 #include "Common/FileUtil.h"
 #include "Common/IniFile.h"
+#include "DiscIO/Volume.h"
+#include "DiscIO/VolumeDisc.h"
 
 // Extern DSU client RX counter for DEBUG HUD (defined in DualShockUDPClient.cpp)
 namespace ciface { namespace DualShockUDPClient { extern std::atomic<uint64_t> g_rx_counter; } }
@@ -89,6 +91,51 @@ static void DeleteCirKeys(Config::LayerType layer_type)
 static bool ICubeEmulationActive() {
   const Core::State st = Core::GetState(Core::System::GetInstance());
   return st == Core::State::Running || st == Core::State::Starting;
+}
+
+// Device-local by design: CloudSync mirrors User/Config, not app preferences. A sandbox-relative
+// path survives the install-container UUID changing; no game identity or cross-device path is implied.
+static NSString* const ICubeDefaultISOSelectionKey = @"icube.defaultISO.localSelection";
+
+static NSString* ICubeDefaultISOHome()
+{
+  return NSHomeDirectory().stringByResolvingSymlinksInPath.stringByStandardizingPath;
+}
+
+static NSString* ICubeDefaultISOSelectionPath()
+{
+  NSDictionary* record = [NSUserDefaults.standardUserDefaults dictionaryForKey:ICubeDefaultISOSelectionKey];
+  NSString* relative = record[@"relativePath"];
+  if ([relative isKindOfClass:NSString.class] && relative.length && !relative.isAbsolutePath)
+  {
+    NSString* home = ICubeDefaultISOHome();
+    NSString* resolved = [[home stringByAppendingPathComponent:relative] stringByStandardizingPath];
+    return [resolved hasPrefix:[home stringByAppendingString:@"/"]] ? resolved : @"";
+  }
+  NSString* absolute = record[@"absolutePath"];
+  return [absolute isKindOfClass:NSString.class] && absolute.isAbsolutePath ? absolute : @"";
+}
+
+static bool ICubeDefaultISOUsable(NSString* path)
+{
+  if (!path.isAbsolutePath)
+    return false;
+  BOOL directory = NO;
+  NSFileManager* files = NSFileManager.defaultManager;
+  if (![files fileExistsAtPath:path isDirectory:&directory] || directory ||
+      ![files isReadableFileAtPath:path])
+    return false;
+  // DiscIO sniffs the contents/container. ELF, DOL, WAD, URLs and arbitrary files cannot be discs.
+  return DiscIO::CreateDisc(std::string(path.UTF8String)) != nullptr;
+}
+
+static void ICubeStoreDefaultISO(NSString* path)
+{
+  NSString* resolved = path.stringByResolvingSymlinksInPath.stringByStandardizingPath;
+  NSString* prefix = [ICubeDefaultISOHome() stringByAppendingString:@"/"];
+  NSDictionary* record = [resolved hasPrefix:prefix] ?
+      @{@"relativePath": [resolved substringFromIndex:prefix.length]} : @{@"absolutePath": resolved};
+  [NSUserDefaults.standardUserDefaults setObject:record forKey:ICubeDefaultISOSelectionKey];
 }
 
 @implementation DOLConfigBridge
@@ -147,33 +194,16 @@ static bool ICubeEmulationActive() {
 // Internal Resolution (EFB Scale)
 + (NSInteger)gfxEfbScale { return (NSInteger)Config::Get(Config::GFX_EFB_SCALE); }
 // MANUAL setter: writes the Base layer unconditionally. Perf-knob resolver step #3 layer discipline:
-// manual UI authors Base; auto controllers (AutoIRController, ThermalManager) author CurrentRun.
-// Reads (Config::Get) prefer CurrentRun, so an active auto override is automatically "effective"
+// manual UI authors Base; game settings and explicit runtime overrides may shadow it.
+// Reads (Config::Get) prefer CurrentRun, so an explicit runtime override is effective
 // while the user's Base value is preserved underneath and re-exposed when the override clears.
 + (void)setGfxEfbScale:(NSInteger)scale { Config::SetBase(Config::GFX_EFB_SCALE, (int)scale); }
 + (NSInteger)gfxEfbScaleBase
 {
   return (NSInteger)Config::GetBase(Config::GFX_EFB_SCALE);
 }
-// AUTO setter: writes the CurrentRun layer (like AutoIRController). Used by thermal auto-tuning so
-// its throttle shadows — never overwrites — the user's manual Base value. Guard against a missing
-// CurrentRun layer: thermal notifications can fire outside emulation, and Config::Set dereferences
-// GetLayer(layer) with no null check (Config.h:106). CurrentRun is created at Config::Init and on
-// every boot (ClearCurrentRunLayer), so it normally exists; the guard is belt-and-suspenders.
-+ (void)setGfxEfbScaleAuto:(NSInteger)scale {
-  if (Config::GetLayer(Config::LayerType::CurrentRun))
-    Config::Set(Config::LayerType::CurrentRun, Config::GFX_EFB_SCALE, (int)scale);
-}
-// Clear the auto (CurrentRun) EFB override, re-exposing the user's manual Base value. Used by the
-// thermal "restore quality" path: deleting the CurrentRun entry (rather than writing the captured
-// baseline back into CurrentRun) avoids pinning the key on CurrentRun, which would otherwise leave
-// the "Auto" badge stuck on and the manual control disabled after the device cools.
-+ (void)clearGfxEfbScaleAuto {
-  if (Config::GetLayer(Config::LayerType::CurrentRun))
-    Config::DeleteKey(Config::LayerType::CurrentRun, Config::GFX_EFB_SCALE);
-}
 // Resolver step #3 badge: which layer, if not Base, holds the effective value of a perf key. Any
-// layer above Base wins over the user's own value: CurrentRun (Auto-IR, thermal, adaptive clock),
+// layer above Base wins over the user's own value: CurrentRun (adaptive clock and explicit runtime overrides),
 // and also a game's INI (GlobalGame / LocalGame), e.g. per-game Internal Resolution or the shipped
 // RHT / UGP / RDC overclocks.
 static DOLConfigOverride OverrideForLayer(Config::LayerType layer)
@@ -260,16 +290,6 @@ public:
 + (BOOL)gfxAsyncPresent { return Config::Get(Config::GFX_ASYNC_PRESENT); }
 + (void)setGfxAsyncPresent:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_ASYNC_PRESENT, (bool)enabled); }
 
-+ (BOOL)gfxAutoIREnable { return Config::Get(Config::GFX_AUTO_IR_ENABLE); }
-+ (void)setGfxAutoIREnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_AUTO_IR_ENABLE, (bool)enabled); }
-+ (NSInteger)gfxAutoIRTargetFPS { return (NSInteger)Config::Get(Config::GFX_AUTO_IR_TARGET_FPS); }
-+ (void)setGfxAutoIRTargetFPS:(NSInteger)fps { Config::SetBaseOrCurrent(Config::GFX_AUTO_IR_TARGET_FPS, (int)fps); }
-+ (NSInteger)gfxAutoIRMinScale { return (NSInteger)Config::Get(Config::GFX_AUTO_IR_MIN_SCALE); }
-+ (void)setGfxAutoIRMinScale:(NSInteger)scale { Config::SetBaseOrCurrent(Config::GFX_AUTO_IR_MIN_SCALE, (int)scale); }
-+ (NSInteger)gfxAutoIRMaxScale { return (NSInteger)Config::Get(Config::GFX_AUTO_IR_MAX_SCALE); }
-+ (void)setGfxAutoIRMaxScale:(NSInteger)scale { Config::SetBaseOrCurrent(Config::GFX_AUTO_IR_MAX_SCALE, (int)scale); }
-+ (BOOL)gfxAutoIRShowOSD { return Config::Get(Config::GFX_AUTO_IR_SHOW_OSD); }
-+ (void)setGfxAutoIRShowOSD:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_AUTO_IR_SHOW_OSD, (bool)enabled); }
 
 + (NSInteger)gfxShaderCompilationMode { return (NSInteger)Config::Get(Config::GFX_SHADER_COMPILATION_MODE); }
 + (void)setGfxShaderCompilationMode:(NSInteger)mode { Config::SetBaseOrCurrent(Config::GFX_SHADER_COMPILATION_MODE, (ShaderCompilationMode)mode); }
@@ -332,6 +352,61 @@ public:
 + (void)setMainEnableCheats:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_ENABLE_CHEATS, (bool)enabled); }
 + (BOOL)mainOverrideRegionSettings { return Config::Get(Config::MAIN_OVERRIDE_REGION_SETTINGS); }
 + (void)setMainOverrideRegionSettings:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_OVERRIDE_REGION_SETTINGS, (bool)enabled); }
++ (NSString*)mainDefaultISO {
+  return @(Config::Get(Config::MAIN_DEFAULT_ISO).c_str());
+}
+
++ (NSString*)defaultISOSelectionPath { return ICubeDefaultISOSelectionPath(); }
++ (BOOL)defaultISOSelectionIsAvailable { return ICubeDefaultISOUsable(ICubeDefaultISOSelectionPath()); }
+
++ (void)migrateLegacyDefaultISO {
+  const std::string legacy = Config::GetBase(Config::MAIN_DEFAULT_ISO);
+  NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+  if (![defaults objectForKey:ICubeDefaultISOSelectionKey])
+  {
+    // One-time migration only. A foreign install's absolute path must never become this device's
+    // selection, even if a synced Dolphin.ini later brings it back. Empty records mark completion.
+    NSString* path = @(legacy.c_str());
+    NSString* resolved = path.stringByResolvingSymlinksInPath.stringByStandardizingPath;
+    if ([resolved hasPrefix:[ICubeDefaultISOHome() stringByAppendingString:@"/"]] &&
+        ICubeDefaultISOUsable(resolved))
+      ICubeStoreDefaultISO(resolved);
+    else
+      [defaults setObject:@{} forKey:ICubeDefaultISOSelectionKey];
+  }
+  if (!legacy.empty())
+  {
+    Config::DeleteKey(Config::LayerType::Base, Config::MAIN_DEFAULT_ISO);
+    Config::Save();  // Remove the absolute path before user-data sync starts.
+  }
+}
+
++ (BOOL)setMainDefaultISO:(NSString*)path {
+  if (!ICubeDefaultISOUsable(path))
+    return NO;  // A failed selection preserves the current choice.
+  [self migrateLegacyDefaultISO];
+  ICubeStoreDefaultISO(path);
+  Config::SetCurrent(Config::MAIN_DEFAULT_ISO, std::string(ICubeDefaultISOSelectionPath().UTF8String));
+  return YES;
+}
+
++ (void)clearMainDefaultISO {
+  [NSUserDefaults.standardUserDefaults setObject:@{} forKey:ICubeDefaultISOSelectionKey];
+  Config::SetCurrent(Config::MAIN_DEFAULT_ISO, std::string{});
+  Config::DeleteKey(Config::LayerType::Base, Config::MAIN_DEFAULT_ISO);
+  Config::Save();
+}
+
++ (BOOL)prepareDefaultISOForBoot {
+  [self migrateLegacyDefaultISO];
+  NSString* path = ICubeDefaultISOSelectionPath();
+  const bool available = path.length == 0 || ICubeDefaultISOUsable(path);
+  // Never hand the core an unavailable or imported sandbox-absolute path. Preserve the local
+  // choice so Settings can explain its absence and the user can select its new location or clear.
+  Config::SetCurrent(Config::MAIN_DEFAULT_ISO, std::string(available ? path.UTF8String : ""));
+  return available;
+}
+
 + (BOOL)mainAutoDiscChange { return Config::Get(Config::MAIN_AUTO_DISC_CHANGE); }
 + (void)setMainAutoDiscChange:(BOOL)enabled { Config::SetBase(Config::MAIN_AUTO_DISC_CHANGE, (bool)enabled); }
 + (BOOL)mainFastDiscSpeed { return Config::Get(Config::MAIN_FAST_DISC_SPEED); }
@@ -1145,6 +1220,13 @@ static bool HasCurrentRunLayer()
     }
   };
 
+  // General boot preferences have no performance launch overrides. Fallback Region returns
+  // to Dolphin's locale-derived default; Wii SYSCONF/console identity remains preserved.
+  del(Config::MAIN_ENABLE_CHEATS);
+  del(Config::MAIN_OVERRIDE_REGION_SETTINGS);
+  del(Config::MAIN_AUTO_DISC_CHANGE);
+  del(Config::MAIN_FALLBACK_REGION);
+
   // ---- CPU / core (perf) ----
   del(Config::MAIN_CPU_CORE);
   del(Config::MAIN_CPU_THREAD);
@@ -1183,6 +1265,14 @@ static bool HasCurrentRunLayer()
   // ---- Misc gameplay / boot feature toggles ----
   del(Config::MAIN_SKIP_IPL);                 // boot: GC IPL/BIOS intro skip
   del(Config::MAIN_EMULATE_SKYLANDER_PORTAL); // peripheral emulation (default off)
+  // Slot B also holds memory cards and other custom attachments. Reset the microphone
+  // peripheral only; preserve non-microphone assignments in every layer and their fallback.
+  for (Config::LayerType lt : kLayers)
+  {
+    const auto layer = Config::GetLayer(lt);
+    if (layer && layer->Get(Config::MAIN_SLOT_B) == ExpansionInterface::EXIDeviceType::Microphone)
+      Config::DeleteKey(lt, Config::MAIN_SLOT_B);
+  }
 
   // ---- Audio ----
   del(Config::MAIN_AUDIO_BACKEND);
@@ -1220,11 +1310,6 @@ static bool HasCurrentRunLayer()
   del(Config::GFX_DISABLE_FOG);
   del(Config::GFX_ENABLE_GPU_TEXTURE_DECODING);
   del(Config::GFX_ASYNC_PRESENT);
-  del(Config::GFX_AUTO_IR_ENABLE);
-  del(Config::GFX_AUTO_IR_TARGET_FPS);
-  del(Config::GFX_AUTO_IR_MIN_SCALE);
-  del(Config::GFX_AUTO_IR_MAX_SCALE);
-  del(Config::GFX_AUTO_IR_SHOW_OSD);
   del(Config::GFX_SHADER_COMPILATION_MODE);
   del(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING);
   del(Config::GFX_SHADER_COMPILER_THREADS);
@@ -1244,6 +1329,8 @@ static bool HasCurrentRunLayer()
   del(Config::GFX_SSAA);
 
   // ---- Graphics: hacks (incl. iCube perf) ----
+  del(Config::GFX_HACK_BBOX_ENABLE);
+  del(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES);
   del(Config::GFX_HACK_EFB_ACCESS_ENABLE);
   del(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM);
   del(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM);
@@ -1301,6 +1388,8 @@ static bool HasCurrentRunLayer()
   // deleted above and lands on the compiled iOS/tvOS default, Hybrid Ubershaders
   // (GraphicsSettings.cpp).
   Config::SetBase(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING, true);
+  // Match DolphinCoreService's speed-first launch default (compiled default is 128).
+  Config::SetBase(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES, 0);
 
   // fast-disc, DSP-on-thread, and immediate-XFB all compile to the CONSERVATIVE upstream default
   // (false) — the OPPOSITE of what DolphinCoreService applies at launch via SetBaseIfUnspecified.
@@ -1311,11 +1400,6 @@ static bool HasCurrentRunLayer()
   Config::SetBase(Config::MAIN_FAST_DISC_SPEED, true);
   Config::SetBase(Config::MAIN_DSP_THREAD, true);
   Config::SetBase(Config::GFX_HACK_IMMEDIATE_XFB, true);
-#if !TARGET_OS_TV
-  // Internal resolution compiles to 1x; iCube's iOS default is Auto (fit the screen), see
-  // DolphinCoreService.
-  Config::SetBase(Config::GFX_EFB_SCALE, EFB_SCALE_AUTO_INTEGRAL);
-#endif
 
   // Fastmem compiles to true, which is wrong on a device without it. Seed both keys the way
   // DolphinCoreService does at launch instead of leaving them on the compiled value until then.
@@ -1536,19 +1620,11 @@ static NSString* BaseLayerKeyName(const Config::Location& location)
     case 1:
       safe_delete(Config::MAIN_GFX_BACKEND);
       safe_delete(Config::GFX_VSYNC);
-#if TARGET_OS_TV
       safe_delete(Config::GFX_EFB_SCALE);
-#else
-      Config::SetBase(Config::GFX_EFB_SCALE, EFB_SCALE_AUTO_INTEGRAL);  // iOS default: fit the screen
-#endif
+      Config::SetBase(Config::GFX_EFB_SCALE, 1);  // Native: match launch and global reset.
       safe_delete(Config::GFX_WIDESCREEN_HACK);
       safe_delete(Config::GFX_DISABLE_FOG);
       safe_delete(Config::GFX_ASYNC_PRESENT);
-      safe_delete(Config::GFX_AUTO_IR_ENABLE);
-      safe_delete(Config::GFX_AUTO_IR_TARGET_FPS);
-      safe_delete(Config::GFX_AUTO_IR_MIN_SCALE);
-      safe_delete(Config::GFX_AUTO_IR_MAX_SCALE);
-      safe_delete(Config::GFX_AUTO_IR_SHOW_OSD);
       safe_delete(Config::GFX_SHADER_COMPILATION_MODE);
       safe_delete(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING);
       break;

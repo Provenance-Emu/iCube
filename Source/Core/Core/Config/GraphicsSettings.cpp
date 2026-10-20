@@ -93,37 +93,6 @@ const Info<bool> GFX_SSAA{{System::GFX, "Settings", "SSAA"}, false};
 const Info<int> GFX_EFB_SCALE{{System::GFX, "Settings", "InternalResolution"}, 1};
 const Info<int> GFX_MAX_EFB_SCALE{{System::GFX, "Settings", "MaxInternalResolution"}, 12};
 
-// Auto Internal Resolution Controller (iCube) — config keys; controller logic ported in the GFX cluster.
-// Default OFF on Apple: Auto-IR offers no benefit when the title is CPU-bound (the usual iCube case,
-// per the toggle's own help text) and it fights the manual IR picker over GFX_EFB_SCALE. With it off,
-// a manual 1x selection actually renders at 1x out of the box. Users can still opt in.
-const Info<bool> GFX_AUTO_IR_ENABLE{{System::GFX, "Settings", "AutoInternalResolution"},
-                                     false};
-const Info<int> GFX_AUTO_IR_TARGET_FPS{{System::GFX, "Settings", "AutoIRTargetFPS"}, 60};
-const Info<int> GFX_AUTO_IR_MIN_SCALE{{System::GFX, "Settings", "AutoIRMinScale"}, 1};
-const Info<int> GFX_AUTO_IR_MAX_SCALE{{System::GFX, "Settings", "AutoIRMaxScale"},
-#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
-                                       4
-#else
-                                       12
-#endif
-};
-const Info<int> GFX_AUTO_IR_COOLDOWN_FRAMES{{System::GFX, "Settings", "AutoIRCooldownFrames"},
-#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
-                                             90
-#else
-                                             60
-#endif
-};
-const Info<int> GFX_AUTO_IR_HYSTERESIS_PERCENT{{System::GFX, "Settings", "AutoIRHysteresisPct"},
-                                                12};
-const Info<bool> GFX_AUTO_IR_SHOW_OSD{{System::GFX, "Settings", "AutoIRShowOSD"},
-#if defined(__APPLE__) && (defined(__aarch64__) || defined(__ARM64__) || defined(__arm64__))
-                                      true
-#else
-                                      false
-#endif
-};
 const Info<bool> GFX_TEXFMT_OVERLAY_ENABLE{{System::GFX, "Settings", "TexFmtOverlayEnable"}, false};
 const Info<bool> GFX_TEXFMT_OVERLAY_CENTER{{System::GFX, "Settings", "TexFmtOverlayCenter"}, false};
 const Info<bool> GFX_ENABLE_WIREFRAME{{System::GFX, "Settings", "WireFrame"}, false};

@@ -19,8 +19,8 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
 
   private let iosOnlyRows = ["frame-cap", "instant-replay", "save-clips-photos", "save-only-photos", "clip-length"]
   private let allRows = [
-    "backend", "aspect-ratio", "vsync", "auto-ir-osd", "triple-buffering", "force-scale-one", "overscan-fullscreen",
-    "async-present", "auto-ir", "target-fps", "min-scale", "max-scale", "frame-cap",
+    "backend", "aspect-ratio", "vsync", "triple-buffering", "force-scale-one", "overscan-fullscreen",
+    "async-present", "frame-cap",
     "instant-replay", "save-clips-photos", "save-only-photos", "clip-length",
     "shader-compile-type", "compile-before-start",
   ]
@@ -54,14 +54,13 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
     XCTAssertEqual(changes, [.vSync(true)])
   }
 
-  func test_scaleCycles_useTheInternalScaleLabels() {
-    for id in ["min-scale", "max-scale"] {
-      guard case .cycle(let options, _)? = model().item(id: id)?.role else { return XCTFail("\(id) cycle") }
-      XCTAssertEqual(options.map { $0.0 }, ["1x", "2x", "3x", "4x"], id)
-      XCTAssertEqual(options.map { $0.1 }, InternalScale.allCases.map { AnyHashable($0) }, id)
+  func test_videoHasNoAdaptiveResolutionControls() {
+    for isIOS in [true, false] {
+      let m = model(state { $0.isIOS = isIOS })
+      for id in ["auto-ir-osd", "auto-ir", "target-fps", "min-scale", "max-scale"] {
+        XCTAssertNil(m.item(id: id), id)
+      }
     }
-    XCTAssertEqual(model().item(id: "min-scale")?.currentValueTitle, "1x")
-    XCTAssertEqual(model().item(id: "max-scale")?.currentValueTitle, "2x")
   }
 
   func test_frameCapAndClipLength_offerTheOldChoices() {
@@ -127,9 +126,9 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
 
   func test_everyToggleRow_emitsItsOwnChange() {
     let expected: [(String, (Bool) -> GraphicsGeneralChange)] = [
-      ("vsync", { .vSync($0) }), ("auto-ir-osd", { .showAutoIrOSD($0) }), ("triple-buffering", { .tripleBuffering($0) }),
+      ("vsync", { .vSync($0) }), ("triple-buffering", { .tripleBuffering($0) }),
       ("force-scale-one", { .forceScaleOneNonProMotion($0) }), ("overscan-fullscreen", { .overscanFullscreen($0) }),
-      ("async-present", { .asyncPresent($0) }), ("auto-ir", { .autoIR($0) }), ("instant-replay", { .instantReplay($0) }),
+      ("async-present", { .asyncPresent($0) }), ("instant-replay", { .instantReplay($0) }),
       ("save-clips-photos", { .saveClipsToPhotos($0) }), ("save-only-photos", { .saveOnlyToPhotos($0) }),
       ("compile-before-start", { .compileBeforeStart($0) }),
     ]
@@ -148,9 +147,6 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
     let expected: [(String, AnyHashable, GraphicsGeneralChange)] = [
       ("backend", AnyHashable(GraphicsBackend.opengl), .backend(.opengl)),
       ("aspect-ratio", AnyHashable(AspectRatio._16_9), .aspect(._16_9)),
-      ("target-fps", AnyHashable(TargetFPS.fps120), .targetFPS(.fps120)),
-      ("min-scale", AnyHashable(InternalScale.x3_0), .minScale(.x3_0)),
-      ("max-scale", AnyHashable(InternalScale.x4_0), .maxScale(.x4_0)),
       ("frame-cap", AnyHashable(90), .frameCap(90)),
       ("clip-length", AnyHashable(30), .clipSeconds(30)),
       ("shader-compile-type", AnyHashable(ShaderCompileType.hybridUber), .shaderType(.hybridUber)),
@@ -165,10 +161,9 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
   }
 
   func test_cycleRows_showTheStateValue() {
-    let m = model(state { $0.backend = .vulkan; $0.aspect = ._4_3; $0.targetFPS = .unlimited; $0.shaderType = .hybridUber; $0.frameCap = 120; $0.clipSeconds = 30 })
+    let m = model(state { $0.backend = .vulkan; $0.aspect = ._4_3; $0.shaderType = .hybridUber; $0.frameCap = 120; $0.clipSeconds = 30 })
     XCTAssertEqual(m.item(id: "backend")?.currentValueTitle, "Vulkan")
     XCTAssertEqual(m.item(id: "aspect-ratio")?.currentValueTitle, "4:3")
-    XCTAssertEqual(m.item(id: "target-fps")?.currentValueTitle, "Unlimited")
     XCTAssertEqual(m.item(id: "shader-compile-type")?.currentValueTitle, "Hybrid Ubershaders")
     XCTAssertEqual(m.item(id: "frame-cap")?.currentValueTitle, "120")
     XCTAssertEqual(m.item(id: "clip-length")?.currentValueTitle, "30s")

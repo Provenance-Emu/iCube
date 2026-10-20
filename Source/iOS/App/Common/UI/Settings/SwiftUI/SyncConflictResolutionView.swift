@@ -17,6 +17,7 @@ import SwiftUI
 struct SyncConflictResolutionView: View {
 
     @ObservedObject private var coordinator = CloudSyncCoordinator.shared
+    @State private var resolutionFeedback: String?
 
     var body: some View {
         Form {
@@ -26,6 +27,14 @@ struct SyncConflictResolutionView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
+                if let reason = coordinator.conflictResolutionUnavailableReason {
+                    Section {
+                        HStack {
+                            if coordinator.isResolvingConflict || coordinator.isSyncing { ProgressView() }
+                            Text(reason)
+                        }
+                    }
+                }
                 ForEach(coordinator.pendingConflicts) { conflict in
                     Section(header: Text(conflict.metadata.relativePath), footer: footer(for: conflict)) {
                         switch conflict.kind {
@@ -41,13 +50,13 @@ struct SyncConflictResolutionView: View {
                                 size: conflict.remoteVersion.size
                             )
                             Button(L("Keep Both")) {
-                                Task { await coordinator.resolve(conflict, as: .keepBoth) }
+                                resolve(conflict, as: .keepBoth)
                             }
                             Button(L("Keep This Device's Copy")) {
-                                Task { await coordinator.resolve(conflict, as: .useLocal) }
+                                resolve(conflict, as: .useLocal)
                             }
                             Button(L("Keep iCloud's Copy")) {
-                                Task { await coordinator.resolve(conflict, as: .useRemote) }
+                                resolve(conflict, as: .useRemote)
                             }
 
                         case .deletedRemotelyChangedLocally:
@@ -63,29 +72,53 @@ struct SyncConflictResolutionView: View {
                                     .font(.footnote)
                             }
                             Button(L("Keep It")) {
-                                Task { await coordinator.resolve(conflict, as: .useLocal) }
+                                resolve(conflict, as: .useLocal)
                             }
                             Button(L("Delete It Here Too"), role: .destructive) {
-                                Task { await coordinator.resolve(conflict, as: .useRemote) }
+                                resolve(conflict, as: .useRemote)
                             }
                         }
                     }
                 }
+                .disabled(coordinator.conflictResolutionUnavailableReason != nil)
 
                 Section(footer: Text(L("Applies your choice to every conflict above."))) {
                     Button(L("Keep Both, Everywhere")) {
-                        Task { await coordinator.resolveAllConflicts(as: .keepBoth) }
+                        resolveAll(as: .keepBoth)
                     }
                     Button(L("Keep This Device Everywhere")) {
-                        Task { await coordinator.resolveAllConflicts(as: .useLocal) }
+                        resolveAll(as: .useLocal)
                     }
                     Button(L("Keep iCloud Everywhere")) {
-                        Task { await coordinator.resolveAllConflicts(as: .useRemote) }
+                        resolveAll(as: .useRemote)
                     }
                 }
+                .disabled(coordinator.conflictResolutionUnavailableReason != nil)
             }
         }
         .navigationTitle(L("Sync Conflicts"))
+        .alert(L("Sync Conflicts"), isPresented: Binding(
+            get: { resolutionFeedback != nil },
+            set: { if !$0 { resolutionFeedback = nil } }
+        )) {
+            Button(L("OK"), role: .cancel) { resolutionFeedback = nil }
+        } message: {
+            Text(resolutionFeedback ?? "")
+        }
+    }
+
+    private func resolve(_ conflict: SyncConflict, as resolution: ConflictResolution) {
+        Task {
+            let result = await coordinator.resolve(conflict, as: resolution)
+            resolutionFeedback = result.message
+        }
+    }
+
+    private func resolveAll(as resolution: ConflictResolution) {
+        Task {
+            let result = await coordinator.resolveAllConflicts(as: resolution)
+            resolutionFeedback = result.message
+        }
     }
 
     @ViewBuilder

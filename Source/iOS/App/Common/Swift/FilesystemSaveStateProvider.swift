@@ -37,8 +37,8 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
     for url in entries {
       // Skip directories, thumbnail PNGs, and metadata JSON sidecars.
       if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true { continue }
+      guard Self.isCommittedStateFileName(url.lastPathComponent) else { continue }
       let ext = url.pathExtension.lowercased()
-      if ext == "png" || ext == "json" { continue }
 
       // Sidecar metadata (title / savedAt / version), when present.
       let meta = SaveStateMetadataStore.read(forStateFile: url)
@@ -137,6 +137,18 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
   }
 
   // MARK: - Helpers
+
+  /// Numbered states include the dedicated Continuity slot 99 and other positive core slots.
+  /// `.sav` remains supported for legacy/manual exports. Worker temporaries, input recordings and
+  /// the core's global undo files are implementation artifacts, never user Load/Delete candidates.
+  static func isCommittedStateFileName(_ name: String) -> Bool {
+    let lower = name.lowercased()
+    guard lower != "laststate.sav", lower != "undo.sav" else { return false }
+    let ext = URL(fileURLWithPath: name).pathExtension.lowercased()
+    if ext == "auto" || ext == "sav" { return true }
+    guard let slot = extractSlot(fromExtension: ext) else { return false }
+    return slot > 0 && UInt64(slot) <= UInt64(UInt32.max)
+  }
 
   private static func extractGameID(from baseName: String) -> String {
     // Heuristic: first 6 characters look like GALE01, RSBE01, etc.

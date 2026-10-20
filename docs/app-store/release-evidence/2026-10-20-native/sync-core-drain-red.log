@@ -1,0 +1,50 @@
+Test Suite 'All tests' started at 2026-10-20 00:32:27.127.
+Test Suite 'CloudSafety.xctest' started at 2026-10-20 00:32:27.132.
+Test Suite 'CloudSyncSafetyTests' started at 2026-10-20 00:32:27.132.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testAccountChangeClearsOldAccountChoicesEvenWhileEmulating]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testAccountChangeClearsOldAccountChoicesEvenWhileEmulating]' passed (0.068 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testCancelledDownloadRetainsConflictAndOriginalFile]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testCancelledDownloadRetainsConflictAndOriginalFile]' passed (0.075 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingAndImmediatelyReenablingSyncInvalidatesOldDownload]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingAndImmediatelyReenablingSyncInvalidatesOldDownload]' passed (0.038 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingSyncDuringDownloadRetainsConflictAndOriginalFile]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingSyncDuringDownloadRetainsConflictAndOriginalFile]' passed (0.088 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDownloadFinishingAfterEmulationStartsDoesNotOverwriteOrResolve]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDownloadFinishingAfterEmulationStartsDoesNotOverwriteOrResolve]' passed (0.010 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testEarlyUIDidEndDoesNotAdmitFileWritesDuringCoreTeardown]' started.
+/tmp/icube-cloud-audit/CloudSyncSafetyTests.swift:187: error: -[CloudSafety.CloudSyncSafetyTests testEarlyUIDidEndDoesNotAdmitFileWritesDuringCoreTeardown] : XCTAssertFalse failed
+/tmp/icube-cloud-audit/CloudSyncSafetyTests.swift:188: error: -[CloudSafety.CloudSyncSafetyTests testEarlyUIDidEndDoesNotAdmitFileWritesDuringCoreTeardown] : XCTAssertEqual failed: ("9 bytes") is not equal to ("8 bytes")
+Test Case '-[CloudSafety.CloudSyncSafetyTests testEarlyUIDidEndDoesNotAdmitFileWritesDuringCoreTeardown]' failed (5.363 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testExplicitRemoteChoiceUsesRemoteBytesAndVersionMetadata]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testExplicitRemoteChoiceUsesRemoteBytesAndVersionMetadata]' passed (0.014 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedTrashMoveRetainsDeleteConflict]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedTrashMoveRetainsDeleteConflict]' passed (0.013 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedUploadsAndDownloadsRetainConflicts]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedUploadsAndDownloadsRetainConflicts]' passed (0.012 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFastBootAndDrainInvalidatesDownloadBeforeQueuedPolicyDelivery]' started.
+/tmp/icube-cloud-audit/CloudSyncSafetyTests.swift:201: error: -[CloudSafety.CloudSyncSafetyTests testFastBootAndDrainInvalidatesDownloadBeforeQueuedPolicyDelivery] : XCTAssertEqual failed: ("6 bytes") is not equal to ("8 bytes")
+/tmp/icube-cloud-audit/CloudSyncSafetyTests.swift:202: error: -[CloudSafety.CloudSyncSafetyTests testFastBootAndDrainInvalidatesDownloadBeforeQueuedPolicyDelivery] : XCTAssertEqual failed: ("[]") is not equal to ("[B6818168-CCB8-41E1-8449-D13753BDCE1C]")
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFastBootAndDrainInvalidatesDownloadBeforeQueuedPolicyDelivery]' failed (0.076 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testKeepBothDoesNotResolveWhenRemoteDownloadFails]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testKeepBothDoesNotResolveWhenRemoteDownloadFails]' passed (0.047 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testRescanRefreshesRemoteVersionForAnExistingConflictPath]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testRescanRefreshesRemoteVersionForAnExistingConflictPath]' passed (0.002 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testResolutionDuringEmulationDoesNotDownloadOrOverwrite]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testResolutionDuringEmulationDoesNotDownloadOrOverwrite]' passed (0.029 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testSnapshotFromPreviousAccountCannotStartTransfersInNewAccount]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testSnapshotFromPreviousAccountCannotStartTransfersInNewAccount]' passed (0.046 seconds).
+Test Suite 'CloudSyncSafetyTests' failed at 2026-10-20 00:32:33.277.
+	 Executed 14 tests, with 4 failures (0 unexpected) in 5.881 (6.145) seconds
+Test Suite 'SyncLocalIOGateTests' started at 2026-10-20 00:32:33.277.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootBeforeSyncStartsNeedsNoCoordinatorOrLease]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootBeforeSyncStartsNeedsNoCoordinatorOrLease]' passed (0.004 seconds).
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootClosesAdmissionUntilEmulationEnds]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootClosesAdmissionUntilEmulationEnds]' passed (0.001 seconds).
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootWaitsForExistingLocalIOButDoesNotHoldItsConditionLock]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootWaitsForExistingLocalIOButDoesNotHoldItsConditionLock]' passed (0.059 seconds).
+Test Suite 'SyncLocalIOGateTests' passed at 2026-10-20 00:32:33.342.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.064 (0.065) seconds
+Test Suite 'CloudSafety.xctest' failed at 2026-10-20 00:32:33.342.
+	 Executed 17 tests, with 4 failures (0 unexpected) in 5.945 (6.211) seconds
+Test Suite 'All tests' failed at 2026-10-20 00:32:33.342.
+	 Executed 17 tests, with 4 failures (0 unexpected) in 5.945 (6.215) seconds

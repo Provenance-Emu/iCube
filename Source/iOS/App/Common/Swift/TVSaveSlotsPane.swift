@@ -22,6 +22,8 @@ struct TVSaveSlotsPane: View {
   @FocusState private var focus: Focus?
   @State private var lastFocus: Focus?
   @State private var managedSlot: Int?
+  @State private var saveRequest: SaveStateUIRequest?
+  @State private var saveTask: Task<Void, Never>?
   /// The long-press that opened the panel also ends in a select; this swallows that one select.
   @State private var longPressFired = false
   @Environment(\.icubePlatformAccent) private var platformAccent
@@ -88,13 +90,18 @@ struct TVSaveSlotsPane: View {
         Spacer(minLength: 0)
         InfoShelf(text: shelfText(bySlot), value: nil, title: shelfTitle, icon: "square.stack.3d.up")
       }
-      .disabled(managedSlot != nil)
+      .disabled(managedSlot != nil || saveRequest != nil)
       if let slot = managedSlot {
         ICubeConfirmPanel(title: String(format: L("Slot %d"), slot), message: manageMessage(bySlot[slot]),
                           model: manageModel(slot: slot, state: bySlot[slot]), isTV: true, onBack: { managedSlot = nil })
       }
     }
     .task(id: game.gameID) { await states.load(gameID: game.gameID) }
+    .onDisappear {
+      saveTask?.cancel()
+      saveTask = nil
+      saveRequest = nil
+    }
     .onAppear {
       DispatchQueue.main.async { focus = initialFocus ?? .slot(selectedSlot) }
     }
@@ -179,19 +186,30 @@ struct TVSaveSlotsPane: View {
   }
 
   private func save(_ slot: Int) {
+    guard saveRequest == nil else { return }
     managedSlot = nil
-    if SaveStateService.saveSlot(slot) {
-      EmulationToast.post(String(format: L("Saved to Slot %d"), slot))
-    } else {
-      EmulationToast.post(L("Save failed"))
+    let request = SaveStateUIRequest(slot: slot, gameID: game.gameID,
+                                     sessionIdentifier: TVEmulationBridge.currentSessionIdentifier())
+    saveRequest = request
+    saveTask = Task { @MainActor in
+      let snapshot = await SaveStateService.saveSlotSnapshotAsync(request.slot, expectedGameID: request.gameID,
+                                                                     expectedSessionIdentifier: request.sessionIdentifier)
+      guard !Task.isCancelled, saveRequest?.id == request.id else { return }
+      let present = request.accepts(completedGameID: snapshot?.gameID, completedSessionIdentifier: snapshot?.sessionIdentifier,
+                                    currentGameID: TVEmulationBridge.currentGameID(),
+                                    currentSessionIdentifier: TVEmulationBridge.currentSessionIdentifier(), activeID: saveRequest?.id)
+      saveRequest = nil
+      saveTask = nil
+      guard present else { return }
+      EmulationToast.post(QuickSlot.saveOutcome(slot: request.slot, saved: snapshot != nil).message)
+      if snapshot != nil { await states.load(gameID: request.gameID) }
     }
-    Task { await states.load(gameID: game.gameID) }
   }
 
   private func load(_ slot: Int) {
     managedSlot = nil
     TVEmulationBridge.loadState(fromSlot: slot)
-    EmulationToast.post(String(format: L("Loaded Slot %d"), slot))
+    EmulationToast.post(String(format: L("Loading Slot %d"), slot))
   }
 
   private func delete(_ state: SaveStateInfo) {

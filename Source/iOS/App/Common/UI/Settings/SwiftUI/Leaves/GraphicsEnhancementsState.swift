@@ -5,7 +5,7 @@ import Foundation
 
 /// Internal-resolution picks with a fixed meaning; every other value is the scale itself (2x ... max).
 enum EfbScaleChoice: Int {
-  /// Fit the window (Auto-IR territory).
+  /// Fit the render window; independent of frame rate or thermal load.
   case auto = 0
   case native = 1
 }
@@ -39,7 +39,7 @@ struct GraphicsEnhancementsState: Equatable {
   var disableCopyFilter = true
   var efbScale = EfbScaleChoice.native.rawValue
   var efbMaxScale = 6
-  /// Set while Auto-IR / thermal (CurrentRun) or the running game's INI outranks the user's own scale.
+  /// Set while a running game's INI or explicit runtime override outranks the user's own scale.
   var efbOverride: DOLConfigOverride = .none
   /// MetalFX spatial upscaling of the picture to the screen; the row exists only where the GPU supports it.
   var metalFXSupported = false
@@ -94,8 +94,6 @@ enum GraphicsEnhancementsChange: Equatable {
 
 /// What a change implies beyond writing its own key. Pure so the rules are tested; the host performs them.
 enum GraphicsEnhancementsSideEffect: Equatable {
-  /// Picking a fixed scale means the user wants that exact IR; Auto-IR also drives GFX_EFB_SCALE, so leaving it on makes the two fight.
-  case autoIROff
   /// Desktop parity: SSAA only applies when MSAA > 1.
   case clearSSAA
 }
@@ -103,7 +101,6 @@ enum GraphicsEnhancementsSideEffect: Equatable {
 extension GraphicsEnhancementsState {
   static func sideEffects(of change: GraphicsEnhancementsChange, in state: GraphicsEnhancementsState) -> [GraphicsEnhancementsSideEffect] {
     switch change {
-    case .efbScale(let scale) where scale != EfbScaleChoice.auto.rawValue: return [.autoIROff]
     case .msaa(let samples) where samples <= MsaaSamples.none.rawValue && state.ssaa: return [.clearSSAA]
     default: return []
     }

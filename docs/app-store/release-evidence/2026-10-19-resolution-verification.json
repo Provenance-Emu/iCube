@@ -1,0 +1,101 @@
+{
+  "date": "2026-10-19",
+  "source_base": "34a95701c1fa27a638d6498c044151efd746a842",
+  "source_state": "uncommitted audit/removal changes; not a frozen release candidate",
+  "core_checks": {
+    "packaged-four-slices": {
+      "result": "passed",
+      "artifacts": [
+        {
+          "binary": "PVlibDolphin-tvos",
+          "bytes": 27160528,
+          "sha256": "b975792215c248612794a9a1bb2f4ee905449a204d7f51dba3245f22621d7e2c"
+        },
+        {
+          "binary": "PVlibDolphin-ios",
+          "bytes": 27185304,
+          "sha256": "97b1c40d25007447659f29ae768be61d034bade7004f7d2222419eda6ab4b65c"
+        },
+        {
+          "binary": "PVlibDolphin-tvos-sim",
+          "bytes": 27290168,
+          "sha256": "a4bc58f9a114ab5b5bb40a26c5c26aab229a6c86549cf5ad0e74ee91efc05627"
+        },
+        {
+          "binary": "PVlibDolphin-ios-sim",
+          "bytes": 27312776,
+          "sha256": "63d593839332650cdbdce79e1bafc548f9a80aebfd6f75971ec9d65414d4f759"
+        }
+      ]
+    },
+    "ios-embedded": {
+      "result": "passed",
+      "artifacts": [
+        {
+          "binary": "PVlibDolphin-ios-sim",
+          "bytes": 27172144,
+          "sha256": "ee6e21be7a184ad426f4c06cff22d41b103bb6a4e6eccb9def3de354141476d8"
+        }
+      ]
+    },
+    "ios-installed": {
+      "result": "passed",
+      "artifacts": [
+        {
+          "binary": "PVlibDolphin-ios-sim",
+          "bytes": 27172144,
+          "sha256": "ee6e21be7a184ad426f4c06cff22d41b103bb6a4e6eccb9def3de354141476d8"
+        }
+      ]
+    },
+    "tvos-embedded": {
+      "result": "passed",
+      "artifacts": [
+        {
+          "binary": "PVlibDolphin-tvos-sim",
+          "bytes": 27149664,
+          "sha256": "08a6f6cd360947697d403ab451e10203944241d411c1025f2d894398c82e201a"
+        }
+      ]
+    },
+    "tvos-installed": {
+      "result": "passed",
+      "artifacts": [
+        {
+          "binary": "PVlibDolphin-tvos-sim",
+          "bytes": 27149664,
+          "sha256": "08a6f6cd360947697d403ab451e10203944241d411c1025f2d894398c82e201a"
+        }
+      ]
+    }
+  },
+  "tests": {
+    "ios-settings-fresh-core": {
+      "result": "Passed",
+      "passedTests": 97,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "totalTestCount": 97
+    },
+    "tvos-ui-previous-core": {
+      "result": "Passed",
+      "passedTests": 25,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "totalTestCount": 25
+    },
+    "tvos-targeted-fresh-core": {
+      "result": "Passed",
+      "passedTests": 3,
+      "failedTests": 0,
+      "skippedTests": 0,
+      "totalTestCount": 3
+    }
+  },
+  "pending": [
+    "Release (AppStore) artifacts/screens",
+    "physical legacy-config gameplay/load/thermal probe",
+    "matched A14 performance comparison",
+    "complete per-field settings persistence/reset and release device matrix"
+  ]
+}

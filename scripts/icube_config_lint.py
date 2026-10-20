@@ -434,8 +434,8 @@ def parse_all_config_writes():
     """Repo-wide: sym -> {relpath: line} for every Config::Set*(Config::SYM).
 
     Catches both the SetBase* family and the per-layer Config::Set(LayerType, SYM, ..)
-    form used by automatic controllers (e.g. AutoIRController writes GFX_EFB_SCALE this
-    way). Used to detect competing writers across independent subsystems.
+    form used by runtime controllers. Used to detect competing writers across
+    independent subsystems.
     """
     writes = {}
     for root in (CORE_ROOT, IOS_ROOT):
@@ -665,8 +665,8 @@ def main():
 
     # ----- COMPETING WRITERS --------------------------------------------------
     # The real competition risk is a Config symbol written by >1 INDEPENDENT
-    # subsystem that BOTH ship in the iOS build (e.g. the manual IR picker AND
-    # AutoIRController both writing GFX_EFB_SCALE). Collapse all the iCube frontend
+    # subsystem that BOTH ship in the iOS build (for example manual preferences and
+    # a runtime controller writing the same key). Collapse all the iCube frontend
     # writers (everything under Source/iOS — bridge, launch, every settings VC) into
     # ONE logical "iCube-frontend" source: a user picker + its bridge setter is
     # normal layering, not competition. Desktop-only DolphinQt/etc writers don't

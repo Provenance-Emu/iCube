@@ -1,0 +1,8 @@
+PASS: payload failure completion=0 primary=OLD undo=UNDO
+PASS: close failure completion=0 primary=OLD undo=UNDO
+PASS: promotion failure completion=0 primary=OLD undo=UNDO
+PASS: compression failure with good IO flag completion=0 primary=OLD undo=UNDO
+PASS: undo housekeeping failure completion=1 primary=HEADERCOMPLETE undo=UNDO
+PASS: completed save completion=1 primary=HEADERCOMPLETE undo=OLD
+PASS: legacy async writer without completion keeps existing save behavior
+HOST WRITER EVIDENCE ONLY: actual complete production writer and transaction helper; deterministic storage/IO/compression fault adapters

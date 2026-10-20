@@ -58,8 +58,6 @@ enum GraphicsHacksModelBuilder {
              L("Offload vertex decoding to a Metal compute shader (CPU→GPU). Experimental — currently only position-only-float formats use the GPU path (others fall back to CPU), so most games see little change yet. OFF by default. Applies on next launch."), set: { apply(.useComputeVertexDecode($0)) }),
       SettingsRow.toggle("no-mipmapping", L("No Mipmapping (iOS)"), state.noMipmapping,
              L("Disables mipmaps. Saves a little memory/bandwidth but makes distant textures shimmer. Leave off normally."), set: { apply(.noMipmapping($0)) }),
-      SettingsRow.toggle("gpu-efb-peek", L("GPU EFB Peek Resolve"), state.gpuEfbPeekResolve,
-             L("Experimental: resolves EFB peek reads on the GPU instead of a CPU readback. May reduce CPU-thread stalls for games that read the framebuffer; OFF by default. Verify visuals per game."), set: { apply(.gpuEfbPeekResolve($0)) }),
     ])
     let interlace = MenuSection(id: "interlace", items: [
       SettingsRow.toggle("vi-decimate-interlace", L("Interlaced Field Decimation"), state.viDecimateInterlace,

@@ -1,0 +1,22 @@
+name: ICubeTVAudit
+options:
+  bundleIdPrefix: com.joemattiello.audit
+settings:
+  GENERATE_INFOPLIST_FILE: YES
+  CODE_SIGN_STYLE: Manual
+  CODE_SIGN_IDENTITY: '-'
+  CODE_SIGNING_REQUIRED: NO
+  DEVELOPMENT_TEAM: ''
+targets:
+  ICubeTVAudit:
+    type: bundle.ui-testing
+    platform: tvOS
+    deploymentTarget: '17.0'
+    sources: [Tests]
+schemes:
+  ICubeTVAudit:
+    build:
+      targets:
+        ICubeTVAudit: [test]
+    test:
+      targets: [ICubeTVAudit]

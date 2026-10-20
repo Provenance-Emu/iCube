@@ -1,0 +1,4 @@
+exit=1 FAIL uploadFailure: conflictRetained=false, originalBytesPreserved=true
+exit=1 FAIL downloadFailure: conflictRetained=false, originalBytesPreserved=true
+exit=1 FAIL emulating: conflictRetained=false, originalBytesPreserved=false
+exit=1 FAIL inFlight: conflictRetained=false, originalBytesPreserved=false

@@ -4,10 +4,9 @@
 import PVHelp
 import SwiftUI
 
-/// How much of the Debug leaf a build shows. The App Store build shows only the JIT section, and only when JIT is
-/// possible (a re-signed install); developer tools (bench server, logging, metrics) never reach store users.
+/// Store installs retain environment facts even without JIT. Developer controls stay in the full scope.
 enum DebugLeafScope {
-  case full, jitOnly
+  case full, jitOnly, environmentOnly
 }
 
 /// Pure: snapshot in, changes out (it cannot write, and it reads no singleton). Descriptions are the captions the hand-built
@@ -16,6 +15,9 @@ enum DebugRootModelBuilder {
   typealias Apply = (DebugRootChange) -> Void
 
   static func make(state: DebugRootState, scope: DebugLeafScope = .full, apply: @escaping Apply) -> MenuModel {
+    if scope == .environmentOnly {
+      return MenuModel(sections: [environment(state, apply, readOnly: true)])
+    }
     if scope == .jitOnly {
       return MenuModel(sections: [environment(state, apply)].filter { !$0.items.isEmpty })
     }
@@ -37,6 +39,15 @@ enum DebugRootModelBuilder {
     ])
   }
 
+  private static func userFolder(_ path: String) -> MenuItem {
+    guard !path.isEmpty else {
+      return status("user-folder", L("User Folder"), L("Where iCube keeps its settings, saves and game data."))
+    }
+    return SettingsRow.destination("user-folder", L("User Folder"),
+                                   String(format: L("Where iCube keeps its settings, saves and game data: %@"), path),
+                                   view: AnyView(DebugUserFolderView(path: path)))
+  }
+
   private static func recording(_ state: DebugRootState, _ apply: @escaping Apply) -> MenuSection {
     MenuSection(id: "recording", header: L("Recording"), items: [
       SettingsRow.toggle("instant-replay", L("Enable ReplayKit Instant Replay"), state.instantReplay,
@@ -45,13 +56,10 @@ enum DebugRootModelBuilder {
     ])
   }
 
-  private static func environment(_ state: DebugRootState, _ apply: @escaping Apply) -> MenuSection {
+  private static func environment(_ state: DebugRootState, _ apply: @escaping Apply, readOnly: Bool = false) -> MenuSection {
     let h = state.hydrated
     var items = [
-      status("user-folder", L("User Folder"),
-             h.userFolder.isEmpty
-               ? L("Where iCube keeps its settings, saves and game data.")
-               : String(format: L("Where iCube keeps its settings, saves and game data: %@"), h.userFolder)),
+      userFolder(h.userFolder),
       status("jit-status", L("JIT"), L("Whether the emulator can generate native code on this device right now."),
              badge: h.jitAcquired ? L("Acquired") : L("Not Acquired")),
       status("debugger-status", L("Debugger"), L("Whether a debugger is attached; iOS 26 needs one to switch JIT on."),
@@ -63,6 +71,11 @@ enum DebugRootModelBuilder {
     }
     items.append(status("jit-error", L("JIT Error"),
                         String(format: L("The last error from trying to acquire JIT: %@"), h.jitError.isEmpty ? L("(none)") : h.jitError)))
+    if readOnly {
+      items.append(status("fastmem-available", L("Fastmem"), L("Whether this device can provide the fast memory-access path."),
+                          badge: h.fastmemAvailable ? L("Available") : L("Not Available")))
+      return MenuSection(id: "environment", header: L("Environment"), items: items)
+    }
     // Recovery that does NOT depend on StikDebug being installed. The cookie is set before the brk and cleared on return,
     // so anything that kills the app in between (a non-broker debugger, but also jetsam while the region faults in) leaves it set.
     if h.txmHandshakeBlocked {

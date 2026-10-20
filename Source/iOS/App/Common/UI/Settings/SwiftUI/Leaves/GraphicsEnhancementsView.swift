@@ -14,7 +14,7 @@ struct GraphicsEnhancementsView: View {
   private func sync() {
     var s = GraphicsEnhancementsState()
     s.efbMaxScale = max(1, DOLConfigBridge.gfxEfbMaxScale())
-    // The user's own scale (Base), never an Auto-IR / thermal CurrentRun override: this row edits Base.
+    // The user's own scale (Base), separate from game or explicit runtime overrides.
     s.efbScale = DOLConfigBridge.gfxEfbScaleBase()
     s.efbOverride = DOLConfigBridge.efbScaleOverride()
     s.metalFXSupported = DOLConfigBridge.gfxMetalFXSpatialUpscaleSupported()
@@ -55,7 +55,6 @@ struct GraphicsEnhancementsView: View {
     }
     for effect in effects {
       switch effect {
-      case .autoIROff: DOLConfigBridge.setGfxAutoIREnable(false)
       case .clearSSAA: state.ssaa = false; DOLConfigBridge.setGfxSsaa(false)
       }
     }

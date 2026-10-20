@@ -69,7 +69,9 @@ enum SettingsRootModelBuilder {
     ]
     if let debugLeaf {
       // The limited leaf only has the Environment section, so it must not promise the full set of developer switches.
-      let debugDescription = debugLeaf == .jitOnly
+      let debugDescription = debugLeaf == .environmentOnly
+        ? [L("User Folder"), L("Fastmem"), L("JIT")].joined(separator: ", ")
+        : debugLeaf == .jitOnly
         ? L("JIT status, how to turn JIT on, and the fastmem state.")
         : L("Developer switches: fastmem, JIT, logging, stall metrics.")
       performance.append(SettingsLeafEntry(id: "debug", title: L("Debug"), icon: "ladybug", description: debugDescription,
@@ -104,7 +106,7 @@ enum SettingsRootModelBuilder {
       ]),
       SettingsRootSection(id: "graphics", header: L("Graphics"), entries: [
         SettingsLeafEntry(id: "graphics-video", title: L("Video"), icon: "display",
-                          description: L("Backend, aspect ratio, V-Sync, auto resolution and shader compilation."),
+                          description: L("Backend, aspect ratio, V-Sync and shader compilation."),
                           hostsMenuScreen: true,
                           makeModel: { GraphicsGeneralModelBuilder.make(state: GraphicsGeneralState(isIOS: isIOS), apply: { _ in }) }) { GraphicsGeneralView() },
         SettingsLeafEntry(id: "graphics-enhancements", title: L("Enhancements"), icon: "sparkles",
@@ -146,10 +148,14 @@ enum SettingsRootModelBuilder {
     ]
   }
 
-  /// What this build shows: the App Store build hides the leaf unless JIT is detected (a re-signed install).
+  static func debugLeaf(isStore: Bool, jitSupported: Bool) -> DebugLeafScope {
+    isStore ? (jitSupported ? .jitOnly : .environmentOnly) : .full
+  }
+
+  /// Environment facts remain visible in store builds independently of JIT support.
   static var storeDebugLeaf: DebugLeafScope? {
     #if APPSTORE
-    JitManager.shared().jitSupported ? .jitOnly : nil
+    debugLeaf(isStore: true, jitSupported: JitManager.shared().jitSupported)
     #else
     .full
     #endif

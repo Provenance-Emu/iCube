@@ -1,0 +1,3 @@
+HOST MODEL EVIDENCE ONLY — actual unchanged production PauseMenuModelBuilder.make and primaryLayout
+Shared model IDs: ["resume", "quick-save", "quick-load", "fast-forward", "mute", "screenshot", "record", "save-states", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers", "continuity", "settings", "reset", "exit"]
+EXPECTED RED: manual Change Disc absent from shared pause model and platform layout

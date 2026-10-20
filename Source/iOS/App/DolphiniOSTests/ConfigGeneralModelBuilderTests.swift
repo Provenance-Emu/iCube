@@ -27,10 +27,29 @@ final class ConfigGeneralModelBuilderTests: XCTestCase {
 
   func test_rowOrder_andSections() {
     XCTAssertEqual(model().allItems.map(\.id), [
-      "dual-core", "dsp-thread", "cheats", "override-region", "auto-disc-change", "fast-disc-speed", "resume-where-left-off",
+      "dual-core", "dsp-thread", "cheats", "override-region", "auto-disc-change", "default-iso", "fast-disc-speed", "resume-where-left-off",
       "speed-limit", "fast-forward-speed", "fallback-region",
     ])
     XCTAssertEqual(model().sections.map(\.header), ["Basic Settings", "Speed", nil])
+  }
+
+  /// Release #60: this must be reachable even before the user has chosen a disc.
+  /// Uses only the pre-existing model API so it can run against the unfixed app.
+  func test_defaultISOManagement_isReachableFromGeneralSettings() {
+    let row = model().item(id: "default-iso")
+    XCTAssertNotNil(row, "General must expose the selected Default ISO and a way to clear it")
+    XCTAssertEqual(row?.title, "Default ISO")
+    if case .destination? = row?.role {} else { XCTFail("Default ISO must open its management screen") }
+  }
+
+  func test_defaultISO_showsSelectedFilename_andUnavailableBadge() {
+    let selected = model(state { $0.defaultISO = DefaultISOSelectionState(path: "/local/Base game.rvz", available: true) })
+    XCTAssertEqual(selected.item(id: "default-iso")?.subtitle, "Base game.rvz")
+    XCTAssertNil(selected.item(id: "default-iso")?.badge)
+    let unavailable = model(state { $0.defaultISO = DefaultISOSelectionState(path: "/local/Moved.iso", available: false) })
+    XCTAssertEqual(unavailable.item(id: "default-iso")?.subtitle, "Moved.iso")
+    XCTAssertEqual(unavailable.item(id: "default-iso")?.badge, "Unavailable")
+    XCTAssertEqual(model().item(id: "default-iso")?.subtitle, "None")
   }
 
   func test_everyRow_hasADescription() {

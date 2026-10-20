@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <future>
 #include <string>
 #include <type_traits>
 
@@ -96,6 +97,12 @@ void Save(Core::System& system, u32 slot);
 void Load(Core::System& system, u32 slot);
 
 void SaveAs(Core::System& system, std::string filename);
+// Wait for this particular save's worker task and return whether its final file was committed.
+// Unlike the legacy asynchronous entrypoints, failures are observable by frontend Save & Quit.
+bool SaveAsAndWait(Core::System& system, std::string filename);
+bool SaveAndWait(Core::System& system, u32 slot);
+// Captures/queues the snapshot before returning; callers may release CPUThreadGuard before waiting.
+std::future<bool> SaveAsWithResult(Core::System& system, std::string filename);
 void LoadAs(Core::System& system, std::string filename);
 
 void LoadLastSaved(Core::System& system, int i = 1);

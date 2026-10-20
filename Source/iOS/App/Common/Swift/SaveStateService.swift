@@ -10,6 +10,7 @@ import Foundation
 /// directly. The save-manager UI phase migrates the existing in-game Save
 /// buttons onto these entry points.
 public enum SaveStateService {
+  private static let saveQueue = DispatchQueue(label: "org.icube.completed-state-saves", qos: .userInitiated)
   /// Game ID of the running title (authoritative, from the core), or nil when
   /// nothing is running.
   public static var currentGameID: String? {
@@ -27,26 +28,85 @@ public enum SaveStateService {
                               title: String? = nil,
                               gameTitle: String? = nil,
                               wait: Bool = true) -> Bool {
-    // The core refuses while it is booting or stopping; writing a sidecar for a state that was never made would lie.
-    guard TVEmulationBridge.saveState(toSlot: slot, wait: wait) else { return false }
+    saveSlotSnapshot(slot, title: title, gameTitle: gameTitle, wait: wait) != nil
+  }
 
-    guard let path = TVEmulationBridge.stateFilePath(forSlot: slot) else { return false }
-    let stateURL = URL(fileURLWithPath: path)
-    let now = Date()
+  /// Synchronous compatibility for non-UI callers. User interfaces use the async facade below.
+  static func saveSlotSnapshot(_ slot: Int, title: String? = nil, gameTitle: String? = nil,
+                               wait: Bool = true) -> SaveStateCompletedSnapshot? {
+    _ = wait
+    return saveQueue.sync { performSaveSlot(slot, title: title, gameTitle: gameTitle, expectedGameID: nil, expectedSessionIdentifier: nil) }
+  }
+
+  @MainActor
+  static func saveSlotAsync(_ slot: Int, title: String? = nil, gameTitle: String? = nil,
+                            expectedGameID: String? = nil, expectedSessionIdentifier: UInt64? = nil) async -> Bool {
+    await saveSlotSnapshotAsync(slot, title: title, gameTitle: gameTitle, expectedGameID: expectedGameID, expectedSessionIdentifier: expectedSessionIdentifier) != nil
+  }
+
+  @MainActor
+  static func saveSlotSnapshotAsync(_ slot: Int, title: String? = nil, gameTitle: String? = nil,
+                                    expectedGameID: String? = nil, expectedSessionIdentifier: UInt64? = nil) async -> SaveStateCompletedSnapshot? {
+    let expected = expectedGameID ?? TVEmulationBridge.currentGameID()
+    guard !expected.isEmpty else { return nil }
+    let session = expectedSessionIdentifier ?? TVEmulationBridge.currentSessionIdentifier()
+    return await withCheckedContinuation { continuation in
+      saveQueue.async {
+        continuation.resume(returning: performSaveSlot(slot, title: title, gameTitle: gameTitle, expectedGameID: expected, expectedSessionIdentifier: session))
+      }
+    }
+  }
+
+  @MainActor
+  static func stopForUserAsync(savedStatePath: String? = nil, expectedGameID: String, expectedSessionIdentifier: UInt64? = nil) async -> Bool {
+    let session = expectedSessionIdentifier ?? TVEmulationBridge.currentSessionIdentifier()
+    return await withCheckedContinuation { continuation in
+      saveQueue.async {
+        continuation.resume(returning: TVEmulationBridge.stopForUser(savedStatePath: savedStatePath, expectedGameID: expectedGameID, expectedSessionIdentifier: session))
+      }
+    }
+  }
+
+  /// Saving the numbered snapshot and copying it to auto/queuing stop are one serialized request.
+  /// A different queued save cannot replace this path between its completion and auto-state reuse.
+  @MainActor
+  static func saveAndStopForUserAsync(_ slot: Int, expectedGameID: String, expectedSessionIdentifier: UInt64? = nil) async -> UserQuitAttemptResult {
+    let session = expectedSessionIdentifier ?? TVEmulationBridge.currentSessionIdentifier()
+    return await withCheckedContinuation { continuation in
+      saveQueue.async {
+        var outcome = UserQuitAttemptResult.failed(.numberedSlot)
+        UserStopRequest.saveAndQuit(save: {
+          performSaveSlot(slot, title: nil, gameTitle: nil, expectedGameID: expectedGameID, expectedSessionIdentifier: session)?.filePath
+        }, quit: { path in
+          outcome = TVEmulationBridge.stopForUser(savedStatePath: path, expectedGameID: expectedGameID, expectedSessionIdentifier: session)
+            ? .stopped : .failed(.finalizing(savedStatePath: path))
+        }, failed: {})
+        continuation.resume(returning: outcome)
+      }
+    }
+  }
+
+  private static func performSaveSlot(_ slot: Int, title: String?, gameTitle: String?,
+                                      expectedGameID: String?, expectedSessionIdentifier: UInt64?) -> SaveStateCompletedSnapshot? {
+    let session = expectedSessionIdentifier ?? TVEmulationBridge.currentSessionIdentifier()
+    guard let snapshot = TVEmulationBridge.saveStateSnapshot(toSlot: slot, expectedGameID: expectedGameID, expectedSessionIdentifier: session),
+          snapshot.sessionIdentifier == TVEmulationBridge.currentSessionIdentifier() else { return nil }
+    let completed = SaveStateCompletedSnapshot(filePath: snapshot.filePath, gameID: snapshot.gameID,
+                                               playTimeSeconds: snapshot.playTimeSeconds, savedAt: snapshot.savedAt, sessionIdentifier: snapshot.sessionIdentifier)
+    let stateURL = URL(fileURLWithPath: completed.filePath)
     let metadata = SaveStateMetadata(
-      title: title ?? defaultTitle(slot: slot, date: now),
-      gameID: currentGameID ?? "UNKNOWN",
-      gameTitle: gameTitle,
-      savedAt: now,
-      playTimeSeconds: Double(TVEmulationBridge.currentGamePlayTimeSeconds()),
-      isAuto: false
-    )
-    let ok = SaveStateMetadataStore.write(metadata, forStateFile: stateURL)
-    captureThumbnail(forStateFile: stateURL)
-    return ok
+      title: title ?? defaultTitle(slot: slot, date: completed.savedAt),
+      gameID: completed.gameID, gameTitle: gameTitle, savedAt: completed.savedAt,
+      playTimeSeconds: Double(completed.playTimeSeconds), isAuto: false)
+    guard SaveStateMetadataStore.write(metadata, forStateFile: stateURL) else { return nil }
+    captureThumbnail(forStateFile: stateURL, sessionIdentifier: completed.sessionIdentifier)
+    return completed
   }
 
   // MARK: - Thumbnails
+
+  private static let previewSessionLock = NSLock()
+  private static var previewSessionIdentifier: UInt64?
 
   /// Stable scratch path for the "last frame before the pause menu opened" preview.
   public static var pausePreviewURL: URL {
@@ -57,6 +117,9 @@ public enum SaveStateService {
   /// opens, while frames are still in flight — so a save made while paused still
   /// has a thumbnail (the live capture below can't fire once presenting stops).
   public static func capturePausePreview() {
+    previewSessionLock.lock()
+    previewSessionIdentifier = TVEmulationBridge.currentSessionIdentifier()
+    previewSessionLock.unlock()
     TVEmulationBridge.captureScreenshot(toPath: pausePreviewURL.path)
   }
 
@@ -64,13 +127,20 @@ public enum SaveStateService {
   /// (covers saves made while paused), then requests a live capture that overwrites
   /// it with the current frame when emulation is still running. Both are best-effort;
   /// a missing thumbnail degrades to a placeholder in the UI.
-  private static func captureThumbnail(forStateFile stateURL: URL) {
+  private static func captureThumbnail(forStateFile stateURL: URL, sessionIdentifier: UInt64) {
     let thumbURL = stateURL.appendingPathExtension("png")
-    adoptPausePreviewIfFresh(into: thumbURL)
-    TVEmulationBridge.captureScreenshot(toPath: thumbURL.path)
+    adoptPausePreviewIfFresh(into: thumbURL, sessionIdentifier: sessionIdentifier)
+    DispatchQueue.main.async {
+      guard TVEmulationBridge.currentSessionIdentifier() == sessionIdentifier else { return }
+      TVEmulationBridge.captureScreenshot(toPath: thumbURL.path)
+    }
   }
 
-  private static func adoptPausePreviewIfFresh(into thumbURL: URL) {
+  private static func adoptPausePreviewIfFresh(into thumbURL: URL, sessionIdentifier: UInt64) {
+    previewSessionLock.lock()
+    let previewSession = previewSessionIdentifier
+    previewSessionLock.unlock()
+    guard previewSession == sessionIdentifier, TVEmulationBridge.currentSessionIdentifier() == sessionIdentifier else { return }
     let fm = FileManager.default
     let preview = pausePreviewURL
     guard let attrs = try? fm.attributesOfItem(atPath: preview.path),
@@ -267,4 +337,13 @@ public enum SaveStateService {
   public static func installDidStartObserver() {
     _ = didStartObserverToken
   }
+}
+
+/// Safe to return from the serialized save worker to a UI task.
+struct SaveStateCompletedSnapshot: Sendable {
+  let filePath: String
+  let gameID: String
+  let playTimeSeconds: Int
+  let savedAt: Date
+  let sessionIdentifier: UInt64
 }

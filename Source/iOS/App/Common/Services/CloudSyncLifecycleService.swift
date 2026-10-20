@@ -14,12 +14,9 @@ import UIKit
 /// from every scene's callbacks in `MainDisplaySceneDelegate` — including at
 /// cold launch, so sync runs on a fresh install that never opens Settings.
 ///
-/// Emulation gating uses `DOLEmulationWillStartNotification` /
-/// `DOLEmulationDidEndNotification`, already posted by `EmulationCoordinator`
-/// and already used for exactly this purpose by the web server. Dolphin holds
-/// save states, memory cards and the Wii NAND open while a game runs; syncing
-/// underneath it is how a save gets corrupted. The coordinator's policy defers
-/// that work and flushes it on stop.
+/// WillStart closes local file admission synchronously. The boot worker releases it only
+/// after Core is truly Uninitialized; the earlier UI DidEnd event does not release it.
+/// This keeps memory cards, save states and NAND untouched throughout core teardown.
 final class CloudSyncLifecycleService: NSObject, UIApplicationDelegate {
 
     private var observers: [NSObjectProtocol] = []
@@ -54,11 +51,13 @@ final class CloudSyncLifecycleService: NSObject, UIApplicationDelegate {
             center.addObserver(
                 forName: Notification.Name("DOLEmulationWillStartNotification"),
                 object: nil, queue: .main
-            ) { [weak self] _ in self?.send(.emulationWillStart) },
-            center.addObserver(
-                forName: Notification.Name("DOLEmulationDidEndNotification"),
-                object: nil, queue: .main
-            ) { [weak self] _ in self?.send(.emulationDidEnd) },
+            ) { _ in
+                // Close admission before EmulationCoordinator dispatches the boot worker.
+                let generation = SyncLocalIOGate.shared.beginEmulation()
+                Task { @MainActor in
+                    await CloudSyncCoordinator.shared.handleEmulationWillStart(generation: generation)
+                }
+            },
             // A merged document was rewritten on disk: the store that owns it
             // reloads so the UI reflects the other device's changes.
             center.addObserver(
@@ -81,4 +80,31 @@ final class CloudSyncLifecycleService: NSObject, UIApplicationDelegate {
             await CloudSyncCoordinator.shared.handle(event)
         }
     }
+}
+
+/// Called only by the emulation worker. Independent of sync opt-in/startup: zero leases
+/// returns immediately, and an in-flight actor file write drains before the core opens it.
+@objc(ICubeCloudSyncBootGate)
+final class ICubeCloudSyncBootGate: NSObject {
+    @objc static func waitForLocalIO() {
+        SyncLocalIOGate.shared.waitForLocalIO()
+    }
+
+    @objc static func currentGeneration() -> UInt64 { SyncLocalIOGate.shared.currentGeneration }
+
+    @objc static func ensureEmulationForWorker(_ generation: UInt64) -> Bool {
+        SyncLocalIOGate.shared.ensureEmulation(generation: generation)
+    }
+
+    @objc static func isCurrentEmulation(_ generation: UInt64) -> Bool {
+        SyncLocalIOGate.shared.isCurrentEmulation(generation)
+    }
+
+    @objc static func finishCoreDrain(_ generation: UInt64) {
+        guard SyncLocalIOGate.shared.finishCoreDrain(generation: generation) else { return }
+        Task { @MainActor in
+            await CloudSyncCoordinator.shared.handleCoreDidDrain(generation: generation)
+        }
+    }
+
 }

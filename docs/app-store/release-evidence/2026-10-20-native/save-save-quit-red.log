@@ -1,0 +1,2 @@
+HOST QUIT-CALLBACK EVIDENCE ONLY: actual production saveAndQuit; save returns false, quit callback recorded
+EXPECTED RED: failed Save & Quit invoked quit callback

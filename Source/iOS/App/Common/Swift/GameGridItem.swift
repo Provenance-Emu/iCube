@@ -17,6 +17,7 @@ struct GameGridItem: View {
   let requestDelete: (TVGameItem) -> Void
   let showFavoriteToggle: (TVGameItem) -> Void
   let showStorageAlert: (String) -> Void
+  let setDefaultISO: (TVGameItem) -> Void
   let showCacheInfo: (TVGameItem) -> Void
   let showSaveStates: (TVGameItem) -> Void
   let showMods: (TVGameItem) -> Void
@@ -656,6 +657,11 @@ struct GameGridItem: View {
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
       }
+      if DefaultISOLibraryAction.isOffered(for: item) {
+        Button(action: { setDefaultISO(item) }) {
+          Label(L("Set as Default ISO"), systemImage: "opticaldisc")
+        }
+      }
       // Nearby Sharing exclusion. Enforced server-side in the manifest builder,
       // not by filtering the browse UI, so an excluded game is absent from what
       // is served and 404s if a peer asks for it by name.
@@ -891,6 +897,11 @@ struct GameGridItem: View {
       }
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
+      }
+      if DefaultISOLibraryAction.isOffered(for: item) {
+        Button(action: { setDefaultISO(item) }) {
+          Label(L("Set as Default ISO"), systemImage: "opticaldisc")
+        }
       }
       // See the note on the tvOS menu above: exclusion is enforced in the
       // served manifest, this is only the way to set it.

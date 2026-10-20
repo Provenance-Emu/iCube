@@ -17,12 +17,21 @@ final class GraphicsHacksModelBuilderTests: XCTestCase {
       "texture-cache", "bbox", "bbox-sync", "efb-access", "skip-efb-ram", "skip-xfb-ram", "immediate-xfb",
       "copy-efb-scaled", "early-xfb", "skip-duplicate-xfb", "efb-format-changes", "vertex-rounding",
       "force-progressive", "defer-efb-copies", "vi-skip", "fast-texture-sampling", "fast-math",
-      "compute-efb-xfb", "compute-vertex-decode", "no-mipmapping", "gpu-efb-peek", "vi-decimate-interlace",
+      "compute-efb-xfb", "compute-vertex-decode", "no-mipmapping", "vi-decimate-interlace",
     ])
   }
 
   func test_everyRow_hasADescription() {
     for item in model().allItems { XCTAssertFalse((item.description ?? "").isEmpty, item.id) }
+  }
+
+  func test_gpuEfbPeekResolve_withoutRendererSupport_isNotExposedEvenWhenStoredOn() {
+    for storedValue in [false, true] {
+      var state = GraphicsHacksState()
+      state.gpuEfbPeekResolve = storedValue
+      XCTAssertNil(model(state).item(id: "gpu-efb-peek"), "the config key has no renderer consumer")
+    }
+    XCTAssertTrue(changes.isEmpty)
   }
 
   func test_toggle_emitsTheMatchingChange() {
@@ -98,7 +107,7 @@ final class GraphicsHacksModelBuilderTests: XCTestCase {
       ("defer-efb-copies", { .deferEfbCopies($0) }), ("fast-texture-sampling", { .fastTextureSampling($0) }),
       ("fast-math", { .fastMath($0) }), ("compute-efb-xfb", { .useComputeEfbXfb($0) }),
       ("compute-vertex-decode", { .useComputeVertexDecode($0) }), ("no-mipmapping", { .noMipmapping($0) }),
-      ("gpu-efb-peek", { .gpuEfbPeekResolve($0) }), ("vi-decimate-interlace", { .viDecimateInterlace($0) }),
+      ("vi-decimate-interlace", { .viDecimateInterlace($0) }),
     ]
     let m = model()
     for (id, change) in expected {

@@ -82,7 +82,7 @@ struct PauseCardFace: View {
   @ViewBuilder private var glyph: some View {
     if let icon = item.icon {
       Image(systemName: icon)
-        .font(.system(size: Metrics.glyphSize(prominent: prominent, compact: compact, large: large), weight: .medium))
+        .font(Metrics.glyphFont(prominent: prominent, compact: compact, large: large))
     }
   }
 
@@ -130,7 +130,7 @@ struct PauseHelpShelf<Trailing: View>: View {
     let shape = RoundedRectangle(cornerRadius: Metrics.shelfCornerRadius, style: .continuous)
     return HStack(alignment: .center, spacing: Metrics.shelfSpacing) {
       Image(systemName: item?.icon ?? "info.circle")
-        .font(.system(size: Metrics.shelfGlyph, weight: .medium))
+        .font(Metrics.shelfGlyphFont)
         .foregroundStyle(item.map { $0.role.isDestructive ? ($0.tint ?? ICubeDesign.color(.destructive)) : accent } ?? accent)
         .frame(width: Metrics.shelfGlyphColumn)
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
@@ -223,6 +223,11 @@ extension ICubeDesign {
     static let disabledOpacity: Double = 0.45
     static let focusedChipOpacity: Double = 0.35
     static let shelfBorderOpacity: Double = TVPause.footerBorderOpacity
+    static var shelfGlyphFont: Font { .system(size: shelfGlyph, weight: .medium) }
+
+    static func glyphFont(prominent: Bool, compact: Bool, large: Bool) -> Font {
+      .system(size: glyphSize(prominent: prominent, compact: compact, large: large), weight: .medium)
+    }
 
     /// `large`: an iPad (regular width).
     static func height(prominent: Bool, compact: Bool, large: Bool) -> CGFloat {

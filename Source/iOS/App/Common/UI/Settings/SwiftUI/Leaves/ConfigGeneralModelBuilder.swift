@@ -7,6 +7,10 @@ import SwiftUI
 /// plus the help text its pickers carried (markup stripped).
 enum ConfigGeneralModelBuilder {
   static func make(state: ConfigGeneralState, apply: @escaping (ConfigGeneralChange) -> Void) -> MenuModel {
+    var defaultISO = SettingsRow.destination("default-iso", L("Default ISO"),
+      DefaultISOSelectionState.instructions, icon: "opticaldisc", view: AnyView(DefaultISOSettingsView()))
+    defaultISO.subtitle = state.defaultISO.name
+    if !state.defaultISO.path.isEmpty && !state.defaultISO.available { defaultISO.badge = L("Unavailable") }
     let basic = MenuSection(id: "basic-settings", header: L("Basic Settings"), items: [
       SettingsRow.toggle("dual-core", L("Enable Dual Core (speedup)"), state.dualCore,
                          L("Runs the emulated GPU on a separate thread from the emulated CPU (can deadlock some games on this interpreter)."),
@@ -23,6 +27,7 @@ enum ConfigGeneralModelBuilder {
       SettingsRow.toggle("auto-disc-change", L("Auto Disc Change"), state.autoDiscChange,
                          L("Automatically swaps to the next disc for multi-disc games."),
                          set: { apply(.autoDiscChange($0)) }),
+      defaultISO,
       SettingsRow.toggle("fast-disc-speed", L("Fast Disc Speed (speedup)"), state.fastDiscSpeed,
                          L("Removes emulated disc-read delays. Speeds up loading in most games but breaks a few that depend on real timing."),
                          set: { apply(.fastDiscSpeed($0)) }),

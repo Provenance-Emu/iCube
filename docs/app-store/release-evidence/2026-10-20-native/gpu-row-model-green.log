@@ -1,0 +1,2 @@
+PASS stored=false: inert GPU row absent
+PASS stored=true: inert GPU row absent

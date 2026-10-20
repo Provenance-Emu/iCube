@@ -1,0 +1,3 @@
+HOST PROVIDER EVIDENCE ONLY: actual production scan and filename helpers; compatibility lookup stubbed false
+Observed files: ["GALE01.auto", "GALE01.s01", "GALE01.s99", "GALE01.sav"]
+PASS: only committed state files surfaced

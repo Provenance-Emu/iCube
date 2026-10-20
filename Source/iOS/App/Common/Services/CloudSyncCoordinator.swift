@@ -14,6 +14,19 @@ struct SyncProgress: Equatable {
     var total: Int
 }
 
+enum SyncConflictResolutionResult {
+    case resolved
+    case deferred(String)
+    case failed(String)
+
+    var message: String? {
+        switch self {
+        case .resolved: return nil
+        case .deferred(let message), .failed(let message): return message
+        }
+    }
+}
+
 /// Drives sync of the user's data under `User/` — never games.
 ///
 /// This is **glue only**. Every rule worth arguing about lives in `PVCloudSync`
@@ -28,13 +41,13 @@ struct SyncProgress: Equatable {
 /// - *what this device has synced before* — `SyncIndexStore`
 /// - *where removed files go* — `SyncTrash`; nothing is unlinked outright
 ///
-/// ## It has to work with no container
+/// ## Availability is checked for the current installation
 ///
-/// iCube's CloudKit container is **not provisioned yet** and no entitlements
-/// file requests it. That is the state the app ships in, so the whole path has
-/// to be inert-but-honest rather than absent: `CloudKitSyncProvider` refuses to
-/// construct, `InertSyncProvider` takes its place, and `unavailableReason` is
-/// shown in Settings. Nothing here crashes, spins, or silently pretends.
+/// `ICubeCloudSync` declares the provisioned container. Actual availability still
+/// depends on the installed build's entitlements and the current iCloud account;
+/// the declaration alone does not establish Production sync readiness. When a
+/// provider cannot be constructed, `InertSyncProvider` takes its place and
+/// `unavailableReason` is shown in Settings instead of reporting a successful sync.
 ///
 /// ## App preferences are deliberately NOT mirrored wholesale
 ///
@@ -55,14 +68,29 @@ final class CloudSyncCoordinator: ObservableObject {
     static let documentDidChangeNotification = Notification.Name("CloudSyncDocumentDidChangeNotification")
     static let fileTypeKey = "fileType"
 
+    /// These whole files contain account credentials or device-local network endpoints.
+    /// Keep the pinned package classifier unchanged; apply this app privacy boundary in both directions.
+    static func isEligibleForCloudSync(relativePath: String) -> Bool {
+        var components: [String] = []
+        for component in relativePath.replacingOccurrences(of: "\\", with: "/").split(separator: "/") {
+            if component == "." { continue }
+            if component == ".." { if !components.isEmpty { components.removeLast() }; continue }
+            components.append(String(component).lowercased())
+        }
+        let path = components.joined(separator: "/")
+        return path != "config/retroachievements.ini" && path != "config/dsuclient.ini"
+    }
+
     // MARK: - Observable state
 
     /// Opt-in, default off. Persisted.
     @Published var isEnabled: Bool {
         didSet {
             guard oldValue != isEnabled else { return }
-            UserDefaults.standard.set(isEnabled, forKey: PreferenceKey.enabled)
-            Task { await apply(.enabledChanged(isEnabled)) }
+            let enabled = isEnabled
+            if !enabled { transferGeneration &+= 1 }
+            UserDefaults.standard.set(enabled, forKey: PreferenceKey.enabled)
+            Task { await apply(.enabledChanged(enabled)) }
         }
     }
 
@@ -77,6 +105,18 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     @Published private(set) var isSyncing = false
+    @Published private(set) var isEmulating = false
+    @Published private(set) var isResolvingConflict = false
+
+    var conflictResolutionUnavailableReason: String? {
+        if isEmulating || localIOGate.isEmulating { return L("Stop emulation to resolve sync conflicts.") }
+        if !isEnabled { return L("Turn on iCloud sync to resolve conflicts.") }
+        if isSyncing || isResolvingConflict || isRestoringTrash { return L("Wait for the current sync operation to finish.") }
+        if scanner == nil || provider == nil || index == nil || trash == nil {
+            return L("Sync is not ready. Try again after it reconnects.")
+        }
+        return nil
+    }
     @Published private(set) var progress: SyncProgress?
     @Published private(set) var statistics = SyncStatistics()
     @Published private(set) var pendingConflicts: [SyncConflict] = []
@@ -103,6 +143,10 @@ final class CloudSyncCoordinator: ObservableObject {
     private var provider: (any SyncProvider)?
     private var index: SyncIndexStore?
     private var trash: SyncTrash?
+    private var recoveryRoot: URL?
+    private var recoveryIndex: SyncIndexStore?
+    @Published private(set) var isRestoringTrash = false
+    private var recoveryDeferredEvents: [SyncLifecycleEvent] = []
 
     private var watchers: [DirectoryWatcher] = []
     private var backgroundTimerTask: Task<Void, Never>?
@@ -113,6 +157,45 @@ final class CloudSyncCoordinator: ObservableObject {
     /// it between files, which is the only way to actually stop a sync that is
     /// already looping — an entry guard only blocks new ones.
     private var abortRequested = false
+    private let localIOGate: SyncLocalIOGate
+    private var transferGeneration: UInt64 = 0
+    private var deferredFileWork = false
+
+    private struct TransferEpoch {
+        let policy: UInt64
+        let boot: UInt64
+    }
+
+    private func captureTransferEpoch() -> TransferEpoch {
+        TransferEpoch(policy: transferGeneration, boot: localIOGate.currentGeneration)
+    }
+
+    private enum TransferDeferred: Error { case interrupted }
+
+    private func requireTransferAccess(generation: TransferEpoch) throws {
+        guard isEnabled, !abortRequested, !Task.isCancelled, !isRestoringTrash,
+              generation.policy == transferGeneration && generation.boot == localIOGate.currentGeneration, !localIOGate.isEmulating,
+              !lifecycle.isEmulating else {
+            deferredFileWork = true
+            throw TransferDeferred.interrupted
+        }
+    }
+
+    private func canContinueTransfer(generation: TransferEpoch) -> Bool {
+        do { try requireTransferAccess(generation: generation); return true }
+        catch { return false }
+    }
+
+    /// Counter leases include the scanner actor hop, but never a provider/network await.
+    private func withLocalIO<T>(generation: TransferEpoch, _ operation: () async throws -> T) async throws -> T {
+        try requireTransferAccess(generation: generation)
+        guard localIOGate.beginLocalIO(generation: generation.boot) else {
+            deferredFileWork = true
+            throw TransferDeferred.interrupted
+        }
+        defer { localIOGate.endLocalIO() }
+        return try await operation()
+    }
 
     /// Last known metadata per path, for the statistics pane. In memory only;
     /// the durable record of what was synced is `SyncIndexStore`.
@@ -125,28 +208,71 @@ final class CloudSyncCoordinator: ObservableObject {
     /// screen that says sync is unavailable.
     private var lastSyncCompletionDate: Date?
 
-    private init(network: any SyncNetworkObserving = SyncNetworkMonitor()) {
-        let enabled = UserDefaults.standard.bool(forKey: PreferenceKey.enabled)
+    init(network: any SyncNetworkObserving = SyncNetworkMonitor(),
+         enabled: Bool? = nil, scanner: UserDataScanner? = nil,
+         provider: (any SyncProvider)? = nil, index: SyncIndexStore? = nil,
+         trash: SyncTrash? = nil, localIOGate: SyncLocalIOGate = .shared,
+         pendingConflicts: [SyncConflict] = []) {
+        let enabled = enabled ?? UserDefaults.standard.bool(forKey: PreferenceKey.enabled)
         self.isEnabled = enabled
         self.policy = Self.loadPolicy()
         self.lifecycle = SyncLifecyclePolicy(isEnabled: enabled)
         self.network = network
+        self.scanner = scanner
+        self.provider = provider
+        self.index = index
+        self.trash = trash
+        self.recoveryRoot = scanner?.rootDirectory
+        self.recoveryIndex = index
+        self.localIOGate = localIOGate
+        self.pendingConflicts = pendingConflicts.filter { Self.isEligibleForCloudSync(relativePath: $0.metadata.relativePath) }
     }
 
     // MARK: - Events in
 
     /// Feed a lifecycle event to the policy and carry out its answer.
     func handle(_ event: SyncLifecycleEvent) async {
+        if case .emulationWillStart = event {
+            await handleEmulationWillStart(generation: localIOGate.ensureEmulation())
+            return
+        }
+        // UI DidEnd deliberately precedes core teardown and must not reopen admission.
+        if case .emulationDidEnd = event, localIOGate.isEmulating { return }
         await apply(event)
+    }
+
+    func handleEmulationWillStart(generation: UInt64) async {
+        guard localIOGate.isCurrentEmulation(generation) else { return }
+        isEmulating = true
+        transferGeneration &+= 1
+        await apply(.emulationWillStart)
+    }
+
+    func handleCoreDidDrain(generation: UInt64) async {
+        guard localIOGate.isCurrentDrain(generation) else { return }
+        isEmulating = false
+        await apply(.emulationDidEnd)
+        if deferredFileWork, localIOGate.isCurrentDrain(generation) {
+            deferredFileWork = false
+            await apply(.trigger(.fileChanged))
+        }
     }
 
     func syncNow() async {
         await apply(.trigger(.manual))
     }
 
+    func waitForCurrentSyncCompletion() async {
+        await syncTask?.value
+    }
+
     /// Called once at launch by `CloudSyncLifecycleService`.
     func start() async {
         guard isEnabled else {
+            if let root = DolphinPaths.userDirectoryURL() {
+                prepareLocalRecovery(root: root, kind: Self.makeProvider(deviceIdentifier: SyncDeviceIdentity.deviceIdentifier()).kind)
+                await refreshTrash()
+            }
             // Still resolve availability so Settings can explain itself before
             // the user ever turns sync on.
             await refreshAvailability()
@@ -156,6 +282,15 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     private func apply(_ event: SyncLifecycleEvent) async {
+        if isRestoringTrash {
+            recoveryDeferredEvents.append(event)
+            return
+        }
+        if isResolvingConflict, case .trigger = event {
+            deferredFileWork = true
+            return
+        }
+        if case .enabledChanged(false) = event { transferGeneration &+= 1 }
         // Timer ticks stand down in Low Power Mode; the user's own actions and
         // the foreground and game-end triggers still run.
         if case .trigger(.periodicTimer) = event, network.isLowPowerModeEnabled {
@@ -195,6 +330,17 @@ final class CloudSyncCoordinator: ObservableObject {
 
     // MARK: - Setup / teardown
 
+    private func prepareLocalRecovery(root: URL, kind: SyncProviderKind) {
+        recoveryRoot = root
+        let support = Self.supportDirectory()
+        if recoveryIndex == nil {
+            recoveryIndex = SyncIndexStore(fileURL: support
+                .appendingPathComponent(kind.rawValue, isDirectory: true)
+                .appendingPathComponent("index.json"))
+        }
+        if trash == nil { trash = SyncTrash(rootURL: support.appendingPathComponent("Trash", isDirectory: true)) }
+    }
+
     private func prepare() async {
         guard let root = DolphinPaths.userDirectoryURL() else {
             unavailableReason = .unknown("Could not locate iCube's User directory.")
@@ -204,11 +350,8 @@ final class CloudSyncCoordinator: ObservableObject {
         let provider = Self.makeProvider(deviceIdentifier: SyncDeviceIdentity.deviceIdentifier())
         self.provider = provider
 
-        let support = Self.supportDirectory()
-        index = SyncIndexStore(fileURL: support
-            .appendingPathComponent(provider.kind.rawValue, isDirectory: true)
-            .appendingPathComponent("index.json"))
-        trash = SyncTrash(rootURL: support.appendingPathComponent("Trash", isDirectory: true))
+        prepareLocalRecovery(root: root, kind: provider.kind)
+        index = recoveryIndex
 
         do {
             try await provider.initialize()
@@ -286,12 +429,21 @@ final class CloudSyncCoordinator: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                await self.index?.reset()
-                self.addEvent(.info, message: "iCloud account changed; starting fresh")
-                await self.handle(.trigger(.accountChanged))
+                await self.handleAccountChange()
             }
         }
         #endif
+    }
+
+    func handleAccountChange() async {
+        transferGeneration &+= 1
+        // Versions and choices belong to one account; disabling sync alone retains them.
+        pendingConflicts.removeAll()
+        metadataCache.removeAll()
+        refreshStatistics()
+        await index?.reset()
+        addEvent(.info, message: "iCloud account changed; starting fresh")
+        await handle(.trigger(.accountChanged))
     }
 
     private func startBackgroundTimer() {
@@ -325,7 +477,7 @@ final class CloudSyncCoordinator: ObservableObject {
         progress = nil
         abortRequested = false
         metadataCache.removeAll()
-        pendingConflicts.removeAll()
+        // Keep unresolved choices when disabling interrupts a transfer; failed work is retryable.
         statistics = SyncStatistics()
         lastSyncCompletionDate = nil
         lastError = nil
@@ -336,6 +488,7 @@ final class CloudSyncCoordinator: ObservableObject {
 
     private func runSync(trigger: SyncTrigger) async {
         guard let scanner, let provider, let index, let trash else { return }
+        let generation = captureTransferEpoch()
 
         // A fresh trigger gets a fresh chance to report cleanly.
         lastError = nil
@@ -345,10 +498,14 @@ final class CloudSyncCoordinator: ObservableObject {
         // does not need a cloud, so the settings pane can show what *would*
         // sync on a build with no container at all.
         let local = await scanner.scanLocalFiles(policy: policy)
+            .filter { Self.isEligibleForCloudSync(relativePath: $0.relativePath) }
+        guard canContinueTransfer(generation: generation) else { return }
         rebuildMetadataCache(from: local)
         refreshStatistics()
 
-        if let reason = await provider.unavailableReason() {
+        let reason = await provider.unavailableReason()
+        guard canContinueTransfer(generation: generation) else { return }
+        if let reason {
             unavailableReason = reason
             addEvent(.info, message: reason.localizedDescription)
             return
@@ -357,8 +514,14 @@ final class CloudSyncCoordinator: ObservableObject {
 
         let remote: RemoteSyncSnapshot
         do {
-            remote = try await provider.fetchRemoteSnapshot()
+            let snapshot = try await provider.fetchRemoteSnapshot()
+            guard canContinueTransfer(generation: generation) else { return }
+            remote = RemoteSyncSnapshot(
+                files: snapshot.files.filter { Self.isEligibleForCloudSync(relativePath: $0.relativePath) },
+                tombstones: snapshot.tombstones.filter { Self.isEligibleForCloudSync(relativePath: $0.relativePath) },
+                cursor: snapshot.cursor)
         } catch {
+            guard canContinueTransfer(generation: generation) else { return }
             // Never treat a failed remote fetch as "the cloud is empty" — that
             // reads as "every local file is new" and re-uploads the library.
             await record(error, during: "fetching the iCloud file list")
@@ -366,20 +529,28 @@ final class CloudSyncCoordinator: ObservableObject {
         }
 
         // Bind the index to the account before it is consulted.
-        if await index.bind(toAccountIdentity: provider.accountIdentity()) {
+        let identity = await provider.accountIdentity()
+        guard canContinueTransfer(generation: generation) else { return }
+        let changedAccount = await index.bind(toAccountIdentity: identity)
+        guard canContinueTransfer(generation: generation) else { return }
+        if changedAccount {
             addEvent(.info, message: "Different iCloud account than last time; starting fresh")
         }
 
         let now = Date()
         // Housekeeping first, both best-effort.
         let purged = await trash.purge(olderThan: now.addingTimeInterval(-CloudSyncConstants.trashRetention))
+        guard canContinueTransfer(generation: generation) else { return }
         if purged > 0 { addEvent(.info, message: "Emptied \(purged) file(s) from Recently Deleted after 30 days") }
         try? await provider.purgeExpiredTombstones(olderThan: now.addingTimeInterval(-CloudSyncConstants.tombstoneRetention))
+        guard canContinueTransfer(generation: generation) else { return }
 
+        let storedIndex = await index.snapshot()
+        guard canContinueTransfer(generation: generation) else { return }
         let steps = planner.plan(
             local: local,
             remote: remote,
-            index: await index.snapshot(),
+            index: SyncIndexSnapshot(entries: storedIndex.entries.filter { Self.isEligibleForCloudSync(relativePath: $0.key) }),
             policy: policy,
             now: now,
             deviceIdentifier: SyncDeviceIdentity.deviceIdentifier()
@@ -391,7 +562,7 @@ final class CloudSyncCoordinator: ObservableObject {
 
         for step in steps {
             // The only way to actually stop a run that is already going.
-            if abortRequested || Task.isCancelled { break }
+            if !canContinueTransfer(generation: generation) { break }
             defer { progress?.completed += 1 }
 
             // Large categories wait for Wi-Fi when the user asked them to.
@@ -406,27 +577,30 @@ final class CloudSyncCoordinator: ObservableObject {
                 metadata.lastSyncDate = now
                 metadataCache[metadata.relativePath] = metadata
                 await index.record(path: metadata.relativePath, checksum: metadata.checksum, lastModified: metadata.lastModified, syncedAt: now)
+                guard canContinueTransfer(generation: generation) else { return }
 
             case .upload(let metadata, let reason):
-                await upload(metadata, reason: reason, scanner: scanner, provider: provider, index: index)
+                await upload(metadata, reason: reason, scanner: scanner, provider: provider, index: index, generation: generation)
 
             case .download(let metadata):
-                if await download(metadata, scanner: scanner, provider: provider, index: index) { downloaded += 1 }
+                if await download(metadata, scanner: scanner, provider: provider, index: index, generation: generation) { downloaded += 1 }
 
             case .restore(let metadata):
-                if await download(metadata, scanner: scanner, provider: provider, index: index) {
+                if await download(metadata, scanner: scanner, provider: provider, index: index, generation: generation) {
                     downloaded += 1
                     addEvent(.info, file: metadata.relativePath,
                              message: "Brought back: it was deleted here but changed on another device")
                 }
 
             case .merge(let localMeta, let remoteMeta):
-                await merge(local: localMeta, remote: remoteMeta, scanner: scanner, provider: provider, index: index)
+                await merge(local: localMeta, remote: remoteMeta, scanner: scanner, provider: provider, index: index, generation: generation)
 
             case .writeTombstone(let tombstone):
                 do {
                     try await provider.writeTombstone(tombstone)
+                    guard canContinueTransfer(generation: generation) else { return }
                     await index.markDeleted(path: tombstone.relativePath, at: now)
+                    guard canContinueTransfer(generation: generation) else { return }
                     addEvent(.info, file: tombstone.relativePath, message: "Deleted on your other devices too")
                 } catch {
                     addEvent(.error, file: tombstone.relativePath,
@@ -435,8 +609,12 @@ final class CloudSyncCoordinator: ObservableObject {
 
             case .trashLocal(let metadata, let tombstone):
                 do {
-                    _ = try await scanner.moveToTrash(relativePath: metadata.relativePath, trash: trash, now: now)
+                    _ = try await withLocalIO(generation: generation) {
+                        try await scanner.moveToTrash(relativePath: metadata.relativePath, trash: trash, now: now)
+                    }
+                    try requireTransferAccess(generation: generation)
                     await index.markDeleted(path: metadata.relativePath, at: tombstone.deletedAt)
+                    guard canContinueTransfer(generation: generation) else { return }
                     metadataCache.removeValue(forKey: metadata.relativePath)
                     addEvent(.info, file: metadata.relativePath,
                              message: "Removed because it was deleted on another device. Recoverable in Recently Deleted for 30 days")
@@ -447,20 +625,17 @@ final class CloudSyncCoordinator: ObservableObject {
 
             case .markDeleted(let relativePath):
                 await index.markDeleted(path: relativePath, at: now)
+                guard canContinueTransfer(generation: generation) else { return }
 
             case .conflict(let conflict):
-                if !pendingConflicts.contains(where: { $0.metadata.relativePath == conflict.metadata.relativePath }) {
-                    pendingConflicts.append(conflict)
-                    var metadata = conflict.metadata
-                    metadata.syncStatus = .conflict
-                    metadataCache[metadata.relativePath] = metadata
-                    addEvent(.conflict, file: conflict.metadata.relativePath, message: Self.message(for: conflict.kind))
-                }
+                recordConflict(conflict)
             }
         }
 
+        guard canContinueTransfer(generation: generation) else { return }
         do {
             try await index.save()
+            guard canContinueTransfer(generation: generation) else { return }
         } catch {
             addEvent(.error, message: "Could not save the sync index: \(error.localizedDescription)")
         }
@@ -478,6 +653,24 @@ final class CloudSyncCoordinator: ObservableObject {
         addEvent(.success, message: "Sync completed (\(trigger.rawValue))")
     }
 
+    func recordConflict(_ conflict: SyncConflict) {
+        guard Self.isEligibleForCloudSync(relativePath: conflict.metadata.relativePath) else { return }
+        let existing = pendingConflicts.firstIndex { $0.metadata.relativePath == conflict.metadata.relativePath }
+        if let existing {
+            let previous = pendingConflicts[existing]
+            if previous.kind != conflict.kind || previous.localVersion != conflict.localVersion ||
+                previous.remoteVersion != conflict.remoteVersion {
+                pendingConflicts[existing] = conflict
+            }
+        } else {
+            pendingConflicts.append(conflict)
+            addEvent(.conflict, file: conflict.metadata.relativePath, message: Self.message(for: conflict.kind))
+        }
+        var metadata = conflict.metadata
+        metadata.syncStatus = .conflict
+        metadataCache[metadata.relativePath] = metadata
+    }
+
     private static func message(for kind: SyncConflict.Kind) -> String {
         switch kind {
         case .bothChanged: return "Changed on two devices at once"
@@ -485,62 +678,77 @@ final class CloudSyncCoordinator: ObservableObject {
         }
     }
 
+    @discardableResult
     private func upload(
         _ metadata: SyncableFileMetadata,
         reason: SyncPlanStep.UploadReason,
         scanner: UserDataScanner,
         provider: any SyncProvider,
-        index: SyncIndexStore
-    ) async {
+        index: SyncIndexStore,
+        generation requestedGeneration: TransferEpoch? = nil
+    ) async -> Bool {
+        guard Self.isEligibleForCloudSync(relativePath: metadata.relativePath) else { return false }
+        let generation = requestedGeneration ?? captureTransferEpoch()
         var working = metadata
         working.syncStatus = .uploading
         metadataCache[working.relativePath] = working
         do {
-            let data = try await scanner.readFile(relativePath: metadata.relativePath)
+            let data = try await withLocalIO(generation: generation) {
+                try await scanner.readFile(relativePath: metadata.relativePath)
+            }
+            try requireTransferAccess(generation: generation)
             try await provider.upload(metadata: metadata, data: data)
+            try requireTransferAccess(generation: generation)
             working.syncStatus = .synced
             working.lastSyncDate = Date()
             working.lastError = nil
             metadataCache[working.relativePath] = working
             await index.record(path: metadata.relativePath, checksum: metadata.checksum, lastModified: metadata.lastModified)
             addEvent(.upload, file: metadata.relativePath, message: "Uploaded (\(reason.rawValue))")
+            return true
+        } catch is TransferDeferred {
+            return false
         } catch {
+            guard generation.policy == transferGeneration && generation.boot == localIOGate.currentGeneration, isEnabled else { return false }
             working.syncStatus = .error
             working.lastError = error.localizedDescription
             working.syncAttempts += 1
             metadataCache[working.relativePath] = working
             addEvent(.error, file: metadata.relativePath,
                      message: "Upload failed: \(error.localizedDescription)")
+            return false
         }
     }
 
-    /// Returns true when the file was written.
+    /// Returns true only after committing the downloaded file and recording its actual metadata.
     @discardableResult
     private func download(
         _ metadata: SyncableFileMetadata,
         scanner: UserDataScanner,
         provider: any SyncProvider,
-        index: SyncIndexStore
+        index: SyncIndexStore,
+        userSelectedRemote: Bool = false,
+        generation requestedGeneration: TransferEpoch? = nil
     ) async -> Bool {
-        // Belt and braces on top of the planner: never overwrite a local file
-        // that is newer than the remote copy, whatever routed us here.
-        if let localModified = await scanner.modificationDate(relativePath: metadata.relativePath),
-           localModified > metadata.lastModified.addingTimeInterval(CloudSyncConstants.modificationTimeTolerance) {
-            return false
-        }
-
+        guard Self.isEligibleForCloudSync(relativePath: metadata.relativePath) else { return false }
+        let generation = requestedGeneration ?? captureTransferEpoch()
         var working = metadata
         working.syncStatus = .downloading
         metadataCache[working.relativePath] = working
         do {
+            if !userSelectedRemote,
+               let localModified = await scanner.modificationDate(relativePath: metadata.relativePath),
+               localModified > metadata.lastModified.addingTimeInterval(CloudSyncConstants.modificationTimeTolerance) {
+                return false
+            }
+            try requireTransferAccess(generation: generation)
             let data = try await provider.download(metadata: metadata)
-            // Never write an empty blob over a real save.
             guard !data.isEmpty else { throw SyncProviderError.invalidData }
-            try await scanner.writeFile(
-                relativePath: metadata.relativePath,
-                data: data,
-                modificationDate: metadata.lastModified
-            )
+            try await withLocalIO(generation: generation) {
+                try await scanner.writeFile(relativePath: metadata.relativePath, data: data,
+                                            modificationDate: metadata.lastModified)
+            }
+            try requireTransferAccess(generation: generation)
             working.syncStatus = .synced
             working.lastSyncDate = Date()
             working.lastError = nil
@@ -549,7 +757,10 @@ final class CloudSyncCoordinator: ObservableObject {
             addEvent(.download, file: metadata.relativePath, message: "Downloaded from iCloud")
             notifyIfDocument(metadata.fileType)
             return true
+        } catch is TransferDeferred {
+            return false
         } catch {
+            guard generation.policy == transferGeneration && generation.boot == localIOGate.currentGeneration, isEnabled else { return false }
             working.syncStatus = .error
             working.lastError = error.localizedDescription
             working.syncAttempts += 1
@@ -569,31 +780,38 @@ final class CloudSyncCoordinator: ObservableObject {
         remote: SyncableFileMetadata,
         scanner: UserDataScanner,
         provider: any SyncProvider,
-        index: SyncIndexStore
+        index: SyncIndexStore,
+        generation requestedGeneration: TransferEpoch? = nil
     ) async {
+        guard Self.isEligibleForCloudSync(relativePath: local.relativePath),
+              Self.isEligibleForCloudSync(relativePath: remote.relativePath) else { return }
+        let generation = requestedGeneration ?? captureTransferEpoch()
         guard let merger = DocumentMergers.merger(for: local.fileType) else {
             // Should not happen: the planner only emits .merge for document kinds.
             if local.lastModified >= remote.lastModified {
-                await upload(local, reason: .contentChanged, scanner: scanner, provider: provider, index: index)
+                await upload(local, reason: .contentChanged, scanner: scanner, provider: provider, index: index, generation: generation)
             } else {
-                await download(remote, scanner: scanner, provider: provider, index: index)
+                await download(remote, scanner: scanner, provider: provider, index: index, generation: generation)
             }
             return
         }
 
         let path = local.relativePath
         do {
-            let localData = try await scanner.readFile(relativePath: path)
+            let localData = try await withLocalIO(generation: generation) {
+                try await scanner.readFile(relativePath: path)
+            }
             let remoteData = try await provider.download(metadata: remote)
+            try requireTransferAccess(generation: generation)
             let merged: Data
             do {
                 merged = try merger.merge(local: localData, remote: remoteData)
             } catch {
                 addEvent(.error, file: path, message: "Could not merge; keeping the newer copy (\(error.localizedDescription))")
                 if local.lastModified >= remote.lastModified {
-                    await upload(local, reason: .contentChanged, scanner: scanner, provider: provider, index: index)
+                    await upload(local, reason: .contentChanged, scanner: scanner, provider: provider, index: index, generation: generation)
                 } else {
-                    await download(remote, scanner: scanner, provider: provider, index: index)
+                    await download(remote, scanner: scanner, provider: provider, index: index, generation: generation)
                 }
                 return
             }
@@ -609,16 +827,23 @@ final class CloudSyncCoordinator: ObservableObject {
 
             let localChanged = merged != localData
             if localChanged {
-                try await scanner.writeFile(relativePath: path, data: merged, modificationDate: now)
+                try await withLocalIO(generation: generation) {
+                    try await scanner.writeFile(relativePath: path, data: merged, modificationDate: now)
+                }
             }
+            try requireTransferAccess(generation: generation)
             if merged != remoteData {
                 try await provider.upload(metadata: result, data: merged)
             }
+            try requireTransferAccess(generation: generation)
             metadataCache[path] = result
             await index.record(path: path, checksum: result.checksum, lastModified: now, syncedAt: now)
             addEvent(.info, file: path, message: localChanged ? "Merged changes from another device" : "Merged this device's changes into iCloud")
             if localChanged { notifyIfDocument(local.fileType) }
+        } catch is TransferDeferred {
+            return
         } catch {
+            guard canContinueTransfer(generation: generation) else { return }
             var working = local
             working.syncStatus = .error
             working.lastError = error.localizedDescription
@@ -639,48 +864,97 @@ final class CloudSyncCoordinator: ObservableObject {
 
     // MARK: - Conflicts
 
-    func resolve(_ conflict: SyncConflict, as resolution: ConflictResolution) async {
-        guard let scanner, let provider, let index, let trash else { return }
+    @discardableResult
+    func resolve(_ conflict: SyncConflict, as resolution: ConflictResolution) async -> SyncConflictResolutionResult {
+        guard Self.isEligibleForCloudSync(relativePath: conflict.metadata.relativePath) else {
+            pendingConflicts.removeAll { !Self.isEligibleForCloudSync(relativePath: $0.metadata.relativePath) }
+            metadataCache.removeValue(forKey: conflict.metadata.relativePath)
+            refreshStatistics()
+            return .deferred(L("The conflict could not be resolved. Review its latest versions and try again."))
+        }
+        if let reason = conflictResolutionUnavailableReason { return .deferred(reason) }
+        let failure = L("The conflict could not be resolved. Review its latest versions and try again.")
+        guard let scanner, let provider, let index, let trash,
+              !isSyncing, !isResolvingConflict,
+              pendingConflicts.contains(where: { $0.id == conflict.id }) else { return .deferred(failure) }
+        let generation = captureTransferEpoch()
+        do { try requireTransferAccess(generation: generation) }
+        catch { return .deferred(conflictResolutionUnavailableReason ?? failure) }
+        isResolvingConflict = true
+        defer { isResolvingConflict = false }
+        let succeeded: Bool
         switch (conflict.kind, resolution) {
         case (.bothChanged, .useLocal):
-            await upload(conflict.metadata, reason: .conflictKeepLocal, scanner: scanner, provider: provider, index: index)
+            succeeded = await upload(conflict.metadata, reason: .conflictKeepLocal, scanner: scanner, provider: provider, index: index, generation: generation)
         case (.bothChanged, .useRemote):
-            await download(conflict.metadata, scanner: scanner, provider: provider, index: index)
+            succeeded = await download(Self.remoteMetadata(for: conflict), scanner: scanner,
+                                       provider: provider, index: index, userSelectedRemote: true, generation: generation)
         case (.bothChanged, .keepBoth):
-            await keepBoth(conflict, scanner: scanner, provider: provider, index: index)
-
-        // A delete conflict has no second copy to keep: "keep both" and "keep
-        // this device's" both mean the file lives on, which undeletes it.
+            succeeded = await keepBoth(conflict, scanner: scanner, provider: provider, index: index, generation: generation)
         case (.deletedRemotelyChangedLocally, .useLocal), (.deletedRemotelyChangedLocally, .keepBoth):
-            await upload(conflict.metadata, reason: .undelete, scanner: scanner, provider: provider, index: index)
+            succeeded = await upload(conflict.metadata, reason: .undelete, scanner: scanner, provider: provider, index: index, generation: generation)
         case (.deletedRemotelyChangedLocally, .useRemote):
             do {
-                _ = try await scanner.moveToTrash(relativePath: conflict.metadata.relativePath, trash: trash)
+                _ = try await withLocalIO(generation: generation) {
+                    try await scanner.moveToTrash(relativePath: conflict.metadata.relativePath, trash: trash)
+                }
+                try requireTransferAccess(generation: generation)
                 await index.markDeleted(path: conflict.metadata.relativePath)
                 metadataCache.removeValue(forKey: conflict.metadata.relativePath)
                 addEvent(.info, file: conflict.metadata.relativePath, message: "Removed. Recoverable in Recently Deleted for 30 days")
                 await refreshTrash()
+                succeeded = true
+            } catch is TransferDeferred {
+                succeeded = false
             } catch {
                 addEvent(.error, file: conflict.metadata.relativePath, message: "Could not remove: \(error.localizedDescription)")
+                succeeded = false
             }
-
         case (_, .manual):
-            return
+            return .deferred(failure)
         }
-        pendingConflicts.removeAll { $0.id == conflict.id }
-        try? await index.save()
-        refreshStatistics()
+        guard succeeded else {
+            if let reason = conflictResolutionUnavailableReason, isEmulating || !isEnabled {
+                return .deferred(reason)
+            }
+            return .failed(metadataCache[conflict.metadata.relativePath]?.lastError ?? failure)
+        }
+        do {
+            try requireTransferAccess(generation: generation)
+            try await index.save()
+            try requireTransferAccess(generation: generation)
+            pendingConflicts.removeAll { $0.id == conflict.id }
+            refreshStatistics()
+            return .resolved
+        } catch is TransferDeferred {
+            return .deferred(conflictResolutionUnavailableReason ?? failure)
+        } catch {
+            addEvent(.error, file: conflict.metadata.relativePath,
+                     message: "Could not save the sync index: \(error.localizedDescription)")
+            return .failed(error.localizedDescription)
+        }
     }
 
-    /// Copy the local version aside under a timestamped name, then take the
-    /// remote one. The copy keeps its original extension so Dolphin still sees a
-    /// save state in a slot it understands.
+    private static func remoteMetadata(for conflict: SyncConflict) -> SyncableFileMetadata {
+        var remote = conflict.metadata
+        remote.lastModified = conflict.remoteVersion.modifiedDate
+        remote.fileSize = conflict.remoteVersion.size
+        remote.checksum = conflict.remoteVersion.checksum
+        // Conflict.metadata is the local version; use the stable path for the remote lookup.
+        remote.cloudKitRecordID = nil
+        return remote
+    }
+
+    /// Preserve the local copy before taking the explicitly selected remote version.
     private func keepBoth(
         _ conflict: SyncConflict,
         scanner: UserDataScanner,
         provider: any SyncProvider,
-        index: SyncIndexStore
-    ) async {
+        index: SyncIndexStore,
+        generation requestedGeneration: TransferEpoch? = nil
+    ) async -> Bool {
+        guard Self.isEligibleForCloudSync(relativePath: conflict.metadata.relativePath) else { return false }
+        let generation = requestedGeneration ?? captureTransferEpoch()
         let relativePath = conflict.metadata.relativePath
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         let directory = (relativePath as NSString).deletingLastPathComponent
@@ -691,21 +965,34 @@ final class CloudSyncCoordinator: ObservableObject {
             ? "\(stem)_thisdevice_\(stamp)"
             : "\(stem)_thisdevice_\(stamp).\(fileExtension)"
         let copyPath = directory.isEmpty ? copyName : (directory as NSString).appendingPathComponent(copyName)
-
         do {
-            let localData = try await scanner.readFile(relativePath: relativePath)
-            try await scanner.writeFile(relativePath: copyPath, data: localData, modificationDate: nil)
-            await download(conflict.metadata, scanner: scanner, provider: provider, index: index)
+            let localData = try await withLocalIO(generation: generation) {
+                try await scanner.readFile(relativePath: relativePath)
+            }
+            try await withLocalIO(generation: generation) {
+                try await scanner.writeFile(relativePath: copyPath, data: localData, modificationDate: nil)
+            }
+            guard await download(Self.remoteMetadata(for: conflict), scanner: scanner, provider: provider,
+                                 index: index, userSelectedRemote: true, generation: generation) else { return false }
             addEvent(.info, file: relativePath, message: "Kept both (this device's copy saved as \(copyName))")
+            return true
+        } catch is TransferDeferred {
+            return false
         } catch {
             addEvent(.error, file: relativePath, message: "Could not keep both: \(error.localizedDescription)")
+            return false
         }
     }
 
-    func resolveAllConflicts(as resolution: ConflictResolution) async {
+    @discardableResult
+    func resolveAllConflicts(as resolution: ConflictResolution) async -> SyncConflictResolutionResult {
+        var result = SyncConflictResolutionResult.resolved
         for conflict in pendingConflicts {
-            await resolve(conflict, as: resolution)
+            let outcome = await resolve(conflict, as: resolution)
+            if outcome.message != nil { result = outcome }
+            if conflictResolutionUnavailableReason != nil { break }
         }
+        return result
     }
 
     // MARK: - Recently Deleted
@@ -718,17 +1005,29 @@ final class CloudSyncCoordinator: ObservableObject {
     /// Put a trashed file back. It is stamped now, so the next run reads it as
     /// an undelete and uploads it, replacing the tombstone everywhere.
     func restoreFromTrash(_ entry: SyncTrashEntry) async {
-        guard let trash, let root = scanner?.rootDirectory else { return }
+        guard !isRestoringTrash, !isSyncing, !isResolvingConflict,
+              let trash, let root = recoveryRoot, let recoveryIndex else { return }
+        let bootGeneration = localIOGate.currentGeneration
+        guard !Task.isCancelled, !localIOGate.isEmulating,
+              localIOGate.beginLocalIO(generation: bootGeneration) else { return }
+        isRestoringTrash = true
+        // Keep the lease and defer lifecycle starts until the durable undelete is complete.
+        // A disabled sync still has its index: forgetting the old tombstone is local recovery.
         do {
+            await recoveryIndex.remove(path: entry.relativePath)
+            try await recoveryIndex.save()
             try await trash.restore(entry, into: root)
-            await index?.remove(path: entry.relativePath)
-            try? await index?.save()
             addEvent(.info, file: entry.relativePath, message: "Restored from Recently Deleted")
             await refreshTrash()
-            await apply(.trigger(.fileChanged))
+            recoveryDeferredEvents.append(.trigger(.fileChanged))
         } catch {
             addEvent(.error, file: entry.relativePath, message: "Could not restore: \(error.localizedDescription)")
         }
+        localIOGate.endLocalIO()
+        isRestoringTrash = false
+        let events = recoveryDeferredEvents
+        recoveryDeferredEvents.removeAll()
+        for event in events { await apply(event) }
     }
 
     func deleteFromTrash(_ entry: SyncTrashEntry) async {
@@ -789,7 +1088,7 @@ final class CloudSyncCoordinator: ObservableObject {
     /// already know about files whose bytes have not changed.
     private func rebuildMetadataCache(from local: [SyncableFileMetadata]) {
         var rebuilt: [String: SyncableFileMetadata] = [:]
-        for file in local {
+        for file in local where Self.isEligibleForCloudSync(relativePath: file.relativePath) {
             var entry = file
             if let previous = metadataCache[file.relativePath],
                previous.checksum == file.checksum {

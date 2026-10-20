@@ -11,18 +11,18 @@ import Foundation
 /// `deletingPathExtension()` would treat `.s01` as the extension and collapse
 /// every slot onto `GALE01.json`, so we deliberately append instead.
 public enum SaveStateMetadataStore {
-  private static let encoder: JSONEncoder = {
+  private static func makeEncoder() -> JSONEncoder {
     let e = JSONEncoder()
     e.outputFormatting = [.prettyPrinted, .sortedKeys]
     e.dateEncodingStrategy = .iso8601
     return e
-  }()
+  }
 
-  private static let decoder: JSONDecoder = {
+  private static func makeDecoder() -> JSONDecoder {
     let d = JSONDecoder()
     d.dateDecodingStrategy = .iso8601
     return d
-  }()
+  }
 
   /// `GALE01.s01` -> `GALE01.s01.json`
   public static func sidecarURL(forStateFile stateURL: URL) -> URL {
@@ -32,7 +32,7 @@ public enum SaveStateMetadataStore {
   @discardableResult
   public static func write(_ metadata: SaveStateMetadata, forStateFile stateURL: URL) -> Bool {
     do {
-      let data = try encoder.encode(metadata)
+      let data = try makeEncoder().encode(metadata)
       try data.write(to: sidecarURL(forStateFile: stateURL), options: .atomic)
       return true
     } catch {
@@ -43,7 +43,7 @@ public enum SaveStateMetadataStore {
   public static func read(forStateFile stateURL: URL) -> SaveStateMetadata? {
     let url = sidecarURL(forStateFile: stateURL)
     guard let data = try? Data(contentsOf: url) else { return nil }
-    return try? decoder.decode(SaveStateMetadata.self, from: data)
+    return try? makeDecoder().decode(SaveStateMetadata.self, from: data)
   }
 
   /// Update just the user-facing title, preserving everything else.

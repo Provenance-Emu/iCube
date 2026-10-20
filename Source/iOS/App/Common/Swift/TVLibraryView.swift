@@ -268,13 +268,14 @@ final class TVLibraryViewModel: ObservableObject {
   }
 }
 
-/// The three content menus in the library toolbar. On iOS these are SwiftUI `Menu`s; on tvOS,
+/// The content menus in the library toolbar and rail. On iOS these are SwiftUI `Menu`s; on tvOS,
 /// where `Menu` has no usable presentation, the same content is pushed as a sheet. Owning the
 /// title and icon here keeps the two platforms labelled identically.
 enum TVToolbarSheet: String, Identifiable, CaseIterable {
   case view
   case importGames
   case system
+  case sort
 
   var id: String { rawValue }
 
@@ -283,6 +284,7 @@ enum TVToolbarSheet: String, Identifiable, CaseIterable {
     case .view: return "square.grid.3x3"
     case .importGames: return "square.and.arrow.down"
     case .system: return "gamecontroller"
+    case .sort: return "arrow.up.arrow.down"
     }
   }
 
@@ -291,6 +293,7 @@ enum TVToolbarSheet: String, Identifiable, CaseIterable {
     case .view: return L("View Options")
     case .importGames: return L("Import")
     case .system: return L("System")
+    case .sort: return L("Sort")
     }
   }
 }
@@ -552,9 +555,8 @@ struct TVLibraryView: View {
 #if os(tvOS)
   /// Which library toolbar menu is currently presented as a sheet. tvOS only: see TVToolbarSheet.
   @State private var tvToolbarSheet: TVToolbarSheet?
-  /// A toolbar-menu action that presents another sheet has to wait for the toolbar sheet to
-  /// finish dismissing, or the second presentation is dropped.
-  private static let tvToolbarSheetDismissDelay: TimeInterval = 0.35
+  /// Present the next destination only after SwiftUI finishes dismissing the menu sheet.
+  @State private var pendingLibraryMenuAction: (() -> Void)?
   #if os(tvOS)
   /// "Maybe Later" under the onboarding's two full-width actions: a row, not a third full-width bar.
   private static let onboardingSecondaryWidth: CGFloat = 480
@@ -895,6 +897,14 @@ struct TVLibraryView: View {
         storageAlertMessage = message
         showStorageErrorAlert = true
       },
+      setDefaultISO: { item in
+        if DOLConfigBridge.setMainDefaultISO(item.filePath) {
+          showSnackbar(L("Default ISO set."))
+        } else {
+          storageAlertMessage = L("Choose a readable local GameCube or Wii disc image.")
+          showStorageErrorAlert = true
+        }
+      },
       showCacheInfo: { showCacheInfoFor = $0 },
       showSaveStates: { item in
         let gid = item.gameID
@@ -1085,6 +1095,7 @@ struct TVLibraryView: View {
         TVLibraryRail(
           destination: $tvLibraryDestination,
           searchText: $searchText,
+          presentedMenu: $tvToolbarSheet,
           platforms: tvRailPlatforms,
           isSelecting: isSelectionMode,
           onToggleSelect: {
@@ -1095,9 +1106,6 @@ struct TVLibraryView: View {
             }
           },
           onSettings: { showSettings = true },
-          importMenu: { libraryImportMenuSection },
-          viewMenu: { libraryViewMenuSection },
-          sortMenu: { sortMenuItems },
           // The content is disabled while the rail holds focus, so every right press out of the rail lands
           // here: on the card focused last, or the first one.
           onStuckRight: {
@@ -1742,31 +1750,43 @@ struct TVLibraryView: View {
 
   @ViewBuilder
   private func tvToolbarSheetBody(_ kind: TVToolbarSheet) -> some View {
-    NavigationStack {
-      List {
-        switch kind {
-        case .view: libraryViewMenuSection
-        case .importGames: libraryImportMenuSection
-        case .system: librarySystemMenuSection
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+      ICubeLeafHeader(title: kind.title, subtitle: L("My Library"))
+      ScrollView {
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
+          switch kind {
+          case .view: libraryViewMenuSection
+          case .importGames: libraryImportMenuSection
+          case .system: librarySystemMenuSection
+          case .sort: sortMenuItems
+          }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // Focus scales the row and draws a ring/glow outside its layout bounds.
+        .padding(ICubeDesign.Spacing.l.rawValue)
       }
-      .navigationTitle(kind.title)
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button(L("Done")) { tvToolbarSheet = nil }
-        }
+      HStack {
+        Spacer()
+        Button(L("Done")) { tvToolbarSheet = nil }
+          .fixedSize(horizontal: true, vertical: false)
       }
     }
+    .icubeText(.nav)
+    .foregroundStyle(ICubeDesign.color(.textPrimary))
+    .buttonStyle(ICubeRowButtonStyle())
+    .padding(ICubeDesign.Spacing.xxl.rawValue)
+    .background { ICubeRoom(style: .gradient) }
+    .onExitCommand { tvToolbarSheet = nil }
   }
 #endif
 
   /// Runs a library-menu action. On tvOS a toolbar sheet has to dismiss before the
-  /// next presentation; a rail `Menu` dismisses itself, so the action runs immediately.
+  /// next presentation. Toolbar and rail buttons use the same sheet on tvOS.
   private func libraryMenuAction(_ action: @escaping () -> Void) {
 #if os(tvOS)
     if tvToolbarSheet != nil {
+      pendingLibraryMenuAction = action
       tvToolbarSheet = nil
-      DispatchQueue.main.asyncAfter(deadline: .now() + Self.tvToolbarSheetDismissDelay, execute: action)
     } else {
       action()
     }
@@ -2193,7 +2213,11 @@ struct TVLibraryView: View {
     }
 #if os(tvOS)
     .fullScreenCover(isPresented: $showSettings) { SettingsRootView().interactiveDismissDisabled(true) }
-    .sheet(item: $tvToolbarSheet) { tvToolbarSheetBody($0) }
+    .sheet(item: $tvToolbarSheet, onDismiss: {
+      let action = pendingLibraryMenuAction
+      pendingLibraryMenuAction = nil
+      action?()
+    }) { tvToolbarSheetBody($0) }
     .sheet(isPresented: $showSearchSheet) {
       NavigationStack {
         Form {
@@ -2380,7 +2404,7 @@ struct TVLibraryView: View {
           }
         }
         Button(L("Cancel"), role: .cancel) { itemPendingDelete = nil }
-      } message: { if let item = itemPendingDelete { Text(L("This will delete \(item.title). This action cannot be undone.")) } }
+      } message: { if let item = itemPendingDelete { Text(String(format: L("This will delete %@. This action cannot be undone."), item.title)) } }
       .alert(L("Delete Selected Games?"), isPresented: $showBatchDeleteConfirm) {
         Button(L("Delete"), role: .destructive) {
           performBatchDelete(paths: pendingBatchDeletePaths)

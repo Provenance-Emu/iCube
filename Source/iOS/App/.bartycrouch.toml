@@ -2,7 +2,7 @@
 tasks = ["interfaces"]
 
 [update.interfaces]
-path = ["DolphiniOS"]
+paths = ["DolphiniOS"]
 defaultToBase = true
 ignoreEmptyStrings = false
 unstripped = false

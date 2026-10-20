@@ -1,0 +1,40 @@
+Test Suite 'All tests' started at 2026-10-20 00:08:00.578.
+Test Suite 'CloudSafety.xctest' started at 2026-10-20 00:08:00.580.
+Test Suite 'CloudSyncSafetyTests' started at 2026-10-20 00:08:00.580.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testAccountChangeClearsOldAccountChoicesEvenWhileEmulating]' started.
+/tmp/icube-cloud-audit/CloudSyncSafetyTests.swift:169: error: -[CloudSafety.CloudSyncSafetyTests testAccountChangeClearsOldAccountChoicesEvenWhileEmulating] : XCTAssertTrue failed - The new account must never resolve the previous account's remote version
+Test Case '-[CloudSafety.CloudSyncSafetyTests testAccountChangeClearsOldAccountChoicesEvenWhileEmulating]' failed (5.447 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testCancelledDownloadRetainsConflictAndOriginalFile]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testCancelledDownloadRetainsConflictAndOriginalFile]' passed (0.005 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingSyncDuringDownloadRetainsConflictAndOriginalFile]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingSyncDuringDownloadRetainsConflictAndOriginalFile]' passed (0.004 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDownloadFinishingAfterEmulationStartsDoesNotOverwriteOrResolve]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDownloadFinishingAfterEmulationStartsDoesNotOverwriteOrResolve]' passed (0.005 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testExplicitRemoteChoiceUsesRemoteBytesAndVersionMetadata]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testExplicitRemoteChoiceUsesRemoteBytesAndVersionMetadata]' passed (0.010 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedTrashMoveRetainsDeleteConflict]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedTrashMoveRetainsDeleteConflict]' passed (0.020 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedUploadsAndDownloadsRetainConflicts]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedUploadsAndDownloadsRetainConflicts]' passed (0.019 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testKeepBothDoesNotResolveWhenRemoteDownloadFails]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testKeepBothDoesNotResolveWhenRemoteDownloadFails]' passed (0.016 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testRescanRefreshesRemoteVersionForAnExistingConflictPath]' started.
+/tmp/icube-cloud-audit/CloudSyncSafetyTests.swift:182: error: -[CloudSafety.CloudSyncSafetyTests testRescanRefreshesRemoteVersionForAnExistingConflictPath] : XCTAssertEqual failed: ("Optional(PVCloudSync.SyncConflict.FileVersion(modifiedDate: 2023-11-14 22:13:18 +0000, size: 6, checksum: "b71199ebd070b36beab7317920c2c2f1d777df8d05e5527d8458fda57cb17a7a"))") is not equal to ("Optional(PVCloudSync.SyncConflict.FileVersion(modifiedDate: 2023-11-14 22:13:28 +0000, size: 20, checksum: "newer-remote-checksum"))")
+Test Case '-[CloudSafety.CloudSyncSafetyTests testRescanRefreshesRemoteVersionForAnExistingConflictPath]' failed (0.006 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testResolutionDuringEmulationDoesNotDownloadOrOverwrite]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testResolutionDuringEmulationDoesNotDownloadOrOverwrite]' passed (0.002 seconds).
+Test Suite 'CloudSyncSafetyTests' failed at 2026-10-20 00:08:06.117.
+	 Executed 10 tests, with 2 failures (0 unexpected) in 5.533 (5.538) seconds
+Test Suite 'SyncLocalIOGateTests' started at 2026-10-20 00:08:06.117.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootBeforeSyncStartsNeedsNoCoordinatorOrLease]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootBeforeSyncStartsNeedsNoCoordinatorOrLease]' passed (0.000 seconds).
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootClosesAdmissionUntilEmulationEnds]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootClosesAdmissionUntilEmulationEnds]' passed (0.000 seconds).
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootWaitsForExistingLocalIOButDoesNotHoldItsConditionLock]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootWaitsForExistingLocalIOButDoesNotHoldItsConditionLock]' passed (0.052 seconds).
+Test Suite 'SyncLocalIOGateTests' passed at 2026-10-20 00:08:06.171.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.053 (0.054) seconds
+Test Suite 'CloudSafety.xctest' failed at 2026-10-20 00:08:06.171.
+	 Executed 13 tests, with 2 failures (0 unexpected) in 5.587 (5.592) seconds
+Test Suite 'All tests' failed at 2026-10-20 00:08:06.172.
+	 Executed 13 tests, with 2 failures (0 unexpected) in 5.587 (5.594) seconds

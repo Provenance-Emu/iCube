@@ -1,0 +1,27 @@
+Running main() from Externals/gtest/googletest/src/gtest_main.cc
+[==========] Running 9 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 9 tests from StateFileTransaction
+[ RUN      ] StateFileTransaction.WriteFailurePreservesCurrentAndUndo
+[       OK ] StateFileTransaction.WriteFailurePreservesCurrentAndUndo (0 ms)
+[ RUN      ] StateFileTransaction.CloseFailurePreservesCurrentAndUndo
+[       OK ] StateFileTransaction.CloseFailurePreservesCurrentAndUndo (0 ms)
+[ RUN      ] StateFileTransaction.UndoStagingFailurePreservesCurrentAndUndo
+[       OK ] StateFileTransaction.UndoStagingFailurePreservesCurrentAndUndo (0 ms)
+[ RUN      ] StateFileTransaction.PromotionFailurePreservesCurrentAndUndo
+[       OK ] StateFileTransaction.PromotionFailurePreservesCurrentAndUndo (0 ms)
+[ RUN      ] StateFileTransaction.SuccessfulCommitKeepsPreviousInUndo
+[       OK ] StateFileTransaction.SuccessfulCommitKeepsPreviousInUndo (0 ms)
+[ RUN      ] StateFileTransaction.UndoHousekeepingFailureStillReportsCommittedPrimary
+[       OK ] StateFileTransaction.UndoHousekeepingFailureStillReportsCommittedPrimary (0 ms)
+[ RUN      ] StateFileTransaction.FirstSaveDoesNotReplaceUnrelatedUndo
+[       OK ] StateFileTransaction.FirstSaveDoesNotReplaceUnrelatedUndo (0 ms)
+[ RUN      ] StateFileTransaction.SavingDirectlyToUndoPathDoesNotRestoreOldBytes
+[       OK ] StateFileTransaction.SavingDirectlyToUndoPathDoesNotRestoreOldBytes (0 ms)
+[ RUN      ] StateFileTransaction.AliasedUndoPathDoesNotRestoreOldBytes
+[       OK ] StateFileTransaction.AliasedUndoPathDoesNotRestoreOldBytes (0 ms)
+[----------] 9 tests from StateFileTransaction (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 9 tests from 1 test suite ran. (0 ms total)
+[  PASSED  ] 9 tests.

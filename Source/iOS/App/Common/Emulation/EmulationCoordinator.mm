@@ -9,6 +9,7 @@ NSString* const DOLEmulationDidEndNotification = @"DOLEmulationDidEndNotificatio
 NSString* const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDidChangeNotification";
 
 #include <cmath>
+#include "Common/ScopeGuard.h"
 #include <variant>
 #include <mach/mach.h>
 #include <sys/sysctl.h>
@@ -138,7 +139,6 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
 
   section("GFX");
   lineI("GFX_EFB_SCALE", Config::Get(Config::GFX_EFB_SCALE));
-  lineB("GFX_AUTO_IR_ENABLE", Config::Get(Config::GFX_AUTO_IR_ENABLE));
   line("MAIN_GFX_BACKEND", Config::Get(Config::MAIN_GFX_BACKEND));
   lineB("GFX_FAST_DEPTH_CALC", Config::Get(Config::GFX_FAST_DEPTH_CALC));
   lineB("GFX_ENABLE_GPU_TEXTURE_DECODING", Config::Get(Config::GFX_ENABLE_GPU_TEXTURE_DECODING));
@@ -273,7 +273,7 @@ static const int   ACFineTicks     = 8;      // ~4s window per fine-refine evalu
 // GPU-bound guard. On single-core iOS (CPUThread forced off — dual-core deadlocks the lean CIR),
 // GPU work runs INLINE on the CPU timeline, so a GPU-bound title depresses max_speed and ClassifyBound
 // mislabels it CpuBound. The predictive jump would then ratchet the CPU clock to the floor for ZERO
-// fps gain (slow-motion). Guard like AutoIRController's probe but on the CPU lever: if lowering the
+// fps gain (slow-motion). Guard the CPU clock probe: if lowering the
 // clock from the pre-jump baseline does NOT raise achieved speed by at least this much, the CPU lever
 // isn't the bottleneck (it's a GPU/video wall) — restore the baseline clock and PARK the lever.
 static const float ACProbeMinGain  = 0.05f;  // min speed gain from underclocking to call it CPU-bound
@@ -645,8 +645,9 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   NSDictionary* willStartInfo = bootParameter.path ? @{ @"path": bootParameter.path } : nil;
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationWillStartNotification object:self userInfo:willStartInfo];
 
+  const uint64_t syncGeneration = [ICubeCloudSyncBootGate currentGeneration];
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    [self emulationLoopWithBootParameter:bootParameter];
+    [self emulationLoopWithBootParameter:bootParameter syncGeneration:syncGeneration];
   });
 }
 
@@ -661,9 +662,8 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
       // No scene to present on: fall back to booting directly so the user isn't left with a dead
       // launch (skip-IPL on, retry). This mirrors the "Boot Game Directly" action.
       [DOLConfigBridge setMainSkipIPL:YES];
-      dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [self emulationLoopWithBootParameter:bootParameter];
-      });
+      // Re-enter the common launch route so will-start closes sync admission before boot.
+      [self runEmulationWithBootParameter:bootParameter];
       return;
     }
 
@@ -686,9 +686,8 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
       // Enable skip-IPL (boot straight into the game, no menu) and retry the launch.
       [DOLConfigBridge setMainSkipIPL:YES];
       finish();
-      dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [self emulationLoopWithBootParameter:bootParameter];
-      });
+      // Re-enter the common launch route so will-start closes sync admission before boot.
+      [self runEmulationWithBootParameter:bootParameter];
     }]];
 
     [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Learn More")
@@ -901,16 +900,10 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
       // marginal windowed-speed dip right at the cliff from descending one step past f*.
       const bool meetsFStar = (speed >= speedThreshold - ACSpeedHysteresis) && !newUnderrun;
 
-      // --- Bottleneck classification, decoupled from Auto-IR (step #1). ---
-      // The CPU-vs-GPU `bound` flag used to be written ONLY by AutoIRController, so with Auto-IR
-      // off (the default) it stayed Unknown forever and this loop ran blind. When Auto-IR is OFF,
-      // publish the classification from our own speed-delta probe every tick so the routing here
-      // (and the auto-VI gate, step #5) sees a real bound. When Auto-IR is ON it owns the EFB-scale
-      // probe and the classification, so we don't stomp it — exactly one writer at a time.
-      if (!Config::Get(Config::GFX_AUTO_IR_ENABLE)) {
-        PerformanceMetrics::SetBound(
-            PerformanceMetrics::ClassifyBound(speed, maxSpeed, speedThreshold));
-      }
+      // Resolution no longer adapts to performance. This CPU/VI clock loop owns bottleneck
+      // classification, independent of legacy adaptive-resolution preferences.
+      PerformanceMetrics::SetBound(
+          PerformanceMetrics::ClassifyBound(speed, maxSpeed, speedThreshold));
       const PerformanceMetrics::Bound bound = PerformanceMetrics::GetBound();
 
       const auto resetWindow = ^{
@@ -1415,7 +1408,7 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
       }
     }
 
-    // Bound classification (same sensor adaptive clock / Auto-IR use).
+    // Bound classification (same sensor the adaptive clock uses).
     {
       const char* bound_str = "unknown";
       switch (PerformanceMetrics::GetBound()) {
@@ -1682,9 +1675,8 @@ static bool IsWiiBoot(const BootParameters& boot)
 //
 // MUST be called from the emulation background queue only: never from the main queue (teardown of
 // the renderer can need it) and never from inside DOLHostQueueRunSync (the host queue may be needed
-// to finish the teardown). The matching end-of-run wait is deliberately NOT done: DidEnd has to be
-// posted as soon as the core leaves Running, otherwise it could land after the *next* launch's
-// WillStart and dismiss that game's screen.
+// to finish the teardown). UI DidEnd remains early, before the next launch's WillStart can
+// arrive. The separate sync-drain scope guard waits after that UI event without delaying it.
 static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
 {
   Core::System& system = Core::System::GetInstance();
@@ -1711,10 +1703,28 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   return Core::IsUninitialized(system);
 }
 
-- (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter {
+- (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter syncGeneration:(uint64_t)syncGeneration {
+  // UI DidEnd remains early. Every worker exit, including pre-Starting failures, separately
+  // waits for actual card/NAND/config teardown before admitting sync file mutations again.
+  Common::ScopeGuard syncDrain([syncGeneration] {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      while ([ICubeCloudSyncBootGate currentGeneration] == syncGeneration) {
+        if (DOLWaitForCoreUninitialized(5.0)) {
+          [ICubeCloudSyncBootGate finishCoreDrain:syncGeneration];
+          break;
+        }
+      }
+    });
+  });
+  if (![ICubeCloudSyncBootGate ensureEmulationForWorker:syncGeneration])
+    return;
+
   // The previous game may still be in Core::State::Stopping if the user relaunched right after
   // exiting. Wait for the teardown to finish instead of racing it in BootCore.
-  if (!DOLWaitForCoreUninitialized(5.0))
+  const bool previousCoreDrained = DOLWaitForCoreUninitialized(5.0);
+  if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
+    return;
+  if (!previousCoreDrained)
   {
     NSLog(@"[Emulation] Previous emulation session did not shut down within 5s (state=%d); not "
           @"booting",
@@ -1732,17 +1742,42 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
     return;
   }
 
-  // Recorded here, not at DOLEmulationWillStartNotification: the missing-IPL retry enters the loop
-  // directly. Read by TVEmulationBridge.autoStateFilePath (ModdedBoot).
-  [DOLModdedBoot beginBootAtPath:bootParameter.path];
+  // Wait on this worker, never the main thread, for sync file I/O admitted before launch.
+  [ICubeCloudSyncBootGate waitForLocalIO];
+  if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
+    return;
+
+  // A launcher/WAD or the Wii Menu mounts MAIN_DEFAULT_ISO through Boot.cpp. Ordinary disc
+  // boots remain usable even when an unrelated saved Default ISO has moved or been removed.
+  const BOOL defaultISOReady = [DOLConfigBridge prepareDefaultISOForBoot];
+  if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
+    return;
+  NSString* extension = bootParameter.path.pathExtension.lowercaseString;
+  const BOOL needsDefaultISO = bootParameter.bootType == EmulationBootTypeSystemMenu ||
+      (bootParameter.bootType == EmulationBootTypeFile &&
+       [@[@"dol", @"elf", @"wad"] containsObject:extension]);
+  if (!defaultISOReady && needsDefaultISO)
+  {
+    PanicAlertFmt("{}", [DOLCoreLocalizedString(@"The selected Default ISO is missing or unreadable. Select its new location in the library or clear it in General settings.") UTF8String]);
+    [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification
+                                                        object:self userInfo:nil];
+    _mainDisplayView = nil;
+    return;
+  }
 
   __block CGFloat renderSurfaceScale = UIScreen.mainScreen.scale;
   dispatch_sync(dispatch_get_main_queue(), ^{
     Core::UndeclareAsHostThread();
-    renderSurfaceScale = [self currentRenderSurfaceScale];
+    if ([ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
+      renderSurfaceScale = [self currentRenderSurfaceScale];
   });
 
+  __block BOOL supersededBoot = NO;
   DOLHostQueueRunSync(^{
+    if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration]) {
+      supersededBoot = YES;
+      return;
+    }
     __block WindowSystemInfo wsi;
     wsi.type = WindowSystemType::iOS;
     wsi.render_surface = (__bridge void*)self->_metalLayer;
@@ -1874,6 +1909,10 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
     // Important: Renderer initialization may mutate CAMetalLayer properties.
     // UIKit requires layer mutations on the main thread. Run BootCore on main.
     dispatch_sync(dispatch_get_main_queue(), ^{
+      if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration]) {
+        supersededBoot = YES;
+        return;
+      }
       // Ensure we have a valid drawable size before booting to avoid CAMetalLayer warnings
       [self updateMetalLayerFrame];
       [self->_renderHost layoutIfNeeded];
@@ -1881,9 +1920,17 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
       while ((self->_metalLayer.drawableSize.width <= 0.0 || self->_metalLayer.drawableSize.height <= 0.0) && CACurrentMediaTime() < deadline) {
         // Pump runloop briefly to let layout complete
         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+        if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
+          break;
         [self updateMetalLayerFrame];
       }
+      if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration]) {
+        supersededBoot = YES;
+        return;
+      }
 
+      // Publish the run identity only once this boot still owns admission after layout.
+      [DOLModdedBoot beginBootAtPath:bootParameter.path];
       auto local_boot = std::move(boot);
       // Initialize controller backends before boot so devices are available
       UICommon::InitControllers(wsi);
@@ -1901,11 +1948,18 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
             [[NSUserDefaults standardUserDefaults] boolForKey:@"icube.cirProfile"];
         Config::SetCurrent(Config::MAIN_CIR_PROFILE, cirProfile);
       }
+      if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration]) {
+        supersededBoot = YES;
+        return;
+      }
       if (!BootManager::BootCore(system, std::move(local_boot), wsi)) {
         PanicAlertFmt("Failed to init core!");
       }
     });
   });
+
+  if (supersededBoot)
+    return;
 
   // Wait for state changes instead of polling
   dispatch_semaphore_t stateSemaphore = dispatch_semaphore_create(0);

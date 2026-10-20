@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-19",
+  "configuration": "NJB Debug; tvOS 26.5 simulator",
+  "source_state": "local uncommitted changes",
+  "tvos_tests": {
+    "result": "Passed",
+    "passedTests": 3,
+    "failedTests": 0,
+    "skippedTests": 0,
+    "totalTestCount": 3
+  },
+  "review": "independent static review: no actionable findings",
+  "ios_suite": {
+    "result": "Passed",
+    "passedTests": 1970,
+    "failedTests": 0,
+    "skippedTests": 6,
+    "totalTestCount": 1976
+  },
+  "lint_gates": {
+    "design_tokens": "fails: two existing hard-coded styles in PauseCardFace.swift",
+    "localized_keys": "fails: eleven existing missing localization keys"
+  },
+  "pending": [
+    "APPSTORE runtime checks",
+    "physical input and device acceptance",
+    "full per-field settings persistence/reset matrix",
+    "iOS clipboard interaction check"
+  ],
+  "ios_skips": {
+    "reason": "Opt-in snapshot renderers require explicit output-directory environment variables.",
+    "tests": [
+      "ICubeDesignSnapshotTests/testRenderPieces()",
+      "PauseMenuSnapshotTests/testRenderPauseMenu()",
+      "TopBarSnapshotTests/testRenderTopBar()",
+      "TouchOverlaySnapshotTests/testRenderArtStates()",
+      "TouchOverlaySnapshotTests/testRenderDefaultLayouts()",
+      "TouchOverlaySnapshotTests/testRenderFixtureSkin()"
+    ]
+  },
+  "core_checks": {
+    "ios": {
+      "result": "passed",
+      "artifacts": [
+        {
+          "binary": "PVlibDolphin-ios-sim",
+          "bytes": 27172144,
+          "sha256": "ee6e21be7a184ad426f4c06cff22d41b103bb6a4e6eccb9def3de354141476d8"
+        }
+      ]
+    },
+    "tvos": {
+      "result": "passed",
+      "artifacts": [
+        {
+          "binary": "PVlibDolphin-tvos-sim",
+          "bytes": 27149664,
+          "sha256": "08a6f6cd360947697d403ab451e10203944241d411c1025f2d894398c82e201a"
+        }
+      ]
+    }
+  }
+}

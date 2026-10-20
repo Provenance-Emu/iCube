@@ -17,27 +17,6 @@ enum AspectRatio: CaseIterable { case auto, stretch, _4_3, _16_9
   static func from(raw: Int) -> AspectRatio { switch raw { case 1: return ._16_9; case 2: return ._4_3; case 3: return .stretch; default: return .auto } }
 }
 
-enum TargetFPS: CaseIterable { case unlimited, fps30, fps60, fps120
-  var label: String { switch self { case .unlimited: return L("Unlimited"); case .fps30: return "30"; case .fps60: return "60"; case .fps120: return "120" } }
-  var fpsValue: Int { switch self { case .unlimited: return 0; case .fps30: return 30; case .fps60: return 60; case .fps120: return 120 } }
-  static func from(value: Int) -> TargetFPS { switch value { case 30: return .fps30; case 120: return .fps120; case 0: return .unlimited; default: return .fps60 } }
-}
-
-// Auto Internal Resolution min/max bounds. The core stores these as an integer EFB
-// multiplier and clamps to >= 1 (AutoIRController.cpp), so only whole scales are valid.
-// The old fractional options (0.5x/0.75x/1.25x/1.5x) all collapsed to 0 -> read back
-// as 1.0x, i.e. they "self-reset"; they are dropped.
-enum InternalScale: Int, CaseIterable { case x1_0 = 1, x2_0 = 2, x3_0 = 3, x4_0 = 4
-  var label: String { switch self {
-  case .x1_0: return "1x"
-  case .x2_0: return "2x"
-  case .x3_0: return "3x"
-  case .x4_0: return "4x"
-  }}
-  var scaleValue: Int { rawValue }
-  static func from(value: Int) -> InternalScale { InternalScale(rawValue: value) ?? .x1_0 }
-}
-
 // Mirrors Dolphin's ShaderCompilationMode (VideoConfig.h): Synchronous(0) is the
 // "Specialized" mode in Dolphin's own UI; raw values must match the core 1:1 or the
 // picker reads back a different option than it stored ("self-reset").

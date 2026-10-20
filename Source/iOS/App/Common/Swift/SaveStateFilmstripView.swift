@@ -16,6 +16,8 @@ struct SaveStateFilmstripView: View {
   let gameID: String
   @StateObject private var vm = SaveStatesViewModel()
   @State private var actionTarget: SaveStateInfo?
+  @State private var saveRequest: SaveStateUIRequest?
+  @State private var saveTask: Task<Void, Never>?
   @State private var renameTarget: SaveStateInfo?
   #if !os(tvOS)
   // Only iOS drives rename through an `.alert` with an embedded TextField;
@@ -91,6 +93,12 @@ struct SaveStateFilmstripView: View {
         }
       }
     }
+    .disabled(saveRequest != nil)
+    .onDisappear {
+      saveTask?.cancel()
+      saveTask = nil
+      saveRequest = nil
+    }
     // Per-card action menu. One dialog, driven by whichever card was selected,
     // rather than per-card state -- keeps the "one focus target per card"
     // contract intact on tvOS while still offering every action.
@@ -113,9 +121,8 @@ struct SaveStateFilmstripView: View {
         // game that isn't booted, or the cross-game SaveStatesBrowserView).
         if let slot = target.slot, isThisGameRunning {
           Button(String(format: L("Save Here (Slot %d)"), slot)) {
-            _ = SaveStateService.saveSlot(slot)
+            saveHere(slot)
             actionTarget = nil
-            Task { await vm.load(gameID: gameID) }
           }
         }
         Button(L("Rename")) {
@@ -233,6 +240,26 @@ struct SaveStateFilmstripView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .padding()
+  }
+
+  private func saveHere(_ slot: Int) {
+    guard saveRequest == nil else { return }
+    let request = SaveStateUIRequest(slot: slot, gameID: gameID,
+                                     sessionIdentifier: TVEmulationBridge.currentSessionIdentifier())
+    saveRequest = request
+    saveTask = Task { @MainActor in
+      let snapshot = await SaveStateService.saveSlotSnapshotAsync(request.slot, expectedGameID: request.gameID,
+                                                                     expectedSessionIdentifier: request.sessionIdentifier)
+      guard !Task.isCancelled, saveRequest?.id == request.id else { return }
+      let present = request.accepts(completedGameID: snapshot?.gameID, completedSessionIdentifier: snapshot?.sessionIdentifier,
+                                    currentGameID: TVEmulationBridge.currentGameID(),
+                                    currentSessionIdentifier: TVEmulationBridge.currentSessionIdentifier(), activeID: saveRequest?.id)
+      saveRequest = nil
+      saveTask = nil
+      guard present else { return }
+      EmulationToast.post(QuickSlot.saveOutcome(slot: request.slot, saved: snapshot != nil).message)
+      if snapshot != nil { await vm.load(gameID: request.gameID) }
+    }
   }
 
   /// This view is reached two ways: from the pause menu of an already-running

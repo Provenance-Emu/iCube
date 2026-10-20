@@ -541,6 +541,9 @@ let iCubeTests = Target.target(
         // AppIntentsTests needs `LibrarySnapshot`/`LibrarySnapshotGame` fixtures directly.
         .package(product: "PVLibrarySnapshot"),
         .package(product: "PVHelp"),
+        // Cloud safety tests exercise the coordinator with real scanner/index types.
+        .package(product: "PVCloudSync"),
+        .package(product: "PVSyncRules"),
         // SkinLibraryTests zips the skin fixture with `Zip.zipFiles`.
         .package(product: "Zip"),
     ],

@@ -9,7 +9,7 @@ NS_ASSUME_NONNULL_BEGIN
 typedef NS_ENUM(NSInteger, DOLConfigOverride) {
   /// The user's own value is in effect.
   DOLConfigOverrideNone = 0,
-  /// Set for this run by the app: Auto-IR, thermal or the adaptive clock (CurrentRun), or by
+  /// Set for this run by the app: the adaptive clock or an explicit runtime override (CurrentRun), or by
   /// netplay, a movie or the command line.
   DOLConfigOverrideAuto,
   /// Set by the running game's settings (GlobalGame / LocalGame INI).
@@ -37,16 +37,12 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 // Caller is responsible for mapping to display labels.
 // Also see Config::GFX_MAX_EFB_SCALE for bounds if needed.
 + (NSInteger)gfxEfbScale;
-// The user's own EFB scale: the Base layer, ignoring Auto-IR / thermal CurrentRun overrides.
+// The user's own EFB scale: the Base layer, ignoring game and explicit runtime overrides.
 // Settings screens show and seed from this, so the value a MANUAL setter writes back is never an
 // auto one.
 + (NSInteger)gfxEfbScaleBase;
 // MANUAL setter — writes Base (resolver step #3 layer discipline).
 + (void)setGfxEfbScale:(NSInteger)scale;
-// AUTO setter — writes CurrentRun (for thermal/auto throttling; shadows but preserves manual Base).
-+ (void)setGfxEfbScaleAuto:(NSInteger)scale;
-// Clear the auto (CurrentRun) EFB override, re-exposing the manual Base value.
-+ (void)clearGfxEfbScaleAuto;
 // Badge helpers: which layer above Base, if any, decides the key now. Settings screens show the
 // user's Base value, so while this is not None they disable the control and badge it ("Auto" or
 // "Game"): an edit there would not apply until the override goes away. The clock helpers cover both
@@ -74,18 +70,6 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 // Async present
 + (BOOL)gfxAsyncPresent;
 + (void)setGfxAsyncPresent:(BOOL)enabled;
-
-// Auto IR
-+ (BOOL)gfxAutoIREnable;
-+ (void)setGfxAutoIREnable:(BOOL)enabled;
-+ (NSInteger)gfxAutoIRTargetFPS;
-+ (void)setGfxAutoIRTargetFPS:(NSInteger)fps;
-+ (NSInteger)gfxAutoIRMinScale;
-+ (void)setGfxAutoIRMinScale:(NSInteger)scale;
-+ (NSInteger)gfxAutoIRMaxScale;
-+ (void)setGfxAutoIRMaxScale:(NSInteger)scale;
-+ (BOOL)gfxAutoIRShowOSD;
-+ (void)setGfxAutoIRShowOSD:(BOOL)enabled;
 
 // Shader compilation
 + (NSInteger)gfxShaderCompilationMode;
@@ -118,6 +102,17 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (void)setMainEnableCheats:(BOOL)enabled;
 + (BOOL)mainOverrideRegionSettings;
 + (void)setMainOverrideRegionSettings:(BOOL)enabled;
+// Device-local Default ISO selection. No absolute path is persisted in synced Dolphin.ini.
+// mainDefaultISO is the effective core boot key; selectionPath remains visible when unavailable.
++ (NSString*)mainDefaultISO;
++ (NSString*)defaultISOSelectionPath;
++ (BOOL)defaultISOSelectionIsAvailable;
++ (BOOL)setMainDefaultISO:(NSString*)path;
++ (void)clearMainDefaultISO;
++ (void)migrateLegacyDefaultISO;
+// Revalidate after the previous run cleared CurrentRun. NO means a selected disc is unavailable.
++ (BOOL)prepareDefaultISOForBoot;
+
 + (BOOL)mainAutoDiscChange;
 + (void)setMainAutoDiscChange:(BOOL)enabled;
 + (BOOL)mainFastDiscSpeed;

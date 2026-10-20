@@ -7,7 +7,7 @@ import XCTest
 
 /// Settings screens must not save what they only displayed. They seed @State from Config on every
 /// Config change (`configSynced`) and write through `Binding.onSet`, which fires on a control's
-/// own set only. They seed the clock and IR rows from Base, so an adaptive-clock or Auto-IR value
+/// own set only. They seed the clock and IR rows from Base, so a game or adaptive-clock value
 /// (CurrentRun) is never what gets written back.
 final class SettingsWriteBackTests: XCTestCase {
   /// Stands in for a view's @State: `stored` is what sync assigns, `binding` what a control gets.
@@ -42,6 +42,103 @@ final class SettingsWriteBackTests: XCTestCase {
     state.stored = 60 // what a configSynced sync() does
     XCTAssertEqual(control.wrappedValue, 60)
     XCTAssertEqual(writes, [])
+  }
+
+  func testGraphicsResetRestoresNativeResolution() {
+    DOLConfigBridge.setGfxEfbScale(0) // Auto can multiply GPU work on high-density displays.
+    DOLConfigBridge.resetPage(toDefaults: 1)
+    XCTAssertEqual(DOLConfigBridge.gfxEfbScaleBase(), 1,
+                   "Reset must restore the performance-safe Native default, not fit the display")
+  }
+
+  func testResetAllRestoresBoundingBoxDefault() throws {
+    DOLConfigBridge.setGfxHackBboxEnable(true)
+    XCTAssertTrue(DOLConfigBridge.gfxHackBboxEnable())
+
+    try resetAllPreservingUserDefaults()
+
+    XCTAssertFalse(DOLConfigBridge.gfxHackBboxEnable(), "Reset must remove the user's bounding-box override")
+  }
+
+  func testResetAllRestoresOptimizedTextureCacheDefault() throws {
+    DOLConfigBridge.setGfxSafeTextureCacheColorSamples(512)
+    XCTAssertEqual(DOLConfigBridge.gfxSafeTextureCacheColorSamples(), 512)
+
+    try resetAllPreservingUserDefaults()
+
+    XCTAssertEqual(DOLConfigBridge.gfxSafeTextureCacheColorSamples(), 0,
+                   "Reset must match iCube's Fast launch default, rather than retaining Safe or falling back to 128")
+  }
+
+  func testResetAllRemovesSlotBMicrophone() throws {
+    var snapshot = DOLConfigBridge.baseLayerSnapshot()
+    snapshot["Dolphin.Core.SlotB"] = "4" // EXIDeviceType::Microphone
+    DOLConfigBridge.restoreBaseLayerSnapshot(snapshot)
+    XCTAssertTrue(DOLConfigBridge.mainSlotBMicrophone())
+
+    try resetAllPreservingUserDefaults()
+
+    XCTAssertFalse(DOLConfigBridge.mainSlotBMicrophone())
+    XCTAssertNil(DOLConfigBridge.baseLayerSnapshot()["Dolphin.Core.SlotB"])
+  }
+
+  func testResetAllPreservesSlotBMemoryCardAssignments() throws {
+    for device in ["1", "8"] { // EXIDeviceType::MemoryCard and MemoryCardFolder
+      var snapshot = DOLConfigBridge.baseLayerSnapshot()
+      snapshot["Dolphin.Core.SlotB"] = device
+      DOLConfigBridge.restoreBaseLayerSnapshot(snapshot)
+
+      try resetAllPreservingUserDefaults()
+
+      XCTAssertEqual(DOLConfigBridge.baseLayerSnapshot()["Dolphin.Core.SlotB"], device,
+                     "Gameplay reset must preserve the user's memory-card attachment")
+    }
+  }
+
+  func testResetAllRestoresGeneralBootPreferences() throws {
+    // Capture Dolphin's locale-derived fallback before installing any override. This is not
+    // the Wii console's SYSCONF region and must not be hardcoded to NTSC-U in the reset.
+    DOLConfigBridge.deleteBaseLayerKeys(["Dolphin.Core.FallbackRegion"])
+    let localeFallback = DOLConfigBridge.mainFallbackRegion()
+    DOLConfigBridge.setMainEnableCheats(true)
+    DOLConfigBridge.setMainOverrideRegionSettings(true)
+    DOLConfigBridge.setMainAutoDiscChange(true)
+    DOLConfigBridge.setMainFallbackRegion(localeFallback == 0 ? 1 : 0)
+    XCTAssertTrue(DOLConfigBridge.mainEnableCheats())
+    XCTAssertTrue(DOLConfigBridge.mainOverrideRegionSettings())
+    XCTAssertTrue(DOLConfigBridge.mainAutoDiscChange())
+    XCTAssertNotEqual(DOLConfigBridge.mainFallbackRegion(), localeFallback)
+
+    try resetAllPreservingUserDefaults()
+
+    XCTAssertFalse(DOLConfigBridge.mainEnableCheats())
+    XCTAssertFalse(DOLConfigBridge.mainOverrideRegionSettings())
+    XCTAssertFalse(DOLConfigBridge.mainAutoDiscChange())
+    XCTAssertEqual(DOLConfigBridge.mainFallbackRegion(), localeFallback)
+    let resetBase = DOLConfigBridge.baseLayerSnapshot()
+    for key in ["EnableCheats", "OverrideRegionSettings", "AutoDiscChange", "FallbackRegion"] {
+      XCTAssertNil(resetBase["Dolphin.Core.\(key)"], key)
+    }
+  }
+
+  func testResetAllPreservesSDCardWriteProtection() throws {
+    DOLConfigBridge.setMainAllowSDWrites(false)
+    try resetAllPreservingUserDefaults()
+    XCTAssertFalse(DOLConfigBridge.mainAllowSDWrites(),
+                   "Resetting performance must not enable writes to a user's read-only SD card")
+  }
+
+  /// These Config regressions also exercise the public reset's UserDefaults cleanup. Restore the
+  /// host's preferences afterwards, just as the fixture restores its Base Config layer.
+  private func resetAllPreservingUserDefaults() throws {
+    let domain = try XCTUnwrap(Bundle.main.bundleIdentifier)
+    let defaults = UserDefaults.standard
+    let saved = defaults.persistentDomain(forName: domain)
+    defer {
+      if let saved { defaults.setPersistentDomain(saved, forName: domain) }
+      else { defaults.removePersistentDomain(forName: domain) }
+    }
+    DOLConfigBridge.resetAllToDefaults()
   }
 
   func testAControlChangeWritesOnce() {
@@ -139,24 +236,14 @@ final class SettingsWriteBackTests: XCTestCase {
     XCTAssertEqual(bodies.filter { $0.range(of: Self.configWriter, options: .regularExpression) != nil }.count, 1)
   }
 
-  /// The Internal Resolution row seeds from Base: with Auto-IR / thermal overriding the scale on
-  /// CurrentRun, the seed is still the user's own value, so writing it back changes nothing.
-  func testTheEfbBaseGetterIgnoresTheAutoOverride() {
-    let saved = DOLConfigBridge.baseLayerSnapshot()["Graphics.Settings.InternalResolution"]
-    defer {
-      DOLConfigBridge.clearGfxEfbScaleAuto()
-      if let saved, let scale = Int(saved) {
-        DOLConfigBridge.setGfxEfbScale(scale)
-      } else {
-        DOLConfigBridge.deleteBaseLayerKeys(["Graphics.Settings.InternalResolution"])
-      }
-    }
+  /// The scale shown as the user's preference remains Base even when a game chooses another scale.
+  func testTheEfbBaseGetterIgnoresGameOverrides() {
     DOLConfigBridge.setGfxEfbScale(2)
-    DOLConfigBridge.setGfxEfbScaleAuto(4)
-
-    XCTAssertEqual(DOLConfigBridge.gfxEfbScale(), 4)
+    DOLConfigBridge.addTestGameLayer(withEfbScale: 3)
+    defer { DOLConfigBridge.removeTestGameLayer() }
+    XCTAssertEqual(DOLConfigBridge.gfxEfbScale(), 3)
     XCTAssertEqual(DOLConfigBridge.gfxEfbScaleBase(), 2)
-    XCTAssertEqual(DOLConfigBridge.efbScaleOverride(), .auto)
+    XCTAssertEqual(DOLConfigBridge.efbScaleOverride(), .game)
   }
 
   /// A running game's INI (per-game Internal Resolution, the shipped RHT / UGP / RDC overclocks)
@@ -173,10 +260,7 @@ final class SettingsWriteBackTests: XCTestCase {
     XCTAssertEqual(DOLConfigBridge.overclockOverride(), .game)
     XCTAssertEqual(DOLConfigBridge.viOverclockOverride(), .none)
 
-    // CurrentRun outranks the game: the adaptive clock / Auto-IR badge wins.
-    DOLConfigBridge.setGfxEfbScaleAuto(4)
-    defer { DOLConfigBridge.clearGfxEfbScaleAuto() }
-    XCTAssertEqual(DOLConfigBridge.efbScaleOverride(), .auto)
+
   }
 
   /// A jitless boot puts the Cached Interpreter on CurrentRun for the run. Changed from the pause menu,

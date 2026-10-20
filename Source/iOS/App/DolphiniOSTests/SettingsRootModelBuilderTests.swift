@@ -6,6 +6,11 @@ import XCTest
 @testable import iCube
 
 final class SettingsRootModelBuilderTests: XCTestCase {
+  func testStoreWithoutJitStillOffersEnvironmentInformation() {
+    XCTAssertEqual(SettingsRootModelBuilder.debugLeaf(isStore: true, jitSupported: false), .environmentOnly)
+    XCTAssertEqual(SettingsRootModelBuilder.debugLeaf(isStore: true, jitSupported: true), .jitOnly)
+    XCTAssertEqual(SettingsRootModelBuilder.debugLeaf(isStore: false, jitSupported: false), .full)
+  }
   func test_sections_inSpecOrder() {
     let sections = SettingsRootModelBuilder.sections(isIOS: true, achievements: true)
     XCTAssertEqual(sections.map(\.id), ["general", "graphics", "audio", "consoles", "controllers", "performance", "sync-network", "privacy", "about"])

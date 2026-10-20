@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "Core/State.h"
+#include "Core/StateFileTransaction.h"
 
 #include <algorithm>
 #include <filesystem>
+#include <future>
+#include <memory>
 #include <locale>
 #include <map>
 #include <mutex>
@@ -30,6 +33,7 @@
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
 #include "Common/StringUtil.h"
+#include "Common/ScopeGuard.h"
 #include "Common/Thread.h"
 #include "Common/TimeUtil.h"
 #include "Common/TransferableSharedMutex.h"
@@ -91,6 +95,7 @@ struct CompressAndDumpStateArgs
   Common::UniqueBuffer<u8> buffer;
   std::string filename;
   std::shared_lock<decltype(s_state_saves_in_progress)> task_lock;
+  std::shared_ptr<std::promise<bool>> completion;
 };
 
 // Queue for compressing and writing savestates to disk.
@@ -327,7 +332,7 @@ static std::vector<SlotWithTimestamp> GetUsedSlotsWithTimestamp()
   return result;
 }
 
-static void CompressBufferToFile(std::span<const u8> raw_buffer, File::IOFile& f)
+static bool CompressBufferToFile(std::span<const u8> raw_buffer, File::IOFile& f)
 {
   u64 total_bytes_compressed = 0;
 
@@ -344,8 +349,8 @@ static void CompressBufferToFile(std::span<const u8> raw_buffer, File::IOFile& f
 
     if (compressed_len == 0)
     {
-      PanicAlertFmtT("Internal LZ4 Error - compression failed");
-      break;
+      ERROR_LOG_FMT(CORE, "Internal LZ4 Error - compression failed");
+      return false;
     }
 
     // The size of the data to write is 'compressed_len'
@@ -356,6 +361,7 @@ static void CompressBufferToFile(std::span<const u8> raw_buffer, File::IOFile& f
     if (total_bytes_compressed == raw_buffer.size())
       break;
   }
+  return f.IsGood();
 }
 
 static void CreateExtendedHeader(StateExtendedHeader& extended_header, size_t uncompressed_size)
@@ -394,6 +400,11 @@ static void WriteHeadersToFile(size_t uncompressed_size, File::IOFile& f)
 
 static void CompressAndDumpState(Core::System& system, const CompressAndDumpStateArgs& save_args)
 {
+  bool saved = false;
+  Common::ScopeGuard complete([&] {
+    if (save_args.completion)
+      save_args.completion->set_value(saved);
+  });
   const auto& buffer = save_args.buffer;
   const std::string& filename = save_args.filename;
 
@@ -418,59 +429,83 @@ static void CompressAndDumpState(Core::System& system, const CompressAndDumpStat
 
   WriteHeadersToFile(buffer.size(), f);
 
+  bool payload_written = true;
   if (s_use_compression)
-    CompressBufferToFile(buffer, f);
+    payload_written = CompressBufferToFile(buffer, f);
   else
-    f.WriteBytes(buffer.data(), buffer.size());
+    payload_written = f.WriteBytes(buffer.data(), buffer.size());
 
-  if (!f.IsGood())
-    Core::DisplayMessage("Failed to write state file", 2000);
+  struct FileOperations
+  {
+    File::IOFile& file;
+    bool Close() { return file.Close(); }
+    bool Exists(const std::string& path) { return File::Exists(path); }
+    bool SameFile(const std::string& a, const std::string& b)
+    {
+      std::error_code error;
+      return std::filesystem::equivalent(StringToPath(a), StringToPath(b), error) && !error;
+    }
+    bool StagePrevious(const std::string& source, const std::string& destination)
+    {
+      // State files are replaced rather than mutated, so a hard link safely preserves the old
+      // inode without copying a large state. Filesystems without hard links fall back to a copy.
+      std::error_code error;
+      std::filesystem::create_hard_link(StringToPath(source), StringToPath(destination), error);
+      return !error || File::CopyRegularFile(source, destination);
+    }
+    bool Replace(const std::string& source, const std::string& destination)
+    {
+      return File::Rename(source, destination);
+    }
+    void Remove(const std::string& path)
+    {
+      if (File::Exists(path))
+        File::Delete(path);
+    }
+  } files{f};
 
   const std::string last_state_filename = File::GetUserPath(D_STATESAVES_IDX) + "lastState.sav";
+  const bool had_previous = filename != last_state_filename &&
+                            !files.SameFile(filename, last_state_filename) && File::Exists(filename);
+  const auto result = detail::CommitStateFile(files, temp_filename, filename, last_state_filename,
+                                             payload_written && f.IsGood());
+  if (result == detail::CommitStateFileResult::Failed)
+  {
+    Core::DisplayMessage("Failed to save state file", 2000);
+    return;
+  }
+  saved = true;  // The primary file is committed even if best-effort undo housekeeping fails.
+
   const std::string last_state_dtmname = last_state_filename + ".dtm";
   const std::string dtmname = filename + ".dtm";
-
-  // Backup existing state (overwriting an existing backup, if any).
-  if (File::Exists(filename))
+  if (result == detail::CommitStateFileResult::SavedWithoutUndo)
   {
-    if (File::Exists(last_state_filename))
-      File::Delete((last_state_filename));
-    if (File::Exists(last_state_dtmname))
-      File::Delete((last_state_dtmname));
-
-    if (!File::Rename(filename, last_state_filename))
+    Core::DisplayMessage("State saved, but the previous state could not be kept for undo", 2000);
+  }
+  else if (had_previous)
+  {
+    if (File::Exists(dtmname))
     {
-      Core::DisplayMessage("Failed to move previous state to state undo backup", 1000);
+      if (!File::CopyRegularFile(dtmname, last_state_dtmname))
+      {
+        File::Delete(last_state_dtmname);
+        Core::DisplayMessage("Failed to back up the previous state's dtm", 2000);
+      }
     }
-    else if (File::Exists(dtmname))
+    else if (File::Exists(last_state_dtmname))
     {
-      if (!File::Rename(dtmname, last_state_dtmname))
-        Core::DisplayMessage("Failed to move previous state's dtm to state undo backup", 1000);
+      File::Delete(last_state_dtmname);
     }
   }
 
   auto& movie = system.GetMovie();
-  if ((movie.IsMovieActive()) && !movie.IsJustStartingRecordingInputFromSaveState())
+  if (movie.IsMovieActive() && !movie.IsJustStartingRecordingInputFromSaveState())
     movie.SaveRecording(dtmname);
-  else if (!movie.IsMovieActive())
+  else if (!movie.IsMovieActive() && File::Exists(dtmname))
     File::Delete(dtmname);
 
-  // Move written state to final location.
-  // TODO: This should also be atomic. This is possible on all systems, but needs a special
-  // implementation of IOFile on Windows.
-  if (!f.Close())
-    Core::DisplayMessage("Failed to close state file", 2000);
-
-  if (!File::Rename(temp_filename, filename))
-  {
-    Core::DisplayMessage("Failed to rename state file", 2000);
-  }
-  else
-  {
-    const std::filesystem::path temp_path(StringToPath(filename));
-    Core::DisplayMessage(fmt::format("Saved State to {}", PathToString(temp_path.filename())),
-                         2000);
-  }
+  const std::filesystem::path saved_path(StringToPath(filename));
+  Core::DisplayMessage(fmt::format("Saved State to {}", PathToString(saved_path.filename())), 2000);
 }
 
 // iCube: Core::RunOnCPUThread runs its job inline on the caller when the core is not Running.
@@ -487,10 +522,15 @@ static bool CanDoStateFromHere(Core::System& system, std::string_view operation)
   return false;
 }
 
-static void SaveAsFromCore(Core::System& system, std::string filename)
+static void SaveAsFromCore(Core::System& system, std::string filename,
+                           std::shared_ptr<std::promise<bool>> completion)
 {
   if (!CanDoStateFromHere(system, "save"))
+  {
+    if (completion)
+      completion->set_value(false);
     return;
+  }
 
   // Try with a buffer a bit larger than the previous state.
   // This will often avoid the "Measure" step.
@@ -506,6 +546,7 @@ static void SaveAsFromCore(Core::System& system, std::string filename)
         .buffer = std::move(buffer),
         .filename = std::move(filename),
         .task_lock = GetStateSaveTaskLock(),
+        .completion = std::move(completion),
     };
     Core::DisplayMessage("Saving State...", 1000);
     s_compress_and_dump_thread.EmplaceItem(std::move(dump_args));
@@ -513,6 +554,8 @@ static void SaveAsFromCore(Core::System& system, std::string filename)
   else
   {
     Core::DisplayMessage("Unable to save: Internal DoState Error", 4000);
+    if (completion)
+      completion->set_value(false);
   }
 }
 
@@ -520,8 +563,39 @@ void SaveAs(Core::System& system, std::string filename)
 {
   Core::RunOnCPUThread(
       system, [&system, filename = std::move(filename), lock = GetStateSaveTaskLock()]() mutable {
-        SaveAsFromCore(system, std::move(filename));
+        SaveAsFromCore(system, std::move(filename), {});
       });
+}
+
+std::future<bool> SaveAsWithResult(Core::System& system, std::string filename)
+{
+  auto completion = std::make_shared<std::promise<bool>>();
+  auto result = completion->get_future();
+  if (!Core::IsRunning(system))
+  {
+    completion->set_value(false);
+    return result;
+  }
+  Core::RunOnCPUThread(system, [&system, filename = std::move(filename), completion,
+                               lock = GetStateSaveTaskLock()]() mutable {
+    if (!Core::IsRunning(system) || !s_compress_and_dump_thread.IsRunning())
+    {
+      completion->set_value(false);
+      return;
+    }
+    SaveAsFromCore(system, std::move(filename), std::move(completion));
+  });
+  return result;
+}
+
+bool SaveAsAndWait(Core::System& system, std::string filename)
+{
+  return SaveAsWithResult(system, std::move(filename)).get();
+}
+
+bool SaveAndWait(Core::System& system, u32 slot)
+{
+  return SaveAsAndWait(system, MakeStateFilename(slot));
 }
 
 static bool GetVersionFromLZO(StateHeader& header, File::IOFile& f)
@@ -971,7 +1045,7 @@ void SaveFirstSaved(Core::System& system)
       slot = used_slots.front().slot;
     }
 
-    SaveAsFromCore(system, MakeStateFilename(*slot));
+    SaveAsFromCore(system, MakeStateFilename(*slot), {});
   });
 }
 

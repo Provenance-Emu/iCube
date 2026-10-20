@@ -8,10 +8,37 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
+  TVDiscChangeResultScheduled,
+  TVDiscChangeResultFileUnavailable,
+  TVDiscChangeResultInvalidDisc,
+  TVDiscChangeResultIncompatibleSystem,
+  TVDiscChangeResultNoRunningGame,
+  TVDiscChangeResultPendingInsertion,
+};
+
+/// Identity captured with the serialized state, returned only after its file has been committed.
+@interface TVSaveStateSnapshot : NSObject
+@property (nonatomic, readonly, copy) NSString* filePath;
+@property (nonatomic, readonly, copy) NSString* gameID;
+@property (nonatomic, readonly) NSInteger playTimeSeconds;
+@property (nonatomic, readonly, copy) NSDate* savedAt;
+@property (nonatomic, readonly) uint64_t sessionIdentifier;
+@end
+
 @interface TVEmulationBridge : NSObject
 
 + (void)runWithBootParameter:(EmulationBootParameter*)param;
 + (void)stop;
+/// User Quit: a failed enabled auto-save leaves the session running and returns NO.
+/// A nonnil path must come from a successful save snapshot; it is copied to auto instead of serialized twice.
++ (BOOL)stopForUserWithSavedStatePath:(nullable NSString*)savedStatePath NS_SWIFT_NAME(stopForUser(savedStatePath:));
++ (BOOL)stopForUserWithSavedStatePath:(nullable NSString*)savedStatePath expectedGameID:(nullable NSString*)expectedGameID NS_SWIFT_NAME(stopForUser(savedStatePath:expectedGameID:));
++ (BOOL)stopForUserWithSavedStatePath:(nullable NSString*)savedStatePath expectedGameID:(nullable NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(stopForUser(savedStatePath:expectedGameID:expectedSessionIdentifier:));
++ (uint64_t)currentSessionIdentifier;
+/// Explicit user recovery, or programmatic stop after its own save policy has run.
++ (void)stopWithoutSaving;
++ (BOOL)stopWithoutSavingForUserExpectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(stopWithoutSavingForUser(expectedSessionIdentifier:));
 + (BOOL)isRunning;
 + (void)pause;
 + (void)resume;
@@ -26,6 +53,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// The console's reset button: the running game restarts from power-on. Resumes a paused core,
 /// because a reset only takes effect while the CPU runs. No-op when nothing is running.
 + (void)resetSystem;
+/// Validates a local disc and queues the console's eject/insert events without rebooting.
+/// Keeps a paused core paused; insertion completes after the caller resumes through PauseArbiter.
++ (TVDiscChangeResult)changeDiscAtPath:(NSString*)path NS_SWIFT_NAME(changeDisc(atPath:));
 
 // Convenience wrappers for Swift
 // Launch a game file at path; sensible defaults applied.
@@ -36,8 +66,11 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)registerMainDisplayView:(UIView*)view;
 
 // Savestates
-// Returns NO when nothing was saved because the core is not running (still booting or stopping).
+// Returns YES only after the state worker committed this save. `wait` remains for source compatibility.
 + (BOOL)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait;
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot NS_SWIFT_NAME(saveStateSnapshot(toSlot:));
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:));
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:expectedSessionIdentifier:));
 // YES while the core can take a save or load (running, including a user pause).
 + (BOOL)isStateOperationAllowed;
 + (void)loadStateFromSlot:(NSInteger)slot;
@@ -65,7 +98,7 @@ NS_ASSUME_NONNULL_BEGIN
 // returns nil when no game is running, and for a boot of a GameMod descriptor
 // (a patched game shares the vanilla game's id, so it never resumes).
 + (nullable NSString*)autoStateFilePath;
-+ (void)saveStateToPath:(NSString*)path wait:(BOOL)wait;
++ (BOOL)saveStateToPath:(NSString*)path wait:(BOOL)wait;
 + (void)loadStateFromPath:(NSString*)path;
 
 // Returns YES if the state file at path was written by a build whose save format

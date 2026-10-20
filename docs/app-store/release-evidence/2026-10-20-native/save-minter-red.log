@@ -1,0 +1,3 @@
+HOST MINTER EVIDENCE ONLY: actual production minter; failed save injected with real stale slot99 file
+EXPECTED RED: failed save exported old existing slot99
+Hash calls: 1

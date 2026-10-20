@@ -723,7 +723,11 @@ class DolphinBuilder:
         framework_path = self.xcframework_dir / f"{framework_name}{CONFIG['platforms'][platform]['suffix']}.framework"
 
         # Remove existing framework if it exists
-        if framework_path.exists():
+        if framework_path.is_symlink():
+            # A cached-core install may link this output to a shared cache. Replace
+            # the link for this build without deleting the cached framework itself.
+            framework_path.unlink()
+        elif framework_path.exists():
             shutil.rmtree(framework_path)
 
         # Create framework directory structure

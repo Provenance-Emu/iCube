@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import SwiftUI
+import UIKit
 
 /// Debug, on the menu engine. `sync()` reads Config and UserDefaults into the snapshot and writes nothing; `apply(_:)` is the only writer.
 /// The JIT, fastmem and user-folder facts are read once by `.task` (reading them rechecks JIT) and carried forward by `sync()`.
@@ -82,6 +83,39 @@ struct DebugRootView: View {
       StikDebugLauncher.enableJIT()
       #endif
     }
+  }
+}
+
+/// The full installation path is support information, not a settings writer.
+struct DebugUserFolderView: View {
+  let path: String
+  @Environment(\.dismiss) private var dismiss
+
+  private var pathText: some View {
+    Text(verbatim: path)
+      .icubeText(.body)
+      .foregroundStyle(ICubeDesign.color(.textPrimary))
+      .fixedSize(horizontal: false, vertical: true)
+      .accessibilityIdentifier("user-folder-path")
+      #if os(iOS)
+      .textSelection(.enabled)
+      #endif
+  }
+
+  var body: some View {
+    SettingsLeafScreen(model: MenuModel(sections: [MenuSection(id: "user-folder", items: items)]),
+                       title: L("User Folder"), sync: {})
+  }
+
+  private var items: [MenuItem] {
+    let description = L("Where iCube keeps its settings, saves and game data.")
+    var rows = [SettingsRow.custom("path", L("User Folder"), AnyView(pathText), description, enabled: false)]
+    #if os(iOS)
+    rows.append(SettingsRow.action("copy-path", L("Copy"), description) { UIPasteboard.general.string = path })
+    #else
+    rows.append(SettingsRow.action("done", L("Done"), description) { dismiss() })
+    #endif
+    return rows
   }
 }
 

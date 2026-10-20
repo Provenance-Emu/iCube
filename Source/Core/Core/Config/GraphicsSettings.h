@@ -88,14 +88,6 @@ extern const Info<bool> GFX_SSAA;
 extern const Info<int> GFX_EFB_SCALE;
 extern const Info<int> GFX_MAX_EFB_SCALE;
 
-// Auto Internal Resolution Controller (iCube; controller logic lands in the GFX cluster)
-extern const Info<bool> GFX_AUTO_IR_ENABLE;
-extern const Info<int> GFX_AUTO_IR_TARGET_FPS;
-extern const Info<int> GFX_AUTO_IR_MIN_SCALE;
-extern const Info<int> GFX_AUTO_IR_MAX_SCALE;
-extern const Info<int> GFX_AUTO_IR_COOLDOWN_FRAMES;
-extern const Info<int> GFX_AUTO_IR_HYSTERESIS_PERCENT;
-extern const Info<bool> GFX_AUTO_IR_SHOW_OSD;
 extern const Info<bool> GFX_TEXFMT_OVERLAY_ENABLE;
 extern const Info<bool> GFX_TEXFMT_OVERLAY_CENTER;
 extern const Info<bool> GFX_ENABLE_WIREFRAME;

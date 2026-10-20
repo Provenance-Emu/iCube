@@ -28,17 +28,16 @@ struct ICubeSaveStateMinter: SaveStateMinting {
     /// range the save UI offers.
     static let handoffSlot = 99
 
+    var saveSnapshot: @Sendable (Int, String?, UInt64) async -> SaveStateCompletedSnapshot? = { slot, gameID, session in
+        await SaveStateService.saveSlotSnapshotAsync(slot, expectedGameID: gameID, expectedSessionIdentifier: session)
+    }
+
     func mintHandoffState(identity: GameIdentity) async throws -> SaveStateDescriptor {
-        let absolutePath = try await MainActor.run { () throws -> String in
-            // `State::Save` and the path accessors read `SConfig`, which is not
-            // thread-safe; the rest of the app treats these as main-thread-only
-            // (see the comments in DebugAPIRoutes) and so does this.
-            guard let path = TVEmulationBridge.stateFilePath(forSlot: Self.handoffSlot) else {
-                throw ContinuityError.noActiveSession
-            }
-            TVEmulationBridge.saveState(toSlot: Self.handoffSlot, wait: true)
-            return path
+        let session = await MainActor.run { TVEmulationBridge.currentSessionIdentifier() }
+        guard let snapshot = await saveSnapshot(Self.handoffSlot, identity.gameID, session) else {
+            throw ContinuityError.noActiveSession
         }
+        let absolutePath = snapshot.filePath
 
         let url = URL(fileURLWithPath: absolutePath)
         guard let relativePath = ContinuityPaths.relativePath(forAbsolutePath: absolutePath) else {
