@@ -48,8 +48,15 @@ struct ICubeConfirmPanel: View {
         }
         .focusSection()
         #else
-        MenuScreen(model: model, style: .grid, onBack: onBack)
-          .fixedSize(horizontal: false, vertical: true)
+        // A GeometryReader-based grid has no intrinsic row height and collapses
+        // under fixedSize. Fit eager actions first, then scroll on short screens.
+        ViewThatFits(in: .vertical) {
+          MenuScreen(model: model, style: .actions, onBack: onBack)
+            .fixedSize(horizontal: false, vertical: true)
+          ScrollView {
+            MenuScreen(model: model, style: .actions, onBack: onBack)
+          }
+        }
         #endif
       }
       .padding(isTV ? ICubeDesign.Spacing.xl.rawValue : ICubeDesign.Spacing.m.rawValue)

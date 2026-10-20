@@ -7,7 +7,7 @@ struct TVRootView: View {
     // settings leaf, `-ICubeAddGamesPreview` the Add Games screen, for simulator screenshots (Scripts/tvos_screens.sh).
     let args = ProcessInfo.processInfo.arguments
     if args.contains("-ICubePausePreview") {
-      PauseMenuView(selectedSlot: .constant(1), onClose: {}, platform: .tvos,
+      PauseMenuView(selectedSlot: .constant(1), onClose: {}, platform: Self.previewPlatform,
                     game: PauseMenuView.previewGame())
         .debugPane(Self.argument(after: "-ICubePausePane", in: args))
         .debugFocus(Self.argument(after: "-ICubePauseFocus", in: args))
@@ -26,6 +26,14 @@ struct TVRootView: View {
   }
 
   #if DEBUG
+  private static var previewPlatform: PlatformKind {
+    #if os(tvOS)
+    .tvos
+    #else
+    .ios
+    #endif
+  }
+
   static func argument(after flag: String, in args: [String]) -> String? {
     guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
     return args[i + 1]

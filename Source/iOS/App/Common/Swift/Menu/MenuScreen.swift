@@ -14,6 +14,9 @@ enum MenuStyle: Equatable {
   /// (`menuButtonIOS`/`menuRowIOS`). Visual fidelity is unverified against a
   /// device/screenshot compare; see the design doc's Implementation Status.
   case grid
+  /// A modal's single column of actions. Eager rows provide an intrinsic height;
+  /// the host owns overflow scrolling instead of asking a GeometryReader to size itself.
+  case actions
   /// Plain `List` of rows — the shape Settings/Cheats/Controllers already use.
   case list
   /// Pause-overlay tiles (unified menu UX spec §5): `columns` per row, an `InfoShelf` beneath, rendered
@@ -27,14 +30,14 @@ enum MenuStyle: Equatable {
   var columns: Int {
     switch self {
     case .tiles(let columns, _), .cards(let columns, _): return max(1, columns)
-    case .grid, .list: return 1
+    case .grid, .actions, .list: return 1
     }
   }
 
   var isCompactTiles: Bool {
     switch self {
     case .tiles(_, let compact), .cards(_, let compact): return compact
-    case .grid, .list: return false
+    case .grid, .actions, .list: return false
     }
   }
 
@@ -42,7 +45,7 @@ enum MenuStyle: Equatable {
   var isTileGrid: Bool {
     switch self {
     case .tiles, .cards: return true
-    case .grid, .list: return false
+    case .grid, .actions, .list: return false
     }
   }
 
@@ -255,6 +258,7 @@ struct MenuScreen: View {
     #if os(iOS)
     switch style {
     case .grid: gridBody
+    case .actions: actionsBody
     case .list: listBody
     case .tiles: tilesBody
     case .cards: cardsBody
@@ -687,6 +691,17 @@ struct MenuScreen: View {
 
   // MARK: iOS — grid style (pause-menu card look, §5 token table)
 
+  private var actionsBody: some View {
+    VStack(alignment: .leading, spacing: MenuGridLayout.spacing) {
+      ForEach(model.sections) { section in
+        if let header = section.header {
+          Text(header).font(.headline).foregroundStyle(.white)
+        }
+        ForEach(section.items) { item in gridCard(item) }
+      }
+    }
+  }
+
   /// Fixed columns from `MenuGridLayout` rather than `GridItem(.adaptive(...))`, so the d-pad
   /// navigation (`tick()`) knows the real column count for the current width.
   private var gridBody: some View {
@@ -777,7 +792,7 @@ struct MenuScreen: View {
     switch style {
     case .grid: columnCount = gridColumnCount
     case .tiles, .cards: columnCount = style.columns
-    case .list: columnCount = 1
+    case .actions, .list: columnCount = 1
     }
     let stepsPickersInGrid = !style.isTileGrid
     let headerlessSectionIsOneRow: Bool

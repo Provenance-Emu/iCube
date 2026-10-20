@@ -1,5 +1,9 @@
 # iCube handoff (2026-10-10)
 
+## Urgent iPad Exit confirmation — October 20, 2026
+
+Owner reports missing Exit/Cancel actions in the pause confirmation. [Source fix and pending runtime acceptance](app-store/release-evidence/2026-10-20-ipad-pause-confirmation.md): replace the iOS intrinsic-height GeometryReader grid with eager modal actions and overflow scrolling; preserve tvOS and stop/save handlers. Swift parsing and independent source review pass; SDK build, hosted regression and rendered checks remain blocked by severe host load/CoreSimulator stalls. No runtime fix or upload is claimed. Owner's physical iPad is available with current TestFlight; direct screenshot/config reads work but Device Hub touch control requires iPadOS 27+. Its global resolution is already Native1× and per-game INIs are empty; see [performance source audit](app-store/release-evidence/2026-10-20-performance-source-audit.md).
+
 ## Current TestFlight crash blocker — October 20, 2026
 
 [Sentry audit](app-store/release-evidence/2026-10-20-sentry-crash-audit.md): build `1792472425` has **75 fatal reports / 11 distinct Sentry users**. Four groups share a Swift symbolic-reference / metadata failure (74 reports; inspected on iOS 17/18 near startup), plus one fatal hang. Map the shipped binary's symbolic reference and inspect older-OS availability before promoting another release. The CloudKit startup group is separate: 101 sideload reports / 14 users, not part of that TestFlight count. No fix or Sentry resolution is claimed.
