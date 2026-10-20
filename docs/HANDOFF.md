@@ -1,5 +1,9 @@
 # iCube handoff (2026-10-10)
 
+## Current TestFlight crash blocker — October 20, 2026
+
+[Sentry audit](app-store/release-evidence/2026-10-20-sentry-crash-audit.md): build `1792472425` has **75 fatal reports / 11 distinct Sentry users**. Four groups share a Swift symbolic-reference / metadata failure (74 reports; inspected on iOS 17/18 near startup), plus one fatal hang. Map the shipped binary's symbolic reference and inspect older-OS availability before promoting another release. The CloudKit startup group is separate: 101 sideload reports / 14 users, not part of that TestFlight count. No fix or Sentry resolution is claimed.
+
 ## Library release blockers — October 20, 2026
 
 Latest SDK evidence: [library verification](app-store/release-evidence/2026-10-20-library-sdk-verification.md). Integrated iOS/tvOS Debug builds pass. The full iOS suite reports **2,124 passed, six opt-in snapshots skipped, zero failures**, including eight metadata-service tests, 32 store tests and the now-included Objective-C++ invalid-game regression. Rendered tvOS title/tag Save/Cancel/reopen/relaunch and explicit selection pass. The corrected Back-navigation check, cover set/reopen/clear and oversized-cover checks pass. The card now respects small custom artwork, with a rendered card regression passing; the owner then identified the modal as visually unusable despite behavioral passes. The [fullscreen layout follow-up](app-store/release-evidence/2026-10-20-tvos-editor-presentation.md) replaces the transparent Form with an opaque room, artwork column, readable fields and pinned actions; targeted Back/cover/layout checks pass, and the focused-prompt pixel regression fails before the ink fix and passes after it. Final screenshots are recorded; physical-device review remains open; speculative Back-handler changes were reverted. The new library wave remains unuploaded.
