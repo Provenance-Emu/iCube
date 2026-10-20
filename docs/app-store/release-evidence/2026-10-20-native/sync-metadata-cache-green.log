@@ -1,0 +1,141 @@
+Test Suite 'All tests' started at 2026-10-20 03:42:55.462.
+Test Suite 'CloudSafety.xctest' started at 2026-10-20 03:42:55.468.
+Test Suite 'CloudSyncDrainWakeTests' started at 2026-10-20 03:42:55.468.
+Test Case '-[CloudSafety.CloudSyncDrainWakeTests testNewBootBeforeQueuedDrainDeliverySuppressesWake]' started.
+Test Case '-[CloudSafety.CloudSyncDrainWakeTests testNewBootBeforeQueuedDrainDeliverySuppressesWake]' passed (0.081 seconds).
+Test Case '-[CloudSafety.CloudSyncDrainWakeTests testStaleWorkerDrainCannotWakeNewBoot]' started.
+Test Case '-[CloudSafety.CloudSyncDrainWakeTests testStaleWorkerDrainCannotWakeNewBoot]' passed (0.036 seconds).
+Test Case '-[CloudSafety.CloudSyncDrainWakeTests testUIDidEndCannotWakeUntilAcceptedPhysicalDrain]' started.
+Test Case '-[CloudSafety.CloudSyncDrainWakeTests testUIDidEndCannotWakeUntilAcceptedPhysicalDrain]' passed (0.008 seconds).
+Test Suite 'CloudSyncDrainWakeTests' passed at 2026-10-20 03:42:55.601.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.125 (0.132) seconds
+Test Suite 'CloudSyncSafetyTests' started at 2026-10-20 03:42:55.601.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testAccountChangeClearsOldAccountChoicesEvenWhileEmulating]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testAccountChangeClearsOldAccountChoicesEvenWhileEmulating]' passed (0.038 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testCancelledDownloadRetainsConflictAndOriginalFile]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testCancelledDownloadRetainsConflictAndOriginalFile]' passed (0.031 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDelayedLifecycleDeliveryCannotRecloseDrainedBootOrOpenNewBoot]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDelayedLifecycleDeliveryCannotRecloseDrainedBootOrOpenNewBoot]' passed (0.027 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingAndImmediatelyReenablingSyncInvalidatesOldDownload]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingAndImmediatelyReenablingSyncInvalidatesOldDownload]' passed (0.067 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingSyncDuringDownloadRetainsConflictAndOriginalFile]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDisablingSyncDuringDownloadRetainsConflictAndOriginalFile]' passed (0.036 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDownloadFinishingAfterEmulationStartsDoesNotOverwriteOrResolve]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testDownloadFinishingAfterEmulationStartsDoesNotOverwriteOrResolve]' passed (0.006 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testEarlyUIDidEndDoesNotAdmitFileWritesDuringCoreTeardown]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testEarlyUIDidEndDoesNotAdmitFileWritesDuringCoreTeardown]' passed (0.005 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testExplicitRemoteChoiceUsesRemoteBytesAndVersionMetadata]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testExplicitRemoteChoiceUsesRemoteBytesAndVersionMetadata]' passed (0.029 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedTrashMoveRetainsDeleteConflict]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedTrashMoveRetainsDeleteConflict]' passed (0.009 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedUploadsAndDownloadsRetainConflicts]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFailedUploadsAndDownloadsRetainConflicts]' passed (0.010 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFastBootAndDrainInvalidatesDownloadBeforeQueuedPolicyDelivery]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFastBootAndDrainInvalidatesDownloadBeforeQueuedPolicyDelivery]' passed (0.004 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFirstDownloadMergesLibraryEditsCreatedWhileNetworkSuspends]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testFirstDownloadMergesLibraryEditsCreatedWhileNetworkSuspends]' passed (0.013 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testInitialScannerLeaseDrainsBeforeCoreBootCanOpenFiles]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testInitialScannerLeaseDrainsBeforeCoreBootCanOpenFiles]' passed (0.063 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testKeepBothDoesNotResolveWhenRemoteDownloadFails]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testKeepBothDoesNotResolveWhenRemoteDownloadFails]' passed (0.008 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditFirstDownloadRejectsMalformedOversizeAndForgedCategory]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditFirstDownloadRejectsMalformedOversizeAndForgedCategory]' passed (0.065 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditMergeRetainsIndependentFieldsAndClearTombstones]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditMergeRetainsIndependentFieldsAndClearTombstones]' passed (0.032 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditShardDownloadNotifiesItsRelativePath]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditShardDownloadNotifiesItsRelativePath]' passed (0.064 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditShardUploadsThroughExistingDocumentProvider]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditShardUploadsThroughExistingDocumentProvider]' passed (0.072 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditStoreWriterWaitsForSyncCommitAndKeepsIndependentRemoteTags]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryEditStoreWriterWaitsForSyncCommitAndKeepsIndependentRemoteTags]' passed (0.331 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryMergePreservesEditMadeWhileRemoteDownloadSuspends]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testLibraryMergePreservesEditMadeWhileRemoteDownloadSuspends]' passed (0.107 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testMalformedNewerRemoteDocumentCannotReplaceValidLocalDocument]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testMalformedNewerRemoteDocumentCannotReplaceValidLocalDocument]' passed (0.354 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testMalformedOrWrongIdentityLibraryEditDownloadCannotReplaceGoodLocal]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testMalformedOrWrongIdentityLibraryEditDownloadCannotReplaceGoodLocal]' passed (0.342 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testMergedDocumentNotifiesOwnerEvenWhenUploadFails]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testMergedDocumentNotifiesOwnerEvenWhenUploadFails]' passed (0.159 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPrivateConfigEligibilityNormalizesCaseAndRelativeComponents]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPrivateConfigEligibilityNormalizesCaseAndRelativeComponents]' passed (0.001 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPrivateConfigsNeverUploadButOrdinaryConfigsStillSync]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPrivateConfigsNeverUploadButOrdinaryConfigsStillSync]' passed (0.337 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPrivateRemoteConfigsNeverDownloadButOrdinaryConfigsStillSync]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPrivateRemoteConfigsNeverDownloadButOrdinaryConfigsStillSync]' passed (0.094 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPrivateRemoteTombstonesCannotRemoveLocalCredentials]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPrivateRemoteTombstonesCannotRemoveLocalCredentials]' passed (0.049 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testProfileWriterWaitsForSyncCommitAndPreservesBothGames]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testProfileWriterWaitsForSyncCommitAndPreservesBothGames]' passed (0.286 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPurgeableStoragePlanningRestoresMissingFileWithSurvivingIndex]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testPurgeableStoragePlanningRestoresMissingFileWithSurvivingIndex]' passed (0.013 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testRecentlyDeletedRestoresWhileDisabledAndDurablyForgetsTombstone]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testRecentlyDeletedRestoresWhileDisabledAndDurablyForgetsTombstone]' passed (0.019 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testRescanRefreshesRemoteVersionForAnExistingConflictPath]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testRescanRefreshesRemoteVersionForAnExistingConflictPath]' passed (0.003 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testResolutionDuringEmulationDoesNotDownloadOrOverwrite]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testResolutionDuringEmulationDoesNotDownloadOrOverwrite]' passed (0.004 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testSnapshotFromPreviousAccountCannotStartTransfersInNewAccount]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testSnapshotFromPreviousAccountCannotStartTransfersInNewAccount]' passed (0.051 seconds).
+Test Case '-[CloudSafety.CloudSyncSafetyTests testStalePrivateConfigConflictsCannotUploadOrDownload]' started.
+Test Case '-[CloudSafety.CloudSyncSafetyTests testStalePrivateConfigConflictsCannotUploadOrDownload]' passed (0.099 seconds).
+Test Suite 'CloudSyncSafetyTests' passed at 2026-10-20 03:42:58.468.
+	 Executed 34 tests, with 0 failures (0 unexpected) in 2.825 (2.868) seconds
+Test Suite 'GameProfileSyncTests' started at 2026-10-20 03:42:58.469.
+Test Case '-[CloudSafety.GameProfileSyncTests testExclusionEditAdoptsCurrentRemoteProfileFields]' started.
+Test Case '-[CloudSafety.GameProfileSyncTests testExclusionEditAdoptsCurrentRemoteProfileFields]' passed (0.005 seconds).
+Test Case '-[CloudSafety.GameProfileSyncTests testLocalEditBeforeSyncReloadPreservesRemoteGame]' started.
+Test Case '-[CloudSafety.GameProfileSyncTests testLocalEditBeforeSyncReloadPreservesRemoteGame]' passed (0.014 seconds).
+Test Case '-[CloudSafety.GameProfileSyncTests testMalformedReloadKeepsPriorMemory]' started.
+Test Case '-[CloudSafety.GameProfileSyncTests testMalformedReloadKeepsPriorMemory]' passed (0.011 seconds).
+Test Case '-[CloudSafety.GameProfileSyncTests testPurgedProfilesDirectoryIsRecreated]' started.
+Test Case '-[CloudSafety.GameProfileSyncTests testPurgedProfilesDirectoryIsRecreated]' passed (0.008 seconds).
+Test Case '-[CloudSafety.GameProfileSyncTests testReloadMergesRecentLocalEditsAndRemoteGames]' started.
+Test Case '-[CloudSafety.GameProfileSyncTests testReloadMergesRecentLocalEditsAndRemoteGames]' passed (0.007 seconds).
+Test Case '-[CloudSafety.GameProfileSyncTests testResetPreservesExclusionAndRemovesRuntimeOverrides]' started.
+Test Case '-[CloudSafety.GameProfileSyncTests testResetPreservesExclusionAndRemovesRuntimeOverrides]' passed (0.008 seconds).
+Test Case '-[CloudSafety.GameProfileSyncTests testSavingGraphicsSnapshotDoesNotClearSharingExclusion]' started.
+Test Case '-[CloudSafety.GameProfileSyncTests testSavingGraphicsSnapshotDoesNotClearSharingExclusion]' passed (0.008 seconds).
+Test Case '-[CloudSafety.GameProfileSyncTests testStampedResetSurvivesOldPeerAndPreservesExclusion]' started.
+Test Case '-[CloudSafety.GameProfileSyncTests testStampedResetSurvivesOldPeerAndPreservesExclusion]' passed (0.010 seconds).
+Test Suite 'GameProfileSyncTests' passed at 2026-10-20 03:42:58.544.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 0.071 (0.076) seconds
+Test Suite 'LibraryStateStoreTests' started at 2026-10-20 03:42:58.544.
+Test Case '-[CloudSafety.LibraryStateStoreTests testDefaultsFavoriteTogglesWithinOneSecondRemainOrdered]' started.
+Test Case '-[CloudSafety.LibraryStateStoreTests testDefaultsFavoriteTogglesWithinOneSecondRemainOrdered]' passed (0.020 seconds).
+Test Case '-[CloudSafety.LibraryStateStoreTests testFavoritesNotificationStillImportsExplicitLocalChange]' started.
+Test Case '-[CloudSafety.LibraryStateStoreTests testFavoritesNotificationStillImportsExplicitLocalChange]' passed (0.018 seconds).
+Test Case '-[CloudSafety.LibraryStateStoreTests testLocalEditBeforeReloadAdoptsAlreadyCommittedRemoteDocument]' started.
+Test Case '-[CloudSafety.LibraryStateStoreTests testLocalEditBeforeReloadAdoptsAlreadyCommittedRemoteDocument]' passed (0.016 seconds).
+Test Case '-[CloudSafety.LibraryStateStoreTests testPurgedProfileDirectoryIsRecreatedWithoutLosingCounters]' started.
+Test Case '-[CloudSafety.LibraryStateStoreTests testPurgedProfileDirectoryIsRecreatedWithoutLosingCounters]' passed (0.010 seconds).
+Test Case '-[CloudSafety.LibraryStateStoreTests testReloadAfterMissingOrMalformedFileKeepsMemoryAndRecoversFile]' started.
+2026-10-20 03:42:58.632 xctest[44222:19844083] [LibraryStateStore] could not decode library_state.json: DecodingError.dataCorrupted: Data was corrupted. Debug description: The given data was not valid JSON.. Underlying error: Error Domain=NSCocoaErrorDomain Code=3840 "Unexpected character 'b' around line 1, column 1." UserInfo={NSDebugDescription=Unexpected character 'b' around line 1, column 1., NSJSONSerializationErrorIndex=0}
+Test Case '-[CloudSafety.LibraryStateStoreTests testReloadAfterMissingOrMalformedFileKeepsMemoryAndRecoversFile]' passed (0.027 seconds).
+Test Case '-[CloudSafety.LibraryStateStoreTests testReloadMergesInMemoryCountersWithDownloadedDocumentAndPersistsUnion]' started.
+Test Case '-[CloudSafety.LibraryStateStoreTests testReloadMergesInMemoryCountersWithDownloadedDocumentAndPersistsUnion]' passed (0.020 seconds).
+Test Case '-[CloudSafety.LibraryStateStoreTests testSetFavoriteMirrorsDefaultsAndPublishesOrderedRapidEdits]' started.
+Test Case '-[CloudSafety.LibraryStateStoreTests testSetFavoriteMirrorsDefaultsAndPublishesOrderedRapidEdits]' passed (0.013 seconds).
+Test Case '-[CloudSafety.LibraryStateStoreTests testStartupPreservesPersistedFavoriteOverStaleDefaultsMirror]' started.
+Test Case '-[CloudSafety.LibraryStateStoreTests testStartupPreservesPersistedFavoriteOverStaleDefaultsMirror]' passed (0.009 seconds).
+Test Case '-[CloudSafety.LibraryStateStoreTests testUnrelatedDefaultsEditCannotRestampStaleMirrorOverRemoteFavorite]' started.
+Test Case '-[CloudSafety.LibraryStateStoreTests testUnrelatedDefaultsEditCannotRestampStaleMirrorOverRemoteFavorite]' passed (0.010 seconds).
+Test Suite 'LibraryStateStoreTests' passed at 2026-10-20 03:42:58.691.
+	 Executed 9 tests, with 0 failures (0 unexpected) in 0.144 (0.147) seconds
+Test Suite 'SyncLocalIOGateTests' started at 2026-10-20 03:42:58.691.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootBeforeSyncStartsNeedsNoCoordinatorOrLease]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootBeforeSyncStartsNeedsNoCoordinatorOrLease]' passed (0.000 seconds).
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootClosesAdmissionUntilEmulationEnds]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootClosesAdmissionUntilEmulationEnds]' passed (0.000 seconds).
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootWaitsForExistingLocalIOButDoesNotHoldItsConditionLock]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testBootWaitsForExistingLocalIOButDoesNotHoldItsConditionLock]' passed (0.055 seconds).
+Test Case '-[CloudSafety.SyncLocalIOGateTests testOldCoreDrainCannotOpenANewPendingBoot]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testOldCoreDrainCannotOpenANewPendingBoot]' passed (0.001 seconds).
+Test Case '-[CloudSafety.SyncLocalIOGateTests testSupersededWorkerCannotReopenAdmissionAfterNewBootDrains]' started.
+Test Case '-[CloudSafety.SyncLocalIOGateTests testSupersededWorkerCannotReopenAdmissionAfterNewBootDrains]' passed (0.001 seconds).
+Test Suite 'SyncLocalIOGateTests' passed at 2026-10-20 03:42:58.750.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.057 (0.058) seconds
+Test Suite 'CloudSafety.xctest' passed at 2026-10-20 03:42:58.750.
+	 Executed 59 tests, with 0 failures (0 unexpected) in 3.222 (3.281) seconds
+Test Suite 'All tests' passed at 2026-10-20 03:42:58.750.
+	 Executed 59 tests, with 0 failures (0 unexpected) in 3.222 (3.287) seconds
+[Profiles] Failed to load: Error Domain=NSCocoaErrorDomain Code=3840 "JSON text did not start with array or object and option to allow fragments not set. around line 1, column 0." UserInfo={NSDebugDescription=JSON text did not start with array or object and option to allow fragments not set. around line 1, column 0., NSJSONSerializationErrorIndex=0}

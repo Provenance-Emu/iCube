@@ -1,5 +1,7 @@
 # Release artifact checks
 
+For the prepared rendered tvOS title/tag/cover editor suite and inert library-only fixture recipe, see [tvos-library-editing.md](tvos-library-editing.md). Its UI tests have not been run.
+
 `check_resolution_core.py` verifies a packaged Dolphin xcframework or an embedded `.framework` after adaptive internal resolution was removed. It checks every supplied slice, requires the iOS/tvOS device and simulator slices for an xcframework, identifies the normal resolution symbol, and rejects retired controller/bootstrap/config content. Catalyst is inspected when included.
 
 ```sh

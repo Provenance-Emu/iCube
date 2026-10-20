@@ -1,5 +1,13 @@
 # iCube handoff (2026-10-10)
 
+## Library release blockers — October 20, 2026
+
+Owner-confirmed scope: **custom titles, covers and classification tags**, plus manual nearby browse/import **and automatic ROM mirroring nearby with both apps open**. Source/test checkpoint `9ef37f11e9` is pushed to `develop`. The working tree was clean after that push. Previous TestFlight build `1792472425` is live on both platforms; the new library wave has **not** been uploaded.
+
+Start with [editing integration evidence](app-store/release-evidence/2026-10-20-library-editing-integration.md), [sync audit](app-store/release-evidence/2026-10-20-library-sync-audit.md) and [nearby adapter evidence](app-store/release-evidence/2026-10-20-nearby-mirror-adapters.md). Targeted native regressions pass. Integrated SDK builds, rendered editor/focus acceptance, real-device convergence and complete Provenance receiver acceptance remain pending. The source checkpoint is not a candidate acceptance claim.
+
+The generated workspace resolves PVSyncRules **1.0.2**, commit `692ca3a1a84cb713c42bf775d5558c97d0bf05d3`. No new C++/core work is required for this wave. Provenance counterpart work is in the parent repository and needs separate review/commit/build evidence; preserve unrelated parent edits. ROM copying does **not** establish title/cover/tag convergence: [cross-app metadata proposal](superpowers/specs/2026-10-20-cross-app-library-metadata-proposal.md) records the remaining contract and identity work.
+
 ## App Store release planning — 2026-10-19
 
 Latest owner decision: remove adaptive internal-resolution control, including thermal EFB changes; retain manual scales/Auto (Fit Window), Native default, and CPU/VI adaptation. [Removal plan](superpowers/plans/2026-10-19-remove-adaptive-resolution.md). Implemented and locally verified; shipping/device gates remain open.

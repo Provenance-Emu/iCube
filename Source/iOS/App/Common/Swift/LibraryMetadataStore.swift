@@ -5,7 +5,8 @@ import CryptoKit
 
 /// App-owned custom library fields. This file is separate from emulator profiles,
 /// so resetting per-game emulation settings cannot remove library edits.
-final class LibraryMetadataStore {
+// All mutable state and writers are accessed through the serialized file gate.
+final class LibraryMetadataStore: @unchecked Sendable {
   struct Identity: Hashable, Sendable {
     let rawValue: String
     fileprivate init(_ rawValue: String) { self.rawValue = rawValue }
@@ -39,7 +40,8 @@ final class LibraryMetadataStore {
     }
   }
 
-  /// The gate must synchronously execute its operation once. The app injects the
+  /// The gate must serialize calls and synchronously execute each operation once.
+  /// The app injects the
   /// same short lock used by its sync scanner; no lock spans a network operation.
   typealias FileAccess = (_ operation: () throws -> Void) throws -> Void
   typealias Writer = (_ data: Data, _ url: URL) throws -> Void
@@ -52,6 +54,7 @@ final class LibraryMetadataStore {
   enum StoreError: LocalizedError {
     case invalidDocument, invalidRecord(String), invalidTransaction, identityMismatch
     case titleTooLong, tooManyTags, tagTooLong, coverTooLarge, documentTooLarge, invalidTimestamp
+    case cacheCapacity, recoveryUnavailable
 
     var errorDescription: String? {
       switch self {
@@ -65,40 +68,242 @@ final class LibraryMetadataStore {
       case .coverTooLarge: return "Custom covers must be 256 KiB or smaller."
       case .documentTooLarge: return "Library metadata exceeds the 1 MiB per-game document limit."
       case .invalidTimestamp: return "Library metadata edit has an invalid timestamp."
+      case .cacheCapacity: return "Library metadata cannot fit in its memory cache."
+      case .recoveryUnavailable: return "Previously loaded library metadata is unavailable. Restore its local recovery copy before editing."
       }
     }
   }
 
+  struct Summary: Equatable, Sendable {
+    let title: String?
+    let tags: [String]
+  }
+
+  struct CacheStatistics {
+    let recordCount: Int
+    let retainedBytes: Int
+    let decodedCoverBytes: Int
+    let summaryCount: Int
+    let summaryBytes: Int
+  }
+
+  private struct CachedRecord {
+    let bytes: Data
+    let summary: Summary
+    var projection: Draft?
+    var used: UInt64 = 0
+    func cost(for identity: Identity) -> Int {
+      bytes.count + (projection?.coverData?.count ?? 0) +
+        (summary.title?.utf8.count ?? 0) * 2 + summary.tags.reduce(0) { $0 + $1.utf8.count * 2 + 32 } +
+        identity.rawValue.utf8.count * 2 + 1024
+    }
+  }
+
+  private struct CachedSummary {
+    let value: Summary
+    var used: UInt64
+    func cost(for identity: Identity) -> Int {
+      (value.title?.utf8.count ?? 0) * 2 + value.tags.reduce(0) { $0 + $1.utf8.count * 2 + 32 } +
+        identity.rawValue.utf8.count * 2 + 512
+    }
+  }
+
   private let directoryURL: URL
+  private let recoveryDirectoryURL: URL
   private let fileAccess: FileAccess
   private let write: Writer
-  private var documents: [Identity: [String: Any]] = [:]
-  // Draft is a value type; Data/Array use copy-on-write. Repeated title, tag and
-  // sort lookups share the decoded cover instead of allocating it per getter.
-  private var projections: [Identity: Draft] = [:]
+  private let writeRecovery: Writer
+  private let cacheByteLimit: Int
+  private let cacheCountLimit: Int
+  private var records: [Identity: CachedRecord] = [:]
+  private var summaries: [Identity: CachedSummary] = [:]
+  private var summaryBytesUsed = 0
+  private let summaryByteLimit: Int
+  private let summaryCountLimit: Int
+  // Compact receipts distinguish an evicted/purged shard from an unseen game.
+  // A missing shard is never interpreted as a timestamped clear.
+  private var seen = Set<String>()
   private var stale = Set<Identity>()
+  private var clock: UInt64 = 0
 
   init(directoryURL: URL, withFileAccess: FileAccess? = nil,
-       write: @escaping Writer = { try $0.write(to: $1, options: .atomic) }) throws {
+       write: @escaping Writer = { try $0.write(to: $1, options: .atomic) },
+       recoveryDirectoryURL: URL? = nil, cacheByteLimit: Int = 16 * 1024 * 1024,
+       cacheCountLimit: Int = 64, summaryByteLimit: Int = 4 * 1024 * 1024,
+       summaryCountLimit: Int = 8192,
+       writeRecovery: @escaping Writer = { try $0.write(to: $1, options: .atomic) }) throws {
     self.directoryURL = directoryURL
+    // Production: Profiles/LibraryMetadataRecovery, outside the sync allowlist.
+    self.recoveryDirectoryURL = recoveryDirectoryURL ?? directoryURL.deletingLastPathComponent()
+      .appendingPathComponent(directoryURL.lastPathComponent + "Recovery", isDirectory: true)
     let lock = NSRecursiveLock()
     self.fileAccess = withFileAccess ?? { operation in
       lock.lock(); defer { lock.unlock() }; try operation()
     }
     self.write = write
+    self.writeRecovery = writeRecovery
+    self.cacheByteLimit = cacheByteLimit
+    self.cacheCountLimit = cacheCountLimit
+    self.summaryByteLimit = summaryByteLimit
+    self.summaryCountLimit = summaryCountLimit
   }
 
-  /// Lazily reads only this game's shard. Reload invalidates cached projections.
-  /// A failed refresh throws once while retaining the previous valid cache.
+  /// Sorting/searching need no retained decoded cover. Full records remain bounded.
+  func summary(for identity: Identity) throws -> Summary {
+    try withAccess {
+      if let cached = summaries[identity], !stale.contains(identity) {
+        if records[identity] != nil { touch(identity) }
+        clock &+= 1
+        summaries[identity]?.used = clock
+        return cached.value
+      }
+      try refreshIfNeeded(identity)
+      touch(identity)
+      let summary = records[identity]!.summary
+      cacheSummary(summary, for: identity)
+      return summary
+    }
+  }
+
+  /// A failed refresh throws once, retaining the last validated projection, even
+  /// when that record had to be recovered after eviction or a cache purge.
   func draft(for identity: Identity) throws -> Draft {
     try withAccess {
-      if let cached = projections[identity], !stale.contains(identity) { return cached }
-      defer { stale.remove(identity) }
-      let latest = try readDocument(for: identity)
-      let projection = try Self.project(latest, for: identity)
-      documents[identity] = latest
-      projections[identity] = projection
+      try refreshIfNeeded(identity)
+      var entry = records[identity]!
+      if let projection = entry.projection { touch(identity); return projection }
+      let projection = try Self.project(Self.decodeDocument(entry.bytes, filename: identity.fileName), for: identity)
+      entry.projection = projection
+      let victims = try prepareAdmission(entry, for: identity)
+      adopt(entry, for: identity, evicting: victims)
       return projection
+    }
+  }
+
+  func cacheStatistics() throws -> CacheStatistics {
+    try withAccess {
+      CacheStatistics(recordCount: records.count,
+        retainedBytes: records.reduce(0) { $0 + $1.value.cost(for: $1.key) },
+        decodedCoverBytes: records.values.reduce(0) { $0 + ($1.projection?.coverData?.count ?? 0) },
+        summaryCount: summaries.count,
+        summaryBytes: summaryBytesUsed)
+    }
+  }
+
+  private func touch(_ identity: Identity) {
+    clock &+= 1
+    records[identity]?.used = clock
+  }
+
+  /// Lightweight sort/search hits survive full-record eviction. This cache has
+  /// its own byte/count limits and never owns encoded or decoded cover bytes.
+  private func cacheSummary(_ value: Summary, for identity: Identity) {
+    clock &+= 1
+    let entry = CachedSummary(value: value, used: clock)
+    if let previous = summaries.removeValue(forKey: identity) { summaryBytesUsed -= previous.cost(for: identity) }
+    let cost = entry.cost(for: identity)
+    guard summaryCountLimit > 0, cost <= summaryByteLimit else { return }
+    if summaries.count >= summaryCountLimit || summaryBytesUsed + cost > summaryByteLimit {
+      for (key, cached) in summaries.sorted(by: { $0.value.used < $1.value.used }) {
+        if summaries.count < summaryCountLimit, summaryBytesUsed + cost <= summaryByteLimit { break }
+        summaryBytesUsed -= cached.cost(for: key)
+        summaries.removeValue(forKey: key)
+        if records[key] == nil { stale.remove(key) }
+      }
+    }
+    summaries[identity] = entry
+    summaryBytesUsed += cost
+  }
+
+  private func makeRecord(_ bytes: Data, for identity: Identity, projection: Draft? = nil) throws -> CachedRecord {
+    let object = try Self.decodeDocument(bytes, filename: identity.fileName)
+    let fields = try Self.project(object, for: identity, includeCover: false)
+    return CachedRecord(bytes: bytes, summary: Summary(title: fields.title, tags: fields.tags), projection: projection)
+  }
+
+  /// All recovery writes complete before any victim leaves memory. A failure
+  /// leaves the authoritative cache intact and is surfaced through the caller.
+  private func prepareAdmission(_ incoming: CachedRecord, for identity: Identity) throws -> [Identity] {
+    let cost = incoming.cost(for: identity)
+    guard cacheCountLimit > 0, cost <= cacheByteLimit else { throw StoreError.cacheCapacity }
+    var total = cost
+    var count = 1
+    var victims: [Identity] = []
+    for (key, entry) in records.filter({ $0.key != identity }).sorted(by: { $0.value.used > $1.value.used }) {
+      let size = entry.cost(for: key)
+      if count < cacheCountLimit, total + size <= cacheByteLimit {
+        total += size; count += 1
+      } else { victims.append(key) }
+    }
+    for key in victims {
+      let entry = records[key]!
+      // Never snapshot an uncommitted draft; only validated durable raw bytes.
+      if entry.bytes != Data("{}".utf8) {
+        let bytes = try recoverySnapshot(entry.bytes, for: key)
+        try FileManager.default.createDirectory(at: recoveryDirectoryURL, withIntermediateDirectories: true)
+        try writeRecovery(bytes, recoveryDirectoryURL.appendingPathComponent(key.fileName))
+      }
+    }
+    return victims
+  }
+
+  /// Another store may have saved since this cache entry was loaded. Converge
+  /// complete validated records using the sync engine's opaque per-field LWW
+  /// contract, including explicit null tombstones and canonical-byte tie breaks.
+  private func recoverySnapshot(_ cached: Data, for identity: Identity) throws -> Data {
+    var merged = try Self.decodeDocument(cached, filename: identity.fileName)
+    let sources = [try? boundedRead(directoryURL.appendingPathComponent(identity.fileName)),
+                   try? recoveryBytes(for: identity)]
+    for source in sources {
+      guard let source, let object = try? Self.decodeDocument(source, filename: identity.fileName) else { continue }
+      for (key, incoming) in object {
+        guard let current = merged[key] else { merged[key] = incoming; continue }
+        let oldStamp = Self.timestamp((current as? [String: Any])?["updatedAt"])
+        let newStamp = Self.timestamp((incoming as? [String: Any])?["updatedAt"])
+        if newStamp > oldStamp { merged[key] = incoming }
+        else if newStamp == oldStamp {
+          let oldBytes = try JSONSerialization.data(withJSONObject: current, options: [.sortedKeys, .fragmentsAllowed])
+          let newBytes = try JSONSerialization.data(withJSONObject: incoming, options: [.sortedKeys, .fragmentsAllowed])
+          if oldBytes.lexicographicallyPrecedes(newBytes) { merged[key] = incoming }
+        }
+      }
+    }
+    let result = try JSONSerialization.data(withJSONObject: merged, options: [.sortedKeys])
+    try Self.validateDocument(data: result, filename: identity.fileName)
+    return result
+  }
+
+  private func adopt(_ entry: CachedRecord, for identity: Identity, evicting victims: [Identity]) {
+    for victim in victims {
+      records.removeValue(forKey: victim)
+      if summaries[victim] == nil { stale.remove(victim) }
+    }
+    records[identity] = entry
+    if entry.bytes != Data("{}".utf8) { seen.insert(identity.fileName) }
+    stale.remove(identity)
+    touch(identity)
+    cacheSummary(entry.summary, for: identity)
+  }
+
+  private func refreshIfNeeded(_ identity: Identity) throws {
+    if records[identity] != nil, !stale.contains(identity) { return }
+    do {
+      let entry = try makeRecord(readBytes(for: identity), for: identity)
+      let victims = try prepareAdmission(entry, for: identity)
+      adopt(entry, for: identity, evicting: victims)
+    } catch {
+      // Malformed primary bytes remain untouched. Recover a prior valid record
+      // for the next read, but still report this refresh failure to the caller.
+      if records[identity] != nil { stale.remove(identity) }
+      else if let bytes = try? recoveryBytes(for: identity),
+              let entry = try? makeRecord(bytes, for: identity),
+              let victims = try? prepareAdmission(entry, for: identity) {
+        adopt(entry, for: identity, evicting: victims)
+      }
+      // A title/tag projection can survive even if its full recovery record is
+      // unavailable. Report the refresh error once, retain that valid summary.
+      if summaries[identity] != nil { stale.remove(identity) }
+      throw error
     }
   }
 
@@ -112,7 +317,7 @@ final class LibraryMetadataStore {
     let now = date.timeIntervalSinceReferenceDate
     guard now.isFinite else { throw StoreError.invalidTimestamp }
     return try withAccess {
-      var candidate = try readDocument(for: identity)
+      var candidate = try Self.decodeDocument(readBytes(for: identity), filename: identity.fileName)
       let fileURL = directoryURL.appendingPathComponent(identity.fileName)
       // Reject a malformed current record rather than replacing evidence of it.
       _ = try Self.project(candidate, for: identity)
@@ -138,22 +343,23 @@ final class LibraryMetadataStore {
         try update("tags", value: edited.tags.isEmpty ? NSNull() : edited.tags)
       }
       let projection = try Self.project(candidate, for: identity)
+      let bytes = try JSONSerialization.data(withJSONObject: candidate, options: [.sortedKeys])
+      let entry = try makeRecord(bytes, for: identity, projection: projection)
+      // Snapshot eviction victims before committing: a recovery failure cannot
+      // report a failed Save after the user's primary file already changed.
+      let victims = try prepareAdmission(entry, for: identity)
       if changed {
-        let bytes = try JSONSerialization.data(withJSONObject: candidate, options: [.sortedKeys])
-        guard bytes.count <= Self.maxDocumentBytes else { throw StoreError.documentTooLarge }
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try write(bytes, fileURL)
       }
       // Publish only after durable success. Failure keeps the previous valid cache.
-      documents[identity] = candidate
-      projections[identity] = projection
-      stale.remove(identity)
+      adopt(entry, for: identity, evicting: victims)
       return projection
     }
   }
 
   func reload() throws {
-    try withAccess { stale.formUnion(documents.keys) }
+    try withAccess { stale.formUnion(records.keys); stale.formUnion(summaries.keys) }
   }
 
   private func withAccess<T>(_ body: () throws -> T) throws -> T {
@@ -163,22 +369,32 @@ final class LibraryMetadataStore {
     return try result.get()
   }
 
-  private func readDocument(for identity: Identity) throws -> [String: Any] {
-    let fileURL = directoryURL.appendingPathComponent(identity.fileName)
-    let bytes: Data
-    do {
-      let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-      if let size = attributes[.size] as? NSNumber, size.int64Value > Self.maxDocumentBytes {
-        throw StoreError.documentTooLarge
-      }
-      bytes = try Data(contentsOf: fileURL)
+  private func boundedRead(_ url: URL) throws -> Data {
+    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+    if let size = attributes[.size] as? NSNumber, size.int64Value > Self.maxDocumentBytes {
+      throw StoreError.documentTooLarge
     }
+    let bytes = try Data(contentsOf: url)
+    guard bytes.count <= Self.maxDocumentBytes else { throw StoreError.documentTooLarge }
+    return bytes
+  }
+
+  private func recoveryBytes(for identity: Identity) throws -> Data {
+    let bytes = try boundedRead(recoveryDirectoryURL.appendingPathComponent(identity.fileName))
+    try Self.validateDocument(data: bytes, filename: identity.fileName)
+    return bytes
+  }
+
+  private func readBytes(for identity: Identity) throws -> Data {
+    do { return try boundedRead(directoryURL.appendingPathComponent(identity.fileName)) }
     catch let error as CocoaError where error.code == .fileReadNoSuchFile {
-      // Missing files are not a metadata clear: explicit clears are timestamped
-      // null records. Retain this session's last durable fields after a purge.
-      return documents[identity] ?? [:]
+      if let entry = records[identity] { return entry.bytes }
+      do { return try recoveryBytes(for: identity) }
+      catch let recoveryError as CocoaError where recoveryError.code == .fileReadNoSuchFile {
+        if seen.contains(identity.fileName) { throw StoreError.recoveryUnavailable }
+        return Data("{}".utf8)
+      }
     }
-    return try Self.decodeDocument(bytes, filename: identity.fileName)
   }
 
   /// Validate untrusted cloud bytes before the sync scanner promotes them. Unknown
@@ -209,12 +425,12 @@ final class LibraryMetadataStore {
     if let filename, !isValidShardFilename(filename) { throw StoreError.identityMismatch }
     for identity in identities {
       if let filename, identity.fileName != filename { throw StoreError.identityMismatch }
-      _ = try project(object, for: identity)
+      _ = try project(object, for: identity, includeCover: false)
     }
     return object
   }
 
-  private static func project(_ object: [String: Any], for identity: Identity) throws -> Draft {
+  private static func project(_ object: [String: Any], for identity: Identity, includeCover: Bool = true) throws -> Draft {
     func value(_ field: String) throws -> Any? {
       guard let raw = object[identity.rawValue + ":" + field] else { return nil }
       guard let record = raw as? [String: Any], let value = record["value"] else {
@@ -229,15 +445,32 @@ final class LibraryMetadataStore {
     }
     if let cover = try value("cover") {
       // Bound the encoded form before allocating decoded bytes from remote JSON.
-      guard let encoded = cover as? String, encoded.utf8.count <= ((maxCoverBytes + 2) / 3) * 4,
-            let data = Data(base64Encoded: encoded) else { throw StoreError.invalidRecord("cover") }
-      result.coverData = data
+      guard let encoded = cover as? String, validCoverEncoding(encoded) else {
+        throw StoreError.invalidRecord("cover")
+      }
+      if includeCover {
+        guard let data = Data(base64Encoded: encoded) else { throw StoreError.invalidRecord("cover") }
+        result.coverData = data
+      }
     }
     if let tags = try value("tags") {
       guard let tags = tags as? [String] else { throw StoreError.invalidRecord("tags") }
       result.tags = tags
     }
     return try normalized(result)
+  }
+
+  /// Validate remote base64 without allocating a decoded cover during title/tag
+  /// scans. Padding determines the exact byte count, including the final quartet.
+  private static func validCoverEncoding(_ encoded: String) -> Bool {
+    let bytes = encoded.utf8
+    let count = bytes.count
+    guard count <= ((maxCoverBytes + 2) / 3) * 4, count % 4 == 0 else { return false }
+    let padding = bytes.last == 61 ? (bytes.dropLast().last == 61 ? 2 : 1) : 0
+    guard count / 4 * 3 - padding <= maxCoverBytes else { return false }
+    return bytes.dropLast(padding).allSatisfy {
+      (65...90).contains($0) || (97...122).contains($0) || (48...57).contains($0) || $0 == 43 || $0 == 47
+    }
   }
 
   private static func normalized(_ draft: Draft) throws -> Draft {

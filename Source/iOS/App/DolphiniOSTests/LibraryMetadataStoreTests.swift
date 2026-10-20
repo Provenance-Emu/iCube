@@ -15,7 +15,10 @@ final class LibraryMetadataStoreTests: XCTestCase {
     file = folder.appendingPathComponent(identity.fileName)
   }
 
-  override func tearDownWithError() throws { try? FileManager.default.removeItem(at: folder) }
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(at: folder)
+    try? FileManager.default.removeItem(at: folder.deletingLastPathComponent().appendingPathComponent(folder.lastPathComponent + "Recovery"))
+  }
 
   private func object() throws -> [String: Any] {
     try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
@@ -239,6 +242,220 @@ final class LibraryMetadataStoreTests: XCTestCase {
     XCTAssertEqual(try first.draft(for: identity), old)
     try first.reload()
     XCTAssertEqual(try first.draft(for: identity), fresh)
+  }
+
+  private func otherIdentity(_ index: Int) -> LibraryMetadataStore.Identity {
+    LibraryMetadataStore.Identity.game(gameID: "CACHE\(index)", discNumber: 0, revision: 0)!
+  }
+
+  func testFullRecordRetentionIsBoundedAfterManyMaximumCovers() throws {
+    let budget = 2 * 1024 * 1024
+    let store = try LibraryMetadataStore(directoryURL: folder, cacheByteLimit: budget, cacheCountLimit: 3)
+    for index in 0..<40 {
+      _ = try store.commit(.init(title: "Game \(index)", coverData: Data(repeating: UInt8(index), count: 256 * 1024)), baseline: .init(), for: otherIdentity(index))
+      let stats = try store.cacheStatistics()
+      XCTAssertLessThanOrEqual(stats.recordCount, 3)
+      XCTAssertLessThanOrEqual(stats.retainedBytes, budget)
+    }
+    XCTAssertEqual(try store.draft(for: otherIdentity(0)).coverData, Data(repeating: 0, count: 256 * 1024))
+  }
+
+  func testSummaryLookupsRetainNoDecodedCovers() throws {
+    let writer = try LibraryMetadataStore(directoryURL: folder)
+    for index in 0..<20 {
+      _ = try writer.commit(.init(title: "Game \(index)", coverData: Data(repeating: 7, count: 256 * 1024), tags: ["Puzzle"]), baseline: .init(), for: otherIdentity(index))
+    }
+    let reader = try LibraryMetadataStore(directoryURL: folder, cacheByteLimit: 1024 * 1024, cacheCountLimit: 2)
+    for index in 0..<20 {
+      let summary = try reader.summary(for: otherIdentity(index))
+      XCTAssertEqual(summary.title, "Game \(index)")
+      XCTAssertEqual(summary.tags, ["Puzzle"])
+    }
+    let stats = try reader.cacheStatistics()
+    XCTAssertEqual(stats.decodedCoverBytes, 0)
+    XCTAssertLessThanOrEqual(stats.recordCount, 2)
+    XCTAssertLessThanOrEqual(stats.retainedBytes, 1024 * 1024)
+  }
+
+  func testEvictedPurgedShardRecoversFullUnknownRecordsAndUneditedCover() throws {
+    let future: [String: Any] = ["future": ["opaque": [1, 2]], recordKey("title"): ["updatedAt": 1, "value": "Keep", "futureOption": true], recordKey("cover"): ["updatedAt": 1, "value": Data([1, 2, 3]).base64EncodedString()]]
+    try JSONSerialization.data(withJSONObject: future).write(to: file)
+    let store = try LibraryMetadataStore(directoryURL: folder, cacheCountLimit: 1)
+    let saved = try store.draft(for: identity)
+    _ = try store.draft(for: otherIdentity(1)) // Evicts and snapshots full validated bytes.
+    try FileManager.default.removeItem(at: file)
+    var changed = saved; changed.tags = ["New"]
+    let result = try store.commit(changed, baseline: saved, for: identity)
+    XCTAssertEqual(result.coverData, Data([1, 2, 3]))
+    XCTAssertEqual(result.title, "Keep")
+    XCTAssertEqual(try object()["future"] as? NSDictionary, future["future"] as? NSDictionary)
+    XCTAssertEqual((try object()[recordKey("title")] as? [String: Any])?["futureOption"] as? Bool, true)
+  }
+
+  func testEvictedMalformedShardThrowsThenServesRecoveryWithoutReplacingCorruption() throws {
+    let store = try LibraryMetadataStore(directoryURL: folder, cacheCountLimit: 1)
+    let saved = try store.commit(.init(title: "Keep", coverData: Data([4])), baseline: .init(), for: identity)
+    _ = try store.draft(for: otherIdentity(1))
+    let corrupt = Data("broken".utf8); try corrupt.write(to: file)
+    XCTAssertThrowsError(try store.draft(for: identity))
+    XCTAssertEqual(try store.draft(for: identity), saved)
+    XCTAssertThrowsError(try store.commit(.init(title: "New"), baseline: saved, for: identity))
+    XCTAssertEqual(try Data(contentsOf: file), corrupt)
+  }
+
+  func testRecoveryFailurePrecedesPrimaryCommitAndRetainsAuthoritativeMemory() throws {
+    let store = try LibraryMetadataStore(directoryURL: folder, cacheCountLimit: 1, writeRecovery: { _, _ in throw NSError(domain: "recovery", code: 1) })
+    let saved = try store.commit(.init(title: "Keep"), baseline: .init(), for: identity)
+    let second = otherIdentity(1)
+    XCTAssertThrowsError(try store.commit(.init(title: "Must not save"), baseline: .init(), for: second))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent(second.fileName).path))
+    try FileManager.default.removeItem(at: file)
+    XCTAssertEqual(try store.draft(for: identity), saved)
+    XCTAssertEqual(try store.cacheStatistics().recordCount, 1)
+  }
+
+  func testPrimaryWriteFailureAfterSnapshotPreflightKeepsPreviousCacheAndBytes() throws {
+    var fail = false
+    let store = try LibraryMetadataStore(directoryURL: folder, write: { bytes, url in
+      if fail { throw NSError(domain: "primary", code: 1) }
+      try bytes.write(to: url, options: .atomic)
+    }, cacheCountLimit: 1)
+    let saved = try store.commit(.init(title: "Keep"), baseline: .init(), for: identity)
+    let before = try Data(contentsOf: file)
+    fail = true
+    XCTAssertThrowsError(try store.commit(.init(title: "Fail"), baseline: .init(), for: otherIdentity(1)))
+    XCTAssertEqual(try store.draft(for: identity), saved)
+    XCTAssertEqual(try Data(contentsOf: file), before)
+    XCTAssertEqual(try store.cacheStatistics().recordCount, 1)
+    XCTAssertEqual(try store.summary(for: identity).title, saved.title)
+  }
+
+  func testMissingBothCopiesOfKnownEvictedShardReportsUnavailableInsteadOfClear() throws {
+    let recovery = folder.appendingPathComponent("recovery")
+    let store = try LibraryMetadataStore(directoryURL: folder, recoveryDirectoryURL: recovery, cacheCountLimit: 1)
+    _ = try store.commit(.init(title: "Keep"), baseline: .init(), for: identity)
+    _ = try store.draft(for: otherIdentity(1))
+    try FileManager.default.removeItem(at: file)
+    try FileManager.default.removeItem(at: recovery.appendingPathComponent(identity.fileName))
+    XCTAssertThrowsError(try store.draft(for: identity))
+    XCTAssertThrowsError(try store.commit(.init(tags: ["New"]), baseline: .init(), for: identity))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+  }
+
+  func testRecoverySurvivesNewStoreAndCanceledDraftDoesNotLeakIntoSnapshot() throws {
+    let store = try LibraryMetadataStore(directoryURL: folder, cacheCountLimit: 1)
+    let saved = try store.commit(.init(title: "Keep", coverData: Data([3])), baseline: .init(), for: identity)
+    var canceled = try store.draft(for: identity); canceled.title = "Canceled"; canceled.coverData = Data([9])
+    _ = try store.draft(for: otherIdentity(1))
+    try FileManager.default.removeItem(at: file)
+    let reopened = try LibraryMetadataStore(directoryURL: folder)
+    XCTAssertEqual(try reopened.draft(for: identity), saved)
+    XCTAssertEqual(canceled.title, "Canceled")
+  }
+
+  func testRecentlyUsedRecordStaysResidentWhenRecoveryForItWouldFail() throws {
+    let store = try LibraryMetadataStore(directoryURL: folder, cacheCountLimit: 2, writeRecovery: { bytes, url in
+      if url.lastPathComponent == self.identity.fileName { throw NSError(domain: "wrong-victim", code: 1) }
+      try bytes.write(to: url, options: .atomic)
+    })
+    _ = try store.commit(.init(title: "Keep"), baseline: .init(), for: identity)
+    _ = try store.commit(.init(title: "Older"), baseline: .init(), for: otherIdentity(1))
+    _ = try store.summary(for: identity)
+    XCTAssertNoThrow(try store.draft(for: otherIdentity(2)))
+  }
+
+  func testOlderStoreEvictionCannotRollBackNewerPrimaryOrRecoveryTombstone() throws {
+    let lock = NSRecursiveLock()
+    let gate: LibraryMetadataStore.FileAccess = { body in lock.lock(); defer { lock.unlock() }; try body() }
+    let old = try LibraryMetadataStore(directoryURL: folder, withFileAccess: gate, cacheCountLimit: 1)
+    let before = try old.commit(.init(title: "Old", coverData: Data([1])), baseline: .init(), for: identity, at: Date(timeIntervalSinceReferenceDate: 1))
+    let fresh = try LibraryMetadataStore(directoryURL: folder, withFileAccess: gate, cacheCountLimit: 1)
+    let latest = try fresh.commit(.init(title: "New"), baseline: before, for: identity, at: Date(timeIntervalSinceReferenceDate: 2))
+    _ = try fresh.draft(for: otherIdentity(1)) // Snapshot newer title and cover clear.
+    try FileManager.default.removeItem(at: file)
+    _ = try old.draft(for: otherIdentity(2)) // Old full record must not replace newer snapshot.
+    XCTAssertEqual(try LibraryMetadataStore(directoryURL: folder).draft(for: identity), latest)
+
+    // Also prefer a newer primary when it has never reached the recovery path.
+    let newer = try LibraryMetadataStore(directoryURL: folder, withFileAccess: gate)
+    _ = try newer.commit(.init(title: "Newest", tags: ["Added"]), baseline: latest, for: identity, at: Date(timeIntervalSinceReferenceDate: 3))
+    _ = try old.draft(for: identity)
+    _ = try newer.commit(.init(title: "Primary latest", tags: ["Added"]), baseline: .init(title: "Newest", tags: ["Added"]), for: identity, at: Date(timeIntervalSinceReferenceDate: 4))
+    _ = try old.draft(for: otherIdentity(3))
+    try FileManager.default.removeItem(at: file)
+    XCTAssertEqual(try LibraryMetadataStore(directoryURL: folder).draft(for: identity).title, "Primary latest")
+  }
+
+  func testSummaryValidationRejectsMalformedCoverPaddingAndExactOversize() throws {
+    let invalid = ["=AAA", "AA=A", "A===", "AAAA=", "AA\n=", "!!!!", Data(repeating: 1, count: 256 * 1024 + 1).base64EncodedString()]
+    for encoded in invalid {
+      try JSONSerialization.data(withJSONObject: [recordKey("cover"): ["updatedAt": 1, "value": encoded]]).write(to: file)
+      XCTAssertThrowsError(try LibraryMetadataStore(directoryURL: folder).summary(for: identity))
+    }
+    for data in [Data(), Data([1]), Data([1, 2]), Data([1, 2, 3]), Data(repeating: 5, count: 256 * 1024)] {
+      try JSONSerialization.data(withJSONObject: [recordKey("cover"): ["updatedAt": 1, "value": data.base64EncodedString()]]).write(to: file)
+      let store = try LibraryMetadataStore(directoryURL: folder)
+      XCTAssertNoThrow(try store.summary(for: identity))
+      XCTAssertEqual(try store.cacheStatistics().decodedCoverBytes, 0)
+      XCTAssertEqual(try store.draft(for: identity).coverData, data)
+    }
+  }
+
+  func testSummarySurvivesFullEvictionAndRepeatedSortLookupsPerformNoFileIO() throws {
+    let recovery = folder.appendingPathComponent("recovery")
+    var failSnapshot = false
+    let store = try LibraryMetadataStore(directoryURL: folder, recoveryDirectoryURL: recovery, cacheCountLimit: 1, writeRecovery: { bytes, url in
+      if failSnapshot { throw NSError(domain: "unexpected-sort-write", code: 1) }
+      try bytes.write(to: url, options: .atomic)
+    })
+    _ = try store.commit(.init(title: "Cached title", coverData: Data(repeating: 1, count: 256 * 1024), tags: ["Cached tag"]), baseline: .init(), for: identity)
+    _ = try store.commit(.init(title: "Other"), baseline: .init(), for: otherIdentity(1))
+    try FileManager.default.removeItem(at: file)
+    try FileManager.default.removeItem(at: recovery.appendingPathComponent(identity.fileName))
+    failSnapshot = true
+    for _ in 0..<100 {
+      let summary = try store.summary(for: identity)
+      XCTAssertEqual(summary.title, "Cached title")
+      XCTAssertEqual(summary.tags, ["Cached tag"])
+    }
+    // Full-record reads would hit the missing known-shard guard; projection
+    // lookups above can succeed only from the independent lightweight cache.
+    XCTAssertThrowsError(try store.draft(for: identity))
+    XCTAssertEqual(try store.cacheStatistics().recordCount, 1)
+  }
+
+  func testSummaryReloadRefreshesEvictedRecordAndPreservesMalformedOrMissingProjection() throws {
+    let recovery = folder.appendingPathComponent("recovery")
+    let store = try LibraryMetadataStore(directoryURL: folder, recoveryDirectoryURL: recovery, cacheCountLimit: 1)
+    let saved = try store.commit(.init(title: "Old", tags: ["Old tag"]), baseline: .init(), for: identity)
+    _ = try store.draft(for: otherIdentity(1))
+    let writer = try LibraryMetadataStore(directoryURL: folder)
+    _ = try writer.commit(.init(title: "New", tags: ["New tag"]), baseline: saved, for: identity)
+    XCTAssertEqual(try store.summary(for: identity).title, "Old")
+    try store.reload()
+    XCTAssertEqual(try store.summary(for: identity).title, "New")
+    _ = try store.draft(for: otherIdentity(2))
+    try Data("malformed".utf8).write(to: file)
+    try store.reload()
+    XCTAssertThrowsError(try store.summary(for: identity))
+    XCTAssertEqual(try store.summary(for: identity).tags, ["New tag"])
+    _ = try store.draft(for: otherIdentity(3))
+    try FileManager.default.removeItem(at: file)
+    try FileManager.default.removeItem(at: recovery.appendingPathComponent(identity.fileName))
+    try store.reload()
+    XCTAssertThrowsError(try store.summary(for: identity))
+    XCTAssertEqual(try store.summary(for: identity).title, "New")
+  }
+
+  func testSummaryByteAndCountBudgetsBoundLightweightProjectionRetention() throws {
+    let store = try LibraryMetadataStore(directoryURL: folder, cacheCountLimit: 1, summaryByteLimit: 2048, summaryCountLimit: 2)
+    for index in 0..<20 {
+      _ = try store.commit(.init(title: String(repeating: "x", count: 200), tags: ["Tag"]), baseline: .init(), for: otherIdentity(index))
+      let stats = try store.cacheStatistics()
+      XCTAssertLessThanOrEqual(stats.summaryCount, 2)
+      XCTAssertLessThanOrEqual(stats.summaryBytes, 2048)
+      XCTAssertLessThanOrEqual(stats.recordCount, 1)
+    }
   }
 
 }

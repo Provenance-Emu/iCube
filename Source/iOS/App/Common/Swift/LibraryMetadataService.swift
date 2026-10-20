@@ -160,7 +160,7 @@ final class LibraryMetadataService: NSObject {
 
   @objc static func customTitle(for item: TVGameItem) -> String? {
     guard let identity = identity(for: item) else { return nil }
-    return (try? store().draft(for: identity))?.title
+    return (try? store().summary(for: identity))?.title
   }
 
   @objc static func customCover(for item: TVGameItem) -> UIImage? {
@@ -186,7 +186,7 @@ final class LibraryMetadataService: NSObject {
 
   @objc static func tags(for item: TVGameItem) -> [String] {
     guard let identity = identity(for: item) else { return [] }
-    return (try? store().draft(for: identity))?.tags ?? []
+    return (try? store().summary(for: identity))?.tags ?? []
   }
 
   static func reloadAfterSync() {
