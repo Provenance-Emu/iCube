@@ -3,6 +3,11 @@ export PATH="$PATH:/opt/homebrew/bin"
 
 set -e
 
+if [[ "${CONFIGURATION:-}" == Debug* && "${ICUBE_FAST_DEV_SKIP_LOCALIZATION:-}" == "1" ]]; then
+  echo "note: unchanged localization inputs; fast DEV reuses committed strings"
+  exit 0
+fi
+
 cd "$PROJECT_DIR"
 
 # BartyCrouch regenerates the .strings files from the storyboards. It is a

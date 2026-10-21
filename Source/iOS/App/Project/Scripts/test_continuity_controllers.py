@@ -74,4 +74,4 @@ let package = Package(name: "ContinuityControllerHarness", platforms: [.macOS(.v
     .testTarget(name: "ControllerTests", dependencies: ["Host", "PVContinuity"], path: "Tests")
 ''' + extra_targets + "])\n")
 print(f"Harness: {scratch}", flush=True)
-raise SystemExit(subprocess.call(["swift", "test", "--package-path", str(scratch), "--jobs", "4"]))
+raise SystemExit(subprocess.call(["xcrun", "swift", "test", "--package-path", str(scratch), "--jobs", "4"]))

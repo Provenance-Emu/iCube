@@ -1,5 +1,11 @@
 # iCube handoff (2026-10-10)
 
+## Fast DEV loop — October 21, 2026
+
+[Commands and measured evidence](app-store/release-evidence/2026-10-21-fast-dev-loop.md): cached app check 4.9s; TV Swift comment edit 54.7s total; native TV/phone/iPad checks 25–38s; captures 2–3s. 45 tooling tests and 299 targeted library/continuity host tests pass. The reusable JSON actions runner avoids rebuilding for each navigation sequence. Use explicit registered targets and selected Xcode; physical operations remain deferred. TV checks use an explicit accepted-engine pin that excludes concurrent locale engine work; phone/tablet runner checks explicitly use existing DEV with freshness unverified. No new TestFlight packaging for this tooling change.
+
+Owner's [Performance proposal](superpowers/specs/2026-10-21-performance-controls-design.md) adds a full paused pane plus optional transparent live remote controls; full-description approval is pending. They prefer a user setting, proposed Pause default/Live opt-in. Native remote input suppression is required: an unassigned remote can still reach saved mappings. Missing iOS/non-default markers, reset setting/group and safe recovery remain on the docket. Installed cross-device/Provenance convergence is still a release gate; ROM copy alone is insufficient.
+
 ## tvOS Settings / pause HUD follow-up — October 21, 2026
 
 [Current evidence](app-store/release-evidence/2026-10-21-tvos-settings.md): direct-choice panels replace list cycling; Left returns to categories without changing choices; root Back requires category focus before closing. Disabled dependencies show a readable reason and reduced emphasis. Opt-in non-default dots use [audited core/launch/reset baselines](app-store/release-evidence/2026-10-21-settings-default-audit.md), excluding language and ambiguous defaults. tvOS HUD long-press now opens six quick toggles inside Pause; iOS keeps its touch presentation.

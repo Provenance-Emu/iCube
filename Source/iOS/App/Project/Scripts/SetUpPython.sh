@@ -14,4 +14,6 @@ if [ ! -d "$VENV_DIR" ]; then
   python3 -m venv "$VENV_DIR"
 fi
 
-"$VENV_DIR/bin/python3" -m pip install polib
+if ! "$VENV_DIR/bin/python3" -c 'import polib' &>/dev/null; then
+  "$VENV_DIR/bin/python3" -m pip install polib
+fi

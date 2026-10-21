@@ -138,3 +138,8 @@ mcp-smoke:
 # Open Settings on the device first so the server is up. URL=http://ip/ skips Bonjour.
 webserver-bench:
 	./Scripts/webserver_transfer_bench.sh $(if $(URL),--url $(URL),)
+
+# Incremental DEV build/test/capture loop; see Tools/dev-loop/README.md.
+.PHONY: fast
+fast:
+	python3 "$(ROOT)/Tools/dev-loop/icube.py" $(ARGS)

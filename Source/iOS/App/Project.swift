@@ -210,13 +210,13 @@ let preScripts: [TargetScript] = [
         basedOnDependencyAnalysis: false
     ),
     .pre(
-        script: #""$PROJECT_DIR/venv/bin/python3" "$PROJECT_DIR/Project/Scripts/UpdateCoreStrings.py" "$PROJECT_DIR/../../../Languages/po/" "$PROJECT_DIR/Common/UI/Localization""#,
+        path: "Project/Scripts/UpdateCoreStrings.sh",
         name: "Update Core Strings",
         inputPaths: ["$(PROJECT_DIR)/../../../Languages/po/en.po"],
         outputPaths: ["$(DERIVED_FILE_DIR)/UpdateCoreStrings_dummy.txt"]
     ),
     .pre(
-        script: #""$PROJECT_DIR/venv/bin/python3" "$PROJECT_DIR/Project/Scripts/TransferCoreStringsToStoryboard.py" "$PROJECT_DIR/DolphiniOS" "$PROJECT_DIR/Common/UI/Localization/""#,
+        path: "Project/Scripts/TransferCoreStringsToStoryboard.sh",
         name: "Transfer Core Strings to Storyboard Strings",
         basedOnDependencyAnalysis: false
     ),
@@ -233,6 +233,10 @@ let preScripts: [TargetScript] = [
 let uploadDsymScript: TargetScript = .post(
     script: """
     # This script is responsible for uploading debug symbols and source context for Sentry.
+    if [[ "${CONFIGURATION:-}" == Debug* && "${ICUBE_FAST_DEV:-}" == "1" ]]; then
+      echo "note: fast DEV skips symbol upload; archive/release upload remains enabled"
+      exit 0
+    fi
     if [[ "$(uname -m)" == arm64 ]]; then
       export PATH="/opt/homebrew/bin:$PATH"
     fi

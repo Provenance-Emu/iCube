@@ -1,0 +1,83 @@
+{
+  "status": "passed-scoped-checks",
+  "source_base": "d31f6dcf944aa9531ac4d68b1fd383e02abe701a",
+  "source_sha256": {
+    "Source/iOS/App/Makefile": "6f88b8dbbd33cb4765f00717be007082099932ed424878d9d405f0b1a44975b1",
+    "Source/iOS/App/Project.swift": "6c34a6534e9cc07bc494099a684fe7dccda696cc4e8caf4241ffd5b9b3b12401",
+    "Source/iOS/App/Project/Scripts/SetUpPython.sh": "ae10eda2d1b727f48485a359deb983f0a3dcfcf1b20edced8f3bd428af0f3ac2",
+    "Source/iOS/App/Project/Scripts/TransferCoreStringsToStoryboard.sh": "c920e66c5a09dfde7f09a694c71505f0ab1f605bc48f1d5b9324490b1a42a082",
+    "Source/iOS/App/Project/Scripts/UpdateCoreStrings.sh": "bf742d7aeae9e90f489cbe7b5f69e25d45b8fb8d0f96ef178407d4789e521fe1",
+    "Source/iOS/App/Project/Scripts/UpdateStoryboardStrings.sh": "d08f684ac1a866bc6d0fb68036c132877cb4287ff5a2e21893e0874240ab6e5f",
+    "Source/iOS/App/Project/Scripts/test_continuity_controllers.py": "93b3935cae4adc27b0601c513f262749495d4886682404dcaa313cf2a4587c90",
+    "Source/iOS/App/Project/Scripts/test_library_editing_native.py": "9d9948e63172b5dc1a1cbeba544b6f972f682879354d00c42b3d97d91b6536cb",
+    "Source/iOS/App/Project/Scripts/test_nearby_library_mirror_native.py": "10bdf7daa70e0b04bb3534990f161abc3a0a0745e0f6a0e6edcfdbb621d8b2a9",
+    "Tools/dev-loop/FastInteractionSchema.swift": "ae2cafd1ac2f71f53cfd21425df3f4a370be088c0bc732a56baf5f11ae0e814d",
+    "Tools/dev-loop/FastInteractionTests.swift": "ccd6d6c5b9f88d747a0c75213e2b3d006c46c000cb8759a438753344a15c8fbc",
+    "Tools/dev-loop/README.md": "8a0fa4ed20f44a98acf0f57b4230545807a6f1c16ed8fe00edab65a0ca15d071",
+    "Tools/dev-loop/icube.py": "7f6e4bf1f5ecb16dec20e710efe78072c21646648127c344fea8d12497234cff",
+    "Tools/dev-loop/test_action_schema.py": "083aae377f958b5788f5e73a3842440df263be6eed64f9d5abfececc4b9c1695",
+    "Tools/dev-loop/test_build_phases.py": "030f845152828bad7840c9c09a8300e53295ff0916635ec00baf8cf7f98eaa9a",
+    "Tools/dev-loop/test_icube.py": "a0154b2e5d6e966ccdb55515f0619c0373c8991d09278dfa764a861524625c40"
+  },
+  "tooling_tests": 45,
+  "library_continuity_host_tests": 299,
+  "native_actions": {
+    "tvos": "passed current-app/pinned-engine",
+    "iphone": "passed unverified-existing-dev",
+    "ipad": "passed unverified-existing-dev"
+  },
+  "physical_runtime": "deferred by owner",
+  "performance_feature": "reviewed design awaiting approval; no gameplay implementation",
+  "measurements": [
+    {
+      "task": "tv-restored-build",
+      "elapsed_seconds": 54.111,
+      "exit_code": 0
+    },
+    {
+      "task": "tv-final-cache-hit",
+      "elapsed_seconds": 4.943,
+      "exit_code": 0
+    },
+    {
+      "task": "tv-final-install",
+      "elapsed_seconds": 9.028,
+      "exit_code": 0
+    },
+    {
+      "task": "tv-final-navigation",
+      "elapsed_seconds": 30.04,
+      "exit_code": 0
+    },
+    {
+      "task": "tv-final-capture",
+      "elapsed_seconds": 2.439,
+      "exit_code": 0
+    },
+    {
+      "task": "iphone-capture",
+      "elapsed_seconds": 3.154,
+      "exit_code": 0
+    },
+    {
+      "task": "ipad-capture",
+      "elapsed_seconds": 2.82,
+      "exit_code": 0
+    },
+    {
+      "task": "tooling-tests",
+      "elapsed_seconds": 4.181,
+      "exit_code": 0
+    },
+    {
+      "task": "library-metadata",
+      "elapsed_seconds": 33.185,
+      "exit_code": 0
+    },
+    {
+      "task": "library-editing",
+      "elapsed_seconds": 0.566,
+      "exit_code": 1
+    }
+  ]
+}
