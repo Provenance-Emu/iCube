@@ -28,8 +28,22 @@ Raw logs/screenshots and generated projects are gitignored under `build/release-
 
 ## Remaining acceptance
 
+### Subsequent SDK and device attempt
+
+Checkpoint `eadbfbb850` passes the integrated iOS simulator build, signed physical DEV build, and full hosted iOS suite: **2,132 passed, six opt-in snapshots skipped, zero failures**. This includes the new intrinsic-height regression. Task-local isolation of the Interface Builder helper resolved the build deadlock without resetting shared services. DEV candidate `1.0.0 (1792538716)` installed successfully on the owner's iPad, preserving its existing data and leaving the separate production TestFlight untouched.
+
+The first physical XCTest attempt timed out at Apple's UI Automation passcode requirement. After the owner enabled it directly on the device, the retry executed, launched the existing Luigi's Mansion card, and encountered DEV's **Waiting for JIT** alert. Its toolbar-hittability assertion therefore failed before the Exit panel was reached. Screenshot and accessibility evidence identify that alert; this run neither demonstrates an Exit failure nor establishes acceptance. The harness now handles the offered **Use No JIT Mode (Slow)** action before testing the toolbar. A successful fixed-build physical Exit/Cancel run remains required.
+
 1. Complete the SDK build and hosted layout regression.
 2. Run the rendered portrait/landscape checks against the fixed binary and inspect screenshots; the shipped failure is now visually confirmed on the physical iPad.
 3. Check short-screen/large-text scrolling and controller focus visibility, including switching from the fitting branch to overflow.
 4. Validate the actual iPad pause/Exit/Cancel path, preserving its installed library and saves. Verify Reset's cancellation as the sibling path.
 5. Archive/upload only after the release's independent startup-crash and distribution gates are also addressed. This source checkpoint is not a verified TestFlight fix.
+
+## Physical fixed-build acceptance
+
+At 8:06 p.m. Eastern, the physical real-game DEV audit passed: **one test, zero failures**, 33.499 seconds. Candidate DEV `1792538716` was running the existing Luigi’s Mansion ROM in no-JIT mode. The harness revealed the auto-hidden toolbar, opened More → Pause Menu → Exit, required Cancel / Quit / Save & Quit to be visible, onscreen, hittable and noncollapsed, then cancelled and repeated the full Exit/Cancel cycle twice. The final screenshot was visually inspected: all three actions render beneath the warning. No Quit, Save & Quit, Reset or save operation was selected; the DEV game remains paused and the separate production TestFlight was not changed.
+
+This run required independently confirming DEV ConfirmStop is enabled before permitting the Exit tap. Earlier harness attempts uncovered JIT and auto-hide handling gaps, and one missing forwarded preflight environment value; those were test-harness failures and are retained, not reported as app regressions.
+
+Local authoritative result: `build/release-audit/2026-10-20-testflight-final/physical-real-game-exit-hud.xcresult`; structured summary `physical-exit-passed-summary.json`; attachments under `physical-exit-passed-attachments/`. This establishes the ordinary physical iPad landscape path, not compact/large-text/controller acceptance. The newly approved toolbar will need the same flow rerun using its direct Pause action.

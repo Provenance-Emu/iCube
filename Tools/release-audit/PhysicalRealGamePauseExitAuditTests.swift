@@ -10,6 +10,8 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
   func testRealGameExitActionsCancelAndReopen() throws {
     continueAfterFailure = false
     executionTimeAllowance = 150
+    XCTAssertEqual(ProcessInfo.processInfo.environment["ICUBE_CONFIRM_STOP_PREFLIGHT"], "enabled",
+                   "Read the DEV configuration and verify Confirm on Stop is enabled before tapping Exit; otherwise Exit may stop immediately.")
     app = XCUIApplication(bundleIdentifier: "com.joemattiello.iCube-debug")
     app.launchArguments = ["-onboarding_seen_v1", "YES", "-SCREENSHOT_MODE", "0"]
     if app.state == .notRunning { app.launch() } else { app.activate() }
@@ -18,7 +20,11 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
 
     // Accept a prior paused DEV session without resuming or starting another game.
     let exit = app.buttons["pause.tile.exit"].firstMatch
-    if !exit.exists && !app.buttons["Pause"].exists && !app.buttons["Resume"].exists {
+    let noJIT = app.alerts["Waiting for JIT"].buttons["Use No JIT Mode (Slow)"]
+    if noJIT.exists { noJIT.tap() }
+    var launchedGame = false
+    let emulationHUD = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "DSU:")).firstMatch
+    if !exit.exists && !app.buttons["Pause"].exists && !app.buttons["Resume"].exists && !app.staticTexts["Paused"].exists && !emulationHUD.exists && !app.staticTexts["START"].exists {
       let title = NSPredicate(format: "label CONTAINS[cd] %@", "Luigi")
       let card = app.buttons.matching(title).firstMatch
       if card.waitForExistence(timeout: 20), card.isHittable {
@@ -32,18 +38,32 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
         record("02-luigi-library-title")
         text.tap()
       }
+      launchedGame = true
     }
 
     if !exit.exists {
+      // DEV builds may offer JIT before boot. Exercise the same no-JIT path
+      // available in TestFlight instead of treating the blocked toolbar as a
+      // confirmation layout failure.
+      if (launchedGame && noJIT.waitForExistence(timeout: 5)) || noJIT.exists {
+        record("03-no-jit-offer")
+        XCTAssertTrue(noJIT.isHittable)
+        noJIT.tap()
+        XCTAssertTrue(noJIT.waitForNonExistence(timeout: 10))
+      }
+      // Boot may finish after the toolbar's idle deadline. Reveal before
+      // querying its Pause/Resume controls, rather than waiting for hidden UI.
+      revealToolbarIfHidden()
       let pause = app.buttons["Pause"].firstMatch
       let resume = app.buttons["Resume"].firstMatch
-      let playingOrPaused = NSPredicate { _, _ in pause.exists || resume.exists || exit.exists }
+      let playingOrPaused = NSPredicate { _, _ in pause.exists || resume.exists || exit.exists || self.app.staticTexts["Paused"].exists }
       let ready = XCTNSPredicateExpectation(predicate: playingOrPaused, object: nil)
       let result = XCTWaiter.wait(for: [ready], timeout: 45)
       record("03-game-start-result")
       XCTAssertEqual(result, .completed, "Game did not expose Pause/Resume within 45 seconds")
       if pause.exists && pause.isHittable { pause.tap() }
       if !exit.exists {
+        revealToolbarIfHidden()
         let more = app.buttons["More"].firstMatch
         XCTAssertTrue(more.waitForExistence(timeout: 5), "Paused emulation must expose toolbar More")
         XCTAssertTrue(more.isHittable)
@@ -78,6 +98,16 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
     }
     // The pause menu remains open, holding the emulator paused. No teardown
     // terminates the app or changes the user's game/session state.
+  }
+
+  private func revealToolbarIfHidden() {
+    let more = app.buttons["More"].firstMatch
+    guard !more.exists, app.alerts.count == 0 else { return }
+    // EmulationScreen.topRevealStrip spans the game picture's top 80pt.
+    // Reveal its toolbar without tapping the central Paused pill (Resume).
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
+      .withOffset(CGVector(dx: 0, dy: 20)).tap()
+    XCTAssertTrue(more.waitForExistence(timeout: 5))
   }
 
   private func record(_ name: String) {
