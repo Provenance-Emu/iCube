@@ -20,6 +20,23 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   private var ir: PerformanceTuningState { state { $0.jitAvailable = true; $0.engine = .cachedInterpreterIR } }
   private var jit: PerformanceTuningState { state { $0.jitAvailable = true; $0.engine = .jitARM64 } }
 
+  func test_clockMetadata_explainsParentAndAutomaticOrGameOverrides() {
+    var value = cir
+    value.cpuClockEnabled = false
+    value.cpuClockOverride = .none
+    value.cpuClockPercent = 100
+    XCTAssertFalse(model(value).item(id: "cpu-clock-percent")!.isModified)
+    XCTAssertTrue(model(value).item(id: "cpu-clock-percent")!.disabledReason!.contains("Enable"))
+    value.cpuClockEnabled = true
+    XCTAssertNil(model(value).item(id: "cpu-clock-percent")!.disabledReason)
+    value.cpuClockPercent = 80
+    XCTAssertTrue(model(value).item(id: "cpu-clock-percent")!.isModified)
+    value.cpuClockOverride = .auto
+    XCTAssertTrue(model(value).item(id: "cpu-clock-percent")!.disabledReason!.contains("Adaptive Clock"))
+    value.cpuClockOverride = .game
+    XCTAssertTrue(model(value).item(id: "cpu-clock-percent")!.disabledReason!.contains("game"))
+  }
+
   private func isOn(_ item: MenuItem?) -> Bool? {
     guard case .toggle(let binding)? = item?.role else { return nil }
     return binding.wrappedValue

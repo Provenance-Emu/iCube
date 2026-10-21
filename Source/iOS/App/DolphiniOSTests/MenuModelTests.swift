@@ -226,7 +226,7 @@ final class MenuModelTests: XCTestCase {
 
   /// On tvOS a left press on these rows steps the value, so the settings shell must keep focus off the
   /// sidebar while one has focus. Every other row lets left leave for the sidebar.
-  func test_adjustsWithLeftRight_onlyStepperCycleAndCompactPicker() {
+  func test_adjustsWithLeftRight_onlyNumericStepperRetainsHorizontalEditing() {
     var number = 100.0
     var choice: AnyHashable = 1
     var flag = false
@@ -246,8 +246,8 @@ final class MenuModelTests: XCTestCase {
     let model = MenuModel(sections: [MenuSection(id: "s", items: [stepper, cycle, compact, exploded, toggle, action, disabledStepper])])
 
     XCTAssertTrue(model.adjustsWithLeftRight(focusID: "stepper"))
-    XCTAssertTrue(model.adjustsWithLeftRight(focusID: "cycle"))
-    XCTAssertTrue(model.adjustsWithLeftRight(focusID: "compact"))
+    XCTAssertFalse(model.adjustsWithLeftRight(focusID: "cycle"))
+    XCTAssertFalse(model.adjustsWithLeftRight(focusID: "compact"))
     XCTAssertFalse(model.adjustsWithLeftRight(focusID: "exploded"))
     XCTAssertFalse(model.adjustsWithLeftRight(focusID: "exploded#0"), "an exploded picker's option row is a plain button")
     XCTAssertFalse(model.adjustsWithLeftRight(focusID: "toggle"))
@@ -302,4 +302,21 @@ final class MenuModelTests: XCTestCase {
     XCTAssertEqual(value, AnyHashable(1))
     XCTAssertTrue(closed)
   }
+  func test_optionsPickerOpeningAndFocusNavigationDoNotWriteSelection() {
+    var value = AnyHashable(2)
+    var writes = 0
+    var closes = 0
+    let selection = Binding(get: { value }, set: { value = $0; writes += 1 })
+    let model = MenuModel.optionsPicker(itemID: "language", options: [("One", 1), ("Two", 2)],
+                                        selection: selection, onPick: { closes += 1 })
+    XCTAssertEqual(model.focusRequest, "language#2")
+    for id in model.focusableIDs { _ = model.item(id: id)?.title }
+    XCTAssertEqual(writes, 0, "Opening and browsing choices must not apply a setting")
+    XCTAssertEqual(closes, 0)
+    model.item(id: "language#1")?.activateInPlace()
+    XCTAssertEqual(writes, 1)
+    XCTAssertEqual(closes, 1)
+    XCTAssertEqual(value, AnyHashable(1))
+  }
+
 }

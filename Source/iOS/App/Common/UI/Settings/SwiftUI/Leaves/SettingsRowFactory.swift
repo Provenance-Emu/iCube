@@ -7,40 +7,44 @@ import SwiftUI
 /// Rows never write anything themselves: `set` is the builder's `apply(.change(value))`.
 enum SettingsRow {
   static func toggle(_ id: String, _ title: String, _ value: Bool, _ description: String,
-                     enabled: Bool = true, badge: String? = nil, icon: String? = nil, set: @escaping (Bool) -> Void) -> MenuItem {
+                     enabled: Bool = true, badge: String? = nil, icon: String? = nil, defaultValue: Bool? = nil, disabledReason: String? = nil, set: @escaping (Bool) -> Void) -> MenuItem {
     MenuItem(id: id, title: title, icon: icon, role: .toggle(Binding(get: { value }, set: set)),
-             badge: badge, isEnabled: enabled, description: description)
+             badge: badge, isEnabled: enabled, description: description, disabledReason: enabled ? nil : disabledReason,
+             isModified: defaultValue.map { value != $0 } ?? false)
   }
 
   static func cycle<V: Hashable>(_ id: String, _ title: String, _ options: [(String, V)], _ value: V, _ description: String,
-                                 enabled: Bool = true, badge: String? = nil, icon: String? = nil, set: @escaping (V) -> Void) -> MenuItem {
+                                 enabled: Bool = true, badge: String? = nil, icon: String? = nil, defaultValue: V? = nil, disabledReason: String? = nil, set: @escaping (V) -> Void) -> MenuItem {
     MenuItem(id: id, title: title, icon: icon,
              role: .cycle(options: options.map { ($0.0, AnyHashable($0.1)) },
                           selection: Binding(get: { AnyHashable(value) }, set: { if let v = $0.base as? V { set(v) } })),
-             badge: badge, isEnabled: enabled, description: description)
+             badge: badge, isEnabled: enabled, description: description, disabledReason: enabled ? nil : disabledReason,
+             isModified: defaultValue.map { value != $0 } ?? false)
   }
 
   /// A direct choice: iOS shows a menu, tvOS one row per option. Unlike `cycle`, no value is committed
   /// on the way to the one the user wants.
   static func picker<V: Hashable>(_ id: String, _ title: String, _ options: [(String, V)], _ value: V, _ description: String,
-                                  enabled: Bool = true, badge: String? = nil, icon: String? = nil, set: @escaping (V) -> Void) -> MenuItem {
+                                  enabled: Bool = true, badge: String? = nil, icon: String? = nil, defaultValue: V? = nil, disabledReason: String? = nil, set: @escaping (V) -> Void) -> MenuItem {
     MenuItem(id: id, title: title, icon: icon,
              role: .picker(options: options.map { ($0.0, AnyHashable($0.1)) },
                            selection: Binding(get: { AnyHashable(value) }, set: { if let v = $0.base as? V { set(v) } })),
-             badge: badge, isEnabled: enabled, description: description)
+             badge: badge, isEnabled: enabled, description: description, disabledReason: enabled ? nil : disabledReason,
+             isModified: defaultValue.map { value != $0 } ?? false)
   }
 
   static func stepper(_ id: String, _ title: String, _ value: Double, range: ClosedRange<Double>, step: Double,
                       format: @escaping (Double) -> String, _ description: String,
-                      enabled: Bool = true, badge: String? = nil, icon: String? = nil, set: @escaping (Double) -> Void) -> MenuItem {
+                      enabled: Bool = true, badge: String? = nil, icon: String? = nil, defaultValue: Double? = nil, disabledReason: String? = nil, set: @escaping (Double) -> Void) -> MenuItem {
     MenuItem(id: id, title: title, icon: icon,
              role: .stepper(MenuStepper(value: Binding(get: { value }, set: set), range: range, step: step, format: format)),
-             badge: badge, isEnabled: enabled, description: description)
+             badge: badge, isEnabled: enabled, description: description, disabledReason: enabled ? nil : disabledReason,
+             isModified: defaultValue.map { value != $0 } ?? false)
   }
 
   static func action(_ id: String, _ title: String, _ description: String, icon: String? = nil,
-                     enabled: Bool = true, badge: String? = nil, run: @escaping () -> Void) -> MenuItem {
-    MenuItem(id: id, title: title, icon: icon, role: .action(run), badge: badge, isEnabled: enabled, description: description)
+                     enabled: Bool = true, badge: String? = nil, disabledReason: String? = nil, run: @escaping () -> Void) -> MenuItem {
+    MenuItem(id: id, title: title, icon: icon, role: .action(run), badge: badge, isEnabled: enabled, description: description, disabledReason: enabled ? nil : disabledReason)
   }
 
   static func destination(_ id: String, _ title: String, _ description: String, icon: String? = nil, view: AnyView) -> MenuItem {
@@ -48,13 +52,13 @@ enum SettingsRow {
   }
 
   /// A row the engine has no role for. A `.custom` row renders only its view, so the view carries its own title.
-  static func custom(_ id: String, _ title: String, _ view: AnyView, _ description: String, enabled: Bool = true) -> MenuItem {
-    MenuItem(id: id, title: title, role: .custom(view), isEnabled: enabled, description: description)
+  static func custom(_ id: String, _ title: String, _ view: AnyView, _ description: String, enabled: Bool = true, disabledReason: String? = nil) -> MenuItem {
+    MenuItem(id: id, title: title, role: .custom(view), isEnabled: enabled, description: description, disabledReason: enabled ? nil : disabledReason)
   }
 
   static func destructive(_ id: String, _ title: String, _ description: String, icon: String? = nil,
-                          enabled: Bool = true, run: @escaping () -> Void) -> MenuItem {
-    MenuItem(id: id, title: title, icon: icon, role: .destructive(run), isEnabled: enabled, description: description)
+                          enabled: Bool = true, disabledReason: String? = nil, run: @escaping () -> Void) -> MenuItem {
+    MenuItem(id: id, title: title, icon: icon, role: .destructive(run), isEnabled: enabled, description: description, disabledReason: enabled ? nil : disabledReason)
   }
 
   /// Read-only text: never focused (`isEnabled` false), so a pad's focus walks past it and tvOS skips it.

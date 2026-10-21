@@ -233,7 +233,10 @@ struct MenuScreen: View {
         focusedID = MenuFocusRouter.reconcile(focusedID: focusedID, previousOrder: oldOrder, model: model, requestedID: model.focusRequest)
       }
       #else
-      .onExitCommand { onBack?() }
+      .onExitCommand {
+        guard !tvChoiceDismissalPending else { return }
+        if longPressPicker != nil { closeLongPressPicker() } else { onBack?() }
+      }
       // tvOS native focus has no router: move it to the host's requested row once the list changed,
       // but never off a focused row that still exists (the iOS reconcile rule).
       .onChange(of: model.focusRequest) { _, id in
@@ -287,6 +290,9 @@ struct MenuScreen: View {
     let selection: Binding<AnyHashable>
   }
   @State private var longPressPicker: LongPressPicker?
+  #if os(tvOS)
+  @State private var tvChoiceDismissalPending = false
+  #endif
   /// Set by a touch/remote long-press so the Button action that fires on the same release is ignored once.
   @State private var suppressActivateFor: String?
 
@@ -312,8 +318,19 @@ struct MenuScreen: View {
   }
 
   private func closeLongPressPicker() {
+    #if os(tvOS)
+    let origin = longPressPicker?.id
+    tvChoiceDismissalPending = true
+    #endif
     longPressPicker = nil
     suppressActivateFor = nil
+    #if os(tvOS)
+    paneHoldsLeft?(false)
+    DispatchQueue.main.async {
+      if let origin { tvFocusedID = origin }
+      tvChoiceDismissalPending = false
+    }
+    #endif
   }
 
   private var longPressPickerModel: MenuModel {
@@ -330,16 +347,30 @@ struct MenuScreen: View {
         VStack(alignment: .leading, spacing: 8) {
           Text(picker.title).font(.headline).foregroundStyle(.white)
           MenuScreen(model: longPressPickerModel, style: .list, onBack: { closeLongPressPicker() }, tvClaimsFocus: true)
+            #if os(tvOS)
+            .environment(\.settingsPaneHoldsLeft, { _ in paneHoldsLeft?(longPressPicker != nil) })
+            #endif
+            #if os(tvOS)
+            .frame(maxHeight: min(CGFloat(picker.options.count) * 64 + 24, 560))
+            #else
             .frame(maxHeight: CGFloat(picker.options.count) * 64 + 24)
+            #endif
         }
         .padding(16)
+        #if os(tvOS)
+        .frame(maxWidth: 720)
+        #else
         .frame(maxWidth: 420)
+        #endif
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.ultraThinMaterial))
         .padding(24)
         #if os(tvOS)
         .focusSection()
         #endif
       }
+      #if os(tvOS)
+      .accessibilityIdentifier("menu.choice-panel.\(picker.id)")
+      #endif
       .transition(.opacity)
     }
   }
@@ -435,9 +466,24 @@ struct MenuScreen: View {
   private func rowLabel(
     _ item: MenuItem, value: String?, valueStyle: TVValueStyle, isDestructive: Bool = false
   ) -> some View {
-    tvRowLabel(title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, badge: item.badge,
-               value: value, valueStyle: valueStyle, description: item.description, showsChevron: item.showsChevron,
-               isDestructive: isDestructive)
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+      HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+        tvRowLabel(title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, badge: item.badge,
+                   value: value, valueStyle: valueStyle, description: item.description, showsChevron: item.showsChevron,
+                   isDestructive: isDestructive)
+        if item.isModified {
+          Circle().fill(ICubeDesign.color(.accent)).frame(width: 6, height: 6)
+            .accessibilityHidden(true)
+        }
+      }
+      if !item.isEnabled, let reason = item.disabledReason {
+        Text(L("Unavailable") + ": " + reason)
+          .icubeText(.detail).foregroundStyle(ICubeDesign.color(.textPrimary))
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .accessibilityValue([value, item.isModified ? L("Changed from default") : nil].compactMap { $0 }.joined(separator: ", "))
+
   }
   #endif
 
@@ -481,9 +527,13 @@ struct MenuScreen: View {
   #endif
 
   private func rowLabel(_ item: MenuItem) -> some View {
+    #if os(tvOS)
+    rowLabel(item, value: nil, valueStyle: .neutral)
+    #else
     rowLabel(
       title: item.title, subtitle: item.subtitle, icon: item.icon, tint: item.tint, badge: item.badge,
       description: item.description, showsChevron: item.showsChevron)
+    #endif
   }
 
   /// A `.cycle` row: description, current value and the override badge ("Auto"/"Game") all show.
@@ -935,7 +985,7 @@ struct MenuScreen: View {
     }
     .buttonStyle(ICubeRowButtonStyle())
     // A row that left/right adjust keeps a left press: the settings shell takes its sidebar out of focus.
-    .onChange(of: tvFocusedID) { _, id in paneHoldsLeft?(model.adjustsWithLeftRight(focusID: id)) }
+    .onChange(of: tvFocusedID) { _, id in paneHoldsLeft?(longPressPicker != nil || model.adjustsWithLeftRight(focusID: id)) }
     .onDisappear { paneHoldsLeft?(false) }
     .onAppear {
       // A settings deep link's row takes focus (the shell leaves the sidebar alone while one is pending).
@@ -971,26 +1021,19 @@ struct MenuScreen: View {
 
   @ViewBuilder
   private func tvSectionRows(_ section: MenuSection) -> some View {
-    ForEach(section.items) { item in tvRow(item) }
+    ForEach(section.items) { item in
+      tvRow(item).accessibilityIdentifier("menu.row.\(item.id)")
+    }
   }
 
-  /// `.defaultFocus` needs a ROW id, not necessarily `MenuItem.id` — a
-  /// `.picker` item explodes into one row per option (`tvRow` below), each
-  /// with its own composite `"\(item.id)#\(index)"` focus id, so if the
-  /// first focusable item happens to be a picker this must target its first
-  /// option's row, not an id no row ever binds `.focused(equals:)` to. The
-  /// exception is a `.picker` with `isCompactOnTV`: it is ONE row bound to
-  /// the plain `item.id`, so that id is the target.
+  /// Each tvOS item owns exactly one focusable row.
   private var defaultTVFocusID: String? {
     guard let firstID = model.focusableIDs.first, let item = model.item(id: firstID) else { return nil }
     return tvFocusID(for: item)
   }
 
-  /// The focus id of `item`'s row: an exploded picker's first option row, else the item's own id.
+  /// The stable row id also restores focus after dismissing a choice panel.
   private func tvFocusID(for item: MenuItem) -> String {
-    if case .picker(let options, _) = item.role, !options.isEmpty, !item.isCompactOnTV {
-      return "\(item.id)#0"
-    }
     return item.id
   }
 
@@ -998,55 +1041,33 @@ struct MenuScreen: View {
   private func tvSection(_ section: MenuSection) -> some View {
     if let header = section.header {
       Section(header: Text(header), footer: footerView(section)) {
-        ForEach(section.items) { item in tvRow(item) }
+        ForEach(section.items) { item in
+      tvRow(item).accessibilityIdentifier("menu.row.\(item.id)")
+    }
       }
     } else {
       Section(footer: footerView(section)) {
-        ForEach(section.items) { item in tvRow(item) }
+        ForEach(section.items) { item in
+      tvRow(item).accessibilityIdentifier("menu.row.\(item.id)")
+    }
       }
     }
   }
 
-  /// One `MenuItem` -> one `List` row with exactly one control, per the
-  /// design doc's §2 tvOS contract — except `.picker`, which explodes into
-  /// one row per option (checkmark for the selection) because a `Picker`
-  /// embedded in a row has no usable tvOS presentation (see the tvOS focus
-  /// notes in docs/superpowers/specs/2026-09-28-controller-hub-design.md).
-  /// A `.picker` with `isCompactOnTV` is the other exception: ONE row that
-  /// d-pad left/right steps through (`tvCompactPicker`), for long value lists.
+  /// Choices open a scrollable panel; browsing its rows never changes the selection.
   @ViewBuilder
   private func tvRow(_ item: MenuItem) -> some View {
     switch item.role {
-    case .picker(let options, let selection) where item.isCompactOnTV:
-      tvCompactPicker(item, options: options, selection: selection)
-    case .picker(let options, let selection):
-      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
-        Text(item.title)
-          .icubeText(.nav)
-          .foregroundStyle(ICubeDesign.color(.textPrimary))
-          .accessibilityAddTraits(.isHeader)
-        if let description = item.description {
-          Text(description)
-            .icubeText(.detail)
-            .foregroundStyle(ICubeDesign.color(.textSecondary))
-            .fixedSize(horizontal: false, vertical: true)
-        }
+    case .picker(let options, let selection), .cycle(let options, let selection):
+      Button {
+        guard item.isEnabled else { return }
+        longPressPicker = LongPressPicker(id: item.id, title: item.title, options: options, selection: selection)
+        paneHoldsLeft?(true)
+      } label: {
+        rowLabel(item, value: item.currentValueTitle ?? "—", valueStyle: .accent)
       }
-      .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
-      .padding(.vertical, ICubeDesign.Spacing.xs.rawValue)
-      ForEach(Array(options.enumerated()), id: \.offset) { index, option in
-        let selected = option.1 == selection.wrappedValue
-        Button {
-          selection.wrappedValue = option.1
-        } label: {
-          tvRowLabel(title: option.0, subtitle: nil, icon: nil, tint: nil, badge: nil,
-                     value: selected ? L("Selected") : nil, valueStyle: .accent, description: nil,
-                     showsChevron: false)
-        }
-        .buttonStyle(ICubeRowButtonStyle(isSelected: selected))
-        .disabled(!item.isEnabled)
-        .focused($tvFocusedID, equals: "\(item.id)#\(index)")
-      }
+      .disabled(!item.isEnabled)
+      .focused($tvFocusedID, equals: item.id)
     case .toggle(let binding):
       let on = binding.wrappedValue
       Button {
@@ -1063,27 +1084,21 @@ struct MenuScreen: View {
         .disabled(!item.isEnabled)
         .focused($tvFocusedID, equals: item.id)
     case .custom(let customView):
-      customView
+      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+        customView
+        if !item.isEnabled, let reason = item.disabledReason {
+          Text(L("Unavailable") + ": " + reason)
+            .icubeText(.detail)
+            .foregroundStyle(ICubeDesign.color(.textPrimary))
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+      .disabled(!item.isEnabled)
+      .opacity(item.isEnabled || item.disabledReason == nil ? 1 : 0.65)
     case .stepper(let stepper):
       tvSteppedRow(item, valueTitle: stepper.format(stepper.value.wrappedValue)) { direction in
         stepper.value.wrappedValue = stepper.stepped(stepper.value.wrappedValue, by: direction)
       }
-    case .cycle(let options, let selection):
-      Button {
-        performActivate(item)
-      } label: {
-        rowLabel(item, value: "‹ \(item.currentValueTitle ?? "—") ›", valueStyle: .accent)
-      }
-        .disabled(!item.isEnabled)
-        .focused($tvFocusedID, equals: item.id)
-        .onMoveCommand { direction in   // A still cycles; left/right step without leaving the row
-          guard item.isEnabled else { return }
-          switch direction {
-          case .left: stepPicker(selection, options: options, by: -1)
-          case .right: stepPicker(selection, options: options, by: 1)
-          default: break
-          }
-        }
     case .navigation, .action:
       Button { performActivate(item) } label: { rowLabel(item) }
         .disabled(!item.isEnabled)
@@ -1097,19 +1112,7 @@ struct MenuScreen: View {
     }
   }
 
-  /// A `.picker` flagged `isCompactOnTV`: one focusable row, title then "‹ value ›". Left/right step
-  /// through the options (wrapping, as the iOS d-pad adjust does), up/down move focus like any row,
-  /// and select does nothing.
-  private func tvCompactPicker(
-    _ item: MenuItem, options: [(String, AnyHashable)], selection: Binding<AnyHashable>
-  ) -> some View {
-    tvSteppedRow(item, valueTitle: MenuItemRole.selectedTitle(options: options, current: selection.wrappedValue) ?? "") {
-      stepPicker(selection, options: options, by: $0)
-    }
-  }
-
-  /// A row that left/right steps: title, then "‹ value ›". Built like `tvCompactPicker` always was: a
-  /// `.focusable` HStack with `.onMoveCommand`, not a `Button`, because select does nothing here.
+  /// A numeric row edits with left/right while retaining its current focus.
   private func tvSteppedRow(_ item: MenuItem, valueTitle: String, step: @escaping (Int) -> Void) -> some View {
     HStack(spacing: ICubeDesign.Spacing.m.rawValue) {
       rowLabel(item)
@@ -1122,7 +1125,7 @@ struct MenuScreen: View {
     .focusable(item.isEnabled)
     .focused($tvFocusedID, equals: item.id)
     .icubeRowChrome(focused: tvFocusedID == item.id)
-    .opacity(item.isEnabled ? 1 : 0.5)
+    .opacity(item.isEnabled ? 1 : 0.65)
     .onMoveCommand { direction in
       guard item.isEnabled else { return }
       switch direction {
@@ -1133,11 +1136,6 @@ struct MenuScreen: View {
     }
   }
 
-  private func stepPicker(_ selection: Binding<AnyHashable>, options: [(String, AnyHashable)], by step: Int) {
-    if let next = MenuItemRole.cycled(options: options, current: selection.wrappedValue, step: step) {
-      selection.wrappedValue = next
-    }
-  }
   #endif
 }
 

@@ -17,7 +17,7 @@ enum PerformanceTuningModelBuilder {
       sections.append(MenuSection(id: "engine-optimizations-hint", header: L("Engine Optimizations"), items: [
         SettingsRow.action("engine-optimizations-hint", L("Select a Cached Interpreter engine"),
                            engineHint(state),
-                           enabled: false, run: {}),
+                           enabled: false, disabledReason: engineHint(state), run: {}),
       ]))
     }
     if state.showCIROpts {
@@ -29,7 +29,7 @@ enum PerformanceTuningModelBuilder {
     sections.append(MenuSection(id: "clock-override", header: L("Clock Override"), items: [
       flagRow("cpu-clock-enabled", L("Enable Emulated CPU Clock Override"), .cpuClockEnabled, state, apply,
               L("Adjusts the emulated CPU's clock rate. Higher values can raise the framerate of variable-rate games at a performance cost; lower values may trigger a game's internal frameskip. ⚠️ Changing this from 100% can and will break games — use at your own risk."),
-              enabled: state.cpuClockOverride == .none),
+              enabled: state.cpuClockOverride == .none, disabledReason: overrideReason(state.cpuClockOverride)),
       percentStepper("cpu-clock-percent", L("Emulated CPU Clock"), state.cpuClockPercent, on: state.cpuClockEnabled, override: state.cpuClockOverride,
                      L("The emulated CPU's clock as a percentage of normal. Only used while the override above is enabled."),
                      set: { apply(.cpuClockPercent($0)) }),
@@ -37,7 +37,7 @@ enum PerformanceTuningModelBuilder {
     sections.append(MenuSection(id: "vbi-override", header: L("Override VBI Frequency"), items: [
       flagRow("vbi-enabled", L("Enable VBI Frequency Override"), .vbiEnabled, state, apply,
               L("Makes games run at a different frame rate. Lowering it makes emulation less demanding; raising it can improve smoothness. May change gameplay speed, since speed is often tied to frame rate."),
-              enabled: state.vbiOverride == .none),
+              enabled: state.vbiOverride == .none, disabledReason: overrideReason(state.vbiOverride)),
       percentStepper("vbi-percent", L("VBI Frequency"), state.vbiPercent, on: state.vbiEnabled, override: state.vbiOverride,
                      L("The emulated video-interface frequency as a percentage of normal. Only used while the override above is enabled."),
                      set: { apply(.vbiPercent($0)) }),
@@ -228,20 +228,28 @@ enum PerformanceTuningModelBuilder {
     return MenuSection(id: "validation", header: L("Correctness Validation (developer, slow)"), items: items)
   }
 
+  private static func overrideReason(_ override: DOLConfigOverride) -> String? {
+    switch override {
+    case .auto: return L("Controlled by Adaptive Clock. Turn off Adaptive Clock to edit this setting.")
+    case .game: return L("Controlled by the active game configuration.")
+    default: return nil
+    }
+  }
+
   // MARK: Rows
 
   /// A Bool setting: its value is read from the snapshot through the flag, and a change emits that same flag.
   private static func flagRow(_ id: String, _ title: String, _ flag: PerformanceTuningFlag, _ state: PerformanceTuningState,
                               _ apply: @escaping Apply, _ description: String,
-                              recommended: Bool = false, enabled: Bool = true) -> MenuItem {
+                              recommended: Bool = false, enabled: Bool = true, disabledReason: String? = nil) -> MenuItem {
     SettingsRow.toggle(id, title, state[keyPath: flag.keyPath], description, enabled: enabled,
-                       badge: recommended ? L("Recommended") : nil, set: { apply(.flag(flag, $0)) })
+                       badge: recommended ? L("Recommended") : nil, disabledReason: disabledReason, set: { apply(.flag(flag, $0)) })
   }
 
   /// A validation toggle, disabled until the optimisation it checks (`parent`) is ON.
   private static func validateRow(_ id: String, _ title: String, _ flag: PerformanceTuningFlag, parent: PerformanceTuningFlag,
                                   _ state: PerformanceTuningState, _ apply: @escaping Apply, _ description: String) -> MenuItem {
-    flagRow(id, title, flag, state, apply, description, enabled: state[keyPath: parent.keyPath])
+    flagRow(id, title, flag, state, apply, description, enabled: state[keyPath: parent.keyPath], disabledReason: L("Enable the optimization above before validating it."))
   }
 
   /// A clock percentage. While the adaptive clock or the game drives the key, the control is disabled and badged: a
@@ -250,6 +258,6 @@ enum PerformanceTuningModelBuilder {
                                      _ description: String, set: @escaping (Int) -> Void) -> MenuItem {
     SettingsRow.stepper(id, title, Double(percent), range: PerformanceTuningLimits.clockPercentRange, step: 1,
                         format: { "\(Int($0))%" }, description,
-                        enabled: on && override == .none, badge: ConfigOverrideBadge.title(for: override), set: { set(Int($0)) })
+                        enabled: on && override == .none, badge: ConfigOverrideBadge.title(for: override), defaultValue: 100, disabledReason: override == .none ? L("Enable the frequency override above first.") : overrideReason(override), set: { set(Int($0)) })
   }
 }

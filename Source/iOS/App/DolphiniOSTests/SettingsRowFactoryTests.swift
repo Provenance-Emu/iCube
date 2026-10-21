@@ -7,6 +7,20 @@ import XCTest
 @testable import iCube
 
 final class SettingsRowFactoryTests: XCTestCase {
+  func test_modification_requiresAnExplicitTypedFactoryDefault() {
+    XCTAssertFalse(SettingsRow.toggle("preference", "Preference", true, "d") { _ in }.isModified)
+    XCTAssertFalse(SettingsRow.toggle("t", "T", false, "d", defaultValue: false) { _ in }.isModified)
+    XCTAssertTrue(SettingsRow.toggle("t", "T", true, "d", defaultValue: false) { _ in }.isModified)
+    XCTAssertTrue(SettingsRow.cycle("c", "C", [("A", 1), ("B", 2)], 2, "d", defaultValue: 1) { _ in }.isModified)
+    XCTAssertFalse(SettingsRow.picker("p", "P", [("A", 1)], 1, "d", defaultValue: 1) { _ in }.isModified)
+    XCTAssertTrue(SettingsRow.stepper("s", "S", 120, range: 1 ... 400, step: 1, format: { "\($0)" }, "d", defaultValue: 100) { _ in }.isModified)
+  }
+
+  func test_disabledReason_isOnlyExposedWhileDisabled() {
+    XCTAssertEqual(SettingsRow.toggle("t", "T", false, "d", enabled: false, disabledReason: "Enable its parent first") { _ in }.disabledReason, "Enable its parent first")
+    XCTAssertNil(SettingsRow.toggle("t", "T", false, "d", disabledReason: "Enable its parent first") { _ in }.disabledReason)
+  }
+
   func test_toggle_setReachesTheCallback_andDescriptionIsKept() {
     var received: [Bool] = []
     let item = SettingsRow.toggle("t", "Toggle", false, "Does a thing.") { received.append($0) }

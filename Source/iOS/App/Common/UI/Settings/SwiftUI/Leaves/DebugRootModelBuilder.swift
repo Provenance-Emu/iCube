@@ -35,7 +35,7 @@ enum DebugRootModelBuilder {
     MenuSection(id: "cpu-memory", header: L("CPU / Memory"), items: [
       SettingsRow.toggle("fastmem", L("Fastmem"), state.fastmem,
                          L("Fast memory-access path for the CPU emulator. A large speedup where supported; disabled if the device can't provide it."),
-                         enabled: state.hydrated.fastmemAvailable, set: { apply(.fastmem($0)) }),
+                         enabled: state.hydrated.fastmemAvailable, disabledReason: L("Fast memory access is unavailable in this environment."), set: { apply(.fastmem($0)) }),
     ])
   }
 

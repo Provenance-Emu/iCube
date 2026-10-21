@@ -8,6 +8,7 @@ import SwiftUI
 /// it. Leaving Settings then closed it from two levels deep; Back pops that page instead.
 enum SettingsSidebarBack: Equatable {
   case popPane
+  case focusSidebar
   case leaveSettings
   /// The release of the press that opened Settings (`BackCoalescer`).
   case ignore
@@ -15,8 +16,9 @@ enum SettingsSidebarBack: Equatable {
   /// - Parameters:
   ///   - paneDepth: pages pushed on top of the pane's leaf.
   ///   - honorsPress: whether `BackCoalescer` lets this press close Settings.
-  static func action(paneDepth: Int, honorsPress: Bool) -> SettingsSidebarBack {
+  static func action(paneDepth: Int, honorsPress: Bool, sidebarFocused: Bool = true) -> SettingsSidebarBack {
     if paneDepth > 0 { return .popPane }
+    if !sidebarFocused { return .focusSidebar }
     return honorsPress ? .leaveSettings : .ignore
   }
 }
@@ -46,6 +48,7 @@ struct SettingsSidebarShell: View {
   /// True while focus is on a pane row that left/right adjust (`settingsPaneHoldsLeft`): the sidebar is
   /// then not focusable, so left steps the value instead of leaving the row.
   @State private var paneHoldsLeft = false
+  @State private var sidebarFocusTransferPending = false
   @State private var paneNavigation = SettingsPaneNavigation()
   @Environment(\.dismiss) private var dismiss
   #else
@@ -146,9 +149,12 @@ struct SettingsSidebarShell: View {
   /// Menu with focus in the sidebar: pop a page still pushed in the pane, else leave Settings unless it is
   /// the release of the press that opened it.
   private func leaveSettings() {
+    guard !sidebarFocusTransferPending else { return }
     switch SettingsSidebarBack.action(paneDepth: paneNavigation.depth,
-                                      honorsPress: BackCoalescer.shouldHonor(openedAt: openedAt, now: Date())) {
+                                      honorsPress: BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()),
+                                      sidebarFocused: sidebarFocus != nil) {
     case .popPane: paneNavigation.pop()
+    case .focusSidebar: backToSidebar()
     case .leaveSettings: dismiss()
     case .ignore: break
     }
@@ -158,12 +164,15 @@ struct SettingsSidebarShell: View {
   /// Back from an adjustable row first gives the sidebar its focus back; the focus move waits a
   /// runloop turn, until the sidebar is focusable again.
   private func backToSidebar() {
-    guard paneHoldsLeft else {
-      sidebarFocus = selectedID
-      return
-    }
+    guard !sidebarFocusTransferPending else { return }
+    sidebarFocusTransferPending = true
     paneHoldsLeft = false
-    DispatchQueue.main.async { sidebarFocus = selectedID }
+    // All rows use the same deferred transfer. A duplicate callback during this
+    // command must not see the new sidebar focus and dismiss the whole Settings cover.
+    DispatchQueue.main.async {
+      sidebarFocus = selectedID
+      sidebarFocusTransferPending = false
+    }
   }
   #endif
 
@@ -234,6 +243,7 @@ struct SettingsSidebarShell: View {
             }
             .buttonStyle(ICubeRowButtonStyle(isSelected: isSelected))
             .focused($sidebarFocus, equals: entry.id)
+            .accessibilityIdentifier("settings.category.\(entry.id)")
           }
         }
       }
@@ -272,6 +282,7 @@ struct SettingsSidebarShell: View {
             }
             .buttonStyle(FocusButtonStyle())
             .focused($sidebarFocus, equals: entry.id)
+            .accessibilityIdentifier("settings.category.\(entry.id)")
           }
         }
       }

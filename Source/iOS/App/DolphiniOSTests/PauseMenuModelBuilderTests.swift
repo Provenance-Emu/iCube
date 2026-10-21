@@ -137,6 +137,44 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertTrue(PerfHUDToggle.Flags(graphs: true).isOn, "any stat drawn counts as on")
   }
 
+  func test_perfHUDVBlankAloneCountsAsOn_andMasterOffClearsIt() {
+    XCTAssertTrue(PerfHUDToggle.Flags(vblank: true).isOn)
+    XCTAssertFalse(PerfHUDToggle.flags(on: false).vblank)
+  }
+
+  func test_perfHUDLongPressRouteKeepsTVPauseParentOpen() {
+    var calls: [String] = []
+    PausePerfHUDRoute.open(platform: .tvos, openSubmenu: { calls.append("submenu") },
+                           closePause: { calls.append("close") }, openTouchOverlay: { calls.append("touch") })
+    XCTAssertEqual(calls, ["submenu"])
+    calls = []
+    PausePerfHUDRoute.open(platform: .ios, openSubmenu: { calls.append("submenu") },
+                           closePause: { calls.append("close") }, openTouchOverlay: { calls.append("touch") })
+    XCTAssertEqual(calls, ["close", "touch"])
+  }
+
+  func test_perfHUDSubmenuHasSixIndependentLiveToggles() {
+    var flags = PerfHUDToggle.Flags()
+    var writes = 0
+    let model = PauseMenuModelBuilder.perfHUDModel(read: { flags }, write: { stat, on in
+      flags[keyPath: stat.keyPath] = on
+      writes += 1
+    })
+    XCTAssertEqual(model.allItems.count, 6)
+    XCTAssertEqual(model.focusRequest, "hud-fps")
+    for item in model.allItems {
+      guard case .toggle(let binding) = item.role else { return XCTFail("HUD choice must be a toggle") }
+      XCTAssertFalse(binding.wrappedValue)
+    }
+    XCTAssertEqual(writes, 0)
+    model.item(id: "hud-vblank")?.activateInPlace()
+    XCTAssertTrue(flags.vblank)
+    XCTAssertEqual(writes, 1)
+    guard case .toggle(let binding)? = model.item(id: "hud-vblank")?.role else { return XCTFail("VBlank") }
+    flags.vblank = false
+    XCTAssertFalse(binding.wrappedValue, "Existing menu bindings must reread external Config changes")
+  }
+
   func test_upscaling_cyclesResolutions_andLongPressOpensGraphicsLeaf() {
     let resolution = Box(1)
     let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(resolution: resolution), actions: actions())

@@ -15,10 +15,10 @@ enum ConfigAdvancedModelBuilder {
                            set: { apply(.memOverride($0)) }),
         SettingsRow.stepper("mem1", L("MEM1"), Double(state.mem1MB), range: ConfigAdvancedLimits.mem1MB, step: 1, format: megabytes,
                             L("Main memory. The real console has 24 MB."),
-                            enabled: state.memOverride, set: { apply(.mem1MB(Int($0))) }),
+                            enabled: state.memOverride, disabledReason: L("Enable Emulated Memory Size Override first."), set: { apply(.mem1MB(Int($0))) }),
         SettingsRow.stepper("mem2", L("MEM2"), Double(state.mem2MB), range: ConfigAdvancedLimits.mem2MB, step: 1, format: megabytes,
                             L("Wii extended memory. The real console has 64 MB."),
-                            enabled: state.memOverride, set: { apply(.mem2MB(Int($0))) }),
+                            enabled: state.memOverride, disabledReason: L("Enable Emulated Memory Size Override first."), set: { apply(.mem2MB(Int($0))) }),
       ])
 
     let rtcToggle = SettingsRow.toggle("rtc-enabled", L("Enable Custom RTC"), state.rtcEnabled,

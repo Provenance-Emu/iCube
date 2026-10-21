@@ -125,16 +125,25 @@ private struct ICubeRowButtonChrome<Label: View>: View {
   let isFocusedOverride: Bool?
   let isSelected: Bool
   @Environment(\.isFocused) private var isFocused
+  @Environment(\.isEnabled) private var isEnabled
 
   var body: some View {
+    #if os(tvOS)
+    let focused = isEnabled && (isFocusedOverride ?? isFocused)
+    let selected = isEnabled && isSelected
+    let rowOpacity = isEnabled ? 1.0 : 0.65
+    #else
     let focused = isFocusedOverride ?? isFocused
+    let selected = isSelected
+    let rowOpacity = 1.0
+    #endif
     label
       .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
       .padding(.vertical, ICubeDesign.Spacing.s.rawValue)
       .frame(maxWidth: .infinity, minHeight: ICubeRowButtonStyle.minHeight, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
-          .fill(focused || isSelected ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface))
+          .fill(focused || selected ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface))
       )
       .overlay(
         RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
@@ -142,6 +151,7 @@ private struct ICubeRowButtonChrome<Label: View>: View {
       )
       .modifier(ICubeFocusChrome(focused: focused, pressed: isPressed,
                                  radius: ICubeDesign.Radius.small.rawValue, scale: ICubeDesign.Motion.rowFocusScale))
+      .opacity(rowOpacity)
   }
 }
 

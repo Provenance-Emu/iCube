@@ -8,6 +8,17 @@ import SwiftUI
 
 internal enum PlatformKind { case ios, tvos }
 
+/// The television submenu stays inside the pause session and its existing pause token.
+enum PausePerfHUDRoute {
+  static func open(platform: PlatformKind, openSubmenu: () -> Void,
+                   closePause: () -> Void, openTouchOverlay: () -> Void) {
+    switch platform {
+    case .tvos: openSubmenu()
+    case .ios: closePause(); openTouchOverlay()
+    }
+  }
+}
+
 internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
   @AppStorage("quick_save_mode") private var quickSaveMode: QuickSaveMode = .history
@@ -27,7 +38,7 @@ internal struct PauseMenuView: View {
     /// grid (`SaveStateFilmstripView`) -- previously iOS-only.
     case filmstrip
   }
-  private enum Pane { case main, saves, cheats, controllers, discs }
+  private enum Pane { case main, saves, cheats, controllers, discs, perfHUD }
   /// The quick-slot picker's slots, numbered as the UI shows them.
   static let saveSlots = 1 ... PauseMenuModelBuilder.slotCount
   @State private var pane: Pane = .main
@@ -86,6 +97,7 @@ internal struct PauseMenuView: View {
   @State private var nextEngine: Int = CpuEngine.cachedInterpreter.rawValue
   /// Mirror of `PerfHUDToggle.isOn` behind the Performance HUD tile.
   @State private var perfHUDOn: Bool = false
+  @State private var perfHUDFlags = PerfHUDToggle.Flags()
   @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   /// True while any sheet, full-screen cover, or non-main pane owned by this menu is
@@ -131,12 +143,26 @@ internal struct PauseMenuView: View {
     internalResolution = TVEmulationBridge.internalResolution()
     metalFXUpscale = DOLConfigBridge.gfxMetalFXSpatialUpscale()
     audioVolume = TVEmulationBridge.audioVolumePercent()
-    perfHUDOn = PerfHUDToggle.isOn
+    perfHUDFlags = PerfHUDToggle.read()
+    perfHUDOn = perfHUDFlags.isOn
     refreshEngineState()
   }
 
   private func refreshActiveCheatCount() {
     activeCheatCount = CheatsMenuView.activeCheatCount(forGameId: game.gameID, revision: game.revision)
+  }
+
+  private var perfHUDMenuModel: MenuModel {
+    // Track every flag, including changes that leave the master switch on. The binding getters
+    // still read Config directly so repeated actions never capture an old snapshot.
+    _ = perfHUDFlags
+    return PauseMenuModelBuilder.perfHUDModel()
+  }
+
+  private func closePerfHUDSubmenu() {
+    tvLastFocusID = "perf-hud"
+    refreshLiveSettings()
+    pane = .main
   }
 
   /// Mutes / unmutes through the helper the top bar shares, so both always agree.
@@ -160,6 +186,12 @@ internal struct PauseMenuView: View {
       case .main:
         mainMenu
           .onAppear { NSLog("[PAUSE] Main menu appeared") }
+      case .perfHUD:
+        MenuScreen(model: perfHUDMenuModel, style: .list,
+                   onBack: { closePerfHUDSubmenu() },
+                   tvHeader: ICubeLeafHeader(title: L("Performance HUD"), subtitle: L("Pause Menu")),
+                   tvClaimsFocus: true)
+          .frame(maxWidth: 1000)
       case .saves:
         savesMenu
           .onAppear { NSLog("[PAUSE] Saves menu appeared") }
@@ -268,11 +300,16 @@ internal struct PauseMenuView: View {
           focused = .back
         case .controllers:
           focused = .back
-        case .discs:
+        case .discs, .perfHUD:
           break
         }
       }
     }
+    #if os(tvOS)
+    .onReceive(NotificationCenter.default.publisher(for: .DOLConfigChanged)) { _ in
+      refreshLiveSettings()
+    }
+    #endif
     .onChange(of: showShaders) { _, shown in
       if !shown { refreshShaderState() }
     }
@@ -280,7 +317,8 @@ internal struct PauseMenuView: View {
     .onExitCommand {
       guard !quitRequestInFlight else { return }
       // At .main the tile grid's own onBack closes (coalesced), and the confirm overlays handle theirs.
-      if pane != .main { pane = .main }
+      if pane == .perfHUD { closePerfHUDSubmenu() }
+      else if pane != .main { pane = .main }
     }
     // Spec §5.3: Play/Pause on the remote resumes, from any pane.
     .onPlayPauseCommand {
@@ -709,7 +747,12 @@ internal struct PauseMenuView: View {
         settingsLink = link
         showSettings = true
       },
-      openPerfOverlay: { onClose(); onShowPerfOverlay() },
+      openPerfOverlay: {
+        PausePerfHUDRoute.open(platform: platform, openSubmenu: {
+          tvLastFocusID = "perf-hud"
+          pane = .perfHUD
+        }, closePause: onClose, openTouchOverlay: onShowPerfOverlay)
+      },
       requestReset: { showResetDialog = true },
       requestExit: requestExit,
       recenterPointer: {
@@ -882,6 +925,15 @@ struct PauseMenuActions {
 
 /// Unified menu UX spec §5: Quick / Game / System. Shared by iOS and tvOS.
 enum PauseMenuModelBuilder {
+  static func perfHUDModel(read: @escaping () -> PerfHUDToggle.Flags = PerfHUDToggle.read,
+                           write: @escaping (PerfHUDToggle.Stat, Bool) -> Void = { $0.set($1) }) -> MenuModel {
+    let items = PerfHUDToggle.Stat.allCases.map { stat in
+      MenuItem(id: "hud-\(stat.rawValue)", title: stat.title, role: .toggle(Binding(
+        get: { read()[keyPath: stat.keyPath] }, set: { write(stat, $0) })))
+    }
+    return MenuModel(sections: [MenuSection(id: "hud", items: items)], focusRequest: "hud-fps")
+  }
+
   /// The session row, in order (iFly layout): big tiles above the Options grid.
   static let primaryIDs = ["resume", "save-states", "reset", "exit"]
 

@@ -1,5 +1,11 @@
 # iCube handoff (2026-10-10)
 
+## tvOS Settings / pause HUD follow-up — October 21, 2026
+
+[Current evidence](app-store/release-evidence/2026-10-21-tvos-settings.md): direct-choice panels replace list cycling; Left returns to categories without changing choices; root Back requires category focus before closing. Disabled dependencies show a readable reason and reduced emphasis. Opt-in non-default dots use [audited core/launch/reset baselines](app-store/release-evidence/2026-10-21-settings-default-audit.md), excluding language and ambiguous defaults. tvOS HUD long-press now opens six quick toggles inside Pause; iOS keeps its touch presentation.
+
+Final tvOS SDK builds and native reported-flow checks pass: chooser open/cancel/commit/restore, General/GameCube/Wii Back, Left without mutation, pause Settings reopen/Back repeated three times, library Settings two-step Back, disabled reason/appearance, HUD long-press/FPS toggle/restore/Back. The library test uses a demo catalogue without booting games. Owner confirms intermittent Back happened from both library and pause but currently works; the original intermittent failure was not reproduced. Screenshot review caught double dimming, corrected before final acceptance. Final iOS build-for-testing and full suite pass: **2,241 passed, five opt-in skips, zero failures (2,246 total)**. These changes are not yet in TestFlight; prior build below remains the distributed version. Physical iPad tests remain deferred.
+
 ## Latest play-controls release — October 21, 2026
 
 **iOS and tvOS TestFlight 1.0.0 (1792554707) are VALID, Beta Review APPROVED, and internal/external IN_BETA_TESTING.** Both are assigned to Internal, Patrons, Moderators, Friends and Family, and Public Website; notifications enabled. [TestFlight](https://testflight.apple.com/join/9ZEfnyMP). Archived source `76d443d03d` is pushed; no App Store release submission. [Build IDs, guards and evidence](app-store/release-evidence/2026-10-20-play-controls.md).

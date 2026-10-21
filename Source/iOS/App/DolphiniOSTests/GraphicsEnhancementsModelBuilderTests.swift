@@ -17,6 +17,19 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
     return s
   }
 
+  func test_resolutionMetadata_usesNativeDefault_andExplainsGameOverride() {
+    var value = GraphicsEnhancementsState()
+    value.efbScale = 1
+    value.efbOverride = .none
+    XCTAssertFalse(model(value).item(id: "efb-scale")!.isModified)
+    XCTAssertNil(model(value).item(id: "efb-scale")!.disabledReason)
+    value.efbScale = 3
+    value.efbOverride = .game
+    XCTAssertTrue(model(value).item(id: "efb-scale")!.isModified)
+    XCTAssertFalse(model(value).item(id: "efb-scale")!.isEnabled)
+    XCTAssertTrue(model(value).item(id: "efb-scale")!.disabledReason!.contains("game"))
+  }
+
   private let baseRows = [
     "efb-scale", "anisotropy", "msaa", "ssaa", "output-resampling", "true-color", "disable-copy-filter",
     "widescreen-hack", "hdr-output", "gpu-texture-decoding", "disable-fog", "arbitrary-mipmap",

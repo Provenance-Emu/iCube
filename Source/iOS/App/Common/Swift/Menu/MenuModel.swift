@@ -60,6 +60,8 @@ struct MenuItem: Identifiable {
   /// built, not a live read on every render.
   var badge: String?
   var isEnabled: Bool = true
+  var disabledReason: String?
+  var isModified: Bool = false
   /// `.custom` rows only: what a controller's A does on iOS. A `.custom` row carries its own touch
   /// and tvOS gestures, so `MenuScreen` cannot activate it by itself; without this a pad could focus
   /// the player screen's capture rows but never arm one.
@@ -86,6 +88,8 @@ struct MenuItem: Identifiable {
     onCustomActivate: (() -> Void)? = nil,
     isCompactOnTV: Bool = false,
     description: String? = nil,
+    disabledReason: String? = nil,
+    isModified: Bool = false,
     longPress: MenuLongPress? = nil,
     showsChevron: Bool = false
   ) {
@@ -97,6 +101,8 @@ struct MenuItem: Identifiable {
     self.role = role
     self.badge = badge
     self.isEnabled = isEnabled
+    self.disabledReason = disabledReason
+    self.isModified = isModified
     self.onCustomActivate = onCustomActivate
     self.isCompactOnTV = isCompactOnTV
     self.description = description
@@ -199,13 +205,11 @@ extension MenuItem {
     }
   }
 
-  /// A tvOS list row whose left/right step its value (a stepper, a cycle row, a compact picker), so a
-  /// left press must stay on the row instead of moving focus to the settings sidebar.
+  /// Numeric tvOS rows retain horizontal editing; choices open a panel on Select.
   var adjustsWithLeftRight: Bool {
     guard isEnabled else { return false }
     switch role {
-    case .stepper, .cycle: return true
-    case .picker: return isCompactOnTV
+    case .stepper: return true
     default: return false
     }
   }

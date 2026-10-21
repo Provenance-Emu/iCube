@@ -12,6 +12,30 @@ final class GraphicsHacksModelBuilderTests: XCTestCase {
     GraphicsHacksModelBuilder.make(state: state) { self.changes.append($0) }
   }
 
+  func test_bboxSync_explainsBackendAndParentDependencies() {
+    var state = GraphicsHacksState()
+    state.backendSupportsBbox = true
+    state.bboxEnabled = false
+    XCTAssertEqual(model(state).item(id: "bbox-sync")?.disabledReason, "Enable Bounding Box Emulation first.")
+    state.backendSupportsBbox = false
+    XCTAssertTrue(model(state).item(id: "bbox-sync")!.disabledReason!.contains("backend"))
+    state.backendSupportsBbox = true
+    state.bboxEnabled = true
+    XCTAssertNil(model(state).item(id: "bbox-sync")?.disabledReason)
+  }
+
+  func test_modification_usesShippingSeedsRatherThanSnapshotInitialValues() {
+    var state = GraphicsHacksState()
+    state.textureCacheSamples = 0
+    state.immediateXfb = true
+    XCTAssertFalse(model(state).item(id: "texture-cache")!.isModified)
+    XCTAssertFalse(model(state).item(id: "immediate-xfb")!.isModified)
+    state.textureCacheSamples = 128
+    state.immediateXfb = false
+    XCTAssertTrue(model(state).item(id: "texture-cache")!.isModified)
+    XCTAssertTrue(model(state).item(id: "immediate-xfb")!.isModified)
+  }
+
   func test_rowOrder_matchesTheOldScreen() {
     XCTAssertEqual(model().allItems.map(\.id), [
       "texture-cache", "bbox", "bbox-sync", "efb-access", "skip-efb-ram", "skip-xfb-ram", "immediate-xfb",

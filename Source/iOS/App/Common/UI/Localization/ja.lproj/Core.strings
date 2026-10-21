@@ -5571,3 +5571,26 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Browse classic slots before saving; occupied slots require confirmation." = "Browse classic slots before saving; occupied slots require confirmation.";
 "Load the latest manual state, or automatic resume when no manual state exists." = "Load the latest manual state, or automatic resume when no manual state exists.";
 "Save, load and browse save states." = "Save, load and browse save states.";
+"Changed from default" = "デフォルトから変更済み";
+"Controlled automatically. Turn off the automatic controller to edit this setting." = "自動制御中です。この設定を変更するには、自動制御をオフにしてください。";
+"Controlled by Adaptive Clock. Turn off Adaptive Clock to edit this setting." = "アダプティブクロックによる制御中です。この設定を変更するには、アダプティブクロックをオフにしてください。";
+"Controlled by the active game configuration." = "現在のゲーム設定によって制御されています。";
+"Enable Bitcrusher first." = "先にビットクラッシャーを有効にしてください。";
+"Enable Bounding Box Emulation first." = "先にバウンディングボックスのエミュレーションを有効にしてください。";
+"Enable Dolby Pro Logic II decoding first." = "先に Dolby Pro Logic II のデコードを有効にしてください。";
+"Enable Echo first." = "先にエコーを有効にしてください。";
+"Enable Emulated Memory Size Override first." = "先にエミュレートするメモリサイズの上書きを有効にしてください。";
+"Enable Equalizer first." = "先にイコライザーを有効にしてください。";
+"Enable Load Custom Textures first." = "先にカスタムテクスチャの読み込みを有効にしてください。";
+"Enable MSAA above None first." = "先に MSAA を「なし」以外に設定してください。";
+"Enable Wii Speak first." = "先に Wii スピークを有効にしてください。";
+"Enable the frequency override above first." = "先に上の周波数の上書きを有効にしてください。";
+"Enable the optimization above before validating it." = "検証する前に、上の最適化を有効にしてください。";
+"Fast memory access is unavailable in this environment." = "この環境では高速メモリアクセスを利用できません。";
+"Select AVAudioEngine and enable Dolby Pro Logic II decoding and Spatial Audio first." = "先に AVAudioEngine を選択し、Dolby Pro Logic II のデコードと空間オーディオを有効にしてください。";
+"Select AVAudioEngine and enable Dolby Pro Logic II decoding first." = "先に AVAudioEngine を選択し、Dolby Pro Logic II のデコードを有効にしてください。";
+"Turn off Immediate XFB and VI Skip first." = "先に即時 XFB と VI スキップをオフにしてください。";
+"Turn off Skip EFB Copy to RAM or Skip XFB Copy to RAM first." = "先に「EFB の RAM へのコピーをスキップ」または「XFB の RAM へのコピーをスキップ」をオフにしてください。";
+"Unmute Wii Speak first." = "先に Wii スピークのミュートを解除してください。";
+
+"Perf Graph" = "パフォーマンスグラフ";

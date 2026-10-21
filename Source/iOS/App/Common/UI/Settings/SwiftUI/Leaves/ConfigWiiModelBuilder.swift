@@ -112,11 +112,11 @@ enum ConfigWiiModelBuilder {
                                              set: { apply(.wiiSpeak($0)) }),
                           SettingsRow.toggle("wii-speak-muted", L("Mute Wii Speak"), state.wiiSpeakMuted,
                                              L("Keeps the emulated microphone silent. Dolphin ships it muted; turn this off to be heard."),
-                                             enabled: state.wiiSpeak, set: { apply(.wiiSpeakMuted($0)) }),
+                                             enabled: state.wiiSpeak, disabledReason: L("Enable Wii Speak first."), set: { apply(.wiiSpeakMuted($0)) }),
                           SettingsRow.stepper("wii-speak-volume", L("Wii Speak Volume"), Double(state.wiiSpeakVolumeDb),
                                               range: ConfigWiiLimits.wiiSpeakVolumeDb, step: 1, format: decibels,
                                               L("Gain applied to captured speech before the game hears it."),
-                                              enabled: state.wiiSpeak && !state.wiiSpeakMuted, set: { apply(.wiiSpeakVolumeDb(Int($0))) }),
+                                              enabled: state.wiiSpeak && !state.wiiSpeakMuted, disabledReason: state.wiiSpeak ? L("Unmute Wii Speak first.") : L("Enable Wii Speak first."), set: { apply(.wiiSpeakVolumeDb(Int($0))) }),
                         ])]
     #else
     return []

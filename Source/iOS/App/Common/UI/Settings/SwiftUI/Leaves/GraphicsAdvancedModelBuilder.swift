@@ -19,8 +19,8 @@ enum GraphicsAdvancedModelBuilder {
   typealias Apply = (GraphicsAdvancedChange) -> Void
 
   static func make(state: GraphicsAdvancedState, apply: @escaping Apply) -> MenuModel {
-    func flag(_ id: String, _ title: String, _ flag: GraphicsAdvancedFlag, _ description: String, enabled: Bool = true) -> MenuItem {
-      SettingsRow.toggle(id, title, state[keyPath: flag.keyPath], description, enabled: enabled, set: { apply(.flag(flag, $0)) })
+    func flag(_ id: String, _ title: String, _ flag: GraphicsAdvancedFlag, _ description: String, enabled: Bool = true, disabledReason: String? = nil) -> MenuItem {
+      SettingsRow.toggle(id, title, state[keyPath: flag.keyPath], description, enabled: enabled, disabledReason: disabledReason, set: { apply(.flag(flag, $0)) })
     }
 
     let statistics = MenuSection(id: "performance-statistics", header: L("Performance Statistics"),
@@ -55,7 +55,7 @@ enum GraphicsAdvancedModelBuilder {
     var utilityItems = [
       flag("load-custom-textures", L("Load Custom Textures"), .hiresTextures, L("Loads installed high-resolution texture packs in place of the originals.")),
       flag("prefetch-custom-textures", L("Prefetch Custom Textures"), .prefetchTextures,
-           L("Loads all custom textures into memory up front for smoother play, at higher memory use."), enabled: state.hiresTextures),
+           L("Loads all custom textures into memory up front for smoother play, at higher memory use."), enabled: state.hiresTextures, disabledReason: L("Enable Load Custom Textures first.")),
     ]
     if state.showsTexturePackWarning {
       let text = String(format: L("Installed texture packs total %@, a large share of this device's memory. Prefetching them can crash the game; turn Prefetch off or remove packs you don't use."),
