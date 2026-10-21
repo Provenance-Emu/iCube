@@ -10,6 +10,7 @@
 // C++ includes
 #include "Common/Config/Config.h"
 #include "Core/Config/MainSettings.h"
+#include "Core/Config/DefaultLocale.h"
 #include "Core/Config/GraphicsSettings.h"
 // Full definition of `enum class TriState` (GraphicsSettings.h only forward-declares it). Needed for
 // the (TriState)mode cast in the VISkipMode setter (setVISkipMode:).
@@ -414,6 +415,7 @@ public:
 + (void)setMainFastDiscSpeed:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_FAST_DISC_SPEED, (bool)enabled); }
 + (BOOL)mainDSPThread { return Config::Get(Config::MAIN_DSP_THREAD); }
 + (void)setMainDSPThread:(BOOL)enabled { Config::SetBaseOrCurrent(Config::MAIN_DSP_THREAD, (bool)enabled); }
++ (NSInteger)defaultFallbackRegion { return (NSInteger)Config::GetDefaultRegion(); }
 + (NSInteger)mainFallbackRegion { return (NSInteger)Config::Get(Config::MAIN_FALLBACK_REGION); }
 + (void)setMainFallbackRegion:(NSInteger)regionRaw { Config::SetBaseOrCurrent(Config::MAIN_FALLBACK_REGION, (DiscIO::Region)regionRaw); }
 + (NSInteger)mainEmulationSpeedPercent { float v = Config::Get(Config::MAIN_EMULATION_SPEED); return (NSInteger)lroundf(v * 100.0f); }

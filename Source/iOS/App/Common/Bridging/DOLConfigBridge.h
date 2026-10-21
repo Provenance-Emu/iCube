@@ -120,6 +120,7 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (BOOL)mainDSPThread;
 + (void)setMainDSPThread:(BOOL)enabled;
 + (NSInteger)mainFallbackRegion;
++ (NSInteger)defaultFallbackRegion;
 + (void)setMainFallbackRegion:(NSInteger)regionRaw;
 + (NSInteger)mainEmulationSpeedPercent;
 + (void)setMainEmulationSpeedPercent:(NSInteger)percent;

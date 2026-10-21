@@ -28,15 +28,13 @@ struct ConfigGeneralView: View {
     s.resumeWhereLeftOff = defaults.bool(forKey: ConfigGeneralDefaultsKey.resumeWhereLeftOff)
     s.speedLimitPercent = DOLConfigBridge.mainEmulationSpeedPercent()
     s.fastForwardSpeedPercent = ConfigGeneralState.storedFastForward(defaults.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int)
-    s.fallbackRegion = ConfigGeneralState.displayedRegion(raw: DOLConfigBridge.mainFallbackRegion())
+    s.fallbackRegion = ConfigGeneralState.displayedRegion(raw: DOLConfigBridge.mainFallbackRegion(), defaultRegion: Region.from(raw: DOLConfigBridge.defaultFallbackRegion()))
     state = s
   }
 
-  /// The one write outside `apply`: Config holding the Error region is replaced with NTSC-U, on appear and on every Config change
-  /// (a reset or game-INI load), as the old `syncFromConfig` did on each sync. The write re-posts the change once; the second
-  /// pass sees a valid region, `fallbackRegionSeed` returns nil, and it stops. `sync()` itself only displays NTSC-U in that case.
+  /// Repair invalid regions on appear/reset using the core’s locale-derived default.
   private func seedFallbackRegion() {
-    if let region = ConfigGeneralState.fallbackRegionSeed(configRaw: DOLConfigBridge.mainFallbackRegion()) {
+    if let region = ConfigGeneralState.fallbackRegionSeed(configRaw: DOLConfigBridge.mainFallbackRegion(), defaultRegion: Region.from(raw: DOLConfigBridge.defaultFallbackRegion())) {
       DOLConfigBridge.setMainFallbackRegion(region.rawValue)
     }
   }

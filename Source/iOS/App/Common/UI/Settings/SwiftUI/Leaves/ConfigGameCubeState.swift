@@ -16,25 +16,10 @@ struct ConfigGameCubeState: Equatable {
   /// and the GameCube IPL has no Japanese entry.
   static let languageRange = 0 ... 5
 
-  /// Leading ISO-639 subtag to GameCube index, in index order after English (0).
-  private static let languagePrefixes: [(prefix: String, index: Int)] = [("de", 1), ("fr", 2), ("es", 3), ("it", 4), ("nl", 5)]
-
-  /// Maps the preferred language to the nearest GameCube IPL language (English/German/French/Spanish/Italian/Dutch only;
-  /// anything else, Japanese included, is English).
-  static func gcLanguage(forPreferredLanguage code: String) -> Int {
-    let lowered = code.lowercased()
-    return languagePrefixes.first { lowered.hasPrefix($0.prefix) }?.index ?? 0
-  }
-
-  /// A stored value is trusted but clamped to the valid range (the old 0...6 picker could store 6); never chosen shows the locale's.
-  static func displayedLanguage(isSet: Bool, stored: Int, preferredLanguage: String) -> Int {
-    guard isSet else { return gcLanguage(forPreferredLanguage: preferredLanguage) }
-    return languageRange.contains(stored) ? stored : 0
-  }
-
-  /// What to persist on appear: the locale-derived language, once, when the user never chose one. The old view wrote it from every sync.
-  static func languageSeed(isSet: Bool, preferredLanguage: String) -> Int? {
-    isSet ? nil : gcLanguage(forPreferredLanguage: preferredLanguage)
+  /// Config already resolves an unset key to the core's locale-derived default.
+  /// Clamp values written by the old 0...6 picker to the six valid IPL entries.
+  static func displayedLanguage(stored: Int) -> Int {
+    languageRange.contains(stored) ? stored : 0
   }
 }
 

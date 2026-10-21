@@ -83,26 +83,12 @@ final class ConfigGameCubeModelBuilderTests: XCTestCase {
     XCTAssertEqual(options.last?.1.base as? Int, 9)
   }
 
-  func test_gcLanguage_fromThePreferredLanguageCode() {
-    let cases: [(String, Int)] = [("en-US", 0), ("de-DE", 1), ("fr", 2), ("es-MX", 3), ("it", 4), ("nl-NL", 5), ("ja-JP", 0), ("zh-Hans", 0), ("", 0), ("DE", 1), ("FR-ca", 2)]
-    for (code, expected) in cases { XCTAssertEqual(ConfigGameCubeState.gcLanguage(forPreferredLanguage: code), expected, code) }
-  }
-
-  func test_displayedLanguage_trustsAStoredValue_clampsOldBugValues_andDerivesWhenUnset() {
-    let cases: [(Bool, Int, String, Int)] = [
-      (true, 3, "de", 3), (true, 0, "de", 0), (true, 5, "en", 5),
-      (true, 6, "de", 0), (true, -1, "de", 0), (true, 99, "fr", 0),
-      (false, 0, "fr", 2), (false, 4, "nl", 5), (false, 0, "ja", 0),
-    ]
-    for (isSet, stored, code, expected) in cases {
-      XCTAssertEqual(ConfigGameCubeState.displayedLanguage(isSet: isSet, stored: stored, preferredLanguage: code), expected, "\(isSet) \(stored) \(code)")
+  func test_displayedLanguage_preservesConfigValue_andClampsOldBugValues() {
+    for value in 0 ... 5 {
+      XCTAssertEqual(ConfigGameCubeState.displayedLanguage(stored: value), value)
     }
-  }
-
-  func test_languageSeed_onlyWhenNeverChosen() {
-    let cases: [(Bool, String, Int?)] = [(false, "nl", 5), (false, "en", 0), (false, "", 0), (true, "nl", nil), (true, "en", nil)]
-    for (isSet, code, expected) in cases {
-      XCTAssertEqual(ConfigGameCubeState.languageSeed(isSet: isSet, preferredLanguage: code), expected, "\(isSet) \(code)")
+    for value in [-1, 6, 99] {
+      XCTAssertEqual(ConfigGameCubeState.displayedLanguage(stored: value), 0)
     }
   }
 

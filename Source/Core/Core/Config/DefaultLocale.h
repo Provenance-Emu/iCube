@@ -16,6 +16,7 @@ enum class Region;
 namespace Config
 {
 DiscIO::Language GetDefaultLanguage();
+int GetDefaultGameCubeLanguage();
 std::optional<u8> GetOptionalDefaultCountry();
 u8 GetDefaultCountry();
 DiscIO::Region GetDefaultRegion();

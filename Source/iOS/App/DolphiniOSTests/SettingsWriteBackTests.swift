@@ -100,6 +100,7 @@ final class SettingsWriteBackTests: XCTestCase {
     // the Wii console's SYSCONF region and must not be hardcoded to NTSC-U in the reset.
     DOLConfigBridge.deleteBaseLayerKeys(["Dolphin.Core.FallbackRegion"])
     let localeFallback = DOLConfigBridge.mainFallbackRegion()
+    XCTAssertEqual(localeFallback, DOLConfigBridge.defaultFallbackRegion())
     DOLConfigBridge.setMainEnableCheats(true)
     DOLConfigBridge.setMainOverrideRegionSettings(true)
     DOLConfigBridge.setMainAutoDiscChange(true)

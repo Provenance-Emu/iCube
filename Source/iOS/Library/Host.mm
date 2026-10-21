@@ -12,10 +12,14 @@
 
 #include "HostNotifications.h"
 #include "HostQueue.h"
+#include "PreferredLocales.h"
 
 std::vector<std::string> Host_GetPreferredLocales()
 {
-  return {};
+  @autoreleasepool
+  {
+    return DOLPreferredLocales(NSLocale.preferredLanguages, NSLocale.currentLocale);
+  }
 }
 
 void Host_PPCSymbolsChanged()

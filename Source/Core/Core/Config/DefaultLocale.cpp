@@ -173,6 +173,19 @@ DiscIO::Language GetDefaultLanguage()
   return language;
 }
 
+int GetDefaultGameCubeLanguage()
+{
+  // The IPL only supports English through Dutch. Try the remaining preferred languages
+  // when the first language is unsupported (for example Swedish followed by German).
+  for (const std::string& locale : GetPreferredLocales())
+  {
+    const auto language = TryParseLanguage(locale);
+    if (language && *language >= DiscIO::Language::English && *language <= DiscIO::Language::Dutch)
+      return DiscIO::ToGameCubeLanguage(*language);
+  }
+  return 0;
+}
+
 std::optional<u8> GetOptionalDefaultCountry()
 {
   static const std::optional<u8> country = ComputeDefaultCountry();

@@ -10,6 +10,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 #include "Common/Swap.h"
+#include "Core/Config/DefaultLocale.h"
 #include "Core/IOS/FS/FileSystem.h"
 #include "Core/IOS/Uids.h"
 
@@ -264,9 +265,9 @@ void SysConf::InsertDefaultEntries()
   console_nick[21] = static_cast<u8>(strlen("dolphin"));
   AddEntry({Entry::Type::SmallArray, "IPL.NIK", std::move(console_nick)});
 
-  AddEntry({Entry::Type::Byte, "IPL.LNG", {1}});
+  AddEntry({Entry::Type::Byte, "IPL.LNG", {static_cast<u8>(Config::GetDefaultLanguage())}});
   std::vector<u8> ipl_sadr(0x1007 + 1);
-  ipl_sadr[0] = 0x6c;
+  ipl_sadr[0] = Config::GetDefaultCountry();
   AddEntry({Entry::Type::BigArray, "IPL.SADR", std::move(ipl_sadr)});
 
   std::vector<u8> ipl_pc(0x49 + 1);

@@ -157,15 +157,27 @@ final class ConfigGeneralModelBuilderTests: XCTestCase {
     XCTAssertEqual(ConfigGeneralState().fastForwardSpeedPercent, 300)
   }
 
-  func test_displayedRegion_showsNTSCU_forAnUnknownStoredValue() {
-    for raw in [3, 5, -1, 99] { XCTAssertEqual(ConfigGeneralState.displayedRegion(raw: raw), .ntscU, "\(raw)") }
-    XCTAssertEqual(ConfigGeneralState.displayedRegion(raw: 2), .pal)
+  func test_displayedRegion_usesLocaleDefault_forAnUnknownStoredValue() {
+    for defaultRegion in Region.selectable {
+      for raw in [3, 5, -1, 99] {
+        XCTAssertEqual(ConfigGeneralState.displayedRegion(raw: raw, defaultRegion: defaultRegion), defaultRegion)
+      }
+      for stored in Region.selectable {
+        XCTAssertEqual(ConfigGeneralState.displayedRegion(raw: stored.rawValue, defaultRegion: defaultRegion), stored)
+      }
+    }
     XCTAssertEqual(model(state { $0.fallbackRegion = .ntscK }).item(id: "fallback-region")?.currentValueTitle, "NTSC-K")
   }
 
   func test_fallbackRegionSeed_onlyForAnUnknownRegion() {
-    for raw in [3, 5, -1, 99] { XCTAssertEqual(ConfigGeneralState.fallbackRegionSeed(configRaw: raw), .ntscU, "\(raw)") }
-    for raw in [0, 1, 2, 4] { XCTAssertNil(ConfigGeneralState.fallbackRegionSeed(configRaw: raw), "\(raw)") }
+    for defaultRegion in Region.selectable {
+      for raw in [3, 5, -1, 99] {
+        XCTAssertEqual(ConfigGeneralState.fallbackRegionSeed(configRaw: raw, defaultRegion: defaultRegion), defaultRegion)
+      }
+      for raw in [0, 1, 2, 4] {
+        XCTAssertNil(ConfigGeneralState.fallbackRegionSeed(configRaw: raw, defaultRegion: defaultRegion))
+      }
+    }
   }
 
   func test_defaultsKeys_arePinned() {

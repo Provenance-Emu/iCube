@@ -55,15 +55,15 @@ struct ConfigGeneralState: Equatable {
   /// `integer(forKey:)` would turn an unset key into 0 (Unlimited): only a truly unset key is 300.
   static func storedFastForward(_ stored: Int?) -> Int { stored ?? defaultFastForwardPercent }
 
-  /// Display only: an unknown stored region shows as NTSC-U, as the old view did.
-  static func displayedRegion(raw: Int) -> Region {
+  /// Display only: an invalid stored region uses the core’s locale-derived default.
+  static func displayedRegion(raw: Int, defaultRegion: Region) -> Region {
     let region = Region.from(raw: raw)
-    return region == .unknown ? .ntscU : region
+    return region == .unknown ? defaultRegion : region
   }
 
-  /// What the host's seed step writes: NTSC-U when Config holds the Error region, else nothing.
-  static func fallbackRegionSeed(configRaw: Int) -> Region? {
-    Region.from(raw: configRaw) == .unknown ? .ntscU : nil
+  /// Repair invalid values using the same locale default as the core.
+  static func fallbackRegionSeed(configRaw: Int, defaultRegion: Region) -> Region? {
+    Region.from(raw: configRaw) == .unknown ? defaultRegion : nil
   }
 
   /// The ladder, plus the stored value when it is not on it, so the row shows the raw value instead of a dash. Unlimited (0) stays first.
