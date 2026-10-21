@@ -12,7 +12,7 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
   private struct FixtureProvider: SaveStateProviding {
     func states(for gameID: String) async -> [SaveStateInfo] { Self.fixtures }
     func statesGroupedByGame() async -> [String: [SaveStateInfo]] { ["GALE01": Self.fixtures] }
-    func thumbnail(for state: SaveStateInfo) async -> UIImage? { nil }
+    func thumbnail(for state: SaveStateInfo) async -> UIImage? { state.isQuickSave ? UIImage(systemName: "gamecontroller") : nil }
     func delete(state: SaveStateInfo) throws { XCTFail("Rendering must not delete a state") }
     func rename(state: SaveStateInfo, to title: String) throws { XCTFail("Rendering must not rename a state") }
 
@@ -32,12 +32,15 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
 
   private struct Harness: View {
     var onFooter: (CGRect) -> Void = { _ in }
+    var onContent: (String, CGRect) -> Void = { _, _ in }
     @State private var mode: QuickSaveMode
     @State private var slot = 4
 
-    init(mode: QuickSaveMode, onFooter: @escaping (CGRect) -> Void = { _ in }) {
+    init(mode: QuickSaveMode, onFooter: @escaping (CGRect) -> Void = { _ in },
+         onContent: @escaping (String, CGRect) -> Void = { _, _ in }) {
       _mode = State(initialValue: mode)
       self.onFooter = onFooter
+      self.onContent = onContent
     }
 
     var body: some View {
@@ -46,7 +49,7 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
                                             load: { _, _ in XCTFail("Rendering must not load"); return .unavailable },
                                             setKept: { _, _, _ in XCTFail("Rendering must not pin"); return .keepFailed },
                                             saveSlot: { _ in XCTFail("Rendering must not save a classic slot"); return .saveFailed }),
-        provider: FixtureProvider(), isModded: { false }, onFooterFrameChange: onFooter)
+        provider: FixtureProvider(), isModded: { false }, onFooterFrameChange: onFooter, onContentFrameChange: onContent)
     }
   }
 
@@ -67,6 +70,52 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
         XCTAssertLessThanOrEqual(footer.maxY, size.height, "Save/Load footer is offscreen at \(size)")
       }
     }
+  }
+
+  func testShortPhoneLandscapeInitiallyShowsCardMetadataAndThumbnailAbovePinnedFooter() throws {
+    guard UIDevice.current.userInterfaceIdiom == .phone else { throw XCTSkip("Compact rows are iPhone-only") }
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    // Include the shortest supported phone viewport, not only a large landscape phone.
+    for size in [CGSize(width: 667, height: 375), CGSize(width: 852, height: 393)] {
+      for mode in [QuickSaveMode.history, .slots] {
+        var footer: CGRect = .zero
+        var content: [String: CGRect] = [:]
+        let first = mode == .history ? FixtureProvider.fixtures[0].path.lastPathComponent : "slot-1"
+        let keys = ["\(first).title", "\(first).occupancy", "\(first).thumbnail"]
+          + (mode == .history ? ["\(first).timestamp"] : [])
+        _ = render(Harness(mode: mode, onFooter: { footer = $0 }, onContent: { content[$0] = $1 })
+          .environment(\.verticalSizeClass, .compact), size: size, scene: scene, layoutReady: {
+            footer.height > 0 && content["viewport"] != nil && keys.allSatisfy { content[$0] != nil }
+          })
+        let viewport = try XCTUnwrap(content["viewport"])
+        XCTAssertGreaterThan(viewport.height, 0)
+        XCTAssertLessThanOrEqual(viewport.maxY, footer.minY + 0.001)
+        XCTAssertGreaterThanOrEqual(footer.height, 44)
+        XCTAssertTrue(CGRect(origin: .zero, size: size).insetBy(dx: -0.001, dy: -0.001).contains(footer))
+        for key in keys {
+          let frame = try XCTUnwrap(content[key], key)
+          XCTAssertGreaterThan(frame.width, 0, key)
+          XCTAssertGreaterThan(frame.height, 0, key)
+          XCTAssertTrue(viewport.insetBy(dx: -0.001, dy: -0.001).contains(frame),
+                        "Initial card element is clipped: \(key) \(frame), viewport \(viewport)")
+        }
+        let thumbnail = try XCTUnwrap(content["\(first).thumbnail"])
+        let title = try XCTUnwrap(content["\(first).title"])
+        XCTAssertLessThanOrEqual(thumbnail.maxX, title.minX, "Short phone cards must put metadata beside the thumbnail")
+      }
+    }
+  }
+
+  func testPortraitRetainsArtworkAboveCardMetadata() throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    var content: [String: CGRect] = [:]
+    let first = FixtureProvider.fixtures[0].path.lastPathComponent
+    _ = render(Harness(mode: .history, onContent: { content[$0] = $1 })
+      .environment(\.verticalSizeClass, .regular), size: CGSize(width: 393, height: 852), scene: scene,
+      layoutReady: { content["\(first).title"] != nil && content["\(first).thumbnail"] != nil })
+    let thumbnail = try XCTUnwrap(content["\(first).thumbnail"])
+    let title = try XCTUnwrap(content["\(first).title"])
+    XCTAssertLessThanOrEqual(thumbnail.maxY, title.minY, "Regular-height cards must retain the artwork-above-metadata layout")
   }
 
   func testAccessibilityFooterStaysReachableInLandscape() throws {
@@ -142,7 +191,7 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
       window.layoutIfNeeded()
       RunLoop.main.run(until: Date().addingTimeInterval(0.01))
     }
-    XCTAssertTrue(layoutReady(), "The real picker footer did not complete layout")
+    XCTAssertTrue(layoutReady(), "The real picker content/footer did not complete layout")
   }
 
   private func render<V: View>(_ view: V, size: CGSize, scene: UIWindowScene,

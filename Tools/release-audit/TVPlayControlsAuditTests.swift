@@ -70,7 +70,7 @@ final class TVPlayControlsAuditTests: XCTestCase {
   }
 
   private func record(_ name: String) {
-    let shot = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
+    let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     shot.name = name
     shot.lifetime = .keepAlways
     add(shot)

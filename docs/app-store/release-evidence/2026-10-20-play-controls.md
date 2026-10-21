@@ -12,6 +12,10 @@ The owner approved the [design](../../superpowers/specs/2026-10-20-play-toolbar-
 
 ## Evidence so far
 
+Latest follow-up: compact-height phone cards place thumbnails beside metadata, reduce redundant section chrome and retain readable standard fonts and 44-point mode targets. iOS uses one custom principal heading. The exact previously failing geometry assertions now pass: **38 focused layout/cache tests, zero failures/skips**. This follow-up also splits the library-cache cost expression into typed values for Xcode 26.3; source review and local SDK checks pass. Fresh native/full/hosted reruns remain pending for this revision.
+
+The final full iOS suite passes **2,227 tests**, with five opt-in tests skipped and zero failures (2,232 total, 76.5 seconds). Both iOS and tvOS Debug Simulator builds pass. Source checkpoint `fba1b270ab` is pushed. Final targeted result: `play-controls-targeted-final.xcresult`; full result: `play-controls-full-final.xcresult`, under the ignored `build/release-audit/2026-10-20-testflight-final/` directory.
+
 Reviewed backend and mute sources are pushed in `bba7d06a3d`; localization completion is pushed in `22eda26730`. The final UI/routing/consent source review is clean, including the queued-save race and stale-session checks. Native queue tests cover pending saves, explicit consent, session/path drift and fail-closed filesystem errors; production menu tests cover history/classic/modded and stale completions.
 
 The final iOS Simulator SDK build passes, followed by **127 targeted tests, zero failures/skips**, including actual footer lifecycle measurement and accessibility reflow. Source review of the structural SwiftUI body extraction and typed Pause-menu handoff factory is clean. The earlier initial SDK run passed 71 of 73 tests; the next passed 89 of 91. In both, the failing methods were actual picker-footer measurement tests. Their assertions were retained while the observation seam was repaired; the final 127-case run now passes those checks. All fourteen live-audio/mute tests, nine surface-action cases and nine tvOS pane cases passed in the second run. These counts do not establish final candidate acceptance.
@@ -22,7 +26,7 @@ The prior real-game physical iPad Exit/Cancel regression passed with the older t
 
 ## Outstanding gates
 
-1. Final full suite. The iOS SDK build and all 127 targeted cases pass after semantics-preserving view decomposition exposed and corrected the Pause initializer handoff.
+1. Complete native runtime gates below; both Debug SDK builds, all 127 targeted cases and the full iOS suite pass after semantics-preserving view decomposition exposed and corrected the Pause initializer handoff.
 2. Final native phone/iPad portrait, landscape and accessibility captures; tvOS focus/Back acceptance.
 3. Fresh DEV physical Exit/Cancel, audible mute and non-destructive save-history smoke checks.
 4. Accepted source commit, fresh matching iOS/tvOS build number, signed archives, optimized SwiftUI/core/signature/UUID guards, Sentry symbols and both TestFlight uploads/processing/group assignment/Beta Review submission.

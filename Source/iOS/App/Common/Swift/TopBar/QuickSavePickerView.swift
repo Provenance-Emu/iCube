@@ -38,6 +38,10 @@ struct QuickSavePickerView: View {
   /// Reports actual footer layout directly; hosted checks must not depend on preference propagation.
   var onFooterFrameChange: (CGRect) -> Void = { _ in }
 
+  /// Direct geometry samples for rendered acceptance checks inside the navigation boundary.
+  var onContentFrameChange: (String, CGRect) -> Void = { _, _ in }
+
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var scan = QuickSavePickerScan()
   @State private var thumbnails: [URL: UIImage] = [:]
@@ -60,7 +64,7 @@ struct QuickSavePickerView: View {
     NavigationStack {
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
         ScrollView {
-          VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
+          VStack(alignment: .leading, spacing: usesCompactCards ? ICubeDesign.Spacing.xs.rawValue : ICubeDesign.Spacing.m.rawValue) {
             modeButtons
             if isModded() {
               Text(L("Modded games use classic slots. Automatic resume and quick-save history are unavailable."))
@@ -71,7 +75,7 @@ struct QuickSavePickerView: View {
               historyContents
               historyRetention
             } else {
-              Text(L("Choose a slot")).icubeText(.nav)
+              if !usesCompactCards { Text(L("Choose a slot")).icubeText(.nav) }
               LazyVGrid(columns: cardColumns, spacing: ICubeDesign.Spacing.s.rawValue) {
                 ForEach(QuickSavePickerModel.slots, id: \.self) { slot in
                   stateCard(QuickSavePickerModel.slotState(slot, states: states), slot: slot)
@@ -79,9 +83,10 @@ struct QuickSavePickerView: View {
               }
             }
           }
-          .padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
+          .padding(.vertical, usesCompactCards ? .zero : ICubeDesign.Spacing.xxs.rawValue)
         }
         .scrollBounceBehavior(.basedOnSize)
+        .background(contentFrameObserver("viewport"))
         footer
           .background(GeometryReader { geometry in
             let frame = geometry.frame(in: .global)
@@ -92,7 +97,11 @@ struct QuickSavePickerView: View {
       }
       .padding(ICubeDesign.Spacing.m.rawValue)
       .background(ICubeRoom(style: .gradient))
-      .navigationTitle(L("Save States"))
+      #if os(tvOS)
+      .navigationTitle(L("Save States")) // design-lint: allow Preserve existing tvOS navigation title; iOS uses its principal heading.
+      #else
+      .navigationBarTitleDisplayMode(.inline)
+      #endif
       .toolbar {
         ToolbarItem(placement: .principal) {
           Text(L("Save States")).icubeText(.nav).accessibilityIdentifier("quick-save-picker.header")
@@ -131,13 +140,21 @@ struct QuickSavePickerView: View {
     #endif
   }
 
+  private var usesCompactCards: Bool {
+    #if os(iOS)
+    return UIDevice.current.userInterfaceIdiom == .phone && verticalSizeClass == .compact
+    #else
+    return false
+    #endif
+  }
+
   private var cardColumns: [GridItem] {
     #if os(tvOS)
     let minimumWidth: CGFloat = 320
     #else
     let minimumWidth: CGFloat = 144
     #endif
-    return dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())]
+    return usesCompactCards || dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())]
       : [GridItem(.adaptive(minimum: minimumWidth), spacing: ICubeDesign.Spacing.s.rawValue)]
   }
 
@@ -172,7 +189,7 @@ struct QuickSavePickerView: View {
 
   private var historyContents: some View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
-      Text(L("Newest first")).icubeText(.nav)
+      if !usesCompactCards { Text(L("Newest first")).icubeText(.nav) }
       if manualStates.isEmpty {
         Label(L("No manual save states yet"), systemImage: "clock.arrow.circlepath")
           .icubeText(.body)
@@ -196,35 +213,21 @@ struct QuickSavePickerView: View {
       if let slot { selectedSlot = slot }
       if let state { selection.select(state) }
     } label: {
-      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
-        ZStack {
-          ICubeDesign.color(.rowSurface)
-          if let state, let image = thumbnails[state.path] {
-            Image(uiImage: image).resizable().scaledToFit()
-          } else {
-            VStack(spacing: ICubeDesign.Spacing.xxs.rawValue) {
-              Image(systemName: state == nil ? "plus" : "photo").font(ICubeDesign.symbolFont(.rail))
-              Text(state == nil ? L("Empty") : L("No preview")).icubeText(.detail)
-            }
+      Group {
+        if usesCompactCards {
+          HStack(alignment: .center, spacing: ICubeDesign.Spacing.s.rawValue) {
+            cardThumbnail(state, slot: slot)
+              .frame(width: ICubeDesign.Spacing.xxl.rawValue)
+            cardMetadata(state, slot: slot, compact: true)
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
+        } else {
+          VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
+            cardThumbnail(state, slot: slot)
+            cardMetadata(state, slot: slot, compact: false)
+              .padding([.horizontal, .bottom], ICubeDesign.Spacing.s.rawValue)
           }
         }
-        .aspectRatio(16.0 / 9.0, contentMode: .fit)
-        .clipped()
-        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
-          Text(cardTitle(state, slot: slot)).icubeText(.body).fontWeight(.semibold)
-          Text(state == nil ? L("Empty · ready to save") : L("Occupied")).icubeText(.detail)
-          if let state {
-            if state.path == manualStates.first?.path { Text(L("Latest manual")).icubeText(.tag) }
-            if !state.isCompatible { Text(L("Incompatible")).icubeText(.detail).foregroundStyle(ICubeDesign.color(.destructive)) }
-            if let date = state.modifiedAt ?? state.createdAt {
-              Text(date.formatted(date: .abbreviated, time: .shortened)).icubeText(.detail)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel(date.formatted(date: .complete, time: .shortened))
-            } else { Text(L("Date unavailable")).icubeText(.detail) }
-          }
-        }
-        .padding([.horizontal, .bottom], ICubeDesign.Spacing.s.rawValue)
       }
       .foregroundStyle(ICubeDesign.color(.textPrimary))
       .background(ICubeDesign.color(selected ? .selectedFill : .rowSurface))
@@ -243,7 +246,87 @@ struct QuickSavePickerView: View {
     .disabled(busy)
     .accessibilityAddTraits(selected ? .isSelected : [])
     .accessibilityHint(L("Selects this state. Use Load selected to load it."))
-    .accessibilityIdentifier("quick-save-picker.card.\(slot.map { "slot-\($0)" } ?? state?.path.lastPathComponent ?? "empty")")
+    .accessibilityIdentifier("quick-save-picker.card.\(cardIdentifier(state, slot: slot))")
+  }
+
+  private func cardIdentifier(_ state: SaveStateInfo?, slot: Int?) -> String {
+    slot.map { "slot-\($0)" } ?? state?.path.lastPathComponent ?? "empty"
+  }
+
+  private func contentFrameObserver(_ identifier: String) -> some View {
+    GeometryReader { geometry in
+      let frame = geometry.frame(in: .global)
+      Color.clear
+        .onAppear { onContentFrameChange(identifier, frame) }
+        .onChange(of: frame) { _, frame in onContentFrameChange(identifier, frame) }
+    }
+  }
+
+  private func cardThumbnail(_ state: SaveStateInfo?, slot: Int?) -> some View {
+    ZStack {
+      ICubeDesign.color(.rowSurface)
+      if let state, let image = thumbnails[state.path] {
+        Image(uiImage: image).resizable().scaledToFit()
+      } else {
+        VStack(spacing: ICubeDesign.Spacing.xxs.rawValue) {
+          Image(systemName: state == nil ? "plus" : "photo").font(ICubeDesign.symbolFont(.rail))
+          Text(state == nil ? L("Empty") : L("No preview")).icubeText(.detail)
+        }
+      }
+    }
+    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+    .clipped()
+    .background(contentFrameObserver("\(cardIdentifier(state, slot: slot)).thumbnail"))
+  }
+
+  private func cardOccupancy(_ state: SaveStateInfo?, slot: Int?) -> some View {
+    Text(state == nil ? L("Empty · ready to save") : L("Occupied")).icubeText(.detail)
+      .background(contentFrameObserver("\(cardIdentifier(state, slot: slot)).occupancy"))
+  }
+
+  private func cardTitleText(_ state: SaveStateInfo?, slot: Int?) -> some View {
+    Text(cardTitle(state, slot: slot)).icubeText(.body).fontWeight(.semibold)
+      .background(contentFrameObserver("\(cardIdentifier(state, slot: slot)).title"))
+  }
+
+  @ViewBuilder
+  private func cardTimestamp(_ state: SaveStateInfo, slot: Int?) -> some View {
+    if let date = state.modifiedAt ?? state.createdAt {
+      Text(date.formatted(date: .abbreviated, time: .shortened)).icubeText(.detail)
+        .lineLimit(2)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel(date.formatted(date: .complete, time: .shortened))
+        .background(contentFrameObserver("\(cardIdentifier(state, slot: slot)).timestamp"))
+    } else { Text(L("Date unavailable")).icubeText(.detail) }
+  }
+
+  @ViewBuilder
+  private func cardStatusBadges(_ state: SaveStateInfo) -> some View {
+    if state.path == manualStates.first?.path { Text(L("Latest manual")).icubeText(.tag) }
+    if !state.isCompatible { Text(L("Incompatible")).icubeText(.detail).foregroundStyle(ICubeDesign.color(.destructive)) }
+  }
+
+  private func cardMetadata(_ state: SaveStateInfo?, slot: Int?, compact: Bool) -> some View {
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+      if compact && !dynamicTypeSize.isAccessibilitySize {
+        HStack(alignment: .firstTextBaseline, spacing: ICubeDesign.Spacing.xs.rawValue) {
+          cardTitleText(state, slot: slot)
+          Spacer(minLength: ICubeDesign.Spacing.xs.rawValue)
+          if let state { cardTimestamp(state, slot: slot) }
+        }
+        HStack(alignment: .firstTextBaseline, spacing: ICubeDesign.Spacing.xs.rawValue) {
+          cardOccupancy(state, slot: slot)
+          if let state { cardStatusBadges(state) }
+        }
+      } else {
+        cardTitleText(state, slot: slot)
+        cardOccupancy(state, slot: slot)
+        if let state {
+          cardStatusBadges(state)
+          cardTimestamp(state, slot: slot)
+        }
+      }
+    }
   }
 
   private func cardTitle(_ state: SaveStateInfo?, slot: Int?) -> String {

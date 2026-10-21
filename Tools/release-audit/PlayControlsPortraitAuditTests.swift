@@ -37,6 +37,7 @@ final class PlayControlsPortraitAuditTests: XCTestCase {
     XCTAssertTrue(save.label.contains("Save"))
     XCTAssertTrue(load.label.contains("Load"))
     XCTAssertTrue(load.isEnabled)
+    assertSinglePickerHeading()
     record("portrait-history")
 
     let kept = app.buttons["quick-save-picker.card.GALE01.quick-4F47B891-8628-45E3-98A3-A403A04BB4FB.s01"].firstMatch
@@ -64,6 +65,7 @@ final class PlayControlsPortraitAuditTests: XCTestCase {
     XCTAssertTrue(save.isEnabled)
     assertVisibleTarget(save)
     XCTAssertTrue(save.label.contains("1"))
+    assertSinglePickerHeading()
     record("portrait-classic-empty")
     let incompatible = app.buttons["quick-save-picker.card.slot-4"].firstMatch
     if !incompatible.isHittable { app.scrollViews.firstMatch.swipeUp() }
@@ -103,7 +105,53 @@ final class PlayControlsPortraitAuditTests: XCTestCase {
     XCTAssertTrue(save.waitForExistence(timeout: 10))
     assertVisibleTarget(save)
     assertVisibleTarget(app.buttons["quick-save-picker.load"].firstMatch)
+    assertSinglePickerHeading()
+    assertInitialHistoryMetadataVisible()
     record("landscape-history")
+  }
+
+  func testLandscapeClassicInitialMetadataRemainsOnscreen() throws {
+    try start(picker: "slots", landscape: true)
+    let save = app.buttons["quick-save-picker.save"].firstMatch
+    XCTAssertTrue(save.waitForExistence(timeout: 10))
+    assertVisibleTarget(save)
+    assertVisibleTarget(app.buttons["quick-save-picker.load"].firstMatch)
+    let first = app.buttons["quick-save-picker.card.slot-1"].firstMatch
+    XCTAssertTrue(first.waitForExistence(timeout: 5))
+    XCTAssertTrue(first.label.contains("Slot 1"), first.label)
+    XCTAssertTrue(first.label.contains("Empty"), first.label)
+    assertInitialCardFullyVisible(first)
+    assertSinglePickerHeading()
+    record("landscape-classic-initial-metadata")
+  }
+
+  private func assertInitialHistoryMetadataVisible() {
+    let first = app.buttons["quick-save-picker.card.GALE01.quick-A2CC29A2-38BC-41B6-B37C-7624990EAE90.s01"].firstMatch
+    XCTAssertTrue(first.waitForExistence(timeout: 5))
+    XCTAssertTrue(first.label.contains("Quick save"), first.label)
+    XCTAssertTrue(first.label.contains("Occupied"), first.label)
+    assertInitialCardFullyVisible(first)
+  }
+
+  private func assertInitialCardFullyVisible(_ card: XCUIElement) {
+    // No swipe: the first full card (including the thumbnail and metadata) must fit initially.
+    let scroll = app.scrollViews.firstMatch
+    XCTAssertTrue(scroll.exists)
+    XCTAssertTrue(card.isHittable)
+    // ICubeRowButtonStyle draws a 1pt centered stroke: AX includes its 0.5pt
+    // horizontal outset. Account only for that known stroke, keeping Y strict.
+    let cardContent = card.frame.insetBy(dx: 0.5, dy: 0)
+    XCTAssertTrue(scroll.frame.insetBy(dx: -0.001, dy: -0.001).contains(cardContent),
+                  "Initial metadata is clipped: card \(card.frame), viewport \(scroll.frame)")
+    XCTAssertLessThanOrEqual(card.frame.maxY, app.buttons["quick-save-picker.save"].firstMatch.frame.minY)
+  }
+
+  private func assertSinglePickerHeading() {
+    let heading = app.staticTexts["quick-save-picker.header"].firstMatch
+    XCTAssertTrue(heading.waitForExistence(timeout: 5))
+    let titles = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Save States"))
+      .allElementsBoundByIndex.filter { $0.isHittable }
+    XCTAssertEqual(titles.count, 1, "The principal title must not be duplicated by a large navigation heading")
   }
 
   func testAccessibilityLandscapeHistoryActionsRemainOnscreen() throws {
@@ -115,6 +163,20 @@ final class PlayControlsPortraitAuditTests: XCTestCase {
     assertVisibleTarget(load)
     XCTAssertLessThanOrEqual(save.frame.maxY, load.frame.minY + 0.001,
                              "Accessibility size must stack the actions without overlap")
+    let first = app.buttons["quick-save-picker.card.GALE01.quick-A2CC29A2-38BC-41B6-B37C-7624990EAE90.s01"].firstMatch
+    XCTAssertTrue(first.waitForExistence(timeout: 5))
+    XCTAssertTrue(first.label.contains("Quick save"), first.label)
+    XCTAssertTrue(first.label.contains("Occupied"), first.label)
+    let beforeScroll = first.frame.minY
+    let scroll = app.scrollViews.firstMatch
+    // Keep the same row in the lazy grid while measuring real content movement.
+    // A full swipe can correctly virtualize it out of the accessibility tree.
+    scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+      .press(forDuration: 0.1, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)))
+    XCTAssertTrue(first.exists)
+    XCTAssertLessThan(first.frame.minY, beforeScroll, "Large-text metadata must remain in genuinely scrollable content")
+    assertVisibleTarget(save)
+    assertVisibleTarget(load)
     record("accessibility-landscape-history")
   }
 
@@ -156,7 +218,7 @@ final class PlayControlsPortraitAuditTests: XCTestCase {
   }
 
   private func record(_ name: String) {
-    let screenshot = XCTAttachment(screenshot: XCUIDevice.shared.screenshot())
+    let screenshot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
     screenshot.name = name
     screenshot.lifetime = .keepAlways
     add(screenshot)
