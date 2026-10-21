@@ -6,7 +6,9 @@ struct TVRootView: View {
     // `-ICubePausePreview` opens the pause menu on a stand-in game, `-ICubeSettingsPreview <leafID>` opens one
     // settings leaf, `-ICubeAddGamesPreview` the Add Games screen, for simulator screenshots (Scripts/tvos_screens.sh).
     let args = ProcessInfo.processInfo.arguments
-    if args.contains("-ICubePausePreview") {
+    if args.contains("-ICubePlayControlsPreview") {
+      PlayControlsAuditPreview()
+    } else if args.contains("-ICubePausePreview") {
       PauseMenuView(selectedSlot: .constant(1), onClose: {}, platform: Self.previewPlatform,
                     game: PauseMenuView.previewGame())
         .debugPane(Self.argument(after: "-ICubePausePane", in: args))

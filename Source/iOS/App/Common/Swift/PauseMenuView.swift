@@ -10,10 +10,15 @@ internal enum PlatformKind { case ios, tvos }
 
 internal struct PauseMenuView: View {
   @Binding var selectedSlot: Int
+  @AppStorage("quick_save_mode") private var quickSaveMode: QuickSaveMode = .history
   let onClose: () -> Void
   var onShowPerfOverlay: () -> Void = {}
   let platform: PlatformKind
   let game: TVGameItem
+  var startsInSaveBrowser = false
+  @State private var initialSaveBrowserConsumed = false
+  @State private var showSharedSaveBrowser = false
+  @State private var openingSaveSession: UInt64?
 
   @FocusState private var focused: FocusField?
   internal enum FocusField: Hashable {
@@ -197,6 +202,11 @@ internal struct PauseMenuView: View {
         pauseToken = PauseArbiter.shared.adoptPending() ?? PauseArbiter.shared.claim(PauseArbiter.Reason.pauseMenu)
         openedAt = Date()
       }
+      if openingSaveSession == nil { openingSaveSession = TVEmulationBridge.currentSessionIdentifier() }
+      if startsInSaveBrowser && !initialSaveBrowserConsumed {
+        initialSaveBrowserConsumed = true
+        openSharedSaveBrowser()
+      }
       isMuted = QuickMute.isMuted
       fastForward = PauseFastForwardState(
         isEnabled: TVEmulationBridge.isFastForwardEnabled(),
@@ -233,6 +243,7 @@ internal struct PauseMenuView: View {
       // this menu is currently presented — i.e. this is a real teardown (Resume,
       // Exit, or the parent dismissing the whole menu), not a covering child.
       guard !isPauseMenuChildPresented else { return }
+      openingSaveSession = nil
       if let token = pauseToken {
         PauseArbiter.shared.release(token)
         pauseToken = nil
@@ -532,64 +543,24 @@ internal struct PauseMenuView: View {
     ICubeConfirmPanel(title: title, message: message, model: model, isTV: isTV, onBack: onBack)
   }
 
+  private func openSharedSaveBrowser() {
+    showSharedSaveBrowser = true
+    pane = .saves
+  }
+
+  private var quickSaveActions: QuickSaveMenuActions {
+    QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
+      session: .init(gameID: game.gameID, identifier: openingSaveSession ?? TVEmulationBridge.currentSessionIdentifier()),
+      isActive: { pauseToken != nil && openingSaveSession != nil }, openBrowser: openSharedSaveBrowser,
+      report: { EmulationToast.post($0.message) })
+  }
+
   private var savesMenu: some View {
     Group {
-      if platform == .ios {
-        NavigationStack {
-          List {
-            Section(header: Text(L("Quick Slots"))) {
-              ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                  ForEach(Self.saveSlots, id: \.self) { i in
-                    Button(action: { selectedSlot = i }) {
-                      Label(String(format: L("Slot %d"), i), systemImage: selectedSlot == i ? "checkmark.circle.fill" : "circle")
-                    }
-                    .buttonStyle(.bordered)
-                  }
-                }
-                .padding(.vertical, 4)
-              }
-            }
-            Section(header: Text(L("Actions"))) {
-              Button { QuickSlot.save(slot: selectedSlot) } label: {
-                HStack { Image(systemName: ControllerGlyphs.glyphName(for: "confirm", set: ControllerStyleManager.shared.current()))
-                  Text(String(format: L("Save to Slot %d"), selectedSlot))
-                }
-              }
-              Button { TVEmulationBridge.loadState(fromSlot: selectedSlot)
-                NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": String(format: L("Loading Slot %d"), selectedSlot)])
-              } label: {
-                HStack { Image(systemName: "arrow.down.circle")
-                  Text(String(format: L("Load Slot %d"), selectedSlot))
-                }
-              }
-              Button { showFilmstripSheet = true } label: {
-                HStack { Image(systemName: "film")
-                  Text(L("Open Filmstrip"))
-                }
-              }
-            }
-          }
-          .navigationTitle(L("Save States"))
-          .toolbar(content: {
-            ToolbarItem(placement: .navigationBarLeading) {
-              Button(L("Back")) { pane = .main }
-            }
-          })
-          .sheet(isPresented: $showFilmstripSheet) {
-            // `.claimsController()` pushes this sheet's own scope onto
-            // `ControllerFocusCoordinator` while it is up. Nothing underneath
-            // needs to gate on it explicitly here: `pane == .saves` already
-            // means the root pane's own `MenuScreen` (D18) was torn down when
-            // `pane` left `.main`, so there is no raw handler left to fight
-            // over dpad/A -- this sheet's claim only matters for anything
-            // else that might still be listening (e.g. a future D18
-            // migration of this very list, design doc §6 step 5).
-            NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
-              .pauseClaim("filmstrip")
-              .claimsController()
-          }
-        }
+      if platform == .ios || showSharedSaveBrowser {
+        QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
+                            onDismiss: { pane = .main; showSharedSaveBrowser = false })
+          .claimsController()
       } else {
         tvHeroLayout {
           TVSaveSlotsPane(game: game, selectedSlot: $selectedSlot, initialFocus: debugSavesFocus,
@@ -598,8 +569,9 @@ internal struct PauseMenuView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.icubePlatformAccent, platformAccent)
         .sheet(isPresented: $showFilmstripSheet) {
-          NavigationStack { SaveStateFilmstripView(gameID: game.gameID) }
-            .pauseClaim("filmstrip")
+          QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
+                              onDismiss: { showFilmstripSheet = false })
+            .pauseClaim("save-browser")
             .claimsController()
         }
       }
@@ -685,7 +657,7 @@ internal struct PauseMenuView: View {
           DOLConfigBridge.setMainCpuCore(raw)
           nextEngine = raw
           EmulationToast.post(String(format: L("%@ from the next launch"), CpuEngine.from(raw: raw).shortName))
-        }))
+        }), quickSaveMode: $quickSaveMode)
   }
 
   private func refreshShaderState() {
@@ -705,11 +677,12 @@ internal struct PauseMenuView: View {
       audioVolume: audioVolume,
       engineShortName: engineShortName,
       jitAcquired: jitAcquired,
-      nextEngine: nextEngine)
+      nextEngine: nextEngine, quickSaveMode: quickSaveMode, isModded: ModdedBoot.isCurrentBootModded)
+    let quick = quickSaveActions
     let actions = PauseMenuActions(
       resume: { PauseArbiter.shared.userResume(); onClose() },
-      quickSave: { _ = QuickSlot.save(slot: selectedSlot) },
-      quickLoad: { QuickSlot.load(slot: selectedSlot) },
+      quickSave: quick.save,
+      quickLoad: quick.load,
       screenshot: {
         switch QuickScreenshot.saveFromPausePreview() {
         case .saved: EmulationToast.post(L("Screenshot saved to ScreenShots"))
@@ -864,6 +837,8 @@ struct PauseMenuState {
   var jitAcquired: Bool = false
   /// The engine the next launch uses (`CpuEngine` raw value): the Performance tile's value.
   var nextEngine: Int = CpuEngine.cachedInterpreter.rawValue
+  var quickSaveMode: QuickSaveMode = .history
+  var isModded = false
 }
 
 /// Live bindings for the in-place tiles. Writing one applies immediately; the host rebuilds the model.
@@ -882,6 +857,7 @@ struct PauseMenuBindings {
   var perfHUD: Binding<Bool> = .constant(false)
   /// The CPU engine for the next launch (`CpuEngine` raw value); the Performance tile cycles it.
   var cpuEngine: Binding<AnyHashable> = .constant(AnyHashable(CpuEngine.cachedInterpreter.rawValue))
+  var quickSaveMode: Binding<QuickSaveMode> = .constant(.history)
 }
 
 struct PauseMenuActions {
@@ -987,16 +963,19 @@ enum PauseMenuModelBuilder {
 
   static func make(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions) -> MenuModel {
     let slotOptions: [(String, AnyHashable)] = (1 ... slotCount).map { (String(format: L("Slot %d"), $0), AnyHashable($0)) }
+    let classic = state.isModded || state.quickSaveMode == .slots
     let slotBadge = String(format: L("Slot %d"), state.quickSlot)
-    let slotPicker = MenuLongPress.options(title: L("Quick Slot"), options: slotOptions, selection: bindings.quickSlot)
+    let slotPicker: MenuLongPress? = classic ? .options(title: L("Quick Slot"), options: slotOptions, selection: bindings.quickSlot) : nil
 
     let quick = MenuSection(id: "quick", header: L("Quick"), items: [
       MenuItem(id: "resume", title: L("Resume"), icon: "play.fill", tint: .blue, role: .action(actions.resume),
                description: L("Return to the game.")),
       MenuItem(id: "quick-save", title: L("Quick Save"), icon: "square.and.arrow.down", tint: .green, role: .action(actions.quickSave),
-               badge: slotBadge, description: L("Save to the quick slot. Long-press to choose the slot."), longPress: slotPicker),
+               badge: classic ? slotBadge : L("Quick-save history"),
+               description: classic ? L("Browse classic slots before saving; occupied slots require confirmation.") : L("Save new state"), longPress: slotPicker),
       MenuItem(id: "quick-load", title: L("Quick Load"), icon: "square.and.arrow.up", tint: .green, role: .action(actions.quickLoad),
-               badge: slotBadge, description: L("Load the quick slot. Long-press to choose the slot."), longPress: slotPicker),
+               badge: classic ? slotBadge : L("Latest manual"),
+               description: classic ? L("Load the quick slot. Long-press to choose the slot.") : L("Load the latest manual state, or automatic resume when no manual state exists."), longPress: slotPicker),
       MenuItem(id: "fast-forward", title: L("Fast Forward"), icon: "forward.fill", tint: .cyan,
                role: .cycle(options: fastForwardOptions, selection: bindings.fastForward),
                description: L("Tap to cycle the speed. Long-press to pick one. Takes effect on resume.")),
@@ -1011,7 +990,7 @@ enum PauseMenuModelBuilder {
 
     var game: [MenuItem] = [
       MenuItem(id: "save-states", title: L("Save States"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates),
-               description: L("Save, load and browse every slot.")),
+               description: L("Save, load and browse save states.")),
       MenuItem(id: "change-disc", title: L("Change Disc"), icon: "opticaldisc", role: .action(actions.openDiscPicker),
                description: L("Insert another local disc without restarting the game.")),
       MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .toggle(bindings.perfHUD),
@@ -1078,10 +1057,10 @@ enum RecordingToggle {
 }
 
 /// Bindings and actions for the in-game quick menu, built from the same sources the pause menu uses
-/// (`QuickMute`, `QuickSlot`, `QuickScreenshot`, the fast-forward bridge) so both menus always agree.
+/// (`QuickMute`, mode-aware quick actions, `QuickScreenshot`, the fast-forward bridge) so both menus always agree.
 @MainActor
 enum QuickMenuHost {
-  static func bindings(selectedSlot: Binding<Int>) -> PauseMenuBindings {
+  static func bindings(selectedSlot: Binding<Int>, mode: Binding<QuickSaveMode>) -> PauseMenuBindings {
     PauseMenuBindings(
       mute: Binding(get: { QuickMute.isMuted }, set: { _ in _ = QuickMute.toggle() }),
       fastForward: Binding(get: { fastForwardState().selection }, set: { value in
@@ -1091,14 +1070,14 @@ enum QuickMenuHost {
       quickSlot: Binding(get: { AnyHashable(selectedSlot.wrappedValue) }, set: { if let slot = $0 as? Int { selectedSlot.wrappedValue = slot } }),
       shader: .constant(ShaderQuickApply.noneValue),
       recording: Binding(get: { RecordingManager.shared.isRecording }, set: { RecordingToggle.set($0) }),
-      perfHUD: Binding(get: { PerfHUDToggle.isOn }, set: { PerfHUDToggle.set($0) }))
+      perfHUD: Binding(get: { PerfHUDToggle.isOn }, set: { PerfHUDToggle.set($0) }), quickSaveMode: mode)
   }
 
-  static func actions(selectedSlot: Binding<Int>, openPerfOverlay: @escaping () -> Void) -> PauseMenuActions {
+  static func actions(quickActions: QuickSaveMenuActions, openPerfOverlay: @escaping () -> Void) -> PauseMenuActions {
     PauseMenuActions(
       resume: {},
-      quickSave: { _ = QuickSlot.save(slot: selectedSlot.wrappedValue) },
-      quickLoad: { QuickSlot.load(slot: selectedSlot.wrappedValue) },
+      quickSave: quickActions.save,
+      quickLoad: quickActions.load,
       screenshot: {
         switch QuickScreenshot.saveFromPausePreview() {
         case .saved: EmulationToast.post(L("Screenshot saved to ScreenShots"))

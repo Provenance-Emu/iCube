@@ -24,7 +24,7 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
     if noJIT.exists { noJIT.tap() }
     var launchedGame = false
     let emulationHUD = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "DSU:")).firstMatch
-    if !exit.exists && !app.buttons["Pause"].exists && !app.buttons["Resume"].exists && !app.staticTexts["Paused"].exists && !emulationHUD.exists && !app.staticTexts["START"].exists {
+    if !exit.exists && !app.buttons["play-toolbar.pause"].exists && !app.buttons["Pause"].exists && !app.buttons["Resume"].exists && !app.staticTexts["Paused"].exists && !emulationHUD.exists && !app.staticTexts["START"].exists {
       let title = NSPredicate(format: "label CONTAINS[cd] %@", "Luigi")
       let card = app.buttons.matching(title).firstMatch
       if card.waitForExistence(timeout: 20), card.isHittable {
@@ -54,14 +54,20 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
       // Boot may finish after the toolbar's idle deadline. Reveal before
       // querying its Pause/Resume controls, rather than waiting for hidden UI.
       revealToolbarIfHidden()
+      let directPause = app.buttons["play-toolbar.pause"].firstMatch
       let pause = app.buttons["Pause"].firstMatch
       let resume = app.buttons["Resume"].firstMatch
-      let playingOrPaused = NSPredicate { _, _ in pause.exists || resume.exists || exit.exists || self.app.staticTexts["Paused"].exists }
+      let playingOrPaused = NSPredicate { _, _ in directPause.exists || pause.exists || resume.exists || exit.exists || self.app.staticTexts["Paused"].exists }
       let ready = XCTNSPredicateExpectation(predicate: playingOrPaused, object: nil)
       let result = XCTWaiter.wait(for: [ready], timeout: 45)
       record("03-game-start-result")
       XCTAssertEqual(result, .completed, "Game did not expose Pause/Resume within 45 seconds")
-      if pause.exists && pause.isHittable { pause.tap() }
+      if directPause.exists {
+        XCTAssertTrue(directPause.isHittable)
+        directPause.tap()
+        XCTAssertTrue(exit.waitForExistence(timeout: 10), "Direct Pause must open the pause menu")
+        record("04-direct-pause")
+      } else if pause.exists && pause.isHittable { pause.tap() }
       if !exit.exists {
         revealToolbarIfHidden()
         let more = app.buttons["More"].firstMatch
@@ -102,12 +108,14 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
 
   private func revealToolbarIfHidden() {
     let more = app.buttons["More"].firstMatch
-    guard !more.exists, app.alerts.count == 0 else { return }
+    let directPause = app.buttons["play-toolbar.pause"].firstMatch
+    guard !directPause.exists, !more.exists, app.alerts.count == 0 else { return }
     // EmulationScreen.topRevealStrip spans the game picture's top 80pt.
     // Reveal its toolbar without tapping the central Paused pill (Resume).
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
       .withOffset(CGVector(dx: 0, dy: 20)).tap()
-    XCTAssertTrue(more.waitForExistence(timeout: 5))
+    let revealed = NSPredicate { _, _ in directPause.exists || more.exists }
+    XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: revealed, object: nil)], timeout: 5), .completed)
   }
 
   private func record(_ name: String) {

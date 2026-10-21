@@ -29,7 +29,8 @@ struct QuickMenuView: View {
   /// A snapshot built from the live bindings, so the Mute icon and the slot badge follow them.
   private var state: PauseMenuState {
     PauseMenuState(quickSlot: bindings.quickSlot.wrappedValue as? Int ?? 1, isMuted: bindings.mute.wrappedValue,
-                   activeCheatCount: 0, shaderOptions: [], showsRecenterPointer: false)
+                   activeCheatCount: 0, shaderOptions: [], showsRecenterPointer: false,
+                   quickSaveMode: bindings.quickSaveMode.wrappedValue, isModded: ModdedBoot.isCurrentBootModded)
   }
 
   private var model: MenuModel {

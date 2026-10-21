@@ -16,7 +16,9 @@ struct SaveStateFilmstripView: View {
   let gameID: String
   @StateObject private var vm = SaveStatesViewModel()
   @State private var actionTarget: SaveStateInfo?
-  @State private var saveRequest: SaveStateUIRequest?
+  @AppStorage("quick_save_mode") private var quickSaveMode: QuickSaveMode = .history
+  @AppStorage("quick_save_slot") private var selectedSlot = 1
+  @State private var showSavePicker = false
   @State private var saveTask: Task<Void, Never>?
   @State private var renameTarget: SaveStateInfo?
   #if !os(tvOS)
@@ -93,11 +95,16 @@ struct SaveStateFilmstripView: View {
         }
       }
     }
-    .disabled(saveRequest != nil)
+    .disabled(saveTask != nil)
     .onDisappear {
       saveTask?.cancel()
       saveTask = nil
-      saveRequest = nil
+    }
+    .sheet(isPresented: $showSavePicker) {
+      QuickSavePickerView(gameID: gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
+                          onDismiss: { showSavePicker = false })
+        .pauseClaim("save-browser")
+        .claimsController()
     }
     // Per-card action menu. One dialog, driven by whichever card was selected,
     // rather than per-card state -- keeps the "one focus target per card"
@@ -115,12 +122,13 @@ struct SaveStateFilmstripView: View {
           loadOrBoot(target)
           actionTarget = nil
         }
+        .disabled(!target.isCompatible)
         // Only offered when THIS game is the one actually running: SaveStateService.saveSlot
         // calls straight into TVEmulationBridge.saveState, which is a silent no-op with no
         // running core to save from (e.g. reached from the library's "View Save States" on a
         // game that isn't booted, or the cross-game SaveStatesBrowserView).
         if let slot = target.slot, isThisGameRunning {
-          Button(String(format: L("Save Here (Slot %d)"), slot)) {
+          Button(String(format: L("Save to slot %d"), slot)) {
             saveHere(slot)
             actionTarget = nil
           }
@@ -243,23 +251,9 @@ struct SaveStateFilmstripView: View {
   }
 
   private func saveHere(_ slot: Int) {
-    guard saveRequest == nil else { return }
-    let request = SaveStateUIRequest(slot: slot, gameID: gameID,
-                                     sessionIdentifier: TVEmulationBridge.currentSessionIdentifier())
-    saveRequest = request
-    saveTask = Task { @MainActor in
-      let snapshot = await SaveStateService.saveSlotSnapshotAsync(request.slot, expectedGameID: request.gameID,
-                                                                     expectedSessionIdentifier: request.sessionIdentifier)
-      guard !Task.isCancelled, saveRequest?.id == request.id else { return }
-      let present = request.accepts(completedGameID: snapshot?.gameID, completedSessionIdentifier: snapshot?.sessionIdentifier,
-                                    currentGameID: TVEmulationBridge.currentGameID(),
-                                    currentSessionIdentifier: TVEmulationBridge.currentSessionIdentifier(), activeID: saveRequest?.id)
-      saveRequest = nil
-      saveTask = nil
-      guard present else { return }
-      EmulationToast.post(QuickSlot.saveOutcome(slot: request.slot, saved: snapshot != nil).message)
-      if snapshot != nil { await vm.load(gameID: request.gameID) }
-    }
+    selectedSlot = slot
+    quickSaveMode = .slots
+    showSavePicker = true
   }
 
   /// This view is reached two ways: from the pause menu of an already-running
@@ -270,8 +264,19 @@ struct SaveStateFilmstripView: View {
   /// thread that does not exist yet -- a silent no-op with no running game to load
   /// into. Boot the game fresh instead and land directly on the requested state.
   private func loadOrBoot(_ state: SaveStateInfo) {
+    guard state.isCompatible else { return }
     if isThisGameRunning {
-      TVEmulationBridge.loadState(fromPath: state.path.path)
+      let session = TVEmulationBridge.currentSessionIdentifier()
+      saveTask = Task { @MainActor in
+        defer { saveTask = nil }
+        guard TVEmulationBridge.currentGameID() == gameID,
+              TVEmulationBridge.currentSessionIdentifier() == session else { return }
+        let outcome = await QuickSaveActions.loadSelected(state,
+          expectedSession: .init(gameID: gameID, identifier: session))
+        guard !Task.isCancelled, TVEmulationBridge.currentGameID() == gameID,
+              TVEmulationBridge.currentSessionIdentifier() == session else { return }
+        if !outcome.message.isEmpty { EmulationToast.post(outcome.message) }
+      }
       return
     }
     // The base game, not a patched copy or mod descriptor that shares its ID: those do not own the vanilla states.

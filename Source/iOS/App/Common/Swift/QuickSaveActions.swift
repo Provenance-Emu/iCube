@@ -47,8 +47,12 @@ enum QuickSaveActions {
   }
 
   private struct Session {
-    let gameID = TVEmulationBridge.currentGameID()
-    let identifier = TVEmulationBridge.currentSessionIdentifier()
+    let gameID: String
+    let identifier: UInt64
+    init(expected: QuickSaveSurfaceSession? = nil) {
+      gameID = expected?.gameID ?? TVEmulationBridge.currentGameID()
+      identifier = expected?.identifier ?? TVEmulationBridge.currentSessionIdentifier()
+    }
     var isCurrent: Bool {
       !gameID.isEmpty && gameID == TVEmulationBridge.currentGameID() &&
         identifier == TVEmulationBridge.currentSessionIdentifier()
@@ -60,26 +64,58 @@ enum QuickSaveActions {
     return await saveHistory()
   }
 
-  static func load(mode: QuickSaveMode, slot: Int) async -> Outcome {
-    if effectiveMode(mode, modded: ModdedBoot.isCurrentBootModded) == .slots { return loadSlot(slot) }
-    let session = Session()
-    guard session.isCurrent, TVEmulationBridge.isStateOperationAllowed() else { return .unavailable }
-    let states = await FilesystemSaveStateProvider().states(for: session.gameID)
-    guard session.isCurrent else { return .cancelled }
-    switch QuickSaveHistoryPolicy.loadTarget(states: states, modded: ModdedBoot.isCurrentBootModded) {
-    case .manual(let url), .automatic(let url):
-      return requestLoad(url, session: session)
-    case .incompatible(let url): return .incompatible(url)
-    case .unavailable: return .empty
+  struct LoadEnvironment {
+    var session: () -> QuickSaveSurfaceSession
+    var isCurrent: (QuickSaveSurfaceSession) -> Bool
+    var allowed: () -> Bool
+    var isModded: () -> Bool
+    var states: (String) async -> [SaveStateInfo]
+    var slotPath: (Int) -> URL?
+    var exists: (URL) -> Bool
+    var compatible: (URL) -> Bool
+    var request: (URL, QuickSaveSurfaceSession) -> Bool
+
+    static var live: Self {
+      Self(session: { .init(gameID: TVEmulationBridge.currentGameID(), identifier: TVEmulationBridge.currentSessionIdentifier()) },
+        isCurrent: { TVEmulationBridge.currentGameID() == $0.gameID && TVEmulationBridge.currentSessionIdentifier() == $0.identifier },
+        allowed: { TVEmulationBridge.isStateOperationAllowed() }, isModded: { ModdedBoot.isCurrentBootModded },
+        states: { await FilesystemSaveStateProvider().states(for: $0) },
+        slotPath: { TVEmulationBridge.stateFilePath(forSlot: $0).map { URL(fileURLWithPath: $0) } },
+        exists: { FileManager.default.fileExists(atPath: $0.path) },
+        compatible: { TVEmulationBridge.stateFileIsCompatible(atPath: $0.path) },
+        request: { TVEmulationBridge.loadState(fromPath: $0.path, expectedGameID: $1.gameID, expectedSessionIdentifier: $1.identifier) })
     }
+  }
+
+  static func load(mode: QuickSaveMode, slot: Int, expectedSession: QuickSaveSurfaceSession? = nil, environment: LoadEnvironment? = nil) async -> Outcome {
+    let environment = environment ?? .live
+    let session = expectedSession ?? environment.session()
+    guard !session.gameID.isEmpty, environment.isCurrent(session), environment.allowed() else { return .unavailable }
+    let url: URL
+    if effectiveMode(mode, modded: environment.isModded()) == .slots {
+      guard let path = environment.slotPath(slot) else { return .empty }
+      url = path
+    } else {
+      let states = await environment.states(session.gameID)
+      guard environment.isCurrent(session) else { return .cancelled }
+      switch QuickSaveHistoryPolicy.loadTarget(states: states, modded: environment.isModded()) {
+      case .manual(let path), .automatic(let path): url = path
+      case .incompatible(let path): return .incompatible(path)
+      case .unavailable: return .empty
+      }
+    }
+    guard environment.isCurrent(session) else { return .cancelled }
+    guard environment.exists(url) else { return .empty }
+    guard environment.compatible(url) else { return .incompatible(url) }
+    return environment.request(url, session) ? .loadRequested(url) : .unavailable
   }
 
   static func effectiveMode(_ mode: QuickSaveMode, modded: Bool) -> QuickSaveMode {
     modded ? .slots : mode
   }
 
-  static func saveHistory() async -> Outcome {
-    let session = Session()
+  static func saveHistory(expectedSession: QuickSaveSurfaceSession? = nil) async -> Outcome {
+    let session = Session(expected: expectedSession)
     guard session.isCurrent, !ModdedBoot.isCurrentBootModded,
           TVEmulationBridge.isStateOperationAllowed() else { return .unavailable }
     let result = await SaveStateService.saveHistoryResultAsync(expectedGameID: session.gameID,
@@ -90,18 +126,28 @@ enum QuickSaveActions {
     return result.cleanupFailed ? .savedWithCleanupWarning(url) : .saved(url)
   }
 
+  /// Unconfirmed callers can create only an empty captured slot. UI replacement consent uses the overload below.
   static func saveSlot(_ slot: Int) async -> Outcome {
-    let session = Session()
-    guard session.isCurrent, TVEmulationBridge.isStateOperationAllowed() else { return .unavailable }
-    let snapshot = await QuickSlot.saveSnapshot(slot: slot, expectedGameID: session.gameID,
-      expectedSessionIdentifier: session.identifier)
-    guard session.isCurrent else { return .cancelled }
+    let session = QuickSaveSurfaceSession(gameID: TVEmulationBridge.currentGameID(), identifier: TVEmulationBridge.currentSessionIdentifier())
+    guard let path = TVEmulationBridge.stateFilePath(forSlot: slot) else { return .saveFailed }
+    let request = QuickSaveSlotSaveRequest(session: session, slot: slot, path: URL(fileURLWithPath: path))
+    return await saveSlot(ClassicSlotSaveConsent(request: request, allowsOverwrite: false))
+  }
+
+  static func saveSlot(_ consent: ClassicSlotSaveConsent) async -> Outcome {
+    let request = consent.request
+    guard TVEmulationBridge.currentGameID() == request.session.gameID,
+          TVEmulationBridge.currentSessionIdentifier() == request.session.identifier,
+          TVEmulationBridge.isStateOperationAllowed() else { return .unavailable }
+    let snapshot = await SaveStateService.saveSlotSnapshotAsync(consent)
+    guard TVEmulationBridge.currentGameID() == request.session.gameID,
+          TVEmulationBridge.currentSessionIdentifier() == request.session.identifier else { return .cancelled }
     guard let snapshot else { return .saveFailed }
     return .saved(URL(fileURLWithPath: snapshot.filePath))
   }
 
-  static func loadSelected(_ state: SaveStateInfo) async -> Outcome {
-    let session = Session()
+  static func loadSelected(_ state: SaveStateInfo, expectedSession: QuickSaveSurfaceSession? = nil) async -> Outcome {
+    let session = Session(expected: expectedSession)
     guard session.isCurrent, state.gameID == session.gameID,
           TVEmulationBridge.isStateOperationAllowed() else { return .unavailable }
     // Mods deliberately use the explicit classic slot; shared vanilla history and auto are unsafe.
@@ -111,24 +157,13 @@ enum QuickSaveActions {
     return requestLoad(state.path, session: session)
   }
 
-  static func setKept(_ kept: Bool, for state: SaveStateInfo) async -> Outcome {
-    let session = Session()
+  static func setKept(_ kept: Bool, for state: SaveStateInfo, expectedSession: QuickSaveSurfaceSession? = nil) async -> Outcome {
+    let session = Session(expected: expectedSession)
     guard session.isCurrent, state.gameID == session.gameID, state.isQuickSave else { return .keepFailed }
     let updated = await SaveStateService.setHistoryKeptAsync(kept, state: state,
       expectedSessionIdentifier: session.identifier)
     guard session.isCurrent else { return .cancelled }
     return updated ? .keepUpdated : .keepFailed
-  }
-
-  private static func loadSlot(_ slot: Int) -> Outcome {
-    let session = Session()
-    guard session.isCurrent, TVEmulationBridge.isStateOperationAllowed() else { return .unavailable }
-    guard let path = TVEmulationBridge.stateFilePath(forSlot: slot),
-          FileManager.default.fileExists(atPath: path) else { return .empty }
-    let url = URL(fileURLWithPath: path)
-    guard TVEmulationBridge.stateFileIsCompatible(atPath: path) else { return .incompatible(url) }
-    return QuickSlot.requestLoad(slot: slot, expectedGameID: session.gameID,
-      expectedSessionIdentifier: session.identifier) ? .loadRequested(url) : .unavailable
   }
 
   private static func requestLoad(_ url: URL, session: Session) -> Outcome {

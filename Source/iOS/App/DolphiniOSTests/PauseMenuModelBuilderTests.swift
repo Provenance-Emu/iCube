@@ -214,7 +214,9 @@ final class PauseMenuModelBuilderTests: XCTestCase {
 
   func test_quickSave_badgeIsSlot_andLongPressOffersTenSlots() {
     let slot = Box(3)
-    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(slot: slot), actions: actions())
+    var snapshot = state()
+    snapshot.quickSaveMode = .slots
+    let model = PauseMenuModelBuilder.make(state: snapshot, bindings: bindings(slot: slot), actions: actions())
     let item = model.item(id: "quick-save")!
     XCTAssertEqual(item.badge, "Slot 3")
     guard case .options(_, let options, let selection)? = item.effectiveLongPress else { return XCTFail("slot picker") }

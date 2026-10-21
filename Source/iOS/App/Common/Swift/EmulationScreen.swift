@@ -254,8 +254,10 @@ struct EmulationScreen: View {
   @State private var showPauseMenu = false
   /// The quick menu (spec §7): an overlay over the running game, never a cover.
   @State private var showQuickMenu = false
+  @State private var pauseStartsInSaveBrowser = false
   @ObservedObject private var recorder = RecordingManager.shared
-  @State private var selectedSlot = 1
+  @AppStorage("quick_save_slot") private var selectedSlot = 1
+  @AppStorage("quick_save_mode") private var quickSaveMode: QuickSaveMode = .history
   @AppStorage("ui_show_dsu_debug_hud") private var showDSUDebugHUD: Bool = {
     #if DEBUG
     return true
@@ -280,6 +282,9 @@ struct EmulationScreen: View {
   /// The arbiter claim held while the controller-settings sheet is up; released when it is dismissed. A
   /// pause the user made from the bar is a separate claim and stays.
   @State private var controllerSettingsToken: PauseArbiter.Token?
+  @State private var showQuickSavePicker = false
+  @State private var quickSavePickerToken: PauseArbiter.Token?
+  @State private var quickStateActionInFlight = false
   var showTopBar: Bool { topBar.isVisible }
   @State private var fastForwardEnabled = false
   // iOS observer tokens to avoid leaks. Defect #10: these three used to be
@@ -378,8 +383,8 @@ struct EmulationScreen: View {
   private func handleSkinAction(_ action: SkinAction) {
     switch action {
     case .menu: showPauseMenu = true
-    case .quickSave: QuickSlot.save(slot: selectedSlot)
-    case .quickLoad: QuickSlot.load(slot: selectedSlot)
+    case .quickSave: quickSaveFromTopBar()
+    case .quickLoad: quickLoadFromTopBar()
     case .control: break
     }
   }
@@ -426,8 +431,8 @@ struct EmulationScreen: View {
     if showQuickMenu && !showPauseMenu {
       QuickMenuView(
         isPresented: $showQuickMenu,
-        bindings: QuickMenuHost.bindings(selectedSlot: $selectedSlot),
-        actions: QuickMenuHost.actions(selectedSlot: $selectedSlot, openPerfOverlay: {
+        bindings: QuickMenuHost.bindings(selectedSlot: $selectedSlot, mode: $quickSaveMode),
+        actions: QuickMenuHost.actions(quickActions: quickMenuSaveActions, openPerfOverlay: {
           showQuickMenu = false
           refreshPerfOverlayState()
           showPerfOverlay = true
@@ -453,8 +458,39 @@ struct EmulationScreen: View {
   }
   #endif
 
+  private var quickMenuSaveActions: QuickSaveMenuActions {
+    QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
+      session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
+      isActive: { showQuickMenu && !showPauseMenu }, openBrowser: {
+        // Acquire before the Quick Menu relinquishes its claim; Pause adopts it before showing the browser.
+        SaveStateService.capturePausePreview()
+        PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+        pauseStartsInSaveBrowser = true
+        showPauseMenu = true
+      }, report: { EmulationToast.post($0.message) })
+  }
+
+  private func pauseMenu(platform: PlatformKind) -> PauseMenuView {
+    var menu = PauseMenuView(
+      selectedSlot: $selectedSlot,
+      onClose: { showPauseMenu = false },
+      onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
+      platform: platform,
+      game: game)
+    menu.startsInSaveBrowser = pauseStartsInSaveBrowser
+    return menu
+  }
+
   var body: some View {
     #if os(tvOS)
+    tvOSScreen
+    #else // os(iOS)
+    iosScreen
+    #endif
+  }
+
+  #if os(tvOS)
+  private var tvOSScreen: some View {
     ZStack {
       EmulationSurfaceController(gamePath: game.filePath)
         .ignoresSafeArea()
@@ -576,13 +612,7 @@ struct EmulationScreen: View {
       }
     }
     .fullScreenCover(isPresented: $showPauseMenu) {
-      PauseMenuView(
-        selectedSlot: $selectedSlot,
-        onClose: { showPauseMenu = false },
-        onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
-        platform: .tvos,
-        game: game
-      )
+      pauseMenu(platform: .tvos)
     }
     .onAppear {
       log.debug("[INPUT] tvOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
@@ -752,6 +782,7 @@ struct EmulationScreen: View {
       // The quick menu never outlives the pause menu; left set, it came back (and re-claimed the
       // pause) the moment the pause menu closed.
       if visible { showQuickMenu = false }
+      else { pauseStartsInSaveBrowser = false }
       postOverlayVisibility()
       isPaused = TVEmulationBridge.isPaused()
       #if canImport(ActivityKit)
@@ -764,322 +795,170 @@ struct EmulationScreen: View {
     }
     .onPlayPauseCommand {}
     .navigationBarBackButtonHidden(true)
-    #else // os(iOS)
-    ZStack {
-      Color.black.ignoresSafeArea()
-      GeometryReader { proxy in
-        let isPortrait = proxy.size.height > proxy.size.width
-        let gameAR = stableAR ?? (proxy.size.width / max(proxy.size.height, 1))
-        if let skinFrame = skinGamePictureFrame(in: proxy, gameAR: gameAR) {
+  }
+  #else // os(iOS)
+  private var iosEmulationSurface: some View {
+    GeometryReader { proxy in
+      let isPortrait = proxy.size.height > proxy.size.width
+      let gameAR = stableAR ?? (proxy.size.width / max(proxy.size.height, 1))
+      if let skinFrame = skinGamePictureFrame(in: proxy, gameAR: gameAR) {
+        EmulationSurfaceController(gamePath: game.filePath)
+          .frame(width: skinFrame.width, height: skinFrame.height)
+          .position(x: skinFrame.midX, y: skinFrame.midY)
+      } else if isPortrait {
+        VStack(spacing: 0) {
+          let topInset = proxy.safeAreaInsets.top
+          if topInset > 0 {
+            Color.clear.frame(height: topInset)
+          }
+          let availableHeight = proxy.size.height - topInset
+          let desiredHeight = min(availableHeight * 0.66, proxy.size.width / max(gameAR, 0.0001))
           EmulationSurfaceController(gamePath: game.filePath)
-            .frame(width: skinFrame.width, height: skinFrame.height)
-            .position(x: skinFrame.midX, y: skinFrame.midY)
-        } else if isPortrait {
-          VStack(spacing: 0) {
-            let topInset = proxy.safeAreaInsets.top
-            if topInset > 0 {
-              Color.clear.frame(height: topInset)
-            }
-            let availableHeight = proxy.size.height - topInset
-            let desiredHeight = min(availableHeight * 0.66, proxy.size.width / max(gameAR, 0.0001))
-            EmulationSurfaceController(gamePath: game.filePath)
-              .frame(width: proxy.size.width, height: desiredHeight)
-              .onTapGesture { toggleTopBar() }
-            Spacer()
-          }
-        } else {
-          let targetHeight = min(proxy.size.height, proxy.size.width / max(gameAR, 0.0001))
-          VStack(spacing: 0) {
-            Spacer()
-            EmulationSurfaceController(gamePath: game.filePath)
-              .frame(width: proxy.size.width, height: targetHeight)
-              .onTapGesture { toggleTopBar() }
-            Spacer()
-          }
-        }
-      }
-      .onChange(of: UIDevice.current.orientation) { _ in
-        TVEmulationBridge.resizeSurfaceNow()
-        scheduleARPoll()
-      }
-      .onAppear {
-        // Per-game profile overrides on boot. Resume-where-left-off / boot-into-state
-        // used to be decided here too, but that decision now lives in a single
-        // app-lifetime observer (`SaveStateService.installDidStartObserver()`): this
-        // per-view observer can overlap with the next screen's during a navigation
-        // transition (the outgoing screen's `onDisappear` hasn't fired yet while the
-        // incoming one's `onAppear` already registered), and two observers both
-        // calling into the one-shot "Start Fresh" flag let the second one load the
-        // auto-state right after the first correctly skipped it. Register once
-        // (guarded) regardless, since this still only wants to run once per screen.
-        guard resumeObserver == nil else { return }
-        resumeObserver = NotificationCenter.default.addObserver(
-          forName: Notification.Name("DOLEmulationDidStartNotification"),
-          object: nil, queue: .main) { _ in
-          GameProfiles.shared.applyRuntimeOverrides(for: game)
-        }
-      }
-
-      // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
-      // pause menu is open; the disconnect banner (zIndex 5) sits above it.
-      if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
-        PausedPill(onResume: {
-          PauseArbiter.shared.userResume()
-          PauseArbiter.shared.resumeIfUnheld()
-          isPaused = false
-        })
-        .zIndex(3)
-      }
-
-      quickMenuAndRecordingOverlay
-
-      // Banner shown while a disconnect-induced pause is active (reconnect resumes).
-      if controllerManager.disconnectPause != nil {
-        ControllerDisconnectBanner(
-          onUseTouchControls: { controllerManager.useTouchControlsForDisconnectedSlot() }
-        )
-        .zIndex(5)
-      }
-
-      // Top hit area: tap near status bar to reveal overlay (active only when hidden). Gone while the
-      // layout editor is up: it would swallow the touches that start in the top 80 pt.
-      if !showTopBar && !isEditingLayout {
-        GeometryReader { screen in
-          let strip = topRevealStrip(canvas: screen.size)
-          Color.clear
-            .frame(width: strip.width, height: strip.height)
-            .contentShape(Rectangle())
+            .frame(width: proxy.size.width, height: desiredHeight)
             .onTapGesture { toggleTopBar() }
-            .position(x: strip.midX, y: strip.midY)
+          Spacer()
         }
-        .ignoresSafeArea()
-        .zIndex(1)
-        .allowsHitTesting(true)
-      }
-
-      if showDSUDebugHUD {
-        DSUDebugHUD()
-          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-          .padding(.top, 96)
-          .zIndex(1000)
-          .allowsHitTesting(true)
-      }
-
-      if showTopBar && !isEditingLayout {
-        emulationTopBar
-          .onPreferenceChange(TopBarHeightKey.self) { topBarHeight = $0 }
-          .transition(.move(edge: .top).combined(with: .opacity))
-          .zIndex(2)
-      }
-
-      // In-game toast ("Saved to Slot 3", ...): the library's snackbar renders underneath this screen.
-      EmulationToastOverlay(barHeight: topBarHeight, barVisible: showTopBar)
-        .zIndex(6)
-
-      // Semi-transparent overlay with quick performance controls (iOS)
-      if showPerfOverlay {
-        Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
-        GeometryReader { geometry in
-          let isLandscape = geometry.size.width > geometry.size.height
-          ScrollView {
-            if isLandscape {
-              // Two-column layout for landscape
-              VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                  Text("Performance Controls").font(.headline).foregroundColor(.white)
-                  Spacer()
-                  Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
-                    .buttonStyle(.plain)
-                }
-                Divider().background(.white.opacity(0.2))
-
-                HStack(alignment: .top, spacing: 20) {
-                  // Left column
-                  VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                      Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-                        ocEnabled = v
-                        DOLConfigBridge.setMainOverclockEnable(v)
-                        // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
-                        if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
-                      }))
-                      .tint(.blue)
-                      .foregroundColor(.white)
-                      .disabled(ocOverride != .none)
-                      autoBadge(ocOverride)
-                    }
-                    HStack {
-                      Slider(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }.asDouble, in: 1 ... 400)
-                        .disabled(!ocEnabled || ocOverride != .none)
-                      Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-                    }
-
-                    HStack {
-                      Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
-                        vbiEnabledQuick = v
-                        DOLConfigBridge.setMainViOverclockEnable(v)
-                        if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
-                      }))
-                      .tint(.blue)
-                      .foregroundColor(.white)
-                      .disabled(vbiOverride != .none)
-                      autoBadge(vbiOverride)
-                    }
-                    HStack {
-                      Slider(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }.asDouble, in: 1 ... 400)
-                        .disabled(!vbiEnabledQuick || vbiOverride != .none)
-                      Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-                    }
-
-                    // Graphics controls
-                    HStack {
-                      Text(L("Internal Resolution"))
-                        .foregroundColor(.white.opacity(0.8))
-                        .font(.caption)
-                      autoBadge(efbOverride)
-                      Spacer()
-                      Slider(value: efbScaleQuickBinding.asDouble, in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
-                        .disabled(efbOverride != .none)
-                      Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
-                    }
-                    HStack {
-                      Text(L("Anisotropic Filtering"))
-                        .foregroundColor(.white.opacity(0.8))
-                        .font(.caption)
-                      Spacer()
-                      Slider(value: $anisotropyQuick.onSet { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }.asDouble, in: 1 ... 16, step: 1)
-                      Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
-                    }
-                    if overscanApplicable {
-                      Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
-                        .tint(.blue)
-                        .foregroundColor(.white)
-                    }
-
-                    // Adaptive clock (auto) + VI-skip mode
-                    adaptiveControls()
-                  }
-                  .frame(maxWidth: .infinity)
-
-                  // Right column - Overlay toggles + diagnostics grid
-                  VStack(alignment: .leading, spacing: 12) {
-                    Text("Display Overlays").font(.subheadline).foregroundColor(.white.opacity(0.8))
-                    overlayToggleGrid()
-                  }
-                  .frame(maxWidth: .infinity)
-                }
-              }
-            } else {
-              // Single column layout for portrait
-              VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                  Text("Performance Controls").font(.headline).foregroundColor(.white)
-                  Spacer()
-                  Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
-                    .buttonStyle(.plain)
-                }
-                Divider().background(.white.opacity(0.2))
-                HStack {
-                  Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-                    ocEnabled = v
-                    DOLConfigBridge.setMainOverclockEnable(v)
-                    // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
-                    if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
-                  }))
-                  .tint(.blue)
-                  .foregroundColor(.white)
-                  .disabled(ocOverride != .none)
-                  autoBadge(ocOverride)
-                }
-                HStack {
-                  Slider(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }.asDouble, in: 1 ... 400)
-                    .disabled(!ocEnabled || ocOverride != .none)
-                  Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-                }
-                HStack {
-                  Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
-                    vbiEnabledQuick = v
-                    DOLConfigBridge.setMainViOverclockEnable(v)
-                    if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
-                  }))
-                  .tint(.blue)
-                  .foregroundColor(.white)
-                  .disabled(vbiOverride != .none)
-                  autoBadge(vbiOverride)
-                }
-                HStack {
-                  Slider(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }.asDouble, in: 1 ... 400)
-                    .disabled(!vbiEnabledQuick || vbiOverride != .none)
-                  Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
-                }
-
-                // Adaptive clock (auto) + VI-skip mode
-                adaptiveControls()
-
-                Divider().background(.white.opacity(0.2))
-                // Overlays + diagnostics, as a scannable icon grid.
-                overlayToggleGrid()
-
-                // Quick graphics controls
-                HStack {
-                  Text(L("Internal Resolution"))
-                    .foregroundColor(.white.opacity(0.8))
-                  autoBadge(efbOverride)
-                  Spacer()
-                  Slider(value: efbScaleQuickBinding.asDouble, in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
-                    .disabled(efbOverride != .none)
-                  Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
-                }
-                HStack {
-                  Text(L("Anisotropic Filtering"))
-                    .foregroundColor(.white.opacity(0.8))
-                  Spacer()
-                  Slider(value: $anisotropyQuick.onSet { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }.asDouble, in: 1 ... 16, step: 1)
-                  Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
-                }
-                if overscanApplicable {
-                  Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
-                    .tint(.blue)
-                    .foregroundColor(.white)
-                }
-              }
-            }
-          }
-          .padding(20)
-          .frame(maxWidth: isLandscape ? min(geometry.size.width * 0.9, 720) : 420)
-          .frame(maxHeight: isLandscape ? min(geometry.size.height * 0.8, 400) : .infinity)
-          .background(.black.opacity(0.6))
-          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-          .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
-          .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+      } else {
+        let targetHeight = min(proxy.size.height, proxy.size.width / max(gameAR, 0.0001))
+        VStack(spacing: 0) {
+          Spacer()
+          EmulationSurfaceController(gamePath: game.filePath)
+            .frame(width: proxy.size.width, height: targetHeight)
+            .onTapGesture { toggleTopBar() }
+          Spacer()
         }
-        .zIndex(5)
-      }
-
-      // Legacy touch pads
-      if isTouchControlsActive {
-        touchPadsContainer
-          .id(touchPadsRefreshToken)
-          .ignoresSafeArea()
-          // Hidden, not removed, while the editor draws the same layout above it.
-          .opacity(isEditingLayout ? 0 : 1)
-          .allowsHitTesting(!isEditingLayout)
-          .transition(.opacity)
-          .onAppear {
-            // Ensure touch input is always a valid IR source
-            TCDeviceMotion.shared.setMotionEnabled(true)
-            syncMotionPortToTouchscreen()
-            TCDeviceMotion.shared.statusBarOrientationChanged()
-          }
-      }
-
-      // Edit Layout…: the editor lays out on the same canvas as the pads above (the whole screen), so
-      // nothing moves when play resumes, and sits above the top bar and its reveal strip.
-      if isEditingLayout {
-        TouchOverlayLayoutEditorView(padKind: layoutEditPadKind, overGame: true, onDone: endLayoutEdit)
-          .zIndex(7)
       }
     }
+    .onChange(of: UIDevice.current.orientation) { _ in
+      TVEmulationBridge.resizeSurfaceNow()
+      scheduleARPoll()
+    }
+    .onAppear {
+      // Per-game profile overrides on boot. Resume-where-left-off / boot-into-state
+      // used to be decided here too, but that decision now lives in a single
+      // app-lifetime observer (`SaveStateService.installDidStartObserver()`): this
+      // per-view observer can overlap with the next screen's during a navigation
+      // transition (the outgoing screen's `onDisappear` hasn't fired yet while the
+      // incoming one's `onAppear` already registered), and two observers both
+      // calling into the one-shot "Start Fresh" flag let the second one load the
+      // auto-state right after the first correctly skipped it. Register once
+      // (guarded) regardless, since this still only wants to run once per screen.
+      guard resumeObserver == nil else { return }
+      resumeObserver = NotificationCenter.default.addObserver(
+        forName: Notification.Name("DOLEmulationDidStartNotification"),
+        object: nil, queue: .main) { _ in
+        GameProfiles.shared.applyRuntimeOverrides(for: game)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var iosStatusOverlays: some View {
+    // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
+    // pause menu is open; the disconnect banner (zIndex 5) sits above it.
+    if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
+      PausedPill(onResume: {
+        PauseArbiter.shared.userResume()
+        PauseArbiter.shared.resumeIfUnheld()
+        isPaused = false
+      })
+      .zIndex(3)
+    }
+
+    quickMenuAndRecordingOverlay
+
+    // Banner shown while a disconnect-induced pause is active (reconnect resumes).
+    if controllerManager.disconnectPause != nil {
+      ControllerDisconnectBanner(
+        onUseTouchControls: { controllerManager.useTouchControlsForDisconnectedSlot() }
+      )
+      .zIndex(5)
+    }
+  }
+
+  @ViewBuilder
+  private var iosTopBarOverlays: some View {
+    // Top hit area: tap near status bar to reveal overlay (active only when hidden). Gone while the
+    // layout editor is up: it would swallow the touches that start in the top 80 pt.
+    if !showTopBar && !isEditingLayout {
+      GeometryReader { screen in
+        let strip = topRevealStrip(canvas: screen.size)
+        Color.clear
+          .frame(width: strip.width, height: strip.height)
+          .contentShape(Rectangle())
+          .onTapGesture { toggleTopBar() }
+          .position(x: strip.midX, y: strip.midY)
+      }
+      .ignoresSafeArea()
+      .zIndex(1)
+      .allowsHitTesting(true)
+    }
+
+    if showDSUDebugHUD {
+      DSUDebugHUD()
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.top, 96)
+        .zIndex(1000)
+        .allowsHitTesting(true)
+    }
+
+    if showTopBar && !isEditingLayout {
+      emulationTopBar
+        .onPreferenceChange(TopBarHeightKey.self) { topBarHeight = $0 }
+        .transition(.move(edge: .top).combined(with: .opacity))
+        .zIndex(2)
+    }
+
+    // In-game toast ("Saved to Slot 3", ...): the library's snackbar renders underneath this screen.
+    EmulationToastOverlay(barHeight: topBarHeight, barVisible: showTopBar)
+      .zIndex(6)
+  }
+
+  @ViewBuilder
+  private var iosTouchOverlays: some View {
+    // Legacy touch pads
+    if isTouchControlsActive {
+      touchPadsContainer
+        .id(touchPadsRefreshToken)
+        .ignoresSafeArea()
+        // Hidden, not removed, while the editor draws the same layout above it.
+        .opacity(isEditingLayout ? 0 : 1)
+        .allowsHitTesting(!isEditingLayout)
+        .transition(.opacity)
+        .onAppear {
+          // Ensure touch input is always a valid IR source
+          TCDeviceMotion.shared.setMotionEnabled(true)
+          syncMotionPortToTouchscreen()
+          TCDeviceMotion.shared.statusBarOrientationChanged()
+        }
+    }
+
+    // Edit Layout…: the editor lays out on the same canvas as the pads above (the whole screen), so
+    // nothing moves when play resumes, and sits above the top bar and its reveal strip.
+    if isEditingLayout {
+      TouchOverlayLayoutEditorView(padKind: layoutEditPadKind, overGame: true, onDone: endLayoutEdit)
+        .zIndex(7)
+    }
+  }
+
+  private var iosCanvas: some View {
+    ZStack {
+      Color.black.ignoresSafeArea()
+      iosEmulationSurface
+
+      iosStatusOverlays
+
+      iosTopBarOverlays
+
+      // Semi-transparent overlay with quick performance controls (iOS)
+      performanceOverlay
+
+      iosTouchOverlays
+    }
+  }
+
+  private var iosPresentedCanvas: some View {
+    iosCanvas
     // Single owner of the core's IMU pointer on the touchscreen Wii Remote: always OFF, whether the
     // overlay is shown or hidden. The app drives that slot's IR itself (touch in drag/follow,
     // device attitude in gyro mode) and keeps feeding the phone's motion into its IMU axes, so
@@ -1097,13 +976,7 @@ struct EmulationScreen: View {
       TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
     }
     .fullScreenCover(isPresented: $showPauseMenu) {
-      PauseMenuView(
-        selectedSlot: $selectedSlot,
-        onClose: { showPauseMenu = false },
-        onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
-        platform: .ios,
-        game: game
-      )
+      pauseMenu(platform: .ios)
     }
     .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
       if case .success(let urls) = result {
@@ -1126,192 +999,15 @@ struct EmulationScreen: View {
       }
       Button(L("Cancel"), role: .cancel) {}
     }
-    .onAppear {
-      log.debug("[INPUT] iOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
-      log.debug("[INPUT] iOS initial controllers count: \(GCController.controllers().count)")
-      // Controller observation is started app-wide from MainDisplaySceneDelegate
-      // (scene root) so hotplug auto-assign works in library/menus/in-game on both
-      // iOS and tvOS. Do not start/stop it here.
-      // Initialize expected system early from metadata to avoid startup races
-      isWiiSystem = inferIsWii(from: game)
-      irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
-      let useIMU = (irModeRaw == 0)
-      let wantsMotionForShake = MotionSettings.enhancedShakeDetection() && isWiiSystem
-      // The core's IMU pointer stays OFF while the on-screen pads own the pointer: the app
-      // synthesizes IR itself (touch in drag/follow, device attitude in gyro mode) and shake
-      // detection only needs the accelerometer. Enabling it here for gyro mode or shake made
-      // the core fold the phone's real tilt into the IR transform on top of the app's pointer,
-      // which is the "touch pointer stopped working" report. The `isTouchControlsActive` onChange
-      // above (declared before this block) is the runtime owner of this flag afterwards.
-      // Target whichever Wii Remote the overlay is actually bound to, and none when no Wii Remote is
-      // on the Touchscreen: `?? 0` used to switch a gyro pad's IMU pointer off on Wii Remote 1 at
-      // every Wii boot (controller hub decision 12).
-      if let imuTouchSlot = controllerManager.touchscreenSlot(system: .wii) {
-        TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: imuTouchSlot)
-      }
-      let wantsMotion = (isTouchControlsActive && useIMU) || wantsMotionForShake
-      TCDeviceMotion.shared.setMotionEnabled(wantsMotion)
-      if wantsMotion {
-        syncMotionPortToTouchscreen()
-        TCDeviceMotion.shared.statusBarOrientationChanged()
-      }
+  }
 
-      // Enable enhanced motion controls for touchscreen by default (Wii games)
-      if isWiiSystem {
-        setupEnhancedMotionControls()
-      }
-
-      // Listen for motion settings changes during gameplay
-      obsMotionSettingsChanged = NotificationCenter.default.addObserver(forName: Notification.Name("DOLMotionSettingsChanged"), object: nil, queue: .main) { _ in
-        restartMotionSystemForSettingsChange()
-        // Ensure motion stays on for shake even if touch overlay is hidden but an external controller is connected
-        let wantsMotionForShake2 = MotionSettings.enhancedShakeDetection() && isWiiSystem
-        if wantsMotionForShake2 {
-          Task { @MainActor in
-            TCDeviceMotion.shared.setMotionEnabled(true)
-            syncMotionPortToTouchscreen()
-            TCDeviceMotion.shared.statusBarOrientationChanged()
-          }
-        }
-      }
-      // Ensure touch controls start visible
-      isTouchControlsActive = controllerManager.overlayVisible
-      desiredTouchControls = true
-      controllerManager.setSystem(isWii: isWiiSystem)
-      // Reconcile port ownership. The touchscreen fallback (ControllerManager.prepareForBoot)
-      // runs once, pre-boot, from the coordinator; running it here too would re-decide AFTER
-      // the engine and overwrite what reconcile() had just bound.
-      ControllerManager.shared.reconcile()
-      // Configure Wiimote sources based on connected controllers
-      ControllerManager.shared.updateWiimoteEmulationForExternalControllers()
-      // reconcile() may have moved the touchscreen to another slot; follow it.
-      syncMotionPortToTouchscreen()
-      #if os(iOS)
-      ReplayKitManager.shared.startBufferingIfEnabled()
-      // A skin whose files vanished is forgotten here, not while the screen draws (that would publish mid-update).
-      SkinMount.forgetDeadSelections(in: .shared)
-      if UserDefaults.standard.bool(forKey: "thermal_auto_enable") { ThermalManager.shared.start() }
-      #endif
-      // On iOS, do not hand controller button presses to the system while in-game
-      GCController.shouldMonitorBackgroundEvents = false
-
-      logCurrentControllers()
-      fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
-      ControllerManager.shared.refreshInputHandlers()
-      #if os(iOS)
-      SiriShortcutManager.shared.donatePlay(game: game)
-      #endif
-      // Controller connect/disconnect handled by ControllerManager
-      // NotificationCenter bridging for assignments remains
-      obsAssignmentsChanged = NotificationCenter.default.addObserver(forName: ControllerManager.assignmentsChanged, object: nil, queue: .main) { _ in
-        if !userOverrideTouchControls {
-          let visible = controllerManager.touchscreenSlot(system: isWiiSystem ? .wii : .gamecube) != nil
-          controllerManager.overlayVisible = visible
-          isTouchControlsActive = visible
-        }
-        touchPadsRefreshToken = UUID()
-      }
-      obsWiiOverlayLayoutChanged = NotificationCenter.default.addObserver(forName: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil, queue: .main) { _ in
-        touchPadsRefreshToken = UUID()
-      }
-      endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
-        dismiss()
-      }
-      obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
-        showPauseMenu = true
-      }
-      obsShowQuickMenu = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowQuickMenu"), object: nil, queue: .main) { _ in
-        if !showPauseMenu { showQuickMenu = true }
-      }
-      // Re-fetch AR soon after appear to avoid tiny first layout
-      scheduleARPoll()
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { TVEmulationBridge.resizeSurfaceNow() }
-      // Re-infer system shortly after appear in case metadata was incomplete
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-        isWiiSystem = inferIsWii(from: game)
-        touchPadsRefreshToken = UUID()
-      }
-      // Load current OC/VBI state
-      ocEnabled = DOLConfigBridge.mainOverclockEnableBase()
-      ocPercent = DOLConfigBridge.mainOverclockPercentBase()
-      vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnableBase()
-      vbiPercentQuick = DOLConfigBridge.mainViOverclockPercentBase()
-      // Resolver step #3: does an auto controller or the running game outrank these keys?
-      ocOverride = DOLConfigBridge.overclockOverride()
-      vbiOverride = DOLConfigBridge.viOverclockOverride()
-      efbOverride = DOLConfigBridge.efbScaleOverride()
-      // Overlay toggles and quick graphics
-      showFPSQuick = DOLConfigBridge.gfxShowFPS()
-      showVPSQuick = DOLConfigBridge.gfxShowVPS()
-      showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
-      showVBlankQuick = DOLConfigBridge.gfxShowVTimes()
-      efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
-      efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
-      anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
-      // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
-      adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
-      viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
-      showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
-      overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
-      refreshOverscanApplicable()
-      if overscanApplicable {
-        TVEmulationBridge.setOverscanFullscreenEnabled(overscanFullscreen)
-      }
-      // (Removed) "IR mode 0 means unset -> force Follow": mode 0 is the user's Gyro choice
-      // (PointerMode.gyro) and the engine default is 2 (iOSSettings.cpp), so this bounced every
-      // Gyro selection back to Follow on each appearance.
-      // Initialize overlay signature for Wii type (extension + sideways)
-      let touchSlot = controllerManager.touchscreenSlot(system: .wii) ?? 0
-      let ext0 = Int(DOLWiimoteBridge.selectedExtension(forWiimote: touchSlot))
-      let side0 = DOLWiimoteBridge.isSideways(forWiimote: touchSlot)
-      wiiOverlaySignature = (ext0 & 0xFF) | (side0 ? 0x100 : 0)
-      // Default touch controls: shown while some active slot of the running system is bound to the
-      // on-screen Touchscreen (only if not user-overridden). "Hidden whenever any controller is
-      // connected" made an explicit Touchscreen assignment with a pad attached look dead.
-      if !userOverrideTouchControls {
-        let visible = controllerManager.touchscreenSlot(system: isWiiSystem ? .wii : .gamecube) != nil
-        controllerManager.overlayVisible = visible
-        isTouchControlsActive = visible
-      }
-      // ControllerManager publishes connect/disconnect; adjust default overlay there via reconcile if needed
-      // Show the bar on appear; it hides itself once idle (see TopBarVisibility)
-      topBar.show(now: Date())
-    }
+  private var iosLifecycleCanvas: some View {
+    iosPresentedCanvas
+    .onAppear { iosDidAppear() }
     .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLExternalDisplayDidChangeNotification"))) { _ in
       refreshOverscanApplicable()
     }
-    .onDisappear {
-      if let token = endObserver { NotificationCenter.default.removeObserver(token)
-        endObserver = nil
-      }
-      // Without this the resume observer outlived the screen and stacked up one per launch —
-      // the same double-handler bug as the tvOS branch (see the start observer there).
-      if let token = resumeObserver { NotificationCenter.default.removeObserver(token)
-        resumeObserver = nil
-      }
-      if let t = obsShowPause { NotificationCenter.default.removeObserver(t)
-        obsShowPause = nil
-      }
-      if let t = obsShowQuickMenu { NotificationCenter.default.removeObserver(t)
-        obsShowQuickMenu = nil
-      }
-      if let t = obsMotionSettingsChanged { NotificationCenter.default.removeObserver(t)
-        obsMotionSettingsChanged = nil
-      }
-      if let t = obsAssignmentsChanged { NotificationCenter.default.removeObserver(t)
-        obsAssignmentsChanged = nil
-      }
-      if let t = obsWiiOverlayLayoutChanged { NotificationCenter.default.removeObserver(t)
-        obsWiiOverlayLayoutChanged = nil
-      }
-      // Do not stopObserving() here — the controller observer is app-wide (started
-      // in MainDisplaySceneDelegate) so auto-assign stays live after exiting a game.
-      // Disable motion when leaving screen
-      TCDeviceMotion.shared.setMotionEnabled(false)
-      resetAllControllerInputState()
-      arPollTask?.cancel()
-      arPollTask = nil
-    }
+    .onDisappear { iosDidDisappear() }
     .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
       // Ask the renderer to resize/reconfigure
       TVEmulationBridge.resizeSurfaceNow()
@@ -1322,6 +1018,10 @@ struct EmulationScreen: View {
       // overlay host's portrait/landscape layout callback does not see.
       Task { @MainActor in TCDeviceMotion.shared.statusBarOrientationChanged() }
     }
+  }
+
+  private var iosInputCanvas: some View {
+    iosLifecycleCanvas
     .onReceive(NotificationCenter.default.publisher(for: SkinLibrary.didChangeNotification)) { _ in
       // A skin was picked, imported or deleted (possibly the one on screen): rebuild the pads and the game placement.
       touchPadsRefreshToken = UUID()
@@ -1369,6 +1069,7 @@ struct EmulationScreen: View {
     }
     .onChange(of: showPauseMenu) { visible in
       if visible { showQuickMenu = false }
+      else { pauseStartsInSaveBrowser = false }
       isPaused = TVEmulationBridge.isPaused()
       // The fullScreenCover transition perturbs the GeometryReader size and the Metal
       // surface never resizes itself (updateUIViewController is empty), so without this
@@ -1376,6 +1077,10 @@ struct EmulationScreen: View {
       // rotation.
       if !visible { TVEmulationBridge.resizeSurfaceNow() }
     }
+  }
+
+  private var iosNavigationCanvas: some View {
+    iosInputCanvas
     // The library stack pushes this screen; hide its bar (iOS 26 renders leftover
     // toolbar items as floating glass buttons that also swallow the top-edge tap).
     .toolbar(.hidden, for: .navigationBar)
@@ -1383,6 +1088,10 @@ struct EmulationScreen: View {
     .statusBar(hidden: true)
     .animation(TopBarStyle.transition, value: showTopBar)
     .modifier(TopBarChildPresentationHold(visibility: $topBar, isPresented: topBarChildPresented))
+  }
+
+  private var iosScreen: some View {
+    iosNavigationCanvas
     .sheet(isPresented: $showShaderSheet) {
       NavigationStack {
         ShaderSettingsView()
@@ -1397,6 +1106,14 @@ struct EmulationScreen: View {
     }
     .sheet(isPresented: $showFXSheet) {
       NavigationStack { AudioEffectsSheet() }
+    }
+    .sheet(isPresented: $showQuickSavePicker, onDismiss: quickSavePickerDismissed) {
+      QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
+                          onDismiss: { showQuickSavePicker = false })
+        .claimsController()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+      showQuickSavePicker = false
     }
     .sheet(isPresented: $showControllerSettings, onDismiss: controllerSettingsDismissed) {
       NavigationStack {
@@ -1442,8 +1159,194 @@ struct EmulationScreen: View {
     // onDisappear and its raw nav handlers would otherwise keep moving the grid
     // (and could launch another game) underneath the running one.
     .claimsController()
-    #endif
   }
+
+  private func iosDidAppear() {
+    log.debug("[INPUT] iOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
+    log.debug("[INPUT] iOS initial controllers count: \(GCController.controllers().count)")
+    // Controller observation is started app-wide from MainDisplaySceneDelegate
+    // (scene root) so hotplug auto-assign works in library/menus/in-game on both
+    // iOS and tvOS. Do not start/stop it here.
+    // Initialize expected system early from metadata to avoid startup races
+    isWiiSystem = inferIsWii(from: game)
+    irModeRaw = DOLConfigBridge.mainTouchPadIRMode()
+    let useIMU = (irModeRaw == 0)
+    let wantsMotionForShake = MotionSettings.enhancedShakeDetection() && isWiiSystem
+    // The core's IMU pointer stays OFF while the on-screen pads own the pointer: the app
+    // synthesizes IR itself (touch in drag/follow, device attitude in gyro mode) and shake
+    // detection only needs the accelerometer. Enabling it here for gyro mode or shake made
+    // the core fold the phone's real tilt into the IR transform on top of the app's pointer,
+    // which is the "touch pointer stopped working" report. The `isTouchControlsActive` onChange
+    // above (declared before this block) is the runtime owner of this flag afterwards.
+    // Target whichever Wii Remote the overlay is actually bound to, and none when no Wii Remote is
+    // on the Touchscreen: `?? 0` used to switch a gyro pad's IMU pointer off on Wii Remote 1 at
+    // every Wii boot (controller hub decision 12).
+    if let imuTouchSlot = controllerManager.touchscreenSlot(system: .wii) {
+      TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: imuTouchSlot)
+    }
+    let wantsMotion = (isTouchControlsActive && useIMU) || wantsMotionForShake
+    TCDeviceMotion.shared.setMotionEnabled(wantsMotion)
+    if wantsMotion {
+      syncMotionPortToTouchscreen()
+      TCDeviceMotion.shared.statusBarOrientationChanged()
+    }
+
+    // Enable enhanced motion controls for touchscreen by default (Wii games)
+    if isWiiSystem {
+      setupEnhancedMotionControls()
+    }
+
+    // Listen for motion settings changes during gameplay
+    obsMotionSettingsChanged = NotificationCenter.default.addObserver(forName: Notification.Name("DOLMotionSettingsChanged"), object: nil, queue: .main) { _ in
+      restartMotionSystemForSettingsChange()
+      // Ensure motion stays on for shake even if touch overlay is hidden but an external controller is connected
+      let wantsMotionForShake2 = MotionSettings.enhancedShakeDetection() && isWiiSystem
+      if wantsMotionForShake2 {
+        Task { @MainActor in
+          TCDeviceMotion.shared.setMotionEnabled(true)
+          syncMotionPortToTouchscreen()
+          TCDeviceMotion.shared.statusBarOrientationChanged()
+        }
+      }
+    }
+    // Ensure touch controls start visible
+    isTouchControlsActive = controllerManager.overlayVisible
+    desiredTouchControls = true
+    controllerManager.setSystem(isWii: isWiiSystem)
+    // Reconcile port ownership. The touchscreen fallback (ControllerManager.prepareForBoot)
+    // runs once, pre-boot, from the coordinator; running it here too would re-decide AFTER
+    // the engine and overwrite what reconcile() had just bound.
+    ControllerManager.shared.reconcile()
+    // Configure Wiimote sources based on connected controllers
+    ControllerManager.shared.updateWiimoteEmulationForExternalControllers()
+    // reconcile() may have moved the touchscreen to another slot; follow it.
+    syncMotionPortToTouchscreen()
+    #if os(iOS)
+    ReplayKitManager.shared.startBufferingIfEnabled()
+    // A skin whose files vanished is forgotten here, not while the screen draws (that would publish mid-update).
+    SkinMount.forgetDeadSelections(in: .shared)
+    if UserDefaults.standard.bool(forKey: "thermal_auto_enable") { ThermalManager.shared.start() }
+    #endif
+    // On iOS, do not hand controller button presses to the system while in-game
+    GCController.shouldMonitorBackgroundEvents = false
+
+    logCurrentControllers()
+    fastForwardEnabled = TVEmulationBridge.isFastForwardEnabled()
+    ControllerManager.shared.refreshInputHandlers()
+    #if os(iOS)
+    SiriShortcutManager.shared.donatePlay(game: game)
+    #endif
+    // Controller connect/disconnect handled by ControllerManager
+    // NotificationCenter bridging for assignments remains
+    obsAssignmentsChanged = NotificationCenter.default.addObserver(forName: ControllerManager.assignmentsChanged, object: nil, queue: .main) { _ in
+      if !userOverrideTouchControls {
+        let visible = controllerManager.touchscreenSlot(system: isWiiSystem ? .wii : .gamecube) != nil
+        controllerManager.overlayVisible = visible
+        isTouchControlsActive = visible
+      }
+      touchPadsRefreshToken = UUID()
+    }
+    obsWiiOverlayLayoutChanged = NotificationCenter.default.addObserver(forName: Notification.Name("DOLWiiOverlayLayoutChangedNotification"), object: nil, queue: .main) { _ in
+      touchPadsRefreshToken = UUID()
+    }
+    endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
+      dismiss()
+    }
+    obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
+      showPauseMenu = true
+    }
+    obsShowQuickMenu = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowQuickMenu"), object: nil, queue: .main) { _ in
+      if !showPauseMenu { showQuickMenu = true }
+    }
+    // Re-fetch AR soon after appear to avoid tiny first layout
+    scheduleARPoll()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { TVEmulationBridge.resizeSurfaceNow() }
+    // Re-infer system shortly after appear in case metadata was incomplete
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+      isWiiSystem = inferIsWii(from: game)
+      touchPadsRefreshToken = UUID()
+    }
+    // Load current OC/VBI state
+    ocEnabled = DOLConfigBridge.mainOverclockEnableBase()
+    ocPercent = DOLConfigBridge.mainOverclockPercentBase()
+    vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnableBase()
+    vbiPercentQuick = DOLConfigBridge.mainViOverclockPercentBase()
+    // Resolver step #3: does an auto controller or the running game outrank these keys?
+    ocOverride = DOLConfigBridge.overclockOverride()
+    vbiOverride = DOLConfigBridge.viOverclockOverride()
+    efbOverride = DOLConfigBridge.efbScaleOverride()
+    // Overlay toggles and quick graphics
+    showFPSQuick = DOLConfigBridge.gfxShowFPS()
+    showVPSQuick = DOLConfigBridge.gfxShowVPS()
+    showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
+    showVBlankQuick = DOLConfigBridge.gfxShowVTimes()
+    efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
+    efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
+    anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
+    // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
+    adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
+    viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
+    showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
+    overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
+    refreshOverscanApplicable()
+    if overscanApplicable {
+      TVEmulationBridge.setOverscanFullscreenEnabled(overscanFullscreen)
+    }
+    // (Removed) "IR mode 0 means unset -> force Follow": mode 0 is the user's Gyro choice
+    // (PointerMode.gyro) and the engine default is 2 (iOSSettings.cpp), so this bounced every
+    // Gyro selection back to Follow on each appearance.
+    // Initialize overlay signature for Wii type (extension + sideways)
+    let touchSlot = controllerManager.touchscreenSlot(system: .wii) ?? 0
+    let ext0 = Int(DOLWiimoteBridge.selectedExtension(forWiimote: touchSlot))
+    let side0 = DOLWiimoteBridge.isSideways(forWiimote: touchSlot)
+    wiiOverlaySignature = (ext0 & 0xFF) | (side0 ? 0x100 : 0)
+    // Default touch controls: shown while some active slot of the running system is bound to the
+    // on-screen Touchscreen (only if not user-overridden). "Hidden whenever any controller is
+    // connected" made an explicit Touchscreen assignment with a pad attached look dead.
+    if !userOverrideTouchControls {
+      let visible = controllerManager.touchscreenSlot(system: isWiiSystem ? .wii : .gamecube) != nil
+      controllerManager.overlayVisible = visible
+      isTouchControlsActive = visible
+    }
+    // ControllerManager publishes connect/disconnect; adjust default overlay there via reconcile if needed
+    // Show the bar on appear; it hides itself once idle (see TopBarVisibility)
+    topBar.show(now: Date())
+  }
+
+  private func iosDidDisappear() {
+    if let token = endObserver { NotificationCenter.default.removeObserver(token)
+      endObserver = nil
+    }
+    // Without this the resume observer outlived the screen and stacked up one per launch —
+    // the same double-handler bug as the tvOS branch (see the start observer there).
+    if let token = resumeObserver { NotificationCenter.default.removeObserver(token)
+      resumeObserver = nil
+    }
+    if let t = obsShowPause { NotificationCenter.default.removeObserver(t)
+      obsShowPause = nil
+    }
+    if let t = obsShowQuickMenu { NotificationCenter.default.removeObserver(t)
+      obsShowQuickMenu = nil
+    }
+    if let t = obsMotionSettingsChanged { NotificationCenter.default.removeObserver(t)
+      obsMotionSettingsChanged = nil
+    }
+    if let t = obsAssignmentsChanged { NotificationCenter.default.removeObserver(t)
+      obsAssignmentsChanged = nil
+    }
+    if let t = obsWiiOverlayLayoutChanged { NotificationCenter.default.removeObserver(t)
+      obsWiiOverlayLayoutChanged = nil
+    }
+    // Do not stopObserving() here — the controller observer is app-wide (started
+    // in MainDisplaySceneDelegate) so auto-assign stays live after exiting a game.
+    // Disable motion when leaving screen
+    TCDeviceMotion.shared.setMotionEnabled(false)
+    resetAllControllerInputState()
+    arPollTask?.cancel()
+    arPollTask = nil
+  }
+
+  #endif
 
   // Adaptive-clock (auto) live toggle + VI-skip mode picker, shared across all perf-overlay layouts.
   // Resolver step #3: refresh the perf-overlay state from the live config whenever the overlay is
@@ -1452,6 +1355,214 @@ struct EmulationScreen: View {
   // "Auto" badge appear and the manual controls disable when the user opens the overlay mid-game.
 
   #if os(iOS)
+  @ViewBuilder
+  private var performanceOverlay: some View {
+    if showPerfOverlay {
+      Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
+      GeometryReader { geometry in
+        let isLandscape = geometry.size.width > geometry.size.height
+        performancePanel(size: geometry.size, isLandscape: isLandscape)
+      }
+      .zIndex(5)
+    }
+  }
+
+  private func performancePanel(size: CGSize, isLandscape: Bool) -> some View {
+    ScrollView {
+      if isLandscape {
+        landscapePerformanceControls
+      } else {
+        portraitPerformanceControls
+      }
+    }
+    .padding(20)
+    .frame(maxWidth: isLandscape ? min(size.width * 0.9, 720) : 420)
+    .frame(maxHeight: isLandscape ? min(size.height * 0.8, 400) : .infinity)
+    .background(.black.opacity(0.6))
+    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
+    .position(x: size.width / 2, y: size.height / 2)
+  }
+
+  private var landscapePerformanceControls: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Text("Performance Controls").font(.headline).foregroundColor(.white)
+        Spacer()
+        Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
+          .buttonStyle(.plain)
+      }
+      Divider().background(.white.opacity(0.2))
+
+      HStack(alignment: .top, spacing: 20) {
+        // Left column
+        landscapePerformanceSettings
+
+        // Right column - Overlay toggles + diagnostics grid
+        landscapePerformanceOverlays
+      }
+    }
+  }
+
+  private var landscapePerformanceSettings: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack {
+        Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+          ocEnabled = v
+          DOLConfigBridge.setMainOverclockEnable(v)
+          // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
+          if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
+        }))
+        .tint(.blue)
+        .foregroundColor(.white)
+        .disabled(ocOverride != .none)
+        autoBadge(ocOverride)
+      }
+      HStack {
+        Slider(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }.asDouble, in: 1 ... 400)
+          .disabled(!ocEnabled || ocOverride != .none)
+        Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+      }
+
+      HStack {
+        Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+          vbiEnabledQuick = v
+          DOLConfigBridge.setMainViOverclockEnable(v)
+          if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
+        }))
+        .tint(.blue)
+        .foregroundColor(.white)
+        .disabled(vbiOverride != .none)
+        autoBadge(vbiOverride)
+      }
+      HStack {
+        Slider(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }.asDouble, in: 1 ... 400)
+          .disabled(!vbiEnabledQuick || vbiOverride != .none)
+        Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+      }
+
+      // Graphics controls
+      HStack {
+        Text(L("Internal Resolution"))
+          .foregroundColor(.white.opacity(0.8))
+          .font(.caption)
+        autoBadge(efbOverride)
+        Spacer()
+        Slider(value: efbScaleQuickBinding.asDouble, in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
+          .disabled(efbOverride != .none)
+        Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
+      }
+      HStack {
+        Text(L("Anisotropic Filtering"))
+          .foregroundColor(.white.opacity(0.8))
+          .font(.caption)
+        Spacer()
+        Slider(value: anisotropySliderBinding, in: 1 ... 16, step: 1)
+        Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
+      }
+      if overscanApplicable {
+        Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
+          .tint(.blue)
+          .foregroundColor(.white)
+      }
+
+      // Adaptive clock (auto) + VI-skip mode
+      adaptiveControls()
+    }
+    .frame(maxWidth: .infinity)
+  }
+
+  private var landscapePerformanceOverlays: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Display Overlays").font(.subheadline).foregroundColor(.white.opacity(0.8))
+      overlayToggleGrid()
+    }
+    .frame(maxWidth: .infinity)
+  }
+
+  private var portraitPerformanceControls: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      HStack {
+        Text("Performance Controls").font(.headline).foregroundColor(.white)
+        Spacer()
+        Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.white).font(.title3) }
+          .buttonStyle(.plain)
+      }
+      Divider().background(.white.opacity(0.2))
+      HStack {
+        Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
+          ocEnabled = v
+          DOLConfigBridge.setMainOverclockEnable(v)
+          // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
+          if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
+        }))
+        .tint(.blue)
+        .foregroundColor(.white)
+        .disabled(ocOverride != .none)
+        autoBadge(ocOverride)
+      }
+      HStack {
+        Slider(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }.asDouble, in: 1 ... 400)
+          .disabled(!ocEnabled || ocOverride != .none)
+        Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+      }
+      HStack {
+        Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
+          vbiEnabledQuick = v
+          DOLConfigBridge.setMainViOverclockEnable(v)
+          if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
+        }))
+        .tint(.blue)
+        .foregroundColor(.white)
+        .disabled(vbiOverride != .none)
+        autoBadge(vbiOverride)
+      }
+      HStack {
+        Slider(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }.asDouble, in: 1 ... 400)
+          .disabled(!vbiEnabledQuick || vbiOverride != .none)
+        Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
+      }
+
+      // Adaptive clock (auto) + VI-skip mode
+      adaptiveControls()
+
+      Divider().background(.white.opacity(0.2))
+      // Overlays + diagnostics, as a scannable icon grid.
+      overlayToggleGrid()
+
+      // Quick graphics controls
+      HStack {
+        Text(L("Internal Resolution"))
+          .foregroundColor(.white.opacity(0.8))
+        autoBadge(efbOverride)
+        Spacer()
+        Slider(value: efbScaleQuickBinding.asDouble, in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
+          .disabled(efbOverride != .none)
+        Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+      }
+      portraitAnisotropyControl
+      if overscanApplicable {
+        Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
+          .tint(.blue)
+          .foregroundColor(.white)
+      }
+    }
+  }
+
+  private var anisotropySliderBinding: Binding<Double> {
+    $anisotropyQuick.onSet { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }.asDouble
+  }
+
+  private var portraitAnisotropyControl: some View {
+    HStack {
+      Text(L("Anisotropic Filtering"))
+        .foregroundColor(.white.opacity(0.8))
+      Spacer()
+      Slider(value: anisotropySliderBinding, in: 1 ... 16, step: 1)
+      Text("\(anisotropyQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+    }
+  }
+
   private var emulationTopBar: some View {
     EmulationTopBar(
       visibility: $topBar,
@@ -1478,8 +1589,10 @@ struct EmulationScreen: View {
         // The on-screen controls follow the choice (the assignmentsChanged observer).
         userOverrideTouchControls = false
         controllerManager.choosePlayer1(qualifier, isWii: isWiiSystem)
-      })
-      .disabled(quitRequestInFlight)
+      },
+      onQuickSave: quickSaveFromTopBar,
+      onQuickLoad: { quickLoadFromTopBar() })
+      .disabled(quitRequestInFlight || quickStateActionInFlight)
       .overlay {
         if quitRequestInFlight { ProgressView(L("Saving…")) }
       }
@@ -1499,6 +1612,7 @@ struct EmulationScreen: View {
   /// True while anything the bar opened (or the pause menu) is on screen; the bar must not hide under it.
   private var topBarChildPresented: Bool {
     showPerfOverlay || showShaderSheet || showShaderParams || showFXSheet || showControllerSettings
+      || showQuickSavePicker || quickStateActionInFlight
       || showPauseMenu || showExitConfirm || quitSaveFailure != nil || quitRequestInFlight || showSkyImporter || showSkyClearPicker
   }
 
@@ -1517,11 +1631,49 @@ struct EmulationScreen: View {
     case .controllerSettings:
       controllerSettingsToken = PauseArbiter.shared.claim("controller-settings")
       showControllerSettings = true
-    case .pauseMenu: showPauseMenu = true
+    case .pauseMenu:
+      SaveStateService.capturePausePreview()
+      PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+      showPauseMenu = true
+    case .saveStates: presentQuickSavePicker()
     case .editLayout: beginLayoutEdit()
     case .skylanderImport: showSkyImporter = true
     case .skylanderClear: showSkyClearPicker = true
     }
+  }
+
+  private func presentQuickSavePicker() {
+    guard !showQuickSavePicker else { return }
+    SaveStateService.capturePausePreview()
+    quickSavePickerToken = PauseArbiter.shared.claim("quick-save-picker")
+    showQuickSavePicker = true
+  }
+
+  private func quickSavePickerDismissed() {
+    if let token = quickSavePickerToken {
+      PauseArbiter.shared.release(token)
+      quickSavePickerToken = nil
+    }
+    isPaused = TVEmulationBridge.isPaused()
+    TVEmulationBridge.resizeSurfaceNow()
+  }
+
+  private func toolbarQuickActions() -> QuickSaveMenuActions {
+    QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
+      session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
+      isActive: { UIApplication.shared.applicationState == .active && !showPauseMenu },
+      openBrowser: presentQuickSavePicker, onBusyChanged: { quickStateActionInFlight = $0 },
+      report: { EmulationToast.post($0.message) })
+  }
+
+  private func quickSaveFromTopBar() {
+    guard !quickStateActionInFlight else { return }
+    toolbarQuickActions().save()
+  }
+
+  private func quickLoadFromTopBar() {
+    guard !quickStateActionInFlight else { return }
+    toolbarQuickActions().load()
   }
 
   private func quitFromTopBar() {

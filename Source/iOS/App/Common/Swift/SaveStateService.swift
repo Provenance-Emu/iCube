@@ -11,6 +11,7 @@ import Foundation
 /// buttons onto these entry points.
 public enum SaveStateService {
   private static let saveQueue = DispatchQueue(label: "org.icube.completed-state-saves", qos: .userInitiated)
+  private static let classicSaveExecutor = ClassicSlotSaveExecutor(queue: saveQueue)
   /// Game ID of the running title (authoritative, from the core), or nil when
   /// nothing is running.
   public static var currentGameID: String? {
@@ -31,19 +32,21 @@ public enum SaveStateService {
     saveSlotSnapshot(slot, title: title, gameTitle: gameTitle, wait: wait) != nil
   }
 
-  /// Synchronous compatibility for non-UI callers. User interfaces use the async facade below.
+  /// Synchronous compatibility for non-UI callers. UI saves use the consent-bearing async overload.
   static func saveSlotSnapshot(_ slot: Int, title: String? = nil, gameTitle: String? = nil,
                                wait: Bool = true) -> SaveStateCompletedSnapshot? {
     _ = wait
     return saveQueue.sync { performSaveSlot(slot, title: title, gameTitle: gameTitle, expectedGameID: nil, expectedSessionIdentifier: nil) }
   }
 
+  /// Explicit compatibility overwrite. Live save UI must use the consent-bearing overload.
   @MainActor
   static func saveSlotAsync(_ slot: Int, title: String? = nil, gameTitle: String? = nil,
                             expectedGameID: String? = nil, expectedSessionIdentifier: UInt64? = nil) async -> Bool {
     await saveSlotSnapshotAsync(slot, title: title, gameTitle: gameTitle, expectedGameID: expectedGameID, expectedSessionIdentifier: expectedSessionIdentifier) != nil
   }
 
+  /// Explicit compatibility overwrite; this overload deliberately preserves its historical policy.
   @MainActor
   static func saveSlotSnapshotAsync(_ slot: Int, title: String? = nil, gameTitle: String? = nil,
                                     expectedGameID: String? = nil, expectedSessionIdentifier: UInt64? = nil) async -> SaveStateCompletedSnapshot? {
@@ -54,6 +57,21 @@ public enum SaveStateService {
       saveQueue.async {
         continuation.resume(returning: performSaveSlot(slot, title: title, gameTitle: gameTitle, expectedGameID: expected, expectedSessionIdentifier: session))
       }
+    }
+  }
+
+  /// UI saves carry the exact destination and replacement choice through the existing serialized queue.
+  @MainActor
+  static func saveSlotSnapshotAsync(_ consent: ClassicSlotSaveConsent) async -> SaveStateCompletedSnapshot? {
+    await withCheckedContinuation { continuation in
+      classicSaveExecutor.enqueue(consent,
+        currentSession: { .init(gameID: TVEmulationBridge.currentGameID(), identifier: TVEmulationBridge.currentSessionIdentifier()) },
+        destination: { TVEmulationBridge.stateFilePath(forSlot: $0).map { URL(fileURLWithPath: $0) } },
+        write: { consent in
+          let request = consent.request
+          return performSaveSlot(request.slot, title: nil, gameTitle: nil,
+            expectedGameID: request.session.gameID, expectedSessionIdentifier: request.session.identifier, consent: consent)
+        }, completion: { continuation.resume(returning: $0) })
     }
   }
 
@@ -138,10 +156,18 @@ public enum SaveStateService {
   }
 
   private static func performSaveSlot(_ slot: Int, title: String?, gameTitle: String?,
-                                      expectedGameID: String?, expectedSessionIdentifier: UInt64?) -> SaveStateCompletedSnapshot? {
+                                      expectedGameID: String?, expectedSessionIdentifier: UInt64?,
+                                      consent: ClassicSlotSaveConsent? = nil) -> SaveStateCompletedSnapshot? {
     let session = expectedSessionIdentifier ?? TVEmulationBridge.currentSessionIdentifier()
-    guard let snapshot = TVEmulationBridge.saveStateSnapshot(toSlot: slot, expectedGameID: expectedGameID, expectedSessionIdentifier: session),
-          snapshot.sessionIdentifier == TVEmulationBridge.currentSessionIdentifier() else { return nil }
+    let snapshot: TVSaveStateSnapshot?
+    if let consent {
+      snapshot = TVEmulationBridge.saveStateSnapshot(toSlot: slot, expectedGameID: expectedGameID,
+        expectedSessionIdentifier: session, expectedPath: consent.request.path.path, allowOverwrite: consent.allowsOverwrite)
+    } else {
+      // Intentional compatibility/non-UI callers retain their existing explicit overwrite contract.
+      snapshot = TVEmulationBridge.saveStateSnapshot(toSlot: slot, expectedGameID: expectedGameID, expectedSessionIdentifier: session)
+    }
+    guard let snapshot, snapshot.sessionIdentifier == TVEmulationBridge.currentSessionIdentifier() else { return nil }
     let completed = SaveStateCompletedSnapshot(filePath: snapshot.filePath, gameID: snapshot.gameID,
                                                playTimeSeconds: snapshot.playTimeSeconds, savedAt: snapshot.savedAt, sessionIdentifier: snapshot.sessionIdentifier)
     let stateURL = URL(fileURLWithPath: completed.filePath)

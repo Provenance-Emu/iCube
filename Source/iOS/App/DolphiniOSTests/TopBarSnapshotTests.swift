@@ -22,14 +22,16 @@ final class TopBarSnapshotTests: XCTestCase {
   private struct Harness: View {
     let togglesOn: Bool
     let compactHeight: Bool
+    var onHeight: (CGFloat) -> Void = { _ in }
     @State private var visibility = TopBarVisibility()
     @State private var slot = 3
     @State private var paused: Bool
     @State private var fastForward: Bool
 
-    init(togglesOn: Bool, compactHeight: Bool) {
+    init(togglesOn: Bool, compactHeight: Bool, onHeight: @escaping (CGFloat) -> Void = { _ in }) {
       self.togglesOn = togglesOn
       self.compactHeight = compactHeight
+      self.onHeight = onHeight
       _paused = State(initialValue: togglesOn)
       _fastForward = State(initialValue: togglesOn)
     }
@@ -47,7 +49,27 @@ final class TopBarSnapshotTests: XCTestCase {
           onSetOverscanFullscreen: { _ in })
       }
       .environment(\.verticalSizeClass, compactHeight ? .compact : .regular)
+      .onPreferenceChange(TopBarHeightKey.self, perform: onHeight)
     }
+  }
+
+  func testPortraitToolbarFitsPhonePadAndSplitWidth() throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    for size in [CGSize(width: 320, height: 568), Self.portrait, CGSize(width: 1024, height: 1366)] {
+      var height: CGFloat = 0
+      _ = render(Harness(togglesOn: false, compactHeight: false, onHeight: { height = $0 }), size: size, scene: scene)
+      XCTAssertGreaterThanOrEqual(height, 44, "The toolbar must report its rendered height at \(size)")
+      XCTAssertLessThanOrEqual(height, 80, "Portrait must fit one control row at \(size)")
+    }
+  }
+
+  func testAccessibilityTypeExpandsWithoutClippingToStandardHeight() throws {
+    let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    var height: CGFloat = 0
+    _ = render(Harness(togglesOn: false, compactHeight: false, onHeight: { height = $0 })
+      .dynamicTypeSize(.accessibility3), size: Self.portrait, scene: scene)
+    XCTAssertGreaterThan(height, 80, "Accessibility labels must be allowed to reflow")
+    XCTAssertLessThan(height, Self.portrait.height, "All primary actions must remain reachable")
   }
 
   func testRenderTopBar() throws {
@@ -58,7 +80,10 @@ final class TopBarSnapshotTests: XCTestCase {
     try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
     let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
 
-    for (orientation, size) in [("portrait", Self.portrait), ("landscape", Self.landscape)] {
+    for (orientation, size) in [("portrait", Self.portrait), ("landscape", Self.landscape),
+                              ("ipad-portrait", CGSize(width: 1024, height: 1366)),
+                              ("ipad-landscape", CGSize(width: 1366, height: 1024)),
+                              ("split", CGSize(width: 320, height: 800))] {
       for (state, on) in [("idle", false), ("toggled", true)] {
         let image = render(Harness(togglesOn: on, compactHeight: size == Self.landscape), size: size, scene: scene)
         try XCTUnwrap(image.pngData()).write(to: outputDir.appendingPathComponent("top-bar-\(orientation)-\(state).png"))

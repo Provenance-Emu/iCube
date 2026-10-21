@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import SwiftUI
+import UIKit
 
 /// tvOS pause → Save States: the quick slots as cards showing each state's thumbnail and age, on the same tile
 /// surface and platform accent as the pause grid. An empty slot saves on select; a filled slot, or any slot held
@@ -17,13 +18,22 @@ struct TVSaveSlotsPane: View {
   @Binding var selectedSlot: Int
   var initialFocus: Focus?
   let onViewAll: () -> Void
+  var operations: QuickSavePickerOperations = .live
+  var readSessionIdentifier: () -> UInt64 = { TVEmulationBridge.currentSessionIdentifier() }
+  var sessionIsCurrent: (String, UInt64) -> Bool = {
+    TVEmulationBridge.currentGameID() == $0 && TVEmulationBridge.currentSessionIdentifier() == $1
+  }
 
-  @StateObject private var states = SaveStatesViewModel()
+  @State private var scan = QuickSavePickerScan()
+  @State private var thumbnails: [URL: UIImage] = [:]
+  @State private var openingSession: QuickSaveSurfaceSession?
+  @State private var busy = false
   @FocusState private var focus: Focus?
   @State private var lastFocus: Focus?
   @State private var managedSlot: Int?
-  @State private var saveRequest: SaveStateUIRequest?
-  @State private var saveTask: Task<Void, Never>?
+  @State private var managedSaveRequest: QuickSaveSlotSaveRequest?
+  @State private var managedRequiresOverwrite = false
+  @State private var actionTask: Task<Void, Never>?
   /// The long-press that opened the panel also ends in a select; this swallows that one select.
   @State private var longPressFired = false
   @Environment(\.icubePlatformAccent) private var platformAccent
@@ -66,7 +76,7 @@ struct TVSaveSlotsPane: View {
   private var accent: Color { platformAccent ?? ICubeDesign.color(.accent) }
 
   var body: some View {
-    let bySlot = Self.latestBySlot(states.states)
+    let bySlot = Self.latestBySlot(scan.states)
     return ZStack {
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
         ICubeAccentHeader(text: L("Save States"))
@@ -90,19 +100,21 @@ struct TVSaveSlotsPane: View {
         Spacer(minLength: 0)
         InfoShelf(text: shelfText(bySlot), value: nil, title: shelfTitle, icon: "square.stack.3d.up")
       }
-      .disabled(managedSlot != nil || saveRequest != nil)
+      .disabled(managedSlot != nil || busy)
       if let slot = managedSlot {
         ICubeConfirmPanel(title: String(format: L("Slot %d"), slot), message: manageMessage(bySlot[slot]),
-                          model: manageModel(slot: slot, state: bySlot[slot]), isTV: true, onBack: { managedSlot = nil })
+                          model: manageModel(slot: slot, state: bySlot[slot]), isTV: true, onBack: { closeManage() })
       }
     }
-    .task(id: game.gameID) { await states.load(gameID: game.gameID) }
+    .task(id: game.gameID) { await reload() }
     .onDisappear {
-      saveTask?.cancel()
-      saveTask = nil
-      saveRequest = nil
+      actionTask?.cancel()
+      actionTask = nil
+      openingSession = nil
+      closeManage()
     }
     .onAppear {
+      openingSession = QuickSaveSurfaceSession(gameID: game.gameID, identifier: readSessionIdentifier())
       DispatchQueue.main.async { focus = initialFocus ?? .slot(selectedSlot) }
     }
     .onChange(of: focus) { _, newFocus in
@@ -131,7 +143,7 @@ struct TVSaveSlotsPane: View {
               .background(Capsule().fill(accent.opacity(ICubeDesign.IconBadge.tintOpacity)))
           }
         }
-        Text(state.map(age) ?? L("Empty"))
+        Text(state.map { $0.isCompatible ? age($0) : L("Incompatible") } ?? L("Empty"))
           .icubeText(.detail)
           .foregroundStyle(ICubeDesign.color(.textSecondary))
           .lineLimit(1)
@@ -143,9 +155,10 @@ struct TVSaveSlotsPane: View {
     // iFly's card focus (lift, glows, accent border), as on the pause grid.
     .buttonStyle(ICubeCardButtonStyle())
     .focused($focus, equals: .slot(slot))
+    .disabled(!scan.hasCompletedScan || busy)
     .simultaneousGesture(LongPressGesture(minimumDuration: Self.longPressDuration).onEnded { _ in
       longPressFired = true
-      managedSlot = slot
+      openManage(slot)
     })
   }
 
@@ -154,7 +167,7 @@ struct TVSaveSlotsPane: View {
     let shape = RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
     ZStack {
       shape.fill(ICubeDesign.color(.rowSurface))
-      if let state, let image = states.thumbnails[state.id] {
+      if let state, let image = thumbnails[state.path] {
         Image(uiImage: image).resizable().scaledToFit()
       } else {
         Image(systemName: state == nil ? "plus" : "photo")
@@ -178,65 +191,135 @@ struct TVSaveSlotsPane: View {
       longPressFired = false
       return
     }
-    if state == nil {
-      save(slot)
-    } else {
-      managedSlot = slot
+    guard !busy else { return }
+    if state != nil { openManage(slot); return }
+    switch saveDecision(slot) {
+    case .save(let request): save(request, confirmed: false)
+    case .confirm(let request): openManage(slot, request: request)
+    case .unavailable: break
     }
   }
 
-  private func save(_ slot: Int) {
-    guard saveRequest == nil else { return }
+  private func saveDecision(_ slot: Int) -> QuickSaveSlotSaveDecision {
+    guard let openingSession, isCurrent(openingSession) else { return .unavailable }
+    let destination = operations.slotDestination(slot)
+    return scan.prepareSave(slot: slot, session: openingSession, destination: destination,
+      occupancy: destination.map(operations.occupancy) ?? .unknown)
+  }
+
+  private func openManage(_ slot: Int, request: QuickSaveSlotSaveRequest? = nil) {
+    guard !busy, scan.hasCompletedScan else { return }
+    if let request { managedSaveRequest = request; managedRequiresOverwrite = true }
+    else {
+      switch saveDecision(slot) {
+      case .confirm(let request): managedSaveRequest = request; managedRequiresOverwrite = true
+      case .save(let request): managedSaveRequest = request; managedRequiresOverwrite = false
+      case .unavailable: managedSaveRequest = nil; managedRequiresOverwrite = false
+      }
+    }
+    managedSlot = slot
+  }
+
+  private func closeManage() {
     managedSlot = nil
-    let request = SaveStateUIRequest(slot: slot, gameID: game.gameID,
-                                     sessionIdentifier: TVEmulationBridge.currentSessionIdentifier())
-    saveRequest = request
-    saveTask = Task { @MainActor in
-      let snapshot = await SaveStateService.saveSlotSnapshotAsync(request.slot, expectedGameID: request.gameID,
-                                                                     expectedSessionIdentifier: request.sessionIdentifier)
-      guard !Task.isCancelled, saveRequest?.id == request.id else { return }
-      let present = request.accepts(completedGameID: snapshot?.gameID, completedSessionIdentifier: snapshot?.sessionIdentifier,
-                                    currentGameID: TVEmulationBridge.currentGameID(),
-                                    currentSessionIdentifier: TVEmulationBridge.currentSessionIdentifier(), activeID: saveRequest?.id)
-      saveRequest = nil
-      saveTask = nil
-      guard present else { return }
-      EmulationToast.post(QuickSlot.saveOutcome(slot: request.slot, saved: snapshot != nil).message)
-      if snapshot != nil { await states.load(gameID: request.gameID) }
+    managedSaveRequest = nil
+    managedRequiresOverwrite = false
+  }
+
+  private func save(_ request: QuickSaveSlotSaveRequest, confirmed: Bool) {
+    guard !busy else { return }
+    closeManage()
+    busy = true
+    actionTask = Task { @MainActor in
+      defer { busy = false; actionTask = nil }
+      guard let outcome = await scan.save(request, confirmed: confirmed, isCurrent: isCurrent,
+        destination: operations.slotDestination, occupancy: operations.occupancy,
+        operation: { await operations.saveSlot(.init(request: $0, allowsOverwrite: confirmed)) }), !Task.isCancelled else { return }
+      report(outcome, session: request.session)
+      if outcome.isSuccess { await reload() }
     }
   }
 
-  private func load(_ slot: Int) {
-    managedSlot = nil
-    TVEmulationBridge.loadState(fromSlot: slot)
-    EmulationToast.post(String(format: L("Loading Slot %d"), slot))
+  private func load(_ state: SaveStateInfo?) {
+    guard !busy, let openingSession else { return }
+    closeManage()
+    busy = true
+    actionTask = Task { @MainActor in
+      defer { busy = false; actionTask = nil }
+      guard let outcome = await QuickSaveSurfaceActions.load(state, session: openingSession,
+        isCurrent: isCurrent, operation: { await operations.load($0, openingSession) }), !Task.isCancelled else { return }
+      report(outcome, session: openingSession)
+    }
+  }
+
+  private func isCurrent(_ session: QuickSaveSurfaceSession) -> Bool {
+    openingSession == session && sessionIsCurrent(session.gameID, session.identifier)
+  }
+
+  private func report(_ outcome: QuickSaveActions.Outcome, session: QuickSaveSurfaceSession) {
+    if isCurrent(session), !outcome.message.isEmpty { EmulationToast.post(outcome.message) }
+  }
+
+  private func reload() async {
+    let provider = FilesystemSaveStateProvider()
+    await scan.reload {
+      QuickSavePickerModel.visibleStates(await provider.states(for: game.gameID), modded: ModdedBoot.isCurrentBootModded)
+    }
+    guard !Task.isCancelled else { return }
+    for state in scan.states {
+      if let image = await provider.thumbnail(for: state) { thumbnails[state.path] = image }
+    }
   }
 
   private func delete(_ state: SaveStateInfo) {
-    managedSlot = nil
-    states.delete(state: state, inGameID: game.gameID)
-    EmulationToast.post(L("Deleted"))
+    guard let openingSession, isCurrent(openingSession), !busy else { return }
+    closeManage()
+    do {
+      try FilesystemSaveStateProvider().delete(state: state)
+      EmulationToast.post(L("Deleted"))
+      actionTask = Task { await reload() }
+    } catch {
+      // Leave the entry visible when deletion failed.
+    }
   }
 
   // MARK: Manage panel
 
   private func manageMessage(_ state: SaveStateInfo?) -> String {
-    guard let state else { return L("This slot is empty.") }
+    guard let state else {
+      return managedRequiresOverwrite ? L("This replaces the state in the selected classic slot.") : L("This slot is empty.")
+    }
     return String(format: L("Saved %@."), age(state))
+  }
+
+  /// The primary pane uses the same compatible-state gate as the picker, including callback activation.
+  static func loadItem(state: SaveStateInfo?, busy: Bool, onLoad: @escaping (SaveStateInfo) -> Void) -> MenuItem {
+    MenuItem(id: "slot-load", title: L("Load"), icon: "square.and.arrow.up", role: .action {
+      guard let state, QuickSavePickerModel.canLoad(state, busy: busy) else { return }
+      onLoad(state)
+    }, isEnabled: QuickSavePickerModel.canLoad(state, busy: busy))
+  }
+
+  /// Captures the request and the choice actually presented before closing the manage panel clears them.
+  static func saveItem(request: QuickSaveSlotSaveRequest?, requiresOverwrite: Bool, busy: Bool,
+                       onSave: @escaping (QuickSaveSlotSaveRequest, Bool) -> Void) -> MenuItem {
+    MenuItem(id: "slot-save", title: requiresOverwrite ? L("Overwrite") : L("Save Here"), icon: "square.and.arrow.down",
+      role: .action {
+        guard let request else { return }
+        onSave(request, requiresOverwrite)
+      }, isEnabled: !busy && request != nil)
   }
 
   /// Cancel first, as in the Exit confirm: a second impatient press must not load over the running game.
   private func manageModel(slot: Int, state: SaveStateInfo?) -> MenuModel {
-    var items = [MenuItem(id: "slot-cancel", title: L("Cancel"), icon: "xmark", role: .action { managedSlot = nil })]
-    if state != nil {
-      items.append(MenuItem(id: "slot-load", title: L("Load"), icon: "square.and.arrow.up", role: .action { load(slot) }))
-    }
-    items.append(MenuItem(id: "slot-save", title: state == nil ? L("Save Here") : L("Overwrite"), icon: "square.and.arrow.down",
-                          role: .action { save(slot) }))
+    var items = [MenuItem(id: "slot-cancel", title: L("Cancel"), icon: "xmark", role: .action { closeManage() })]
+    items.append(Self.loadItem(state: state, busy: busy, onLoad: { load($0) }))
+    items.append(Self.saveItem(request: managedSaveRequest, requiresOverwrite: managedRequiresOverwrite,
+                               busy: busy, onSave: { save($0, confirmed: $1) }))
     if selectedSlot != slot {
       items.append(MenuItem(id: "slot-quick", title: L("Use as Quick Slot"), icon: "bolt", role: .action {
         selectedSlot = slot
-        managedSlot = nil
+        closeManage()
       }))
     }
     if let state {

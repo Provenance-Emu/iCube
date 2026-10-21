@@ -18,6 +18,8 @@
 #include <algorithm>
 #include <atomic>
 #include <mutex>
+#include <cerrno>
+#include <sys/stat.h>
 #include "Core/HW/ProcessorInterface.h"
 #include "Core/HW/DVD/DVDInterface.h"
 #include "DiscIO/VolumeDisc.h"
@@ -117,6 +119,14 @@ static NSString* CheckedStateSavesPath(NSString* path) {
       [[NSFileManager defaultManager] destinationOfSymbolicLinkAtPath:standardized error:nil] != nil)
     return nil;
   return [parent stringByAppendingPathComponent:standardized.lastPathComponent];
+}
+
+// A failed lookup is not absence. Reject symlinks/directories even when replacement was approved.
+static bool ClassicSlotDestinationPermitted(NSString* path, bool allowOverwrite) {
+  struct stat info;
+  if (lstat(path.fileSystemRepresentation, &info) == 0)
+    return allowOverwrite && S_ISREG(info.st_mode);
+  return errno == ENOENT;
 }
 
 static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
@@ -374,6 +384,10 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
 }
 
 + (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session {
+  return [self saveStateSnapshotToSlot:slot expectedGameID:expectedGameID expectedSessionIdentifier:session expectedPath:nil allowOverwrite:YES];
+}
+
++ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session expectedPath:(NSString*)expectedPath allowOverwrite:(BOOL)allowOverwrite {
   auto& system = Core::System::GetInstance();
   if (slot <= 0 || static_cast<uint64_t>(slot) > UINT32_MAX ||
       !StateOperationAllowed(system, "slot save"))
@@ -390,6 +404,8 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
       return nil;
     NSString* path = [self stateFilePathForSlot:slot];
     if (path.length == 0 || gameID.length == 0)
+      return nil;
+    if (expectedPath && (![path isEqualToString:expectedPath] || !ClassicSlotDestinationPermitted(path, allowOverwrite)))
       return nil;
     snapshot = [TVSaveStateSnapshot new];
     snapshot.filePath = path;

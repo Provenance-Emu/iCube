@@ -1,5 +1,9 @@
 # iCube handoff (2026-10-10)
 
+## Latest play-controls checkpoint — October 20, 22:14 Eastern
+
+The final iOS Simulator SDK build passes and **127 targeted tests pass, zero failures/skips**, including live audio, queue overwrite consent, mode/session routing, measured compact toolbar height and pinned Save/Load footer geometry/accessibility reflow. Final source reviews are clean; a large SwiftUI body was decomposed without changing layout/lifecycle, exposing and fixing the explicit Pause initializer handoff. Full suite and final native iPhone/iPad/tvOS/physical checks remain pending. Both TestFlight uploads remain pending; do not upload superseded archives `1792538716`. [Current evidence](app-store/release-evidence/2026-10-20-play-controls.md). A manual hosted CI override is prepared/reviewed for the remote Studio toolchain mismatch; no global service or runner variable was changed.
+
 ## Active release continuation — October 20 evening
 
 Checkpoint `eadbfbb850` is pushed. Both iOS/tvOS App Store archives `1792538716` succeed and pass optimized SwiftUI metadata, signature and retired adaptive-resolution core checks; neither was uploaded. They are superseded by the owner's newly reported mute bug and approved play-toolbar/save-history scope. The full iOS suite at that checkpoint passes **2,132 tests, six opt-in snapshots skipped, zero failures**. The ordinary real-game physical iPad Exit path now passes: all three actions visible/hittable and Cancel/reopen twice; DEV left paused, no quit/save/reset action selected. [Physical evidence](app-store/release-evidence/2026-10-20-ipad-pause-confirmation.md).

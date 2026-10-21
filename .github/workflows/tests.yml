@@ -26,6 +26,11 @@ on:
       - 'Tools/mcp/**'
       - '**/*.md'
   workflow_dispatch:
+    inputs:
+      force_hosted:
+        description: Use GitHub-hosted macOS with the pinned Xcode for this run
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -43,7 +48,8 @@ jobs:
     # ["self-hosted","studio"]) to run this job on the Mac Studio; leave it unset to use
     # GitHub-hosted macos-26. Pull requests from forks ALWAYS run on the hosted runner -
     # never run untrusted fork code on the self-hosted machine.
-    runs-on: ${{ (vars.MACOS_RUNNER_LABELS != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.MACOS_RUNNER_LABELS) || 'macos-26' }}
+    # A manual run may explicitly opt into the hosted path without changing repo variables.
+    runs-on: ${{ (!(github.event_name == 'workflow_dispatch' && inputs.force_hosted) && vars.MACOS_RUNNER_LABELS != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && fromJSON(vars.MACOS_RUNNER_LABELS) || 'macos-26' }}
     # A hung simulator (nextDrawable deadlock class of bug, or a wedged
     # xcodebuild) must not burn hours of runner time silently.
     timeout-minutes: 90

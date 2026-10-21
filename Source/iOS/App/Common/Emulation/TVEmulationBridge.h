@@ -71,6 +71,8 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 + (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot NS_SWIFT_NAME(saveStateSnapshot(toSlot:));
 + (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:));
 + (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:expectedSessionIdentifier:));
+/// UI slot consent: rechecks captured path and actual occupancy under the core guard. Nil path is legacy overwrite.
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session expectedPath:(nullable NSString*)expectedPath allowOverwrite:(BOOL)allowOverwrite NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:expectedSessionIdentifier:expectedPath:allowOverwrite:));
 /// Unique history paths only; validates identity and StateSaves containment under the core guard.
 + (nullable TVSaveStateSnapshot*)saveStateSnapshotToPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(saveStateSnapshot(toPath:expectedGameID:expectedSessionIdentifier:));
 // YES while the core can take a save or load (running, including a user pause).
