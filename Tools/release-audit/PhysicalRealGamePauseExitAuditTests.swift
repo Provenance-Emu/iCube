@@ -12,6 +12,9 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
     executionTimeAllowance = 150
     XCTAssertEqual(ProcessInfo.processInfo.environment["ICUBE_CONFIRM_STOP_PREFLIGHT"], "enabled",
                    "Read the DEV configuration and verify Confirm on Stop is enabled before tapping Exit; otherwise Exit may stop immediately.")
+    // Align XCTest touch geometry with the landscape emulation surface before
+    // the UIKit JIT alert is presented.
+    XCUIDevice.shared.orientation = .landscapeLeft
     app = XCUIApplication(bundleIdentifier: "com.joemattiello.iCube-debug")
     app.launchArguments = ["-onboarding_seen_v1", "YES", "-SCREENSHOT_MODE", "0"]
     if app.state == .notRunning { app.launch() } else { app.activate() }
@@ -21,7 +24,11 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
     // Accept a prior paused DEV session without resuming or starting another game.
     let exit = app.buttons["pause.tile.exit"].firstMatch
     let noJIT = app.alerts["Waiting for JIT"].buttons["Use No JIT Mode (Slow)"]
-    if noJIT.exists { noJIT.tap() }
+    if noJIT.exists {
+      waitForNoJITToBeHittable(noJIT)
+      noJIT.tap()
+      XCTAssertTrue(noJIT.waitForNonExistence(timeout: 10))
+    }
     var launchedGame = false
     let emulationHUD = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "DSU:")).firstMatch
     if !exit.exists && !app.buttons["play-toolbar.pause"].exists && !app.buttons["Pause"].exists && !app.buttons["Resume"].exists && !app.staticTexts["Paused"].exists && !emulationHUD.exists && !app.staticTexts["START"].exists {
@@ -47,7 +54,7 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
       // confirmation layout failure.
       if (launchedGame && noJIT.waitForExistence(timeout: 5)) || noJIT.exists {
         record("03-no-jit-offer")
-        XCTAssertTrue(noJIT.isHittable)
+        waitForNoJITToBeHittable(noJIT)
         noJIT.tap()
         XCTAssertTrue(noJIT.waitForNonExistence(timeout: 10))
       }
@@ -104,6 +111,15 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
     }
     // The pause menu remains open, holding the emulator paused. No teardown
     // terminates the app or changes the user's game/session state.
+  }
+
+  private func waitForNoJITToBeHittable(_ button: XCUIElement) {
+    // Existence can precede alert presentation / orientation settling. Keep
+    // hittability mandatory and never substitute a coordinate tap.
+    let hittable = NSPredicate { _, _ in button.exists && button.isHittable }
+    let ready = XCTNSPredicateExpectation(predicate: hittable, object: nil)
+    XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 10), .completed,
+                   "No-JIT action did not become hittable after alert presentation")
   }
 
   private func revealToolbarIfHidden() {

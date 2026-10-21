@@ -1,8 +1,10 @@
 # iCube handoff (2026-10-10)
 
-## Latest play-controls checkpoint — October 20, 22:14 Eastern
+## Latest play-controls checkpoint — October 20 late evening
 
-The final iOS Simulator SDK build passes and **127 targeted tests pass, zero failures/skips**, including live audio, queue overwrite consent, mode/session routing, measured compact toolbar height and pinned Save/Load footer geometry/accessibility reflow. Final source reviews are clean; a large SwiftUI body was decomposed without changing layout/lifecycle, exposing and fixing the explicit Pause initializer handoff. Full suite and final native iPhone/iPad/tvOS/physical checks remain pending. Both TestFlight uploads remain pending; do not upload superseded archives `1792538716`. [Current evidence](app-store/release-evidence/2026-10-20-play-controls.md). A manual hosted CI override is prepared/reviewed for the remote Studio toolchain mismatch; no global service or runner variable was changed.
+Accepted source `a0fbc29b80` is pushed. Final iOS/tvOS SDK builds pass; full iOS suite **2,229 passed, five opt-in skips, zero failures (2,234 total)**; focused layout/cache **38/38**; native simulator phone **7/7**, iPad **7/7**, tvOS **2/2**. Portrait toolbar is 72 points excluding safe area with 44-point targets. Final native screenshots were inspected; compact landscape metadata and selection indicator no longer overlap. Hosted CI `39535150389` passed on `0964b2aba9`; exact-source run `39538314157` also passed on `a0fbc29b80`. [Current evidence](app-store/release-evidence/2026-10-20-play-controls.md).
+
+Signed DEV build `1792552677` built, passed signature/SwiftUI/core guards and is installed on the owner's iPad with its existing data preserved. The initial new-controls physical run stopped before Exit at no-JIT hittability; a narrow landscape/wait harness correction builds. Coordinated physical Exit/Cancel, mute and history save/load acceptance remains pending, followed by fresh matching iOS/tvOS archives and authorized TestFlight uploads. No new upload is claimed. Do not upload superseded `1792538716` archives. Production paused Sonic session must remain untouched. Continue from the ignored plan ledger rather than restarting completed implementation tasks.
 
 ## Active release continuation — October 20 evening
 
