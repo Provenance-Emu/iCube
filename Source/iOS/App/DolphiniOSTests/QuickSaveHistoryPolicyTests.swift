@@ -14,7 +14,7 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
   }
 
   private func history(_ index: Int, kept: Bool = false) -> SaveStateInfo {
-    state("GALE01.quick-00000000-0000-0000-0000-\(String(format: "%012d", index)).sav",
+    state("GALE01.quick-00000000-0000-0000-0000-\(String(format: "%012d", index)).s01",
           date: Double(index), quick: true, kept: kept)
   }
 
@@ -47,15 +47,15 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
   }
 
   func test_retentionLimitAppliesSeparatelyToEachGame() {
-    let other = state("RSBE01.quick-00000000-0000-0000-0000-000000000001.sav", quick: true, gameID: "RSBE01")
+    let other = state("RSBE01.quick-00000000-0000-0000-0000-000000000001.s01", quick: true, gameID: "RSBE01")
     XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: [history(1), history(2), other], limit: 1), [history(1).path])
   }
 
   func test_keptClassicAutoAndUnvalidatedForeignFilesNeverRotate() {
     let excluded = [history(1, kept: true), state("GALE01.s01"), state("GALE01.auto", automatic: true),
-                    state("GALE01.quick-00000000-0000-0000-0000-000000000001.sav"),
-                    state("foreign.sav", quick: true), state("GALE01.quick-not-a-uuid.sav", quick: true),
-                    state("RSBE01.quick-00000000-0000-0000-0000-000000000001.sav", quick: true)]
+                    state("GALE01.quick-00000000-0000-0000-0000-000000000001.s01"),
+                    state("foreign.s01", quick: true), state("GALE01.quick-not-a-uuid.s01", quick: true),
+                    state("RSBE01.quick-00000000-0000-0000-0000-000000000001.s01", quick: true)]
     XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: excluded, limit: 0), [])
     XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: (1...12).map { history($0) } + excluded), [history(2).path, history(1).path])
   }
@@ -70,8 +70,8 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
       createdAt: Date(timeIntervalSince1970: 10), modifiedAt: nil, sizeBytes: nil,
       versionHash: nil, isCompatible: true, path: URL(fileURLWithPath: "/states/GALE01.s03"), thumbnailURL: nil, isAuto: false)
     XCTAssertEqual(QuickSaveHistoryPolicy.loadTarget(states: [first, created], modded: false), .manual(created.path))
-    let a = state("GALE01.quick-00000000-0000-0000-0000-000000000001.sav", quick: true)
-    let b = state("GALE01.quick-00000000-0000-0000-0000-000000000002.sav", quick: true)
+    let a = state("GALE01.quick-00000000-0000-0000-0000-000000000001.s01", quick: true)
+    let b = state("GALE01.quick-00000000-0000-0000-0000-000000000002.s01", quick: true)
     XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: [b, a], limit: 1), [b.path])
   }
 
@@ -90,7 +90,7 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: root) }
     let gameIDs = ["ID-loader", "ID-Retro Launcher", "ID-demo.quick-example", "ID-新demo", "HAXX", "ID-demo.v2"]
     for gameID in gameIDs {
-      let name = "\(gameID).quick-00000000-0000-0000-0000-000000000001.sav"
+      let name = "\(gameID).quick-00000000-0000-0000-0000-000000000001.s01"
       let url = root.appendingPathComponent(name)
       XCTAssertEqual(QuickSaveHistoryPolicy.historyGameID(for: url), gameID)
       try Data([0]).write(to: url)
@@ -110,7 +110,7 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
     defer { try? FileManager.default.removeItem(at: root) }
     for gameID in ["ID-Slot-3", "ID-StateSlot1"] {
       for index in 1...11 {
-        let url = root.appendingPathComponent("\(gameID).quick-00000000-0000-0000-0000-\(String(format: "%012d", index)).sav")
+        let url = root.appendingPathComponent("\(gameID).quick-00000000-0000-0000-0000-\(String(format: "%012d", index)).s01")
         try Data([0]).write(to: url)
         XCTAssertTrue(SaveStateMetadataStore.write(SaveStateMetadata(title: "Test", gameID: gameID,
           savedAt: Date(timeIntervalSince1970: Double(index)), isQuickSave: true), forStateFile: url))
@@ -126,7 +126,7 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
       let history = states.filter(\.isQuickSave)
       XCTAssertEqual(history.count, 11)
       XCTAssertTrue(history.allSatisfy { $0.slot == nil }, gameID)
-      let expected = root.appendingPathComponent("\(gameID).quick-00000000-0000-0000-0000-000000000001.sav")
+      let expected = root.appendingPathComponent("\(gameID).quick-00000000-0000-0000-0000-000000000001.s01")
       XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: states).map { $0.resolvingSymlinksInPath() },
                      [expected.resolvingSymlinksInPath()])
       XCTAssertEqual(try XCTUnwrap(states.first { !$0.isQuickSave }).slot, legacySlot)
@@ -135,13 +135,41 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
 
   func test_unsafeGameIDsAndMalformedHistoryUUIDsCannotRotate() {
     for gameID in ["", ".", "..", "ID/loader", "ID\\loader", "ID\u{0}loader", "ID\nloader", "ID\u{7F}loader"] {
-      let info = state("\(gameID).quick-00000000-0000-0000-0000-000000000001.sav", quick: true, gameID: gameID)
+      let info = state("\(gameID).quick-00000000-0000-0000-0000-000000000001.s01", quick: true, gameID: gameID)
       XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: [info], limit: 0), [], gameID.debugDescription)
     }
-    for suffix in ["not-a-uuid.sav", "00000000000000000000000000000001.sav",
-                   "00000000-0000-0000-0000-000000000001.sav.tmp", "00000000-0000-0000-0000-000000000001.SAV"] {
+    for suffix in ["not-a-uuid.s01", "00000000000000000000000000000001.s01",
+                   "00000000-0000-0000-0000-000000000001.s01.tmp", "00000000-0000-0000-0000-000000000001.S01",
+                   "00000000-0000-0000-0000-000000000001.s02"] {
       XCTAssertNil(QuickSaveHistoryPolicy.historyGameID(for: URL(fileURLWithPath: "/states/ID-loader.quick-\(suffix)")))
     }
+  }
+
+  func test_preferredAndLegacyHistoryExtensionsRequireMetadataAndExcludeSidecars() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let stem = "GALE01.quick-00000000-0000-0000-0000-000000000001"
+    for ext in ["s01", "sav", "s02"] {
+      let url = root.appendingPathComponent("\(stem).\(ext)")
+      try Data([0]).write(to: url)
+      try Data([0]).write(to: url.appendingPathExtension("png"))
+      XCTAssertTrue(SaveStateMetadataStore.write(SaveStateMetadata(title: "Test", gameID: "GALE01", isQuickSave: true), forStateFile: url))
+      if ext == "s02" {
+        XCTAssertNil(QuickSaveHistoryPolicy.historyGameID(for: url))
+      } else {
+        XCTAssertEqual(QuickSaveHistoryPolicy.historyGameID(for: url), "GALE01")
+      }
+      XCTAssertNil(QuickSaveHistoryPolicy.historyGameID(for: url.appendingPathExtension("json")))
+      XCTAssertNil(QuickSaveHistoryPolicy.historyGameID(for: url.appendingPathExtension("png")))
+    }
+    let states = await FilesystemSaveStateProvider(root: root).states(for: "GALE01")
+    XCTAssertEqual(states.count, 3)
+    let history = states.filter(\.isQuickSave)
+    XCTAssertEqual(Set(history.map { $0.path.pathExtension }), Set(["s01", "sav"]))
+    XCTAssertTrue(history.allSatisfy { $0.slot == nil })
+    XCTAssertEqual(try XCTUnwrap(states.first { $0.path.pathExtension == "s02" }).slot, 2)
+    XCTAssertEqual(Set(QuickSaveHistoryPolicy.pruningCandidates(states: states, limit: 0).map { $0.pathExtension }), Set(["s01", "sav"]))
   }
 
   func test_providerValidatesHistoryMetadataWithoutHidingForeignOrLegacySaves() async throws {
@@ -153,7 +181,7 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
     let mismatch = history(3).path.lastPathComponent
     let automatic = history(4).path.lastPathComponent
     let unmarked = history(5).path.lastPathComponent
-    let malformed = "GALE01.quick-bad.sav"
+    let malformed = "GALE01.quick-bad.s01"
     let classic = "GALE01.s99"
     for name in [valid, missing, mismatch, automatic, unmarked, malformed, classic] {
       try Data([0]).write(to: root.appendingPathComponent(name))

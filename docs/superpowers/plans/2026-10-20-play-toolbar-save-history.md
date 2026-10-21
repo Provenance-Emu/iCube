@@ -33,7 +33,7 @@
 
 **Files:** Create `Source/iOS/App/Common/Swift/QuickSaveHistoryPolicy.swift`; modify `SaveStateInfo.swift`, `SaveStateMetadata.swift`, `FilesystemSaveStateProvider.swift` in that directory; create `Source/iOS/App/DolphiniOSTests/QuickSaveHistoryPolicyTests.swift`.
 
-**Interfaces:** Add `QuickSaveMode: String { case history, slots }`. Add defaulted `isQuickSave: Bool` and `isKept: Bool` to SaveStateInfo, and backward-compatible optional equivalents to metadata. Define `QuickLoadTarget` with `.manual(URL)`, `.automatic(URL)`, `.incompatible(URL)`, `.unavailable`. `QuickSaveHistoryPolicy.loadTarget(states: [SaveStateInfo], modded: Bool) -> QuickLoadTarget` selects latest manual by recorded/file date, deterministic path tie-break; modded disables implicit history/auto. `pruningCandidates(states: [SaveStateInfo], limit: Int = 10) -> [URL]` only returns validated, unkept history states beyond the newest 10. File naming is `{gameID}.quick-{UUID}.sav`; valid metadata must agree with game and history classification before pruning.
+**Interfaces:** Add `QuickSaveMode: String { case history, slots }`. Add defaulted `isQuickSave: Bool` and `isKept: Bool` to SaveStateInfo, and backward-compatible optional equivalents to metadata. Define `QuickLoadTarget` with `.manual(URL)`, `.automatic(URL)`, `.incompatible(URL)`, `.unavailable`. `QuickSaveHistoryPolicy.loadTarget(states: [SaveStateInfo], modded: Bool) -> QuickLoadTarget` selects latest manual by recorded/file date, deterministic path tie-break; modded disables implicit history/auto. `pruningCandidates(states: [SaveStateInfo], limit: Int = 10) -> [URL]` only returns validated, unkept history states beyond the newest 10. File naming is `{gameID}.quick-{UUID}.s01`; valid metadata must agree with game and history classification before pruning.
 
 - [ ] Write tests asserting manual beats newer auto; legacy numbered manual is eligible; no saves is unavailable; newest incompatible is returned as incompatible; modded forbids auto/history; 12 ordinary history entries yield 2 oldest candidates; kept/classic/auto/foreign files yield none; equal dates sort deterministically; old metadata decodes with false flags.
 - [ ] Run the pure policy tests before implementation and retain the expected failure output.
@@ -50,7 +50,7 @@
 - [ ] Add failure-first tests for successful unique-file+metadata creation; write and metadata failures retaining older entries; only-after-commit pruning; kept exclusions; cleanup error; changed game/session before write and before completion; modded classic fallback; traversal/outside-root rejection; no premature success toast.
 - [ ] Run targeted tests against old behavior, retain failing evidence, then implement queue/bridge/store operations without a new C++ core API.
 - [ ] Capture thumbnails through the existing session-aware pipeline; missing capture leaves a placeholder, not a failed state. Never reuse numbered slots or Continuity slot 99 as scratch storage.
-- [ ] Verify StateSaves sync discovery accepts history `.sav`, JSON and PNG sidecars; add a filename-classification regression without claiming transport convergence.
+- [ ] Verify StateSaves sync discovery accepts history `.s01`, JSON and PNG sidecars; add a filename-classification regression without claiming transport convergence.
 - [ ] Run new persistence and existing save/session/quit tests. Confirm a failed history save does not rotate anything and a stale operation cannot write a new session.
 - [ ] Commit only this task's reviewed changes.
 

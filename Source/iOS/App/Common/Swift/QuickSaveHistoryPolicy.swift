@@ -41,10 +41,11 @@ public enum QuickSaveHistoryPolicy {
     }.sorted(by: newestFirst).map(\.path)
   }
 
-  /// Recognize the entire canonical immutable history filename, never a prefix.
+  /// Recognize preferred sync-compatible `.s01` history and legacy `.sav` history.
+  /// Other numbered extensions remain classic saves, even with a history-like name.
   static func historyGameID(for url: URL) -> String? {
     let name = url.lastPathComponent
-    guard name.hasSuffix(".sav"),
+    guard name.hasSuffix(".s01") || name.hasSuffix(".sav"),
           let separator = name.range(of: ".quick-", options: .backwards) else { return nil }
     let gameID = String(name[..<separator.lowerBound])
     let identifier = String(name[separator.upperBound...].dropLast(4))
