@@ -15,6 +15,11 @@ public struct SaveStateInfo: Identifiable, Hashable {
   /// True for the dedicated "resume where I left off" auto-state ({GameID}.auto),
   /// surfaced as a "Continue" entry rather than a numbered slot.
   public let isAuto: Bool
+  /// True only for a history filename with matching identifying sidecar metadata.
+  /// This validation is required before the retention policy may rotate a file.
+  public let isQuickSave: Bool
+  /// Kept history entries are excluded from automatic retention cleanup.
+  public let isKept: Bool
   /// In-game play time at the moment this state was written, when the metadata
   /// sidecar recorded one. Nil for legacy saves with no sidecar, or a sidecar
   /// written before this field existed.
@@ -31,7 +36,9 @@ public struct SaveStateInfo: Identifiable, Hashable {
               path: URL,
               thumbnailURL: URL?,
               isAuto: Bool,
-              playTimeSeconds: Double? = nil) {
+              playTimeSeconds: Double? = nil,
+              isQuickSave: Bool = false,
+              isKept: Bool = false) {
     self.gameID = gameID
     self.displayName = displayName
     self.slot = slot
@@ -44,6 +51,8 @@ public struct SaveStateInfo: Identifiable, Hashable {
     self.thumbnailURL = thumbnailURL
     self.isAuto = isAuto
     self.playTimeSeconds = playTimeSeconds
+    self.isQuickSave = isQuickSave
+    self.isKept = isKept
   }
 }
 

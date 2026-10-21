@@ -26,6 +26,10 @@ public struct SaveStateMetadata: Codable, Hashable {
   public var playTimeSeconds: Double?
   /// True for the dedicated "resume where I left off" auto-save (`{GameID}.auto`).
   public var isAuto: Bool
+  /// Optional for backwards compatibility; absent values mean false.
+  public var isQuickSave: Bool?
+  /// Optional for backwards compatibility; only validated history entries rotate.
+  public var isKept: Bool?
 
   public init(title: String,
               gameID: String,
@@ -34,7 +38,9 @@ public struct SaveStateMetadata: Codable, Hashable {
               scmRevision: String? = nil,
               playTimeSeconds: Double? = nil,
               isAuto: Bool = false,
-              schemaVersion: Int = SaveStateMetadata.currentSchemaVersion) {
+              schemaVersion: Int = SaveStateMetadata.currentSchemaVersion,
+              isQuickSave: Bool? = nil,
+              isKept: Bool? = nil) {
     self.schemaVersion = schemaVersion
     self.title = title
     self.gameID = gameID
@@ -43,5 +49,7 @@ public struct SaveStateMetadata: Codable, Hashable {
     self.scmRevision = scmRevision
     self.playTimeSeconds = playTimeSeconds
     self.isAuto = isAuto
+    self.isQuickSave = isQuickSave
+    self.isKept = isKept
   }
 }

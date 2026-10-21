@@ -49,9 +49,16 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
       // Parse save state info; the filename is the fallback label.
       let name = url.deletingPathExtension().lastPathComponent
       let gameID = meta?.gameID ?? Self.extractGameID(from: name)
-      // Dolphin slot states put the slot in the EXTENSION (GALE01.s01), not the
-      // base name — so parse `ext`, falling back to the legacy name patterns.
-      let slot = isAuto ? nil : (Self.extractSlot(fromExtension: ext) ?? Self.extractSlot(from: name))
+      // History files without a matching sidecar remain visible as legacy/foreign
+      // manual saves, but can never become automatic retention candidates.
+      let isQuickSave = QuickSaveHistoryPolicy.historyGameID(for: url) == gameID &&
+        meta?.gameID == gameID && meta?.isQuickSave == true &&
+        meta?.isAuto == false && !isAuto
+      // Validated history has no slot, even when a homebrew game ID contains
+      // text such as "Slot-3". Unmarked legacy saves retain their old heuristics.
+      // Dolphin numbered states put their slot in the extension (GALE01.s01).
+      let slot = (isAuto || isQuickSave) ? nil :
+        (Self.extractSlot(fromExtension: ext) ?? Self.extractSlot(from: name))
       let values = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey, .fileSizeKey])
       let created = values?.creationDate
       let modified = meta?.savedAt ?? values?.contentModificationDate
@@ -88,18 +95,16 @@ public final class FilesystemSaveStateProvider: SaveStateProviding {
         path: url,
         thumbnailURL: hasThumb ? thumbURL : nil,
         isAuto: isAuto,
-        playTimeSeconds: meta?.playTimeSeconds
+        playTimeSeconds: meta?.playTimeSeconds,
+        isQuickSave: isQuickSave,
+        isKept: isQuickSave && meta?.isKept == true
       )
       result[gameID, default: []].append(info)
     }
 
     // Sort each group by most recent modified first
     for (key, list) in result {
-      result[key] = list.sorted { a, b in
-        let ad = a.modifiedAt ?? a.createdAt ?? .distantPast
-        let bd = b.modifiedAt ?? b.createdAt ?? .distantPast
-        return ad > bd
-      }
+      result[key] = list.sorted(by: QuickSaveHistoryPolicy.newestFirst)
     }
 
     return result
