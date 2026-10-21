@@ -69,6 +69,20 @@ enum QuickSlot {
 
   @MainActor private static var pendingSave: SaveStateUIRequest?
 
+  /// Result-bearing variant for the labeled picker; the caller owns its completion UI.
+  @MainActor
+  static func saveSnapshot(slot: Int, expectedGameID: String, expectedSessionIdentifier: UInt64) async -> SaveStateCompletedSnapshot? {
+    await SaveStateService.saveSlotSnapshotAsync(slot, expectedGameID: expectedGameID,
+                                                expectedSessionIdentifier: expectedSessionIdentifier)
+  }
+
+  @MainActor
+  static func requestLoad(slot: Int, expectedGameID: String, expectedSessionIdentifier: UInt64) -> Bool {
+    guard let path = TVEmulationBridge.stateFilePath(forSlot: slot) else { return false }
+    return TVEmulationBridge.loadState(fromPath: path, expectedGameID: expectedGameID,
+                                       expectedSessionIdentifier: expectedSessionIdentifier)
+  }
+
   /// Capture the session before scheduling. Even restarting the same title before the first
   /// task runs must not make an old tap save the new session.
   static func save(slot: Int) {

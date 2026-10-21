@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "TVEmulationBridge.h"
+#import "AudioVolumeRuntime.h"
 
 #import <UIKit/UIKit.h>
 
@@ -101,6 +102,34 @@ static uint64_t CurrentStateSessionIdentifier() {
   });
   (void)hook;
   return s_stateSessionIdentifier.load();
+}
+
+// Accept direct StateSaves children only. Resolve the parent to honor configured root symlinks,
+// but reject a file symlink so a selected state cannot redirect reads/writes outside that root.
+static NSString* CheckedStateSavesPath(NSString* path) {
+  if (path.length == 0 || !path.isAbsolutePath || [path.pathComponents containsObject:@".."])
+    return nil;
+  NSString* root = [NSString stringWithUTF8String:File::GetUserPath(D_STATESAVES_IDX).c_str()];
+  root = root.stringByStandardizingPath.stringByResolvingSymlinksInPath;
+  NSString* standardized = path.stringByStandardizingPath;
+  NSString* parent = standardized.stringByDeletingLastPathComponent.stringByResolvingSymlinksInPath;
+  if (root.length == 0 || ![parent isEqualToString:root] ||
+      [[NSFileManager defaultManager] destinationOfSymbolicLinkAtPath:standardized error:nil] != nil)
+    return nil;
+  return [parent stringByAppendingPathComponent:standardized.lastPathComponent];
+}
+
+static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
+  NSString* name = path.lastPathComponent;
+  NSRange marker = [name rangeOfString:@".quick-" options:NSBackwardsSearch];
+  if (gameID.length == 0 || [gameID isEqualToString:@"."] || [gameID isEqualToString:@".."] ||
+      [gameID rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound ||
+      [gameID containsString:@"/"] || [gameID containsString:@"\\"] ||
+      marker.location == NSNotFound || ![name hasSuffix:@".s01"] ||
+      ![[name substringToIndex:marker.location] isEqualToString:gameID])
+    return false;
+  NSString* uuid = [[name substringFromIndex:NSMaxRange(marker)] stringByDeletingPathExtension];
+  return uuid.length == 36 && [[NSUUID alloc] initWithUUIDString:uuid] != nil;
 }
 
 @interface TVSaveStateSnapshot ()
@@ -377,6 +406,33 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   return Core::IsRunning(Core::System::GetInstance());
 }
 
++ (TVSaveStateSnapshot*)saveStateSnapshotToPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session {
+  auto& system = Core::System::GetInstance();
+  NSString* checkedPath = CheckedStateSavesPath(path);
+  if (!checkedPath || !IsHistoryPathForGame(checkedPath, expectedGameID) ||
+      [DOLModdedBoot isCurrentBootModded] ||
+      !StateOperationAllowed(system, "history save"))
+    return nil;
+  TVSaveStateSnapshot* snapshot = nil;
+  std::future<bool> completion;
+  {
+    const Core::CPUThreadGuard guard(system);
+    if (!StateOperationAllowed(system, "history save") || session != CurrentStateSessionIdentifier() ||
+        ![[self currentGameID] isEqualToString:expectedGameID] ||
+        [[NSFileManager defaultManager] fileExistsAtPath:checkedPath] ||
+        ![CheckedStateSavesPath(checkedPath) isEqualToString:checkedPath])
+      return nil;
+    snapshot = [TVSaveStateSnapshot new];
+    snapshot.filePath = checkedPath;
+    snapshot.gameID = expectedGameID;
+    snapshot.savedAt = NSDate.date;
+    snapshot.sessionIdentifier = session;
+    snapshot.playTimeSeconds = [self currentGamePlayTimeSeconds];
+    completion = State::SaveAsWithResult(system, std::string(checkedPath.fileSystemRepresentation));
+  }
+  return completion.get() ? snapshot : nil;
+}
+
 + (void)loadStateFromSlot:(NSInteger)slot {
   int s = (int)slot;
   Core::QueueHostJob([s](Core::System& system) {
@@ -438,6 +494,31 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
     if (StateOperationAllowed(system, "path load"))
       State::LoadAs(system, p);
   });
+}
+
++ (BOOL)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session {
+  NSString* checkedPath = CheckedStateSavesPath(path);
+  if (!checkedPath || expectedGameID.length == 0 || ![self isStateOperationAllowed] ||
+      session != CurrentStateSessionIdentifier() || ![[self currentGameID] isEqualToString:expectedGameID] ||
+      ![[NSFileManager defaultManager] fileExistsAtPath:checkedPath])
+    return NO;
+  std::string filename(checkedPath.fileSystemRepresentation);
+  std::string expected(expectedGameID.UTF8String);
+  Core::QueueHostJob([filename, expected, session](Core::System& system) {
+    // Check before the guard: Starting Wii boots can hold the CPU lock for a long time.
+    if (!StateOperationAllowed(system, "checked path load"))
+      return;
+    const Core::CPUThreadGuard guard(system);
+    if (!StateOperationAllowed(system, "checked path load") || session != CurrentStateSessionIdentifier() ||
+        SConfig::GetInstance().GetGameID() != expected)
+      return;
+    NSString* pathNow = [NSString stringWithUTF8String:filename.c_str()];
+    if (![CheckedStateSavesPath(pathNow) isEqualToString:pathNow] ||
+        ![TVEmulationBridge stateFileIsCompatibleAtPath:pathNow])
+      return;
+    State::LoadAs(system, filename);
+  });
+  return YES;
 }
 
 + (BOOL)stateFileIsCompatibleAtPath:(NSString*)path {
@@ -513,6 +594,7 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
 
 + (void)setAudioVolumePercent:(NSInteger)percent {
   Config::SetCurrent(Config::MAIN_AUDIO_VOLUME, static_cast<int>(std::clamp<NSInteger>(percent, 0, 100)));
+  ICubeUpdateAudioVolumeAsync();
 }
 
 // Fast-forward (configurable speed multiplier)
@@ -542,6 +624,10 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
 
     g_isFastForwarding = false;
   }
+
+  // Fast-forward may add/remove the runtime mute override; apply its effective
+  // gain as well as the Config flag so normal playback becomes audible again.
+  ICubeUpdateAudioVolumeAsync();
 
   dispatch_async(dispatch_get_main_queue(), ^{
     [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLFastForwardToggled" object:nil userInfo:@{ @"enabled": @(g_isFastForwarding) }];

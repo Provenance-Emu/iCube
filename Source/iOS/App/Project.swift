@@ -537,6 +537,8 @@ let iCubeTests = Target.target(
     ],
     dependencies: [
         .target(name: "iCube"),
+        // Hardware-free audio regressions exercise the packaged CoreAudio DSP directly.
+        .xcframework(path: "../../../build/xcframework/PVlibDolphin.xcframework"),
         // `.target(name: "iCube")` alone doesn't make a package the app links importable here —
         // AppIntentsTests needs `LibrarySnapshot`/`LibrarySnapshotGame` fixtures directly.
         .package(product: "PVLibrarySnapshot"),
@@ -549,7 +551,8 @@ let iCubeTests = Target.target(
     ],
     settings: .settings(
         base: [
-            "CLANG_CXX_LANGUAGE_STANDARD": "gnu++17",
+            // Runtime audio regressions use the same C++23 core headers as the app.
+            "CLANG_CXX_LANGUAGE_STANDARD": "gnu++23",
             "SWIFT_VERSION": "5.0",
             // The test target uses `@testable import iCube` and doesn't need its own
             // ObjC bridging header, so clear it (see the identical fix on the
@@ -563,7 +566,7 @@ let iCubeTests = Target.target(
             // "'AudioSessionManager.h' file not found" even though iCubeTests itself
             // never imports that header directly.
             "SWIFT_OBJC_BRIDGING_HEADER": "",
-            "USER_HEADER_SEARCH_PATHS": ["$(inherited)", "$(SRCROOT)/Common/**", "$(SRCROOT)/DolphiniOS/**"],
+            "USER_HEADER_SEARCH_PATHS": ["$(inherited)", "$(SRCROOT)/Common/**", "$(SRCROOT)/DolphiniOS/**", "$(SRCROOT)/../../Core", "$(SRCROOT)/../Library"],
         ],
         configurations: secondaryConfigs
     )

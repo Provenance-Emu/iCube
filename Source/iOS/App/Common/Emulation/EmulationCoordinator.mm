@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "EmulationCoordinator.h"
+#import "AudioVolumeRuntime.h"
 
 NSString* const DOLEmulationWillStartNotification = @"DOLEmulationWillStartNotification";
 NSString* const DOLEmulationDidStartNotification = @"DOLEmulationDidStartNotification";
@@ -1972,6 +1973,11 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   while (Core::GetState(Core::System::GetInstance()) == Core::State::Starting) {
     dispatch_semaphore_wait(stateSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)));
   }
+
+  // A volume edit after PostInitSoundStream's initial gain read was deferred
+  // while Starting. Replay the latest Config once ready; the helper looks up
+  // the live stream on the host queue and safely ignores shutdown/null streams.
+  ICubeUpdateAudioVolumeAsync();
 
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidStartNotification object:self userInfo:nil];
 

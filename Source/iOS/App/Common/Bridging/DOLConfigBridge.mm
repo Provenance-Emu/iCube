@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "DOLConfigBridge.h"
+#import "AudioVolumeRuntime.h"
 
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
@@ -666,7 +667,10 @@ static bool HasCurrentRunLayer()
   Config::SetBaseOrCurrent(Config::MAIN_AUDIO_BACKEND, std::string(backend.UTF8String));
 }
 + (NSInteger)audioVolume { return (NSInteger)Config::Get(Config::MAIN_AUDIO_VOLUME); }
-+ (void)setAudioVolume:(NSInteger)percent { Config::SetBaseOrCurrent(Config::MAIN_AUDIO_VOLUME, (int)percent); }
++ (void)setAudioVolume:(NSInteger)percent {
+  Config::SetBaseOrCurrent(Config::MAIN_AUDIO_VOLUME, (int)percent);
+  ICubeUpdateAudioVolumeAsync();
+}
 + (NSInteger)audioBufferSizeMs
 {
   return (NSInteger)Config::Get(Config::MAIN_AUDIO_BUFFER_SIZE);

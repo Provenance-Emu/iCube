@@ -71,6 +71,8 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 + (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot NS_SWIFT_NAME(saveStateSnapshot(toSlot:));
 + (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:));
 + (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:expectedSessionIdentifier:));
+/// Unique history paths only; validates identity and StateSaves containment under the core guard.
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(saveStateSnapshot(toPath:expectedGameID:expectedSessionIdentifier:));
 // YES while the core can take a save or load (running, including a user pause).
 + (BOOL)isStateOperationAllowed;
 + (void)loadStateFromSlot:(NSInteger)slot;
@@ -100,6 +102,8 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 + (nullable NSString*)autoStateFilePath;
 + (BOOL)saveStateToPath:(NSString*)path wait:(BOOL)wait;
 + (void)loadStateFromPath:(NSString*)path;
+/// YES means requested, not completed. The queued job rechecks identity before loading.
++ (BOOL)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(loadState(fromPath:expectedGameID:expectedSessionIdentifier:));
 
 // Returns YES if the state file at path was written by a build whose save format
 // matches the running build (header SCM revision == current). Conservative: a

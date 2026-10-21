@@ -67,6 +67,57 @@ public enum SaveStateService {
     }
   }
 
+  @MainActor
+  static func saveHistorySnapshotAsync(gameTitle: String? = nil, expectedGameID: String,
+                                       expectedSessionIdentifier: UInt64) async -> SaveStateCompletedSnapshot? {
+    await saveHistoryResultAsync(gameTitle: gameTitle, expectedGameID: expectedGameID,
+                                 expectedSessionIdentifier: expectedSessionIdentifier).snapshot
+  }
+
+  @MainActor
+  static func saveHistoryResultAsync(gameTitle: String? = nil, expectedGameID: String,
+                                     expectedSessionIdentifier: UInt64) async -> QuickSaveHistoryPersistence.Result {
+    guard !ModdedBoot.isCurrentBootModded else { return .init() }
+    return await withCheckedContinuation { continuation in
+      saveQueue.async {
+        guard let store = historyStore(gameID: expectedGameID, session: expectedSessionIdentifier) else {
+          continuation.resume(returning: .init()); return
+        }
+        let result = store.save(gameID: expectedGameID, sessionIdentifier: expectedSessionIdentifier, gameTitle: gameTitle)
+        if let snapshot = result.snapshot {
+          captureThumbnail(forStateFile: URL(fileURLWithPath: snapshot.filePath), sessionIdentifier: snapshot.sessionIdentifier)
+        }
+        continuation.resume(returning: result)
+      }
+    }
+  }
+
+  @MainActor
+  static func setHistoryKeptAsync(_ kept: Bool, state: SaveStateInfo, expectedSessionIdentifier: UInt64) async -> Bool {
+    let gameID = state.gameID
+    let path = state.path
+    return await withCheckedContinuation { continuation in
+      saveQueue.async {
+        let updated = historyStore(gameID: gameID, session: expectedSessionIdentifier)?
+          .setKept(kept, at: path, gameID: gameID) ?? false
+        continuation.resume(returning: updated)
+      }
+    }
+  }
+
+  private static func historyStore(gameID: String, session: UInt64) -> QuickSaveHistoryPersistence? {
+    guard let root = DolphinPaths.stateSavesURL() else { return nil }
+    return QuickSaveHistoryPersistence(root: root, writeSnapshot: { url in
+      guard let snapshot = TVEmulationBridge.saveStateSnapshot(toPath: url.path, expectedGameID: gameID,
+                                                               expectedSessionIdentifier: session) else { return nil }
+      return SaveStateCompletedSnapshot(filePath: snapshot.filePath, gameID: snapshot.gameID,
+        playTimeSeconds: snapshot.playTimeSeconds, savedAt: snapshot.savedAt, sessionIdentifier: snapshot.sessionIdentifier)
+    }, isCurrentSession: {
+      TVEmulationBridge.currentGameID() == gameID && TVEmulationBridge.currentSessionIdentifier() == session &&
+        TVEmulationBridge.isStateOperationAllowed()
+    })
+  }
+
   /// Saving the numbered snapshot and copying it to auto/queuing stop are one serialized request.
   /// A different queued save cannot replace this path between its completion and auto-state reuse.
   @MainActor
