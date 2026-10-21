@@ -220,6 +220,13 @@ struct QuickSavePickerView: View {
               .frame(width: ICubeDesign.Spacing.xxl.rawValue)
             cardMetadata(state, slot: slot, compact: true)
               .frame(maxWidth: .infinity, alignment: .leading)
+            if selected {
+              cardSelectionIndicator(state, slot: slot)
+            } else {
+              Image(systemName: "checkmark.circle.fill")
+                .font(ICubeDesign.symbolFont(.rail))
+                .hidden()
+            }
           }
         } else {
           VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
@@ -233,7 +240,7 @@ struct QuickSavePickerView: View {
       .background(ICubeDesign.color(selected ? .selectedFill : .rowSurface))
       .clipShape(RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
       .overlay(alignment: .topTrailing) {
-        if selected {
+        if selected && !usesCompactCards {
           Image(systemName: "checkmark.circle.fill")
             .font(ICubeDesign.symbolFont(.rail))
             .foregroundStyle(ICubeDesign.color(.accent))
@@ -247,6 +254,13 @@ struct QuickSavePickerView: View {
     .accessibilityAddTraits(selected ? .isSelected : [])
     .accessibilityHint(L("Selects this state. Use Load selected to load it."))
     .accessibilityIdentifier("quick-save-picker.card.\(cardIdentifier(state, slot: slot))")
+  }
+
+  private func cardSelectionIndicator(_ state: SaveStateInfo?, slot: Int?) -> some View {
+    Image(systemName: "checkmark.circle.fill")
+      .font(ICubeDesign.symbolFont(.rail))
+      .foregroundStyle(ICubeDesign.color(.accent))
+      .background(contentFrameObserver("\(cardIdentifier(state, slot: slot)).selection"))
   }
 
   private func cardIdentifier(_ state: SaveStateInfo?, slot: Int?) -> String {

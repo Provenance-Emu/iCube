@@ -36,9 +36,10 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
     @State private var mode: QuickSaveMode
     @State private var slot = 4
 
-    init(mode: QuickSaveMode, onFooter: @escaping (CGRect) -> Void = { _ in },
+    init(mode: QuickSaveMode, selectedSlot: Int = 4, onFooter: @escaping (CGRect) -> Void = { _ in },
          onContent: @escaping (String, CGRect) -> Void = { _, _ in }) {
       _mode = State(initialValue: mode)
+      _slot = State(initialValue: selectedSlot)
       self.onFooter = onFooter
       self.onContent = onContent
     }
@@ -81,9 +82,9 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
         var footer: CGRect = .zero
         var content: [String: CGRect] = [:]
         let first = mode == .history ? FixtureProvider.fixtures[0].path.lastPathComponent : "slot-1"
-        let keys = ["\(first).title", "\(first).occupancy", "\(first).thumbnail"]
+        let keys = ["\(first).title", "\(first).occupancy", "\(first).thumbnail", "\(first).selection"]
           + (mode == .history ? ["\(first).timestamp"] : [])
-        _ = render(Harness(mode: mode, onFooter: { footer = $0 }, onContent: { content[$0] = $1 })
+        _ = render(Harness(mode: mode, selectedSlot: 1, onFooter: { footer = $0 }, onContent: { content[$0] = $1 })
           .environment(\.verticalSizeClass, .compact), size: size, scene: scene, layoutReady: {
             footer.height > 0 && content["viewport"] != nil && keys.allSatisfy { content[$0] != nil }
           })
@@ -102,6 +103,13 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
         let thumbnail = try XCTUnwrap(content["\(first).thumbnail"])
         let title = try XCTUnwrap(content["\(first).title"])
         XCTAssertLessThanOrEqual(thumbnail.maxX, title.minX, "Short phone cards must put metadata beside the thumbnail")
+        let indicator = try XCTUnwrap(content["\(first).selection"])
+        for key in keys where key != "\(first).selection" {
+          let frame = try XCTUnwrap(content[key])
+          XCTAssertFalse(indicator.intersects(frame), "Selection indicator overlaps \(key): \(indicator), \(frame)")
+          XCTAssertGreaterThanOrEqual(indicator.minX, frame.maxX,
+                                      "Compact selection indicator must occupy its own trailing column")
+        }
       }
     }
   }
