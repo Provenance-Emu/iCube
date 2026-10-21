@@ -93,9 +93,15 @@ final class LibraryMetadataStore: @unchecked Sendable {
     var projection: Draft?
     var used: UInt64 = 0
     func cost(for identity: Identity) -> Int {
-      bytes.count + (projection?.coverData?.count ?? 0) +
-        (summary.title?.utf8.count ?? 0) * 2 + summary.tags.reduce(0) { $0 + $1.utf8.count * 2 + 32 } +
-        identity.rawValue.utf8.count * 2 + 1024
+      let coverBytes: Int = projection?.coverData?.count ?? 0
+      let titleBytes: Int = (summary.title?.utf8.count ?? 0) * 2
+      let tagBytes: Int = summary.tags.reduce(0) { $0 + $1.utf8.count * 2 + 32 }
+      let identityBytes: Int = identity.rawValue.utf8.count * 2
+      var total: Int = bytes.count + coverBytes
+      total += titleBytes
+      total += tagBytes
+      total += identityBytes
+      return total + 1024
     }
   }
 
@@ -103,8 +109,12 @@ final class LibraryMetadataStore: @unchecked Sendable {
     let value: Summary
     var used: UInt64
     func cost(for identity: Identity) -> Int {
-      (value.title?.utf8.count ?? 0) * 2 + value.tags.reduce(0) { $0 + $1.utf8.count * 2 + 32 } +
-        identity.rawValue.utf8.count * 2 + 512
+      let titleBytes: Int = (value.title?.utf8.count ?? 0) * 2
+      let tagBytes: Int = value.tags.reduce(0) { $0 + $1.utf8.count * 2 + 32 }
+      let identityBytes: Int = identity.rawValue.utf8.count * 2
+      var total: Int = titleBytes + tagBytes
+      total += identityBytes
+      return total + 512
     }
   }
 
