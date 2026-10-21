@@ -79,6 +79,7 @@ func recomputeShoulderGesture() {
 /// Delegates to `PauseGestureTracker.requestPauseMenu`, the single gated +
 /// coalesced sink for every pause route.
 private func presentPauseMenu(_ reason: String) {
+  guard !EmuEventVC.isPauseOverlayVisible() else { return }
   Task { @MainActor in
     PauseGestureTracker.shared.requestPauseMenu(reason: reason)
   }
@@ -161,8 +162,9 @@ func installPauseMenuHandlers(_ c: GCController) {
   // nothing else: the Siri Remote and bare micro gamepads.
   guard let eg = c.extendedGamepad else {
     c.microGamepad?.buttonMenu.pressedChangedHandler = { _, _, pressed in
+      let overlayOwned = EmuEventVC.isPauseOverlayVisible()
       Task { @MainActor in
-        PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "microGamepad.buttonMenu")
+        PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: "microGamepad.buttonMenu", overlayOwned: overlayOwned)
       }
     }
     return
@@ -183,9 +185,10 @@ func installPauseMenuHandlers(_ c: GCController) {
 
   // Options is the one dedicated pause-menu button on extended gamepads.
   eg.buttonOptions?.pressedChangedHandler = { _, _, pressed in
+    let overlayOwned = EmuEventVC.isPauseOverlayVisible()
     Task { @MainActor in
-      PauseGestureTracker.shared.optionsButtonChanged(pressed: pressed)
-      PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: PauseGestureTracker.optionsReason)
+      PauseGestureTracker.shared.optionsButtonChanged(pressed: pressed, overlayOwned: overlayOwned)
+      PauseGestureTracker.shared.menuButtonChanged(pressed: pressed, reason: PauseGestureTracker.optionsReason, overlayOwned: overlayOwned)
     }
   }
 }
@@ -510,7 +513,7 @@ func installExtraInputHandlers(_ c: GCController) {
   // Start press. Those pads pause from Options/Home (installPauseMenuHandlers); keep the handler set
   // for them, doing nothing, so the system does not take the press.
   c.controllerPausedHandler = { controller in
-    guard controller.extendedGamepad == nil else { return }
+    guard controller.extendedGamepad == nil && controller.microGamepad == nil else { return }
     presentPauseMenu("controllerPausedHandler")
   }
 

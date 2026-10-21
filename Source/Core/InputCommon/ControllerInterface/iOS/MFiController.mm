@@ -7,6 +7,8 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <cmath>
+#include <unordered_map>
 
 #include "Common/Logging/Log.h"
 #include "Common/MathUtil.h"
@@ -43,6 +45,14 @@ struct AssignedId
 
 std::mutex s_assigned_ids_mutex;
 std::vector<AssignedId> s_assigned_ids;
+struct GateEntry
+{
+  // Retain identity until disconnect/pruning; pointer reuse can never inherit another lease.
+  GCController* controller;
+  std::shared_ptr<ControllerInputGate> gate;
+};
+std::mutex s_gates_mutex;
+std::unordered_map<const void*, GateEntry> s_gates;
 }  // namespace
 
 namespace
@@ -68,7 +78,8 @@ std::string JoinNames(const std::vector<std::string>& names)
 }
 }  // namespace
 
-MFiController::MFiController(GCController* controller) : m_controller(controller)
+MFiController::MFiController(GCController* controller)
+    : m_gate(GetInputGate(controller)), m_controller(controller)
 {
   // What the system exposes for this pad. A device log with extended=0 micro=0 and the element
   // list is how a pad the framework ships no gamepad profile for (the Nintendo Switch Online
@@ -82,26 +93,26 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
   if (controller.extendedGamepad != nil)
   {
     GCExtendedGamepad* gamepad = controller.extendedGamepad;
-    AddInput(new Button(gamepad.buttonA, "Button A"));
-    AddInput(new Button(gamepad.buttonB, "Button B"));
-    AddInput(new Button(gamepad.buttonX, "Button X"));
-    AddInput(new Button(gamepad.buttonY, "Button Y"));
-    AddInput(new Button(gamepad.dpad.up, "D-Pad Up"));
-    AddInput(new Button(gamepad.dpad.down, "D-Pad Down"));
-    AddInput(new Button(gamepad.dpad.left, "D-Pad Left"));
-    AddInput(new Button(gamepad.dpad.right, "D-Pad Right"));
-    AddInput(new PressureSensitiveButton(gamepad.leftShoulder, "L Shoulder"));
-    AddInput(new PressureSensitiveButton(gamepad.rightShoulder, "R Shoulder"));
-    AddInput(new PressureSensitiveButton(gamepad.leftTrigger, "L Trigger"));
-    AddInput(new PressureSensitiveButton(gamepad.rightTrigger, "R Trigger"));
-    AddInput(new Axis(gamepad.leftThumbstick.xAxis, 1.0f, "L Stick X+"));
-    AddInput(new Axis(gamepad.leftThumbstick.xAxis, -1.0f, "L Stick X-"));
-    AddInput(new Axis(gamepad.leftThumbstick.yAxis, 1.0f, "L Stick Y+"));
-    AddInput(new Axis(gamepad.leftThumbstick.yAxis, -1.0f, "L Stick Y-"));
-    AddInput(new Axis(gamepad.rightThumbstick.xAxis, 1.0f, "R Stick X+"));
-    AddInput(new Axis(gamepad.rightThumbstick.xAxis, -1.0f, "R Stick X-"));
-    AddInput(new Axis(gamepad.rightThumbstick.yAxis, 1.0f, "R Stick Y+"));
-    AddInput(new Axis(gamepad.rightThumbstick.yAxis, -1.0f, "R Stick Y-"));
+    AddInput(new Button(gamepad.buttonA, "Button A", m_gate));
+    AddInput(new Button(gamepad.buttonB, "Button B", m_gate));
+    AddInput(new Button(gamepad.buttonX, "Button X", m_gate));
+    AddInput(new Button(gamepad.buttonY, "Button Y", m_gate));
+    AddInput(new Button(gamepad.dpad.up, "D-Pad Up", m_gate));
+    AddInput(new Button(gamepad.dpad.down, "D-Pad Down", m_gate));
+    AddInput(new Button(gamepad.dpad.left, "D-Pad Left", m_gate));
+    AddInput(new Button(gamepad.dpad.right, "D-Pad Right", m_gate));
+    AddInput(new PressureSensitiveButton(gamepad.leftShoulder, "L Shoulder", m_gate));
+    AddInput(new PressureSensitiveButton(gamepad.rightShoulder, "R Shoulder", m_gate));
+    AddInput(new PressureSensitiveButton(gamepad.leftTrigger, "L Trigger", m_gate));
+    AddInput(new PressureSensitiveButton(gamepad.rightTrigger, "R Trigger", m_gate));
+    AddInput(new Axis(gamepad.leftThumbstick.xAxis, 1.0f, "L Stick X+", m_gate));
+    AddInput(new Axis(gamepad.leftThumbstick.xAxis, -1.0f, "L Stick X-", m_gate));
+    AddInput(new Axis(gamepad.leftThumbstick.yAxis, 1.0f, "L Stick Y+", m_gate));
+    AddInput(new Axis(gamepad.leftThumbstick.yAxis, -1.0f, "L Stick Y-", m_gate));
+    AddInput(new Axis(gamepad.rightThumbstick.xAxis, 1.0f, "R Stick X+", m_gate));
+    AddInput(new Axis(gamepad.rightThumbstick.xAxis, -1.0f, "R Stick X-", m_gate));
+    AddInput(new Axis(gamepad.rightThumbstick.yAxis, 1.0f, "R Stick Y+", m_gate));
+    AddInput(new Axis(gamepad.rightThumbstick.yAxis, -1.0f, "R Stick Y-", m_gate));
 
     // Optionals and buttons only on newer iOS versions
 
@@ -110,68 +121,68 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
       if ([gamepad isKindOfClass:[GCDualSenseGamepad class]])
       {
         GCDualSenseGamepad* ds_gamepad = (GCDualSenseGamepad*)gamepad;
-        AddInput(new Button(ds_gamepad.touchpadButton, "Touchpad"));
+        AddInput(new Button(ds_gamepad.touchpadButton, "Touchpad", m_gate));
         
         // The user's first finger on the touchpad.
-        AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, 1.0f, "Touchpad X+"));
-        AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, -1.0f, "Touchpad X-"));
-        AddInput(new Axis(ds_gamepad.touchpadPrimary.yAxis, 1.0f, "Touchpad Y+"));
-        AddInput(new Axis(ds_gamepad.touchpadPrimary.yAxis, -1.0f, "Touchpad Y-"));
+        AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, 1.0f, "Touchpad X+", m_gate));
+        AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, -1.0f, "Touchpad X-", m_gate));
+        AddInput(new Axis(ds_gamepad.touchpadPrimary.yAxis, 1.0f, "Touchpad Y+", m_gate));
+        AddInput(new Axis(ds_gamepad.touchpadPrimary.yAxis, -1.0f, "Touchpad Y-", m_gate));
 
         // The user's second finger on the touchpad.
-        AddInput(new Axis(ds_gamepad.touchpadSecondary.xAxis, 1.0f, "Touchpad Secondary X+"));
-        AddInput(new Axis(ds_gamepad.touchpadSecondary.xAxis, -1.0f, "Touchpad Secondary X-"));
-        AddInput(new Axis(ds_gamepad.touchpadSecondary.yAxis, 1.0f, "Touchpad Secondary Y+"));
-        AddInput(new Axis(ds_gamepad.touchpadSecondary.yAxis, -1.0f, "Touchpad Secondary Y-"));
+        AddInput(new Axis(ds_gamepad.touchpadSecondary.xAxis, 1.0f, "Touchpad Secondary X+", m_gate));
+        AddInput(new Axis(ds_gamepad.touchpadSecondary.xAxis, -1.0f, "Touchpad Secondary X-", m_gate));
+        AddInput(new Axis(ds_gamepad.touchpadSecondary.yAxis, 1.0f, "Touchpad Secondary Y+", m_gate));
+        AddInput(new Axis(ds_gamepad.touchpadSecondary.yAxis, -1.0f, "Touchpad Secondary Y-", m_gate));
       }
     }
 
     if (gamepad.buttonHome != nil)
     {
-      AddInput(new Button(gamepad.buttonHome, "Home"));
+      AddInput(new Button(gamepad.buttonHome, "Home", m_gate));
     }
     
     if ([gamepad isKindOfClass:[GCDualShockGamepad class]])
     {
       GCDualShockGamepad* ds_gamepad = (GCDualShockGamepad*)gamepad;
-      AddInput(new Button(ds_gamepad.touchpadButton, "Touchpad"));
+      AddInput(new Button(ds_gamepad.touchpadButton, "Touchpad", m_gate));
       
       // The user's first finger on the touchpad.
-      AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, 1.0f, "Touchpad X+"));
-      AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, -1.0f, "Touchpad X-"));
-      AddInput(new Axis(ds_gamepad.touchpadPrimary.yAxis, 1.0f, "Touchpad Y+"));
-      AddInput(new Axis(ds_gamepad.touchpadPrimary.yAxis, -1.0f, "Touchpad Y-"));
+      AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, 1.0f, "Touchpad X+", m_gate));
+      AddInput(new Axis(ds_gamepad.touchpadPrimary.xAxis, -1.0f, "Touchpad X-", m_gate));
+      AddInput(new Axis(ds_gamepad.touchpadPrimary.yAxis, 1.0f, "Touchpad Y+", m_gate));
+      AddInput(new Axis(ds_gamepad.touchpadPrimary.yAxis, -1.0f, "Touchpad Y-", m_gate));
 
       // The user's second finger on the touchpad.
-      AddInput(new Axis(ds_gamepad.touchpadSecondary.xAxis, 1.0f, "Touchpad Secondary X+"));
-      AddInput(new Axis(ds_gamepad.touchpadSecondary.xAxis, -1.0f, "Touchpad Secondary X-"));
-      AddInput(new Axis(ds_gamepad.touchpadSecondary.yAxis, 1.0f, "Touchpad Secondary Y+"));
-      AddInput(new Axis(ds_gamepad.touchpadSecondary.yAxis, -1.0f, "Touchpad Secondary Y-"));
+      AddInput(new Axis(ds_gamepad.touchpadSecondary.xAxis, 1.0f, "Touchpad Secondary X+", m_gate));
+      AddInput(new Axis(ds_gamepad.touchpadSecondary.xAxis, -1.0f, "Touchpad Secondary X-", m_gate));
+      AddInput(new Axis(ds_gamepad.touchpadSecondary.yAxis, 1.0f, "Touchpad Secondary Y+", m_gate));
+      AddInput(new Axis(ds_gamepad.touchpadSecondary.yAxis, -1.0f, "Touchpad Secondary Y-", m_gate));
     }
     else if ([gamepad isKindOfClass:[GCXboxGamepad class]])
     {
       GCXboxGamepad* xbox_gamepad = (GCXboxGamepad*)gamepad;
-      AddInput(new Button(xbox_gamepad.paddleButton1, "Paddle 1"));
-      AddInput(new Button(xbox_gamepad.paddleButton2, "Paddle 2"));
-      AddInput(new Button(xbox_gamepad.paddleButton3, "Paddle 3"));
-      AddInput(new Button(xbox_gamepad.paddleButton4, "Paddle 4"));
+      AddInput(new Button(xbox_gamepad.paddleButton1, "Paddle 1", m_gate));
+      AddInput(new Button(xbox_gamepad.paddleButton2, "Paddle 2", m_gate));
+      AddInput(new Button(xbox_gamepad.paddleButton3, "Paddle 3", m_gate));
+      AddInput(new Button(xbox_gamepad.paddleButton4, "Paddle 4", m_gate));
     }
 
-    AddInput(new Button(gamepad.buttonMenu, "Menu"));
+    AddInput(new Button(gamepad.buttonMenu, "Menu", m_gate));
 
     if (gamepad.buttonOptions != nil)
     {
-      AddInput(new Button(gamepad.buttonOptions, "Options"));
+      AddInput(new Button(gamepad.buttonOptions, "Options", m_gate));
     }
 
     if (gamepad.leftThumbstickButton != nil)
     {
-      AddInput(new Button(gamepad.leftThumbstickButton, "L Stick"));
+      AddInput(new Button(gamepad.leftThumbstickButton, "L Stick", m_gate));
     }
 
     if (gamepad.rightThumbstickButton != nil)
     {
-      AddInput(new Button(gamepad.rightThumbstickButton, "R Stick"));
+      AddInput(new Button(gamepad.rightThumbstickButton, "R Stick", m_gate));
     }
   }
 #pragma clang diagnostic push
@@ -180,28 +191,28 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
   {
     // Deprecated in iOS 10, but needed for some older controllers
     GCGamepad* gamepad = controller.gamepad;
-    AddInput(new Button(gamepad.buttonA, "Button A"));
-    AddInput(new Button(gamepad.buttonB, "Button B"));
-    AddInput(new Button(gamepad.buttonX, "Button X"));
-    AddInput(new Button(gamepad.buttonY, "Button Y"));
-    AddInput(new Button(gamepad.dpad.up, "D-Pad Up"));
-    AddInput(new Button(gamepad.dpad.down, "D-Pad Down"));
-    AddInput(new Button(gamepad.dpad.left, "D-Pad Left"));
-    AddInput(new Button(gamepad.dpad.right, "D-Pad Right"));
-    AddInput(new PressureSensitiveButton(gamepad.leftShoulder, "L Shoulder"));
-    AddInput(new PressureSensitiveButton(gamepad.rightShoulder, "R Shoulder"));
+    AddInput(new Button(gamepad.buttonA, "Button A", m_gate));
+    AddInput(new Button(gamepad.buttonB, "Button B", m_gate));
+    AddInput(new Button(gamepad.buttonX, "Button X", m_gate));
+    AddInput(new Button(gamepad.buttonY, "Button Y", m_gate));
+    AddInput(new Button(gamepad.dpad.up, "D-Pad Up", m_gate));
+    AddInput(new Button(gamepad.dpad.down, "D-Pad Down", m_gate));
+    AddInput(new Button(gamepad.dpad.left, "D-Pad Left", m_gate));
+    AddInput(new Button(gamepad.dpad.right, "D-Pad Right", m_gate));
+    AddInput(new PressureSensitiveButton(gamepad.leftShoulder, "L Shoulder", m_gate));
+    AddInput(new PressureSensitiveButton(gamepad.rightShoulder, "R Shoulder", m_gate));
   }
 #pragma clang diagnostic pop
   else if (controller.microGamepad != nil)  // Siri Remote
   {
     GCMicroGamepad* gamepad = controller.microGamepad;
-    AddInput(new Button(gamepad.dpad.up, "D-Pad Up"));
-    AddInput(new Button(gamepad.dpad.down, "D-Pad Down"));
-    AddInput(new Button(gamepad.dpad.left, "D-Pad Left"));
-    AddInput(new Button(gamepad.dpad.right, "D-Pad Right"));
-    AddInput(new Button(gamepad.buttonA, "Button A"));
-    AddInput(new Button(gamepad.buttonX, "Button X"));
-    AddInput(new Button(gamepad.buttonMenu, "Menu"));
+    AddInput(new Button(gamepad.dpad.up, "D-Pad Up", m_gate));
+    AddInput(new Button(gamepad.dpad.down, "D-Pad Down", m_gate));
+    AddInput(new Button(gamepad.dpad.left, "D-Pad Left", m_gate));
+    AddInput(new Button(gamepad.dpad.right, "D-Pad Right", m_gate));
+    AddInput(new Button(gamepad.buttonA, "Button A", m_gate));
+    AddInput(new Button(gamepad.buttonX, "Button X", m_gate));
+    AddInput(new Button(gamepad.buttonMenu, "Menu", m_gate));
   }
   else if (!AddPhysicalProfileInputs(controller))
   {
@@ -221,24 +232,24 @@ MFiController::MFiController(GCController* controller) : m_controller(controller
       motion.sensorsActive = true;
     }
     
-    AddInput(new AccelerometerAxis(motion, X, 1.0, "Accel Left"));
-    AddInput(new AccelerometerAxis(motion, X, -1.0, "Accel Right"));
-    AddInput(new AccelerometerAxis(motion, Y, -1.0, "Accel Forward"));
-    AddInput(new AccelerometerAxis(motion, Y, 1.0, "Accel Back"));
-    AddInput(new AccelerometerAxis(motion, Z, 1.0, "Accel Up"));
-    AddInput(new AccelerometerAxis(motion, Z, -1.0, "Accel Down"));
+    AddInput(new AccelerometerAxis(motion, X, 1.0, "Accel Left", m_gate));
+    AddInput(new AccelerometerAxis(motion, X, -1.0, "Accel Right", m_gate));
+    AddInput(new AccelerometerAxis(motion, Y, -1.0, "Accel Forward", m_gate));
+    AddInput(new AccelerometerAxis(motion, Y, 1.0, "Accel Back", m_gate));
+    AddInput(new AccelerometerAxis(motion, Z, 1.0, "Accel Up", m_gate));
+    AddInput(new AccelerometerAxis(motion, Z, -1.0, "Accel Down", m_gate));
     
     m_supports_accelerometer = true;
     m_supports_gyroscope = motion.hasRotationRate;
 
     if (m_supports_gyroscope)
     {
-      AddInput(new GyroscopeAxis(motion, X, -1.0, "Gyro Pitch Up"));
-      AddInput(new GyroscopeAxis(motion, X, 1.0, "Gyro Pitch Down"));
-      AddInput(new GyroscopeAxis(motion, Y, 1.0, "Gyro Roll Left"));
-      AddInput(new GyroscopeAxis(motion, Y, -1.0, "Gyro Roll Right"));
-      AddInput(new GyroscopeAxis(motion, Z, 1.0, "Gyro Yaw Left"));
-      AddInput(new GyroscopeAxis(motion, Z, -1.0, "Gyro Yaw Right"));
+      AddInput(new GyroscopeAxis(motion, X, -1.0, "Gyro Pitch Up", m_gate));
+      AddInput(new GyroscopeAxis(motion, X, 1.0, "Gyro Pitch Down", m_gate));
+      AddInput(new GyroscopeAxis(motion, Y, 1.0, "Gyro Roll Left", m_gate));
+      AddInput(new GyroscopeAxis(motion, Y, -1.0, "Gyro Roll Right", m_gate));
+      AddInput(new GyroscopeAxis(motion, Z, 1.0, "Gyro Yaw Left", m_gate));
+      AddInput(new GyroscopeAxis(motion, Z, -1.0, "Gyro Yaw Right", m_gate));
     }
   }
   else
@@ -291,18 +302,18 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
       GCControllerDirectionPad* pad = (GCControllerDirectionPad*)element;
       if (input == PP::Input::DPad)
       {
-        AddInput(new Button(pad.up, "D-Pad Up"));
-        AddInput(new Button(pad.down, "D-Pad Down"));
-        AddInput(new Button(pad.left, "D-Pad Left"));
-        AddInput(new Button(pad.right, "D-Pad Right"));
+        AddInput(new Button(pad.up, "D-Pad Up", m_gate));
+        AddInput(new Button(pad.down, "D-Pad Down", m_gate));
+        AddInput(new Button(pad.left, "D-Pad Left", m_gate));
+        AddInput(new Button(pad.right, "D-Pad Right", m_gate));
       }
       else
       {
         const char* side = input == PP::Input::LeftStick ? "L" : "R";
-        AddInput(new Axis(pad.xAxis, 1.0f, std::string(side) + " Stick X+"));
-        AddInput(new Axis(pad.xAxis, -1.0f, std::string(side) + " Stick X-"));
-        AddInput(new Axis(pad.yAxis, 1.0f, std::string(side) + " Stick Y+"));
-        AddInput(new Axis(pad.yAxis, -1.0f, std::string(side) + " Stick Y-"));
+        AddInput(new Axis(pad.xAxis, 1.0f, std::string(side) + " Stick X+", m_gate));
+        AddInput(new Axis(pad.xAxis, -1.0f, std::string(side) + " Stick X-", m_gate));
+        AddInput(new Axis(pad.yAxis, 1.0f, std::string(side) + " Stick Y+", m_gate));
+        AddInput(new Axis(pad.yAxis, -1.0f, std::string(side) + " Stick Y-", m_gate));
       }
     }
     else
@@ -314,9 +325,9 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
       const bool analog = input == PP::Input::LShoulder || input == PP::Input::RShoulder ||
                           input == PP::Input::LTrigger || input == PP::Input::RTrigger;
       if (analog)
-        AddInput(new PressureSensitiveButton(button, input_name));
+        AddInput(new PressureSensitiveButton(button, input_name, m_gate));
       else
-        AddInput(new Button(button, input_name));
+        AddInput(new Button(button, input_name, m_gate));
     }
 
     if (!summary.empty())
@@ -327,6 +338,66 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
   INFO_LOG_FMT(CONTROLLERINTERFACE, "MFi controller '{}': synthesized inputs from physical profile{}: {}",
                GetName(), is_n64 ? " (N64 autoconfig)" : "", summary);
   return true;
+}
+
+std::shared_ptr<ControllerInputGate> MFiController::GetInputGate(GCController* controller)
+{
+  std::lock_guard lock(s_gates_mutex);
+  const void* identity = (__bridge const void*)controller;
+  auto [it, inserted] = s_gates.try_emplace(identity, GateEntry{controller, nullptr});
+  if (inserted)
+    it->second.gate = std::make_shared<ControllerInputGate>();
+  return it->second.gate;
+}
+
+void MFiController::DisconnectInputGate(
+    GCController* controller, const std::shared_ptr<ControllerInputGate>& expected_gate)
+{
+  std::lock_guard lock(s_gates_mutex);
+  if (expected_gate)
+    expected_gate->Disconnect();
+  auto it = s_gates.find((__bridge const void*)controller);
+  if (it != s_gates.end() && (!expected_gate || it->second.gate == expected_gate))
+  {
+    it->second.gate->Disconnect();
+    s_gates.erase(it);
+  }
+}
+
+bool MFiController::AreControlsNeutral(GCController* controller)
+{
+  // Read physical values, never gated GetState. Gravity/gyro do not participate: gravity is
+  // nonzero at rest and motion should resume normally once the closing controls are released.
+  GCPhysicalInputProfile* snapshot = [controller.physicalInputProfile capture];
+  for (GCControllerElement* element in snapshot.elements.allValues)
+  {
+    if ([element isKindOfClass:[GCControllerButtonInput class]])
+    {
+      GCControllerButtonInput* button = (GCControllerButtonInput*)element;
+      if (button.isPressed || std::abs(button.value) > 0.001f)
+        return false;
+    }
+    else if ([element isKindOfClass:[GCControllerAxisInput class]])
+    {
+      if (std::abs(((GCControllerAxisInput*)element).value) > 0.001f)
+        return false;
+    }
+    else if ([element isKindOfClass:[GCControllerDirectionPad class]])
+    {
+      GCControllerDirectionPad* pad = (GCControllerDirectionPad*)element;
+      if (std::abs(pad.xAxis.value) > 0.001f || std::abs(pad.yAxis.value) > 0.001f ||
+          pad.up.isPressed || pad.down.isPressed || pad.left.isPressed || pad.right.isPressed)
+        return false;
+    }
+  }
+  return true;
+}
+
+Core::DeviceRemoval MFiController::UpdateInput()
+{
+  if (m_gate->IsSuppressed())
+    m_gate->PollNeutral([&] { return AreControlsNeutral(m_controller); });
+  return Core::DeviceRemoval::Keep;
 }
 
 std::string MFiController::GetName() const
@@ -396,6 +467,7 @@ std::optional<int> MFiController::GetPreferredId() const
 
 void MFiController::ReleaseId(GCController* controller)
 {
+  DisconnectInputGate(controller);
   const void* ptr = (__bridge const void*)controller;
   std::lock_guard<std::mutex> lock(s_assigned_ids_mutex);
   std::erase_if(s_assigned_ids,
@@ -404,6 +476,16 @@ void MFiController::ReleaseId(GCController* controller)
 
 void MFiController::PruneStaleIds(NSArray<GCController*>* live_controllers)
 {
+  {
+    std::lock_guard lock(s_gates_mutex);
+    std::erase_if(s_gates, [&](const auto& entry) {
+      for (GCController* controller in live_controllers)
+        if (controller == entry.second.controller)
+          return false;
+      entry.second.gate->Disconnect();
+      return true;
+    });
+  }
   std::lock_guard<std::mutex> lock(s_assigned_ids_mutex);
   std::erase_if(s_assigned_ids, [&live_controllers](const AssignedId& entry) {
     for (GCController* controller in live_controllers)
@@ -422,6 +504,8 @@ std::string MFiController::Button::GetName() const
 
 ControlState MFiController::Button::GetState() const
 {
+  if (m_gate->IsSuppressed())
+    return 0;
   return [m_input isPressed];
 }
 
@@ -432,6 +516,8 @@ std::string MFiController::PressureSensitiveButton::GetName() const
 
 ControlState MFiController::PressureSensitiveButton::GetState() const
 {
+  if (m_gate->IsSuppressed())
+    return 0;
   return [m_input value];
 }
 
@@ -442,12 +528,15 @@ std::string MFiController::Axis::GetName() const
 
 ControlState MFiController::Axis::GetState() const
 {
+  if (m_gate->IsSuppressed())
+    return 0;
   return [m_input value] * m_multiplier;
 }
 
 MFiController::AccelerometerAxis::AccelerometerAxis(GCMotion* motion, MotionPlane plane,
-                                                    const double multiplier, const std::string name)
-    : m_motion(motion), m_plane(plane), m_name(name)
+                                                    const double multiplier, const std::string name,
+                                         std::shared_ptr<ControllerInputGate> gate)
+    : m_gate(std::move(gate)), m_motion(motion), m_plane(plane), m_name(name)
 {
   if (plane == X || plane == Y)
   {
@@ -468,6 +557,8 @@ std::string MFiController::AccelerometerAxis::GetName() const
 
 ControlState MFiController::AccelerometerAxis::GetState() const
 {
+  if (m_gate->IsSuppressed())
+    return 0;
   // `acceleration` is the total (gravity + user) acceleration on every controller, whether or
   // not it can also report the two parts separately. The IMU accelerometer group expects m/s^2
   // with gravity included (the DSU client and the touch overlay feed it that way); GCMotion
@@ -490,8 +581,9 @@ ControlState MFiController::AccelerometerAxis::GetState() const
 }
 
 MFiController::GyroscopeAxis::GyroscopeAxis(GCMotion* motion, MotionPlane plane,
-                                         const double multiplier, const std::string name)
-    : m_motion(motion), m_plane(plane), m_name(name)
+                                         const double multiplier, const std::string name,
+                                         std::shared_ptr<ControllerInputGate> gate)
+    : m_gate(std::move(gate)), m_motion(motion), m_plane(plane), m_name(name)
 {
   if (plane == X || plane == Y)
   {
@@ -512,6 +604,8 @@ std::string MFiController::GyroscopeAxis::GetName() const
 
 ControlState MFiController::GyroscopeAxis::GetState() const
 {
+  if (m_gate->IsSuppressed())
+    return 0;
   switch (m_plane)
   {
   case X:

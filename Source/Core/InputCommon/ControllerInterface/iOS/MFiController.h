@@ -6,6 +6,7 @@
 #include <GameController/GameController.h>
 
 #include "InputCommon/ControllerInterface/CoreDevice.h"
+#include "InputCommon/ControllerInterface/iOS/ControllerInputGate.h"
 
 namespace ciface::iOS
 {
@@ -22,12 +23,13 @@ private:
   class Button : public Core::Device::Input
   {
   public:
-    Button(GCControllerButtonInput* input, const std::string name)
-        : m_input(input), m_name(name) {}
+    Button(GCControllerButtonInput* input, const std::string name, std::shared_ptr<ControllerInputGate> gate)
+        : m_gate(std::move(gate)), m_input(input), m_name(name) {}
     std::string GetName() const override;
     ControlState GetState() const override;
 
   private:
+    std::shared_ptr<ControllerInputGate> m_gate;
     GCControllerButtonInput* m_input;
     const std::string m_name;
   };
@@ -35,14 +37,15 @@ private:
   class PressureSensitiveButton : public Core::Device::Input
   {
   public:
-    PressureSensitiveButton(GCControllerButtonInput* input, const std::string name)
-        : m_input(input), m_name(name)
+    PressureSensitiveButton(GCControllerButtonInput* input, const std::string name, std::shared_ptr<ControllerInputGate> gate)
+        : m_gate(std::move(gate)), m_input(input), m_name(name)
     {
     }
     std::string GetName() const override;
     ControlState GetState() const override;
 
   private:
+    std::shared_ptr<ControllerInputGate> m_gate;
     GCControllerButtonInput* m_input;
     const std::string m_name;
   };
@@ -50,14 +53,15 @@ private:
   class Axis : public Core::Device::Input
   {
   public:
-    Axis(GCControllerAxisInput* input, const float multiplier, const std::string name)
-        : m_input(input), m_multiplier(multiplier), m_name(name)
+    Axis(GCControllerAxisInput* input, const float multiplier, const std::string name, std::shared_ptr<ControllerInputGate> gate)
+        : m_gate(std::move(gate)), m_input(input), m_multiplier(multiplier), m_name(name)
     {
     }
     std::string GetName() const override;
     ControlState GetState() const override;
 
   private:
+    std::shared_ptr<ControllerInputGate> m_gate;
     GCControllerAxisInput* m_input;
     float m_multiplier;
     const std::string m_name;
@@ -67,11 +71,12 @@ private:
   {
   public:
     AccelerometerAxis(GCMotion* motion, MotionPlane plane, const double multiplier,
-                      const std::string name);
+                      const std::string name, std::shared_ptr<ControllerInputGate> gate);
     std::string GetName() const override;
     ControlState GetState() const override;
 
   private:
+    std::shared_ptr<ControllerInputGate> m_gate;
     GCMotion* m_motion;
     MotionPlane m_plane;
     double m_multiplier;
@@ -82,11 +87,12 @@ private:
   {
   public:
     GyroscopeAxis(GCMotion* motion, MotionPlane plane, const double multiplier,
-                  const std::string name);
+                  const std::string name, std::shared_ptr<ControllerInputGate> gate);
     std::string GetName() const override;
     ControlState GetState() const override;
 
   private:
+    std::shared_ptr<ControllerInputGate> m_gate;
     GCMotion* m_motion;
     MotionPlane m_plane;
     double m_multiplier;
@@ -95,6 +101,15 @@ private:
 
 public:
   MFiController(GCController* controller);
+
+  Core::DeviceRemoval UpdateInput() override;
+  // Shared by all wrappers and UI leases for this exact GCController identity.
+  static std::shared_ptr<ControllerInputGate> GetInputGate(GCController* controller);
+  static bool AreControlsNeutral(GCController* controller);
+  // UI leases pass their stored gate: stale teardown must never remove a replacement entry.
+  // A confirmed backend disconnect omits expected_gate to retire the current identity entry.
+  static void DisconnectInputGate(
+      GCController* controller, const std::shared_ptr<ControllerInputGate>& expected_gate = {});
 
   std::string GetName() const final override;
   std::string GetSource() const final override;
@@ -126,6 +141,7 @@ private:
   // (PhysicalProfileMapping.h). Returns false when the profile has nothing usable.
   bool AddPhysicalProfileInputs(GCController* controller);
 
+  std::shared_ptr<ControllerInputGate> m_gate;
   GCController* m_controller;
   bool m_supports_accelerometer;
   bool m_supports_gyroscope;

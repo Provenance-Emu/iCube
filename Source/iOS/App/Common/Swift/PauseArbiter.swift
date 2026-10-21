@@ -105,6 +105,11 @@ final class PauseArbiter {
   }
   var holders: [String] { tokens.map(\.reason) }
 
+  /// Exact ownership comparison: callers can fence input without clearing a presentation's claim.
+  func hasHolders(excluding owned: Set<Token>) -> Bool {
+    tokens.contains { !owned.contains($0) }
+  }
+
   @discardableResult
   func claim(_ reason: String) -> Token {
     claim(reason, pausing: true)

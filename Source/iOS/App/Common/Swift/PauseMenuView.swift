@@ -26,7 +26,10 @@ internal struct PauseMenuView: View {
   var onShowPerfOverlay: () -> Void = {}
   let platform: PlatformKind
   let game: TVGameItem
+  var onReopenSaveBrowser: (() -> Void)? = nil
   var startsInSaveBrowser = false
+  var startsInPerformance = false
+  @State private var initialPerformancePaneConsumed = false
   @State private var initialSaveBrowserConsumed = false
   @State private var showSharedSaveBrowser = false
   @State private var openingSaveSession: UInt64?
@@ -93,11 +96,10 @@ internal struct PauseMenuView: View {
   /// The cover-column chip: the engine actually running.
   @State private var engineShortName: String = ""
   @State private var jitAcquired: Bool = false
-  /// The Performance tile's value: the engine the next launch uses (`CpuEngine` raw value).
+  /// The CPU Engine tile's value: the engine the next launch uses (`CpuEngine` raw value).
   @State private var nextEngine: Int = CpuEngine.cachedInterpreter.rawValue
   /// Mirror of `PerfHUDToggle.isOn` behind the Performance HUD tile.
-  @State private var perfHUDOn: Bool = false
-  @State private var perfHUDFlags = PerfHUDToggle.Flags()
+  @StateObject private var performanceControls = PerformanceControlsController.live()
   @Environment(\.verticalSizeClass) private var verticalSizeClass
 
   /// True while any sheet, full-screen cover, or non-main pane owned by this menu is
@@ -128,6 +130,7 @@ internal struct PauseMenuView: View {
   @State private var fastForward = PauseFastForwardState(isEnabled: false, percent: ConfigGeneralState.storedFastForward(nil))
   /// This menu's hold on the pause (spec §4.3). Adopted from the gesture tracker's pending claim when
   /// there is one, otherwise claimed here. Released only on a real teardown, see `onDisappear`.
+  @State private var quickStateActionInFlight = false
   @State private var pauseToken: PauseArbiter.Token?
   /// D15: "N active" badge on the Cheats item. Refreshed on appear and whenever the
   /// pane returns to `.main` (including from the Cheats pane itself), so toggling a
@@ -140,11 +143,11 @@ internal struct PauseMenuView: View {
   }
 
   private func refreshLiveSettings() {
-    internalResolution = TVEmulationBridge.internalResolution()
+    performanceControls.refresh()
+    if pane != .perfHUD { performanceControls.stopRefreshing() }
+    internalResolution = performanceControls.state.resolutionScale
     metalFXUpscale = DOLConfigBridge.gfxMetalFXSpatialUpscale()
     audioVolume = TVEmulationBridge.audioVolumePercent()
-    perfHUDFlags = PerfHUDToggle.read()
-    perfHUDOn = perfHUDFlags.isOn
     refreshEngineState()
   }
 
@@ -153,16 +156,14 @@ internal struct PauseMenuView: View {
   }
 
   private var perfHUDMenuModel: MenuModel {
-    // Track every flag, including changes that leave the master switch on. The binding getters
-    // still read Config directly so repeated actions never capture an old snapshot.
-    _ = perfHUDFlags
-    return PauseMenuModelBuilder.perfHUDModel()
+    PerformanceControlsModelBuilder.build(state: performanceControls.state, apply: performanceControls.apply)
   }
 
   private func closePerfHUDSubmenu() {
+    performanceControls.stopRefreshing()
     tvLastFocusID = "perf-hud"
-    refreshLiveSettings()
     pane = .main
+    refreshLiveSettings()
   }
 
   /// Mutes / unmutes through the helper the top bar shares, so both always agree.
@@ -187,11 +188,29 @@ internal struct PauseMenuView: View {
         mainMenu
           .onAppear { NSLog("[PAUSE] Main menu appeared") }
       case .perfHUD:
-        MenuScreen(model: perfHUDMenuModel, style: .list,
-                   onBack: { closePerfHUDSubmenu() },
-                   tvHeader: ICubeLeafHeader(title: L("Performance HUD"), subtitle: L("Pause Menu")),
-                   tvClaimsFocus: true)
-          .frame(maxWidth: 1000)
+        VStack(spacing: 0) {
+          #if os(iOS)
+          HStack {
+            Button(action: closePerfHUDSubmenu) {
+              Label(L("Back"), systemImage: "chevron.left")
+                .frame(minWidth: 44, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            Text(L("Performance")).font(.headline)
+            Spacer()
+          }
+          .foregroundStyle(.white)
+          .padding(.horizontal)
+          #endif
+          MenuScreen(model: perfHUDMenuModel, style: .list,
+                     onBack: { closePerfHUDSubmenu() },
+                     tvHeader: ICubeLeafHeader(title: L("Performance"), subtitle: L("Pause Menu")),
+                     tvClaimsFocus: true)
+        }
+        .frame(maxWidth: 1000)
+        .onAppear { performanceControls.refresh() }
+        .onDisappear { performanceControls.stopRefreshing() }
       case .saves:
         savesMenu
           .onAppear { NSLog("[PAUSE] Saves menu appeared") }
@@ -246,6 +265,10 @@ internal struct PauseMenuView: View {
       refreshActiveCheatCount()
       refreshShaderState()
       refreshLiveSettings()
+      if startsInPerformance && !initialPerformancePaneConsumed {
+        initialPerformancePaneConsumed = true
+        pane = .perfHUD
+      }
       #if DEBUG
       if !debugInitialPaneConsumed {
         debugInitialPaneConsumed = true
@@ -274,6 +297,7 @@ internal struct PauseMenuView: View {
       // menu (or its sheet) was still visible. Only resume when nothing else from
       // this menu is currently presented — i.e. this is a real teardown (Resume,
       // Exit, or the parent dismissing the whole menu), not a covering child.
+      performanceControls.stopRefreshing()
       guard !isPauseMenuChildPresented else { return }
       openingSaveSession = nil
       if let token = pauseToken {
@@ -589,7 +613,12 @@ internal struct PauseMenuView: View {
   private var quickSaveActions: QuickSaveMenuActions {
     QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
       session: .init(gameID: game.gameID, identifier: openingSaveSession ?? TVEmulationBridge.currentSessionIdentifier()),
-      isActive: { pauseToken != nil && openingSaveSession != nil }, openBrowser: openSharedSaveBrowser,
+      isActive: { pauseToken != nil && openingSaveSession != nil && !quickStateActionInFlight },
+      dismiss: { onClose() }, handoff: .shared, openBrowser: {
+        if quickStateActionInFlight { openSharedSaveBrowser(); onReopenSaveBrowser?() }
+        else { openSharedSaveBrowser() }
+      },
+      onBusyChanged: { quickStateActionInFlight = $0 },
       report: { EmulationToast.post($0.message) })
   }
 
@@ -597,7 +626,8 @@ internal struct PauseMenuView: View {
     Group {
       if platform == .ios || showSharedSaveBrowser {
         QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
-                            onDismiss: { pane = .main; showSharedSaveBrowser = false })
+                            onDismiss: { pane = .main; showSharedSaveBrowser = false },
+                            onCommit: { pane = .main; showSharedSaveBrowser = false; onClose() })
           .claimsController()
       } else {
         tvHeroLayout {
@@ -608,7 +638,8 @@ internal struct PauseMenuView: View {
         .environment(\.icubePlatformAccent, platformAccent)
         .sheet(isPresented: $showFilmstripSheet) {
           QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
-                              onDismiss: { showFilmstripSheet = false })
+                              onDismiss: { showFilmstripSheet = false },
+                              onCommit: { showFilmstripSheet = false; pane = .main; onClose() })
             .pauseClaim("save-browser")
             .claimsController()
         }
@@ -670,8 +701,8 @@ internal struct PauseMenuView: View {
         get: { AnyHashable(internalResolution) },
         set: { value in
           guard let scale = value as? Int else { return }
-          TVEmulationBridge.setInternalResolution(scale)
-          internalResolution = scale
+          performanceControls.apply(.resolutionScale(scale))
+          internalResolution = performanceControls.state.resolutionScale
         }),
       metalFX: Binding(
         get: { metalFXUpscale },
@@ -684,10 +715,7 @@ internal struct PauseMenuView: View {
           audioVolume = percent
         }),
       recording: Binding(get: { recorder.isRecording }, set: { RecordingToggle.set($0) }),
-      perfHUD: Binding(get: { perfHUDOn }, set: { on in
-        PerfHUDToggle.set(on)
-        perfHUDOn = on
-      }),
+      perfHUD: Binding(get: { performanceControls.state.hud.isEnabled }, set: { performanceControls.apply(.hudEnabled($0)) }),
       cpuEngine: Binding(
         get: { AnyHashable(nextEngine) },
         set: { value in
@@ -748,10 +776,9 @@ internal struct PauseMenuView: View {
         showSettings = true
       },
       openPerfOverlay: {
-        PausePerfHUDRoute.open(platform: platform, openSubmenu: {
-          tvLastFocusID = "perf-hud"
-          pane = .perfHUD
-        }, closePause: onClose, openTouchOverlay: onShowPerfOverlay)
+        performanceControls.refresh()
+        tvLastFocusID = "perf-hud"
+        pane = .perfHUD
       },
       requestReset: { showResetDialog = true },
       requestExit: requestExit,
@@ -764,6 +791,15 @@ internal struct PauseMenuView: View {
       },
       openDiscPicker: { pane = .discs })
     var model = PauseMenuModelBuilder.make(state: state, bindings: pauseMenuBindings, actions: actions)
+    if performanceControls.state.scalingOverride != .none {
+      for section in model.sections.indices {
+        for item in model.sections[section].items.indices where model.sections[section].items[item].id == "upscaling" {
+          model.sections[section].items[item].isEnabled = false
+          model.sections[section].items[item].badge = performanceControls.state.scalingOverride.badge
+          model.sections[section].items[item].disabledReason = performanceControls.state.scalingDisabledReason.map { L($0) }
+        }
+      }
+    }
     if quitRequestInFlight {
       for section in model.sections.indices {
         for item in model.sections[section].items.indices { model.sections[section].items[item].isEnabled = false }
@@ -878,7 +914,7 @@ struct PauseMenuState {
   /// The engine actually running ("INT", "CIR", "CIR-IR", "JIT"), and whether the JIT was acquired.
   var engineShortName: String = ""
   var jitAcquired: Bool = false
-  /// The engine the next launch uses (`CpuEngine` raw value): the Performance tile's value.
+  /// The engine the next launch uses (`CpuEngine` raw value): the CPU Engine tile's value.
   var nextEngine: Int = CpuEngine.cachedInterpreter.rawValue
   var quickSaveMode: QuickSaveMode = .history
   var isModded = false
@@ -896,9 +932,9 @@ struct PauseMenuBindings {
   var audioVolume: Binding<AnyHashable> = .constant(AnyHashable(100))
   /// Screen recording on/off (`RecordingManager`); the Record tile toggles it.
   var recording: Binding<Bool> = .constant(false)
-  /// Dolphin's on-screen stats (`PerfHUDToggle`); the Performance HUD tile toggles them.
+  /// Legacy quick-menu HUD binding; the Performance tile now opens the full controls pane.
   var perfHUD: Binding<Bool> = .constant(false)
-  /// The CPU engine for the next launch (`CpuEngine` raw value); the Performance tile cycles it.
+  /// The CPU engine for the next launch (`CpuEngine` raw value); the CPU Engine tile cycles it.
   var cpuEngine: Binding<AnyHashable> = .constant(AnyHashable(CpuEngine.cachedInterpreter.rawValue))
   var quickSaveMode: Binding<QuickSaveMode> = .constant(.history)
 }
@@ -935,7 +971,7 @@ enum PauseMenuModelBuilder {
   }
 
   /// The session row, in order (iFly layout): big tiles above the Options grid.
-  static let primaryIDs = ["resume", "save-states", "reset", "exit"]
+  static let primaryIDs = ["resume", "perf-hud", "reset", "exit"]
 
   /// The pause screen's regroup of `make`'s tiles, on every platform: one headerless primary row, then every other
   /// tile, in order, under Options. A headerless section is what `TVPauseGridView` and `MenuStyle.cards` draw as the
@@ -964,7 +1000,7 @@ enum PauseMenuModelBuilder {
     return .action { actions.openSettingsLeaf(link) }
   }
 
-  /// The Performance tile's engines: the recommended ones for this run (the JIT only when it was acquired). The
+  /// The CPU Engine tile's engines: the recommended ones for this run (the JIT only when it was acquired). The
   /// plain Interpreter stays in Settings, one step away from a slow next launch; when it is the stored engine it is
   /// listed so the badge stays honest.
   static func engineOptions(jitAcquired: Bool, including current: Int) -> [(String, AnyHashable)] {
@@ -992,9 +1028,9 @@ enum PauseMenuModelBuilder {
     return result
   }
 
-  /// Dolphin's EFB scale 0 is Auto.
+  /// Dolphin's EFB scale 0 chooses Fit Window once.
   static func upscalingOptions(including current: Int) -> [(String, AnyHashable)] {
-    options(upscalingOptions, including: current) { $0 == 0 ? L("Auto") : "\($0)x" }
+    options(upscalingOptions, including: current) { $0 == 0 ? L("Fit Window") : "\($0)x" }
   }
 
   static func audioVolumeOptions(including current: Int) -> [(String, AnyHashable)] {
@@ -1028,6 +1064,8 @@ enum PauseMenuModelBuilder {
       MenuItem(id: "quick-load", title: L("Quick Load"), icon: "square.and.arrow.up", tint: .green, role: .action(actions.quickLoad),
                badge: classic ? slotBadge : L("Latest manual"),
                description: classic ? L("Load the quick slot. Long-press to choose the slot.") : L("Load the latest manual state, or automatic resume when no manual state exists."), longPress: slotPicker),
+      MenuItem(id: "save-states", title: L("Save States"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates),
+               description: L("Save, load and browse save states.")),
       MenuItem(id: "fast-forward", title: L("Fast Forward"), icon: "forward.fill", tint: .cyan,
                role: .cycle(options: fastForwardOptions, selection: bindings.fastForward),
                description: L("Tap to cycle the speed. Long-press to pick one. Takes effect on resume.")),
@@ -1041,12 +1079,10 @@ enum PauseMenuModelBuilder {
     ])
 
     var game: [MenuItem] = [
-      MenuItem(id: "save-states", title: L("Save States"), icon: "square.stack.3d.up", tint: .purple, role: .action(actions.openSaveStates),
-               description: L("Save, load and browse save states.")),
       MenuItem(id: "change-disc", title: L("Change Disc"), icon: "opticaldisc", role: .action(actions.openDiscPicker),
                description: L("Insert another local disc without restarting the game.")),
-      MenuItem(id: "perf-hud", title: L("Performance HUD"), icon: "speedometer", tint: .cyan, role: .toggle(bindings.perfHUD),
-               description: L("Frame rate and speed drawn over the game. Long-press for every performance control."),
+      MenuItem(id: "perf-hud", title: L("Performance"), icon: "speedometer", tint: .cyan, role: .action(actions.openPerfOverlay),
+               description: L("Tune clocks, resolution and performance statistics for the running game."),
                longPress: .action(actions.openPerfOverlay)),
       MenuItem(id: "upscaling", title: L("Upscaling"), icon: "arrow.up.left.and.arrow.down.right", tint: .indigo,
                role: .cycle(options: upscalingOptions(including: state.internalResolution), selection: bindings.internalResolution),

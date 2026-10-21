@@ -6,7 +6,13 @@ struct TVRootView: View {
     // `-ICubePausePreview` opens the pause menu on a stand-in game, `-ICubeSettingsPreview <leafID>` opens one
     // settings leaf, `-ICubeAddGamesPreview` the Add Games screen, for simulator screenshots (Scripts/tvos_screens.sh).
     let args = ProcessInfo.processInfo.arguments
-    if args.contains("-ICubePlayControlsPreview") {
+    if args.contains("-ICubeLivePerformancePreview") {
+      #if os(tvOS)
+      LivePerformanceAuditPreview()
+      #else
+      library
+      #endif
+    } else if args.contains("-ICubePlayControlsPreview") {
       PlayControlsAuditPreview()
     } else if args.contains("-ICubePausePreview") {
       PauseMenuView(selectedSlot: .constant(1), onClose: {}, platform: Self.previewPlatform,
@@ -78,3 +84,33 @@ struct TVRootView: View {
       .gameTagMessages()
   }
 }
+
+#if DEBUG && os(tvOS)
+/// Visual acceptance only. This fixture supplies no ROM, state I/O, controller or emulator runtime.
+@MainActor
+private struct LivePerformanceAuditPreview: View {
+  @StateObject private var session: LivePerformanceSession
+
+  init() {
+    var state = PerformanceControlsState()
+    state.maxResolutionScale = 6
+    state.hud.fps = true
+    state.hud.speed = true
+    _session = StateObject(wrappedValue: LivePerformanceSession(
+      controls: PerformanceControlsController(read: { state }, apply: { _ in })))
+  }
+
+  var body: some View {
+    ZStack(alignment: .bottom) {
+      LinearGradient(colors: [.indigo.opacity(0.6), .black, .teal.opacity(0.4)],
+                     startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
+      TVLivePerformanceOverlay(session: session)
+      Text("Rendering preview — no game or controller running")
+        .font(.system(size: 20)).foregroundStyle(.white.opacity(0.7)).padding(30)
+        .accessibilityIdentifier("live-performance.rendering-preview")
+    }
+    .onAppear { session.prepareRenderingPreview() }
+    .onDisappear { session.closeForPause() }
+  }
+}
+#endif

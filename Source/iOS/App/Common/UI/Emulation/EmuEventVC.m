@@ -4,6 +4,7 @@
 #import "EmuEventVC.h"
 #import "ICubeLog.h"
 #import <UIKit/UIKit.h>
+#import <UIKit/UIGestureRecognizerSubclass.h>
 
 NSNotificationName const DOLRequestPauseMenuNotification = @"DOLRequestPauseMenu";
 NSNotificationName const DOLRecenterPointerNotification = @"DOLRecenterPointer";
@@ -11,7 +12,43 @@ NSNotificationName const DOLPointerModeDidChangeNotification = @"DOLPointerModeD
 NSNotificationName const DOLOnScreenControlsChosenNotification = @"DOLOnScreenControlsChosen";
 NSNotificationName const DOLEditTouchLayoutNotification = @"DOLEditTouchLayout";
 NSNotificationName const DOLMotionSettingsChangedNotification = @"DOLMotionSettingsChanged";
+NSNotificationName const DOLMenuPressChangedNotification = @"DOLMenuPressChanged";
+NSNotificationName const DOLGameplayInputBeganNotification = @"DOLGameplayInputBegan";
+static BOOL sPauseOverlayVisible = NO;
+static BOOL sMenuPressActive = NO;
+static NSUInteger sGameplayTouchCount = 0;
 const NSTimeInterval DOLMenuLongPressDuration = 2.0;
+
+// Observe descendants without cancelling their touch handling or competing with gestures.
+@interface DOLGameplayTouchObserver : UIGestureRecognizer
+@end
+@implementation DOLGameplayTouchObserver {
+  NSUInteger _touchCount;
+}
+- (void)touchesBegan:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event {
+  _touchCount += touches.count;
+  sGameplayTouchCount += touches.count;
+  if (!sPauseOverlayVisible)
+    [[NSNotificationCenter defaultCenter] postNotificationName:DOLGameplayInputBeganNotification object:nil];
+}
+- (void)touchesEnded:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event {
+  const NSUInteger released = MIN(_touchCount, touches.count);
+  _touchCount -= released;
+  sGameplayTouchCount -= MIN(sGameplayTouchCount, released);
+  if (_touchCount == 0) self.state = UIGestureRecognizerStateFailed;
+}
+- (void)touchesCancelled:(NSSet<UITouch*>*)touches withEvent:(UIEvent*)event {
+  [self touchesEnded:touches withEvent:event];
+}
+- (void)reset {
+  sGameplayTouchCount -= MIN(sGameplayTouchCount, _touchCount);
+  _touchCount = 0;
+  [super reset];
+}
+- (void)dealloc { sGameplayTouchCount -= MIN(sGameplayTouchCount, _touchCount); }
+- (BOOL)canPreventGestureRecognizer:(UIGestureRecognizer*)other { return NO; }
+- (BOOL)canBePreventedByGestureRecognizer:(UIGestureRecognizer*)other { return NO; }
+@end
 
 #if TARGET_OS_TV
 @interface EmuFocusTrapView : UIView
@@ -39,14 +76,23 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 #if TARGET_OS_TV
   EmuFocusTrapView* _focusTrap;
   NSTimer* _menuLongPressTimer;
+  BOOL _menuPressOwnedByGame;
+#endif
   id _pauseShownObs;
   id _pauseHiddenObs;
-#endif
 }
 
++ (BOOL)isPauseOverlayVisible { return sPauseOverlayVisible; }
++ (BOOL)gameplayTouchIsActive { return sGameplayTouchCount > 0; }
++ (BOOL)menuPressIsActive { return sMenuPressActive; }
 - (BOOL)canBecomeFirstResponder { return YES; }
 - (void)viewDidLoad {
   [super viewDidLoad];
+  DOLGameplayTouchObserver* touchObserver = [[DOLGameplayTouchObserver alloc] initWithTarget:nil action:nil];
+  touchObserver.cancelsTouchesInView = NO;
+  touchObserver.delaysTouchesBegan = NO;
+  touchObserver.delaysTouchesEnded = NO;
+  [self.view addGestureRecognizer:touchObserver];
   DOLDebugLog(@"[INPUT] EmuEventVC viewDidLoad (unconditional)");
   // Long-press on tvOS Menu button to exit back to library
   UILongPressGestureRecognizer* lp = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleMenuLongPress:)];
@@ -69,19 +115,25 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     DOLDebugLog(@"[INPUT] EmuEventVC viewDidLoad – focus trap installed");
   }
-  // Observe pause overlay visibility to relinquish focus
+#endif
+  // Track pause overlays on both platforms; only tvOS has a focus trap to relinquish.
   __weak typeof(self) weakSelf = self;
   _pauseShownObs = [[NSNotificationCenter defaultCenter] addObserverForName:@"DOLPauseOverlayShown" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(__unused NSNotification * _Nonnull note) {
     __strong typeof(weakSelf) strongSelf = weakSelf;
     if (!strongSelf) return;
+    sPauseOverlayVisible = YES;
+#if TARGET_OS_TV
     strongSelf->_focusTrap.hidden = YES;
+#endif
   }];
   _pauseHiddenObs = [[NSNotificationCenter defaultCenter] addObserverForName:@"DOLPauseOverlayHidden" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(__unused NSNotification * _Nonnull note) {
     __strong typeof(weakSelf) strongSelf = weakSelf;
     if (!strongSelf) return;
+    sPauseOverlayVisible = NO;
+#if TARGET_OS_TV
     strongSelf->_focusTrap.hidden = NO;
-  }];
 #endif
+  }];
 }
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
@@ -97,6 +149,9 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 }
 
 - (void)handleMenuLongPress:(UILongPressGestureRecognizer*)gr {
+#if TARGET_OS_TV
+  if (!_menuPressOwnedByGame) return;
+#endif
   if (gr.state == UIGestureRecognizerStateBegan) {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
       DOLDebugLog(@"[INPUT] Menu long-press began – posting DOLEmulationRequestExitToLibrary");
@@ -118,6 +173,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 // press events independently of the responder chain, so skipping super does not
 // disable it.
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+  for (UIPress* press in presses) { if (press.type == UIPressTypeMenu) sMenuPressActive = YES; }
 #ifdef DEBUG
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     for (UIPress* p in presses) {
@@ -133,8 +189,11 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
   const BOOL gameOwnsScreen = (_focusTrap != nil && !_focusTrap.hidden);
   // Fallback long-press detection using a timer in case the gesture recognizer doesn't fire
   for (UIPress* p in presses) {
-    if (p.type != UIPressTypeMenu || !gameOwnsScreen)
-      continue;
+    if (p.type != UIPressTypeMenu) continue;
+    _menuPressOwnedByGame = gameOwnsScreen;
+    [[NSNotificationCenter defaultCenter] postNotificationName:DOLMenuPressChangedNotification object:nil
+      userInfo:@{@"pressed": @YES, @"overlayOwned": @(!gameOwnsScreen)}];
+    if (!gameOwnsScreen) continue;
     handledMenu = YES;
     if (_menuLongPressTimer != nil)
       continue;
@@ -179,6 +238,7 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 }
 
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+  for (UIPress* press in presses) { if (press.type == UIPressTypeMenu) sMenuPressActive = NO; }
 #ifdef DEBUG
   if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
     for (UIPress* p in presses) {
@@ -188,32 +248,15 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 #endif
 #if TARGET_OS_TV
   BOOL handledMenu = NO;
-  const BOOL gameOwnsScreen = (_focusTrap != nil && !_focusTrap.hidden);
   for (UIPress* p in presses) {
-    if (p.type != UIPressTypeMenu || !gameOwnsScreen)
-      continue;
+    if (p.type != UIPressTypeMenu) continue;
+    [[NSNotificationCenter defaultCenter] postNotificationName:DOLMenuPressChangedNotification object:nil
+      userInfo:@{@"pressed": @NO, @"cancelled": @(_menuPressOwnedByGame && _menuLongPressTimer == nil)}];
+    if (!_menuPressOwnedByGame) continue;
     handledMenu = YES;
-    if (_menuLongPressTimer == nil)
-      continue;  // the long press already fired (exit posted); swallow the release
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
-      DOLDebugLog(@"[INPUT] Menu released before %.1fs – requesting pause menu", DOLMenuLongPressDuration);
-    }
     [_menuLongPressTimer invalidate];
     _menuLongPressTimer = nil;
-    // This UIPress path is GCEventViewController's system bridge, historically
-    // observed for the Siri Remote (which has no other button and must keep
-    // this route — see PauseGestureTracker.requestPauseMenu). If an extended
-    // gamepad's own Menu button ALSO surfaces here for the same physical
-    // press, `requestPauseMenu` drops a "uipress-menu" request that
-    // correlates with a just-noted extended-gamepad Menu press (see
-    // `PauseGestureTracker.noteExtendedGamepadMenuPress`), because that
-    // button is bound to the emulated Start/+ instead, with Options as its
-    // dedicated pause button. No filtering needed here — the arbiter handles
-    // it — so a genuine Siri Remote press with no accompanying gamepad press
-    // is unaffected.
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [[NSNotificationCenter defaultCenter] postNotificationName:DOLRequestPauseMenuNotification object:nil];
-    });
+    _menuPressOwnedByGame = NO;
   }
   if (handledMenu)
     return;
@@ -221,8 +264,15 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
   [super pressesEnded:presses withEvent:event];
 }
 
-#if TARGET_OS_TV
 - (void)pressesCancelled:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+  for (UIPress* press in presses) { if (press.type == UIPressTypeMenu) sMenuPressActive = NO; }
+#if TARGET_OS_TV
+  for (UIPress* press in presses) {
+    if (press.type == UIPressTypeMenu)
+      [[NSNotificationCenter defaultCenter] postNotificationName:DOLMenuPressChangedNotification object:nil
+        userInfo:@{@"pressed": @NO, @"cancelled": @YES}];
+  }
+  _menuPressOwnedByGame = NO;
   if (_menuLongPressTimer) {
     if ([[NSUserDefaults standardUserDefaults] boolForKey:@"input_debug"]) {
       DOLDebugLog(@"[INPUT] Cancelling Menu long-press timer (press cancelled)");
@@ -230,9 +280,9 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
     [_menuLongPressTimer invalidate];
     _menuLongPressTimer = nil;
   }
+  #endif
   [super pressesCancelled:presses withEvent:event];
 }
-#endif
 
 #if TARGET_OS_TV
 - (NSArray<id<UIFocusEnvironment>> *)preferredFocusEnvironments {
@@ -265,7 +315,6 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
 }
 #endif
 
-#if TARGET_OS_TV
 - (void)dealloc {
   if (_pauseShownObs) {
     [[NSNotificationCenter defaultCenter] removeObserver:_pauseShownObs];
@@ -276,6 +325,5 @@ const NSTimeInterval DOLMenuLongPressDuration = 2.0;
     _pauseHiddenObs = nil;
   }
 }
-#endif
 
 @end

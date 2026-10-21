@@ -85,9 +85,10 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(MenuItemRole.cycled(options: volumes, current: AnyHashable(80), step: 1), AnyHashable(100))
   }
 
-  func test_upscalingAuto_isListedFirst_andLadderValuesAddNothing() {
+  func test_upscalingFitWindow_isListedFirst_andLadderValuesAddNothing() {
     let auto = PauseMenuModelBuilder.make(state: state(resolution: 0), bindings: bindings(), actions: actions())
     guard case .cycle(let scales, _) = auto.item(id: "upscaling")!.role else { return XCTFail("cycle") }
+    XCTAssertEqual(scales.first?.0, "Fit Window")
     XCTAssertEqual(scales.first?.1, AnyHashable(0))
     XCTAssertEqual(scales.count, 6)
     let onLadder = PauseMenuModelBuilder.make(state: state(resolution: 3, volume: 50), bindings: bindings(), actions: actions())
@@ -98,8 +99,8 @@ final class PauseMenuModelBuilderTests: XCTestCase {
   func test_threeSections_inOrder_withExpectedTiles() {
     let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     XCTAssertEqual(model.sections.map(\.id), ["quick", "game", "system"])
-    XCTAssertEqual(model.sections[0].items.map(\.id), ["resume", "quick-save", "quick-load", "fast-forward", "mute", "screenshot", "record"])
-    XCTAssertEqual(model.sections[1].items.map(\.id), ["save-states", "change-disc", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers", "continuity"])
+    XCTAssertEqual(model.sections[0].items.map(\.id), ["resume", "quick-save", "quick-load", "save-states", "fast-forward", "mute", "screenshot", "record"])
+    XCTAssertEqual(model.sections[1].items.map(\.id), ["change-disc", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers", "continuity"])
     XCTAssertEqual(model.sections[2].items.map(\.id), ["settings", "reset", "exit"])
   }
 
@@ -116,19 +117,16 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(on.item(id: "record")?.badge, "REC")
   }
 
-  /// The tile toggles the HUD in place; the full Performance Controls panel is its long-press.
-  func test_perfHUD_tile_togglesTheHUD_andLongPressOpensPerfOverlay() {
+  func test_performanceTileOpensControlsWithoutChangingHUD() {
     let hud = Box(false)
-    let m = PauseMenuModelBuilder.make(state: state(), bindings: bindings(perfHUD: hud), actions: actions())
-    let item = m.item(id: "perf-hud")!
-    XCTAssertEqual(m.section(containing: "perf-hud")?.id, "game")
-    XCTAssertEqual(item.currentValueTitle, "Off")
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(perfHUD: hud), actions: actions())
+    guard let item = model.item(id: "perf-hud") else { return XCTFail("Missing Performance") }
+    XCTAssertEqual(item.title, "Performance")
+    guard case .action = item.role else { return XCTFail("Performance must open its pane") }
     item.activateInPlace()
-    XCTAssertEqual(hud.value, AnyHashable(true))
-    XCTAssertEqual(log, [])
-    guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("long press") }
-    run()
     XCTAssertEqual(log, ["perf"])
+    XCTAssertEqual(hud.value, AnyHashable(false))
+    XCTAssertEqual(model.item(id: "performance")?.title, "CPU Engine")
   }
 
   func test_perfHUDToggle_onDrawsFPSAndSpeed_offClearsEverything() {
@@ -240,7 +238,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     let without = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     XCTAssertNil(without.item(id: "recenter-pointer"))
     let with = PauseMenuModelBuilder.make(state: state(recenter: true), bindings: bindings(), actions: actions())
-    XCTAssertEqual(with.sections[1].items.map(\.id), ["save-states", "change-disc", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers", "continuity", "recenter-pointer"])
+    XCTAssertEqual(with.sections[1].items.map(\.id), ["change-disc", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders", "controllers", "continuity", "recenter-pointer"])
   }
 
   func test_fastForward_isACycle_offFirst_sixOptions() {
@@ -313,9 +311,9 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     let tv = PauseMenuModelBuilder.primaryLayout(model)
     XCTAssertEqual(tv.sections.map(\.id), ["primary", "options"])
     XCTAssertNil(tv.sections[0].header)
-    XCTAssertEqual(tv.sections[0].items.map(\.id), ["resume", "save-states", "reset", "exit"])
+    XCTAssertEqual(tv.sections[0].items.map(\.id), ["resume", "perf-hud", "reset", "exit"])
     XCTAssertEqual(tv.sections[1].items.map(\.id),
-                   ["quick-save", "quick-load", "fast-forward", "mute", "screenshot", "record", "change-disc", "perf-hud", "upscaling", "audio", "performance", "cheats", "shaders",
+                   ["quick-save", "quick-load", "save-states", "fast-forward", "mute", "screenshot", "record", "change-disc", "upscaling", "audio", "performance", "cheats", "shaders",
                     "controllers", "continuity", "settings"])
     XCTAssertEqual(Set(tv.sections.flatMap(\.items).map(\.id)), Set(model.sections.flatMap(\.items).map(\.id)))
   }

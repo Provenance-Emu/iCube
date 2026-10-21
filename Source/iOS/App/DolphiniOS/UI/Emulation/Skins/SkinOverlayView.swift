@@ -204,6 +204,9 @@ private struct SkinTouchLayer: View {
             acted = true
           }
           if acted { TouchOverlayHaptics.play(.press) }
+        },
+        isGameplayHit: { hit in
+          !input.writes(now: [hit], previous: []).isEmpty && input.actions(ofItem: hit.itemIndex).isEmpty
         }
       )
       ForEach(input.sticks, id: \.itemIndex) { stick in

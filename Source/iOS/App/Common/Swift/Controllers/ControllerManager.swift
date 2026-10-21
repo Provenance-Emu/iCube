@@ -320,6 +320,8 @@ final class ControllerManager: NSObject, ObservableObject {
     // land here so they go through the same gated + coalesced sink as the
     // GCController paths, and so the core is actually paused before the overlay
     // is shown. This observer is app-wide, matching the connect observer.
+    // Install the synchronous press-origin observer before the first UIPress down.
+    _ = PauseGestureTracker.shared
     let onPauseRequest = NotificationCenter.default.addObserver(
       forName: PauseGestureTracker.requestPauseMenuNotification, object: nil, queue: .main) { _ in
         PauseGestureTracker.shared.requestPauseMenu(reason: "uipress-menu")

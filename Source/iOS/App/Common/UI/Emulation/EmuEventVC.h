@@ -10,6 +10,8 @@
 /// emulation actually running, coalesces duplicate routes for one physical
 /// press, and pauses the core before showing the overlay.
 FOUNDATION_EXPORT NSNotificationName const DOLRequestPauseMenuNotification;
+FOUNDATION_EXPORT NSNotificationName const DOLMenuPressChangedNotification;
+FOUNDATION_EXPORT NSNotificationName const DOLGameplayInputBeganNotification;
 
 /// Posted when the user asks to recenter the Wii pointer (pause menu / top bar action). The touch
 /// IR pads observe it to drop their drag state; the gyro pointer is recentered directly through
@@ -48,4 +50,7 @@ FOUNDATION_EXPORT const NSTimeInterval DOLMenuLongPressDuration;
 
 @interface EmuEventVC : GCEventViewController
 #endif
++ (BOOL)isPauseOverlayVisible;
++ (BOOL)gameplayTouchIsActive;
++ (BOOL)menuPressIsActive;
 @end

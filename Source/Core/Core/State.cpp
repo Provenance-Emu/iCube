@@ -901,10 +901,10 @@ static void LoadFileStateData(const std::string& filename, Common::UniqueBuffer<
   ret_data.swap(buffer);
 }
 
-static void LoadAsFromCore(Core::System& system, std::string filename)
+static bool LoadAsFromCore(Core::System& system, std::string filename)
 {
   if (!CanDoStateFromHere(system, "load"))
-    return;
+    return false;
 
   // Ensure all data has reached the filesystem before trying to use it.
   s_compress_and_dump_thread.WaitForCompletion();
@@ -964,6 +964,7 @@ static void LoadAsFromCore(Core::System& system, std::string filename)
 
   if (s_on_after_load_callback)
     s_on_after_load_callback();
+  return loaded_successfully;
 }
 
 void LoadAs(Core::System& system, std::string filename)
@@ -974,6 +975,14 @@ void LoadAs(Core::System& system, std::string filename)
   Core::RunOnCPUThread(system, [&system, filename = std::move(filename)]() mutable {
     LoadAsFromCore(system, std::move(filename));
   });
+}
+
+bool LoadAsAndWait(Core::System& system, std::string filename)
+{
+  const Core::CPUThreadGuard guard(system);
+  if (!CheckIfStateLoadIsAllowed(system))
+    return false;
+  return LoadAsFromCore(system, std::move(filename));
 }
 
 void SetOnAfterLoadCallback(AfterLoadCallbackFunc callback)

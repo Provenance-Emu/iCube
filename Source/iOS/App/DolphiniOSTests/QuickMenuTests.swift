@@ -31,14 +31,15 @@ final class QuickMenuTests: XCTestCase {
     XCTAssertEqual(pauseMenuOpens, 1)
   }
 
-  func test_unboundRemote_routesToQuickMenu() {
-    let remote = PauseGestureTracker.siriRemoteMenuReason
-    XCTAssertTrue(PauseGestureTracker.routesToQuickMenu(reason: remote, isUnboundRemote: true))
-    XCTAssertFalse(PauseGestureTracker.routesToQuickMenu(reason: remote, isUnboundRemote: false))
-    let uipress = PauseGestureTracker.uipressMenuReason
-    XCTAssertTrue(PauseGestureTracker.routesToQuickMenu(reason: uipress, isUnboundRemote: true), "the UIPress route of the same press must agree")
-    XCTAssertFalse(PauseGestureTracker.routesToQuickMenu(reason: uipress, isUnboundRemote: false))
-    XCTAssertFalse(PauseGestureTracker.routesToQuickMenu(reason: PauseGestureTracker.optionsReason, isUnboundRemote: true))
+  func test_remoteMenuRoutesAgreeAndLiveRequiresExplicitPreferenceAndGameplayPad() {
+    for reason in [PauseGestureTracker.siriRemoteMenuReason, PauseGestureTracker.uipressMenuReason] {
+      XCTAssertFalse(PauseGestureTracker.routesToLivePerformance(reason: reason, preference: .pauseMenu, hasGameplayController: true, isPaused: false))
+      XCTAssertTrue(PauseGestureTracker.routesToLivePerformance(reason: reason, preference: .livePerformance, hasGameplayController: true, isPaused: false))
+      XCTAssertFalse(PauseGestureTracker.routesToLivePerformance(reason: reason, preference: .livePerformance, hasGameplayController: false, isPaused: false))
+      XCTAssertFalse(PauseGestureTracker.routesToLivePerformance(reason: reason, preference: .livePerformance, hasGameplayController: true, isPaused: true))
+    }
+    XCTAssertFalse(PauseGestureTracker.routesToLivePerformance(reason: PauseGestureTracker.optionsReason,
+      preference: .livePerformance, hasGameplayController: true, isPaused: false))
   }
 
   func test_optionsHold_timing() {

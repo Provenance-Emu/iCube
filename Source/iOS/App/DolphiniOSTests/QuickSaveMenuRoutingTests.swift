@@ -15,6 +15,7 @@ final class QuickSaveMenuRoutingTests: XCTestCase {
     var slot = 4
     var historyWrites = 0
     var browsers = 0
+    var dismissals = 0
     var loaded: [URL] = []
     var outcomes: [QuickSaveActions.Outcome] = []
     var invalidateWhileScanning = false
@@ -53,7 +54,7 @@ final class QuickSaveMenuRoutingTests: XCTestCase {
             return .saved(self.history)
           },
           load: { await QuickSaveActions.load(mode: $0, slot: $1, expectedSession: $2, environment: self.environment) }),
-        openBrowser: { self.browsers += 1 }, report: { self.outcomes.append($0) })
+        dismiss: { self.dismissals += 1; self.active = false }, openBrowser: { self.browsers += 1 }, report: { self.outcomes.append($0) })
     }
   }
 
@@ -67,6 +68,19 @@ final class QuickSaveMenuRoutingTests: XCTestCase {
     return PauseMenuModelBuilder.primaryLayout(PauseMenuModelBuilder.make(state: state, bindings: bindings, actions: actions))
   }
 
+  func testAdmissionDismissesImmediatelyAndSurvivesItsOwnSurfaceClosing() async {
+    for saving in [false, true] {
+      let fixture = Fixture()
+      let actions = fixture.controller()
+      if saving { actions.save() } else { actions.load() }
+      XCTAssertEqual(fixture.dismissals, 1)
+      XCTAssertFalse(fixture.active)
+      await actions.task?.value
+      XCTAssertEqual(saving ? fixture.historyWrites : fixture.loaded.count, 1)
+      XCTAssertEqual(fixture.outcomes.count, 1)
+    }
+  }
+
   func testProductionPauseAndQuickMenuHistoryActionsCreateHistoryAndLoadNewestManual() async {
     for quick in [false, true] {
       let fixture = Fixture()
@@ -77,6 +91,7 @@ final class QuickSaveMenuRoutingTests: XCTestCase {
       await actions.task?.value
       XCTAssertEqual(fixture.historyWrites, 1)
       XCTAssertEqual(fixture.browsers, 0)
+      fixture.active = true
       menu.item(id: "quick-load")?.activateInPlace()
       await actions.task?.value
       XCTAssertEqual(fixture.loaded, [fixture.history])
@@ -140,6 +155,24 @@ final class QuickSaveMenuRoutingTests: XCTestCase {
         XCTAssertEqual(fixture.outcomes, [.loadRequested(fixture.classic)])
       }
     }
+  }
+
+  func testLoadAwaitsCompletionAndNeverReportsRejectedDeserializationAsSuccess() async {
+    let fixture = Fixture()
+    var environment = fixture.environment
+    var finish: CheckedContinuation<Bool, Never>?
+    environment.requestCompletion = { _, _ in
+      await withCheckedContinuation { finish = $0 }
+    }
+    let task = Task { @MainActor in
+      await QuickSaveActions.load(mode: .slots, slot: 4, expectedSession: fixture.session, environment: environment)
+    }
+    while finish == nil { await Task.yield() }
+    XCTAssertTrue(fixture.loaded.isEmpty, "Legacy admission-only path must not run")
+    finish?.resume(returning: false)
+    let outcome = await task.value
+    XCTAssertEqual(outcome, .unavailable)
+    XCTAssertFalse(outcome.isSuccess)
   }
 
   func testHistorySaveCompletionFromReplacedSessionHasNoSuccessMessage() async {

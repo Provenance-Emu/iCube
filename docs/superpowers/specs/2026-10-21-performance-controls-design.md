@@ -1,6 +1,6 @@
 # Performance controls in Pause and live tvOS play
 
-**Status:** reviewed proposal; full-description approval requested. No gameplay input changes implemented by this document.
+**Status:** approved by the owner on October 21, 2026; implementation authorized with subagents. A subsequent Quick Save/Load pause-lifecycle report is prioritized before the Performance work.
 
 ## Intent
 

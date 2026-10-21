@@ -123,6 +123,25 @@ extension EmulationScreen {
     /// The container's view. Skins are chosen per orientation, but SwiftUI does not call
     /// `updateUIView` on rotation, so this reports when its own bounds change orientation.
     final class HostView: UIView {
+      let gameplayContactObserver = GameplayTouchContactObserver(target: nil, action: nil)
+
+      override init(frame: CGRect) {
+        super.init(frame: frame)
+        addGestureRecognizer(gameplayContactObserver)
+      }
+      required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        addGestureRecognizer(gameplayContactObserver)
+      }
+      override func willRemoveSubview(_ subview: UIView) {
+        GameplayTouchContactObserver.cancelContacts(in: subview)
+        super.willRemoveSubview(subview)
+      }
+      override func willMove(toSuperview newSuperview: UIView?) {
+        if newSuperview == nil { gameplayContactObserver.cancelAllContacts() }
+        super.willMove(toSuperview: newSuperview)
+      }
+
       /// Fired (after layout) when the bounds flip between portrait and landscape.
       var onOrientationChange: (() -> Void)?
       private var laidOutOrientation: TouchOverlayOrientation?

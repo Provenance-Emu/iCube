@@ -81,6 +81,8 @@ final class PauseSettingsDeepLinkTests: XCTestCase {
       switch item.id {
       case "save-states", "change-disc", "cheats", "controllers", "continuity", "settings":
         XCTAssertEqual(pages, [item.id])
+      case "perf-hud":
+        XCTAssertEqual(pages, ["perf-overlay"])
       default:
         XCTAssertEqual(pages, [], "\(item.id) opened \(pages) on a tap")
       }

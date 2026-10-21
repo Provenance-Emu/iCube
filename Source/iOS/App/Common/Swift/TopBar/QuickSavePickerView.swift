@@ -27,6 +27,8 @@ struct QuickSavePickerView: View {
   @Binding var mode: QuickSaveMode
   @Binding var selectedSlot: Int
   let onDismiss: () -> Void
+  /// Actual save/load commits can close the entire owning pause presentation. Merely browsing does not.
+  var onCommit: (() -> Void)? = nil
   var operations: QuickSavePickerOperations = .live
   var provider: SaveStateProviding = FilesystemSaveStateProvider()
   var isModded: () -> Bool = { ModdedBoot.isCurrentBootModded }
@@ -397,16 +399,23 @@ struct QuickSavePickerView: View {
     Button(L("Load selected")) {
       guard let state = selectedState else { return }
       guard !busy else { return }
+      guard matchesCurrentSession(), let openingSessionIdentifier else { return }
+      let session = QuickSaveSurfaceSession(gameID: gameID, identifier: openingSessionIdentifier)
       busy = true
+      let handoff = onCommit.map { QuickStateHandoff.shared.begin(session: session, dismiss: $0) }
+      if handoff != nil { QuickStateHandoff.shared.startInputSampling() }
       Task { @MainActor in
-        defer { busy = false }
-        guard matchesCurrentSession(), let openingSessionIdentifier else { return }
-        let session = QuickSaveSurfaceSession(gameID: gameID, identifier: openingSessionIdentifier)
+        defer {
+          if let handoff { QuickStateHandoff.shared.complete(handoff) }
+          busy = false
+        }
         guard let outcome = await QuickSaveSurfaceActions.load(state, session: session,
-          isCurrent: { $0.gameID == gameID && sessionIsCurrent($0.gameID, $0.identifier) && surfaceIsActive },
+          isCurrent: { sessionIsCurrent($0.gameID, $0.identifier) && (onCommit != nil || surfaceIsActive) },
           operation: { await operations.load($0, session) }) else { return }
-        report(outcome)
-        if outcome.isSuccess && matchesCurrentSession() { onDismiss() }
+        if sessionIsCurrent(session.gameID, session.identifier), (onCommit != nil || surfaceIsActive), !outcome.message.isEmpty {
+          EmulationToast.post(outcome.message)
+        }
+        if onCommit == nil && outcome.isSuccess && matchesCurrentSession() { onDismiss() }
       }
     }
     .buttonStyle(ICubeRowButtonStyle())
@@ -434,18 +443,33 @@ struct QuickSavePickerView: View {
     Task { @MainActor in
       defer { busy = false }
       guard matchesCurrentSession() else { return }
+      let session = QuickSaveSurfaceSession(gameID: gameID, identifier: openingSessionIdentifier ?? 0)
+      var handoff: QuickStateHandoff.Operation?
+      defer { if let handoff { QuickStateHandoff.shared.complete(handoff) } }
+      @MainActor
+      func admitCommit() {
+        guard let onCommit else { return }
+        handoff = QuickStateHandoff.shared.begin(session: session, dismiss: onCommit)
+        QuickStateHandoff.shared.startInputSampling()
+      }
       let outcome: QuickSaveActions.Outcome
       if mode == .slots {
         guard let request, let result = await scan.save(request, confirmed: confirmed,
-          isCurrent: { $0.gameID == gameID && $0.identifier == openingSessionIdentifier && matchesCurrentSession() },
+          isCurrent: { $0 == session && sessionIsCurrent($0.gameID, $0.identifier) && (onCommit != nil || surfaceIsActive) },
           destination: operations.slotDestination, occupancy: operations.occupancy,
-          operation: { await operations.saveSlot(.init(request: $0, allowsOverwrite: confirmed)) }) else { return }
+          operation: { request in
+            admitCommit()
+            return await operations.saveSlot(.init(request: request, allowsOverwrite: confirmed))
+          }) else { return }
         outcome = result
       } else {
+        admitCommit()
         outcome = await operations.save(mode, slot)
       }
-      report(outcome)
-      if outcome.isSuccess && matchesCurrentSession() { await reload() }
+      if sessionIsCurrent(session.gameID, session.identifier), (onCommit != nil || surfaceIsActive), !outcome.message.isEmpty {
+        EmulationToast.post(outcome.message)
+      }
+      if onCommit == nil && outcome.isSuccess && matchesCurrentSession() { await reload() }
     }
   }
 

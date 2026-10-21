@@ -537,6 +537,39 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   return YES;
 }
 
++ (void)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session completion:(void (^)(BOOL loaded))completion {
+  void (^callback)(BOOL) = [completion copy];
+  auto finish = [callback](bool loaded) {
+    dispatch_async(dispatch_get_main_queue(), ^{ callback(loaded); });
+  };
+  NSString* checkedPath = CheckedStateSavesPath(path);
+  if (!checkedPath || expectedGameID.length == 0 || ![self isStateOperationAllowed] ||
+      session != CurrentStateSessionIdentifier() || ![[self currentGameID] isEqualToString:expectedGameID] ||
+      ![[NSFileManager defaultManager] fileExistsAtPath:checkedPath]) {
+    finish(false);
+    return;
+  }
+  std::string filename(checkedPath.fileSystemRepresentation);
+  std::string expected(expectedGameID.UTF8String);
+  Core::QueueHostJob([filename, expected, session, finish](Core::System& system) {
+    bool loaded = false;
+    if (StateOperationAllowed(system, "completed path load")) {
+      {
+        const Core::CPUThreadGuard guard(system);
+        if (StateOperationAllowed(system, "completed path load") && session == CurrentStateSessionIdentifier() &&
+            SConfig::GetInstance().GetGameID() == expected) {
+          NSString* pathNow = [NSString stringWithUTF8String:filename.c_str()];
+          if ([CheckedStateSavesPath(pathNow) isEqualToString:pathNow] &&
+              [TVEmulationBridge stateFileIsCompatibleAtPath:pathNow])
+            loaded = State::LoadAsAndWait(system, filename);
+        }
+      }
+    }
+    // Queue completion only after CPUThreadGuard restored the pre-load pause state.
+    finish(loaded);
+  }, true);
+}
+
 + (BOOL)stateFileIsCompatibleAtPath:(NSString*)path {
   if (path.length == 0)
     return NO;

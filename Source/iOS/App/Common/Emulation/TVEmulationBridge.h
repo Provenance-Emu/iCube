@@ -106,6 +106,8 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 + (void)loadStateFromPath:(NSString*)path;
 /// YES means requested, not completed. The queued job rechecks identity before loading.
 + (BOOL)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(loadState(fromPath:expectedGameID:expectedSessionIdentifier:));
+// Completion reports actual load success, after the CPU guard restores the previous pause state.
++ (void)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session completion:(void (^)(BOOL loaded))completion NS_SWIFT_NAME(loadState(fromPath:expectedGameID:expectedSessionIdentifier:completion:));
 
 // Returns YES if the state file at path was written by a build whose save format
 // matches the running build (header SCM revision == current). Conservative: a

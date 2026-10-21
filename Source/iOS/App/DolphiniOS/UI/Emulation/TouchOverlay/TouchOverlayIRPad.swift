@@ -59,6 +59,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
   /// hosting view itself stays mounted, which `willMove`/`deinit` alone would miss since the
   /// `UIView` doesn't leave a superview in that case.
   static func dismantleUIView(_ uiView: IRSurfaceView, coordinator: ()) {
+    GameplayTouchContactObserver.cancelContacts(in: uiView)
     uiView.forceReleaseAndCenter()
   }
 
@@ -119,7 +120,10 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
     /// SwiftUI entirely.
     override func willMove(toSuperview newSuperview: UIView?) {
       super.willMove(toSuperview: newSuperview)
-      if newSuperview == nil { forceReleaseAndCenter() }
+      if newSuperview == nil {
+        GameplayTouchContactObserver.cancelContacts(in: self)
+        forceReleaseAndCenter()
+      }
     }
 
     deinit {

@@ -14,6 +14,9 @@ struct ControllerHubView: View {
   private let onBack: (() -> Void)?
 
   @State private var viewModel: ControllerHubViewModel
+  #if os(tvOS)
+  @AppStorage(SiriRemoteMenuAction.defaultsKey) private var remoteMenuAction: SiriRemoteMenuAction = .pauseMenu
+  #endif
   @Environment(\.dismiss) private var dismiss
   @Environment(\.icubeLeafParentTitle) private var parentTitle
 
@@ -28,7 +31,7 @@ struct ControllerHubView: View {
 
   var body: some View {
     MenuScreen(
-      model: ControllerHubModelBuilder.make(state: viewModel.state, actions: viewModel.actions, platform: .current),
+      model: menuModel,
       style: .list,
       // Flush first: the host releases its pause claim right after this returns, and a change made
       // within the settle delay must land before the game resumes. `onDisappear` stays the backstop
@@ -65,5 +68,21 @@ struct ControllerHubView: View {
       }
     }
     #endif
+  }
+
+  private var menuModel: MenuModel {
+    var model = ControllerHubModelBuilder.make(state: viewModel.state, actions: viewModel.actions, platform: .current)
+    #if os(tvOS)
+    let remote = MenuSection(id: "siri-remote", header: L("Siri Remote"), items: [
+      MenuItem(id: "siri-remote-menu-action", title: L("Siri Remote Menu Button"), icon: "appletvremote.gen2",
+        role: .picker(options: SiriRemoteMenuAction.allCases.map { (L($0.title), AnyHashable($0)) },
+          selection: Binding(get: { AnyHashable(remoteMenuAction) }, set: {
+            if let value = $0.base as? SiriRemoteMenuAction { remoteMenuAction = value }
+          })),
+        description: L("Pause Menu stops the game. Live Performance adjusts settings while you play with a controller; without a controller it opens Pause Menu. Back closes the live panel.")),
+    ])
+    model.sections.insert(remote, at: max(0, model.sections.count - 1))
+    #endif
+    return model
   }
 }

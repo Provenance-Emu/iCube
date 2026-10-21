@@ -104,6 +104,8 @@ bool SaveAndWait(Core::System& system, u32 slot);
 // Captures/queues the snapshot before returning; callers may release CPUThreadGuard before waiting.
 std::future<bool> SaveAsWithResult(Core::System& system, std::string filename);
 void LoadAs(Core::System& system, std::string filename);
+// Blocks with the CPU locked, restores prior pause state, and reports actual deserialization success.
+bool LoadAsAndWait(Core::System& system, std::string filename);
 
 void LoadLastSaved(Core::System& system, int i = 1);
 void SaveFirstSaved(Core::System& system);

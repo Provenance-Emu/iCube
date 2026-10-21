@@ -25,6 +25,8 @@ final class QuickSaveMenuActions {
   private let session: QuickSaveSurfaceSession
   private let isActive: () -> Bool
   private let runtime: Runtime
+  private let dismiss: () -> Void
+  private let handoff: QuickStateHandoff?
   private let openBrowser: () -> Void
   private let onBusyChanged: (Bool) -> Void
   private let report: (QuickSaveActions.Outcome) -> Void
@@ -32,9 +34,10 @@ final class QuickSaveMenuActions {
 
   init(mode: @escaping () -> QuickSaveMode, slot: @escaping () -> Int, session: QuickSaveSurfaceSession,
        isActive: @escaping () -> Bool = { true }, runtime: Runtime? = nil,
+       dismiss: @escaping () -> Void = {}, handoff: QuickStateHandoff? = nil,
        openBrowser: @escaping () -> Void, onBusyChanged: @escaping (Bool) -> Void = { _ in }, report: @escaping (QuickSaveActions.Outcome) -> Void) {
     self.mode = mode; self.slot = slot; self.session = session; self.isActive = isActive
-    self.runtime = runtime ?? .live; self.openBrowser = openBrowser; self.onBusyChanged = onBusyChanged; self.report = report
+    self.runtime = runtime ?? .live; self.dismiss = dismiss; self.handoff = handoff; self.openBrowser = openBrowser; self.onBusyChanged = onBusyChanged; self.report = report
   }
 
   private var acceptsAction: Bool { !session.gameID.isEmpty && isActive() && runtime.isCurrent(session) }
@@ -46,11 +49,17 @@ final class QuickSaveMenuActions {
       return
     }
     onBusyChanged(true)
+    let operation = handoff?.begin(session: session, dismiss: dismiss)
+    if handoff == nil { dismiss() }
+    handoff?.startInputSampling()
     task = Task { @MainActor in
-      defer { task = nil; onBusyChanged(false) }
-      guard acceptsAction else { return }
+      defer {
+        if let operation { handoff?.complete(operation) }
+        task = nil; onBusyChanged(false)
+      }
+      guard runtime.isCurrent(session) else { return }
       let outcome = await runtime.saveHistory(session)
-      guard !Task.isCancelled, acceptsAction else { return }
+      guard !Task.isCancelled, runtime.isCurrent(session) else { return }
       if !outcome.message.isEmpty { report(outcome) }
     }
   }
@@ -60,11 +69,17 @@ final class QuickSaveMenuActions {
     let mode = QuickSaveActions.effectiveMode(mode(), modded: runtime.isModded())
     let slot = slot()
     onBusyChanged(true)
+    let operation = handoff?.begin(session: session, dismiss: dismiss)
+    if handoff == nil { dismiss() }
+    handoff?.startInputSampling()
     task = Task { @MainActor in
-      defer { task = nil; onBusyChanged(false) }
-      guard acceptsAction else { return }
+      defer {
+        if let operation { handoff?.complete(operation) }
+        task = nil; onBusyChanged(false)
+      }
+      guard runtime.isCurrent(session) else { return }
       let outcome = await runtime.load(mode, slot, session)
-      guard !Task.isCancelled, acceptsAction else { return }
+      guard !Task.isCancelled, runtime.isCurrent(session) else { return }
       if !outcome.message.isEmpty { report(outcome) }
       if case .incompatible = outcome { openBrowser() }
     }

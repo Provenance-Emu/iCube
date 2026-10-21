@@ -254,7 +254,10 @@ struct EmulationScreen: View {
   @State private var showPauseMenu = false
   /// The quick menu (spec §7): an overlay over the running game, never a cover.
   @State private var showQuickMenu = false
+  /// Shared admission fence for quick actions from either platform's Quick menu.
+  @State private var quickStateActionInFlight = false
   @State private var pauseStartsInSaveBrowser = false
+  @State private var pauseStartsInPerformance = false
   @ObservedObject private var recorder = RecordingManager.shared
   @AppStorage("quick_save_slot") private var selectedSlot = 1
   @AppStorage("quick_save_mode") private var quickSaveMode: QuickSaveMode = .history
@@ -284,7 +287,6 @@ struct EmulationScreen: View {
   @State private var controllerSettingsToken: PauseArbiter.Token?
   @State private var showQuickSavePicker = false
   @State private var quickSavePickerToken: PauseArbiter.Token?
-  @State private var quickStateActionInFlight = false
   var showTopBar: Bool { topBar.isVisible }
   @State private var fastForwardEnabled = false
   // iOS observer tokens to avoid leaks. Defect #10: these three used to be
@@ -325,7 +327,12 @@ struct EmulationScreen: View {
   @State var isWiiSystem: Bool = false
 
   // Quick performance overlay
+  @StateObject private var performanceControls = PerformanceControlsController.live()
   @State private var showPerfOverlay: Bool = false
+  #if os(tvOS)
+  @ObservedObject private var livePerformance = LivePerformanceSession.shared
+  @State private var livePerformanceOwner = UUID()
+  #endif
   @State private var ocEnabled: Bool = false
   @State private var ocPercent: Int = 100
   @State private var vbiEnabledQuick: Bool = false
@@ -346,9 +353,9 @@ struct EmulationScreen: View {
   // CurrentRun) or the running game's INI outranks the user's own Base value of the key. Loaded
   // alongside the other perf state at overlay-open; the manual control is disabled and an "Auto" /
   // "Game" badge shown while set, so the control can't author a silently-shadowed Base value.
-  @State private var ocOverride: DOLConfigOverride = .none
-  @State private var vbiOverride: DOLConfigOverride = .none
-  @State private var efbOverride: DOLConfigOverride = .none
+  @State private var ocOverride: PerformanceControlOverride = .none
+  @State private var vbiOverride: PerformanceControlOverride = .none
+  @State private var efbOverride: PerformanceControlOverride = .none
   @AppStorage("gfx_overscan_fullscreen") private var overscanFullscreen = false
   @State private var overscanApplicable = false
 
@@ -434,8 +441,7 @@ struct EmulationScreen: View {
         bindings: QuickMenuHost.bindings(selectedSlot: $selectedSlot, mode: $quickSaveMode),
         actions: QuickMenuHost.actions(quickActions: quickMenuSaveActions, openPerfOverlay: {
           showQuickMenu = false
-          refreshPerfOverlayState()
-          showPerfOverlay = true
+          openPerformanceControls()
         }),
         onOpenPauseMenu: {
           // Runs before the quick menu releases its token: the pending claim keeps the core paused
@@ -449,47 +455,79 @@ struct EmulationScreen: View {
     }
   }
 
-  #if os(tvOS)
   /// `EmuEventVC` drops its focus trap and enables controller navigation while either menu is up; a
   /// menu that does not announce itself can never take focus.
   private func postOverlayVisibility() {
     let visible = showPauseMenu || showQuickMenu
     NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
   }
-  #endif
 
   private var quickMenuSaveActions: QuickSaveMenuActions {
     QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
       session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
-      isActive: { showQuickMenu && !showPauseMenu }, openBrowser: {
+      isActive: { showQuickMenu && !showPauseMenu && !quickStateActionInFlight },
+      dismiss: { showQuickMenu = false }, handoff: .shared, openBrowser: {
         // Acquire before the Quick Menu relinquishes its claim; Pause adopts it before showing the browser.
         SaveStateService.capturePausePreview()
         PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
         pauseStartsInSaveBrowser = true
         showPauseMenu = true
-      }, report: { EmulationToast.post($0.message) })
+      }, onBusyChanged: { quickStateActionInFlight = $0 }, report: { EmulationToast.post($0.message) })
   }
 
   private func pauseMenu(platform: PlatformKind) -> PauseMenuView {
     var menu = PauseMenuView(
       selectedSlot: $selectedSlot,
       onClose: { showPauseMenu = false },
-      onShowPerfOverlay: { refreshPerfOverlayState(); showPerfOverlay = true },
+      onShowPerfOverlay: { openPerformanceControls() },
       platform: platform,
       game: game)
+    menu.onReopenSaveBrowser = {
+      pauseStartsInSaveBrowser = true
+      showPauseMenu = true
+    }
     menu.startsInSaveBrowser = pauseStartsInSaveBrowser
+    menu.startsInPerformance = pauseStartsInPerformance
     return menu
   }
 
   var body: some View {
-    #if os(tvOS)
-    tvOSScreen
-    #else // os(iOS)
-    iosScreen
-    #endif
+    Group {
+      #if os(tvOS)
+      tvOSScreen
+      #else
+      iosScreen
+      #endif
+    }
+    .onReceive(performanceControls.$state) { syncPerformanceMirrors($0) }
+    .onChange(of: showPerfOverlay) { visible in
+      if visible { refreshPerfOverlayState() }
+      else { performanceControls.stopRefreshing() }
+    }
   }
 
   #if os(tvOS)
+  private func attachLivePerformance() {
+    livePerformance.attach(owner: livePerformanceOwner, gameSession: {
+      guard TVEmulationBridge.isRunning(), TVEmulationBridge.currentGameID() == game.gameID else { return nil }
+      return "\(game.gameID):\(TVEmulationBridge.currentSessionIdentifier())"
+    }, canOpen: {
+      TVEmulationBridge.isRunning() && !TVEmulationBridge.isPaused() && !PauseArbiter.shared.isHeld
+        && !showPauseMenu && !showQuickMenu
+    }, onPause: {
+      PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+      showPauseMenu = true
+    }, onControllerUnavailable: {
+      // ControllerManager's existing disconnect lease and banner retain ownership if available.
+      // An unassigned final pad may have no manager slot, so provide an explicit paused recovery.
+      if controllerManager.disconnectPause == nil {
+        _ = PauseArbiter.shared.claim(PauseArbiter.Reason.disconnect)
+        PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+        showPauseMenu = true
+      }
+    })
+  }
+
   private var tvOSScreen: some View {
     ZStack {
       EmulationSurfaceController(gamePath: game.filePath)
@@ -502,9 +540,13 @@ struct EmulationScreen: View {
       // pause menu is open; the disconnect banner (zIndex 5) sits above it.
       if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
         PausedPill(onResume: {
-          PauseArbiter.shared.userResume()
-          PauseArbiter.shared.resumeIfUnheld()
-          isPaused = false
+          if QuickStateHandoff.shared.hasPendingOperation {
+            QuickStateHandoff.shared.noteGameplayInputBegan()
+          } else {
+            PauseArbiter.shared.userResume()
+            PauseArbiter.shared.resumeIfUnheld()
+          }
+          isPaused = TVEmulationBridge.isPaused()
         })
         .zIndex(3)
       }
@@ -518,103 +560,15 @@ struct EmulationScreen: View {
           .zIndex(5)
       }
 
-      // Removed floating speed overlay toggle; moved into pause menu
+      TVLivePerformanceOverlay(session: livePerformance)
+        .zIndex(4)
 
-      // Semi-transparent overlay with controls
-      if showPerfOverlay {
-        Color.black.opacity(0.35).ignoresSafeArea().zIndex(4)
-        VStack(alignment: .leading, spacing: 16) {
-          HStack {
-            Text("Performance Controls").font(.title3).foregroundColor(.white)
-            Spacer()
-            Button { showPerfOverlay = false } label: { Image(systemName: "xmark.circle.fill").font(.title2).foregroundColor(.white) }
-              .buttonStyle(.plain)
-          }
-          Divider().background(.white.opacity(0.2))
-
-          // CPU Clock
-          HStack {
-            Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
-              ocEnabled = v
-              DOLConfigBridge.setMainOverclockEnable(v)
-              // Re-apply the current percent on enable: with MAIN_OVERCLOCK at 100% the factor is
-              // unchanged until the stepper moves, so the toggle alone appeared to do nothing.
-              if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
-            }))
-            .tint(.blue)
-            .foregroundColor(.white)
-            // Resolver step #3: while the adaptive clock drives this key (CurrentRun), the manual
-            // control is disabled; it shows the user's Base %.
-            .disabled(ocOverride != .none)
-            autoBadge(ocOverride)
-          }
-          HStack {
-            Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8))
-            Spacer()
-            TVIntStepperOverlay(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }, range: 1 ... 400, step: 1)
-              .disabled(!ocEnabled || ocOverride != .none)
-          }
-
-          // VBI
-          HStack {
-            Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
-              vbiEnabledQuick = v
-              DOLConfigBridge.setMainViOverclockEnable(v)
-              if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
-            }))
-            .tint(.blue)
-            .foregroundColor(.white)
-            .disabled(vbiOverride != .none)
-            autoBadge(vbiOverride)
-          }
-          HStack {
-            Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8))
-            Spacer()
-            TVIntStepperOverlay(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }, range: 1 ... 400, step: 1)
-              .disabled(!vbiEnabledQuick || vbiOverride != .none)
-          }
-
-          // Adaptive clock (auto) + VI-skip mode
-          adaptiveControls()
-
-          Divider().background(.white.opacity(0.2))
-
-          // Overlays + diagnostics, as a scannable icon grid.
-          overlayToggleGrid()
-
-          // Graphics quick controls
-          HStack {
-            Text("Internal Resolution: \(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x")").foregroundColor(.white.opacity(0.8))
-            autoBadge(efbOverride)
-            Spacer()
-            TVIntStepperOverlay(value: efbScaleQuickBinding, range: 0 ... efbMaxScaleQuick, step: 1)
-              // Resolver step #3: while a game or explicit runtime override drives GFX_EFB_SCALE, the
-              // manual stepper is disabled; it shows the user's Base scale.
-              .disabled(efbOverride != .none)
-          }
-          HStack {
-            Text("Anisotropic: \(anisotropyQuick)x").foregroundColor(.white.opacity(0.8))
-            Spacer()
-            TVIntStepperOverlay(value: $anisotropyQuick.onSet { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }, range: 1 ... 16, step: 1)
-          }
-          if overscanApplicable {
-            Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
-              .tint(.blue)
-              .foregroundColor(.white)
-          }
-        }
-        .padding(20)
-        .frame(maxWidth: 520)
-        .background(.black.opacity(0.6))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(0.15), lineWidth: 1))
-        .zIndex(5)
-      }
     }
     .fullScreenCover(isPresented: $showPauseMenu) {
       pauseMenu(platform: .tvos)
     }
     .onAppear {
+      attachLivePerformance()
       log.debug("[INPUT] tvOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
       let initialCount = GCController.controllers().count
       log.debug("[INPUT] tvOS initial controllers count: \(initialCount)")
@@ -627,6 +581,8 @@ struct EmulationScreen: View {
 
       // Handle pause menu events
       obsShowPause = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowPauseMenu"), object: nil, queue: .main) { _ in
+        PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+        livePerformance.closeForPause()
         showPauseMenu = true
       }
       obsShowQuickMenu = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowQuickMenu"), object: nil, queue: .main) { _ in
@@ -645,6 +601,7 @@ struct EmulationScreen: View {
       // handlers) and auto-assigns, so the previous redundant local observer here
       // (with an empty disconnect handler) has been removed.
       endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
+        livePerformance.detach(owner: livePerformanceOwner)
         dismiss()
       }
       // Keep the token and register once: this observer used to be added anonymously on every
@@ -671,34 +628,15 @@ struct EmulationScreen: View {
         // Claim before the menu exists: the app-inactive claim is released on return, and the menu may
         // not have appeared (and claimed) by then. The menu adopts this token on appear.
         PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+        livePerformance.closeForPause()
         showPauseMenu = true
       }
       obsWillEnterForeground = NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { _ in
         log.debug("[INPUT] tvOS app foregrounded - keeping pause menu visible")
         // Keep pause menu visible when returning to foreground so user can choose to resume
       }
-      // Load current OC/VBI state
-      ocEnabled = DOLConfigBridge.mainOverclockEnableBase()
-      ocPercent = DOLConfigBridge.mainOverclockPercentBase()
-      vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnableBase()
-      vbiPercentQuick = DOLConfigBridge.mainViOverclockPercentBase()
-      // Resolver step #3: does an auto controller or the running game outrank these keys?
-      ocOverride = DOLConfigBridge.overclockOverride()
-      vbiOverride = DOLConfigBridge.viOverclockOverride()
-      efbOverride = DOLConfigBridge.efbScaleOverride()
-      // Overlay toggles and quick graphics
-      showFPSQuick = DOLConfigBridge.gfxShowFPS()
-      showVPSQuick = DOLConfigBridge.gfxShowVPS()
-      showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
-      showVBlankQuick = DOLConfigBridge.gfxShowVTimes()
-      efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
-      efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
-      anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
-      // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
-      adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
-      viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
-      showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
-      overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
+      refreshPerfOverlayState()
+      if !showPerfOverlay { performanceControls.stopRefreshing() }
       refreshOverscanApplicable()
       if overscanApplicable {
         TVEmulationBridge.setOverscanFullscreenEnabled(overscanFullscreen)
@@ -726,6 +664,12 @@ struct EmulationScreen: View {
       refreshOverscanApplicable()
     }
     .onDisappear {
+      performanceControls.stopRefreshing()
+      if showPauseMenu && TVEmulationBridge.isRunning() && TVEmulationBridge.currentGameID() == game.gameID {
+        livePerformance.closeForPause()
+      } else {
+        livePerformance.detach(owner: livePerformanceOwner)
+      }
       if let token = endObserver { NotificationCenter.default.removeObserver(token)
         endObserver = nil
       }
@@ -781,8 +725,15 @@ struct EmulationScreen: View {
     .onChange(of: showPauseMenu) { visible in
       // The quick menu never outlives the pause menu; left set, it came back (and re-claimed the
       // pause) the moment the pause menu closed.
-      if visible { showQuickMenu = false }
-      else { pauseStartsInSaveBrowser = false }
+      if visible {
+        PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+        livePerformance.closeForPause()
+        showQuickMenu = false
+      } else {
+        pauseStartsInSaveBrowser = false
+        pauseStartsInPerformance = false
+        attachLivePerformance()
+      }
       postOverlayVisibility()
       isPaused = TVEmulationBridge.isPaused()
       #if canImport(ActivityKit)
@@ -791,7 +742,9 @@ struct EmulationScreen: View {
     }
     .onChange(of: showQuickMenu) { _ in postOverlayVisibility() }
     .onExitCommand {
-      if showPauseMenu { showPauseMenu = false } else if showQuickMenu { showQuickMenu = false }
+      if livePerformance.isPresented { _ = livePerformance.handleBack() }
+      else if showPauseMenu { showPauseMenu = false }
+      else if showQuickMenu { showQuickMenu = false }
     }
     .onPlayPauseCommand {}
     .navigationBarBackButtonHidden(true)
@@ -858,9 +811,13 @@ struct EmulationScreen: View {
     // pause menu is open; the disconnect banner (zIndex 5) sits above it.
     if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
       PausedPill(onResume: {
-        PauseArbiter.shared.userResume()
-        PauseArbiter.shared.resumeIfUnheld()
-        isPaused = false
+        if QuickStateHandoff.shared.hasPendingOperation {
+          QuickStateHandoff.shared.noteGameplayInputBegan()
+        } else {
+          PauseArbiter.shared.userResume()
+          PauseArbiter.shared.resumeIfUnheld()
+        }
+        isPaused = TVEmulationBridge.isPaused()
       })
       .zIndex(3)
     }
@@ -1069,7 +1026,8 @@ struct EmulationScreen: View {
     }
     .onChange(of: showPauseMenu) { visible in
       if visible { showQuickMenu = false }
-      else { pauseStartsInSaveBrowser = false }
+      else { pauseStartsInSaveBrowser = false; pauseStartsInPerformance = false }
+      postOverlayVisibility()
       isPaused = TVEmulationBridge.isPaused()
       // The fullScreenCover transition perturbs the GeometryReader size and the Metal
       // surface never resizes itself (updateUIViewController is empty), so without this
@@ -1077,6 +1035,7 @@ struct EmulationScreen: View {
       // rotation.
       if !visible { TVEmulationBridge.resizeSurfaceNow() }
     }
+    .onChange(of: showQuickMenu) { _ in postOverlayVisibility() }
   }
 
   private var iosNavigationCanvas: some View {
@@ -1109,7 +1068,7 @@ struct EmulationScreen: View {
     }
     .sheet(isPresented: $showQuickSavePicker, onDismiss: quickSavePickerDismissed) {
       QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
-                          onDismiss: { showQuickSavePicker = false })
+                          onDismiss: { showQuickSavePicker = false }, onCommit: { showQuickSavePicker = false })
         .claimsController()
     }
     .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
@@ -1266,28 +1225,8 @@ struct EmulationScreen: View {
       isWiiSystem = inferIsWii(from: game)
       touchPadsRefreshToken = UUID()
     }
-    // Load current OC/VBI state
-    ocEnabled = DOLConfigBridge.mainOverclockEnableBase()
-    ocPercent = DOLConfigBridge.mainOverclockPercentBase()
-    vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnableBase()
-    vbiPercentQuick = DOLConfigBridge.mainViOverclockPercentBase()
-    // Resolver step #3: does an auto controller or the running game outrank these keys?
-    ocOverride = DOLConfigBridge.overclockOverride()
-    vbiOverride = DOLConfigBridge.viOverclockOverride()
-    efbOverride = DOLConfigBridge.efbScaleOverride()
-    // Overlay toggles and quick graphics
-    showFPSQuick = DOLConfigBridge.gfxShowFPS()
-    showVPSQuick = DOLConfigBridge.gfxShowVPS()
-    showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
-    showVBlankQuick = DOLConfigBridge.gfxShowVTimes()
-    efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
-    efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
-    anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
-    // Adaptive clock (NSUserDefault), VI-skip mode, perf graph
-    adaptiveClockQuick = UserDefaults.standard.bool(forKey: "adaptive_clock_enable")
-    viSkipModeQuick = DOLConfigBridge.gfxHackViSkipMode()
-    showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
-    overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
+    refreshPerfOverlayState()
+    if !showPerfOverlay { performanceControls.stopRefreshing() }
     refreshOverscanApplicable()
     if overscanApplicable {
       TVEmulationBridge.setOverscanFullscreenEnabled(overscanFullscreen)
@@ -1314,6 +1253,7 @@ struct EmulationScreen: View {
   }
 
   private func iosDidDisappear() {
+    performanceControls.stopRefreshing()
     if let token = endObserver { NotificationCenter.default.removeObserver(token)
       endObserver = nil
     }
@@ -1409,9 +1349,8 @@ struct EmulationScreen: View {
       HStack {
         Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
           ocEnabled = v
-          DOLConfigBridge.setMainOverclockEnable(v)
-          // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
-          if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
+          performanceControls.apply(.cpuEnabled(v))
+
         }))
         .tint(.blue)
         .foregroundColor(.white)
@@ -1419,16 +1358,17 @@ struct EmulationScreen: View {
         autoBadge(ocOverride)
       }
       HStack {
-        Slider(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }.asDouble, in: 1 ... 400)
+        Slider(value: $ocPercent.onSet { performanceControls.apply(.cpuPercent($0)) }.asDouble, in: 1 ... 400)
           .disabled(!ocEnabled || ocOverride != .none)
         Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
       }
+      overrideExplanation(ocOverride)
 
       HStack {
         Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
           vbiEnabledQuick = v
-          DOLConfigBridge.setMainViOverclockEnable(v)
-          if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
+          performanceControls.apply(.viEnabled(v))
+
         }))
         .tint(.blue)
         .foregroundColor(.white)
@@ -1436,10 +1376,11 @@ struct EmulationScreen: View {
         autoBadge(vbiOverride)
       }
       HStack {
-        Slider(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }.asDouble, in: 1 ... 400)
+        Slider(value: $vbiPercentQuick.onSet { performanceControls.apply(.viPercent($0)) }.asDouble, in: 1 ... 400)
           .disabled(!vbiEnabledQuick || vbiOverride != .none)
         Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
       }
+      overrideExplanation(vbiOverride)
 
       // Graphics controls
       HStack {
@@ -1450,8 +1391,9 @@ struct EmulationScreen: View {
         Spacer()
         Slider(value: efbScaleQuickBinding.asDouble, in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
           .disabled(efbOverride != .none)
-        Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
+        Text(efbScaleQuick == 0 ? "Fit Window" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 50, alignment: .trailing)
       }
+      overrideExplanation(efbOverride)
       HStack {
         Text(L("Anisotropic Filtering"))
           .foregroundColor(.white.opacity(0.8))
@@ -1492,9 +1434,8 @@ struct EmulationScreen: View {
       HStack {
         Toggle("CPU Clock Override", isOn: Binding(get: { ocEnabled }, set: { v in
           ocEnabled = v
-          DOLConfigBridge.setMainOverclockEnable(v)
-          // Re-apply current percent on enable (100% leaves the factor unchanged otherwise).
-          if v { DOLConfigBridge.setMainOverclockPercent(ocPercent) }
+          performanceControls.apply(.cpuEnabled(v))
+
         }))
         .tint(.blue)
         .foregroundColor(.white)
@@ -1502,15 +1443,16 @@ struct EmulationScreen: View {
         autoBadge(ocOverride)
       }
       HStack {
-        Slider(value: $ocPercent.onSet { DOLConfigBridge.setMainOverclockPercent($0) }.asDouble, in: 1 ... 400)
+        Slider(value: $ocPercent.onSet { performanceControls.apply(.cpuPercent($0)) }.asDouble, in: 1 ... 400)
           .disabled(!ocEnabled || ocOverride != .none)
         Text("\(ocPercent)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
       }
+      overrideExplanation(ocOverride)
       HStack {
         Toggle("VBI Frequency Override", isOn: Binding(get: { vbiEnabledQuick }, set: { v in
           vbiEnabledQuick = v
-          DOLConfigBridge.setMainViOverclockEnable(v)
-          if v { DOLConfigBridge.setMainViOverclockPercent(vbiPercentQuick) }
+          performanceControls.apply(.viEnabled(v))
+
         }))
         .tint(.blue)
         .foregroundColor(.white)
@@ -1518,10 +1460,11 @@ struct EmulationScreen: View {
         autoBadge(vbiOverride)
       }
       HStack {
-        Slider(value: $vbiPercentQuick.onSet { DOLConfigBridge.setMainViOverclockPercent($0) }.asDouble, in: 1 ... 400)
+        Slider(value: $vbiPercentQuick.onSet { performanceControls.apply(.viPercent($0)) }.asDouble, in: 1 ... 400)
           .disabled(!vbiEnabledQuick || vbiOverride != .none)
         Text("\(vbiPercentQuick)%").foregroundColor(.white.opacity(0.8)).frame(width: 52, alignment: .trailing)
       }
+      overrideExplanation(vbiOverride)
 
       // Adaptive clock (auto) + VI-skip mode
       adaptiveControls()
@@ -1538,8 +1481,9 @@ struct EmulationScreen: View {
         Spacer()
         Slider(value: efbScaleQuickBinding.asDouble, in: 0 ... Double(max(1, efbMaxScaleQuick)), step: 1)
           .disabled(efbOverride != .none)
-        Text(efbScaleQuick == 0 ? "Auto" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
+        Text(efbScaleQuick == 0 ? "Fit Window" : "\(efbScaleQuick)x").foregroundColor(.white.opacity(0.8)).frame(width: 60, alignment: .trailing)
       }
+      overrideExplanation(efbOverride)
       portraitAnisotropyControl
       if overscanApplicable {
         Toggle(L("Full Screen Display"), isOn: overscanFullscreenBinding)
@@ -1550,7 +1494,7 @@ struct EmulationScreen: View {
   }
 
   private var anisotropySliderBinding: Binding<Double> {
-    $anisotropyQuick.onSet { DOLConfigBridge.setGfxEnhanceAnisotropySamples($0) }.asDouble
+    $anisotropyQuick.onSet { performanceControls.apply(.anisotropy($0)) }.asDouble
   }
 
   private var portraitAnisotropyControl: some View {
@@ -1662,7 +1606,7 @@ struct EmulationScreen: View {
     QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
       session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
       isActive: { UIApplication.shared.applicationState == .active && !showPauseMenu },
-      openBrowser: presentQuickSavePicker, onBusyChanged: { quickStateActionInFlight = $0 },
+      handoff: .shared, openBrowser: presentQuickSavePicker, onBusyChanged: { quickStateActionInFlight = $0 },
       report: { EmulationToast.post($0.message) })
   }
 
@@ -1779,29 +1723,49 @@ struct EmulationScreen: View {
   /// The quick IR control writes the user's Base scale only when the player moves it.
   private var efbScaleQuickBinding: Binding<Int> {
     $efbScaleQuick.onSet { newScale in
-      DOLConfigBridge.setGfxEfbScale(newScale)
+      performanceControls.apply(.resolutionScale(newScale))
     }
   }
 
   /// Seeds the quick controls from the user's own values (Base). The adaptive clock writes
   /// CurrentRun; seeding from the resolved value let those reach Base through the controls' writers.
   private func refreshPerfOverlayState() {
-    ocEnabled = DOLConfigBridge.mainOverclockEnableBase()
-    ocPercent = DOLConfigBridge.mainOverclockPercentBase()
-    vbiEnabledQuick = DOLConfigBridge.mainViOverclockEnableBase()
-    vbiPercentQuick = DOLConfigBridge.mainViOverclockPercentBase()
-    ocOverride = DOLConfigBridge.overclockOverride()
-    vbiOverride = DOLConfigBridge.viOverclockOverride()
-    efbOverride = DOLConfigBridge.efbScaleOverride()
-    efbMaxScaleQuick = max(1, DOLConfigBridge.gfxEfbMaxScale())
-    efbScaleQuick = DOLConfigBridge.gfxEfbScaleBase()
-    anisotropyQuick = DOLConfigBridge.gfxEnhanceAnisotropySamples()
-    // The pause and quick menus' Performance HUD tile flips these while the panel is closed.
-    showFPSQuick = DOLConfigBridge.gfxShowFPS()
-    showVPSQuick = DOLConfigBridge.gfxShowVPS()
-    showSpeedQuick = DOLConfigBridge.gfxShowSpeed()
-    showGraphsQuick = DOLConfigBridge.gfxShowGraphs()
-    overlayStatsQuick = DOLConfigBridge.gfxOverlayStats()
+    performanceControls.refresh()
+    syncPerformanceMirrors(performanceControls.state)
+  }
+
+  /// Keep the compact portrait/landscape layout while sharing all backend reads and writes.
+  private func syncPerformanceMirrors(_ state: PerformanceControlsState) {
+    ocEnabled = state.cpuEnabled
+    ocPercent = state.cpuPercent
+    vbiEnabledQuick = state.viEnabled
+    vbiPercentQuick = state.viPercent
+    ocOverride = state.cpuOverride
+    vbiOverride = state.viOverride
+    efbOverride = state.scalingOverride
+    efbMaxScaleQuick = state.maxResolutionScale
+    efbScaleQuick = state.resolutionScale
+    anisotropyQuick = state.anisotropy
+    adaptiveClockQuick = state.adaptiveClock
+    viSkipModeQuick = state.viSkipMode.rawValue
+    showFPSQuick = state.hud.fps
+    showVPSQuick = state.hud.vps
+    showSpeedQuick = state.hud.speed
+    showVBlankQuick = state.hud.vblank
+    showGraphsQuick = state.hud.graphs
+    overlayStatsQuick = state.hud.overlayStats
+  }
+
+  private func openPerformanceControls() {
+    #if os(tvOS)
+    pauseStartsInPerformance = true
+    PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+    livePerformance.closeForPause()
+    showPauseMenu = true
+    #else
+    refreshPerfOverlayState()
+    showPerfOverlay = true
+    #endif
   }
 
   // Resolver step #3: small "Auto" / "Game" pill shown next to a perf control whose key is currently
@@ -1809,7 +1773,14 @@ struct EmulationScreen: View {
   // the user's manual Base value. When shown, the corresponding manual control is also disabled: it
   // shows and edits the user's Base value, which applies again once the override clears.
   @ViewBuilder
-  private func autoBadge(_ override: DOLConfigOverride) -> some View {
+  private func overrideExplanation(_ source: PerformanceControlOverride) -> some View {
+    if let reason = source.disabledReason {
+      Text(L(reason)).font(.caption2).foregroundColor(.white.opacity(0.75))
+    }
+  }
+
+  @ViewBuilder
+  private func autoBadge(_ override: PerformanceControlOverride) -> some View {
     if override != .none {
       Text(override == .game ? L("Game") : L("Auto"))
         .font(.caption2).bold()
@@ -1823,19 +1794,7 @@ struct EmulationScreen: View {
   @ViewBuilder
   private func adaptiveControls() -> some View {
     Toggle("Adaptive Clock (Auto)", isOn: Binding(get: { adaptiveClockQuick }, set: { v in
-      adaptiveClockQuick = v
-      // Live: writes the adaptive_clock_enable default AND starts/stops the controller now.
-      EmulationCoordinator.shared().setAdaptiveClockEnabled(v)
-      // Live-lock the manual CPU + VI controls: Adaptive Clock owns BOTH levers when on. The actual
-      // CurrentRun override write/clear happens async on the emu thread, so reflect the badge/disabled
-      // state immediately, then reconcile the effective values once that write lands. (Fixes: toggling
-      // Auto didn't lock/unlock the sliders, and a stale manual VI bled through because the UI never
-      // re-read the override layer on toggle.)
-      // Turning Auto off may leave a game INI's clock in charge (RHT, UGP, RDC): read it rather
-      // than assume none. The CurrentRun clear is async, so the refresh below reconciles.
-      ocOverride = v ? .auto : DOLConfigBridge.overclockOverride()
-      vbiOverride = v ? .auto : DOLConfigBridge.viOverclockOverride()
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { refreshPerfOverlayState() }
+      performanceControls.apply(.adaptiveClock(v))
     }))
     .tint(.blue)
     .foregroundColor(.white)
@@ -1844,7 +1803,7 @@ struct EmulationScreen: View {
       Spacer()
       Picker("VI-Skip Mode", selection: Binding(get: { viSkipModeQuick }, set: { v in
         viSkipModeQuick = v
-        DOLConfigBridge.setGfxHackViSkipMode(v) // TriState: 0=Off, 1=On, 2=Auto
+        performanceControls.apply(.viSkipMode(PerformanceVISkipMode(rawValue: v) ?? .off)) // TriState: 0=Off, 1=On, 2=Auto
       })) {
         Text("Off").tag(0)
         Text("On").tag(1)
@@ -1906,20 +1865,24 @@ struct EmulationScreen: View {
   @ViewBuilder
   private func overlayToggleGrid() -> some View {
     let columns = [GridItem(.adaptive(minimum: 84), spacing: 8)]
+    Toggle(L("Performance HUD"), isOn: Binding(get: { performanceControls.state.hud.isEnabled },
+      set: { performanceControls.apply(.hudEnabled($0)) }))
+      .tint(.blue)
+      .foregroundColor(.white)
     LazyVGrid(columns: columns, spacing: 8) {
       hudToggleCell("FPS", systemImage: "speedometer",
-                    isOn: Binding(get: { showFPSQuick }, set: { v in showFPSQuick = v; DOLConfigBridge.setGfxShowFPS(v) }))
+                    isOn: Binding(get: { showFPSQuick }, set: { v in performanceControls.apply(.hudStatistic(.fps, v)) }))
       hudToggleCell("VPS", systemImage: "gauge.with.dots.needle.67percent",
-                    isOn: Binding(get: { showVPSQuick }, set: { v in showVPSQuick = v; DOLConfigBridge.setGfxShowVPS(v) }))
+                    isOn: Binding(get: { showVPSQuick }, set: { v in performanceControls.apply(.hudStatistic(.vps, v)) }))
       hudToggleCell("Speed", systemImage: "hare",
-                    isOn: Binding(get: { showSpeedQuick }, set: { v in showSpeedQuick = v; DOLConfigBridge.setGfxShowSpeed(v) }))
+                    isOn: Binding(get: { showSpeedQuick }, set: { v in performanceControls.apply(.hudStatistic(.speed, v)) }))
       hudToggleCell("VBlank", systemImage: "clock",
-                    isOn: Binding(get: { showVBlankQuick }, set: { v in showVBlankQuick = v; DOLConfigBridge.setGfxShowVTimes(v) }))
+                    isOn: Binding(get: { showVBlankQuick }, set: { v in performanceControls.apply(.hudStatistic(.vblank, v)) }))
       hudToggleCell("Perf Graph", systemImage: "chart.xyaxis.line",
-                    isOn: Binding(get: { showGraphsQuick }, set: { v in showGraphsQuick = v; DOLConfigBridge.setGfxShowGraphs(v) }))
+                    isOn: Binding(get: { showGraphsQuick }, set: { v in performanceControls.apply(.hudStatistic(.graphs, v)) }))
       // Dolphin's deep engine HUD (GFX_OVERLAY_STATS / g_ActiveConfig.bOverlayStats).
       hudToggleCell("Overlay Stats", systemImage: "list.bullet.rectangle",
-                    isOn: Binding(get: { overlayStatsQuick }, set: { v in overlayStatsQuick = v; DOLConfigBridge.setGfxOverlayStats(v) }))
+                    isOn: Binding(get: { overlayStatsQuick }, set: { v in performanceControls.apply(.hudStatistic(.overlayStats, v)) }))
     }
     // Copy State stays a one-shot action button under the grid.
     Button {

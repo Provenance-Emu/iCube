@@ -1,6 +1,23 @@
 import Foundation
 import GameController
 
+/// A physical Menu press can have two routes. Its owner is captured at down,
+/// and any overlay-owned route owns the whole press through the last release.
+struct MenuPressOwnership {
+  private var routes: Set<String> = []
+  private var overlayOwned = false
+  mutating func began(route: String, overlayOwned: Bool) {
+    if routes.isEmpty { self.overlayOwned = false }
+    routes.insert(route)
+    self.overlayOwned = self.overlayOwned || overlayOwned
+  }
+  mutating func ended(route: String) -> Bool {
+    guard routes.remove(route) != nil, routes.isEmpty else { return false }
+    return !overlayOwned
+  }
+  mutating func cancel() { overlayOwned = true }
+}
+
 /// Tracks shoulder + menu/start gestures
 ///
 /// Rules:
@@ -61,7 +78,11 @@ final class PauseGestureTracker {
   /// Press-down timestamps for the dual-purpose pause-menu buttons
   /// (`microGamepad.buttonMenu` on the Siri Remote, `buttonOptions` on
   /// extended gamepads), keyed by route. See `menuButtonChanged`.
+  private var remoteOwnership = MenuPressOwnership()
+  private var otherOwnership: [String: MenuPressOwnership] = [:]
+  private var menuTransitionObserver: NSObjectProtocol?
   private var menuPressStart: [String: TimeInterval] = [:]
+  var hasMenuPressInProgress: Bool { !menuPressStart.isEmpty }
 
   /// Reason string of the Siri Remote's micro-gamepad Menu route (`installPauseMenuHandlers`).
   static let siriRemoteMenuReason = "microGamepad.buttonMenu"
@@ -80,10 +101,11 @@ final class PauseGestureTracker {
   /// `EmuEventVC`'s UIPress route for the same Siri Remote Menu press.
   static let uipressMenuReason = "uipress-menu"
 
-  /// A short Siri Remote Menu press opens the quick menu only when the remote drives no player slot.
-  /// Both routes the press can take (GCController and UIPress) must agree, or one press opens either menu.
-  static func routesToQuickMenu(reason: String, isUnboundRemote: Bool) -> Bool {
-    (reason == siriRemoteMenuReason || reason == uipressMenuReason) && isUnboundRemote
+  /// Both deliveries of a remote press share the same explicit installation preference.
+  static func routesToLivePerformance(reason: String, preference: SiriRemoteMenuAction,
+                                     hasGameplayController: Bool, isPaused: Bool) -> Bool {
+    (reason == siriRemoteMenuReason || reason == uipressMenuReason)
+      && preference.opensLive(hasGameplayController: hasGameplayController, isPaused: isPaused)
   }
 
   /// An Options hold opens the quick menu from `quickMenuHoldDuration` up to the exit-to-library hold,
@@ -91,11 +113,6 @@ final class PauseGestureTracker {
   static func optionsHoldFired(start: TimeInterval, now: TimeInterval) -> Bool {
     let held = now - start
     return held >= quickMenuHoldDuration && held < DOLMenuLongPressDuration
-  }
-
-  /// True when a Siri Remote (micro gamepad without an extended profile) exists and holds no player slot.
-  private static var siriRemoteIsUnbound: Bool {
-    ControllerManager.shared.controllers.first { $0.microGamepad != nil && $0.extendedGamepad == nil }?.playerIndex == .indexUnset
   }
 
   /// State of the most recent `extendedGamepad.buttonMenu` transition, noted
@@ -123,7 +140,14 @@ final class PauseGestureTracker {
   private var extendedGamepadMenuIsDown = false
   private var lastExtendedGamepadMenuTransition: TimeInterval = 0
 
-  private init() {}
+  private init() {
+    menuTransitionObserver = NotificationCenter.default.addObserver(forName: .DOLMenuPressChanged, object: nil, queue: .main) { [weak self] note in
+      guard let pressed = note.userInfo?["pressed"] as? Bool else { return }
+      self?.menuButtonChanged(pressed: pressed, reason: Self.uipressMenuReason,
+        overlayOwned: note.userInfo?["overlayOwned"] as? Bool ?? false,
+        cancelled: note.userInfo?["cancelled"] as? Bool ?? false)
+    }
+  }
 
   /// Call on every `extendedGamepad.buttonMenu` press/release transition.
   /// See `extendedGamepadMenuIsDown` / `lastExtendedGamepadMenuTransition`.
@@ -161,7 +185,27 @@ final class PauseGestureTracker {
   /// pause menu on press-down would flash the menu at t=0 on every hold and
   /// then exit at t=2. `EmuEventVC` takes the same shape on the UIPress path,
   /// using the same constant.
-  func menuButtonChanged(pressed: Bool, reason: String) {
+  func menuButtonChanged(pressed: Bool, reason: String, overlayOwned: Bool = false, cancelled: Bool = false) {
+    let remote = reason == Self.siriRemoteMenuReason || reason == Self.uipressMenuReason
+    if pressed {
+      if remote { remoteOwnership.began(route: reason, overlayOwned: overlayOwned) }
+      else {
+        var ownership = otherOwnership[reason] ?? MenuPressOwnership()
+        ownership.began(route: reason, overlayOwned: overlayOwned)
+        otherOwnership[reason] = ownership
+      }
+    } else {
+      let eligible: Bool
+      if remote {
+        if cancelled { remoteOwnership.cancel() }
+        eligible = remoteOwnership.ended(route: reason)
+      } else {
+        var ownership = otherOwnership.removeValue(forKey: reason) ?? MenuPressOwnership()
+        if cancelled { ownership.cancel() }
+        eligible = ownership.ended(route: reason)
+      }
+      if !eligible { menuPressStart.removeValue(forKey: reason); return }
+    }
     let now = Date().timeIntervalSinceReferenceDate
     guard !pressed else {
       menuPressStart[reason] = now
@@ -173,20 +217,16 @@ final class PauseGestureTracker {
     // An Options hold belongs to the quick menu (`optionsButtonChanged`), not the pause menu.
     if reason == Self.optionsReason, Self.optionsHoldFired(start: start, now: now) { return }
     #endif
-    if Self.routesToQuickMenu(reason: reason, isUnboundRemote: Self.siriRemoteIsUnbound) {
-      requestQuickMenu(reason: reason)
-      return
-    }
     requestPauseMenu(reason: reason)
   }
 
   /// Call on every `buttonOptions` press/release. Releasing after a hold of at least
   /// `quickMenuHoldDuration` (and before the exit hold) opens the quick menu; a shorter press is left to
   /// `menuButtonChanged`.
-  func optionsButtonChanged(pressed: Bool) {
+  func optionsButtonChanged(pressed: Bool, overlayOwned: Bool = false) {
     let now = Date().timeIntervalSinceReferenceDate
     guard !pressed else {
-      optionsPressStart = now
+      optionsPressStart = overlayOwned ? nil : now
       return
     }
     guard let start = optionsPressStart else { return }
@@ -252,11 +292,28 @@ final class PauseGestureTracker {
       }
       return
     }
-    if Self.routesToQuickMenu(reason: reason, isUnboundRemote: Self.siriRemoteIsUnbound) {
-      requestQuickMenu(reason: reason)
-      return
-    }
     guard now - lastPauseRequest > Self.pauseRequestCoalesceWindow else { return }
+    #if os(tvOS)
+    if reason == Self.siriRemoteMenuReason || reason == Self.uipressMenuReason {
+      // GC callbacks and the UIKit observer deliver remote transitions on MainActor.
+      let handled = MainActor.assumeIsolated {
+        let live = LivePerformanceSession.shared
+        if live.isPresented {
+          lastPauseRequest = now
+          _ = live.handleBack()
+          return true
+        }
+        if Self.routesToLivePerformance(reason: reason, preference: .stored(),
+             hasGameplayController: LivePerformanceSession.hasGameplayController(), isPaused: TVEmulationBridge.isPaused()),
+           live.toggleFromRemote() {
+          lastPauseRequest = now
+          return true
+        }
+        return false
+      }
+      if handled { return }
+    }
+    #endif
     lastPauseRequest = now
     DispatchQueue.main.async {
       if UserDefaults.standard.bool(forKey: "input_debug") {

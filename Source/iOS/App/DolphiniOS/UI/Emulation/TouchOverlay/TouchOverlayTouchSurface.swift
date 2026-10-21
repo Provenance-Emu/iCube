@@ -30,19 +30,23 @@ struct TouchOverlaySurface: UIViewRepresentable {
   }
 
   let onTouches: (Phase, [Touch]) -> Void
+  var gameplayHitTest: (CGPoint) -> Bool = { _ in true }
 
   func makeUIView(context: Context) -> SurfaceView {
     let view = SurfaceView()
     view.onTouches = onTouches
+    view.gameplayHitTest = gameplayHitTest
     return view
   }
 
   func updateUIView(_ uiView: SurfaceView, context: Context) {
     uiView.onTouches = onTouches
+    uiView.gameplayHitTest = gameplayHitTest
   }
 
   final class SurfaceView: UIView {
     var onTouches: ((Phase, [Touch]) -> Void)?
+    var gameplayHitTest: (CGPoint) -> Bool = { _ in true }
 
     override init(frame: CGRect) {
       super.init(frame: frame)
@@ -58,6 +62,11 @@ struct TouchOverlaySurface: UIViewRepresentable {
       isMultipleTouchEnabled = true
       isUserInteractionEnabled = true
       backgroundColor = .clear
+    }
+
+    override func willMove(toSuperview newSuperview: UIView?) {
+      if newSuperview == nil { GameplayTouchContactObserver.cancelContacts(in: self) }
+      super.willMove(toSuperview: newSuperview)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) { report(.began, touches) }
@@ -99,6 +108,7 @@ struct TouchOverlayCluster<ID: Hashable>: View {
   /// Fired with the locations (surface-local) of touches that just landed, once per touch-down and never
   /// for a finger that moves in. For things that must act on a fresh touch only (skin menu/quick-save).
   var onBegan: (([CGPoint]) -> Void)?
+  var isGameplayHit: (ID) -> Bool = { _ in true }
 
   /// The fingers on this surface. A reference box rather than `@State` on purpose: nothing draws from
   /// it, and a `@State` rewritten on every move sample (120 Hz while a finger is down) re-ran this
@@ -110,11 +120,13 @@ struct TouchOverlayCluster<ID: Hashable>: View {
     // swiftlint:disable:next redundant_discardable_let
     let _ = TouchOverlayRenderProbe.body(.cluster)
     GeometryReader { geo in
-      TouchOverlaySurface { phase, touches in
+      TouchOverlaySurface(onTouches: { phase, touches in
         liveTouches.apply(phase, touches)
         if phase == .began { onBegan?(touches.map(\.location)) }
         recompute(in: geo.size)
-      }
+      }, gameplayHitTest: { point in
+        hitTest(point, geo.size).contains(where: isGameplayHit)
+      })
       .contentShape(Rectangle())
       .onDisappear { releaseAll() }
     }
@@ -215,7 +227,7 @@ struct TouchOverlaySingleTouch: View {
   @State private var activeTouchId: ObjectIdentifier?
 
   var body: some View {
-    TouchOverlaySurface { phase, touches in
+    TouchOverlaySurface(onTouches: { phase, touches in
       switch phase {
       case .began:
         guard activeTouchId == nil, let first = touches.first else { return }
@@ -229,7 +241,7 @@ struct TouchOverlaySingleTouch: View {
         activeTouchId = nil
         onChange(nil)
       }
-    }
+    })
     .contentShape(Rectangle())
     .onDisappear {
       guard activeTouchId != nil else { return }

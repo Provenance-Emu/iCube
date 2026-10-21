@@ -74,6 +74,7 @@ enum QuickSaveActions {
     var exists: (URL) -> Bool
     var compatible: (URL) -> Bool
     var request: (URL, QuickSaveSurfaceSession) -> Bool
+    var requestCompletion: ((URL, QuickSaveSurfaceSession) async -> Bool)? = nil
 
     static var live: Self {
       Self(session: { .init(gameID: TVEmulationBridge.currentGameID(), identifier: TVEmulationBridge.currentSessionIdentifier()) },
@@ -83,7 +84,9 @@ enum QuickSaveActions {
         slotPath: { TVEmulationBridge.stateFilePath(forSlot: $0).map { URL(fileURLWithPath: $0) } },
         exists: { FileManager.default.fileExists(atPath: $0.path) },
         compatible: { TVEmulationBridge.stateFileIsCompatible(atPath: $0.path) },
-        request: { TVEmulationBridge.loadState(fromPath: $0.path, expectedGameID: $1.gameID, expectedSessionIdentifier: $1.identifier) })
+        request: { TVEmulationBridge.loadState(fromPath: $0.path, expectedGameID: $1.gameID, expectedSessionIdentifier: $1.identifier) }, requestCompletion: { url, session in
+          await completedLoad(url, session: session)
+        })
     }
   }
 
@@ -107,7 +110,11 @@ enum QuickSaveActions {
     guard environment.isCurrent(session) else { return .cancelled }
     guard environment.exists(url) else { return .empty }
     guard environment.compatible(url) else { return .incompatible(url) }
-    return environment.request(url, session) ? .loadRequested(url) : .unavailable
+    let loaded: Bool
+    if let completed = environment.requestCompletion { loaded = await completed(url, session) }
+    else { loaded = environment.request(url, session) }
+    guard environment.isCurrent(session) else { return .cancelled }
+    return loaded ? .loadRequested(url) : .unavailable
   }
 
   static func effectiveMode(_ mode: QuickSaveMode, modded: Bool) -> QuickSaveMode {
@@ -154,7 +161,7 @@ enum QuickSaveActions {
     guard !ModdedBoot.isCurrentBootModded || (state.slot != nil && !state.isAuto && !state.isQuickSave) else { return .unavailable }
     guard FileManager.default.fileExists(atPath: state.path.path) else { return .empty }
     guard state.isCompatible else { return .incompatible(state.path) }
-    return requestLoad(state.path, session: session)
+    return await requestLoad(state.path, session: session)
   }
 
   static func setKept(_ kept: Bool, for state: SaveStateInfo, expectedSession: QuickSaveSurfaceSession? = nil) async -> Outcome {
@@ -166,11 +173,19 @@ enum QuickSaveActions {
     return updated ? .keepUpdated : .keepFailed
   }
 
-  private static func requestLoad(_ url: URL, session: Session) -> Outcome {
+  private static func requestLoad(_ url: URL, session: Session) async -> Outcome {
     guard session.isCurrent else { return .cancelled }
     guard FileManager.default.fileExists(atPath: url.path) else { return .empty }
     guard TVEmulationBridge.stateFileIsCompatible(atPath: url.path) else { return .incompatible(url) }
-    return TVEmulationBridge.loadState(fromPath: url.path, expectedGameID: session.gameID,
-      expectedSessionIdentifier: session.identifier) ? .loadRequested(url) : .unavailable
+    let loaded = await completedLoad(url, session: .init(gameID: session.gameID, identifier: session.identifier))
+    guard session.isCurrent else { return .cancelled }
+    return loaded ? .loadRequested(url) : .unavailable
   }
+  private static func completedLoad(_ url: URL, session: QuickSaveSurfaceSession) async -> Bool {
+    await withCheckedContinuation { continuation in
+      TVEmulationBridge.loadState(fromPath: url.path, expectedGameID: session.gameID,
+        expectedSessionIdentifier: session.identifier, completion: { continuation.resume(returning: $0) })
+    }
+  }
+
 }
