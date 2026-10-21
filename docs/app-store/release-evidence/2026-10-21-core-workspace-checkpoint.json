@@ -1,0 +1,34 @@
+{
+  "purpose": "Portable checkpoint of existing workspace frameworks; source and framework artifacts are committed separately.",
+  "acceptance": "This is not a coordinated distribution rebuild. The iOS device framework came from the existing local cache; device engines and distribution validation remain pending. Simulator build acceptance is recorded in the locale and Performance handoffs.",
+  "frameworks": [
+    {
+      "framework": "build/xcframework/PVlibDolphin-ios-sim.framework",
+      "uuid": "3773FA08-01BD-3470-8672-B989F22EA049",
+      "sha256": "a5ba3e05178fd1380a634693eda35e50c47da4fb8d6da2cf389e5b133b039396",
+      "bytes": 27354312,
+      "provenance": "existing workspace build output"
+    },
+    {
+      "framework": "build/xcframework/PVlibDolphin-ios.framework",
+      "uuid": "1339F182-AA38-3A87-B181-AAB636237459",
+      "sha256": "4dd4113f02dffa5c7e8e1c1f0ddccbecbc92c5e754c0c7943adb7014ee96e38e",
+      "bytes": 27189216,
+      "provenance": "materialized existing local cache"
+    },
+    {
+      "framework": "build/xcframework/PVlibDolphin-tvos-sim.framework",
+      "uuid": "F0F8A1D1-95AF-3664-823B-9C388B8CE6D2",
+      "sha256": "0a0684bd9e455f61d0c2fa3aff5d098d485b7bebb9fd868d71329497dca6e90f",
+      "bytes": 27331784,
+      "provenance": "existing workspace build output"
+    },
+    {
+      "framework": "build/xcframework/PVlibDolphin-tvos.framework",
+      "uuid": "36E0430E-808E-3918-AE69-A5C9043738BB",
+      "sha256": "2ee4d913857ca687501dbe9a1e89ded21833c3ed10342c1f166c7e8338af00b2",
+      "bytes": 27164440,
+      "provenance": "existing workspace build output"
+    }
+  ]
+}
