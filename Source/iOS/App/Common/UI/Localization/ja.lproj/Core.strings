@@ -5538,3 +5538,35 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Use Original Cover" = "元のカバーを使用";
 "Waiting for a paired device with both apps open. Copying pauses during gameplay." = "両方のアプリを開いたペアリング済みデバイスを待っています。ゲームプレイ中はコピーを一時停止します。";
 "Edits apply to identical files, including renamed copies." = "同じ内容のファイルには、名前を変更しても編集内容が適用されます。";
+
+"10 recent quick saves. Kept saves, classic slots and automatic resume stay separate." = "10 recent quick saves. Kept saves, classic slots and automatic resume stay separate.";
+"Automatic resume" = "Automatic resume";
+"Choose a slot" = "Choose a slot";
+"Classic slots" = "Classic slots";
+"Date unavailable" = "Date unavailable";
+"Empty · ready to save" = "Empty · ready to save";
+"Keep this save" = "Keep this save";
+"Kept — remove keep" = "Kept — remove keep";
+"Latest manual" = "Latest manual";
+"Load selected" = "Load selected";
+"Modded games use classic slots. Automatic resume and quick-save history are unavailable." = "Modded games use classic slots. Automatic resume and quick-save history are unavailable.";
+"Newest first" = "Newest first";
+"No manual save states yet" = "No manual save states yet";
+"No preview" = "No preview";
+"Occupied" = "Occupied";
+"Quick-save history" = "Quick-save history";
+"Replace occupied save state?" = "Replace occupied save state?";
+"Save new state" = "Save new state";
+"Save to slot %d" = "Save to slot %d";
+"Selects this state. Use Load selected to load it." = "Selects this state. Use Load selected to load it.";
+"This replaces the state in the selected classic slot." = "This replaces the state in the selected classic slot.";
+"Wii Pointer" = "Wii Pointer";
+
+"Couldn't create save state" = "Couldn't create save state";
+"Couldn't update Keep" = "Couldn't update Keep";
+"Loading save state" = "Loading save state";
+"No save state available" = "No save state available";
+"Quick save created" = "Quick save created";
+"Quick save created; couldn't remove older saves" = "Quick save created; couldn't remove older saves";
+"Save updated" = "Save updated";
+"This save state is incompatible with this build" = "This save state is incompatible with this build";
