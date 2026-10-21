@@ -1,10 +1,14 @@
 # iCube handoff (2026-10-10)
 
-## Latest play-controls checkpoint — October 20 late evening
+## Latest play-controls release — October 21, 2026
 
-Accepted source `a0fbc29b80` is pushed. Final iOS/tvOS SDK builds pass; full iOS suite **2,229 passed, five opt-in skips, zero failures (2,234 total)**; focused layout/cache **38/38**; native simulator phone **7/7**, iPad **7/7**, tvOS **2/2**. Portrait toolbar is 72 points excluding safe area with 44-point targets. Final native screenshots were inspected; compact landscape metadata and selection indicator no longer overlap. Hosted CI `39535150389` passed on `0964b2aba9`; exact-source run `39538314157` also passed on `a0fbc29b80`. [Current evidence](app-store/release-evidence/2026-10-20-play-controls.md).
+**iOS and tvOS TestFlight 1.0.0 (1792554707) are VALID, Beta Review APPROVED, and internal/external IN_BETA_TESTING.** Both are assigned to Internal, Patrons, Moderators, Friends and Family, and Public Website; notifications enabled. [TestFlight](https://testflight.apple.com/join/9ZEfnyMP). Archived source `76d443d03d` is pushed; no App Store release submission. [Build IDs, guards and evidence](app-store/release-evidence/2026-10-20-play-controls.md).
 
-Signed DEV build `1792552677` built, passed signature/SwiftUI/core guards and is installed on the owner's iPad with its existing data preserved. The initial new-controls physical run stopped before Exit at no-JIT hittability; a narrow landscape/wait harness correction builds. Coordinated physical Exit/Cancel, mute and history save/load acceptance remains pending, followed by fresh matching iOS/tvOS archives and authorized TestFlight uploads. No new upload is claimed. Do not upload superseded `1792538716` archives. Production paused Sonic session must remain untouched. Continue from the ignored plan ledger rather than restarting completed implementation tasks.
+Final full iOS suite: **2,229 passed, five opt-in skips, zero failures (2,234 total)**; focused layout/cache **38/38**; native simulator phone **7/7**, iPad **7/7**, tvOS **2/2**. Hosted exact-product CI `39538314157` passed on `a0fbc29b80`; the subsequent archived commit changes audit/docs only. Portrait toolbar is 72pt, with 44pt targets. Both optimized archives and final distribution IPAs pass compatibility/core/signature/CloudKit/UUID checks; app/core symbols are on Sentry.
+
+The owner explicitly deferred physical testing (“Test it later”). DEV `1792552677` is installed with existing data preserved; the initial new-controls physical run stopped before Exit at no-JIT hittability. A narrow landscape/wait harness correction builds. New-build Exit/Cancel, audible mute/unmute and disposable history save/load remain pending; do not report them passed or run more iPad automation until the owner resumes that window. Production's paused Sonic session was not touched. Keep the plan ledger for this deferred work.
+
+Cross-device sync/Provenance receiver acceptance, older-device startup, live telemetry delivery and a controlled Release performance comparison remain release gates. TestFlight success does not establish App Store readiness. One reviewed Minor remains: late screenshots can recreate orphan thumbnails after pruning; no payload/count safety failure identified.
 
 ## Active release continuation — October 20 evening
 

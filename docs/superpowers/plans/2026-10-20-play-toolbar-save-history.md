@@ -10,6 +10,12 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-20-play-toolbar-save-history-design.md`. The owner approved the interactive mockup and added compact iPhone/iPad portrait as a requirement. A fresh builder review found nothing important left to decide.
 
+## Execution status — October 21, 2026
+
+Tasks 1–3 are implemented, reviewed and pushed. Task 4's simulator/rendered/full/hosted checks pass; the owner explicitly deferred the physical Exit/Cancel, audible mute and disposable history save/load rerun. Task 5 is complete: both TestFlight builds **1.0.0 (1792554707)** are VALID, Beta Review APPROVED and IN_BETA_TESTING for all established groups. No App Store release was submitted. [Final evidence and decisions](../../app-store/release-evidence/2026-10-20-play-controls.md) is the authoritative acceptance record; preserve the ignored plan ledger for deferred device work.
+
+Implementation refinements: all implicit classic/modded saves open the explicit-consent browser; history filenames use unique `.s01` for current sync discovery; short phone landscape uses compact metadata rows. Final distribution validation is on locally exported, SHA256-pinned IPAs before uploading those exact files. The detailed planned checklist below is retained as implementation history; the status above records accepted outcomes and the explicit device deferral.
+
 ## Global constraints
 
 - iOS/tvOS minimum 17; no core format change, no dependency updates, no full core rebuild.
