@@ -5570,5 +5570,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Turn off Immediate XFB and VI Skip first." = "Turn off Immediate XFB and VI Skip first.";
 "Turn off Skip EFB Copy to RAM or Skip XFB Copy to RAM first." = "Turn off Skip EFB Copy to RAM or Skip XFB Copy to RAM first.";
 "Unmute Wii Speak first." = "Unmute Wii Speak first.";
-
 "Perf Graph" = "Perf Graph";

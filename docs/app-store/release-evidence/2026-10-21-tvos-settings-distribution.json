@@ -1,0 +1,111 @@
+{
+  "checked_utc": "2026-10-21T17:21:27.094753+00:00",
+  "source_commit": "d32c105479ce5320ae4317320f01396449f0f800",
+  "marketing_version": "1.0.0",
+  "build_number": "1792601430",
+  "app_id": "6752685822",
+  "bundle_id": "com.joemattiello.iCube",
+  "tests": {
+    "ios_total": 2246,
+    "ios_passed": 2241,
+    "ios_skipped_opt_in": 5,
+    "ios_failed": 0,
+    "native_tvos": "chooser open/browse/cancel/commit/restore, Left, category Back from pause/library, repeated pause entry x3, disabled reason/appearance, HUD long-press/FPS toggle/restore/Back"
+  },
+  "platforms": {
+    "ios": {
+      "asc": {
+        "build_id": "a5f8f7a0-3572-4be5-a6db-1b79cea9b0ef",
+        "platform": "IOS",
+        "processing_state": "VALID",
+        "groups": [
+          "Friends and Family",
+          "Internal",
+          "Moderators",
+          "Patrons",
+          "Public Website"
+        ],
+        "beta_review_state": "APPROVED"
+      },
+      "availability": {
+        "autoNotifyEnabled": true,
+        "internalBuildState": "IN_BETA_TESTING",
+        "externalBuildState": "IN_BETA_TESTING"
+      },
+      "archive_validation": "passed",
+      "ipa_validation": {
+        "status": "passed",
+        "ipa": "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/build/release-audit/2026-10-21-tvos-settings/1792601430-ios-local-distribution/iCube.ipa",
+        "sha256": "92d0238eef70c16496d3f9b1aa0cea583b515bd00b7c68a589144722eb845c70",
+        "source_commit": "d32c105479ce5320ae4317320f01396449f0f800",
+        "build_number": "1792601430",
+        "platform": "IOS",
+        "distribution_entitlements": "Production; get-task-allow=false",
+        "app_uuid": [
+          [
+            "7AD34351-F3EC-35D8-AA33-04D247E74EA7",
+            "arm64"
+          ]
+        ],
+        "core_uuid": [
+          [
+            "1339F182-AA38-3A87-B181-AAB636237459",
+            "arm64"
+          ]
+        ]
+      },
+      "sentry": "passed"
+    },
+    "tvos": {
+      "asc": {
+        "build_id": "dbaa8b34-ca59-4e1f-b5c8-a924a115152f",
+        "platform": "TV_OS",
+        "processing_state": "VALID",
+        "groups": [
+          "Friends and Family",
+          "Internal",
+          "Moderators",
+          "Patrons",
+          "Public Website"
+        ],
+        "beta_review_state": "APPROVED"
+      },
+      "availability": {
+        "autoNotifyEnabled": true,
+        "internalBuildState": "IN_BETA_TESTING",
+        "externalBuildState": "IN_BETA_TESTING"
+      },
+      "archive_validation": "passed",
+      "ipa_validation": {
+        "status": "passed",
+        "ipa": "/Users/jmattiello/Workspace/Provenance/Provenance/Cores/Dolphin/dolphin-ios/build/release-audit/2026-10-21-tvos-settings/1792601430-tvos-local-distribution/iCube.ipa",
+        "sha256": "ab46d0e9d32a1ee8863001a558805bda85e56c1b4f7ab311ce573120b80bbab6",
+        "source_commit": "d32c105479ce5320ae4317320f01396449f0f800",
+        "build_number": "1792601430",
+        "platform": "TV_OS",
+        "distribution_entitlements": "Production; get-task-allow=false",
+        "app_uuid": [
+          [
+            "584267C2-408C-321A-A28A-888C1BEB5928",
+            "arm64"
+          ]
+        ],
+        "core_uuid": [
+          [
+            "36E0430E-808E-3918-AE69-A5C9043738BB",
+            "arm64"
+          ]
+        ]
+      },
+      "sentry": "passed"
+    }
+  },
+  "ci": {
+    "self_hosted_run": 39638371815,
+    "failure": "Before tests: CoreSimulator1171.7.0 older than Xcode-required1174.9.2; device unavailable/error70",
+    "hosted_rerun": 39638918029,
+    "hosted_status": "queued",
+    "hosted_conclusion": ""
+  },
+  "physical_ipad": "Deferred by owner; no operations performed in this follow-up."
+}

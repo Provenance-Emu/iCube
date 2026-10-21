@@ -1,6 +1,6 @@
 # tvOS settings and pause HUD follow-up
 
-Status: implementation under verification; not included in TestFlight 1792554707.
+**Shipped: iOS and tvOS TestFlight 1.0.0 (1792601430), source `d32c105479ce5320ae4317320f01396449f0f800`.** Both are VALID, Beta Review APPROVED, internal/external IN_BETA_TESTING, notifications enabled. [Install TestFlight](https://testflight.apple.com/join/9ZEfnyMP).
 
 The owner reported slow cycling of multi-value settings, a conflict between Left-to-sidebar and Left-to-change-value, intermittent first-Back dismissal from both library and pause entry, unclear disabled rows, and a touch-oriented HUD panel reached from tvOS pause. The owner currently cannot reproduce the intermittent Back behavior and has no known sequence; source safeguards are not proof of its original cause.
 
@@ -31,6 +31,14 @@ Native tvOS acceptance:
 
 Results and screenshots: local `acceptance1.xcresult` (8/8), `acceptance2.xcresult` (repeated Back pass, initial harness AX assumption failure), `acceptance3.xcresult` (2/2) and `acceptance4.xcresult` (2/2), with attachment manifests. Original intermittent Back was not reproduced, so these checks establish the tested sequences and safeguards, not its original cause.
 
-## Remaining acceptance
+## Distribution and limits
 
-Reviewed source commit/push and distribution artifacts. Follow-up TestFlight requires new matching candidates and the normal archive/distribution checks. No App Store release submission is authorized by this document.
+Both archives and final distribution IPAs pass signature, core UUID/dSYM, optimized SwiftUI compatibility, retired adaptive-resolution content and production iCloud checks. Final IPAs disable debugging and carry Production iCloud entitlements. Sentry has app/core symbols for both platforms. Exact IPA hashes, build IDs, group names and Apple availability are in the [distribution proof](2026-10-21-tvos-settings-distribution.json).
+
+Both builds are assigned to Internal, Patrons, Moderators, Friends and Family, and Public Website; What to Test is updated and normal Beta Review completed. No App Store release submission occurred.
+
+The self-hosted CI unit run [39638371815](https://github.com/Provenance-Emu/iCube/actions/runs/39638371815) failed before tests because CoreSimulator 1171.7.0 is older than the selected Xcode requires (1174.9.2). The existing hosted-runner option was used for [39638918029](https://github.com/Provenance-Emu/iCube/actions/runs/39638918029); it remains queued at final verification. This does not replace or invalidate the fresh local full suite; no CI pass is claimed.
+
+The build formatter removed one blank line before Perf Graph in English/Japanese catalogs. Pinned source, formatted source and each compiled archive catalog were parsed and verified identical. Pinned bytes were restored before each guarded release phase. The final evidence commit normalizes those two blank lines only; catalog entries and shipped content remain identical. Proofs are local ios-localization-format-proof.json / tvos-localization-format-proof.json.
+
+Physical iPad testing remains deferred by the owner. The original intermittent Back trigger remains unknown; both reported entry sequences and repeated pause cycles pass. Cross-device sync/Provenance acceptance, older-device startup, live telemetry and controlled Release performance gates in the release plan remain separate App Store requirements.
