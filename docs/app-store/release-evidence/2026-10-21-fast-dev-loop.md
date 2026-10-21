@@ -1,6 +1,6 @@
 # Faster DEV iteration — October 21, 2026
 
-Status: implementation and native integration verified on dedicated simulators; independent review has no open Important findings. This changes local Debug tooling, not the shipped TestFlight binary. Physical automation remains deferred by the owner.
+Status: implementation and native integration verified on dedicated simulators; independent review has no open Important findings. Tooling commit `39ccb64f89` is pushed to `origin/develop`. This changes local Debug tooling, not the shipped TestFlight binary. Physical automation remains deferred by the owner.
 
 ## Workflow
 

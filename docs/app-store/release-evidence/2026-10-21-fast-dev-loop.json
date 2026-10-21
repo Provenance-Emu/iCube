@@ -79,5 +79,14 @@
       "elapsed_seconds": 0.566,
       "exit_code": 1
     }
-  ]
+  ],
+  "tooling_commit": "39ccb64f89",
+  "pushed_to": "origin/develop",
+  "corrected_host_checks": {
+    "metadata": 32,
+    "editing": 12,
+    "nearby_mirror": 12,
+    "continuity_package": 208,
+    "continuity_controllers": 35
+  }
 }
