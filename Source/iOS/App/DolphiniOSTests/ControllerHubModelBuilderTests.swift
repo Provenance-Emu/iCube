@@ -31,7 +31,8 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     setConnectTakesPlayer1: @escaping (Bool) -> Void = { _ in },
     testRumble: @escaping () -> Void = {},
     setTouchOverlayProgrammatic: @escaping (Bool) -> Void = { _ in },
-    resetOverlayLayouts: @escaping () -> Void = {}
+    resetOverlayLayouts: @escaping () -> Void = {},
+    setPointerSourceOverride: @escaping (PointerSource.Kind?) -> Void = { _ in }
   ) -> ControllerHubActions {
     ControllerHubActions(
       playerDestination: { _ in AnyView(EmptyView()) },
@@ -54,7 +55,8 @@ final class ControllerHubModelBuilderTests: XCTestCase {
       testRumble: testRumble,
       setTouchOverlayProgrammatic: setTouchOverlayProgrammatic,
       resetOverlayLayouts: resetOverlayLayouts,
-      lightsDestination: { AnyView(EmptyView()) })
+      lightsDestination: { AnyView(EmptyView()) },
+      setPointerSourceOverride: setPointerSourceOverride)
   }
 
   /// Every port of `system`; `bound` maps a player id ("gc-1", "wii-2") to its device qualifier.
@@ -265,6 +267,74 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     XCTAssertEqual(motion?.1, true)
     XCTAssertNil(model.item(id: "wii-3-pointer"))
     XCTAssertNil(make(hub, platform: .tvos).item(id: "wii-1-pointer"), "no touchscreen pointer on tvOS")
+    XCTAssertEqual(model.item(id: "wii-2-pointer")?.subtitle, "Pointer: Xbox gyro", "the gyro toggle names the pad it reads")
+  }
+
+  // MARK: Pointer source (Wii Remote 1)
+
+  private func pointerSource(
+    _ player1: PointerPlayer1, remoteHasMotion: Bool = false, platform: PlatformKind, mode: PointerMode = .touchFollow,
+    override: PointerSource.Kind? = nil
+  ) -> PointerSourceModel {
+    PointerSourceModel.make(
+      player1: player1, remoteHasMotion: remoteHasMotion, platform: platform, preferredMode: mode, userOverride: override,
+      deviceModel: platform == .tvos ? "Apple TV" : "iPhone")
+  }
+
+  /// tvOS used to have no pointer row for Wii Remote 1 at all: a plain pad now gets Pointer Source,
+  /// saying the Siri Remote aims, with Automatic and the remote to pick from.
+  func test_tvOS_wiiRemote1_plainPad_pointerSourceIsTheRemote() {
+    var picked: [PointerSource.Kind?] = []
+    var hub = state(system: .wiiAndGameCube, bound: ["wii-1": Self.xbox],
+                    pads: [ConnectedPadState(qualifier: Self.xbox, name: "Xbox", batteryPercent: nil, isCharging: false, playerLabel: nil)])
+    hub.pointerSource = pointerSource(.pad(name: "Xbox", capabilities: PadCapabilities()), remoteHasMotion: true, platform: .tvos)
+    let model = make(hub, actions(setPointerSourceOverride: { picked.append($0) }), platform: .tvos)
+    XCTAssertEqual(ids(model, section: "players"), ["wii-1", "wii-1-device", "wii-1-plays-as", "wii-1-pointer-source", "show-all-ports"])
+    let row = model.item(id: "wii-1-pointer-source")
+    XCTAssertEqual(row?.title, "Pointer Source")
+    XCTAssertEqual(row?.subtitle, "Pointer: Siri Remote")
+    guard case .cycle(let options, let selection)? = row?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["Automatic", "Siri Remote"])
+    selection.wrappedValue = AnyHashable("remoteGyro")
+    selection.wrappedValue = AnyHashable(PointerSourceModel.automaticTag)
+    XCTAssertEqual(picked, [.remoteGyro, nil])
+  }
+
+  /// A gyro pad on Wii Remote 1: the source row names the pad's gyro, and only then is the motion
+  /// switch shown.
+  func test_tvOS_wiiRemote1_gyroPad_showsTheSourceAndTheMotionSwitch() {
+    let ds = "MFi/0/DualSense"
+    var hub = state(system: .wiiAndGameCube, bound: ["wii-1": ds],
+                    pads: [ConnectedPadState(qualifier: ds, name: "DualSense", batteryPercent: nil, isCharging: false, playerLabel: nil,
+                                             hasGyro: true)])
+    hub.pointerSource = pointerSource(.pad(name: "DualSense", capabilities: PadCapabilities(hasGyro: true)), platform: .tvos)
+    let model = make(hub, platform: .tvos)
+    XCTAssertEqual(model.item(id: "wii-1-pointer-source")?.subtitle, "Pointer: DualSense gyro")
+    guard case .toggle? = model.item(id: "wii-1-pointer")?.role else { return XCTFail("motion switch") }
+    XCTAssertEqual(model.item(id: "wii-1-pointer")?.title, "Aim with Controller Motion")
+  }
+
+  /// Nothing can aim: an enabled no-op row (tvOS focus must reach it) that says why.
+  func test_wiiRemote1_noPointer_explainsItself() {
+    var hub = state(system: .wiiAndGameCube, bound: ["wii-1": Self.xbox],
+                    pads: [ConnectedPadState(qualifier: Self.xbox, name: "Xbox", batteryPercent: nil, isCharging: false, playerLabel: nil)])
+    hub.pointerSource = pointerSource(.pad(name: "Xbox", capabilities: PadCapabilities()), platform: .tvos)
+    let row = make(hub, platform: .tvos).item(id: "wii-1-pointer-source")
+    XCTAssertEqual(row?.badge, "No pointer")
+    XCTAssertEqual(row?.subtitle, "Connect a controller with motion, or use the Siri Remote.")
+    XCTAssertEqual(row?.isEnabled, true)
+    guard case .action? = row?.role else { return XCTFail("no-op action") }
+    XCTAssertNil(make(hub, platform: .tvos).item(id: "wii-1-pointer"))
+  }
+
+  /// The iOS touchscreen keeps its Follow / Drag / Gyro cycle and gains the source label.
+  func test_iOS_wiiRemote1_touchscreen_keepsTheModeCycle_labelled() {
+    var hub = state(system: .wiiAndGameCube, bound: ["wii-1": Self.touch])
+    hub.pointerMode = .touchDrag
+    hub.pointerSource = pointerSource(.touchscreen, platform: .ios, mode: .touchDrag)
+    let model = make(hub)
+    XCTAssertEqual(model.item(id: "wii-1-pointer")?.subtitle, "Pointer: Touch (Drag)")
+    XCTAssertNil(model.item(id: "wii-1-pointer-source"))
   }
 
   func test_touchControls_layoutRow_isNamedLayout_withAutoGameCubeWiiRemote_andTheRightDescription() throws {

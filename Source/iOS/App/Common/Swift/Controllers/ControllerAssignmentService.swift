@@ -148,6 +148,17 @@ final class ControllerAssignmentService {
     return cleared
   }
 
+  /// The pre-boot pass over `state`: first the slots still bound to a menu remote are cleared (as
+  /// `reconcile` does; a remote saved on Wii Remote 1 would otherwise hold it through the boot and
+  /// keep the touchscreen fallback away), then `AssignmentEngine.decideBoot` runs on the cleaned state
+  /// with those slots unpinned. Returns the slots cleared, for the caller to unpin.
+  @discardableResult
+  func prepareForBoot(_ state: ControllerStateStore.State, pinned: Set<PinnedSlot>) -> [PinnedSlot] {
+    let cleared = clearMenuRemotes(in: state)
+    apply(AssignmentEngine().decideBoot(from: Self.removingMenuRemotes(from: state), pinned: pinned.subtracting(cleared)))
+    return cleared
+  }
+
   // MARK: Private
 
   private func clearMenuRemotes(in state: ControllerStateStore.State) -> [PinnedSlot] {

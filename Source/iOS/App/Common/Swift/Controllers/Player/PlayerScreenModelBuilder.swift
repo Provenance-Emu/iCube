@@ -21,7 +21,7 @@ enum PlayerScreenModelBuilder {
     var sections = [deviceSection(state: state, actions: actions), profileSection(state: state, actions: actions)]
     sections += buttonSections(state: state, actions: actions)
     if showsPointerAndMotion(state: state, platform: platform) {
-      sections.append(pointerSection(state: state, actions: actions))
+      sections.append(pointerSection(state: state, actions: actions, platform: platform))
     }
     if state.isTouchscreen {
       sections.append(MenuSection(id: "stick-feel", items: [MenuItem(
@@ -33,10 +33,14 @@ enum PlayerScreenModelBuilder {
     return lockedToTheArmedRow(MenuModel(sections: sections), armedControlID: state.armedControlID)
   }
 
-  /// Wii ports, iOS only (tvOS has no touchscreen and no Pointer & Motion), and only where something
-  /// drives the pointer: the device's motion or touch, or a pad's own gyro.
+  /// Wii ports where something can drive the pointer: the device's motion or touch (iOS), a pad's own
+  /// gyro, or, on a bound Wii Remote 1, whatever its pointer source says (including that nothing can,
+  /// and why).
   static func showsPointerAndMotion(state: PlayerScreenState, platform: PlatformKind) -> Bool {
-    platform == .ios && state.player.kind == .wiiRemote && (state.isTouchscreen || state.boundPad?.hasGyro == true)
+    guard state.player.kind == .wiiRemote else { return false }
+    if platform == .ios, state.isTouchscreen { return true }
+    if state.pointerSource != nil, state.player.isBound { return true }
+    return state.boundPad?.hasGyro == true
   }
 
   /// "Physical Controller", "Physical Controller (edited)", or "Custom" when not known.
@@ -177,21 +181,16 @@ enum PlayerScreenModelBuilder {
 
   // MARK: Pointer & Motion
 
-  private static func pointerSection(state: PlayerScreenState, actions: PlayerScreenActions) -> MenuSection {
-    guard state.isTouchscreen else {
-      // A pad's pointer comes from its own gyro through its profile; the only switch is the Wii
-      // Remote's IMU pointer (decision 2).
-      return MenuSection(id: "pointer", header: L("Pointer & Motion"), items: [
-        MenuItem(
-          id: "pointer-motion", title: L("Aim with Controller Motion"), subtitle: L("The controller's gyro moves the Wii pointer."),
-          icon: "gyroscope",
-          role: .toggle(Binding(get: { state.motionPointerEnabled }, set: { actions.setMotionPointer($0) }))),
-      ])
+  private static func pointerSection(state: PlayerScreenState, actions: PlayerScreenActions, platform: PlatformKind) -> MenuSection {
+    guard state.isTouchscreen, platform == .ios else {
+      return MenuSection(id: "pointer", header: L("Pointer & Motion"), items: padPointerItems(state: state, actions: actions))
     }
     let motion = state.pointerMotion
+    let modeSubtitle = [state.pointerSource?.headline, motion.pointerIsThisGameOnly ? L("This game only") : nil]
+      .compactMap { $0 }.joined(separator: " · ")
     var items = [
       MenuItem(
-        id: "pointer-mode", title: L("Pointer"), subtitle: motion.pointerIsThisGameOnly ? L("This game only") : nil,
+        id: "pointer-mode", title: L("Pointer"), subtitle: modeSubtitle.isEmpty ? nil : modeSubtitle,
         icon: motion.pointerMode.systemImage,
         role: .picker(options: Self.pointerModes.map { ($0.title, AnyHashable($0)) }, selection: Binding(
           get: { AnyHashable(motion.pointerMode) },
@@ -225,6 +224,27 @@ enum PlayerScreenModelBuilder {
       role: .destination(actions.advancedMotionDestination()),
       description: L("Smoothing, dead zones and the motion sensor's own options.")))
     return MenuSection(id: "pointer", header: L("Pointer & Motion"), items: items)
+  }
+
+  /// A pad's port (or tvOS Wii Remote 1 on the idle touchscreen device). Wii Remote 1 gets its Pointer
+  /// Source row and then only what the source in use reads; another port's gyro pad gets the Wii
+  /// Remote's IMU pointer switch (decision 2), labelled with the pad.
+  private static func padPointerItems(state: PlayerScreenState, actions: PlayerScreenActions) -> [MenuItem] {
+    let motionToggle = { (subtitle: String?) in
+      MenuItem(
+        id: "pointer-motion", title: L("Aim with Controller Motion"), subtitle: subtitle ?? L("The controller's gyro moves the Wii pointer."),
+        icon: "gyroscope",
+        role: .toggle(Binding(get: { state.motionPointerEnabled }, set: { actions.setMotionPointer($0) })))
+    }
+    guard let source = state.pointerSource else {
+      let label = state.boundPad.map { String(format: L("Pointer: %@"), PointerSource.padGyro(padName: $0.name).label(deviceModel: "")) }
+      return [motionToggle(label)]
+    }
+    var items = [ControllerHubModelBuilder.pointerSourceRow(id: "pointer-source", source: source, setOverride: actions.setPointerSourceOverride)]
+    if case .padGyro = source.source, state.boundPad?.hasGyro == true {
+      items.append(motionToggle(nil))
+    }
+    return items
   }
 
   /// The mode's sensitivity row (drag gain or gyro multiplier): a stepped multiplier, one compact

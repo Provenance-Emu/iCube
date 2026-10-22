@@ -5624,3 +5624,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Volume of the Wii Remote's speaker, played through the TV. Long-press for the Wii settings." = "Volume of the Wii Remote's speaker, played through the TV. Long-press for the Wii settings.";
 "Volume, mute, output and effects. Long-press for the audio settings." = "Volume, mute, output and effects. Long-press for the audio settings.";
 "Wii Sound" = "Wii Sound";
+"%@ gyro" = "%@ gyro";
+"%@ touchpad" = "%@ touchpad";
+"Connect a controller with motion, or use the Siri Remote." = "Connect a controller with motion, or use the Siri Remote.";
+"Connect a controller with motion." = "Connect a controller with motion.";
+"No pointer" = "No pointer";
+"Pointer Source" = "Pointer Source";
+"Touch (Drag)" = "Touch (Drag)";
+"Touch (Follow)" = "Touch (Follow)";
+"Where Wii Remote 1's pointer comes from. Automatic uses the controller's gyro, then its touchpad, then the Siri Remote's motion." = "Where Wii Remote 1's pointer comes from. Automatic uses the controller's gyro, then its touchpad, then the Siri Remote's motion.";
+"Where Wii Remote 1's pointer comes from. Automatic uses the controller's gyro, then its touchpad." = "Where Wii Remote 1's pointer comes from. Automatic uses the controller's gyro, then its touchpad.";

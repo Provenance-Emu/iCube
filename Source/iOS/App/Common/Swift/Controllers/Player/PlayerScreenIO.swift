@@ -50,6 +50,8 @@ protocol PlayerScreenIO {
   func setShakeToWiggle(_ enabled: Bool)
   func setDragGain(_ gain: Double)
   func setGyroSensitivity(_ gain: Double)
+  /// Wii Remote 1's Pointer Source (nil: Automatic), stored for every Wii title.
+  func setPointerSourceOverride(_ kind: PointerSource.Kind?)
 }
 
 extension RemapGroupOwner {
@@ -284,4 +286,8 @@ struct LivePlayerScreenIO: PlayerScreenIO {
 
   /// Read on every motion sample (Task 6): nothing to restart.
   func setGyroSensitivity(_ gain: Double) { MotionSettings.setGyroPointerSensitivity(gain) }
+
+  func setPointerSourceOverride(_ kind: PointerSource.Kind?) {
+    PointerSourceOverrideStore().value = kind
+  }
 }

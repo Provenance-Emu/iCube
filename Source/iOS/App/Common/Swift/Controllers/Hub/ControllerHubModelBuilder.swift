@@ -51,9 +51,7 @@ enum ControllerHubModelBuilder {
             set: { if let value = $0.base as? PlaysAs { actions.setPlaysAs(player, value) } })),
           description: L("The controller the game sees. Wii Remote choices move this player to a Wii Remote slot; GameCube Controller moves it to a GameCube port.")))
       }
-      if let pointer = pointerRow(for: player, state: state, actions: actions, platform: platform) {
-        items.append(pointer)
-      }
+      items += pointerRows(for: player, state: state, actions: actions, platform: platform)
     }
     let hiddenCount = state.players.count - bound.count
     if hiddenCount > 0 {
@@ -80,24 +78,57 @@ enum ControllerHubModelBuilder {
       description: player.isPinned ? PlayerScreenHelp.devicePinned : PlayerScreenHelp.device)
   }
 
-  /// Touchscreen Wii Remote (iOS): the pointer mode. Gyro pad: Motion on/off. Otherwise none.
-  private static func pointerRow(for player: PlayerState, state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuItem? {
-    guard player.kind == .wiiRemote, player.isBound else { return nil }
-    if DeviceFamily.from(qualifier: player.deviceQualifier) == .touchscreen {
-      guard platform == .ios else { return nil }
-      return MenuItem(
-        id: "\(player.id)-pointer", title: L("Pointer"), icon: state.pointerMode.systemImage,
+  /// The pointer rows under a bound Wii Remote:
+  /// - iOS touchscreen: the Follow / Drag / Gyro cycle, labelled with the source it gives.
+  /// - Wii Remote 1 otherwise (and tvOS whatever holds it): Pointer Source (Automatic plus every
+  ///   source this setup can drive), then "Aim with Controller Motion" when the pad's gyro is it.
+  /// - Wii Remotes 2-4 on a gyro pad: the motion toggle, labelled with the pad. Otherwise none.
+  private static func pointerRows(for player: PlayerState, state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> [MenuItem] {
+    guard player.kind == .wiiRemote, player.isBound else { return [] }
+    let source = player.port == 1 ? state.pointerSource : nil
+    let pad = state.pads.first { $0.qualifier == player.deviceQualifier }
+    if DeviceFamily.from(qualifier: player.deviceQualifier) == .touchscreen, platform == .ios {
+      return [MenuItem(
+        id: "\(player.id)-pointer", title: L("Pointer"), subtitle: source?.headline, icon: state.pointerMode.systemImage,
         role: .cycle(options: PlayerScreenModelBuilder.pointerModes.map { ($0.title, AnyHashable($0)) }, selection: Binding(
           get: { AnyHashable(state.pointerMode) },
           set: { if let mode = $0.base as? PointerMode { actions.setPointerMode(mode) } })),
         badge: state.pointerIsThisGameOnly ? L("This game") : nil,
-        description: L("How the Wii pointer moves: follow your finger, drag it, or tilt the device."))
+        description: L("How the Wii pointer moves: follow your finger, drag it, or tilt the device."))]
     }
-    guard state.pads.first(where: { $0.qualifier == player.deviceQualifier })?.hasGyro == true else { return nil }
-    return MenuItem(
-      id: "\(player.id)-pointer", title: L("Pointer"), icon: "gyroscope",
+    if let source {
+      var items = [pointerSourceRow(id: "\(player.id)-pointer-source", source: source, setOverride: actions.setPointerSourceOverride)]
+      if case .padGyro = source.source, pad?.hasGyro == true {
+        items.append(MenuItem(
+          id: "\(player.id)-pointer", title: L("Aim with Controller Motion"), icon: "gyroscope",
+          role: .toggle(Binding(get: { player.motionPointerEnabled }, set: { actions.setMotionPointer(player, $0) })),
+          description: L("Aim with the controller's gyro.")))
+      }
+      return items
+    }
+    guard let pad, pad.hasGyro else { return [] }
+    return [MenuItem(
+      id: "\(player.id)-pointer", title: L("Pointer"),
+      subtitle: String(format: L("Pointer: %@"), PointerSource.padGyro(padName: pad.name).label(deviceModel: "")), icon: "gyroscope",
       role: .toggle(Binding(get: { player.motionPointerEnabled }, set: { actions.setMotionPointer(player, $0) })),
-      description: L("Aim with the controller's gyro."))
+      description: L("Aim with the controller's gyro."))]
+  }
+
+  /// Wii Remote 1's Pointer Source: a cycle of Automatic and every source this setup can drive,
+  /// subtitled with the one in use. With no choice at all it is an enabled no-op (tvOS focus must
+  /// reach it, as the Help rows do) that says why nothing aims. The player screen uses it too.
+  static func pointerSourceRow(id: String, source: PointerSourceModel, setOverride: @escaping (PointerSource.Kind?) -> Void) -> MenuItem {
+    guard !source.choices.isEmpty else {
+      return MenuItem(
+        id: id, title: L("Pointer Source"), subtitle: source.explanation, icon: source.source.systemImage, role: .action({}),
+        badge: source.label, description: source.rowDescription)
+    }
+    return MenuItem(
+      id: id, title: L("Pointer Source"), subtitle: source.headline, icon: source.source.systemImage,
+      role: .cycle(options: source.options, selection: Binding(
+        get: { AnyHashable(source.selectedTag) },
+        set: { setOverride(PointerSourceModel.override(forTag: $0)) })),
+      description: source.rowDescription)
   }
 
   private static func deviceName(for player: PlayerState, pads: [ConnectedPadState]) -> String {

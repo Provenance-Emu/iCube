@@ -252,9 +252,10 @@ final class PlayerScreenViewModel {
     let player = readPlayer()
     let system: RemapSystem = slot.kind == .gameCube ? .gamecube : .wii
     let remembered = memory.entry(for: slot.playerID, qualifier: player.deviceQualifier)
+    let pads = reader.connectedPads()
     return PlayerScreenState(
       player: player,
-      pads: reader.connectedPads(),
+      pads: pads,
       profileName: remembered?.name,
       profileEdited: remembered?.edited ?? false,
       controls: io.controlRows(for: slot, attachment: player.wiiExtension),
@@ -268,7 +269,9 @@ final class PlayerScreenViewModel {
           settings: io.numericSettings(owner: entry.owner, group: entry.groupId, port: slot.port))
       },
       isPinned: player.isPinned,
-      isSensorBarOnTop: io.isSensorBarOnTop())
+      isSensorBarOnTop: io.isSensorBarOnTop(),
+      pointerSource: slot == PlayerSlot(kind: .wiiRemote, port: 1)
+        ? reader.pointerSource(wiimote1Qualifier: player.deviceQualifier, pads: pads) : nil)
   }
 
   /// The same reads, in the same shape, as `ControllerHubViewModel.reload()` makes for this port.
@@ -367,7 +370,8 @@ final class PlayerScreenViewModel {
           save: { [weak self] in self?.saveExpression($0, for: row) ?? false }))
       },
       advancedMotionDestination: { AnyView(EnhancedMotionControlsView()) },
-      stickFeelDestination: { AnyView(AnalogStickSettingsView()) })
+      stickFeelDestination: { AnyView(AnalogStickSettingsView()) },
+      setPointerSourceOverride: { [weak self] kind in self?.write { $0.setPointerSourceOverride(kind) } })
   }
 
   /// A setting that is not part of the port's mapping (pointer, motion): write, then re-read.

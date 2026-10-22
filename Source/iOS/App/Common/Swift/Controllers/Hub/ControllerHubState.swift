@@ -125,9 +125,14 @@ struct ConnectedPadState: Equatable {
   var hasGyro: Bool = false
   /// The pad has an LED light bar (`GCController.light`).
   var hasLight: Bool = false
+  /// The pad has a touchpad (`GCController.supportsTouchpad`: DualSense, DualShock 4).
+  var hasTouchpad = false
   /// A menu device (`GCController.isMenuRemote`: the Siri Remote). It never takes a player slot, so
   /// the hub lists it under its own caption and no Device list offers it.
   var isMenuRemote = false
+
+  /// What the pad can aim the Wii pointer with (`PointerSourceResolver`).
+  var capabilities: PadCapabilities { PadCapabilities(hasGyro: hasGyro, hasTouchpad: hasTouchpad) }
 }
 
 /// Plain snapshot of everything the hub shows. No bridge reads happen after it is built;
@@ -148,6 +153,8 @@ struct ControllerHubState {
   var pointerMode: PointerMode
   /// The running title has its own pointer mode, so a change lasts for this game only.
   var pointerIsThisGameOnly: Bool
+  /// Wii Remote 1's pointer source and its choices; nil when the hub lists no Wii Remote.
+  var pointerSource: PointerSourceModel?
   var backgroundInput: Bool
   var rumbleDestination: RumbleDestination
   var connectTakesPlayer1: Bool
@@ -163,7 +170,7 @@ struct ControllerHubState {
       system: system, players: [], showAllPorts: false, pads: [], isGameRunning: false,
       overlayVisible: false, overlayMode: .auto, overlayOpacityPercent: 50,
       dsuClientEnabled: false, dsuServerCount: 0,
-      pointerMode: .touchFollow, pointerIsThisGameOnly: false, backgroundInput: false,
+      pointerMode: .touchFollow, pointerIsThisGameOnly: false, pointerSource: nil, backgroundInput: false,
       rumbleDestination: .default, connectTakesPlayer1: true, touchOverlayProgrammatic: true)
   }
 
@@ -220,4 +227,6 @@ struct ControllerHubActions {
   var setTouchOverlayProgrammatic: (Bool) -> Void
   var resetOverlayLayouts: () -> Void
   var lightsDestination: () -> AnyView
+  /// Wii Remote 1's Pointer Source: nil is Automatic.
+  var setPointerSourceOverride: (PointerSource.Kind?) -> Void = { _ in }
 }

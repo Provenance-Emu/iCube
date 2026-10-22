@@ -380,6 +380,30 @@ final class ControllerReconnectTests: XCTestCase {
     XCTAssertEqual(config.gc[0].mapping, "touch:edited")
   }
 
+  /// A Siri Remote still saved (and pinned) on Wii Remote 1 is cleared before the boot pass, which
+  /// then gives the slot to the Touchscreen as for any slot nothing holds.
+  func test_boot_clearsASavedRemote_beforeDecidingTheBoot() {
+    let remote = "MFi/1/Siri Remote"
+    let config = SimulatedConfig()
+    config.wii[0] = SimulatedConfig.Slot(device: remote, mapping: "pad:Physical Controller", active: true)
+    let service = ControllerAssignmentService(writer: config)
+    let pinned: Set<PinnedSlot> = [PinnedSlot(system: .wii, playerZeroBased: 0)]
+
+    let cleared = service.prepareForBoot(config.state(pads: [], isWii: true, remotes: [remote]), pinned: pinned)
+
+    XCTAssertEqual(cleared, [PinnedSlot(system: .wii, playerZeroBased: 0)])
+    XCTAssertEqual(config.wii[0].device, "iOS/4/Touchscreen", "unpinned, so the boot pass gives it the Touchscreen")
+    XCTAssertTrue(config.wii[0].active)
+  }
+
+  func test_boot_withoutARemote_clearsNothing() {
+    let config = SimulatedConfig()
+    config.gc[0] = SimulatedConfig.Slot(device: SimulatedConfig.touchscreen, mapping: "touch:edited", active: true)
+    let service = ControllerAssignmentService(writer: config)
+    XCTAssertEqual(service.prepareForBoot(config.state(pads: []), pinned: []), [])
+    XCTAssertEqual(config.gc[0].mapping, "touch:edited")
+  }
+
   /// A Wii title leaves a Player 1 the user switched off alone, before and after boot.
   func test_wiiTitle_aSwitchedOffPlayer1_staysOff() {
     let config = SimulatedConfig()

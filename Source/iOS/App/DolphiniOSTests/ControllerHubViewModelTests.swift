@@ -57,6 +57,14 @@ final class ControllerHubViewModelTests: XCTestCase {
     func rumbleDestination() -> RumbleDestination { rumble }
     func connectTakesPlayer1() -> Bool { connectTakesPlayer1Value }
     func touchOverlayProgrammatic() -> Bool { touchOverlayProgrammaticValue }
+    /// Wii Remote 1's qualifier each `pointerSource` read was given.
+    var pointerSourceReads: [String] = []
+    func pointerSource(wiimote1Qualifier: String, pads: [ConnectedPadState]) -> PointerSourceModel? {
+      pointerSourceReads.append(wiimote1Qualifier)
+      return PointerSourceModel.make(
+        player1: .from(qualifier: wiimote1Qualifier, pads: pads), remoteHasMotion: true, platform: .tvos,
+        preferredMode: pointerModeValue, userOverride: nil, deviceModel: "Apple TV")
+    }
   }
 
   @MainActor
@@ -238,6 +246,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     func testRumble() { log.append("testRumble") }
     func resetOverlayLayouts() { log.append("resetLayouts") }
     func setTouchOverlayProgrammatic(_ enabled: Bool) { log.append("programmatic \(enabled)") }
+    func setPointerSourceOverride(_ kind: PointerSource.Kind?) { log.append("pointer-source \(kind?.rawValue ?? "auto")") }
   }
 
   private static let xbox = "MFi/0/Xbox Wireless Controller"
@@ -738,6 +747,27 @@ final class ControllerHubViewModelTests: XCTestCase {
     model.actions.testRumble()
     model.actions.resetOverlayLayouts()
     XCTAssertEqual(writer.log, ["pointer gyro", "motion 2 true", "bg true", "rumble both", "takes false", "programmatic false", "testRumble", "resetLayouts"])
+  }
+
+  /// The snapshot resolves Wii Remote 1's pointer source from its bound device; a GameCube-only hub
+  /// has no Wii Remote, so it asks nothing. Picking a source goes through the writer.
+  @MainActor
+  func test_reload_resolvesWiiRemote1sPointerSource_andThePickIsWritten() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    reader.pads = [ConnectedPadState(qualifier: Self.xbox, name: "Xbox", batteryPercent: nil, isCharging: false, playerLabel: nil)]
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    XCTAssertEqual(reader.pointerSourceReads, [Self.xbox])
+    XCTAssertEqual(model.state.pointerSource?.source, .remoteGyro)
+    model.actions.setPointerSourceOverride(.remoteGyro)
+    model.actions.setPointerSourceOverride(nil)
+    XCTAssertEqual(writer.log, ["pointer-source remoteGyro", "pointer-source auto"])
+
+    let gameCube = FakeReader()
+    let gameCubeModel = makeModel(system: .gamecube, reader: gameCube, writer: FakeWriter(reader: gameCube))
+    XCTAssertNil(gameCubeModel.state.pointerSource)
+    XCTAssertTrue(gameCube.pointerSourceReads.isEmpty)
   }
 
   /// M3: the hub's gyro Pointer toggle marks the profile edited, as the player screen's does.

@@ -137,4 +137,5 @@ final class FakePlayerScreenIO: PlayerScreenIO {
   func setShakeToWiggle(_ enabled: Bool) { writes.append("shake:\(enabled)") }
   func setDragGain(_ gain: Double) { writes.append("gain:\(gain)") }
   func setGyroSensitivity(_ gain: Double) { writes.append("gyro-sensitivity:\(gain)") }
+  func setPointerSourceOverride(_ kind: PointerSource.Kind?) { writes.append("pointer-source:\(kind?.rawValue ?? "auto")") }
 }

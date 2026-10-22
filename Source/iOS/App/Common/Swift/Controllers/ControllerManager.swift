@@ -505,7 +505,8 @@ final class ControllerManager: NSObject, ObservableObject {
   /// mechanical work around it.
   func prepareForBoot(isWii: Bool) {
     let state = ControllerStateStore.shared.snapshot(isWiiSystem: isWii)
-    assignmentService.apply(AssignmentEngine().decideBoot(from: state, pinned: pinnedSlots))
+    let clearedRemoteSlots = assignmentService.prepareForBoot(state, pinned: pinnedSlots)
+    for slot in clearedRemoteSlots { unpin(slot.system, player: slot.playerZeroBased) }
   }
 
   /// The **only** writer of `GCController.playerIndex`.

@@ -116,6 +116,8 @@ struct PlayerScreenState: Equatable {
   var isPinned = false
   /// SYSCONF's sensor bar is at the top: how the core applies the pointer's Vertical Offset.
   var isSensorBarOnTop = false
+  /// Wii Remote 1's pointer source and its choices; nil on every other port.
+  var pointerSource: PointerSourceModel?
 
   static func empty(_ player: PlayerState) -> PlayerScreenState {
     PlayerScreenState(
@@ -181,4 +183,6 @@ struct PlayerScreenActions {
   var advancedMotionDestination: () -> AnyView
   /// Pushes On-Screen Stick Feel, for a port bound to the touchscreen.
   var stickFeelDestination: () -> AnyView
+  /// Wii Remote 1's Pointer Source: nil is Automatic.
+  var setPointerSourceOverride: (PointerSource.Kind?) -> Void = { _ in }
 }
