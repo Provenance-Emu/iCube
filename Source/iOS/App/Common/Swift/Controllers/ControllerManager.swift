@@ -227,7 +227,8 @@ final class ControllerManager: NSObject, ObservableObject {
         // game so the user is never stranded. If it is the SAME physical device,
         // restore it to its original slot; otherwise auto-assign to the first
         // free slot. Either way, clear the pause + dismiss the banner + resume.
-        if let pending = self.disconnectPause {
+        // A menu remote (the Siri Remote waking) is not a controller to play with: the pause stays.
+        if let pending = self.disconnectPause, !c.isMenuRemote {
           // Restoring the *original* slot is knowledge reconcile() does not
           // have (the Touchscreen may hold it by now), so it is written here and
           // the reconcile below leaves it alone because the device is now bound.
@@ -272,6 +273,7 @@ final class ControllerManager: NSObject, ObservableObject {
       // before reconcile() can rewrite the bindings.
       if self.disconnectPause == nil,
          let dropped = c,
+         !dropped.isMenuRemote,
          let slot = self.assignedSlot(for: dropped),
          TVEmulationBridge.isRunning(),
          !(TVEmulationBridge.currentGameID() as String).isEmpty,
@@ -489,7 +491,9 @@ final class ControllerManager: NSObject, ObservableObject {
     isReconciling = true
     defer { isReconciling = false }
 
-    assignmentService.reconcile(ControllerStateStore.shared.snapshot(), pinned: pinnedSlots, autoAssign: autoAssign)
+    let clearedRemoteSlots = assignmentService.reconcile(
+      ControllerStateStore.shared.snapshot(), pinned: pinnedSlots, autoAssign: autoAssign)
+    for slot in clearedRemoteSlots { unpin(slot.system, player: slot.playerZeroBased) }
 
     syncPlayerIndices()
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
@@ -553,6 +557,11 @@ final class ControllerManager: NSObject, ObservableObject {
   /// not enumerated this controller yet there is nothing meaningful to bind, so
   /// the assignment is refused loudly instead of guessing.
   private func assign(_ controller: GCController, toPlayer portZeroBased: Int, system: EmulatedSystem) {
+    guard !controller.isMenuRemote else {
+      NSLog("[INPUT] Refusing to assign %@ to player %d: a menu remote never plays",
+            controller.vendorName ?? "remote", portZeroBased + 1)
+      return
+    }
     let qualifier = TVControllerMappingBridge.qualifiedName(for: controller) as String
     guard !qualifier.isEmpty else {
       NSLog("[INPUT] Cannot assign %@ to player %d: no ControllerInterface device yet",
@@ -574,7 +583,7 @@ final class ControllerManager: NSObject, ObservableObject {
       return
     }
     guard let controller = GCController.controllers().first(where: {
-      (TVControllerMappingBridge.qualifiedName(for: $0) as String) == qualifier
+      !$0.isMenuRemote && (TVControllerMappingBridge.qualifiedName(for: $0) as String) == qualifier
     }) else { return }
     let state = ControllerStateStore.shared.snapshot(isWiiSystem: isWii)
     for slot in isWii ? state.wiimoteAssignments : state.portAssignments
@@ -639,7 +648,9 @@ final class ControllerManager: NSObject, ObservableObject {
     // both the disconnect path and the pause-menu path — so it silently
     // deactivated the Wiimote slot of every pad without a touchpad (Xbox,
     // Switch Pro, bare MFi) on each disconnect and each pause.
-    let connected = Set(TVControllerMappingBridge.allQualifiedDevices().filter { !$0.hasPrefix("iOS/") })
+    // A slot bound to a menu remote is not held: reconcile clears it.
+    let remotes = Set(ControllerStateStore.menuRemoteQualifiers())
+    let connected = Set(TVControllerMappingBridge.allQualifiedDevices().filter { !$0.hasPrefix("iOS/") && !remotes.contains($0) })
     var slotForQualifier: [String: Int] = [:]
     var reserved = Set<Int>()
     // Slot 1 is read too, so a touchpad pad the engine put on Wii Remote 1 keeps it rather than

@@ -96,7 +96,7 @@ final class LivePerformanceSession: ObservableObject {
   #endif
 
   static func isRemote(_ controller: GCController) -> Bool {
-    controller.microGamepad != nil && controller.extendedGamepad == nil
+    controller.isMenuRemote
   }
 
   static func hasGameplayController() -> Bool {

@@ -195,13 +195,20 @@ enum ControllerHubModelBuilder {
   // MARK: Connected Devices
 
   private static func devicesSection(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuSection {
-    var items = state.pads.map { pad in
+    var items = state.pads.filter { !$0.isMenuRemote }.map { pad in
       MenuItem(
         id: "pad-\(pad.qualifier)", title: pad.name, subtitle: batteryText(for: pad), icon: "gamecontroller.fill",
         role: .action { actions.identifyPad(pad.qualifier) }, badge: pad.playerLabel)
     }
     if items.isEmpty {
       items.append(MenuItem(id: "no-pads", title: L("No controllers connected"), role: .action({}), isEnabled: false))
+    }
+    // A menu remote plays nothing: a read-only caption, like the placeholder above. The id carries
+    // the index because a remote the ControllerInterface has not enumerated yet has no qualifier.
+    for (index, remote) in state.pads.filter(\.isMenuRemote).enumerated() {
+      items.append(MenuItem(
+        id: "remote-\(index)", title: remote.name, subtitle: L("Siri Remote — menus and quick actions only"),
+        icon: "appletvremote.gen4", role: .action({}), isEnabled: false))
     }
     if platform == .ios, state.pads.contains(where: \.hasLight) {
       items.append(MenuItem(

@@ -121,9 +121,17 @@ final class ControllerAssignmentService {
   /// source Emulated) even if some other writer deactivated it since the binding
   /// was made. The engine only emits writes for NEW bindings, so without this
   /// pass a slot could stay bound-but-dead until the controller reconnected.
-  func reconcile(_ state: ControllerStateStore.State, pinned: Set<PinnedSlot>, autoAssign: Bool) {
+  ///
+  /// First, every GameCube port and Wii Remote slot still bound to a menu remote (the Siri Remote,
+  /// `state.menuRemoteQualifiers`) is cleared, in a GameCube title too: a user who assigned the
+  /// remote before it became a menu device still has it saved. Those slots stop being pinned, so a
+  /// pad can take them in the same pass. Returns the slots cleared, for the caller to unpin.
+  @discardableResult
+  func reconcile(_ state: ControllerStateStore.State, pinned: Set<PinnedSlot>, autoAssign: Bool) -> [PinnedSlot] {
+    let cleared = clearMenuRemotes(in: state)
+    let state = Self.removingMenuRemotes(from: state)
     if autoAssign {
-      apply(AssignmentEngine().decide(from: state, pinned: pinned))
+      apply(AssignmentEngine().decide(from: state, pinned: pinned.subtracting(cleared)))
     }
     let connected = Set(state.connectedQualifiers)
     func isConnectedPad(_ qualifier: String) -> Bool {
@@ -137,9 +145,41 @@ final class ControllerAssignmentService {
         activate(system: .wii, port: slot.portOneBased - 1)
       }
     }
+    return cleared
   }
 
   // MARK: Private
+
+  private func clearMenuRemotes(in state: ControllerStateStore.State) -> [PinnedSlot] {
+    let remotes = Set(state.menuRemoteQualifiers)
+    guard !remotes.isEmpty else { return [] }
+    var cleared: [PinnedSlot] = []
+    for (system, slots) in [(EmulatedSystem.gamecube, state.portAssignments), (.wii, state.wiimoteAssignments)] {
+      for slot in slots where remotes.contains(slot.defaultDeviceQualifier) {
+        clear(player: slot.portOneBased - 1, system: system)
+        cleared.append(PinnedSlot(system: system, playerZeroBased: slot.portOneBased - 1))
+      }
+    }
+    return cleared
+  }
+
+  /// `state` as it reads once `clearMenuRemotes` has run: no slot names a menu remote.
+  private static func removingMenuRemotes(from state: ControllerStateStore.State) -> ControllerStateStore.State {
+    let remotes = Set(state.menuRemoteQualifiers)
+    guard !remotes.isEmpty else { return state }
+    func cleared(_ slots: [ControllerStateStore.PortAssignment]) -> [ControllerStateStore.PortAssignment] {
+      slots.map { slot in
+        guard remotes.contains(slot.defaultDeviceQualifier) else { return slot }
+        return ControllerStateStore.PortAssignment(
+          portOneBased: slot.portOneBased, defaultDeviceQualifier: "", isActive: slot.isActive)
+      }
+    }
+    return ControllerStateStore.State(
+      controllers: state.controllers, portAssignments: cleared(state.portAssignments),
+      wiimoteAssignments: cleared(state.wiimoteAssignments), connectedQualifiers: state.connectedQualifiers,
+      isWiiSystem: state.isWiiSystem, touchscreenHoldsWiimote1: state.touchscreenHoldsWiimote1,
+      menuRemoteQualifiers: state.menuRemoteQualifiers)
+  }
 
   private func activate(system: EmulatedSystem, port: Int) {
     switch system {

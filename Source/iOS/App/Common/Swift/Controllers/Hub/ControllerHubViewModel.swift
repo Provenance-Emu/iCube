@@ -67,7 +67,8 @@ struct LiveControllerHubReader: ControllerHubReading {
         isCharging: battery?.batteryState == .charging,
         playerLabel: controller.playerIndex == .indexUnset ? nil : "P\(controller.playerIndex.rawValue + 1)",
         hasGyro: controller.motion?.hasRotationRate == true,
-        hasLight: controller.light != nil)
+        hasLight: controller.light != nil,
+        isMenuRemote: controller.isMenuRemote)
     }
   }
 

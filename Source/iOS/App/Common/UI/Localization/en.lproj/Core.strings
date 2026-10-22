@@ -4227,6 +4227,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "No active effects. Tap Add to insert an AUv3 effect." = "No active effects. Tap Add to insert an AUv3 effect.";
 "No adjustable parameters in the current shader" = "No adjustable parameters in the current shader";
 "No controllers connected" = "No controllers connected";
+"Siri Remote — menus and quick actions only" = "Siri Remote — menus and quick actions only";
 "No game in progress" = "No game in progress";
 "No games found. Add GameCube & Wii ROMs to your library to get started with iCube! 🎮" = "No games found. Add GameCube & Wii ROMs to your library to get started with iCube! 🎮";
 "No haptic feedback available" = "No haptic feedback available";

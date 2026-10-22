@@ -453,6 +453,51 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     XCTAssertFalse(model.focusableIDs.contains("no-pads"))
   }
 
+  // MARK: Menu remote (the Siri Remote)
+
+  private static let siriRemote = "MFi/1/Siri Remote"
+
+  private func remote(qualifier: String = siriRemote) -> ConnectedPadState {
+    ConnectedPadState(
+      qualifier: qualifier, name: "Siri Remote", batteryPercent: nil, isCharging: false, playerLabel: nil, isMenuRemote: true)
+  }
+
+  func test_menuRemote_isACaptionRow_notAPad() {
+    var identified: String?
+    let pads = [ConnectedPadState(qualifier: Self.xbox, name: "Xbox", batteryPercent: nil, isCharging: false, playerLabel: nil), remote()]
+    let model = make(state(system: .gamecube, pads: pads), actions(identifyPad: { identified = $0 }), platform: .tvos)
+    XCTAssertEqual(ids(model, section: "devices"), ["pad-\(Self.xbox)", "remote-0"])
+    let row = model.item(id: "remote-0")
+    XCTAssertEqual(row?.title, "Siri Remote")
+    XCTAssertEqual(row?.subtitle, "Siri Remote — menus and quick actions only")
+    XCTAssertEqual(row?.icon, "appletvremote.gen4")
+    XCTAssertEqual(row?.isEnabled, false)
+    XCTAssertFalse(model.focusableIDs.contains("remote-0"))
+    run(row)
+    XCTAssertNil(identified, "a remote has no identify action")
+  }
+
+  func test_remoteOnly_stillSaysNoControllersConnected() {
+    let model = make(state(system: .gamecube, pads: [remote()]), platform: .tvos)
+    XCTAssertEqual(ids(model, section: "devices"), ["no-pads", "remote-0"])
+  }
+
+  /// A remote the ControllerInterface has not enumerated has no qualifier: the ids stay unique.
+  func test_remotesWithoutAQualifier_getUniqueIDs() {
+    let model = make(state(system: .gamecube, pads: [remote(qualifier: ""), remote(qualifier: "")]), platform: .tvos)
+    XCTAssertEqual(ids(model, section: "devices"), ["no-pads", "remote-0", "remote-1"])
+  }
+
+  func test_menuRemote_isNeverADeviceChoice() {
+    let pads = [ConnectedPadState(qualifier: Self.xbox, name: "Xbox", batteryPercent: nil, isCharging: false, playerLabel: nil), remote()]
+    let hub = state(system: .gamecube, bound: ["gc-1": Self.xbox], pads: pads)
+    guard case .cycle(let options, _)? = make(hub, platform: .tvos).item(id: "gc-1-device")?.role else { return XCTFail("cycle") }
+    XCTAssertEqual(options.map(\.0), ["None", "Xbox"])
+    let deviceOptions = PlayerScreenModelBuilder.deviceOptions(
+      isPinned: false, current: .noDevice, pads: pads, currentTitle: "", platform: .tvos)
+    XCTAssertFalse(deviceOptions.contains { $0.choice == .pad(Self.siriRemote) })
+  }
+
   /// Real Wii Remotes have no backend on iOS/tvOS, so the hub offers no scanning toggle.
   func test_devices_offerNoWiiRemoteScanning() {
     XCTAssertFalse(ids(make(state(system: .wiiAndGameCube)), section: "devices").contains("wiimote-scan"))

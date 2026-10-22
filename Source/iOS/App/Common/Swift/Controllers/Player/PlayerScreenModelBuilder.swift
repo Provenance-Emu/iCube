@@ -77,8 +77,10 @@ enum PlayerScreenModelBuilder {
     if isPinned { options.append(DeviceOption(choice: .automatic, title: L("Auto"))) }
     options.append(DeviceOption(choice: .noDevice, title: L("None")))
     if platform == .ios { options.append(DeviceOption(choice: .touchscreen, title: L("Touchscreen"))) }
-    options += pads.map { DeviceOption(choice: .pad($0.qualifier), title: $0.name) }
-    if case .pad(let qualifier) = current, !pads.contains(where: { $0.qualifier == qualifier }) {
+    // A menu remote (the Siri Remote) never takes a player slot.
+    let gameplayPads = pads.filter { !$0.isMenuRemote }
+    options += gameplayPads.map { DeviceOption(choice: .pad($0.qualifier), title: $0.name) }
+    if case .pad(let qualifier) = current, !gameplayPads.contains(where: { $0.qualifier == qualifier }) {
       options.append(DeviceOption(choice: current, title: currentTitle))
     }
     return options

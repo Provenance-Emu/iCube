@@ -1548,7 +1548,7 @@ struct EmulationScreen: View {
     let bound = isWiiSystem ? reader.boundQualifier(forWiimote: 1) : reader.boundQualifier(forGCPort: 1)
     let touchscreen = TopBarDeviceOption(
       qualifier: nil, name: L("On-Screen Controls"), isSelected: AssignmentEngine.isVirtual(bound))
-    return [touchscreen] + reader.connectedPads().filter { !$0.qualifier.isEmpty }.map { pad in
+    return [touchscreen] + reader.connectedPads().filter { !$0.qualifier.isEmpty && !$0.isMenuRemote }.map { pad in
       TopBarDeviceOption(qualifier: pad.qualifier, name: pad.name, isSelected: pad.qualifier == bound)
     }
   }

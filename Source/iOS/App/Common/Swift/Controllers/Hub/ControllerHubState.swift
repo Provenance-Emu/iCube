@@ -125,6 +125,9 @@ struct ConnectedPadState: Equatable {
   var hasGyro: Bool = false
   /// The pad has an LED light bar (`GCController.light`).
   var hasLight: Bool = false
+  /// A menu device (`GCController.isMenuRemote`: the Siri Remote). It never takes a player slot, so
+  /// the hub lists it under its own caption and no Device list offers it.
+  var isMenuRemote = false
 }
 
 /// Plain snapshot of everything the hub shows. No bridge reads happen after it is built;

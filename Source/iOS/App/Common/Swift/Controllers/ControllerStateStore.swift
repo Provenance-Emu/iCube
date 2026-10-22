@@ -35,6 +35,19 @@ final class ControllerStateStore: NSObject, Sendable {
     /// The on-screen controls are using Wii Remote 1: iOS only, the controls are shown, and
     /// Wii Remote 1 is active and bound to the Touchscreen. Auto-assign then starts at Wii Remote 2.
     let touchscreenHoldsWiimote1: Bool
+    /// Qualified names of the connected menu remotes (`GCController.isMenuRemote`: the Siri
+    /// Remote). They are left out of `connectedQualifiers`, so nothing auto-assigns them, and a
+    /// slot still bound to one is cleared by `ControllerAssignmentService.reconcile`. Defaulted
+    /// so test fixtures that predate it compile; `snapshot()` always passes it.
+    var menuRemoteQualifiers: [String] = []
+  }
+
+  /// `qualifiedName(for:)` of every connected menu remote, skipping one the ControllerInterface has
+  /// not enumerated yet (an empty name).
+  static func menuRemoteQualifiers() -> [String] {
+    GCController.controllers().filter(\.isMenuRemote)
+      .map { TVControllerMappingBridge.qualifiedName(for: $0) as String }
+      .filter { !$0.isEmpty }
   }
 
   /// `isWiiSystem`: the title about to boot, for the pre-boot pass; nil reads the running one
@@ -61,7 +74,8 @@ final class ControllerStateStore: NSObject, Sendable {
         defaultDeviceQualifier: TVControllerMappingBridge.defaultDevice(forWiimote: port) as String,
         isActive: DOLConfigBridge.wiimoteSource(for: port) == 1))
     }
-    let connected = TVControllerMappingBridge.allQualifiedDevices()
+    let remotes = Self.menuRemoteQualifiers()
+    let connected = TVControllerMappingBridge.allQualifiedDevices().filter { !remotes.contains($0) }
     let isWii = isWiiSystem ?? TVEmulationBridge.isCurrentSystemWii()
     #if os(iOS)
     let touchscreenHoldsWiimote1 = ControllerManager.shared.overlayVisible
@@ -77,6 +91,7 @@ final class ControllerStateStore: NSObject, Sendable {
       wiimoteAssignments: wiiAssigns,
       connectedQualifiers: connected,
       isWiiSystem: isWii,
-      touchscreenHoldsWiimote1: touchscreenHoldsWiimote1)
+      touchscreenHoldsWiimote1: touchscreenHoldsWiimote1,
+      menuRemoteQualifiers: remotes)
   }
 }

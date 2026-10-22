@@ -11,4 +11,12 @@ public extension GCController {
     }
     return false
   }
+
+  /// A menu device, not a gameplay pad: the Siri Remote exposes a micro gamepad and no extended
+  /// one. It never takes a GameCube port or Wii Remote slot (`ControllerStateStore.State
+  /// .menuRemoteQualifiers`). A pad with neither profile (the Switch Online N64 pad, reached through
+  /// `PhysicalProfileController`) is a gameplay pad.
+  var isMenuRemote: Bool {
+    microGamepad != nil && extendedGamepad == nil
+  }
 }

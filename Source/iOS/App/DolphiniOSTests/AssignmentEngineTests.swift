@@ -10,6 +10,7 @@ private let padA = "MFi/0/Gamepad A"
 private let padB = "MFi/1/Gamepad B"
 private let padC = "DSUClient/0/Pad C"
 private let wiiTouchscreen = "iOS/4/Touchscreen"
+private let siriRemote = "MFi/2/Siri Remote"
 
 /// `touchscreenHoldsWiimote1` is true on iOS while the on-screen controls are shown and Wii Remote 1
 /// is on the Touchscreen; tvOS always passes false.
@@ -18,7 +19,8 @@ private func state(
   wii: [String] = ["", "", "", ""],
   connected: [String],
   isWii: Bool = false,
-  touchscreenHoldsWiimote1: Bool = false
+  touchscreenHoldsWiimote1: Bool = false,
+  menuRemotes: [String] = []
 ) -> ControllerStateStore.State {
   func slots(_ qualifiers: [String]) -> [ControllerStateStore.PortAssignment] {
     qualifiers.enumerated().map {
@@ -31,7 +33,8 @@ private func state(
     wiimoteAssignments: slots(wii),
     connectedQualifiers: connected,
     isWiiSystem: isWii,
-    touchscreenHoldsWiimote1: touchscreenHoldsWiimote1)
+    touchscreenHoldsWiimote1: touchscreenHoldsWiimote1,
+    menuRemoteQualifiers: menuRemotes)
 }
 
 final class AssignmentEngineTests: XCTestCase {
@@ -202,6 +205,39 @@ final class AssignmentEngineTests: XCTestCase {
       ControllerAssignment(qualifier: padB, playerZeroBased: 1, system: .wii),
     ], "padB gets no GameCube port in a Wii title")
   }
+
+  // MARK: Menu remote (the Siri Remote)
+
+  /// The engine drops a menu remote even when a caller lists it as connected.
+  func test_menuRemote_takesNoGameCubePort_thePadDoes() {
+    let decision = AssignmentEngine().decide(
+      from: state(gc: ["", "", "", ""], connected: [siriRemote, padA], menuRemotes: [siriRemote]))
+    XCTAssertEqual(decision.assignments, [ControllerAssignment(qualifier: padA, playerZeroBased: 0, system: .gamecube)])
+  }
+
+  func test_menuRemote_takesNoWiiRemote() {
+    let decision = AssignmentEngine().decide(
+      from: state(gc: ["", "", "", ""], connected: [siriRemote], isWii: true, menuRemotes: [siriRemote]))
+    XCTAssertEqual(decision, .none)
+  }
+
+  /// A remote alone is no controller: the Touchscreen takes Player 1 as with nothing connected, and on
+  /// tvOS (no Touchscreen) nothing is decided.
+  func test_remoteOnly_fallsBackAsWithNoPads() {
+    XCTAssertEqual(
+      AssignmentEngine().decide(from: state(gc: ["", "", "", ""], connected: [touchscreen, siriRemote], menuRemotes: [siriRemote])),
+      AssignmentEngine().decide(from: state(gc: ["", "", "", ""], connected: [touchscreen])))
+    XCTAssertEqual(
+      AssignmentEngine().decide(from: state(gc: ["", "", "", ""], connected: [siriRemote], menuRemotes: [siriRemote])), .none)
+  }
+
+  /// A Player 1 still bound to the remote reads as free: the Touchscreen or a pad takes it.
+  func test_aSlotBoundToTheRemote_isFree() {
+    XCTAssertEqual(
+      AssignmentEngine().decide(
+        from: state(gc: [siriRemote, "", "", ""], connected: [siriRemote, padA], menuRemotes: [siriRemote])).assignments,
+      [ControllerAssignment(qualifier: padA, playerZeroBased: 0, system: .gamecube)])
+  }
 }
 
 /// `AssignmentEngine.decideBoot`: the pre-boot pass that used to be `EnsurePad1DefaultsToTouchscreen`
@@ -215,7 +251,7 @@ final class AssignmentEngineBootTests: XCTestCase {
     gc: [String] = ["", "", "", ""], gcActive: Set<Int> = [1],
     wii: [String] = ["", "", "", ""], wiiActive: Set<Int> = [1],
     connected: [String] = [touchscreen, wiiTouchscreen], isWii: Bool = false,
-    pinned: Set<PinnedSlot> = []
+    pinned: Set<PinnedSlot> = [], menuRemotes: [String] = []
   ) -> BootDecision {
     func slots(_ qualifiers: [String], _ active: Set<Int>) -> [ControllerStateStore.PortAssignment] {
       qualifiers.enumerated().map {
@@ -225,8 +261,20 @@ final class AssignmentEngineBootTests: XCTestCase {
     }
     let state = ControllerStateStore.State(
       controllers: [], portAssignments: slots(gc, gcActive), wiimoteAssignments: slots(wii, wiiActive),
-      connectedQualifiers: connected, isWiiSystem: isWii, touchscreenHoldsWiimote1: false)
+      connectedQualifiers: connected, isWiiSystem: isWii, touchscreenHoldsWiimote1: false,
+      menuRemoteQualifiers: menuRemotes)
     return AssignmentEngine().decideBoot(from: state, pinned: pinned)
+  }
+
+  /// A slot bound to the Siri Remote is not held by a connected pad: boot treats it as empty.
+  func test_menuRemote_holdsNoSlotAtBoot() {
+    XCTAssertEqual(
+      boot(gc: [siriRemote, "", "", ""], wii: [siriRemote, siriRemote, "", ""], wiiActive: [1, 2],
+           connected: [touchscreen, wiiTouchscreen, siriRemote], menuRemotes: [siriRemote]),
+      boot())
+    XCTAssertEqual(
+      boot(gc: [siriRemote, "", "", ""], connected: [siriRemote], menuRemotes: [siriRemote]),
+      BootDecision(activatesGCPort1: true, activatesWiimote1: false, deactivatedWiimotes: [], assignments: []))
   }
 
   func test_gameCubeTitle_freshInstall_touchscreenOnPlayer1AndWiiRemote1() {
