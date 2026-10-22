@@ -1,6 +1,6 @@
 # Shared library edits across iCube and Provenance
 
-October 21, 2026. **Design for owner review; not an implementation or acceptance claim.**
+October 21, 2026. **Owner approved: “Approve and implement.” Implementation and installed acceptance remain open.**
 
 ## Owner requirements
 
