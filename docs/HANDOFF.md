@@ -8,7 +8,7 @@ Current performance/locale candidate source `3ddef3d7bdea736f3da2b7bfd6e5ef2bc9a
 
 Future-run fixes are pushed: `fff79a54ef` verifies persisted TestFlight membership/review state (seven tests); `24ce80dd78` rebuilds only the matching device core per matrix job and checks package/SDK/exports/dSYM/archive identity (15 tests). The active run retains its original workflow and is not restarted. No measured speedup or new archive pass is claimed for the optimization yet.
 
-Provenance [receiver PR #3753](https://github.com/Provenance-Emu/Provenance/pull/3753) is still draft/open at `d1a5acabe98f113edcb8f45fe73b388be7eace24`: Realm async-open compile repair, maintenance registry entries, and merge of current develop. Eleven focused native importer tests and the registry regression pass; fresh SDK checks remain pending. This does not establish title/cover/tag interoperability. Parent checkout working files and unrelated concurrent iCube UI work are preserved.
+Provenance [receiver PR #3753](https://github.com/Provenance-Emu/Provenance/pull/3753) is still draft/open at `7b9ccda0b59aa4a6a9fa4c3ad85860f12b622d43`: Realm async-open compile repair, maintenance registry entries, and merge of current develop. Reviewed admission-cancellation, manual foreground/trust/discovery, same-name content and cached-peer reopening repairs are pushed. Thirty focused native tests and registry checks pass; fresh SDK checks remain pending. This does not establish title/cover/tag interoperability. Parent checkout working files and unrelated concurrent iCube UI work are preserved.
 
 ## Fast DEV loop — October 21, 2026
 
