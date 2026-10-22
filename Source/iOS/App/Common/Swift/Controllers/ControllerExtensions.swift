@@ -512,10 +512,10 @@ func installExtraInputHandlers(_ c: GCController) {
   // OPTIONS, Xbox "≡", Switch "+") is the emulated Start/+, so it opened the pause menu on every
   // Start press. Those pads pause from Options/Home (installPauseMenuHandlers); keep the handler set
   // for them, doing nothing, so the system does not take the press.
-  c.controllerPausedHandler = { controller in
+  DeprecatedAPIShims.setPausedHandler({ controller in
     guard controller.extendedGamepad == nil && controller.microGamepad == nil else { return }
     presentPauseMenu("controllerPausedHandler")
-  }
+  }, on: c)
 
   // Ungated Menu/Options -> pause menu for every controller type.
   installPauseMenuHandlers(c)

@@ -62,7 +62,7 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
     // The framework's pause callback is how tvOS treats a pad's Start / Menu button when nothing
     // else claims it. Keep it claimed, doing nothing, so Start reaches the game through the
     // physical element and never falls back to the system or the app's pause route.
-    base.controllerPausedHandler = { _ in }
+    DeprecatedAPIShims.setPausedHandler({ _ in }, on: base)
 
     for (name, input) in bindings {
       guard let element = profile.elements[name] else { continue }
