@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "AudioSessionManager.h"
+#import "DeprecatedAPIShims.h"
 #import "BootNoticeManager.h"
 #import "PGOFlush.h"
 #import "SharedDefaults.h"

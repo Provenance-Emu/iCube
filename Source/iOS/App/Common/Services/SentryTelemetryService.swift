@@ -187,7 +187,7 @@ enum SentryTelemetryService {
 
       options.enableAutoPerformanceTracing = true
       options.enableAppHangTracking = true
-      options.enableReportNonFullyBlockingAppHangs = false
+      DeprecatedAPIShims.disableNonFullyBlockingAppHangReports(on: options)
       #if !os(tvOS)
       options.enableMetricKit = true
       #endif
@@ -314,7 +314,7 @@ enum SentryTelemetryService {
 
   static func handleEmulationWillStart() {
     EmulationTelemetryGate.setEmulationActive(true)
-    SentrySDK.pauseAppHangTracking()
+    DeprecatedAPIShims.pauseAppHangTracking()
     addEmulationBreadcrumb("will start")
     // Reset before the JIT handshake: a boot that hangs at the brk must not report the previous
     // boot's settings. recordEmulationBoot / handleEmulationDidStart fill these in.
@@ -362,7 +362,7 @@ enum SentryTelemetryService {
   static func handleEmulationDidEnd() {
     EmulationPerfSessionRecorder.shared.finishAndReportIfSampled()
     EmulationTelemetryGate.setEmulationActive(false)
-    SentrySDK.resumeAppHangTracking()
+    DeprecatedAPIShims.resumeAppHangTracking()
     // jit / cpu_core (and game_id outside the App Store build) stay set: a death right after leaving a game
     // is still about that boot.
     addEmulationBreadcrumb("ended")
