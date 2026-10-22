@@ -61,6 +61,10 @@ runs:
       run: |
         python3 -m venv "$RUNNER_TEMP/testflight-distribute-venv"
         "$RUNNER_TEMP/testflight-distribute-venv/bin/python" -m pip install --quiet --disable-pip-version-check "PyJWT[crypto]>=2.8"
+    - name: Test distribution state verification
+      shell: bash
+      run: |
+        "$RUNNER_TEMP/testflight-distribute-venv/bin/python" "${{ github.action_path }}/test_distribute.py"
     - name: Distribute build
       shell: bash
       env:

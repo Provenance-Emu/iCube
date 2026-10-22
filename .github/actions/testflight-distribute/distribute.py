@@ -250,7 +250,9 @@ def main() -> None:
                         {"data": [{"type": "builds", "id": build_id}]})
             print(f"added to {name!r}")
         except ApiError as exc:
-            if exc.status == 409 or "already" in exc.detail.lower():
+            observed = (find_build(client, app_id, build_number, platform)
+                        if exc.status == 409 else None)
+            if observed and name in observed["_groups"]:
                 print(f"already in {name!r}")
             else:
                 raise
@@ -264,12 +266,29 @@ def main() -> None:
         except ApiError as exc:
             # ASC may have auto-submitted when the first external group was
             # attached; a duplicate submission is a 409, not a failure.
-            if exc.status == 409 or "already" in exc.detail.lower():
+            observed = (find_build(client, app_id, build_number, platform)
+                        if exc.status == 409 else None)
+            if observed and observed["_review"] is not None:
                 print("Beta App Review submission already exists")
             else:
                 raise
     elif submit:
         print(f"Beta App Review state already {build['_review']}")
+
+    # Successful POST responses alone do not establish persisted distribution.
+    # Allow short ASC propagation delays, then fail without re-uploading a binary.
+    expected_groups = {g["attributes"]["name"] for g in targets}
+    for attempt in range(4):
+        observed = find_build(client, app_id, build_number, platform)
+        if (observed and observed["attributes"]["processingState"] == "VALID"
+                and expected_groups.issubset(observed["_groups"])
+                and (not submit or observed["_review"] is not None)):
+            break
+        if attempt == 3:
+            sys.exit("::error::ASC did not confirm the requested groups and review "
+                     "submission; reconcile this existing build before retrying")
+        time.sleep(5)
+    print(f"verified groups={sorted(observed['_groups'])} review={observed['_review']}")
 
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
