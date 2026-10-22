@@ -14,6 +14,8 @@ struct CheatsMenuView: View {
   @State private var geckoCodeList: [TVGeckoCodeInfo] = []
   @State private var actionReplayCodeList: [TVActionReplayCodeInfo] = []
   @State private var searchText: String = ""
+  /// tvOS: the search sheet (a Form with the keyboard); the engine has no text-entry row.
+  @State private var showSearchSheet: Bool = false
   @State private var filter: CheatFilter = .all
   @State private var fetchStatus: CheatFetchStatus = .idle
   @State private var lastFetch: Date? = nil
@@ -31,7 +33,7 @@ struct CheatsMenuView: View {
   /// touch-only `List` on iOS, a bespoke two-column layout on tvOS). Search
   /// stays a host concern (`.searchable` below, iOS-only), matching the
   /// design doc's Settings-root precedent; it is not part of the engine.
-  /// Every cheat after the iOS text search (tvOS has none, so this is the full list).
+  /// Every cheat after the text search (`.searchable` on iOS, the Search row's sheet on tvOS).
   private var searchedCheats: [CheatItem] {
     createCombinedCheatList().filter { c in
       let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -52,7 +54,13 @@ struct CheatsMenuView: View {
     #endif
     let state = CheatsMenuState(
       cheatsEnabledGlobal: cheatsEnabledGlobal, cheats: filtered, filter: filter,
-      fetchStatus: fetchStatus, lastFetch: lastFetch, showsFilterRow: showsFilterRow)
+      fetchStatus: fetchStatus, lastFetch: lastFetch, showsFilterRow: showsFilterRow,
+      searchText: searchText)
+    #if os(tvOS)
+    let openSearch: (() -> Void)? = { showSearchSheet = true }
+    #else
+    let openSearch: (() -> Void)? = nil
+    #endif
     let actions = CheatsMenuActions(
       setEnabledGlobal: { newValue in
         DOLConfigBridge.setMainEnableCheats(newValue)
@@ -65,7 +73,8 @@ struct CheatsMenuView: View {
       toggleCheat: { cheat in toggleCheat(cheat) },
       downloadCheats: { downloadCheats() },
       refreshCheats: { loadCheats() },
-      setFilter: { filter = $0 }
+      setFilter: { filter = $0 },
+      openSearch: openSearch
     )
     #if os(tvOS)
     return CheatsMenuModelBuilder.make(state: state, actions: actions, typeAsBadge: true)
@@ -124,47 +133,57 @@ struct CheatsMenuView: View {
       Text(L("Cheats can affect performance and stability. Enable global cheats to apply this code?"))
     }
     #else
-    ZStack {
-      // Blurred cover backdrop; the material keeps the list legible with no hard-coded scrim colour.
-      Image(uiImage: game.coverImage)
-        .resizable()
-        .scaledToFill()
-        .blur(radius: 25)
-        .opacity(0.8)
-        .ignoresSafeArea()
-
-      Rectangle()
-        .fill(.ultraThinMaterial)
-        .ignoresSafeArea()
-
-      VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
-        // Search stays an inline field above the list (the engine has no search of its own).
-        TextField(L("Search"), text: $searchText)
-          .icubeText(.body)
-          .foregroundStyle(ICubeDesign.color(.textPrimary))
-          .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
-          .padding(.vertical, ICubeDesign.Spacing.s.rawValue)
-          .background(
-            RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
-              .fill(ICubeDesign.color(.rowSurface))
-          )
-          .padding(.horizontal, ICubeDesign.Spacing.xl.rawValue)
-
-        MenuScreen(
-          model: cheatsMenuModel,
-          style: .list,
-          onBack: onBack,
-          tvHeader: ICubeLeafHeader(title: L("Cheats"), subtitle: game.title),
-          tvInset: .xl
-        )
-      }
+    // The pause menu already draws the room behind every pane. The earlier blurred cover backdrop
+    // was an unclipped `scaledToFill` sibling in a ZStack: portrait art filled to 1920pt wide is far
+    // taller than the screen, so the whole pane took that height and the search field, header and
+    // Enable/Download/Show rows sat above the visible area, leaving only the long list on screen.
+    VStack(spacing: 0) {
+      MenuScreen(
+        model: cheatsMenuModel,
+        style: .list,
+        onBack: onBack,
+        tvHeader: ICubeLeafHeader(title: L("Cheats"), subtitle: game.title),
+        tvInset: .xl,
+        tvClaimsFocus: true
+      )
     }
+    .frame(maxWidth: 1000)
     .onAppear { appear() }
     .alert(L("Enable Cheats?"), isPresented: $showEnableCheatsPrompt) {
       Button(L("Turn On Cheats")) { confirmEnableCheats() }
       Button(L("Cancel"), role: .cancel) { cancelEnableCheats() }
     } message: {
       Text(L("Cheats can affect performance and stability. Enable global cheats to apply this code?"))
+    }
+    // tvOS alerts can't host text fields and the engine has no text row, so the Search row opens
+    // this sheet (the library's search sheet pattern). The claims keep the game paused and the
+    // remote off the pane behind it while the keyboard is up.
+    .sheet(isPresented: $showSearchSheet) {
+      NavigationStack {
+        Form {
+          Section(header: Text(L("Search Cheats"))) {
+            TextField(L("Name, type, category or creator"), text: $searchText)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled(true)
+          }
+          if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Text(String(format: L("%1$ld results"), searchedCheats.count))
+              .foregroundStyle(.secondary)
+          }
+          Section {
+            Button(L("Done")) { showSearchSheet = false }
+            if !searchText.isEmpty {
+              Button(L("Clear Search"), role: .destructive) {
+                searchText = ""
+                showSearchSheet = false
+              }
+            }
+          }
+        }
+        .navigationTitle(L("Search Cheats"))
+      }
+      .pauseClaim("cheats-search")
+      .claimsController()
     }
     #endif
   }

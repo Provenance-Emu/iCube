@@ -13,7 +13,8 @@ final class CheatsMenuModelBuilderTests: XCTestCase {
     toggleCheat: @escaping (CheatItem) -> Void = { _ in },
     downloadCheats: @escaping () -> Void = {},
     refreshCheats: @escaping () -> Void = {},
-    setFilter: @escaping (CheatFilter) -> Void = { _ in }
+    setFilter: @escaping (CheatFilter) -> Void = { _ in },
+    openSearch: (() -> Void)? = nil
   ) -> CheatsMenuActions {
     CheatsMenuActions(
       setEnabledGlobal: setEnabledGlobal,
@@ -21,7 +22,8 @@ final class CheatsMenuModelBuilderTests: XCTestCase {
       toggleCheat: toggleCheat,
       downloadCheats: downloadCheats,
       refreshCheats: refreshCheats,
-      setFilter: setFilter
+      setFilter: setFilter,
+      openSearch: openSearch
     )
   }
 
@@ -221,6 +223,43 @@ final class CheatsMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(selection.wrappedValue, AnyHashable(CheatFilter.category(.infinite).id))
     selection.wrappedValue = AnyHashable(CheatFilter.enabled.id)
     XCTAssertEqual(chosen, .enabled)
+  }
+
+  // MARK: tvOS search row (regression: search and filter were unreachable under a long list)
+
+  /// With a host search action the model LEADS with Search and the Show filter, so the remote
+  /// lands on them first; the filter leaves its own later section to sit beside Search.
+  func test_searchRow_leadsTheModel_withTheFilterBesideIt_onlyWhenTheHostOpensSearch() {
+    let cheats = [cheat("g0", name: "Infinite Lives", enabled: true), cheat("g1", name: "Moon Jump")]
+    var opened = 0
+    let tv = CheatsMenuModelBuilder.make(
+      state: CheatsMenuState(cheatsEnabledGlobal: true, cheats: cheats, showsFilterRow: true),
+      actions: actions(openSearch: { opened += 1 }))
+    XCTAssertEqual(tv.sections.first?.id, "find")
+    XCTAssertEqual(tv.sections.first?.items.map(\.id), [CheatsMenuModelBuilder.searchItemID, CheatsMenuModelBuilder.filterItemID])
+    XCTAssertEqual(tv.focusableIDs.first, CheatsMenuModelBuilder.searchItemID)
+    XCTAssertNil(tv.sections.first(where: { $0.id == "filter" }), "the filter moved into the find section")
+    XCTAssertTrue(tv.item(id: CheatsMenuModelBuilder.searchItemID)?.activateInPlace() ?? false)
+    XCTAssertEqual(opened, 1)
+
+    let ios = CheatsMenuModelBuilder.make(
+      state: CheatsMenuState(cheatsEnabledGlobal: true, cheats: cheats, showsFilterRow: true), actions: actions())
+    XCTAssertNil(ios.item(id: CheatsMenuModelBuilder.searchItemID), "iOS keeps search in .searchable")
+    XCTAssertEqual(ios.section(containing: CheatsMenuModelBuilder.filterItemID)?.id, "filter", "iOS placement unchanged")
+  }
+
+  func test_searchRow_badgeShowsTheQuery_andTheListHeaderCountsMatches() {
+    let cheats = [cheat("g0", name: "Infinite Lives"), cheat("g1", name: "Moon Jump")]
+    let idle = CheatsMenuModelBuilder.make(
+      state: CheatsMenuState(cheatsEnabledGlobal: true, cheats: cheats, searchText: "  "), actions: actions(openSearch: {}))
+    XCTAssertNil(idle.item(id: CheatsMenuModelBuilder.searchItemID)?.badge, "whitespace is no query")
+    XCTAssertEqual(idle.section(containing: "cheat-g0")?.header, L("Cheat Codes"))
+
+    // The host narrows `cheats` before building; the model only reports what it was given.
+    let searching = CheatsMenuModelBuilder.make(
+      state: CheatsMenuState(cheatsEnabledGlobal: true, cheats: [cheats[1]], searchText: "moon"), actions: actions(openSearch: {}))
+    XCTAssertEqual(searching.item(id: CheatsMenuModelBuilder.searchItemID)?.badge, "moon")
+    XCTAssertEqual(searching.section(containing: "cheat-g1")?.header, String(format: L("%1$ld matching “%2$@”"), 1, "moon"))
   }
 
   // MARK: Fetch status
