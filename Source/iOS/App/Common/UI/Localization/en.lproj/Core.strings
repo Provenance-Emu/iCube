@@ -5634,3 +5634,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Touch (Follow)" = "Touch (Follow)";
 "Automatic picks the controller's gyro, then its touchpad, then the Siri Remote." = "Automatic picks the controller's gyro, then its touchpad, then the Siri Remote.";
 "Automatic picks the controller's gyro, then its touchpad." = "Automatic picks the controller's gyro, then its touchpad.";
+"No controller connected" = "No controller connected";
+"The Siri Remote only navigates menus. Connect a controller to play." = "The Siri Remote only navigates menus. Connect a controller to play.";

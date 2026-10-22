@@ -29,7 +29,10 @@ internal struct PauseMenuView: View {
   var onReopenSaveBrowser: (() -> Void)? = nil
   var startsInSaveBrowser = false
   var startsInPerformance = false
+  /// Opens on the Controllers hub (tvOS: the no-controller notice's Controllers button).
+  var startsInControllers = false
   @State private var initialPerformancePaneConsumed = false
+  @State private var initialControllersPaneConsumed = false
   @State private var initialSaveBrowserConsumed = false
   @State private var showSharedSaveBrowser = false
   @State private var openingSaveSession: UInt64?
@@ -404,6 +407,14 @@ internal struct PauseMenuView: View {
       if startsInPerformance && !initialPerformancePaneConsumed {
         initialPerformancePaneConsumed = true
         pane = .perfHUD
+      }
+      if startsInControllers && !initialControllersPaneConsumed {
+        initialControllersPaneConsumed = true
+        #if os(tvOS)
+        pane = .controllers
+        #else
+        showControllersSheet = true
+        #endif
       }
       #if DEBUG
       if !debugInitialPaneConsumed {

@@ -258,6 +258,15 @@ struct EmulationScreen: View {
   @State private var quickStateActionInFlight = false
   @State private var pauseStartsInSaveBrowser = false
   @State private var pauseStartsInPerformance = false
+  /// The pause menu opens on the Controllers hub (the no-controller notice's Controllers button).
+  @State private var pauseStartsInControllers = false
+  #if os(tvOS)
+  /// When the game was first seen running this boot (`NoControllerNotice`).
+  @State private var firstRunningAt: Date?
+  /// The no-controller notice was shown this boot; it shows once.
+  @State private var noControllerNoticeShown = false
+  @State private var showNoControllerNotice = false
+  #endif
   @ObservedObject private var recorder = RecordingManager.shared
   @AppStorage("quick_save_slot") private var selectedSlot = 1
   @AppStorage("quick_save_mode") private var quickSaveMode: QuickSaveMode = .history
@@ -458,7 +467,13 @@ struct EmulationScreen: View {
   /// `EmuEventVC` drops its focus trap and enables controller navigation while either menu is up; a
   /// menu that does not announce itself can never take focus.
   private func postOverlayVisibility() {
+    #if os(tvOS)
+    // The no-controller notice sits in the screen, not a cover: the game's event controller must hand
+    // the remote's focus and Menu to it, as it does for the menus.
+    let visible = showPauseMenu || showQuickMenu || showNoControllerNotice
+    #else
     let visible = showPauseMenu || showQuickMenu
+    #endif
     NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
   }
 
@@ -488,6 +503,7 @@ struct EmulationScreen: View {
     }
     menu.startsInSaveBrowser = pauseStartsInSaveBrowser
     menu.startsInPerformance = pauseStartsInPerformance
+    menu.startsInControllers = pauseStartsInControllers
     return menu
   }
 
@@ -528,17 +544,56 @@ struct EmulationScreen: View {
     })
   }
 
+  /// Once per boot, `NoControllerNotice.delay` after the game is first seen running, with no gameplay
+  /// pad connected: say the Siri Remote cannot play. A pad connecting while it is up closes it.
+  private func checkNoControllerNotice() {
+    if firstRunningAt == nil, TVEmulationBridge.isRunning(), TVEmulationBridge.currentGameID() == game.gameID {
+      firstRunningAt = Date()
+    }
+    func hasGameplayPad() -> Bool {
+      NoControllerNotice.hasGameplayPad(connectedQualifiers: ControllerStateStore.shared.snapshot().connectedQualifiers)
+    }
+    if showNoControllerNotice {
+      if hasGameplayPad() { showNoControllerNotice = false }
+      return
+    }
+    guard !noControllerNoticeShown, let firstRunningAt else { return }
+    let inputs = NoControllerNotice.Inputs(
+      secondsRunning: Date().timeIntervalSince(firstRunningAt), alreadyShown: noControllerNoticeShown,
+      gameplayPadConnected: hasGameplayPad(),
+      anotherOverlayIsUp: showPauseMenu || showQuickMenu || controllerManager.disconnectPause != nil,
+      isHarnessLaunch: NoControllerNotice.isHarnessLaunch(
+        arguments: ProcessInfo.processInfo.arguments, screenshotMode: UserDefaults.standard.bool(forKey: "SCREENSHOT_MODE")))
+    guard NoControllerNotice.shouldShow(inputs) else { return }
+    noControllerNoticeShown = true
+    showNoControllerNotice = true
+  }
+
+  private func dismissNoControllerNotice() {
+    showNoControllerNotice = false
+  }
+
+  /// The pause menu's Controllers hub, as its Controllers tile opens it. The pending claim keeps the
+  /// game paused between the notice's claim and the menu's.
+  private func openControllersFromNotice() {
+    PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+    pauseStartsInControllers = true
+    showNoControllerNotice = false
+    livePerformance.closeForPause()
+    showPauseMenu = true
+  }
+
   private var tvOSScreen: some View {
     ZStack {
       EmulationSurfaceController(gamePath: game.filePath)
         .ignoresSafeArea()
-        .focusable(!(showPauseMenu || showQuickMenu))
-        .allowsHitTesting(!(showPauseMenu || showQuickMenu))
+        .focusable(!(showPauseMenu || showQuickMenu || showNoControllerNotice))
+        .allowsHitTesting(!(showPauseMenu || showQuickMenu || showNoControllerNotice))
         .navigationBarBackButtonHidden(true)
 
       // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
       // pause menu is open; the disconnect banner (zIndex 5) sits above it.
-      if isPaused && !showPauseMenu && controllerManager.disconnectPause == nil {
+      if isPaused && !showPauseMenu && !showNoControllerNotice && controllerManager.disconnectPause == nil {
         PausedPill(onResume: {
           if QuickStateHandoff.shared.hasPendingOperation {
             QuickStateHandoff.shared.noteGameplayInputBegan()
@@ -563,10 +618,21 @@ struct EmulationScreen: View {
       TVLivePerformanceOverlay(session: livePerformance)
         .zIndex(4)
 
+      if showNoControllerNotice {
+        ICubeConfirmPanel(
+          title: L("No controller connected"),
+          message: L("The Siri Remote only navigates menus. Connect a controller to play."),
+          model: NoControllerNotice.model(onContinue: dismissNoControllerNotice, onControllers: openControllersFromNotice),
+          isTV: true, onBack: dismissNoControllerNotice)
+          // Nobody can play while it is up; Continue releases the pause.
+          .pauseClaim("no-controller")
+          .zIndex(6)
+      }
     }
     .fullScreenCover(isPresented: $showPauseMenu) {
       pauseMenu(platform: .tvos)
     }
+    .onChange(of: showNoControllerNotice) { postOverlayVisibility() }
     .onAppear {
       attachLivePerformance()
       log.debug("[INPUT] tvOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
@@ -650,6 +716,7 @@ struct EmulationScreen: View {
       timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
         elapsedSeconds += 1
         isPaused = TVEmulationBridge.isPaused()
+        checkNoControllerNotice()
         // If the game resumed via any path other than a controller reconnect
         // (pill tap, pause menu Resume, new game), clear a stale disconnect banner.
         if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
@@ -1026,7 +1093,7 @@ struct EmulationScreen: View {
     }
     .onChange(of: showPauseMenu) { _, visible in
       if visible { showQuickMenu = false }
-      else { pauseStartsInSaveBrowser = false; pauseStartsInPerformance = false }
+      else { pauseStartsInSaveBrowser = false; pauseStartsInPerformance = false; pauseStartsInControllers = false }
       postOverlayVisibility()
       isPaused = TVEmulationBridge.isPaused()
       // The fullScreenCover transition perturbs the GeometryReader size and the Metal
