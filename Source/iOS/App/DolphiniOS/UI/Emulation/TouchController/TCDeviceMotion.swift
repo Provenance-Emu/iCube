@@ -630,9 +630,7 @@ import simd
     if let scene = MainSceneCoordinator.shared().mainScene
       ?? UIApplication.shared.connectedScenes.first as? UIWindowScene {
       orientation = scene.interfaceOrientation
-      return
     }
-    orientation = UIApplication.shared.statusBarOrientation
   }
 
   // MARK: - IMU axis mapping (pure, unit-testable)

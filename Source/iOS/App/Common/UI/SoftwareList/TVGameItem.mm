@@ -133,7 +133,7 @@
                     32,
                     banner.width * 4,
                     colorSpace,
-                    kCGImageAlphaFirst | kCGBitmapByteOrder32Big,
+                    (CGBitmapInfo)kCGImageAlphaFirst | (CGBitmapInfo)kCGBitmapByteOrder32Big,
                     provider,
                     NULL,
                     false,

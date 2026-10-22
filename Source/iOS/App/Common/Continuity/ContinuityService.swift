@@ -28,7 +28,7 @@ final class ContinuityService: NSObject, UIApplicationDelegate {
     /// would leave a Bonjour record advertising a device that answers nothing.
     func applicationWillTerminate(_ application: UIApplication) {
         MainActor.assumeIsolated {
-            Task { await ContinuityManager.shared.endHandoff() }
+            _ = Task { await ContinuityManager.shared.endHandoff() }
         }
     }
 }

@@ -27,7 +27,7 @@ import os
 final class EmulationState {
   static let shared = EmulationState(publishesProcessWideFlag: true)
 
-  private static let processWideActive = OSAllocatedUnfairLock(initialState: false)
+  private nonisolated static let processWideActive = OSAllocatedUnfairLock(initialState: false)
 
   /// The shared state's `isActive`, readable from any thread (background loops such as the WebDAV
   /// scanner). Follows `WillStart` as soon as the main queue applies it, which is earlier than the

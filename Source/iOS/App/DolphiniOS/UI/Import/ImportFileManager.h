@@ -14,12 +14,17 @@ NS_ASSUME_NONNULL_BEGIN
 + (ImportFileManager*)shared;
 
 - (void)importFileAtUrl:(NSURL*)url;
-- (void)importFilesAtUrls:(NSArray<NSURL*>*)urls;
-
 /// Window helpers used by the Swift batch-import extension.
 - (void)showWindowOnScene:(UIWindowScene*)scene;
 - (void)hideWindow;
 - (void)presentViewControllerOnWindow:(UIViewController*)controller;
+
+@end
+
+/// Implemented in Swift (`ImportFileManager+BatchImport.swift`).
+@interface ImportFileManager (BatchImport)
+
+- (void)importFilesAtUrls:(NSArray<NSURL*>*)urls;
 
 @end
 

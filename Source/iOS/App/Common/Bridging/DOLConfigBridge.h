@@ -610,8 +610,6 @@ extern NSNotificationName const DOLConfigChangedNotification;
 // settings UI re-reads live Config after resets / external changes). Call once at app launch.
 + (void)startConfigAutoSyncBridge NS_SWIFT_NAME(startConfigAutoSyncBridge());
 
-+ (NSArray<NSString*>*)audioBackendsForPicker;
-
 // Main.EmulatedUSBDevices (subset for iOS)
 + (BOOL)mainEmulateSkylanderPortal;
 + (void)setMainEmulateSkylanderPortal:(BOOL)enabled;

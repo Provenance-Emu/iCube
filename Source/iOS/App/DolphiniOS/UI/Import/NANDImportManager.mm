@@ -23,7 +23,13 @@ static BOOL NANDImportWroteCertificates(NSDate *since) {
 @implementation NANDImportManagerObjC
 
 + (UIViewController *)_topViewController {
-  UIWindow *window = UIApplication.sharedApplication.windows.firstObject;
+  UIWindow *window = nil;
+  for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+    if (![scene isKindOfClass:UIWindowScene.class]) continue;
+    UIWindowScene *windowScene = (UIWindowScene *)scene;
+    window = windowScene.keyWindow ?: windowScene.windows.firstObject;
+    if (window) break;
+  }
   UIViewController *root = window.rootViewController ?: [UIViewController new];
   UIViewController *top = root;
   while (top.presentedViewController) { top = top.presentedViewController; }

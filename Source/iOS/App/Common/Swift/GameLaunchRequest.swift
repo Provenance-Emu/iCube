@@ -24,14 +24,20 @@ enum GameLaunchRequest {
 
   private static func waitForStop(deadline: Date, then completion: @escaping () -> Void) {
     if !TVEmulationBridge.isRunning() {
-      DispatchQueue.main.asyncAfter(deadline: .now() + remountDelay, execute: completion)
+      Task { @MainActor in
+        try? await Task.sleep(for: .seconds(remountDelay))
+        completion()
+      }
       return
     }
     guard Date() < deadline else {
       NSLog("[Launch] core did not stop within %.0fs; giving up on %@", stopTimeout, "play link")
       return
     }
-    DispatchQueue.main.asyncAfter(deadline: .now() + pollInterval) { waitForStop(deadline: deadline, then: completion) }
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(pollInterval))
+      waitForStop(deadline: deadline, then: completion)
+    }
   }
 
   private static func post(_ gameID: String) {

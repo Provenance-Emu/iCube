@@ -500,7 +500,7 @@ struct EmulationScreen: View {
       #endif
     }
     .onReceive(performanceControls.$state) { syncPerformanceMirrors($0) }
-    .onChange(of: showPerfOverlay) { visible in
+    .onChange(of: showPerfOverlay) { _, visible in
       if visible { refreshPerfOverlayState() }
       else { performanceControls.stopRefreshing() }
     }
@@ -722,7 +722,7 @@ struct EmulationScreen: View {
       // Reset inferred system to avoid carryover to the next game
       isWiiSystem = false
     }
-    .onChange(of: showPauseMenu) { visible in
+    .onChange(of: showPauseMenu) { _, visible in
       // The quick menu never outlives the pause menu; left set, it came back (and re-claimed the
       // pause) the moment the pause menu closed.
       if visible {
@@ -740,7 +740,7 @@ struct EmulationScreen: View {
       GameActivityManager.update(isPaused: visible, elapsedSeconds: elapsedSeconds)
       #endif
     }
-    .onChange(of: showQuickMenu) { _ in postOverlayVisibility() }
+    .onChange(of: showQuickMenu) { postOverlayVisibility() }
     .onExitCommand {
       if livePerformance.isPresented { _ = livePerformance.handleBack() }
       else if showPauseMenu { showPauseMenu = false }
@@ -782,7 +782,7 @@ struct EmulationScreen: View {
         }
       }
     }
-    .onChange(of: UIDevice.current.orientation) { _ in
+    .onChange(of: UIDevice.current.orientation) {
       TVEmulationBridge.resizeSurfaceNow()
       scheduleARPoll()
     }
@@ -925,7 +925,7 @@ struct EmulationScreen: View {
     // controller owns the core pointer, and its profile sets it; this never touches that slot.
     // This used to be toggled from four places (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode,
     // the long-press handler, and setup).
-    .onChange(of: isTouchControlsActive) { _ in
+    .onChange(of: isTouchControlsActive) {
       // No touchscreen Wii Remote: the overlay drives no pointer, so there is nothing to keep from
       // fighting. `?? 0` used to flip Wii Remote 1's IMU pointer here even when a gyro pad owns it
       // (controller hub decision 12).
@@ -1001,7 +1001,7 @@ struct EmulationScreen: View {
       // Choosing Wii binds Wii Remote 1 to the touchscreen in `overlayMode`'s didSet.
       touchPadsRefreshToken = UUID()
     }
-    .onChange(of: isWiiSystem) { controllerManager.setSystem(isWii: $0) }
+    .onChange(of: isWiiSystem) { _, new in controllerManager.setSystem(isWii: new) }
     .onReceive(controllerManager.$overlayVisible) { v in
       isTouchControlsActive = v
       touchPadsRefreshToken = UUID()
@@ -1024,7 +1024,7 @@ struct EmulationScreen: View {
         controllerManager.clearDisconnectPause()
       }
     }
-    .onChange(of: showPauseMenu) { visible in
+    .onChange(of: showPauseMenu) { _, visible in
       if visible { showQuickMenu = false }
       else { pauseStartsInSaveBrowser = false; pauseStartsInPerformance = false }
       postOverlayVisibility()
@@ -1035,7 +1035,7 @@ struct EmulationScreen: View {
       // rotation.
       if !visible { TVEmulationBridge.resizeSurfaceNow() }
     }
-    .onChange(of: showQuickMenu) { _ in postOverlayVisibility() }
+    .onChange(of: showQuickMenu) { postOverlayVisibility() }
   }
 
   private var iosNavigationCanvas: some View {

@@ -57,7 +57,7 @@ struct MotionDebugView: View {
           Text("Motion Enabled")
           Spacer()
           Toggle("", isOn: $isMotionEnabled)
-            .onChange(of: isMotionEnabled) { enabled in
+            .onChange(of: isMotionEnabled) { _, enabled in
               TCDeviceMotion.shared.setMotionEnabled(enabled)
             }
         }
@@ -299,7 +299,7 @@ struct MotionDebugView: View {
 
       Section(header: Text("Debug Controls")) {
         Toggle("Debug Logging", isOn: $debugLogging)
-          .onChange(of: debugLogging) { enabled in
+          .onChange(of: debugLogging) { _, enabled in
             NSLog("[MOTION_DEBUG] Debug logging enabled: %@", enabled ? "YES" : "NO")
           }
 
@@ -349,13 +349,13 @@ struct MotionDebugView: View {
       stopRefreshTimer()
     }
     // CRITICAL: Restart motion system when settings change
-    .onChange(of: enhancedShakeEnabled) { _ in restartMotionSystemIfRunning() }
-    .onChange(of: useYawForHorizontal) { _ in restartMotionSystemIfRunning() }
-    .onChange(of: invertRoll) { _ in restartMotionSystemIfRunning() }
-    .onChange(of: invertPitch) { _ in restartMotionSystemIfRunning() }
-    .onChange(of: fullMotionEnabled) { _ in restartMotionSystemIfRunning() }
-    .onChange(of: wiimoteIMUEnabled) { _ in restartMotionSystemIfRunning() }
-    .onChange(of: nunchuckIMUEnabled) { _ in restartMotionSystemIfRunning() }
+    .onChange(of: enhancedShakeEnabled) { restartMotionSystemIfRunning() }
+    .onChange(of: useYawForHorizontal) { restartMotionSystemIfRunning() }
+    .onChange(of: invertRoll) { restartMotionSystemIfRunning() }
+    .onChange(of: invertPitch) { restartMotionSystemIfRunning() }
+    .onChange(of: fullMotionEnabled) { restartMotionSystemIfRunning() }
+    .onChange(of: wiimoteIMUEnabled) { restartMotionSystemIfRunning() }
+    .onChange(of: nunchuckIMUEnabled) { restartMotionSystemIfRunning() }
   }
 
   // MARK: - Helper Methods

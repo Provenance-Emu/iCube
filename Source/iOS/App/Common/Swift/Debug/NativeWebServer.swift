@@ -18,6 +18,7 @@
 import Foundation
 import CryptoKit
 import Network
+import os
 
 /// A lightweight loopback HTTP/JSON server for the debug + benchmark API.
 final class NativeWebServer: @unchecked Sendable {
@@ -220,24 +221,23 @@ final class NativeWebServer: @unchecked Sendable {
     }
 
     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-      var resumed = false
+      let resumed = OSAllocatedUnfairLock(initialState: false)
       listener.stateUpdateHandler = { [weak self] state in
         switch state {
         case .ready:
-          if !resumed { resumed = true
+          if claimFirstResume(resumed) {
             continuation.resume()
           }
         case .failed(let error):
           self?.stop()
-          if !resumed { resumed = true
+          if claimFirstResume(resumed) {
             continuation.resume(throwing: error)
           } else {
             NSLog("[DebugServer] listener failed after ready: \(error)")
             self?.onListenerLost?(error)
           }
         case .cancelled:
-          if !resumed {
-            resumed = true
+          if claimFirstResume(resumed) {
             continuation.resume(throwing: DebugServerError.initializationFailed)
           }
         default:
@@ -621,5 +621,14 @@ private extension Data {
       if self[start ..< stop] == pattern { return start ..< stop }
     }
     return nil
+  }
+}
+
+/// True exactly once per flag: the listener's state handler runs on a background queue and may report
+/// several states, but the start-up continuation must resume a single time.
+private func claimFirstResume(_ flag: OSAllocatedUnfairLock<Bool>) -> Bool {
+  flag.withLock { resumed in
+    defer { resumed = true }
+    return !resumed
   }
 }

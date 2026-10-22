@@ -77,7 +77,7 @@ final class LibrarySnapshotService: UIResponder, UIApplicationDelegate {
 @MainActor
 final class LibrarySnapshotScheduler {
   /// Starts a write and reports, on the main actor, whether the snapshot was saved.
-  typealias Writer = @MainActor (_ completion: @escaping @MainActor (Bool) -> Void) -> Void
+  typealias Writer = @MainActor (_ completion: @escaping @MainActor @Sendable (Bool) -> Void) -> Void
 
   static let defaultDebounce: TimeInterval = 2
   static let shared = LibrarySnapshotScheduler()
@@ -88,8 +88,8 @@ final class LibrarySnapshotScheduler {
   private let state: EmulationState
   private let write: Writer
   private let schedule: (TimeInterval, DispatchWorkItem) -> Void
-  private let beginBackgroundTask: (@escaping () -> Void) -> UIBackgroundTaskIdentifier
-  private let endBackgroundTask: (UIBackgroundTaskIdentifier) -> Void
+  private let beginBackgroundTask: @MainActor (@escaping @Sendable () -> Void) -> UIBackgroundTaskIdentifier
+  private let endBackgroundTask: @MainActor (UIBackgroundTaskIdentifier) -> Void
   private var pending: DispatchWorkItem?
   private var gateInstalled = false
   private var backgroundTask = UIBackgroundTaskIdentifier.invalid
@@ -110,10 +110,10 @@ final class LibrarySnapshotScheduler {
     schedule: @escaping (TimeInterval, DispatchWorkItem) -> Void = { delay, work in
       DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     },
-    beginBackgroundTask: @escaping (@escaping () -> Void) -> UIBackgroundTaskIdentifier = { expiration in
+    beginBackgroundTask: @escaping @MainActor (@escaping @Sendable () -> Void) -> UIBackgroundTaskIdentifier = { expiration in
       UIApplication.shared.beginBackgroundTask(withName: "icube.librarysnapshot", expirationHandler: expiration)
     },
-    endBackgroundTask: @escaping (UIBackgroundTaskIdentifier) -> Void = { UIApplication.shared.endBackgroundTask($0) }
+    endBackgroundTask: @escaping @MainActor (UIBackgroundTaskIdentifier) -> Void = { UIApplication.shared.endBackgroundTask($0) }
   ) {
     self.state = state
     self.write = write

@@ -530,7 +530,7 @@ final class ControllerHubViewModel {
       Task { @MainActor [weak self] in
         try? await Task.sleep(for: .seconds(1))
         try? player.stop(atTime: 0)
-        engine.stop(completionHandler: nil)
+        try? await engine.stop()
         self?.identifyEngines.removeAll { $0 === engine }
       }
     } catch {}

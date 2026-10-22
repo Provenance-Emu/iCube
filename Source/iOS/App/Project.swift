@@ -441,6 +441,9 @@ let iCube = Target.target(
             "SWIFT_VERSION": "5.0",
             "SWIFT_OBJC_INTEROP_MODE": "objc",
             "SWIFT_EMIT_LOC_STRINGS": "YES",
+            // A `= .shared` default on a @MainActor type's init is evaluated on the main actor, not in the
+            // (nonisolated) caller: one setting instead of an optional-parameter workaround per init.
+            "SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES": "YES",
             "TARGETED_DEVICE_FAMILY": "1,2,3,6",
             "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
             "ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS": "YES",
@@ -558,6 +561,7 @@ let iCubeTests = Target.target(
             // Runtime audio regressions use the same C++23 core headers as the app.
             "CLANG_CXX_LANGUAGE_STANDARD": "gnu++23",
             "SWIFT_VERSION": "5.0",
+            "SWIFT_UPCOMING_FEATURE_ISOLATED_DEFAULT_VALUES": "YES",
             // The test target uses `@testable import iCube` and doesn't need its own
             // ObjC bridging header, so clear it (see the identical fix on the
             // LiveActivityExtension target above). That alone isn't sufficient though:

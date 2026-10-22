@@ -161,8 +161,8 @@ enum SentryTelemetryService {
       // Off everywhere: a SIGTERM is the OS or the user ending the app, never a crash. Debug builds
       // sent Xcode/devicectl stops (ICUBE-6E) and distributed builds sent graceful OS terminations
       // with main idle (ICUBE-72). A foreground SIGTERM now surfaces as a watchdog termination
-      // (ICUBE-3), where the emulation/JIT breadcrumbs and tags tell it apart.
-      options.enableSigtermReporting = false
+      // (ICUBE-3), where the emulation/JIT breadcrumbs and tags tell it apart. KSCrash never reports
+      // SIGTERM, so `enableSigtermReporting` (deprecated, off by default) is left alone.
       #if DEBUG
       options.debug = true
       options.enableSpotlight = true
@@ -456,7 +456,7 @@ enum SentryTelemetryService {
   static func recordJitStep(_ step: String, data: [String: Any] = [:]) {
     let crumb = Breadcrumb(level: .info, category: "jit")
     crumb.message = step
-    crumb.data = data
+    crumb.setData(data)
     SentrySDK.addBreadcrumb(crumb)
   }
 
@@ -464,10 +464,10 @@ enum SentryTelemetryService {
   static func recordSettingsRepair(version: Int, deleted: [String: String], removedDefaults: [String]) {
     let crumb = Breadcrumb(level: .info, category: "settings.repair")
     crumb.message = "settings repair v\(version): \(deleted.count) config keys, \(removedDefaults.count) defaults"
-    crumb.data = [
+    crumb.setData([
       "deleted": deleted.keys.sorted().map { "\($0)=\(deleted[$0] ?? "")" },
       "removed_defaults": removedDefaults,
-    ]
+    ])
     SentrySDK.addBreadcrumb(crumb)
   }
 
@@ -476,7 +476,7 @@ enum SentryTelemetryService {
   private static func addEmulationBreadcrumb(_ message: String, data: [String: Any] = [:]) {
     let crumb = Breadcrumb(level: .info, category: "emulation")
     crumb.message = message
-    crumb.data = data
+    crumb.setData(data)
     SentrySDK.addBreadcrumb(crumb)
   }
 
@@ -555,5 +555,12 @@ final class DOLSentryTelemetryBridge: NSObject {
     SentryTelemetryService.trace(name, op: operation, tags: tags) {
       work()
     }
+  }
+}
+
+private extension Breadcrumb {
+  /// `data`'s setter is deprecated; the per-key setter is the supported way to fill it.
+  func setData(_ values: [String: Any]) {
+    for (key, value) in values { setData(value: value, key: key) }
   }
 }

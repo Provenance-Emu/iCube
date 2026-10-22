@@ -220,7 +220,7 @@ final class ControllerManager: NSObject, ObservableObject {
       if let connected = note.object as? GCController {
         self.logExposedProfiles(connected)
         let c = self.physicalProfileWrapper(for: connected)
-        PauseGestureTracker.shared.noteControllerConnected()
+        MainActor.assumeIsolated { PauseGestureTracker.shared.noteControllerConnected() }
         configureController(c)
         ControllerStyleManager.shared.refreshDetection()
         // If a disconnect-pause is active, any connecting controller resumes the
@@ -321,10 +321,10 @@ final class ControllerManager: NSObject, ObservableObject {
     // GCController paths, and so the core is actually paused before the overlay
     // is shown. This observer is app-wide, matching the connect observer.
     // Install the synchronous press-origin observer before the first UIPress down.
-    _ = PauseGestureTracker.shared
+    MainActor.assumeIsolated { _ = PauseGestureTracker.shared }
     let onPauseRequest = NotificationCenter.default.addObserver(
       forName: PauseGestureTracker.requestPauseMenuNotification, object: nil, queue: .main) { _ in
-        PauseGestureTracker.shared.requestPauseMenu(reason: "uipress-menu")
+        MainActor.assumeIsolated { PauseGestureTracker.shared.requestPauseMenu(reason: "uipress-menu") }
       }
     observers.append(contentsOf: [onConnect, onDisconnect, onEmulationStart, onPauseRequest])
 

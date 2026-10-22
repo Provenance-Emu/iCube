@@ -150,14 +150,14 @@ final class DiscPatchModel: ObservableObject {
       copyName: "\(source.deletingPathExtension().lastPathComponent) (\(patch.deletingPathExtension().lastPathComponent))")
     state = .running(DiscPatchProgress(phase: .preparing, fraction: 0))
     beginBackgroundTask()
-    task = Task { [service] in
+    task = Task { [service, weak self] in
       do {
-        let outcome = try await service.run(request) { [weak self] progress in
+        let outcome = try await service.run(request) { progress in
           Task { @MainActor in self?.update(progress) }
         }
-        self.finish(outcome)
+        self?.finish(outcome)
       } catch {
-        self.fail(error)
+        self?.fail(error)
       }
     }
   }

@@ -157,7 +157,7 @@ static void ICubeStoreDefaultISO(NSString* path)
 + (void)startConfigAutoSyncBridge {
   static dispatch_once_t once;
   dispatch_once(&once, ^{
-    Config::ConfigChangedCallbackID callbackID = Config::AddConfigChangedCallback([] {
+    [[maybe_unused]] Config::ConfigChangedCallbackID callbackID = Config::AddConfigChangedCallback([] {
       // (b) one UI-refresh notification per runloop tick (cheap no-op when no settings view observes).
       if (!s_cfg_notify_pending.exchange(true)) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -1675,11 +1675,7 @@ static NSString* BaseLayerKeyName(const Config::Location& location)
     system.GetSkylanderPortal().RemoveSkylander((u8)i);
 }
 
-@end
-
 // MARK: - DSU Client (Cemuhook DualShock UDP) bridging
-
-@implementation DOLConfigBridge (DSU)
 
 + (BOOL)dsuClientEnabled
 {

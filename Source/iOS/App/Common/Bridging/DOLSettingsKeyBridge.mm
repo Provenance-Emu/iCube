@@ -72,12 +72,6 @@ static NSInteger CoerceInt(id v) {
   return 0;
 }
 
-static float CoerceFloat(id v) {
-  if ([v isKindOfClass:[NSNumber class]]) return [v floatValue];
-  if ([v isKindOfClass:[NSString class]]) return [(NSString*)v floatValue];
-  return 0.0f;
-}
-
 static NSString* CoerceString(id v) {
   if ([v isKindOfClass:[NSString class]]) return v;
   if ([v isKindOfClass:[NSNumber class]]) return [(NSNumber*)v stringValue];
