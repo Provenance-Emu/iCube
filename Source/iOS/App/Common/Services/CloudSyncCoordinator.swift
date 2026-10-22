@@ -817,7 +817,7 @@ final class CloudSyncCoordinator: ObservableObject {
     ) async {
         guard Self.isEligibleMetadata(local), Self.isEligibleMetadata(remote) else { return }
         let generation = requestedGeneration ?? captureTransferEpoch()
-        guard let merger = DocumentMergers.merger(for: local.fileType) else {
+        guard let merger = AppDocumentMergers.merger(relativePath: local.relativePath, fileType: local.fileType) else {
             // Should not happen: the planner only emits .merge for document kinds.
             if local.lastModified >= remote.lastModified {
                 await upload(local, reason: .contentChanged, scanner: scanner, provider: provider, index: index, generation: generation)
@@ -1193,7 +1193,7 @@ private extension UserDataScanner {
             var committed = data
             // A local document may have been created during the network request.
             if metadata.fileType.mergeKind == .document, fileExists(relativePath: path),
-               let merger = DocumentMergers.merger(for: metadata.fileType) {
+               let merger = AppDocumentMergers.merger(relativePath: path, fileType: metadata.fileType) {
                 committed = try merger.merge(local: readAppFile(relativePath: path), remote: data)
                 try validateAppDocument(relativePath: path, data: committed)
             }

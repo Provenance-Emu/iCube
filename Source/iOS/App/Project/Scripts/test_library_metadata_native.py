@@ -12,11 +12,23 @@ import tempfile
 
 
 APP_ROOT = Path(__file__).resolve().parents[2]
-SOURCES = ("LibraryMetadataStore",)
+SOURCES = ("LibraryMetadataStore", "AppDocumentMergers")
 PACKAGE = '''// swift-tools-version: 5.9
 import PackageDescription
-let package = Package(name: "LibraryMetadataAudit", platforms: [.macOS(.v13)], targets: [
-  .target(name: "iCube"), .testTarget(name: "iCubeTests", dependencies: ["iCube"])
+let package = Package(name: "LibraryMetadataAudit", platforms: [.macOS(.v14)], dependencies: [
+  .package(url: "https://github.com/Provenance-Emu/PVCloudSync.git", .upToNextMajor(from: "1.1.0")),
+  .package(url: "https://github.com/Provenance-Emu/PVSyncRules.git", .upToNextMajor(from: "1.0.0"))
+], targets: [
+  .target(name: "iCube", dependencies: [
+    .product(name: "PVLibraryMetadata", package: "PVCloudSync"),
+    .product(name: "PVCloudSync", package: "PVCloudSync"),
+    .product(name: "PVSyncRules", package: "PVSyncRules")
+  ]),
+  .testTarget(name: "iCubeTests", dependencies: ["iCube",
+    .product(name: "PVLibraryMetadata", package: "PVCloudSync"),
+    .product(name: "PVCloudSync", package: "PVCloudSync"),
+    .product(name: "PVSyncRules", package: "PVSyncRules")
+  ])
 ])
 '''
 
@@ -34,7 +46,7 @@ def run(folder: Path) -> int:
             if link.is_symlink():
                 link.unlink()
             link.symlink_to(source)
-    return subprocess.run(["xcrun", "swift", "test", "--package-path", str(folder)], check=False).returncode
+    return subprocess.run(["xcrun", "swift", "test", "--package-path", str(folder), "--jobs", "2"], check=False).returncode
 
 
 def main() -> int:

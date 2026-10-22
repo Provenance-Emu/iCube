@@ -3,6 +3,7 @@
 
 import Foundation
 import PVCloudSync
+import enum PVLibraryMetadata.LibraryMetadataDocument
 import PVSyncRules
 import XCTest
 @testable import iCube
@@ -274,6 +275,39 @@ final class CloudSyncSafetyTests: XCTestCase {
     XCTAssertTrue(object[identity.rawValue + ":cover"]?["value"] is NSNull)
     let uploaded = await f.provider.uploadedBytes(path: path)
     XCTAssertEqual(uploaded, merged)
+  }
+
+  func testLibraryEditScannerMergeUsesCanonicalOpaquePrimitiveTies() async throws {
+    let (f, identity, path) = try metadataShard(.success)
+    let local = Data(#"{"future":2}"#.utf8)
+    let remote = Data(#"{"future":9}"#.utf8)
+    try local.write(to: f.file)
+    await f.provider.setPayload(remote)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [shardMetadata(path: path, bytes: remote)]))
+    await f.coordinator.syncNow()
+    await f.coordinator.waitForCurrentSyncCompletion()
+    let expected = try LibraryMetadataDocument.merge(local: local, remote: remote, filename: identity.fileName)
+    XCTAssertEqual(try Data(contentsOf: f.file), expected)
+    let uploaded = await f.provider.uploadedBytes(path: path)
+    XCTAssertEqual(uploaded, expected)
+  }
+
+  func testFirstDownloadUsesCanonicalMergerForNewLocalOpaquePrimitives() async throws {
+    let (f, identity, path) = try metadataShard(.suspended)
+    try FileManager.default.removeItem(at: f.file)
+    let local = Data(#"{"future":2}"#.utf8)
+    let remote = Data(#"{"future":9}"#.utf8)
+    await f.provider.setPayload(remote)
+    await f.provider.setSnapshot(RemoteSyncSnapshot(files: [shardMetadata(path: path, bytes: remote)]))
+    await f.coordinator.syncNow()
+    await f.provider.waitUntilDownloading()
+    try local.write(to: f.file)
+    await f.provider.finishDownload()
+    await f.coordinator.waitForCurrentSyncCompletion()
+    let expected = try LibraryMetadataDocument.merge(local: local, remote: remote, filename: identity.fileName)
+    XCTAssertEqual(try Data(contentsOf: f.file), expected)
+    let index = await f.index.snapshot()
+    XCTAssertEqual(index[path]?.checksum, SyncChecksum.sha256Hex(expected))
   }
 
   func testMalformedOrWrongIdentityLibraryEditDownloadCannotReplaceGoodLocal() async throws {
