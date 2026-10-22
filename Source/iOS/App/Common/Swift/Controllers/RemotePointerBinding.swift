@@ -43,6 +43,8 @@ final class RemotePointerBinding {
   nonisolated static let touchscreenControllerId = ControllerManager.touchscreenWiimoteIdBase
   /// The pointer source is Player 1's: Wii Remote 1.
   nonisolated static let wiimote = 1
+  /// Wii Remotes 2-4, which never carry the remote binding.
+  nonisolated static let otherWiimotes = [2, 3, 4]
 
   /// The remote's motion drives the pointer. Read on every motion sample.
   private(set) var isActive = false
@@ -70,6 +72,10 @@ final class RemotePointerBinding {
     } else {
       writer.unbind(wiimote: Self.wiimote)
     }
+    // A pad that leaves Wii Remote 1 stashes its mapping with these rows in it; restored onto another
+    // Wii Remote, that player's pointer would follow the remote. Only Wii Remote 1 is ever bound, so
+    // the others always lose it (exact match only, so a user's own IR binding stays).
+    for other in Self.otherWiimotes { writer.unbind(wiimote: other) }
     if active != isActive {
       isActive = active
       recenter()

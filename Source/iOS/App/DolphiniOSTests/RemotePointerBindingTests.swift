@@ -115,16 +115,25 @@ final class RemotePointerBindingTests: XCTestCase {
     let binding = RemotePointerBinding(writer: writer)
     binding.apply(source: .remoteGyro)
     XCTAssertTrue(binding.isActive)
-    XCTAssertEqual(writer.calls, ["bind 1", "ir"])
+    XCTAssertEqual(writer.calls, ["bind 1", "unbind 2", "unbind 3", "unbind 4", "ir"])
     XCTAssertEqual(writer.lastIR, GyroPointerMath.irCursorWrites(horizontal: 0, vertical: 0))
   }
 
   /// Any other source removes the binding (the bridge removes only its own exact expressions).
+  /// A stashed pad mapping restored onto Wii Remotes 2-4 may still carry the rows; they always lose them.
+  func test_everyApply_clearsTheBindingFromWiiRemotes2Through4() {
+    for source in [PointerSource.remoteGyro, .padGyro(padName: "DS"), .none] {
+      let writer = RecordingWriter()
+      RemotePointerBinding(writer: writer).apply(source: source)
+      XCTAssertEqual(writer.calls.filter { $0.hasPrefix("unbind ") && $0 != "unbind 1" }, ["unbind 2", "unbind 3", "unbind 4"], "\(source)")
+    }
+  }
+
   func test_otherSources_unbind() {
     for source in [PointerSource.padGyro(padName: "DS"), .padTouchpad(padName: "DS"), .none] {
       let writer = RecordingWriter()
       RemotePointerBinding(writer: writer).apply(source: source)
-      XCTAssertEqual(writer.calls, ["unbind 1"], "\(source)")
+      XCTAssertEqual(writer.calls, ["unbind 1", "unbind 2", "unbind 3", "unbind 4"], "\(source)")
     }
   }
 
@@ -139,7 +148,7 @@ final class RemotePointerBindingTests: XCTestCase {
     let before = binding.integrator
     writer.calls.removeAll()
     binding.apply(source: .remoteGyro)
-    XCTAssertEqual(writer.calls, ["bind 1"])
+    XCTAssertEqual(writer.calls, ["bind 1", "unbind 2", "unbind 3", "unbind 4"])
     XCTAssertEqual(binding.integrator, before)
   }
 
