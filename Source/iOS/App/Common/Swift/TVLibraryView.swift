@@ -1237,6 +1237,10 @@ struct TVLibraryView: View {
           .contentMargins(.leading, TVLayout.leadingInset, for: .scrollContent)
           .contentMargins(.trailing, TVLayout.contentInset, for: .scrollContent)
         }
+        // Each shelf is its own focus section so a Down press from a card further right than the
+        // next shelf's last card still enters that shelf (landing on its nearest card) instead of
+        // dead-ending: without this the engine only accepts a card directly below.
+        .focusSection()
         .id(Self.tvScrollID(for: .shelf(id: shelf.spec.id, filePath: "")))
       }
     }
@@ -1311,6 +1315,8 @@ struct TVLibraryView: View {
         }
       }
     }
+    // Same as the shelves: a Down press from the last shelf's far-right card lands on the grid.
+    .focusSection()
     .padding(.leading, TVLayout.leadingInset)
     .padding(.trailing, TVLayout.contentInset)
   }
