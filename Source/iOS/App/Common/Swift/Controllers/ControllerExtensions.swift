@@ -246,6 +246,15 @@ private func installMotionHandler(_ c: GCController) {
     // controller's `handlerQueue` moves ALL its handlers, including the shoulder/shake ones that
     // mutate this file's unsynchronized dictionaries and read the main-confined ControllerManager.
     motion.valueChangedHandler = { m in
+      // The Siri Remote holds no slot (it is a menu device): its only use of motion is Wii Remote 1's
+      // pointer, while the pointer source is the remote (`RemotePointerBinding`). Which of
+      // `rotationRate`'s axes is the remote's yaw is unverified (`GyroPointerIntegrator.remoteRates`).
+      if c.isMenuRemote {
+        guard m.hasRotationRate else { return }
+        let rate = m.rotationRate
+        MainActor.assumeIsolated { RemotePointerBinding.shared.handleRotation(x: rate.x, y: rate.y, z: rate.z) }
+        return
+      }
       guard let slot = ControllerManager.shared.wiimoteIndex(for: c) else { return }
       let controllerId = ControllerManager.touchscreenWiimoteIdBase - 1 + slot
       // Use userAcceleration for shake/tilt impulses and rotationRate for gyro

@@ -494,6 +494,9 @@ final class ControllerManager: NSObject, ObservableObject {
     let clearedRemoteSlots = assignmentService.reconcile(
       ControllerStateStore.shared.snapshot(), pinned: pinnedSlots, autoAssign: autoAssign)
     for slot in clearedRemoteSlots { unpin(slot.system, player: slot.playerZeroBased) }
+    // After every assign and profile load the pass may have made: a load clears the remote pointer's
+    // IR binding, and binding it first would keep `assign` from loading a pad's default profile.
+    Self.refreshRemotePointer()
 
     syncPlayerIndices()
     NotificationCenter.default.post(name: Self.assignmentsChanged, object: nil)
@@ -507,6 +510,17 @@ final class ControllerManager: NSObject, ObservableObject {
     let state = ControllerStateStore.shared.snapshot(isWiiSystem: isWii)
     let clearedRemoteSlots = assignmentService.prepareForBoot(state, pinned: pinnedSlots)
     for slot in clearedRemoteSlots { unpin(slot.system, player: slot.playerZeroBased) }
+    Self.refreshRemotePointer()
+  }
+
+  /// `RemotePointerBinding.refresh()`, now when on the main thread (every caller today), else queued
+  /// there: the binding reads main-actor state.
+  private static func refreshRemotePointer() {
+    if Thread.isMainThread {
+      MainActor.assumeIsolated { RemotePointerBinding.shared.refresh() }
+    } else {
+      DispatchQueue.main.async { MainActor.assumeIsolated { RemotePointerBinding.shared.refresh() } }
+    }
   }
 
   /// The **only** writer of `GCController.playerIndex`.

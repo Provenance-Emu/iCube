@@ -121,7 +121,7 @@ enum ControllerHubModelBuilder {
     guard !source.choices.isEmpty else {
       return MenuItem(
         id: id, title: L("Pointer Source"), subtitle: source.explanation, icon: source.source.systemImage, role: .action({}),
-        badge: source.label, description: source.rowDescription)
+        badge: source.label)
     }
     return MenuItem(
       id: id, title: L("Pointer Source"), subtitle: source.headline, icon: source.source.systemImage,

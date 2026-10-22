@@ -245,7 +245,10 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     var screen = state(.wiiRemote, device: Self.xbox, pads: [pad(Self.xbox, "Xbox")])
     screen.pointerSource = pointerSource(.pad(name: "Xbox", capabilities: PadCapabilities()), remoteHasMotion: true, platform: .tvos)
     let model = make(screen, recorder, platform: .tvos)
-    XCTAssertEqual(ids(model, section: "pointer").first, "pointer-source")
+    XCTAssertEqual(
+      ids(model, section: "pointer"),
+      ["pointer-source", "pointer-recenter", "pointer-sensitivity", "pointer-invert-x", "pointer-invert-y"],
+      "the remote pointer is relative: recenter, sensitivity and the axes' signs, which are unverified on hardware")
     XCTAssertEqual(model.item(id: "pointer-source")?.subtitle, "Pointer: Siri Remote")
     XCTAssertNil(model.item(id: "pointer-motion"), "no pad gyro, no motion switch")
     guard case .cycle(_, let selection)? = model.item(id: "pointer-source")?.role else { return XCTFail("cycle") }

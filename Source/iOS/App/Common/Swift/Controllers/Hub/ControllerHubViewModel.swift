@@ -59,7 +59,11 @@ struct LiveControllerHubReader: ControllerHubReading {
   func boundQualifier(forWiimote index: Int) -> String {
     let bound = DOLConfigBridge.wiimoteSource(for: index) != 0 ? TVControllerMappingBridge.defaultDevice(forWiimote: index) as String : ""
     #if DEBUG
-    if index == 1, bound.isEmpty, let fake = FakePointerCapabilities.current { return fake.padQualifier }
+    // The stand-in pad replaces nothing real: only an empty slot or the touchscreen (idle on tvOS).
+    if index == 1, bound.isEmpty || DeviceFamily.from(qualifier: bound) == .touchscreen,
+       let fake = FakePointerCapabilities.current {
+      return fake.padQualifier
+    }
     #endif
     return bound
   }

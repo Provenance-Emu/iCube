@@ -987,6 +987,13 @@ struct MenuScreen: View {
     // A row that left/right adjust keeps a left press: the settings shell takes its sidebar out of focus.
     .onChange(of: tvFocusedID) { _, id in paneHoldsLeft?(longPressPicker != nil || model.adjustsWithLeftRight(focusID: id)) }
     .onDisappear { paneHoldsLeft?(false) }
+    // A screen whose rows arrive after it appears (the Controllers hub reads its state in its own
+    // `onAppear`) takes a pending deep-link row once the row exists.
+    .onChange(of: model.allItems.map(\.id)) { _, ids in
+      guard let target = rowTarget?.take(from: ids), let item = model.item(id: target) else { return }
+      let id = tvFocusID(for: item)
+      DispatchQueue.main.async { tvFocusedID = id }
+    }
     .onAppear {
       // A settings deep link's row takes focus (the shell leaves the sidebar alone while one is pending).
       if let target = rowTarget?.take(from: model.allItems.map(\.id)), let item = model.item(id: target) {

@@ -267,6 +267,8 @@ struct LivePlayerScreenIO: PlayerScreenIO {
   func recenterPointer() {
     #if os(iOS)
     TCDeviceMotion.requestPointerRecenter()
+    #else
+    RemotePointerBinding.shared.recenter()
     #endif
   }
 
@@ -289,5 +291,6 @@ struct LivePlayerScreenIO: PlayerScreenIO {
 
   func setPointerSourceOverride(_ kind: PointerSource.Kind?) {
     PointerSourceOverrideStore().value = kind
+    RemotePointerBinding.shared.refresh()
   }
 }

@@ -55,7 +55,7 @@ enum FakePointerCapabilities: String {
     return FakePointerCapabilities(rawValue: args[index + 1])
   }()
 
-  /// The stand-in pad Wii Remote 1 reports while it has no device of its own.
+  /// The stand-in pad Wii Remote 1 reports while it has no device of its own (or the touchscreen).
   var padQualifier: String { "MFi/9/Stand-in Controller" }
 
   var pads: [ConnectedPadState] {

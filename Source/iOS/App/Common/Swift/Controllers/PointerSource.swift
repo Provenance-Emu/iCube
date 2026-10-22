@@ -216,12 +216,11 @@ struct PointerSourceModel: Equatable {
     (tag.base as? String).flatMap(PointerSource.Kind.init(rawValue:))
   }
 
-  /// The row's help line.
+  /// The Pointer Source row's help line, while it offers a choice.
   var rowDescription: String {
-    if let explanation { return explanation }
-    return platform == .tvos
-      ? L("Where Wii Remote 1's pointer comes from. Automatic uses the controller's gyro, then its touchpad, then the Siri Remote's motion.")
-      : L("Where Wii Remote 1's pointer comes from. Automatic uses the controller's gyro, then its touchpad.")
+    platform == .tvos
+      ? L("Automatic picks the controller's gyro, then its touchpad, then the Siri Remote.")
+      : L("Automatic picks the controller's gyro, then its touchpad.")
   }
 }
 

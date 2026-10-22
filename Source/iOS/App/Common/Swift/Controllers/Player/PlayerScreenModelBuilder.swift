@@ -241,8 +241,25 @@ enum PlayerScreenModelBuilder {
       return [motionToggle(label)]
     }
     var items = [ControllerHubModelBuilder.pointerSourceRow(id: "pointer-source", source: source, setOverride: actions.setPointerSourceOverride)]
-    if case .padGyro = source.source, state.boundPad?.hasGyro == true {
+    switch source.source {
+    case .padGyro where state.boundPad?.hasGyro == true:
       items.append(motionToggle(nil))
+    case .remoteGyro:
+      // The remote's motion is integrated by the app (`RemotePointerBinding`): the same sensitivity and
+      // invert keys as the phone-gyro pointer, and a recenter, since a relative pointer drifts.
+      let motion = state.pointerMotion
+      items.append(MenuItem(id: "pointer-recenter", title: L("Recenter Pointer"), icon: "scope", role: .action(actions.recenterPointer)))
+      items.append(sensitivityItem(
+        title: L("Gyro Sensitivity"), choices: PointerMotionState.gyroSensitivityChoices,
+        current: motion.gyroSensitivity, set: actions.setGyroSensitivity))
+      items.append(MenuItem(
+        id: "pointer-invert-x", title: L("Invert X"), icon: "arrow.left.and.right",
+        role: .toggle(Binding(get: { motion.invertX }, set: { actions.setInvertX($0) }))))
+      items.append(MenuItem(
+        id: "pointer-invert-y", title: L("Invert Y"), icon: "arrow.up.and.down",
+        role: .toggle(Binding(get: { motion.invertY }, set: { actions.setInvertY($0) }))))
+    default:
+      break
     }
     return items
   }
