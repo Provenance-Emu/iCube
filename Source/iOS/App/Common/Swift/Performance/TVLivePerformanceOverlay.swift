@@ -13,22 +13,22 @@ struct TVLivePerformanceOverlay: View {
       VStack {
         VStack(alignment: .leading, spacing: 12) {
           HStack {
-            Label(L("Live Performance"), systemImage: "speedometer").font(.system(size: 28, weight: .semibold))
+            Label(L("Live Performance"), systemImage: "speedometer").icubeText(.section)
             Spacer()
-            Text(L("Game continues")).font(.system(size: 18)).foregroundStyle(.white.opacity(0.7))
+            Text(L("Game continues")).icubeText(.detail).foregroundStyle(.white.opacity(0.7))
           }
           if let item = selectedItem, let choices = item.role.steppable, let selected = session.navigation.choiceIndex {
-            Text(item.title).font(.system(size: 24, weight: .medium))
+            Text(item.title).icubeText(.body).fontWeight(.medium)
             ForEach(choiceWindow(count: choices.options.count, selected: selected), id: \.self) { index in
               HStack {
                 Text(choices.options[index].0)
                 Spacer()
                 if choices.options[index].1 == choices.selection.wrappedValue { Image(systemName: "checkmark") }
               }
-              .font(.system(size: 24))
+              .icubeText(.body)
               .padding(.horizontal, 14).padding(.vertical, 9)
               .background(index == selected ? Color.white.opacity(0.22) : Color.clear,
-                          in: RoundedRectangle(cornerRadius: 8))
+                          in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
             }
           } else {
             ForEach(rowWindow) { item in
@@ -36,36 +36,37 @@ struct TVLivePerformanceOverlay: View {
                 HStack(spacing: 12) {
                   Text(item.title).lineLimit(1)
                   Spacer()
-                  if let badge = item.badge { Text(badge).font(.system(size: 18, weight: .medium)).foregroundStyle(.white.opacity(0.7)) }
+                  if let badge = item.badge { Text(badge).icubeText(.tag).foregroundStyle(.white.opacity(0.7)) }
                   if let value = item.currentValueTitle { Text(value).fontWeight(.medium) }
-                  if item.adjustsWithLeftRight { Image(systemName: "arrow.left.and.right").font(.system(size: 17)) }
-                  else if item.role.steppable != nil { Image(systemName: "chevron.right").font(.system(size: 17)) }
+                  if item.adjustsWithLeftRight { Image(systemName: "arrow.left.and.right").icubeText(.detail) }
+                  else if item.role.steppable != nil { Image(systemName: "chevron.right").icubeText(.detail) }
                 }
-                .font(.system(size: 24))
+                .icubeText(.body)
                 .opacity(item.isEnabled ? 1 : 0.6)
                 if !item.isEnabled, let reason = item.disabledReason {
-                  Text(reason).font(.system(size: 17)).foregroundStyle(.white.opacity(0.7)).lineLimit(2)
+                  Text(reason).icubeText(.detail).foregroundStyle(.white.opacity(0.7)).lineLimit(2)
                 }
               }
               .padding(.horizontal, 14).padding(.vertical, 9)
               .background(item.id == session.navigation.selectedID ? Color.white.opacity(0.22) : Color.clear,
-                          in: RoundedRectangle(cornerRadius: 8))
+                          in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
             }
           }
           if let item = selectedItem, let explanation = item.isEnabled ? item.description : item.disabledReason {
-            Text(explanation).font(.system(size: 18)).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
+            Text(explanation).icubeText(.detail).foregroundStyle(.white.opacity(0.75)).lineLimit(2)
           }
           HStack {
             Text(L("Remote: Move · Select · Back"))
             Spacer()
             Text(L("Controller: Play"))
-          }.font(.system(size: 17)).foregroundStyle(.white.opacity(0.65))
+          }.icubeText(.detail).foregroundStyle(.white.opacity(0.65))
         }
         .padding(24)
         .foregroundStyle(.white)
         .frame(width: 820)
-        .background(Color.black.opacity(0.68), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Color.white.opacity(0.18), lineWidth: 1))
+        .background(Color.black.opacity(0.68), in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue))
+        .overlay(RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue)
+          .strokeBorder(Color.white.opacity(0.18), lineWidth: ICubeDesign.Line.hairline.rawValue))
         .padding(.top, 36)
         Spacer(minLength: 0)
       }

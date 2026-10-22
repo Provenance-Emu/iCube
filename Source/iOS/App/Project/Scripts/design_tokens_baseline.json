@@ -9,7 +9,7 @@
   "Common/Swift/Controllers/Player/PlayerScreenModelBuilder.swift": 1,
   "Common/Swift/DSUSessionView.swift": 2,
   "Common/Swift/DolphinBlogView.swift": 46,
-  "Common/Swift/EmulationScreen.swift": 21,
+  "Common/Swift/EmulationScreen.swift": 17,
   "Common/Swift/GameGridItem.swift": 35,
   "Common/Swift/Help/MarkdownContentView.swift": 2,
   "Common/Swift/Help/WikiHelpView.swift": 1,

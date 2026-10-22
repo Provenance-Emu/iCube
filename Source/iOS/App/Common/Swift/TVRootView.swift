@@ -106,7 +106,7 @@ private struct LivePerformanceAuditPreview: View {
                      startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
       TVLivePerformanceOverlay(session: session)
       Text("Rendering preview — no game or controller running")
-        .font(.system(size: 20)).foregroundStyle(.white.opacity(0.7)).padding(30)
+        .icubeText(.body).foregroundStyle(.white.opacity(0.7)).padding(30)
         .accessibilityIdentifier("live-performance.rendering-preview")
     }
     .onAppear { session.prepareRenderingPreview() }
