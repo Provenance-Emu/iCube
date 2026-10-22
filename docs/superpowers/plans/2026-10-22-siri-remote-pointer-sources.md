@@ -60,6 +60,28 @@ connected. The Siri Remote only navigates menus." with Continue / Controllers.
 4. Plain pad on iOS: no phone-gyro pointer by default; offered as a choice.
 5. "Aim with Controller Motion" stays as the pad-gyro entry, now labelled with the pad's name.
 
-## Mechanism
+## Mechanism (verified against the code, 2026-10-22)
 
-Filled in from the code read before Phase 3 starts.
+- **Bindings are not layered config.** They are `ControlReference` expressions plus each controller's
+  default device, written whole by `InputConfig::SaveConfig` (every bridge assign/profile/expression
+  call saves) and re-read from the INI at boot and on title change. The design's "CurrentRun only"
+  binding is impossible, so the remote pointer binding is **persisted deliberately and removed
+  deliberately**.
+- **Binding:** Wii Remote 1's `IR/Up, Down, Left, Right` = `` `iOS/4/Touchscreen:Axis 112` ``..`115`
+  (fully qualified, so it works while the slot's default device is the pad). Touchscreen device 4 always
+  exists and is idle on tvOS. `RepairTouchscreenIRPointer` / `DisableCoreIMUPointerIfTouchscreen` only
+  act when the slot's *default device* is the touchscreen, so they leave this alone.
+- **Applier:** one function decides from the resolver: when the source is `.remoteGyro`, set those four
+  expressions (after any profile load: `Physical Controller.ini` has no IR lines, so a load clears them);
+  otherwise remove them **only if they are exactly these four expressions**, so a user's own IR binding is
+  never touched. Run after reconcile/assign/profile load and at boot.
+- **Trap:** a bound IR row makes `mappingBindsDevice` true, which makes `assign()` skip the default pad
+  profile. Apply the pointer binding after the pad profile, never before.
+- **Pointer math:** the remote's attitude frame is unverified and `GCMotion.attitude` is identity on
+  hardware without it, so the remote pointer integrates `rotationRate` (yaw → x, pitch → y) into a
+  clamped [-1, 1] cursor, written with the existing `irCursorWrites` convention through
+  `TCManagerInterface.setAxisValueFor(_, controller: 4, value:)`. Recenter resets it to 0. Gated on
+  `motion.hasRotationRate`. Axis signs are settings (invert X/Y), because the remote's rotation axes
+  are unverified until tested on a device.
+- **Handler slot:** `GCMotion.valueChangedHandler` has one slot, already set by
+  `installMotionHandler` for every controller with motion; the remote branch goes inside it.
