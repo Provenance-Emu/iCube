@@ -9,9 +9,11 @@ import SwiftUI
 ///
 /// ## tvOS
 ///
-/// Every control is its own `List` row, and dismissal is a row rather than a
-/// toolbar item — a `.toolbar { Done }` behind `#if os(iOS)` would strand a
-/// tvOS user in the sheet with no way out.
+/// The same rows on the menu engine, over the pause menu's room, like every other
+/// pause pane: the stock phone `List` left the notice and status as unfocusable
+/// footnote text at 10 feet. Dismissal is a row rather than a toolbar item — a
+/// `.toolbar { Done }` behind `#if os(iOS)` would strand a tvOS user in the sheet
+/// with no way out; Menu on the remote also closes it through `MenuScreen`'s back.
 struct ContinuityHandoffSheet: View {
     let game: TVGameItem
 
@@ -19,6 +21,38 @@ struct ContinuityHandoffSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        #if os(tvOS)
+        tvBody
+        #else
+        listBody
+        #endif
+    }
+
+    #if os(tvOS)
+    private var tvBody: some View {
+        ZStack {
+            ICubeTVRoomBackground(art: game.bannerImage ?? (game.hasCoverArt ? game.coverImage : nil))
+                .environment(\.colorScheme, .dark)
+            MenuScreen(
+                model: ContinuityHandoffModelBuilder.make(
+                    gameTitle: game.title, gameID: game.gameID,
+                    isOffering: manager.activeSession != nil, error: manager.lastError,
+                    begin: { Task { await manager.beginHandoff(game: game) } },
+                    stop: { Task { await manager.endHandoff() } },
+                    done: { dismiss() }
+                ),
+                style: .list,
+                onBack: { dismiss() },
+                tvHeader: ICubeLeafHeader(title: L("Continue Elsewhere"), subtitle: game.title),
+                tvInset: .xl,
+                tvClaimsFocus: true
+            )
+            .frame(maxWidth: 1000)
+        }
+    }
+    #endif
+
+    private var listBody: some View {
         NavigationStack {
             List {
                 Section {
