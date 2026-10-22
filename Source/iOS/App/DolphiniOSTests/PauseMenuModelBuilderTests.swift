@@ -40,7 +40,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     PauseMenuActions(
       resume: { self.log.append("resume") }, quickSave: { self.log.append("save") }, quickLoad: { self.log.append("load") },
       screenshot: { self.log.append("shot") }, openSaveStates: {}, openCheats: {}, openControllers: {},
-      openShaders: { self.log.append("shaders") }, openContinuity: {}, openSettings: {}, openSettingsLeaf: { self.log.append("leaf:\($0.leafID)#\($0.rowID ?? "")") }, openPerfOverlay: { self.log.append("perf") }, requestReset: {},
+      openShaders: { self.log.append("shaders") }, openContinuity: {}, openSettings: {}, openSettingsLeaf: { self.log.append("leaf:\($0.leafID)#\($0.rowID ?? "")") }, openPerfOverlay: { self.log.append("perf") }, openAudio: { self.log.append("audio") }, requestReset: {},
       requestExit: {}, recenterPointer: {})
   }
 
@@ -75,14 +75,12 @@ final class PauseMenuModelBuilderTests: XCTestCase {
   /// steps to the next option instead of jumping to 0 % / Native.
   func test_offLadderValues_areListedInPlace_soOnePressSteps() {
     let model = PauseMenuModelBuilder.make(state: state(resolution: 5, volume: 80), bindings: bindings(), actions: actions())
-    guard case .cycle(let scales, _) = model.item(id: "upscaling")!.role,
-          case .cycle(let volumes, _) = model.item(id: "audio")!.role else { return XCTFail("cycle") }
+    guard case .cycle(let scales, _) = model.item(id: "upscaling")!.role else { return XCTFail("cycle") }
     XCTAssertEqual(scales.map(\.1), [1, 2, 3, 4, 5, 6].map { AnyHashable($0) })
     XCTAssertEqual(scales[4].0, "5x")
     XCTAssertEqual(MenuItemRole.cycled(options: scales, current: AnyHashable(5), step: 1), AnyHashable(6))
-    XCTAssertEqual(volumes.map(\.1), [0, 25, 50, 75, 80, 100].map { AnyHashable($0) })
-    XCTAssertEqual(volumes[4].0, "80 %")
-    XCTAssertEqual(MenuItemRole.cycled(options: volumes, current: AnyHashable(80), step: 1), AnyHashable(100))
+    // The volume ladder moved to the Audio pane (`PauseAudioModelBuilderTests`); the tile badges the level.
+    XCTAssertEqual(model.item(id: "audio")?.badge, "80 %")
   }
 
   func test_upscalingFitWindow_isListedFirst_andLadderValuesAddNothing() {
@@ -91,9 +89,6 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(scales.first?.0, "Fit Window")
     XCTAssertEqual(scales.first?.1, AnyHashable(0))
     XCTAssertEqual(scales.count, 6)
-    let onLadder = PauseMenuModelBuilder.make(state: state(resolution: 3, volume: 50), bindings: bindings(), actions: actions())
-    guard case .cycle(let plain, _) = onLadder.item(id: "audio")!.role else { return XCTFail("cycle") }
-    XCTAssertEqual(plain.count, 5)
   }
 
   func test_threeSections_inOrder_withExpectedTiles() {
@@ -188,15 +183,24 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(log, ["leaf:graphics-enhancements#efb-scale"])
   }
 
-  func test_audio_cyclesVolumes_andLongPressOpensAudioLeaf() {
-    let volume = Box(100)
-    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(volume: volume), actions: actions())
+  /// One Audio tile in place of Mute + a volume cycle: a tap opens the Audio pane, the badge is the level or
+  /// "Muted", and the long-press still deep-links to the Audio leaf.
+  func test_audio_opensTheAudioPane_badgesTheLevel_andLongPressOpensAudioLeaf() {
+    let model = PauseMenuModelBuilder.make(state: state(volume: 50), bindings: bindings(), actions: actions())
     let item = model.item(id: "audio")!
-    guard case .cycle(let options, let selection) = item.role else { return XCTFail("cycle") }
-    XCTAssertEqual(options.map(\.0), ["0 %", "25 %", "50 %", "75 %", "100 %"])
-    XCTAssertEqual(options.map(\.1), [AnyHashable(0), AnyHashable(25), AnyHashable(50), AnyHashable(75), AnyHashable(100)])
-    selection.wrappedValue = AnyHashable(25)
-    XCTAssertEqual(volume.value, AnyHashable(25))
+    XCTAssertEqual(item.badge, "50 %")
+    XCTAssertEqual(item.icon, "speaker.wave.2")
+    guard case .action = item.role else { return XCTFail("action") }
+    XCTAssertTrue(item.activateInPlace())
+    XCTAssertEqual(log, ["audio"])
+    log = []
+
+    var muted = state()
+    muted.isMuted = true
+    let mutedItem = PauseMenuModelBuilder.make(state: muted, bindings: bindings(muted: Box(true)), actions: actions()).item(id: "audio")!
+    XCTAssertEqual(mutedItem.badge, "Muted")
+    XCTAssertEqual(mutedItem.icon, "speaker.slash.fill")
+
     guard case .action(let run)? = item.effectiveLongPress else { return XCTFail("long press") }
     run()
     XCTAssertEqual(log, ["leaf:audio#volume"])
@@ -312,9 +316,12 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(tv.sections.map(\.id), ["primary", "options"])
     XCTAssertNil(tv.sections[0].header)
     XCTAssertEqual(tv.sections[0].items.map(\.id), ["resume", "perf-hud", "reset", "exit"])
+    // Mute stays in `make` for the quick menu but leaves the pause grid: it lives on the Audio pane with Volume.
     XCTAssertEqual(tv.sections[1].items.map(\.id),
-                   ["quick-save", "quick-load", "save-states", "fast-forward", "mute", "screenshot", "record", "change-disc", "upscaling", "audio", "performance", "cheats", "shaders",
+                   ["quick-save", "quick-load", "save-states", "fast-forward", "screenshot", "record", "change-disc", "upscaling", "audio", "performance", "cheats", "shaders",
                     "controllers", "continuity", "settings"])
-    XCTAssertEqual(Set(tv.sections.flatMap(\.items).map(\.id)), Set(model.sections.flatMap(\.items).map(\.id)))
+    XCTAssertEqual(Set(tv.sections.flatMap(\.items).map(\.id)),
+                   Set(model.sections.flatMap(\.items).map(\.id)).subtracting(PauseMenuModelBuilder.audioPaneIDs))
+    XCTAssertEqual(PauseMenuModelBuilder.audioPaneIDs, ["mute"])
   }
 }

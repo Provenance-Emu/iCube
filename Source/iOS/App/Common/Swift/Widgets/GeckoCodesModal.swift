@@ -11,7 +11,8 @@ struct GeckoCodesModal: UIViewControllerRepresentable {
     let vc = sb.instantiateInitialViewController()!
     let list: UIViewController = (vc as? UINavigationController)?.topViewController ?? vc
     // Bridge C++ property types
-    if let gcv = list as? NSObject {
+    do {
+      let gcv: NSObject = list
       // gameId std::string
       let gid = item.gameID as NSString
       if gcv.responds(to: Selector(("setGameIdString:"))) { gcv.perform(Selector(("setGameIdString:")), with: gid) } else { gcv.setValue(gid, forKey: "gameId") }
@@ -40,7 +41,8 @@ struct ActionReplayCodesModal: UIViewControllerRepresentable {
     let sb = UIStoryboard(name: "ActionReplay", bundle: nil)
     let vc = sb.instantiateInitialViewController()!
     let list: UIViewController = (vc as? UINavigationController)?.topViewController ?? vc
-    if let ar = list as? NSObject {
+    do {
+      let ar: NSObject = list
       // gameId std::string
       let gid = item.gameID as NSString
       if ar.responds(to: Selector(("setGameIdString:"))) { ar.perform(Selector(("setGameIdString:")), with: gid) } else { ar.setValue(gid, forKey: "gameId") }

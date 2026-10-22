@@ -65,9 +65,9 @@ final class CloudSyncCoordinator: ObservableObject {
     /// Posted after a merged document (`libraryState`, `gameProfile`) was
     /// rewritten on disk by a sync. `userInfo[fileTypeKey]` is the category's
     /// raw value. Stores that own those files reload on it.
-    static let documentDidChangeNotification = Notification.Name("CloudSyncDocumentDidChangeNotification")
-    static let fileTypeKey = "fileType"
-    static let relativePathKey = "relativePath"
+    nonisolated static let documentDidChangeNotification = Notification.Name("CloudSyncDocumentDidChangeNotification")
+    nonisolated static let fileTypeKey = "fileType"
+    nonisolated static let relativePathKey = "relativePath"
 
     /// These whole files contain account credentials or device-local network endpoints.
     /// Keep the pinned package classifier unchanged; apply this app privacy boundary in both directions.

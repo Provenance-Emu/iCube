@@ -7,6 +7,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface JitManager (AltServer)
 
+@property (nonatomic) bool isAltServerAutoConnecting;
+
 - (bool)checkAppInstalledByAltServer;
 - (void)beginAltServerAutoDiscover;
 - (void)stopAltServerAutoDiscover;

@@ -28,8 +28,9 @@ protocol ControllerHubWriting {
 }
 
 struct LiveControllerHubWriter: ControllerHubWriting {
-  private let io: any PlayerScreenIO
-  private let reader: any ControllerHubReading
+  // `nonisolated(unsafe)` so the `nonisolated` init can assign them; every read is on the main actor.
+  nonisolated(unsafe) private let io: any PlayerScreenIO
+  nonisolated(unsafe) private let reader: any ControllerHubReading
 
   /// The production seam: the live player-screen IO and hub reader. Explicit and `nonisolated`, as
   /// its siblings' are, so it can be a default argument of the main-actor view model's `init`.

@@ -266,7 +266,7 @@ struct ShaderSettingsView: View {
     return MenuScreen(model: model, style: .list, onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
                       tvHeader: SettingsLeafScreen.header(title: L("Shaders"), parentTitle: parentTitle), tvInset: .xxl)
       .onAppear { sync() }
-      .onChange(of: presetPath) { p in
+      .onChange(of: presetPath) { _, p in
         if let p {
           UserDefaults.standard.set(ShaderLibrary.normalizedPath(p), forKey: "shader_preset_path")
         } else {
@@ -282,8 +282,8 @@ struct ShaderSettingsView: View {
     List {
       Section(header: Text(L("Post-Processing Shader")), footer: Text(L("Note: Some shaders can reduce performance. Heavier effects may cause slowdowns depending on your device."))) {
         Toggle(L("Enable Shader"), isOn: $enabled)
-          .onChange(of: enabled) {
-            UserDefaults.standard.set($0, forKey: "shader_enabled")
+          .onChange(of: enabled) { _, new in
+            UserDefaults.standard.set(new, forKey: "shader_enabled")
             NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
           }
         NavigationLink(destination: ShaderPickerView(selectedPresetPath: $presetPath)) {
@@ -304,8 +304,8 @@ struct ShaderSettingsView: View {
 
       Section(header: Text(L("Advanced")), footer: Text(L("Compatibility options for specific devices or shaders. Most people never need these."))) {
         Toggle(L("Flip vertically"), isOn: $flipVertically)
-          .onChange(of: flipVertically) {
-            UserDefaults.standard.set($0, forKey: "shader_flip_vertical")
+          .onChange(of: flipVertically) { _, new in
+            UserDefaults.standard.set(new, forKey: "shader_flip_vertical")
             NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
           }
         Toggle(L("Enable pre-copy (compat)"), isOn: $compatPreCopyEnabled)
@@ -319,7 +319,7 @@ struct ShaderSettingsView: View {
     }
     .navigationTitle(L("Shaders"))
     .onAppear { sync() }
-    .onChange(of: presetPath) { p in
+    .onChange(of: presetPath) { _, p in
       if let p {
         let pathToStore = ShaderLibrary.normalizedPath(p)
         UserDefaults.standard.set(pathToStore, forKey: "shader_preset_path")

@@ -75,7 +75,7 @@ struct DSUSessionView: View {
               .disabled(running)
           }
           Toggle(L("Start Server"), isOn: $running)
-            .onChange(of: running) { v in
+            .onChange(of: running) { _, v in
               if v {
                 let p = validatedPort()
                 let ok = DSUServerBridge.start(onPort: NSNumber(value: p).intValue)
@@ -94,7 +94,7 @@ struct DSUSessionView: View {
               }
             }
           Toggle(L("Auto‑start when opening"), isOn: $autoStart)
-            .onChange(of: autoStart) { UserDefaults.standard.set($0, forKey: "dsu_server_autostart") }
+            .onChange(of: autoStart) { _, new in UserDefaults.standard.set(new, forKey: "dsu_server_autostart") }
         }
 
         Section(header: Text(L("Quick Links"))) {
@@ -146,7 +146,7 @@ struct DSUSessionView: View {
 
         Section(header: Text(L("Connected Receivers")), footer: Text(L("When approval is required, only allowed receivers will receive input. Version pings are still answered so clients can detect this server."))) {
           Toggle(L("Approval Required"), isOn: $approvalRequired)
-            .onChange(of: approvalRequired) { DSUServerBridge.setApprovalRequired($0) }
+            .onChange(of: approvalRequired) { _, new in DSUServerBridge.setApprovalRequired(new) }
           if clients.isEmpty {
             Text(L("No receivers seen yet")).foregroundStyle(.secondary)
           } else {
@@ -231,8 +231,8 @@ struct DSUSessionView: View {
           NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": L("Receiver connected")])
         }
       }
-      .onChange(of: autoStart) { UserDefaults.standard.set($0, forKey: "dsu_server_autostart") }
-      .onChange(of: portText) { if let p = Int($0), p >= 1 && p <= 65535 { UserDefaults.standard.set(p, forKey: "dsu_server_port") } }
+      .onChange(of: autoStart) { _, new in UserDefaults.standard.set(new, forKey: "dsu_server_autostart") }
+      .onChange(of: portText) { _, new in if let p = Int(new), p >= 1 && p <= 65535 { UserDefaults.standard.set(p, forKey: "dsu_server_port") } }
       .fullScreenCover(isPresented: $showController) { DSUControllerView(onClose: { showController = false }) }
     }
   }

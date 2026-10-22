@@ -50,7 +50,7 @@ final class SkinLibrary: ObservableObject {
   static let shared = SkinLibrary(rootURL: defaultRootURL())
 
   /// File extensions of the archives the system hands to the app (Delta and Manic share the zip layout).
-  static let archiveExtensions: Set<String> = ["deltaskin", "manicskin"]
+  nonisolated static let archiveExtensions: Set<String> = ["deltaskin", "manicskin"]
 
   private static let zipExtension = "zip"
 
@@ -66,10 +66,10 @@ final class SkinLibrary: ObservableObject {
   /// on-screen controller.
   static let didChangeNotification = Notification.Name("DOLSkinLibraryDidChangeNotification")
 
-  private static let rootFolderName = "Skins"
-  private static let selectionFileName = "selection.json"
+  private nonisolated static let rootFolderName = "Skins"
+  private nonisolated static let selectionFileName = "selection.json"
   /// The store's record of which catalog entries it installed, beside `selection.json`.
-  static let storeRecordFileName = "store.json"
+  nonisolated static let storeRecordFileName = "store.json"
   private static let identifierKey = "identifier"
   private static let infoFileName = "info.json"
   private static let stagingArchiveName = "archive.zip"

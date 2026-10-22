@@ -41,12 +41,17 @@ internal struct PauseMenuView: View {
     /// grid (`SaveStateFilmstripView`) -- previously iOS-only.
     case filmstrip
   }
-  private enum Pane { case main, saves, cheats, controllers, discs, perfHUD }
+  private enum Pane: Equatable {
+    case main, saves, cheats, controllers, discs, perfHUD
+    /// The Audio tile's grid (volume, mute, output, effects), and one effect's parameter page under it.
+    case audio
+    case audioEffect(AudioEffectPage)
+  }
   /// The quick-slot picker's slots, numbered as the UI shows them.
   static let saveSlots = 1 ... PauseMenuModelBuilder.slotCount
   @State private var pane: Pane = .main
   #if DEBUG
-  /// `-ICubePausePane <saves|cheats|controllers|reset|exit>`: open a sub-pane for simulator screenshots.
+  /// `-ICubePausePane <saves|cheats|controllers|audio|continuity|reset|exit>`: open a sub-pane for simulator screenshots.
   var debugInitialPane: String?
   /// onAppear re-runs after every child sheet closes; the debug pane applies once.
   @State private var debugInitialPaneConsumed = false
@@ -93,6 +98,14 @@ internal struct PauseMenuView: View {
   @State private var internalResolution: Int = 1
   @State private var metalFXUpscale: Bool = false
   @State private var audioVolume: Int = 100
+  /// Snapshot behind the Audio pane's backend, surround and effect tiles; read with the other live settings
+  /// and written through `ConfigAudioSync.apply`, the Audio leaf's one writer.
+  @State private var audioState = ConfigAudioState()
+  /// The Wii's SYSCONF sound mode and Remote speaker volume, shown on the Audio pane for a Wii title.
+  @State private var wiiSoundMode: Int = 1
+  @State private var wiiSpeakerVolume: Int = 4
+  /// tvOS: the Audio pane's own last-focused tile, so Back from an effect page lands on that effect.
+  @State private var tvAudioFocusID: String?
   /// The cover-column chip: the engine actually running.
   @State private var engineShortName: String = ""
   @State private var jitAcquired: Bool = false
@@ -148,8 +161,16 @@ internal struct PauseMenuView: View {
     internalResolution = performanceControls.state.resolutionScale
     metalFXUpscale = DOLConfigBridge.gfxMetalFXSpatialUpscale()
     audioVolume = TVEmulationBridge.audioVolumePercent()
+    audioState = ConfigAudioSync.read()
+    if Self.isWiiTitleRunning {
+      wiiSoundMode = DOLConfigBridge.sysconfSoundMode()
+      wiiSpeakerVolume = DOLConfigBridge.sysconfSpeakerVolume()
+    }
     refreshEngineState()
   }
+
+  /// A Wii title is running (the Audio pane adds the Wii's own sound rows).
+  private static var isWiiTitleRunning: Bool { TVEmulationBridge.isRunning() && TVEmulationBridge.isCurrentSystemWii() }
 
   private func refreshActiveCheatCount() {
     activeCheatCount = CheatsMenuView.activeCheatCount(forGameId: game.gameID, revision: game.revision)
@@ -166,10 +187,129 @@ internal struct PauseMenuView: View {
     refreshLiveSettings()
   }
 
-  /// Mutes / unmutes through the helper the top bar shares, so both always agree.
+  /// Mutes / unmutes through the helper the top bar shares, so both always agree. Mute zeroes the volume, so
+  /// the Audio pane's Volume tile re-reads it.
   private func toggleMute() {
     isMuted = QuickMute.toggle()
+    audioVolume = TVEmulationBridge.audioVolumePercent()
   }
+
+  // MARK: - Audio pane
+
+  private func openAudioPane() {
+    refreshLiveSettings()
+    tvLastFocusID = "audio"
+    pane = .audio
+  }
+
+  private func closeAudioPane() {
+    tvLastFocusID = "audio"
+    pane = .main
+    refreshLiveSettings()
+  }
+
+  private func openEffectPage(_ page: AudioEffectPage) {
+    tvAudioFocusID = page == .all ? PauseAudioModelBuilder.effectSettingsID : PauseAudioModelBuilder.effectID(page)
+    pane = .audioEffect(page)
+  }
+
+  private func applyAudio(_ change: ConfigAudioChange) {
+    ConfigAudioSync.apply(change, to: &audioState)
+  }
+
+  private var pauseAudioModel: MenuModel {
+    let state = PauseAudioState(
+      isWii: Self.isWiiTitleRunning, volume: audioVolume, isMuted: isMuted,
+      backend: audioState.backend, backendOptions: audioState.shortBackendOptions, surround: audioState.surround,
+      effects: audioState.effects, wiiSoundMode: wiiSoundMode, wiiSpeakerVolume: wiiSpeakerVolume)
+    let bindings = PauseAudioBindings(
+      volume: pauseMenuBindings.audioVolume,
+      mute: pauseMenuBindings.mute,
+      backend: Binding(get: { AnyHashable(audioState.backend) }, set: { if let raw = $0 as? String { applyAudio(.backend(raw)) } }),
+      surround: Binding(get: { audioState.surround }, set: { applyAudio(.surround($0)) }),
+      effectEnabled: { page in
+        Binding(get: { page.isEnabled(in: audioState.effects) },
+                set: { on in if let change = page.enabledChange(on) { applyAudio(.effect(change)) } })
+      },
+      wiiSoundMode: Binding(get: { AnyHashable(wiiSoundMode) }, set: { value in
+        guard let mode = value as? Int else { return }
+        DOLConfigBridge.setSysconfSoundMode(mode)
+        wiiSoundMode = mode
+      }),
+      wiiSpeakerVolume: Binding(get: { AnyHashable(wiiSpeakerVolume) }, set: { value in
+        guard let volume = value as? Int else { return }
+        DOLConfigBridge.setSysconfSpeakerVolume(volume)
+        wiiSpeakerVolume = volume
+      }))
+    let actions = PauseAudioActions(
+      openEffect: { openEffectPage($0) },
+      openAudioSettings: {
+        settingsLink = SettingsDeepLink(leafID: "audio", rowID: nil)
+        showSettings = true
+      },
+      openWiiSettings: {
+        settingsLink = SettingsDeepLink(leafID: "console-wii", rowID: "sound-mode")
+        showSettings = true
+      })
+    return PauseAudioModelBuilder.make(state: state, bindings: bindings, actions: actions)
+  }
+
+  private func effectPageModel(_ page: AudioEffectPage) -> MenuModel {
+    ConfigAudioModelBuilder.effectPageModel(page, state: audioState, apply: applyAudio)
+  }
+
+  /// The Audio tile's grid: the same tile renderers as the main grid, with the hero beside it on tvOS.
+  private var audioPane: some View {
+    #if os(tvOS)
+    TVPauseGridView(model: pauseAudioModel, lastFocusID: $tvAudioFocusID, onBack: closeAudioPane) {
+      coverColumn
+    }
+    .environment(\.colorScheme, .dark)
+    #else
+    GeometryReader { proxy in
+      VStack(spacing: 0) {
+        paneBackHeader(title: L("Audio"), back: closeAudioPane)
+        MenuScreen(model: pauseAudioModel,
+                   style: .cards(columns: PauseTileLayout.cardColumns(forGridWidth: proxy.size.width - 2 * Touch.margin), compact: isCompactHeight),
+                   onBack: closeAudioPane)
+      }
+      .padding(.horizontal, Touch.margin)
+      .padding(.top, Touch.topMargin)
+    }
+    #endif
+  }
+
+  /// One effect's parameters (or every effect's), as the Audio leaf lists them.
+  private func effectPane(_ page: AudioEffectPage) -> some View {
+    VStack(spacing: 0) {
+      #if os(iOS)
+      paneBackHeader(title: page.title, back: { pane = .audio })
+      #endif
+      MenuScreen(model: effectPageModel(page), style: .list,
+                 onBack: { pane = .audio },
+                 tvHeader: ICubeLeafHeader(title: page.title, subtitle: L("Audio")),
+                 tvClaimsFocus: true)
+    }
+    .frame(maxWidth: 1000)
+  }
+
+  #if os(iOS)
+  /// The iOS sub-pane header: Back on the left, the pane's title centred (the Performance pane's layout).
+  private func paneBackHeader(title: String, back: @escaping () -> Void) -> some View {
+    HStack {
+      Button(action: back) {
+        Label(L("Back"), systemImage: "chevron.left")
+          .frame(minWidth: 44, minHeight: 44)
+      }
+      .buttonStyle(.plain)
+      Spacer()
+      Text(title).font(.headline)
+      Spacer()
+    }
+    .foregroundStyle(.white)
+    .padding(.horizontal)
+  }
+  #endif
 
   var body: some View {
     ZStack {
@@ -217,6 +357,11 @@ internal struct PauseMenuView: View {
       case .cheats:
         CheatsMenuView(game: game, onBack: { pane = .main })
           .onAppear { NSLog("[PAUSE] Cheats menu appeared") }
+      case .audio:
+        audioPane
+          .onAppear { NSLog("[PAUSE] Audio pane appeared") }
+      case .audioEffect(let page):
+        effectPane(page)
       case .discs:
         DiscChangePicker(games: TVLibraryBridge.currentGames(), isWii: TVEmulationBridge.isCurrentSystemWii(), onBack: { pane = .main })
       #if os(tvOS)
@@ -279,6 +424,8 @@ internal struct PauseMenuView: View {
         case "reset": showResetDialog = true
         case "exit": showExitDialog = true
         case "discs": pane = .discs
+        case "audio": pane = .audio
+        case "continuity": showContinuitySheet = true
         default: break
         }
         if let id = debugLongPressTileID, case .action(let run)? = pauseMenuModel.item(id: id)?.effectiveLongPress {
@@ -324,7 +471,7 @@ internal struct PauseMenuView: View {
           focused = .back
         case .controllers:
           focused = .back
-        case .discs, .perfHUD:
+        case .discs, .perfHUD, .audio, .audioEffect:
           break
         }
       }
@@ -342,6 +489,8 @@ internal struct PauseMenuView: View {
       guard !quitRequestInFlight else { return }
       // At .main the tile grid's own onBack closes (coalesced), and the confirm overlays handle theirs.
       if pane == .perfHUD { closePerfHUDSubmenu() }
+      else if case .audioEffect = pane { pane = .audio }
+      else if pane == .audio { closeAudioPane() }
       else if pane != .main { pane = .main }
     }
     // Spec §5.3: Play/Pause on the remote resumes, from any pane.
@@ -780,6 +929,7 @@ internal struct PauseMenuView: View {
         tvLastFocusID = "perf-hud"
         pane = .perfHUD
       },
+      openAudio: { openAudioPane() },
       requestReset: { showResetDialog = true },
       requestExit: requestExit,
       recenterPointer: {
@@ -953,6 +1103,8 @@ struct PauseMenuActions {
   /// Opens Settings on a leaf, scrolled to a row (`PauseMenuModelBuilder.settingsLinks`).
   var openSettingsLeaf: (SettingsDeepLink) -> Void = { _ in }
   var openPerfOverlay: () -> Void
+  /// Opens the Audio pane (`PauseAudioModelBuilder`): volume, mute, output and effects as tiles.
+  var openAudio: () -> Void = {}
   var requestReset: () -> Void
   var requestExit: () -> Void
   var recenterPointer: () -> Void
@@ -972,6 +1124,9 @@ enum PauseMenuModelBuilder {
 
   /// The session row, in order (iFly layout): big tiles above the Options grid.
   static let primaryIDs = ["resume", "perf-hud", "reset", "exit"]
+  /// Tiles `make` still emits (the quick menu shows them) that the pause grid itself no longer draws: Mute lives on
+  /// the Audio pane with Volume, so the main grid has one Audio tile instead of two audio tiles.
+  static let audioPaneIDs = ["mute"]
 
   /// The pause screen's regroup of `make`'s tiles, on every platform: one headerless primary row, then every other
   /// tile, in order, under Options. A headerless section is what `TVPauseGridView` and `MenuStyle.cards` draw as the
@@ -979,7 +1134,7 @@ enum PauseMenuModelBuilder {
   static func primaryLayout(_ model: MenuModel) -> MenuModel {
     let all = model.sections.flatMap(\.items)
     let primary = primaryIDs.compactMap { id in all.first { $0.id == id } }
-    let options = all.filter { !primaryIDs.contains($0.id) }
+    let options = all.filter { !primaryIDs.contains($0.id) && !audioPaneIDs.contains($0.id) }
     return MenuModel(sections: [
       MenuSection(id: "primary", items: primary),
       MenuSection(id: "options", header: L("Options"), items: options),
@@ -1037,6 +1192,15 @@ enum PauseMenuModelBuilder {
     options(audioVolumeOptions, including: current) { "\($0) %" }
   }
 
+  /// The Mute tile, as the quick menu, the top bar's helper and the Audio pane all show it.
+  static func muteItem(isMuted: Bool, binding: Binding<Bool>) -> MenuItem {
+    MenuItem(id: "mute", title: L("Mute"), icon: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", tint: .cyan,
+             role: .toggle(binding), description: L("Silence the game's audio."))
+  }
+
+  /// The Audio tile's badge: the level, or that it is muted.
+  static func audioBadge(volume: Int, isMuted: Bool) -> String { isMuted ? L("Muted") : "\(volume) %" }
+
   /// With nothing to cycle (only "None"), the tile just opens the full picker.
   private static func shadersItem(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions) -> MenuItem {
     if state.shaderOptions.count <= 1 {
@@ -1069,8 +1233,7 @@ enum PauseMenuModelBuilder {
       MenuItem(id: "fast-forward", title: L("Fast Forward"), icon: "forward.fill", tint: .cyan,
                role: .cycle(options: fastForwardOptions, selection: bindings.fastForward),
                description: L("Tap to cycle the speed. Long-press to pick one. Takes effect on resume.")),
-      MenuItem(id: "mute", title: L("Mute"), icon: state.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", tint: .cyan,
-               role: .toggle(bindings.mute), description: L("Silence the game's audio.")),
+      muteItem(isMuted: state.isMuted, binding: bindings.mute),
       MenuItem(id: "screenshot", title: L("Screenshot"), icon: "camera", tint: .pink, role: .action(actions.screenshot),
                description: L("Save the last frame to ScreenShots.")),
       MenuItem(id: "record", title: L("Record"), icon: "record.circle", tint: ICubeDesign.color(.destructive),
@@ -1088,9 +1251,10 @@ enum PauseMenuModelBuilder {
                role: .cycle(options: upscalingOptions(including: state.internalResolution), selection: bindings.internalResolution),
                description: L("Internal resolution. Takes effect immediately. Long-press for the graphics settings."),
                longPress: settingsLongPress("upscaling", actions)),
-      MenuItem(id: "audio", title: L("Audio"), icon: "speaker.wave.2", tint: .cyan,
-               role: .cycle(options: audioVolumeOptions(including: state.audioVolume), selection: bindings.audioVolume),
-               description: L("Game volume. Long-press for the audio settings."),
+      MenuItem(id: "audio", title: L("Audio"), icon: state.isMuted ? "speaker.slash.fill" : "speaker.wave.2", tint: .cyan,
+               role: .action(actions.openAudio),
+               badge: audioBadge(volume: state.audioVolume, isMuted: state.isMuted),
+               description: L("Volume, mute, output and effects. Long-press for the audio settings."),
                longPress: settingsLongPress("audio", actions)),
       MenuItem(id: "performance", title: L("CPU Engine"), icon: "gauge.with.dots.needle.67percent", tint: .orange,
                role: .cycle(options: engineOptions(jitAcquired: state.jitAcquired, including: state.nextEngine), selection: bindings.cpuEngine),

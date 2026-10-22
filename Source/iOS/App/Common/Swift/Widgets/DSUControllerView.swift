@@ -28,14 +28,14 @@ private enum OrientationHelper {
     guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
     let mask = currentMask()
     let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: mask)
-    try? scene.requestGeometryUpdate(prefs)
+    scene.requestGeometryUpdate(prefs)
   }
 
   /// Restores default orientation allowances after the view is dismissed
   static func unlock() {
     guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene else { return }
     let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .allButUpsideDown)
-    try? scene.requestGeometryUpdate(prefs)
+    scene.requestGeometryUpdate(prefs)
   }
 }
 
@@ -78,7 +78,6 @@ struct DSUControllerView: View {
 
   private var controllerContent: some View {
     GeometryReader { geo in
-      let isLandscape = geo.size.width > geo.size.height
       ZStack {
         Color.black.ignoresSafeArea()
 
@@ -278,20 +277,20 @@ struct DSUControllerView: View {
       .navigationBarTitleDisplayMode(.inline)
       .navigationDestination(isPresented: $showStickFeel) { AnalogStickSettingsView().clearingSettingsPaneBack() }
       .sheet(isPresented: $showLayoutSheet) { LayoutPickerSheet(selectedRaw: $layoutRaw) }
-      .onChange(of: layoutRaw) { _ in reconfigureVirtualControllerIfNeeded() }
-      .onChange(of: restrictClient) { newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }
+      .onChange(of: layoutRaw) { reconfigureVirtualControllerIfNeeded() }
+      .onChange(of: restrictClient) { _, newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }
       .onAppear {
         DSUServerBridge.setRestrictToClient(restrictClient.isEmpty ? nil : restrictClient)
         // Publish layout metadata for auto-profile selection on receivers
         publishLayoutTXT(raw: layoutRaw)
       }
-      .onChange(of: layoutRaw) { newVal in publishLayoutTXT(raw: newVal) }
+      .onChange(of: layoutRaw) { _, newVal in publishLayoutTXT(raw: newVal) }
       .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
         hasClient = DSUServerBridge.hasClient()
         clientAddr = DSUServerBridge.lastClientAddress()
         txCount = UInt(DSUServerBridge.txCount())
         rxCount = UInt(DSUServerBridge.rxCount())
-        clients = DSUServerBridge.clients() as? [String] ?? []
+        clients = DSUServerBridge.clients()
         if !hasClient { DSUServerBridge.sendNow() }
       }
     }

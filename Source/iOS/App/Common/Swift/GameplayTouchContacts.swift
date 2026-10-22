@@ -41,7 +41,7 @@ final class GameplayTouchContacts {
 
   deinit {
     let scopeID = id
-    MainActor.assumeIsolated { Self.scopes.removeValue(forKey: scopeID) }
+    MainActor.assumeIsolated { _ = Self.scopes.removeValue(forKey: scopeID) }
   }
 }
 

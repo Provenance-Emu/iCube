@@ -53,6 +53,33 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
     XCTAssertEqual(m.allItems.map(\.id), effectRows)
   }
 
+  /// The pause menu's per-effect pages are the leaf's own rows, filtered: same ids, same gating.
+  func test_effectPageModel_isThatEffectsRows_toggleFirst_andAllIsEveryEffectRow() {
+    let s = state { $0.backend = "CoreAudio" }
+    let echo = ConfigAudioModelBuilder.effectPageModel(.echo, state: s) { self.changes.append($0) }
+    XCTAssertEqual(echo.allItems.map(\.id), ["echo", "echo-time", "echo-feedback"])
+    XCTAssertEqual(echo.focusRequest, "echo")
+    XCTAssertEqual(echo.item(id: "echo-time")?.isEnabled, false, "parameters stay disabled until the effect is on")
+    XCTAssertEqual(ConfigAudioModelBuilder.effectPageModel(.equalizer, state: s) { _ in }.allItems.map(\.id), ["eq", "eq-low", "eq-mid", "eq-high"])
+    XCTAssertEqual(ConfigAudioModelBuilder.effectPageModel(.bitcrusher, state: s) { _ in }.allItems.map(\.id), ["bitcrusher", "crush-bits", "crush-downsample"])
+    let all = ConfigAudioModelBuilder.effectPageModel(.all, state: s) { _ in }
+    XCTAssertEqual(all.allItems.map(\.id), effectRows)
+    XCTAssertEqual(all.sections.first?.footer, ConfigAudioModelBuilder.effectsFooter)
+    XCTAssertNil(all.item(id: "plugin-chain"), "the plug-in chain stays in Settings")
+    guard case .toggle(let b) = echo.item(id: "echo")?.role else { return XCTFail("toggle") }
+    b.wrappedValue = true
+    XCTAssertEqual(changes, [.effect(.echoEnabled(true))])
+  }
+
+  func test_shortBackendOptions_matchTheLongOnes_withTileSizedLabels() {
+    var s = ConfigAudioState()
+    s.backends = ["CoreAudio", "AVAudioEngine"]
+    s.backend = ""
+    XCTAssertEqual(s.backendOptions.map(\.1), ["", "CoreAudio", "AVAudioEngine"])
+    XCTAssertEqual(s.shortBackendOptions.map(\.1), s.backendOptions.map(\.1))
+    XCTAssertEqual(s.shortBackendOptions.map(\.0), ["Automatic", "CoreAudio", "AVAudioEngine"])
+  }
+
   func test_everyRow_hasADescription() {
     for backend in ["", "CoreAudio", "AVAudioEngine"] {
       for item in model(state { $0.backend = backend }).allItems { XCTAssertFalse((item.description ?? "").isEmpty, "\(backend) \(item.id)") }

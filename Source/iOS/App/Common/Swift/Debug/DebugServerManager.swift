@@ -108,7 +108,7 @@ final class DebugServerManager: NSObject {
   }
 
   /// UserDefaults key holding the LAN bench token.
-  static let tokenDefaultsKey = "ICubeBenchServerToken"
+  nonisolated static let tokenDefaultsKey = "ICubeBenchServerToken"
 
   /// The token a LAN client must present. Generated once and persisted, so
   /// tooling configured with it keeps working across launches; rotating it is a
@@ -135,7 +135,7 @@ final class DebugServerManager: NSObject {
   override private init() { super.init() }
 
   /// UserDefaults key for the Release-build opt-in. Default OFF.
-  static let enabledDefaultsKey = "ICubeBenchServerEnabled"
+  nonisolated static let enabledDefaultsKey = "ICubeBenchServerEnabled"
 
   /// Whether the server is permitted to run. Always true in DEBUG; in Release
   /// only when the user has opted in via the "Perf Test Bench (HTTP)" toggle;

@@ -84,7 +84,7 @@ final class PauseArbiter {
   private var asyncResumeIssued = false
   private var observers: [NSObjectProtocol] = []
 
-  init(core: Core, schedule: @escaping (@escaping () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) }) {
+  init(core: Core, schedule: @escaping (@escaping () -> Void) -> Void = { DispatchQueue.main.async(execute: DispatchWorkItem(block: $0)) }) {
     self.core = core
     self.schedule = schedule
   }

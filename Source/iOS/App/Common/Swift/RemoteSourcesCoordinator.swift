@@ -575,7 +575,10 @@ final class LibraryCoordinator: ObservableObject {
   init(
     emulationState: EmulationState,
     gamesProvider: @escaping () -> [TVGameItem],
-    localRescan: @escaping (@escaping () -> Void) -> Void = { TVLibraryBridge.rescanLocalAndFetchMetadata($0) }
+    localRescan: @escaping (@escaping () -> Void) -> Void = { completion in
+      nonisolated(unsafe) let completion = completion
+      TVLibraryBridge.rescanLocalAndFetchMetadata { completion() }
+    }
   ) {
     self.emulationState = emulationState
     self.gamesProvider = gamesProvider

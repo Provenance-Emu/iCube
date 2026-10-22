@@ -29,7 +29,7 @@ final class ContinuityManager: ObservableObject {
 
     /// The sentence every continuity surface must show. One definition, so it
     /// cannot be softened in one place and not another.
-    static let transportSecurityNotice = L(
+    nonisolated static let transportSecurityNotice = L(
         "Transfers are not encrypted. Save data and games are sent over your local network in the clear, "
         + "so use this only on a network you trust."
     )
@@ -159,7 +159,8 @@ final class ContinuityManager: ObservableObject {
             // Read live, so turning the switch off in Settings takes effect on
             // a peer's very next request rather than at next launch.
             sharesLibraryProvider: { [weak self] in
-                await MainActor.run { self?.sharesLibrary ?? false }
+                guard let manager = self else { return false }
+                return await manager.sharesLibrary
             }
         )
         self.libraryServer = libraryServer

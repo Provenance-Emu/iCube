@@ -92,11 +92,11 @@ final class DebugEventBus: @unchecked Sendable {
     guard !producersStarted else { return }
     producersStarted = true
     lock.lock()
-    lastSettings = DOLSettingsKeyBridge.snapshotAll() as? [String: Any] ?? [:]
+    lastSettings = DOLSettingsKeyBridge.snapshotAll() as [String: Any]
     lock.unlock()
     DOLDebugBridge.setConfigChangedHandler { [weak self] in
       guard let self else { return }
-      let now = DOLSettingsKeyBridge.snapshotAll() as? [String: Any] ?? [:]
+      let now = DOLSettingsKeyBridge.snapshotAll() as [String: Any]
       // Guard the read-then-write of `lastSettings` with `lock` since this
       // handler may fire from any thread and concurrently; compute the diff
       // and publish only after releasing the lock.
@@ -119,7 +119,7 @@ final class DebugEventBus: @unchecked Sendable {
     timer.schedule(deadline: .now() + 1, repeating: 1)
     timer.setEventHandler { [weak self] in
       guard let self, DOLDebugBridge.coreState() == "running" else { return }
-      let snap = DOLPerfBridge.snapshot() as? [String: Any] ?? [:]
+      let snap = DOLPerfBridge.snapshot() as [String: Any]
       self.publish("perf.sample", ["fps": snap["fps"] ?? 0, "vps": snap["vps"] ?? 0, "frame_ms": snap["frameTimeMs"] ?? 0])
     }
     timer.resume()

@@ -387,7 +387,6 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
       uint16_t prt = ntohs(src.sin_port);
       NSString* addr = [NSString stringWithFormat:@"%s:%hu", ip, prt];
       NSString* keyIP = [NSString stringWithUTF8String:ip];
-      BOOL wasPresent = [selfRef->_clients containsObject:addr];
       // Remove existing occurrence
       [selfRef->_clients removeObject:addr];
       // Insert at front
@@ -579,7 +578,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     char ipbuf[INET_ADDRSTRLEN] = {0};
     const char* ip = inet_ntop(AF_INET, &dst->sin_addr, ipbuf, sizeof(ipbuf));
     uint16_t p = ntohs(dst->sin_port);
-    NSLog(@"[DSU] Sent PadDataResponse %zd bytes to %s:%hu hid_counter=%u buttons1=%02x buttons2=%02x",
+    NSLog(@"[DSU] Sent PadDataResponse %zd bytes to %s:%hu hid_counter=%u buttons1=%02x buttons2=%02x l2=%02x r2=%02x",
           sent, ip ? ip : "<unknown>", p, pd.m_message.hid_packet_counter,
           pd.m_message.button_states1, pd.m_message.button_states2,
           pd.m_message.trigger_l2, pd.m_message.trigger_r2);

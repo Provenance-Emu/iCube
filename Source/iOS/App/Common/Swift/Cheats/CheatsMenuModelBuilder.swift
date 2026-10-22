@@ -126,6 +126,9 @@ struct CheatsMenuState {
   /// (one control per row, per the menu engine's tvOS contract). iOS draws
   /// `CheatFilterChips` as host chrome instead and leaves this false.
   var showsFilterRow: Bool = false
+  /// The host's current text query, shown as the Search row's badge. Only read when
+  /// `CheatsMenuActions.openSearch` is set (tvOS); iOS keeps search in `.searchable`.
+  var searchText: String = ""
 }
 
 /// Plain closures — no `TVCheatsBridge`/`DOLConfigBridge` calls inside
@@ -138,15 +141,42 @@ struct CheatsMenuActions {
   var downloadCheats: () -> Void
   var refreshCheats: () -> Void
   var setFilter: (CheatFilter) -> Void = { _ in }
+  /// tvOS: opens the host's search entry (a sheet with the keyboard). When set, the
+  /// model leads with a "Find" section holding Search and the Show filter, so both
+  /// are the first rows the remote lands on instead of sitting under the list.
+  var openSearch: (() -> Void)? = nil
 }
 
 enum CheatsMenuModelBuilder {
   static let filterItemID = "filter"
+  static let searchItemID = "search"
   static let downloadItemID = "download-cheats"
 
   /// `typeAsBadge`: tvOS shows the Gecko/Action Replay type as the row's trailing badge (no subtitle, no category badge).
   static func make(state: CheatsMenuState, actions: CheatsMenuActions, typeAsBadge: Bool = false) -> MenuModel {
     var sections: [MenuSection] = []
+    let filters = CheatFilter.available(in: state.cheats)
+    let filterRow: MenuItem? = state.showsFilterRow && CheatFilter.isWorthShowing(filters)
+      ? filterItem(state: state, actions: actions, filters: filters) : nil
+
+    // tvOS leads with the ways to narrow the list: search, then the Show filter. Both used to
+    // sit below Enable/Download (and search above the list as host chrome), where a long list
+    // pushed them out of reach.
+    if let openSearch = actions.openSearch {
+      let query = state.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+      var find: [MenuItem] = [
+        MenuItem(
+          id: searchItemID,
+          title: L("Search"),
+          icon: "magnifyingglass",
+          role: .action(openSearch),
+          badge: query.isEmpty ? nil : query,
+          description: L("Find a cheat by name, type, category or creator.")
+        ),
+      ]
+      if let filterRow { find.append(filterRow) }
+      sections.append(MenuSection(id: "find", items: find))
+    }
 
     sections.append(MenuSection(id: "enable", items: [
       MenuItem(
@@ -181,9 +211,8 @@ enum CheatsMenuModelBuilder {
       MenuItem(id: "refresh-cheats", title: L("Refresh List"), role: .action(actions.refreshCheats)),
     ]))
 
-    let filters = CheatFilter.available(in: state.cheats)
-    if state.showsFilterRow, CheatFilter.isWorthShowing(filters) {
-      sections.append(MenuSection(id: "filter", items: [filterItem(state: state, actions: actions, filters: filters)]))
+    if actions.openSearch == nil, let filterRow {
+      sections.append(MenuSection(id: "filter", items: [filterRow]))
     }
 
     let visible = state.cheats.filter(state.filter.matches)
@@ -196,7 +225,13 @@ enum CheatsMenuModelBuilder {
         MenuItem(id: "empty-filter", title: L("No cheats match this filter"), role: .action {}, isEnabled: false),
       ]))
     } else {
-      let header = state.filter == .all ? L("Cheat Codes") : "\(state.filter.title) · \(visible.count)"
+      let query = state.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+      let header: String
+      if actions.openSearch != nil, !query.isEmpty {
+        header = String(format: L("%1$ld matching “%2$@”"), visible.count, query)
+      } else {
+        header = state.filter == .all ? L("Cheat Codes") : "\(state.filter.title) · \(visible.count)"
+      }
       sections.append(MenuSection(id: "cheats", header: header, items: visible.map { cheat in
         MenuItem(
           id: "cheat-\(cheat.id)",

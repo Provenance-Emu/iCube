@@ -41,13 +41,13 @@ struct ShaderDeveloperDebugView: View {
     List {
       Section(header: Text(L("Pipeline")), footer: Text(L("Internal tools for debugging the shader render pipeline. Not needed to pick or tune a shader."))) {
         Toggle(L("Bypass (show source)"), isOn: $dbgBypass)
-          .onChange(of: dbgBypass) {
-            UserDefaults.standard.set($0, forKey: "shader_bypass")
+          .onChange(of: dbgBypass) { _, new in
+            UserDefaults.standard.set(new, forKey: "shader_bypass")
             NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
           }
         Toggle(L("Show checkerboard"), isOn: $dbgChecker)
-          .onChange(of: dbgChecker) {
-            UserDefaults.standard.set($0, forKey: "shader_debug_checker")
+          .onChange(of: dbgChecker) { _, new in
+            UserDefaults.standard.set(new, forKey: "shader_debug_checker")
             NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
           }
         Toggle(L("Apply shader over checkerboard"), isOn: $dbgCheckerApply)
@@ -59,8 +59,8 @@ struct ShaderDeveloperDebugView: View {
         Toggle(L("Force prev pass output at binding 0"), isOn: $dbgForcePrevOutputBinding0)
         Toggle(L("Map 'source' semantics to expected binding"), isOn: $dbgMapSourceSemantics)
         Toggle(L("Preview intermediate pass"), isOn: $dbgShowPass)
-          .onChange(of: dbgShowPass) {
-            UserDefaults.standard.set($0, forKey: "shader_debug_show_pass_enabled")
+          .onChange(of: dbgShowPass) { _, new in
+            UserDefaults.standard.set(new, forKey: "shader_debug_show_pass_enabled")
             NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
           }
         HStack {
@@ -74,8 +74,8 @@ struct ShaderDeveloperDebugView: View {
           }
           #endif
         }
-        .onChange(of: dbgPassIndex) {
-          UserDefaults.standard.set($0, forKey: "shader_debug_show_pass")
+        .onChange(of: dbgPassIndex) { _, new in
+          UserDefaults.standard.set(new, forKey: "shader_debug_show_pass")
           NotificationCenter.default.post(name: Notification.Name("DOLShaderSettingsDidChange"), object: nil)
         }
       }

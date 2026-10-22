@@ -7,12 +7,6 @@
 
 @import AltKit;
 
-@interface JitManager (AltServer)
-
-@property (nonatomic) bool isAltServerAutoConnecting;
-
-@end
-
 @implementation JitManager (AltServer)
 
 - (bool)checkAppInstalledByAltServer {
