@@ -137,8 +137,9 @@ public:
   static void PruneStaleIds(NSArray<GCController*>* live_controllers);
 
 private:
-  // Binds a pad with no extended / micro gamepad through its physical input profile
-  // (PhysicalProfileMapping.h). Returns false when the profile has nothing usable.
+  // Binds a pad with no extended / micro gamepad, or a Switch Online pad with no extended one,
+  // through its physical input profile (PhysicalProfileMapping.h). Returns false, adding nothing,
+  // when the profile has nothing usable.
   bool AddPhysicalProfileInputs(GCController* controller);
 
   std::shared_ptr<ControllerInputGate> m_gate;

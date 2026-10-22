@@ -100,7 +100,8 @@ final class LivePerformanceSession: ObservableObject {
   }
 
   static func hasGameplayController() -> Bool {
-    GCController.controllers().contains { $0.extendedGamepad != nil ||
+    // The manager's list: a wrapped pad (the Switch Online SNES pad) has an extended gamepad there.
+    ControllerManager.shared.controllers.contains { $0.extendedGamepad != nil ||
       ($0.microGamepad == nil && !$0.physicalInputProfile.buttons.isEmpty) }
   }
 

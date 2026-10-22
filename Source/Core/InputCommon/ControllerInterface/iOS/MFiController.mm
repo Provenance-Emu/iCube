@@ -185,6 +185,15 @@ MFiController::MFiController(GCController* controller)
       AddInput(new Button(gamepad.rightThumbstickButton, "R Stick", m_gate));
     }
   }
+  // A Switch Online pad without an extended gamepad. The SNES controller also has the legacy
+  // gamepad and a micro gamepad, which carry neither Start ("Button Menu", GameCube Start / Wii +)
+  // nor Select ("Button Options"); its physical profile names both. If the profile is unusable,
+  // AddPhysicalProfileInputs adds nothing and the branches below bind what the system offers.
+  else if (PhysicalProfile::IsSwitchOnlinePad(
+               GetName(), std::string([controller.productCategory UTF8String])) &&
+           AddPhysicalProfileInputs(controller))
+  {
+  }
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
   else if (controller.gamepad != nil)
@@ -273,8 +282,9 @@ MFiController::MFiController(GCController* controller)
   }
 }
 
-// A pad the framework exposes without an extended or micro gamepad still publishes every
-// physical element under `physicalInputProfile.elements`. Bind those straight to the MFi input
+// A pad the framework exposes without an extended or micro gamepad, or a Switch Online pad it
+// exposes without an extended one, still publishes every physical element under
+// `physicalInputProfile.elements`. Bind those straight to the MFi input
 // names the default profiles read, with GameCube / Wii semantics (PhysicalProfileMapping.h), so
 // the pad works without a core-side wrapper object. The C cluster publishes R Stick directions
 // as digital buttons: a pressed C button is a full C-Stick deflection.
