@@ -72,7 +72,7 @@ inline bool ControlStateCast<bool>(ControlState value)
 template <>
 inline int ControlStateCast<int>(ControlState value)
 {
-  return std::lround(value);
+  return static_cast<int>(std::lround(value));
 }
 
 template <>

@@ -67,7 +67,7 @@ constexpr Digest StringToDigest(std::string_view str)
   for (size_t i = 0; i < str.size(); ++i)
   {
     const char c = str[i];
-    u8 quartet;
+    u8 quartet = 0;
     if (c >= '0' && c <= '9')
       quartet = c - '0';
     else if (c >= 'A' && c <= 'F')
