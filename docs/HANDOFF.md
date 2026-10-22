@@ -1,5 +1,15 @@
 # iCube handoff (2026-10-10)
 
+## Shared library edits / distribution continuation — October 21 evening
+
+Owner approved [different-account nearby custom edit sharing](superpowers/specs/2026-10-21-shared-library-edits-design.md): bidirectional titles/covers/tags, separate per-peer consent, explicit merging of existing and future custom edits. The [implementation plan](superpowers/plans/2026-10-21-shared-library-edits.md) defines the shared package, verified identity bindings, effective Provenance projections, separately authenticated nearby transport and metadata-only same-account adapter. These integrations are not implemented or accepted yet. Current installed physical testing remains deferred.
+
+Current performance/locale candidate source `3ddef3d7bdea736f3da2b7bfd6e5ef2bc9adb292` is building both platforms on hosted [TestFlight run 39711927274](https://github.com/Provenance-Emu/iCube/actions/runs/39711927274). At this checkpoint both jobs are compiling cores; no fresh upload/processing claim. Previous live build remains `1792601430`. Reconcile the exact newly allocated platform build numbers in ASC before retrying an archive. Verify VALID, intended groups/review availability and Sentry symbols, not only green CI. Local evidence and the read-only ASC inspector are under `build/release-audit/2026-10-21-performance-distribution/`.
+
+Future-run fixes are pushed: `fff79a54ef` verifies persisted TestFlight membership/review state (seven tests); `24ce80dd78` rebuilds only the matching device core per matrix job and checks package/SDK/exports/dSYM/archive identity (15 tests). The active run retains its original workflow and is not restarted. No measured speedup or new archive pass is claimed for the optimization yet.
+
+Provenance [receiver PR #3753](https://github.com/Provenance-Emu/Provenance/pull/3753) is still draft/open at `d1a5acabe98f113edcb8f45fe73b388be7eace24`: Realm async-open compile repair, maintenance registry entries, and merge of current develop. Eleven focused native importer tests and the registry regression pass; fresh SDK checks remain pending. This does not establish title/cover/tag interoperability. Parent checkout working files and unrelated concurrent iCube UI work are preserved.
+
 ## Fast DEV loop — October 21, 2026
 
 [Commands and measured evidence](app-store/release-evidence/2026-10-21-fast-dev-loop.md): cached app check 4.9s; TV Swift comment edit 54.7s total; native TV/phone/iPad checks 25–38s; captures 2–3s. 45 tooling tests and 299 targeted library/continuity host tests pass. The reusable JSON actions runner avoids rebuilding for each navigation sequence. Use explicit registered targets and selected Xcode; physical operations remain deferred. TV checks use an explicit accepted-engine pin that excludes concurrent locale engine work; phone/tablet runner checks explicitly use existing DEV with freshness unverified. No new TestFlight packaging for this tooling change.

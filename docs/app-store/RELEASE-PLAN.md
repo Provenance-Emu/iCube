@@ -88,6 +88,8 @@ Entry points: `Source/iOS/{PVCloudSync,PVSyncRules}/`, `Common/Services/{CloudSy
 
 ### R4 — ROM/library access across installs and Provenance (P1; contract decision first)
 
+**October 21 decision:** owner approved [shared custom library edits](../superpowers/specs/2026-10-21-shared-library-edits-design.md), including nearby paired devices on different accounts. [Implementation tasks](../superpowers/plans/2026-10-21-shared-library-edits.md) cover titles, covers and tags with separate metadata consent, verified identity and both app projections. Contract approval is complete; implementation and installed convergence remain open. Receiver PR #3753 is independently pending SDK integration and does not close metadata sharing.
+
 Owner: iCube integration implementer plus Provenance counterpart. Changes in Provenance require their own issue, review and build evidence; an iCube fix cannot close both sides.
 
 Treat the following as distinct user journeys:
