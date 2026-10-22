@@ -130,13 +130,14 @@ final class TVSettingsInteractionAuditTests: XCTestCase {
     let before = hud.value as? String
     XCUIRemote.shared.press(.select, forDuration: 1.2)
     record("hud-long-press-submenu")
-    let fps = app.buttons["menu.row.hud-fps"]
-    XCTAssertTrue(fps.waitForExistence(timeout: 5), "Long press opens HUD settings submenu")
-    for id in ["hud-fps", "hud-vps", "hud-speed", "hud-vblank", "hud-graphs", "hud-overlayStats"] {
-      XCTAssertTrue(app.buttons["menu.row." + id].exists, "Missing HUD option \(id)")
+    // Since the Performance controls (b74137b029) the tile opens the full Performance pane: clocks,
+    // graphics, then the HUD master switch and one row per statistic.
+    let fps = app.buttons["menu.row.performance-hud-fps"]
+    XCTAssertTrue(fps.waitForExistence(timeout: 5), "Long press opens the Performance pane")
+    for id in ["hud-enabled", "hud-fps", "hud-vps", "hud-speed", "hud-vblank", "hud-graphs", "hud-overlayStats"] {
+      XCTAssertTrue(app.buttons["menu.row.performance-" + id].exists, "Missing HUD option \(id)")
     }
-    XCTAssertTrue(app.staticTexts["Performance HUD"].exists)
-    XCTAssertTrue(focusedButton()?.identifier.hasPrefix("menu.row.hud-") == true, "Submenu receives remote focus")
+    XCTAssertTrue(focusedButton()?.identifier.hasPrefix("menu.row.performance-") == true, "Pane receives remote focus")
     focus(fps)
     let originalFPS = fps.value as? String ?? fps.label
     XCUIRemote.shared.press(.select)
