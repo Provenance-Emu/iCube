@@ -69,6 +69,17 @@ enum ConfigAudioModelBuilder {
     MenuModel(sections: effectsSections(state, apply: apply))
   }
 
+  /// One effect's rows (its toggle, then its parameters), for the pause menu's per-effect page. `.all` is
+  /// `effectsModel` without the plug-in chain. The rows are the leaf's own, so ids, wording and the
+  /// disabled-until-enabled rule stay identical to Settings.
+  static func effectPageModel(_ page: AudioEffectPage, state: ConfigAudioState, apply: @escaping (ConfigAudioChange) -> Void) -> MenuModel {
+    guard let effects = effectsSections(state, apply: apply).first(where: { $0.id == "effects" }) else { return MenuModel(sections: []) }
+    let wanted = page.rowIDs
+    let items = wanted.isEmpty ? effects.items : effects.items.filter { wanted.contains($0.id) }
+    return MenuModel(sections: [MenuSection(id: "effects", footer: page == .all ? effectsFooter : nil, items: items)],
+                     focusRequest: page.toggleRowID)
+  }
+
   static func effectsSections(_ state: ConfigAudioState, apply: @escaping (ConfigAudioChange) -> Void) -> [MenuSection] {
     let fx = state.effects
     let effects = MenuSection(id: "effects", header: L("Effects"), footer: effectsFooter, items: [

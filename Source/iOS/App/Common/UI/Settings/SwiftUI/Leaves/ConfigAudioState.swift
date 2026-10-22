@@ -28,6 +28,72 @@ struct AudioEffectsState: Equatable {
   var crushDownsample = 1
 }
 
+/// One built-in effect's parameter page (the pause menu's Audio pane opens one per effect), or every effect.
+enum AudioEffectPage: String, CaseIterable, Equatable {
+  case echo
+  case equalizer
+  case bitcrusher
+  case all
+
+  var title: String {
+    switch self {
+    case .echo: return L("Echo")
+    case .equalizer: return L("Equalizer")
+    case .bitcrusher: return L("Bitcrusher")
+    case .all: return L("Effects")
+    }
+  }
+
+  /// The id of the effect's on/off row in `ConfigAudioModelBuilder.effectsSections`; nil for `all`.
+  var toggleRowID: String? {
+    switch self {
+    case .echo: return "echo"
+    case .equalizer: return "eq"
+    case .bitcrusher: return "bitcrusher"
+    case .all: return nil
+    }
+  }
+
+  /// The ids of the effect's rows in `ConfigAudioModelBuilder.effectsSections`, toggle first; empty for `all`
+  /// (which keeps every row).
+  var rowIDs: [String] {
+    switch self {
+    case .echo: return ["echo", "echo-time", "echo-feedback"]
+    case .equalizer: return ["eq", "eq-low", "eq-mid", "eq-high"]
+    case .bitcrusher: return ["bitcrusher", "crush-bits", "crush-downsample"]
+    case .all: return []
+    }
+  }
+
+  var icon: String {
+    switch self {
+    case .echo: return "wave.3.right"
+    case .equalizer: return "slider.vertical.3"
+    case .bitcrusher: return "waveform.path"
+    case .all: return "waveform"
+    }
+  }
+
+  func isEnabled(in fx: AudioEffectsState) -> Bool {
+    switch self {
+    case .echo: return fx.echoEnabled
+    case .equalizer: return fx.eqEnabled
+    case .bitcrusher: return fx.crushEnabled
+    case .all: return fx.echoEnabled || fx.eqEnabled || fx.crushEnabled
+    }
+  }
+
+  /// The change that turns this effect on or off; nil for `all`.
+  func enabledChange(_ on: Bool) -> AudioEffectsChange? {
+    switch self {
+    case .echo: return .echoEnabled(on)
+    case .equalizer: return .eqEnabled(on)
+    case .bitcrusher: return .crushEnabled(on)
+    case .all: return nil
+    }
+  }
+}
+
 enum AudioEffectsChange: Equatable {
   case echoEnabled(Bool)
   case echoMs(Int)
@@ -88,11 +154,28 @@ struct ConfigAudioState: Equatable {
     }
   }
 
+  /// The short name a tile badge shows for a raw backend name (the pause menu's Audio pane).
+  static func shortLabel(forBackend raw: String) -> String {
+    switch raw {
+    case "": return L("Automatic")
+    case coreAudio: return L("CoreAudio")
+    case avAudioEngine: return L("AVAudioEngine")
+    default: return raw
+    }
+  }
+
   /// (label, raw) for every listed backend; a current backend the list does not carry is inserted first.
   var backendOptions: [(String, String)] {
+    backendOptions(label: Self.label(forBackend:))
+  }
+
+  /// `backendOptions` with the short tile labels.
+  var shortBackendOptions: [(String, String)] { backendOptions(label: Self.shortLabel(forBackend:)) }
+
+  private func backendOptions(label: (String) -> String) -> [(String, String)] {
     var raws = backends
     if !raws.contains(backend) { raws.insert(backend, at: 0) }
-    return raws.map { (Self.label(forBackend: $0), $0) }
+    return raws.map { (label($0), $0) }
   }
 
   var isAVAudioEngine: Bool { backend == Self.avAudioEngine }

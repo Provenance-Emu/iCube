@@ -21,6 +21,7 @@ final class PauseSettingsDeepLinkTests: XCTestCase {
       openControllers: { self.pages.append("controllers") }, openShaders: { self.pages.append("shaders") },
       openContinuity: { self.pages.append("continuity") }, openSettings: { self.pages.append("settings") },
       openSettingsLeaf: { self.opened.append($0) }, openPerfOverlay: { self.pages.append("perf-overlay") },
+      openAudio: { self.pages.append("audio") },
       requestReset: {}, requestExit: {}, recenterPointer: {}, openDiscPicker: { self.pages.append("change-disc") })
     let state = PauseMenuState(quickSlot: 1, isMuted: false, activeCheatCount: 0,
                                shaderOptions: [("None", ShaderQuickApply.noneValue), ("crt", AnyHashable("/s/crt.slangp"))],
@@ -79,7 +80,7 @@ final class PauseSettingsDeepLinkTests: XCTestCase {
       item.activateInPlace()
       XCTAssertEqual(opened, [], "\(item.id) opened Settings on a tap")
       switch item.id {
-      case "save-states", "change-disc", "cheats", "controllers", "continuity", "settings":
+      case "save-states", "change-disc", "cheats", "controllers", "continuity", "settings", "audio":
         XCTAssertEqual(pages, [item.id])
       case "perf-hud":
         XCTAssertEqual(pages, ["perf-overlay"])
