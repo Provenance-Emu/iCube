@@ -43,7 +43,8 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
       setNumericSetting: { recorder.calls.append("setting:\($0.id)=\($1)") },
       expressionDestination: { _ in AnyView(EmptyView()) },
       advancedMotionDestination: { AnyView(EmptyView()) },
-      stickFeelDestination: { AnyView(EmptyView()) })
+      stickFeelDestination: { AnyView(EmptyView()) },
+      setPointerSourceOverride: { recorder.calls.append("pointer-source:\($0?.rawValue ?? "auto")") })
   }
 
   private func pad(_ qualifier: String, _ name: String, gyro: Bool = false) -> ConnectedPadState {
@@ -219,10 +220,66 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
 
   // MARK: Pointer & Motion only where it applies (decisions 2, 4, 7)
 
-  func test_tvOS_hasNoPointerAndMotion() {
+  /// tvOS used to have no Pointer & Motion; a gyro pad's port now gets its motion switch there too,
+  /// labelled with the pad (the hub's toggle already showed on tvOS, unlabelled).
+  func test_tvOS_gyroPad_getsTheLabelledMotionSwitch() {
     let model = make(
       state(.wiiRemote, device: Self.dualSense, pads: [pad(Self.dualSense, "DualSense", gyro: true)]), platform: .tvos)
-    XCTAssertFalse(sectionIDs(model).contains("pointer"))
+    XCTAssertEqual(ids(model, section: "pointer"), ["pointer-motion"])
+    XCTAssertEqual(model.item(id: "pointer-motion")?.subtitle, "Pointer: DualSense gyro")
+  }
+
+  func test_tvOS_touchscreenWithoutASource_hasNoPointerAndMotion() {
+    XCTAssertFalse(sectionIDs(make(state(.wiiRemote, device: Self.touch), platform: .tvos)).contains("pointer"))
+  }
+
+  private func pointerSource(_ player1: PointerPlayer1, remoteHasMotion: Bool = false, platform: PlatformKind) -> PointerSourceModel {
+    PointerSourceModel.make(
+      player1: player1, remoteHasMotion: remoteHasMotion, platform: platform, preferredMode: .touchFollow, userOverride: nil,
+      deviceModel: "Apple TV")
+  }
+
+  /// Wii Remote 1 on a plain pad (tvOS): Pointer Source names the Siri Remote and lets the user pick.
+  func test_wiiRemote1_plainPad_tvOS_showsThePointerSource() {
+    let recorder = Recorder()
+    var screen = state(.wiiRemote, device: Self.xbox, pads: [pad(Self.xbox, "Xbox")])
+    screen.pointerSource = pointerSource(.pad(name: "Xbox", capabilities: PadCapabilities()), remoteHasMotion: true, platform: .tvos)
+    let model = make(screen, recorder, platform: .tvos)
+    XCTAssertEqual(
+      ids(model, section: "pointer"),
+      ["pointer-source", "pointer-recenter", "pointer-sensitivity", "pointer-invert-x", "pointer-invert-y"],
+      "the remote pointer is relative: recenter, sensitivity and the axes' signs, which are unverified on hardware")
+    XCTAssertEqual(model.item(id: "pointer-source")?.subtitle, "Pointer: Siri Remote")
+    XCTAssertNil(model.item(id: "pointer-motion"), "no pad gyro, no motion switch")
+    guard case .cycle(_, let selection)? = model.item(id: "pointer-source")?.role else { return XCTFail("cycle") }
+    selection.wrappedValue = AnyHashable("remoteGyro")
+    XCTAssertEqual(recorder.calls, ["pointer-source:remoteGyro"])
+  }
+
+  /// Wii Remote 1 on a gyro pad: the source, then the motion switch it reads.
+  func test_wiiRemote1_gyroPad_showsTheSourceThenTheMotionSwitch() {
+    var screen = state(.wiiRemote, device: Self.dualSense, pads: [pad(Self.dualSense, "DualSense", gyro: true)])
+    screen.pointerSource = pointerSource(.pad(name: "DualSense", capabilities: PadCapabilities(hasGyro: true)), platform: .ios)
+    XCTAssertEqual(ids(make(screen), section: "pointer"), ["pointer-source", "pointer-motion"])
+  }
+
+  /// A plain pad on iOS has no pointer (plan call 4); the section says so instead of vanishing.
+  func test_wiiRemote1_plainPad_iOS_saysThereIsNoPointer() {
+    var screen = state(.wiiRemote, device: Self.xbox, pads: [pad(Self.xbox, "Xbox")])
+    screen.pointerSource = pointerSource(.pad(name: "Xbox", capabilities: PadCapabilities()), platform: .ios)
+    let model = make(screen)
+    XCTAssertEqual(ids(model, section: "pointer"), ["pointer-source"])
+    XCTAssertEqual(model.item(id: "pointer-source")?.badge, "No pointer")
+    XCTAssertEqual(model.item(id: "pointer-source")?.subtitle, "Connect a controller with motion.")
+  }
+
+  /// The iOS touchscreen keeps its rows; the mode row also says which source it gives.
+  func test_touchscreen_modeRow_namesTheSource() {
+    var screen = state(.wiiRemote, device: Self.touch)
+    screen.pointerSource = PointerSourceModel.make(
+      player1: .touchscreen, remoteHasMotion: false, platform: .ios, preferredMode: .gyro, userOverride: nil, deviceModel: "iPad")
+    screen.pointerMotion.pointerIsThisGameOnly = true
+    XCTAssertEqual(make(screen).item(id: "pointer-mode")?.subtitle, "Pointer: iPad gyro · This game only")
   }
 
   func test_wiiPort_gyroPad_iOS_getsOnlyTheMotionPointerToggle() {

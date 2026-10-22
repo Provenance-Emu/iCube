@@ -10,7 +10,7 @@ enum ControllerGlyphSet: String {
 
 struct ControllerGlyphs {
   static func detectGlyphSet() -> ControllerGlyphSet {
-    guard let c = ControllerManager.shared.controllers.first else { return .generic }
+    guard let c = ControllerManager.shared.controllers.first(where: { !$0.isMenuRemote }) else { return .generic }
     let vendor = (c.vendorName ?? "").lowercased()
     let product = c.productCategory.lowercased()
     if product.contains("dualshock") || product.contains("dualsense") || vendor.contains("sony") || vendor.contains("playstation") {

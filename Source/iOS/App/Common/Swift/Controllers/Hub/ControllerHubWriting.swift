@@ -25,6 +25,8 @@ protocol ControllerHubWriting {
   func testRumble()
   func resetOverlayLayouts()
   func setTouchOverlayProgrammatic(_ enabled: Bool)
+  /// Stores Wii Remote 1's Pointer Source (nil: Automatic) and re-applies the pointer binding.
+  func setPointerSourceOverride(_ kind: PointerSource.Kind?)
 }
 
 struct LiveControllerHubWriter: ControllerHubWriting {
@@ -98,6 +100,8 @@ struct LiveControllerHubWriter: ControllerHubWriting {
     for kind in TouchOverlayPadKind.allCases { TouchOverlayLayoutStore.shared.reset(padKind: kind) }
     #endif
   }
+
+  func setPointerSourceOverride(_ kind: PointerSource.Kind?) { io.setPointerSourceOverride(kind) }
 
   func setTouchOverlayProgrammatic(_ enabled: Bool) {
     #if os(iOS)

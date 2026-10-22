@@ -158,6 +158,23 @@ static BOOL ControllerHasAnyBoundControl(const ControllerEmu::EmulatedController
   return ControllerHasAnyBoundControl(cfg->GetController(idx));
 }
 
+// The IR pointer's four direction controls (`IR/Up`, `Down`, `Left`, `Right`).
+static constexpr int kIRDirectionCount = 4;
+// The Siri Remote pointer (tvOS): the same IR axes, qualified with the Wii Remote 1 touchscreen
+// device (`iOS/4`, always enumerated and idle on tvOS), so a pad-bound slot reads them too. The app
+// writes them from the remote's motion (`RemotePointerBinding`).
+static constexpr const char* kRemotePointerIRExpressions[kIRDirectionCount] = {
+    "`iOS/4/Touchscreen:Axis 112`", "`iOS/4/Touchscreen:Axis 113`", "`iOS/4/Touchscreen:Axis 114`",
+    "`iOS/4/Touchscreen:Axis 115`"};
+
+static bool IsRemotePointerExpression(const std::string& expression)
+{
+  for (const char* remote : kRemotePointerIRExpressions)
+    if (expression == remote)
+      return true;
+  return false;
+}
+
 // Takes the state lock, unlike `ControllerHasAnyBoundControl`: `BoundCount` walks the parsed
 // expression tree, which a hotplug `UpdateReferences` rewrites under that lock.
 static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController* controller)
@@ -165,9 +182,13 @@ static BOOL ControllerMappingBindsDevice(const ControllerEmu::EmulatedController
   if (!controller)
     return NO;
   const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  // The Siri Remote pointer's IR rows bind the touchscreen device, not the slot's own: counting
+  // them would make `ControllerAssignmentService.assign` keep a mapping that binds nothing on a
+  // newly bound pad instead of loading its default profile.
   for (const auto& group : controller->groups)
     for (const auto& control : group->controls)
-      if (control->control_ref && control->control_ref->BoundCount() > 0)
+      if (control->control_ref && control->control_ref->BoundCount() > 0 &&
+          !IsRemotePointerExpression(control->control_ref->GetExpression()))
         return YES;
   return NO;
 }
@@ -228,7 +249,6 @@ static bool DisableCoreIMUPointerIfTouchscreen(int idx)
 
 // The pointer block of the bundled Data/Sys/Profiles/Wiimote/Touchscreen.ini, in the Cursor
 // group's control order (`named_directions`: Up, Down, Left, Right; axis ids in ButtonType.h).
-static constexpr int kIRDirectionCount = 4;
 static constexpr const char* kTouchscreenIRExpressions[kIRDirectionCount] = {
     "`Axis 112`", "`Axis 113`", "`Axis 114`", "`Axis 115`"};
 
@@ -309,6 +329,88 @@ static bool RepairTouchscreenIRPointer(int idx)
   if (imu_changed || ir_changed)
     Wiimote::GetConfig()->SaveConfig();
   return (imu_changed || ir_changed) ? YES : NO;
+}
+
+// The Wii Remote's IR direction group, or nullptr for an out-of-range slot or a group without its
+// four direction controls.
+static ControllerEmu::ControlGroup* WiimoteIRGroup(int idx)
+{
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg || idx < 0 || idx >= cfg->GetControllerCount())
+    return nullptr;
+  auto* ir = Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Point);
+  if (!ir || ir->controls.size() < static_cast<size_t>(kIRDirectionCount))
+    return nullptr;
+  return ir;
+}
+
+// Whether every IR direction's expression is `expressions[i]`. Takes the state lock.
+static bool WiimoteIRExpressionsEqual(ControllerEmu::ControlGroup* ir, const char* const* expressions)
+{
+  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  for (int i = 0; i < kIRDirectionCount; ++i)
+  {
+    const auto& ref = ir->controls[i]->control_ref;
+    if (!ref || ref->GetExpression() != expressions[i])
+      return false;
+  }
+  return true;
+}
+
+// Some IR direction binds an input other than through the remote pointer's expressions: the user's
+// own pointer (a stick, the touchscreen's `Axis 112`, which reads the same axes anyway). The remote
+// pointer never replaces it. Takes the state lock.
+static bool WiimoteIRHasOwnBinding(ControllerEmu::ControlGroup* ir)
+{
+  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  for (int i = 0; i < kIRDirectionCount; ++i)
+  {
+    const auto& ref = ir->controls[i]->control_ref;
+    if (ref && ref->BoundCount() > 0 && !IsRemotePointerExpression(ref->GetExpression()))
+      return true;
+  }
+  return false;
+}
+
+// Writes the four IR expressions, re-resolves the controller and saves.
+static void SetWiimoteIRExpressions(int idx, ControllerEmu::ControlGroup* ir, const char* const* expressions)
+{
+  {
+    const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+    for (int i = 0; i < kIRDirectionCount; ++i)
+      ir->SetControlExpression(i, expressions[i]);
+  }
+  Wiimote::GetConfig()->GetController(idx)->UpdateReferences(g_controller_interface);
+  Wiimote::GetConfig()->SaveConfig();
+}
+
++ (BOOL)bindRemotePointerForWiimote:(NSInteger)indexOneBased
+{
+  const int idx = static_cast<int>(indexOneBased - 1);
+  auto* ir = WiimoteIRGroup(idx);
+  if (!ir || WiimoteIRExpressionsEqual(ir, kRemotePointerIRExpressions) || WiimoteIRHasOwnBinding(ir))
+    return NO;
+  SetWiimoteIRExpressions(idx, ir, kRemotePointerIRExpressions);
+  NSLog(@"[iCube][Input] Wiimote%d: IR pointer bound to the Siri Remote", idx + 1);
+  return YES;
+}
+
++ (BOOL)unbindRemotePointerForWiimote:(NSInteger)indexOneBased
+{
+  const int idx = static_cast<int>(indexOneBased - 1);
+  auto* ir = WiimoteIRGroup(idx);
+  if (!ir || !WiimoteIRExpressionsEqual(ir, kRemotePointerIRExpressions))
+    return NO;
+  static constexpr const char* kEmpty[kIRDirectionCount] = {"", "", "", ""};
+  SetWiimoteIRExpressions(idx, ir, kEmpty);
+  NSLog(@"[iCube][Input] Wiimote%d: Siri Remote pointer binding removed", idx + 1);
+  return YES;
+}
+
++ (BOOL)wiimoteHasRemotePointerBinding:(NSInteger)indexOneBased
+{
+  auto* ir = WiimoteIRGroup(static_cast<int>(indexOneBased - 1));
+  return ir && WiimoteIRExpressionsEqual(ir, kRemotePointerIRExpressions) ? YES : NO;
 }
 
 // The Microphone line of the bundled Data/Sys/Profiles/GCPad/Touchscreen.ini (ButtonType.h

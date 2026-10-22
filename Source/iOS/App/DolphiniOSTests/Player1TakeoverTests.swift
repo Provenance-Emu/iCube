@@ -11,9 +11,11 @@ final class Player1TakeoverTests: XCTestCase {
   private let touchscreen = "iOS/0/Touchscreen"
   private let wiiTouchscreen = "iOS/4/Touchscreen"
   private let pad = "MFi/0/Gamepad A"
+  private let siriRemote = "MFi/1/Siri Remote"
 
   private func state(
-    gc: [String], wii: [String] = ["", "", "", ""], isWii: Bool = false, player1Active: Bool = true
+    gc: [String], wii: [String] = ["", "", "", ""], isWii: Bool = false, player1Active: Bool = true,
+    menuRemotes: [String] = []
   ) -> ControllerStateStore.State {
     func slots(_ q: [String]) -> [ControllerStateStore.PortAssignment] {
       q.enumerated().map {
@@ -23,7 +25,16 @@ final class Player1TakeoverTests: XCTestCase {
     }
     return ControllerStateStore.State(
       controllers: [], portAssignments: slots(gc), wiimoteAssignments: slots(wii), connectedQualifiers: [touchscreen, pad],
-      isWiiSystem: isWii, touchscreenHoldsWiimote1: isWii)
+      isWiiSystem: isWii, touchscreenHoldsWiimote1: isWii, menuRemoteQualifiers: menuRemotes)
+  }
+
+  /// The Siri Remote connecting never takes Player 1 from the on-screen controls.
+  func test_menuRemote_neverTakesPlayer1() {
+    XCTAssertNil(AssignmentEngine.player1Takeover(
+      of: siriRemote, in: state(gc: [touchscreen, "", "", ""], menuRemotes: [siriRemote]), pinned: []))
+    XCTAssertNil(AssignmentEngine.player1Takeover(
+      of: siriRemote, in: state(gc: [touchscreen, "", "", ""], wii: [wiiTouchscreen, "", "", ""], isWii: true,
+                                menuRemotes: [siriRemote]), pinned: []))
   }
 
   func test_gameCube_padTakesAPinnedTouchscreenPlayer1() {

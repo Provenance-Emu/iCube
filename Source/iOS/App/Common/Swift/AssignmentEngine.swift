@@ -77,8 +77,9 @@ final class AssignmentEngine {
   }
 
   func decide(from state: ControllerStateStore.State, pinned: Set<PinnedSlot> = []) -> AssignmentDecision {
-    let connected = Set(state.connectedQualifiers)
-    let physical = state.connectedQualifiers.filter { !Self.isVirtual($0) }
+    let connectedQualifiers = Self.playable(state)
+    let connected = Set(connectedQualifiers)
+    let physical = connectedQualifiers.filter { !Self.isVirtual($0) }
     var out: [ControllerAssignment] = []
     let pinnedGC = Set(pinned.filter { $0.system == .gamecube }.map(\.playerZeroBased))
     let pinnedWii = Set(pinned.filter { $0.system == .wii }.map(\.playerZeroBased))
@@ -107,7 +108,7 @@ final class AssignmentEngine {
     // there the binding simply waits for the pad. In a Wii title a Player 1 the
     // user switched off stays off: binding would plug it back in.
     let player1IsOff = state.portAssignments.contains { $0.portOneBased == 1 && !$0.isActive }
-    if physical.isEmpty, state.connectedQualifiers.contains(where: Self.isVirtual),
+    if physical.isEmpty, connectedQualifiers.contains(where: Self.isVirtual),
        let pad1 = gcSlots.first, !Self.isVirtual(pad1), !pinnedGC.contains(0),
        !(state.isWiiSystem && player1IsOff) {
       out.append(ControllerAssignment(qualifier: nil, playerZeroBased: 0, system: .gamecube))
@@ -139,12 +140,12 @@ final class AssignmentEngine {
   /// (GameCube port 1 in a GameCube title, Wii Remote 1 in a Wii title) takes Player 1, even when
   /// the user picked the Touchscreen there; `decide` alone leaves a pinned Touchscreen alone and, in
   /// a Wii title with the controls shown, starts at Wii Remote 2. nil when Player 1 is not on the
-  /// Touchscreen or is switched off, the pad already is Player 1, or the user pinned the pad to the
-  /// slot it holds.
+  /// Touchscreen or is switched off, the pad already is Player 1, the user pinned the pad to the
+  /// slot it holds, or the device is a menu remote (the Siri Remote never plays).
   static func player1Takeover(
     of qualifier: String, in state: ControllerStateStore.State, pinned: Set<PinnedSlot>
   ) -> Player1Takeover? {
-    guard isPhysical(qualifier) else { return nil }
+    guard isPhysical(qualifier), !state.menuRemoteQualifiers.contains(qualifier) else { return nil }
     let system: EmulatedSystem = state.isWiiSystem ? .wii : .gamecube
     let slots = (state.isWiiSystem ? state.wiimoteAssignments : state.portAssignments)
       .sorted { $0.portOneBased < $1.portOneBased }
@@ -169,7 +170,7 @@ final class AssignmentEngine {
   /// Remotes 2-4 are switched off unless a connected pad holds them or the user pinned them.
   /// Without a Touchscreen (tvOS) only GameCube port 1 is written, as before.
   func decideBoot(from state: ControllerStateStore.State, pinned: Set<PinnedSlot> = []) -> BootDecision {
-    let connected = Set(state.connectedQualifiers)
+    let connected = Set(Self.playable(state))
     func heldByConnectedPad(_ slot: ControllerStateStore.PortAssignment) -> Bool {
       Self.isPhysical(slot.defaultDeviceQualifier) && connected.contains(slot.defaultDeviceQualifier)
     }
@@ -216,6 +217,14 @@ final class AssignmentEngine {
   }
 
   // MARK: Private
+
+  /// `state.connectedQualifiers` without the menu remotes. `ControllerStateStore.snapshot()` already
+  /// leaves them out; the engine does not rely on that.
+  private static func playable(_ state: ControllerStateStore.State) -> [String] {
+    guard !state.menuRemoteQualifiers.isEmpty else { return state.connectedQualifiers }
+    let remotes = Set(state.menuRemoteQualifiers)
+    return state.connectedQualifiers.filter { !remotes.contains($0) }
+  }
 
   private static func slots(from assignments: [ControllerStateStore.PortAssignment]) -> [String] {
     assignments.sorted { $0.portOneBased < $1.portOneBased }.map(\.defaultDeviceQualifier)

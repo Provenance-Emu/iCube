@@ -34,6 +34,13 @@ protocol ControllerHubReading {
   func rumbleDestination() -> RumbleDestination
   func connectTakesPlayer1() -> Bool
   func touchOverlayProgrammatic() -> Bool
+  /// Wii Remote 1's pointer source, from its bound device and `pads`. nil leaves the pointer rows
+  /// without a source (test readers that predate it).
+  func pointerSource(wiimote1Qualifier: String, pads: [ConnectedPadState]) -> PointerSourceModel?
+}
+
+extension ControllerHubReading {
+  func pointerSource(wiimote1Qualifier: String, pads: [ConnectedPadState]) -> PointerSourceModel? { nil }
 }
 
 struct LiveControllerHubReader: ControllerHubReading {
@@ -50,14 +57,22 @@ struct LiveControllerHubReader: ControllerHubReading {
   }
 
   func boundQualifier(forWiimote index: Int) -> String {
-    DOLConfigBridge.wiimoteSource(for: index) != 0 ? TVControllerMappingBridge.defaultDevice(forWiimote: index) as String : ""
+    let bound = DOLConfigBridge.wiimoteSource(for: index) != 0 ? TVControllerMappingBridge.defaultDevice(forWiimote: index) as String : ""
+    #if DEBUG
+    // The stand-in pad replaces nothing real: only an empty slot or the touchscreen (idle on tvOS).
+    if index == 1, bound.isEmpty || DeviceFamily.from(qualifier: bound) == .touchscreen,
+       let fake = FakePointerCapabilities.current {
+      return fake.padQualifier
+    }
+    #endif
+    return bound
   }
 
   func wiiExtension(forWiimote index: Int) -> Int { WiimoteSlotOptions.selectedExtension(forWiimote: index) }
   func isSideways(forWiimote index: Int) -> Bool { WiimoteSlotOptions.isSideways(forWiimote: index) }
 
   func connectedPads() -> [ConnectedPadState] {
-    ControllerManager.shared.controllers.map { controller in
+    var pads: [ConnectedPadState] = ControllerManager.shared.controllers.map { controller in
       let battery = controller.battery
       let hasLevel = battery.map { $0.batteryLevel >= 0 && $0.batteryState != .unknown } ?? false
       return ConnectedPadState(
@@ -67,8 +82,18 @@ struct LiveControllerHubReader: ControllerHubReading {
         isCharging: battery?.batteryState == .charging,
         playerLabel: controller.playerIndex == .indexUnset ? nil : "P\(controller.playerIndex.rawValue + 1)",
         hasGyro: controller.motion?.hasRotationRate == true,
-        hasLight: controller.light != nil)
+        hasLight: controller.light != nil,
+        hasTouchpad: controller.supportsTouchpad,
+        isMenuRemote: controller.isMenuRemote)
     }
+    #if DEBUG
+    if let fake = FakePointerCapabilities.current { pads += fake.pads }
+    #endif
+    return pads
+  }
+
+  func pointerSource(wiimote1Qualifier: String, pads: [ConnectedPadState]) -> PointerSourceModel? {
+    PointerSourceLive.model(wiimote1Qualifier: wiimote1Qualifier, pads: pads)
   }
 
   func isGameRunning() -> Bool { TVEmulationBridge.isRunning() }
@@ -172,6 +197,7 @@ final class ControllerHubViewModel {
   // MARK: Snapshot
 
   func reload() {
+    let pads = reader.connectedPads()
     let players = ControllerHubState.slots(for: system).map { slot -> PlayerState in
       var player: PlayerState
       switch slot.kind {
@@ -192,7 +218,7 @@ final class ControllerHubViewModel {
       system: system,
       players: players,
       showAllPorts: state.showAllPorts,
-      pads: reader.connectedPads(),
+      pads: pads,
       isGameRunning: reader.isGameRunning(),
       overlayVisible: reader.overlayVisible(),
       overlayMode: reader.overlayMode(),
@@ -201,6 +227,8 @@ final class ControllerHubViewModel {
       dsuServerCount: reader.dsuServerCount(),
       pointerMode: reader.pointerMode(),
       pointerIsThisGameOnly: reader.pointerIsThisGameOnly(),
+      pointerSource: system == .gamecube ? nil : reader.pointerSource(
+        wiimote1Qualifier: players.first { $0.kind == .wiiRemote && $0.port == 1 }?.deviceQualifier ?? "", pads: pads),
       backgroundInput: reader.backgroundInput(),
       rumbleDestination: reader.rumbleDestination(),
       connectTakesPlayer1: reader.connectTakesPlayer1(),
@@ -310,6 +338,10 @@ final class ControllerHubViewModel {
         #else
         AnyView(EmptyView())
         #endif
+      },
+      setPointerSourceOverride: { [weak self] kind in
+        self?.writer.setPointerSourceOverride(kind)
+        self?.reload()
       })
   }
 

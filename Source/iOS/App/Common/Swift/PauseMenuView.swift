@@ -29,7 +29,10 @@ internal struct PauseMenuView: View {
   var onReopenSaveBrowser: (() -> Void)? = nil
   var startsInSaveBrowser = false
   var startsInPerformance = false
+  /// Opens on the Controllers hub (tvOS: the no-controller notice's Controllers button).
+  var startsInControllers = false
   @State private var initialPerformancePaneConsumed = false
+  @State private var initialControllersPaneConsumed = false
   @State private var initialSaveBrowserConsumed = false
   @State private var showSharedSaveBrowser = false
   @State private var openingSaveSession: UInt64?
@@ -75,12 +78,14 @@ internal struct PauseMenuView: View {
   /// Where Settings opens; nil opens the root.
   @State private var settingsLink: SettingsDeepLink?
   @State private var showControllersSheet: Bool = false
-  /// Recenter Pointer is offered for a running Wii title on iOS, where touch or the gyro drives it.
-  private static var showsRecenterPointer: Bool {
+  /// Recenter Pointer is offered for a running Wii title on iOS, where touch or the gyro drives it,
+  /// and on tvOS while the Siri Remote's motion is Wii Remote 1's pointer (`RemotePointerBinding`).
+  @MainActor private static var showsRecenterPointer: Bool {
+    guard TVEmulationBridge.isRunning(), TVEmulationBridge.isCurrentSystemWii() else { return false }
     #if os(iOS)
-    return TVEmulationBridge.isRunning() && TVEmulationBridge.isCurrentSystemWii()
+    return true
     #else
-    return false
+    return RemotePointerBinding.shared.isActive
     #endif
   }
 
@@ -402,6 +407,14 @@ internal struct PauseMenuView: View {
       if startsInPerformance && !initialPerformancePaneConsumed {
         initialPerformancePaneConsumed = true
         pane = .perfHUD
+      }
+      if startsInControllers && !initialControllersPaneConsumed {
+        initialControllersPaneConsumed = true
+        #if os(tvOS)
+        pane = .controllers
+        #else
+        showControllersSheet = true
+        #endif
       }
       #if DEBUG
       if !debugInitialPaneConsumed {
@@ -924,9 +937,11 @@ internal struct PauseMenuView: View {
       recenterPointer: {
         #if os(iOS)
         TCDeviceMotion.requestPointerRecenter()
+        #else
+        RemotePointerBinding.shared.recenter()
+        #endif
         PauseArbiter.shared.userResume()
         onClose()
-        #endif
       },
       openDiscPicker: { pane = .discs })
     var model = PauseMenuModelBuilder.make(state: state, bindings: pauseMenuBindings, actions: actions)

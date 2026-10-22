@@ -80,6 +80,26 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
 + (BOOL)enforceTouchscreenPointerForWiimote:(NSInteger)indexOneBased
     NS_SWIFT_NAME(enforceTouchscreenPointer(forWiimote:));
 
+/// The Siri Remote pointer (tvOS): Wii Remote `indexOneBased`'s `IR/Up, Down, Left, Right` become
+/// `` `iOS/4/Touchscreen:Axis 112` `` … `115`, fully qualified so they read the idle touchscreen
+/// device's IR axes (which the app writes from the remote's motion) whatever the slot's own device
+/// is. Persisted on purpose (bindings are INI expressions; there is no per-run layer): the app
+/// removes it with `unbindRemotePointerForWiimote:`. Leaves alone IR rows that already bind an
+/// input of their own (the user's pointer on a stick; the tvOS touchscreen's `Axis 112`, which reads
+/// the same axes). Saves only when it changed something, and returns whether it did.
++ (BOOL)bindRemotePointerForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(bindRemotePointer(forWiimote:));
+
+/// Clears the four IR directions, but only when they are exactly the expressions
+/// `bindRemotePointerForWiimote:` writes: a user's own IR binding is never touched. Saves only when
+/// it changed something, and returns whether it did.
++ (BOOL)unbindRemotePointerForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(unbindRemotePointer(forWiimote:));
+
+/// True when the Wii Remote's IR directions are exactly the remote pointer's expressions.
++ (BOOL)wiimoteHasRemotePointerBinding:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(wiimoteHasRemotePointerBinding(forWiimote:));
+
 /// Assign the iOS Touchscreen virtual device as the default device for a GC port. The Touchscreen
 /// profile is loaded when the port changes device or has no mapping; the port's device is the
 /// Touchscreen afterwards whatever that profile's `Device =` line names.

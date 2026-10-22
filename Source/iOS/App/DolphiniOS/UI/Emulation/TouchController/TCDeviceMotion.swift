@@ -987,26 +987,11 @@ import simd
     )
   }
 
-  /// The gyro-mode IR cursor's writes, by the same both-sides convention as `imuAccelWrites`.
-  ///
-  /// `ControllerEmu::Cursor::GetReshapableState()` (InputCommon/ControllerEmu/
-  /// ControlGroup/Cursor.cpp:67-68) computes `y = Up - Down` and `x = Right - Left` on the
-  /// clamped halves. `Touchscreen.mm` (~line 74-77) wires `WIIMOTE_IR_RIGHT` /
-  /// `WIIMOTE_IR_DOWN` with `m_neg == +1` and `WIIMOTE_IR_UP` / `WIIMOTE_IR_LEFT` with
-  /// `m_neg == -1`.
-  ///
-  /// X: `horizontal` on Right and Left gives `max(0, h) - max(0, -h) == h` (positive =
-  /// right). Y: positive `vertical` means up, and Up's `m_neg == -1` makes `-vertical` on
-  /// Up and Down read `max(0, v) - max(0, -v) == v`. This is the touch path's convention
-  /// too (`TouchOverlayIRPadView.IRSurfaceView.sendIR` writes `[y, y, x, x]` with y positive = down).
-  /// The single-sided writes this replaced lost the left and bottom halves to the clamp.
+  /// The gyro-mode IR cursor's writes: `GyroPointerMath.irCursorWrites`, which the Siri Remote
+  /// pointer on tvOS (no CoreMotion) shares. Kept here so the phone-gyro path and its tests read as
+  /// before.
   static func irCursorWrites(horizontal: Double, vertical: Double) -> [TCButtonType: Float] {
-    let clampedHorizontal = Float(max(-1.0, min(1.0, horizontal)))
-    let clampedVertical = Float(max(-1.0, min(1.0, vertical)))
-    return [
-      .wiiInfraredRight: clampedHorizontal, .wiiInfraredLeft: clampedHorizontal,
-      .wiiInfraredUp: -clampedVertical, .wiiInfraredDown: -clampedVertical,
-    ]
+    GyroPointerMath.irCursorWrites(horizontal: horizontal, vertical: vertical)
   }
 }
 #endif
