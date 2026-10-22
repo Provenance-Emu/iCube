@@ -85,3 +85,19 @@ connected. The Siri Remote only navigates menus." with Continue / Controllers.
   are unverified until tested on a device.
 - **Handler slot:** `GCMotion.valueChangedHandler` has one slot, already set by
   `installMotionHandler` for every controller with motion; the remote branch goes inside it.
+
+## Siri Remote motion, from Apple's code (tvOS 27.2 GameController, decompiled 2026-10-22)
+
+- **2nd-generation Siri Remote (ProductID 0x314/0x315, `GCDirectionalGamepad`): no `GCMotion` at all.**
+  Nothing creates one for that profile, so `controller.motion` is nil and the remote pointer is never
+  offered. This is the remote that ships with every Apple TV sold since 2021.
+- **1st-generation Siri Remote (ProductID 0x266/0x26d, `_GCAppleTVRemoteControllerProfile`): always has
+  `GCMotion`** (`_GCAppleTVRemoteMotionProfile`). `hasGravityAndUserAcceleration` is always true.
+  `hasRotationRate` and `hasAttitude` both return a `_compassEnabled` flag taken from the HID property
+  "UsesCompass" and refreshed per sample; when it is false, `rotationRate` stays (0,0,0).
+- **Axes:** GameController passes CoreMotion's rotation rate through with no swap, sign change or
+  reorientation (`allowsRotation` only rotates the D-pad and touch input). Which component is yaw is
+  set by the remote's firmware frame, so it remains a device check.
+- **Consequence:** the `motion.hasRotationRate` gate is correct. A 1st-gen remote without the compass
+  flag could still drive a tilt pointer from gravity (pitch and roll, no yaw). The 2nd-gen remote's
+  only possible pointer input is its touch clickpad.
