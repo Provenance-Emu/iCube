@@ -1,6 +1,11 @@
 # Siri Remote as a menu device, and controller-adaptive Wii pointer sources
 
-Status: DRAFT for owner review, 2026-10-21. Nothing here is built yet.
+Status: BUILT on 2026-10-22 (`feature/siri-remote-pointer-sources`), with the corrections in the
+[implementation plan](../plans/2026-10-22-siri-remote-pointer-sources.md). Where this document says a
+binding is written to the CurrentRun layer (A5, B4), it is wrong: controller bindings are INI-persisted
+expressions, so the remote pointer binding is persisted and removed deliberately, and the Siri Remote
+pointer integrates rotation rate rather than reading attitude. The plan's "Mechanism" section is the
+source of truth for both. Open questions were taken at this document's proposed defaults.
 Companion fixes landed the same day on `fix/tvos-testing-batch-2026-10-21`
 (library shelf focus, cheats pane, handoff sheet, Audio pane) and are not covered here.
 

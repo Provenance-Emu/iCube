@@ -132,6 +132,13 @@ final class ControllerManager: NSObject, ObservableObject {
     NSLog("[INPUT] connected %@ (%@): extendedGamepad=%d microGamepad=%d physicalInputProfile.elements=[%@]",
           controller.vendorName ?? "(nil)", controller.productCategory,
           controller.extendedGamepad != nil ? 1 : 0, controller.microGamepad != nil ? 1 : 0, elements)
+    // What the pointer resolver can use. The Siri Remote is offered as the Wii pointer only when it
+    // reports a rotation rate, which is unverified per remote model: this line settles it on a device.
+    let motion = controller.motion
+    NSLog("[INPUT] capabilities %@: menuRemote=%d motion=%d rotationRate=%d attitude=%d gravity=%d touchpad=%d",
+          controller.vendorName ?? "(nil)", controller.isMenuRemote ? 1 : 0, motion != nil ? 1 : 0,
+          motion?.hasRotationRate == true ? 1 : 0, motion?.hasAttitude == true ? 1 : 0,
+          motion?.hasGravityAndUserAcceleration == true ? 1 : 0, controller.supportsTouchpad ? 1 : 0)
   }
 
   // MARK: Observing / Publishers
