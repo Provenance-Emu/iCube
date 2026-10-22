@@ -180,7 +180,6 @@ struct CheatsMenuView: View {
             }
           }
         }
-        .navigationTitle(L("Search Cheats"))
       }
       .pauseClaim("cheats-search")
       .claimsController()

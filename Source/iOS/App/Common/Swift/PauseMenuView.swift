@@ -294,7 +294,7 @@ internal struct PauseMenuView: View {
   }
 
   #if os(iOS)
-  /// The iOS sub-pane header: Back on the left, the pane's title centred (the Performance pane's layout).
+  /// The iOS sub-pane header (Performance, Audio, an effect page): Back on the left, the pane's title centred.
   private func paneBackHeader(title: String, back: @escaping () -> Void) -> some View {
     HStack {
       Button(action: back) {
@@ -303,7 +303,7 @@ internal struct PauseMenuView: View {
       }
       .buttonStyle(.plain)
       Spacer()
-      Text(title).font(.headline)
+      Text(title).icubeText(.nav)
       Spacer()
     }
     .foregroundStyle(.white)
@@ -330,18 +330,7 @@ internal struct PauseMenuView: View {
       case .perfHUD:
         VStack(spacing: 0) {
           #if os(iOS)
-          HStack {
-            Button(action: closePerfHUDSubmenu) {
-              Label(L("Back"), systemImage: "chevron.left")
-                .frame(minWidth: 44, minHeight: 44)
-            }
-            .buttonStyle(.plain)
-            Spacer()
-            Text(L("Performance")).font(.headline)
-            Spacer()
-          }
-          .foregroundStyle(.white)
-          .padding(.horizontal)
+          paneBackHeader(title: L("Performance"), back: closePerfHUDSubmenu)
           #endif
           MenuScreen(model: perfHUDMenuModel, style: .list,
                      onBack: { closePerfHUDSubmenu() },
