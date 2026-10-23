@@ -32,7 +32,8 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     testRumble: @escaping () -> Void = {},
     setTouchOverlayProgrammatic: @escaping (Bool) -> Void = { _ in },
     resetOverlayLayouts: @escaping () -> Void = {},
-    setPointerSourceOverride: @escaping (PointerSource.Kind?) -> Void = { _ in }
+    setPointerSourceOverride: @escaping (PointerSource.Kind?) -> Void = { _ in },
+    connectPhone: @escaping (String) -> Void = { _ in }
   ) -> ControllerHubActions {
     ControllerHubActions(
       playerDestination: { _ in AnyView(EmptyView()) },
@@ -56,7 +57,8 @@ final class ControllerHubModelBuilderTests: XCTestCase {
       setTouchOverlayProgrammatic: setTouchOverlayProgrammatic,
       resetOverlayLayouts: resetOverlayLayouts,
       lightsDestination: { AnyView(EmptyView()) },
-      setPointerSourceOverride: setPointerSourceOverride)
+      setPointerSourceOverride: setPointerSourceOverride,
+      connectPhone: connectPhone)
   }
 
   /// Every port of `system`; `bound` maps a player id ("gc-1", "wii-2") to its device qualifier.
@@ -68,7 +70,8 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     pads: [ConnectedPadState] = [],
     isGameRunning: Bool = true,
     isPinned: Set<String> = [],
-    pending: PendingHubChanges = PendingHubChanges()
+    pending: PendingHubChanges = PendingHubChanges(),
+    phones: [HubPhone] = []
   ) -> ControllerHubState {
     var hub = ControllerHubState.empty(system: system)
     hub.players = ControllerHubState.slots(for: system).map { slot in
@@ -82,6 +85,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     hub.pads = pads
     hub.isGameRunning = isGameRunning
     hub.pending = pending
+    hub.phones = phones
     return hub
   }
 
@@ -106,6 +110,28 @@ final class ControllerHubModelBuilderTests: XCTestCase {
 
   func test_tvOS_hasNoTouchControls() {
     XCTAssertEqual(make(state(system: .gamecube), platform: .tvos).sections.map(\.id), ["players", "devices", "setup", "help"])
+  }
+
+  // MARK: Phones
+
+  func test_hub_listsAdvertisingPhones_withTheirState() {
+    var connected: [String] = []
+    let phones = [HubPhone(pid: "A", name: "Joe's iPhone", isAdded: false), HubPhone(pid: "B", name: "Ann's iPhone", isAdded: true)]
+    let model = make(state(system: .wii, phones: phones), actions(connectPhone: { connected.append($0) }), platform: .tvos)
+    XCTAssertEqual(model.sections.map(\.id), ["players", "devices", "phones", "setup", "help"])
+    XCTAssertEqual(model.sections.first { $0.id == "phones" }?.header, "Phones")
+    XCTAssertEqual(ids(model, section: "phones"), ["phone-A", "phone-B"])
+    XCTAssertEqual(model.item(id: "phone-A")?.title, "Joe's iPhone")
+    XCTAssertEqual(model.item(id: "phone-A")?.badge, "Connect")
+    XCTAssertEqual(model.item(id: "phone-B")?.badge, "Added")
+    run(model.item(id: "phone-A"))
+    run(model.item(id: "phone-B"))
+    XCTAssertEqual(connected, ["A"], "an added phone already has its row: its row adds nothing again")
+    XCTAssertTrue(model.item(id: "phone-B")?.isEnabled ?? false, "tvOS focus must reach it")
+  }
+
+  func test_hub_hasNoPhonesSection_whenNoneAdvertise() {
+    XCTAssertFalse(make(state(system: .wii), platform: .tvos).sections.contains { $0.id == "phones" })
   }
 
   // MARK: Players
@@ -321,7 +347,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     hub.pointerSource = pointerSource(.pad(name: "Xbox", capabilities: PadCapabilities()), platform: .tvos)
     let row = make(hub, platform: .tvos).item(id: "wii-1-pointer-source")
     XCTAssertEqual(row?.badge, "No pointer")
-    XCTAssertEqual(row?.subtitle, "Connect a controller with motion, or use the Siri Remote.")
+    XCTAssertEqual(row?.subtitle, "Connect a controller with motion, or use your iPhone as the Wii Remote.")
     XCTAssertEqual(row?.isEnabled, true)
     guard case .action? = row?.role else { return XCTFail("no-op action") }
     XCTAssertNil(make(hub, platform: .tvos).item(id: "wii-1-pointer"))

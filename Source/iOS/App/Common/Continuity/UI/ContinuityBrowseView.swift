@@ -25,6 +25,8 @@ struct ContinuityBrowseView: View {
     /// Whether this view owns its own dismissal affordance. False when it is
     /// pushed inside an existing navigation stack (Settings), true in a sheet.
     let showsDoneRow: Bool
+    @State private var deviceName = ICubeDeviceName.current()
+    @State private var showsRenameSheet = false
 
     init(showsDoneRow: Bool = false) {
         self.showsDoneRow = showsDoneRow
@@ -63,7 +65,9 @@ struct ContinuityBrowseView: View {
                 },
                 sharing: AnyView(ContinuityLibrarySharingView()),
                 done: { dismiss() },
-                automaticCopy: AnyView(NearbyLibraryMirrorView())
+                automaticCopy: AnyView(NearbyLibraryMirrorView()),
+                deviceName: deviceName,
+                renameDevice: { showsRenameSheet = true }
             ),
             style: .list,
             onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
@@ -71,6 +75,7 @@ struct ContinuityBrowseView: View {
             tvInset: .xxl
         )
         .continuityLibraryPullPrompt()
+        .deviceNameSheet(isPresented: $showsRenameSheet, name: $deviceName)
         .task {
             manager.startBrowsing()
             await manager.refreshTrustedPeers()
@@ -104,6 +109,14 @@ struct ContinuityBrowseView: View {
             // things on it (the switch, the per-device grants, the excluded
             // games) and each needs its own focus target on tvOS.
             Section(header: Text(L("This Device"))) {
+                Button { showsRenameSheet = true } label: {
+                    HStack {
+                        Label(L("Device Name"), systemImage: "pencil")
+                        Spacer()
+                        Text(deviceName)
+                            .foregroundColor(.secondary)
+                    }
+                }
                 NavigationLink(destination: NearbyLibraryMirrorView()) {
                     Label(L("Automatic Game Copying"), systemImage: "arrow.down.circle")
                 }
@@ -141,12 +154,60 @@ struct ContinuityBrowseView: View {
         // incoming pairing request has to be answerable from here too — and so
         // does a peer asking to copy a game.
         .continuityLibraryPullPrompt()
+        .deviceNameSheet(isPresented: $showsRenameSheet, name: $deviceName)
         .task {
             manager.startBrowsing()
             await manager.refreshTrustedPeers()
             await manager.refreshLibraryGrants()
         }
         .onDisappear { manager.stopBrowsing() }
+    }
+}
+
+extension View {
+    /// Presents the device-name editor and writes the result to `ICubeDeviceName`.
+    fileprivate func deviceNameSheet(isPresented: Binding<Bool>, name: Binding<String>) -> some View {
+        sheet(isPresented: isPresented) {
+            ContinuityDeviceNameSheet(initialName: name.wrappedValue) { newName in
+                ICubeDeviceName.set(newName)
+                name.wrappedValue = ICubeDeviceName.current()
+                isPresented.wrappedValue = false
+            } onCancel: {
+                isPresented.wrappedValue = false
+            }
+        }
+    }
+}
+
+/// Rename entry point: a `Form` + `TextField` in a sheet, like `RenameStateSheet`, because
+/// `.alert` cannot host a text field on tvOS. Saving a blank name goes back to the system name.
+private struct ContinuityDeviceNameSheet: View {
+    let initialName: String
+    let onSave: (String) -> Void
+    let onCancel: () -> Void
+    @State private var text = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section(footer: Text(L("How this device appears to your other devices."))) {
+                    TextField(L("Device Name"), text: $text)
+                }
+            }
+            #if !os(tvOS)
+            .navigationTitle(L("Device Name"))
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("Cancel"), action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L("Save")) { onSave(text) }
+                }
+            }
+        }
+        .onAppear { text = initialName }
     }
 }
 

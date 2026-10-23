@@ -41,11 +41,13 @@ private enum OrientationHelper {
 
 struct DSUControllerView: View {
   let onClose: () -> Void
+  /// True while the controller screen is on screen (appear to disappear).
+  @State private var sessionOpen = false
   @State private var virtualController: GCVirtualController?
   @State private var showStickFeel = false
   @State private var pointerModeLabel: String = ""
   @State private var showLayoutSheet = false
-  @AppStorage("dsu_controller_layout") private var layoutRaw: String = DSUControllerLayout.appleVirtual.rawValue
+  @AppStorage(DSUControllerLayout.storageKey) private var layoutRaw: String = DSUControllerLayout.appleVirtual.rawValue
   @AppStorage("dsu_apple_left_is_dpad") private var appleLeftIsDPad: Bool = false
   @AppStorage("dsu_restrict_client") private var restrictClient: String = ""
   @State private var hasClient: Bool = false
@@ -149,24 +151,15 @@ struct DSUControllerView: View {
         if !lockLayout {
           OrientationHelper.lockToCurrentOrientation()
         }
-        if !DSUServerBridge.isRunning() {
-          let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
-          let port = (p > 0 && p < 65536) ? p : 26760
-          let ok = DSUServerBridge.start(onPort: NSNumber(value: port).intValue)
-          if !ok {
-            let err = DSUServerBridge.lastError()
-            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
-          }
-        }
-        // Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping)
-        #if canImport(CoreMotion)
-        TCDeviceMotion.shared.setPort(0)
-        // The client gets the phone's own motion, whatever the pointer mode.
-        TCDeviceMotion.shared.setDSUStreaming(true)
-        TCDeviceMotion.shared.setMotionEnabled(true)
-        #endif
+        sessionOpen = true
+        // The phone is the controller: keep the screen on while it is open.
+        KeepAwake.acquire(.dsuController)
+        startServerIfNeeded()
+        enableMotionStreaming()
       }
       .onDisappear {
+        sessionOpen = false
+        KeepAwake.release(.dsuController)
         // Restore default orientation allowances when not using app-level lock
         if !lockLayout {
           OrientationHelper.unlock()
@@ -280,11 +273,15 @@ struct DSUControllerView: View {
       .onChange(of: layoutRaw) { reconfigureVirtualControllerIfNeeded() }
       .onChange(of: restrictClient) { _, newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }
       .onAppear {
-        DSUServerBridge.setRestrictToClient(restrictClient.isEmpty ? nil : restrictClient)
+        // A one-tap session sends to the TV approved on the phone alone: its restriction stays.
+        if !PhoneControllerSession.isActive {
+          DSUServerBridge.setRestrictToClient(restrictClient.isEmpty ? nil : restrictClient)
+        }
         // Publish layout metadata for auto-profile selection on receivers
         publishLayoutTXT(raw: layoutRaw)
       }
       .onChange(of: layoutRaw) { _, newVal in publishLayoutTXT(raw: newVal) }
+      .onAppLifecycle { phase in applySceneLifecycle(phase) }
       .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
         hasClient = DSUServerBridge.hasClient()
         clientAddr = DSUServerBridge.lastClientAddress()
@@ -293,6 +290,36 @@ struct DSUControllerView: View {
         clients = DSUServerBridge.clients()
         if !hasClient { DSUServerBridge.sendNow() }
       }
+    }
+  }
+
+  /// Starts the DSU server on the configured port unless it is already running.
+  private func startServerIfNeeded() {
+    startDSUServerIfNeeded()
+  }
+
+  /// Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping).
+  private func enableMotionStreaming() {
+    #if canImport(CoreMotion)
+    TCDeviceMotion.shared.setPort(0)
+    // The client gets the phone's own motion, whatever the pointer mode.
+    TCDeviceMotion.shared.setDSUStreaming(true)
+    TCDeviceMotion.shared.setMotionEnabled(true)
+    #endif
+  }
+
+  /// Stops the server in the background and brings it (and motion streaming) back on return.
+  private func applySceneLifecycle(_ phase: ScenePhase) {
+    let action = DSUSessionLifecycle.action(for: phase, serverRunning: DSUServerBridge.isRunning(), sessionOpen: sessionOpen)
+    DSUSessionLifecycle.log.notice("Controller screen: scene \(String(describing: phase), privacy: .public) -> \(String(describing: action), privacy: .public)")
+    switch action {
+    case .stop:
+      DSUServerBridge.stop()
+    case .start:
+      startServerIfNeeded()
+      enableMotionStreaming()
+    case .none:
+      break
     }
   }
 
@@ -384,6 +411,19 @@ struct DSUControllerView: View {
   }
 }
 
+/// Starts the DSU server on the configured port unless it is already running, and says so on the
+/// snackbar when it cannot. Shared by the controller screen and the one-tap phone session.
+func startDSUServerIfNeeded() {
+  guard !DSUServerBridge.isRunning() else { return }
+  let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
+  let port = (p > 0 && p < 65536) ? p : 26760
+  let ok = DSUServerBridge.start(onPort: NSNumber(value: port).intValue)
+  if !ok {
+    let err = DSUServerBridge.lastError()
+    NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
+  }
+}
+
 private func publishLayoutTXT(raw: String) {
   let layout = (DSUControllerLayout(rawValue: raw) ?? .appleVirtual)
   switch layout {
@@ -416,7 +456,10 @@ private struct AppleVirtualControllerPlaceholder: View {
 
 // MARK: - Layout Picker
 
-private enum DSUControllerLayout: String, CaseIterable {
+enum DSUControllerLayout: String, CaseIterable {
+  /// The `UserDefaults` key the controller screen keeps the chosen layout under.
+  static let storageKey = "dsu_controller_layout"
+
   case appleVirtual
   case gamecube
   case wiiRemote

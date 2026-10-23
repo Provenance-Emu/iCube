@@ -36,6 +36,7 @@ class ServiceManager {
     CloudSyncLifecycleService(),
     ContinuityService(),
     DolphinCoreService(),
+    PhoneControllerSessionRecoveryService(),
     FirstRunInitializationService(),
     LegacyInputConfigMigrationService(),
     GameFileCacheService(),

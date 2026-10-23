@@ -22,8 +22,22 @@ final class ContinuityModelBuildersTests: XCTestCase {
       peers: [.init(id: "p1", name: "Joe's iPad", subtitle: "Playing Melee", glyph: "ipad")],
       trusted: [("t1", "Living Room TV")], sharesLibrary: false, showsDone: true,
       peerDetail: { _ in AnyView(EmptyView()) }, trustedDetail: { _ in AnyView(EmptyView()) }, sharing: AnyView(EmptyView()), done: {})
-    XCTAssertEqual(m.allItems.map(\.id), ["peer-p1", "share-library", "trusted-t1", "done"])
+    XCTAssertEqual(m.allItems.map(\.id), ["peer-p1", "device-name", "share-library", "trusted-t1", "done"])
     XCTAssertEqual(m.item(id: "peer-p1")?.subtitle, "Playing Melee")
+  }
+
+  func test_browse_hasDeviceNameRow_withTheCurrentNameAsBadge() {
+    var renames = 0
+    let m = ContinuityBrowseModelBuilder.make(
+      peers: [], trusted: [], sharesLibrary: false, showsDone: false,
+      peerDetail: { _ in AnyView(EmptyView()) }, trustedDetail: { _ in AnyView(EmptyView()) }, sharing: AnyView(EmptyView()), done: {},
+      deviceName: "Den iPhone", renameDevice: { renames += 1 })
+    XCTAssertEqual(m.sections[1].id, "this-device")
+    XCTAssertEqual(m.sections[1].items.first?.id, "device-name")
+    XCTAssertEqual(m.item(id: "device-name")?.badge, "Den iPhone")
+    guard case .action(let run)? = m.item(id: "device-name")?.role else { return XCTFail("device-name is not an action row") }
+    run()
+    XCTAssertEqual(renames, 1)
   }
 
   func test_sharing_toggle_andShareAgain() {

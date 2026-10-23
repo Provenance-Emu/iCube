@@ -179,6 +179,16 @@ final class AssignmentEngineTests: XCTestCase {
     ])
   }
 
+  /// A phone connected through DSU joins as the next Wii Remote: a pad already holds Wii Remote 1.
+  func test_dsuPhone_takesWiiRemote2_whenAPadHoldsWiiRemote1() {
+    let phone = "DSUClient/0/Joe's iPhone"
+    let decision = AssignmentEngine().decide(
+      from: state(gc: [padA, "", "", ""], wii: [padA, "", "", ""],
+                  connected: [padA, phone], isWii: true, touchscreenHoldsWiimote1: false))
+    XCTAssertEqual(decision.assignments,
+                   [ControllerAssignment(qualifier: phone, playerZeroBased: 1, system: .wii)])
+  }
+
   func test_gameCubeSystem_neverTouchesWiimoteSlots() {
     let decision = AssignmentEngine().decide(
       from: state(gc: [padA, "", "", ""], wii: ["", "", "", ""],

@@ -28,6 +28,12 @@ struct iCubeShortcuts: AppShortcutsProvider {
             shortTitle: "Random Game",
             systemImageName: "shuffle"
         )
+        AppShortcut(
+            intent: UseAsWiiRemoteIntent(),
+            phrases: ["Use my iPhone as a Wii Remote in \(.applicationName)"],
+            shortTitle: "Wii Remote",
+            systemImageName: "appletv"
+        )
     }
 }
 #endif

@@ -27,6 +27,12 @@ protocol ControllerHubWriting {
   func setTouchOverlayProgrammatic(_ enabled: Bool)
   /// Stores Wii Remote 1's Pointer Source (nil: Automatic) and re-applies the pointer binding.
   func setPointerSourceOverride(_ kind: PointerSource.Kind?)
+  /// The TV-side confirmation of an advertising phone: it connects without a second prompt.
+  func connectPhone(pid: String)
+}
+
+extension ControllerHubWriting {
+  func connectPhone(pid: String) {}
 }
 
 struct LiveControllerHubWriter: ControllerHubWriting {
@@ -102,6 +108,8 @@ struct LiveControllerHubWriter: ControllerHubWriting {
   }
 
   func setPointerSourceOverride(_ kind: PointerSource.Kind?) { io.setPointerSourceOverride(kind) }
+
+  func connectPhone(pid: String) { PhoneControllerService.shared.connect(pid: pid) }
 
   func setTouchOverlayProgrammatic(_ enabled: Bool) {
     #if os(iOS)

@@ -38,12 +38,27 @@ enum NoControllerNotice {
     connectedQualifiers.contains { !AssignmentEngine.isVirtual($0) }
   }
 
-  /// The panel's rows: Continue (plays on) first, so a stray press does not leave the game, then
+  /// What the "Use Your iPhone" panel says when no phone is advertising: text only, no QR code.
+  static var usePhoneHelpMessage: String { L("Open iCube on your iPhone and tap Play on Apple TV.") }
+
+  /// The panel's rows: Continue (plays on) first, so a stray press does not leave the game, then the
+  /// phone (`phoneName`: the one advertising, whose row connects it; nil opens the explanation), then
   /// Controllers (the hub, as the pause menu's Controllers tile opens it).
-  static func model(onContinue: @escaping () -> Void, onControllers: @escaping () -> Void) -> MenuModel {
+  static func model(
+    phoneName: String?, onContinue: @escaping () -> Void, onControllers: @escaping () -> Void, onUsePhone: @escaping () -> Void
+  ) -> MenuModel {
     MenuModel(sections: [MenuSection(id: "no-controller", items: [
       MenuItem(id: "no-controller-continue", title: L("Continue"), icon: "play.fill", role: .action(onContinue)),
+      MenuItem(id: "use-phone", title: phoneName.map { String(format: L("Use %@"), $0) } ?? L("Use Your iPhone"),
+               icon: "iphone.radiowaves.left.and.right", role: .action(onUsePhone)),
       MenuItem(id: "no-controller-controllers", title: L("Controllers"), icon: "gamecontroller", role: .action(onControllers)),
+    ])])
+  }
+
+  /// The explanation panel's one row: back to the notice.
+  static func usePhoneHelpModel(onBack: @escaping () -> Void) -> MenuModel {
+    MenuModel(sections: [MenuSection(id: "use-phone-help", items: [
+      MenuItem(id: "use-phone-help-back", title: L("Back"), icon: "chevron.backward", role: .action(onBack)),
     ])])
   }
 

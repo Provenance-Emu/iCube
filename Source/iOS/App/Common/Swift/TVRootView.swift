@@ -76,12 +76,26 @@ struct TVRootView: View {
       // prompt. Since `.askPerGame` is the default grant, that would be the
       // default experience.
       .continuityPairingPrompt()
+      // A phone offering itself as a controller (DSU) is asked about here for the same reason: it
+      // arrives unsolicited, in the library or during a game.
+      .phoneControllerPrompt()
       .continuityLibraryPullPrompt()
       // Same reasoning as the library-pull prompt above: a `requestGame` ask
       // from a peer ecosystem app (e.g. Provenance) arrives UNSOLICITED, so
       // this belongs at the root rather than on any one screen.
       .ecosystemShareApprovalPrompt()
       .gameTagMessages()
+      #if os(tvOS)
+      // The TV looks for phones only while iCube is in the foreground; who was allowed is kept for the launch.
+      .onAppear { PhoneControllerService.shared.start() }
+      .onAppLifecycle { phase in
+        switch phase {
+        case .active: PhoneControllerService.shared.start()
+        case .background: PhoneControllerService.shared.stop()
+        default: break
+        }
+      }
+      #endif
   }
 }
 

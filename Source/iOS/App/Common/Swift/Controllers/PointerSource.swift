@@ -20,17 +20,23 @@ enum PointerPlayer1: Equatable {
   case touchscreen
   /// A gameplay pad, by its display name.
   case pad(name: String, capabilities: PadCapabilities)
+  /// An iPhone driving the Wii Remote over DSU (a `DSUClient/` device), by the name it advertises.
+  case phone(name: String)
+
+  /// The qualifier prefix of a device a DSU client (the phone) feeds.
+  private static let dsuClientPrefix = "DSUClient/"
 
   /// Wii Remote 1's bound device (`ControllerHubReading.boundQualifier(forWiimote: 1)`, "" while off)
-  /// against the connected pads. A pad that is not in the list (disconnected, or a DSU device) has
-  /// no known capabilities and is named from its qualifier.
+  /// against the connected pads. A `DSUClient/` device is a phone, named from its qualifier. A pad that
+  /// is not in the list (disconnected) has no known capabilities and is named from its qualifier.
   static func from(qualifier: String, pads: [ConnectedPadState]) -> PointerPlayer1 {
     if qualifier.isEmpty { return .none }
     if DeviceFamily.from(qualifier: qualifier) == .touchscreen { return .touchscreen }
+    let name = qualifier.split(separator: "/", maxSplits: 2).last.map(String.init) ?? qualifier
+    if qualifier.hasPrefix(dsuClientPrefix) { return .phone(name: name) }
     if let pad = pads.first(where: { $0.qualifier == qualifier && !$0.isMenuRemote }) {
       return .pad(name: pad.name, capabilities: pad.capabilities)
     }
-    let name = qualifier.split(separator: "/", maxSplits: 2).last.map(String.init) ?? qualifier
     return .pad(name: name, capabilities: PadCapabilities())
   }
 }
@@ -41,6 +47,8 @@ enum PointerSource: Equatable {
   case padGyro(padName: String)
   /// The pad's touchpad.
   case padTouchpad(padName: String)
+  /// tvOS: an iPhone driving the Wii Remote over DSU; its gyro aims through the DSU motion slot.
+  case phoneGyro(phoneName: String)
   /// tvOS: the Siri Remote's motion, written to Wii Remote 1's IR by the app.
   case remoteGyro
   /// iOS: the phone's or iPad's own motion.
@@ -55,13 +63,14 @@ enum PointerSource: Equatable {
   /// The case without its pad name: what the user's override stores (`PointerSourceOverrideStore`).
   /// The raw values are persisted: do not rename.
   enum Kind: String, CaseIterable {
-    case padGyro, padTouchpad, remoteGyro, deviceGyro, touchFollow, touchDrag, none
+    case padGyro, padTouchpad, remoteGyro, deviceGyro, touchFollow, touchDrag, none, phoneGyro
   }
 
   var kind: Kind {
     switch self {
     case .padGyro: return .padGyro
     case .padTouchpad: return .padTouchpad
+    case .phoneGyro: return .phoneGyro
     case .remoteGyro: return .remoteGyro
     case .deviceGyro: return .deviceGyro
     case .touchFollow: return .touchFollow
@@ -76,6 +85,7 @@ enum PointerSource: Equatable {
     switch self {
     case .padGyro(let name): return String(format: L("%@ gyro"), name)
     case .padTouchpad(let name): return String(format: L("%@ touchpad"), name)
+    case .phoneGyro(let name): return String(format: L("%@ gyro"), name)
     case .remoteGyro: return L("Siri Remote")
     case .deviceGyro: return String(format: L("%@ gyro"), deviceModel)
     case .touchFollow: return L("Touch (Follow)")
@@ -88,6 +98,7 @@ enum PointerSource: Equatable {
     switch self {
     case .padGyro, .deviceGyro: return "gyroscope"
     case .padTouchpad: return "hand.point.up.left"
+    case .phoneGyro: return "iphone.radiowaves.left.and.right"
     case .remoteGyro: return "appletvremote.gen4"
     case .touchFollow: return "hand.point.up"
     case .touchDrag: return "hand.draw"
@@ -102,8 +113,8 @@ enum PointerSource: Equatable {
 /// Scope: Player 1 (Wii Remote 1) only. Wii Remotes 2-4 keep today's behaviour (a gyro pad aims
 /// through its profile, anything else has no pointer).
 enum PointerSourceResolver {
-  /// Order: a valid user override, then the pad's gyro, then its touchpad, then (tvOS) the Siri
-  /// Remote's motion, then nothing. An iOS touchscreen Player 1 follows `preferredMode` (the
+  /// Order: a valid user override, then the pad's gyro, then its touchpad, then (tvOS) the
+  /// iPhone driving Wii Remote 1, then the Siri Remote's motion, then nothing. An iOS touchscreen Player 1 follows `preferredMode` (the
   /// existing Follow / Drag / Gyro choice, `PointerModeController`) and ignores the override: that
   /// mode IS its choice. A plain pad on iOS gets no pointer unless the user overrides it to the
   /// device's gyro (plan call 4). An override the setup cannot honour (a gyro pad that left, a
@@ -127,6 +138,7 @@ enum PointerSourceResolver {
       if capabilities.hasGyro { return .padGyro(padName: name) }
       if capabilities.hasTouchpad { return .padTouchpad(padName: name) }
     }
+    if platform == .tvos, case .phone(let name) = player1 { return .phoneGyro(phoneName: name) }
     if platform == .tvos, remoteHasMotion, player1 != .none { return .remoteGyro }
     return .none
   }
@@ -149,6 +161,11 @@ enum PointerSourceResolver {
       case .ios: out.append(.deviceGyro)
       }
       return out
+    case (.tvos, .phone(let name)):
+      return [.phoneGyro(phoneName: name)] + (remoteHasMotion ? [.remoteGyro] : [])
+    case (.ios, .phone):
+      // The phone is not a gyro source on iOS: it aims like a plain pad (the device gyro, by override only).
+      return [.deviceGyro]
     }
   }
 
@@ -196,7 +213,7 @@ struct PointerSourceModel: Equatable {
   var explanation: String? {
     guard source == .none else { return nil }
     return platform == .tvos
-      ? L("Connect a controller with motion, or use the Siri Remote.")
+      ? L("Connect a controller with motion, or use your iPhone as the Wii Remote.")
       : L("Connect a controller with motion.")
   }
 
@@ -219,7 +236,7 @@ struct PointerSourceModel: Equatable {
   /// The Pointer Source row's help line, while it offers a choice.
   var rowDescription: String {
     platform == .tvos
-      ? L("Automatic picks the controller's gyro, then its touchpad, then the Siri Remote.")
+      ? L("Automatic picks the controller's gyro, then its touchpad, then your iPhone, then the Siri Remote.")
       : L("Automatic picks the controller's gyro, then its touchpad.")
   }
 }

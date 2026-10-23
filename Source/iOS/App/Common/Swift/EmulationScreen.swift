@@ -266,6 +266,10 @@ struct EmulationScreen: View {
   /// The no-controller notice was shown this boot; it shows once.
   @State private var noControllerNoticeShown = false
   @State private var showNoControllerNotice = false
+  /// The notice's "Use Your iPhone" explanation is up instead of the notice (no phone is advertising).
+  @State private var showUsePhoneHelp = false
+  /// The phones advertising themselves as a controller, for the notice's "Use <phone>" row.
+  @ObservedObject private var phoneService = PhoneControllerService.shared
   #endif
   @ObservedObject private var recorder = RecordingManager.shared
   @AppStorage("quick_save_slot") private var selectedSlot = 1
@@ -554,7 +558,7 @@ struct EmulationScreen: View {
       NoControllerNotice.hasGameplayPad(connectedQualifiers: ControllerStateStore.shared.snapshot().connectedQualifiers)
     }
     if showNoControllerNotice {
-      if hasGameplayPad() { showNoControllerNotice = false }
+      if hasGameplayPad() { dismissNoControllerNotice() }
       return
     }
     guard !noControllerNoticeShown, let firstRunningAt else { return }
@@ -571,6 +575,19 @@ struct EmulationScreen: View {
 
   private func dismissNoControllerNotice() {
     showNoControllerNotice = false
+    showUsePhoneHelp = false
+  }
+
+  /// The notice's phone row: connects the phone the row named (picking it is the TV-side confirmation)
+  /// and plays on. It explains how to bring one when the row named none, or that phone has stopped
+  /// advertising since the row was drawn.
+  private func usePhoneFromNotice(pid: String?) {
+    guard let pid, phoneService.advertisingPhones.contains(where: { $0.advert?.pid == pid }) else {
+      showUsePhoneHelp = true
+      return
+    }
+    phoneService.connect(pid: pid)
+    dismissNoControllerNotice()
   }
 
   /// The pause menu's Controllers hub, as its Controllers tile opens it. The pending claim keeps the
@@ -578,7 +595,7 @@ struct EmulationScreen: View {
   private func openControllersFromNotice() {
     PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
     pauseStartsInControllers = true
-    showNoControllerNotice = false
+    dismissNoControllerNotice()
     livePerformance.closeForPause()
     showPauseMenu = true
   }
@@ -619,14 +636,27 @@ struct EmulationScreen: View {
         .zIndex(4)
 
       if showNoControllerNotice {
-        ICubeConfirmPanel(
-          title: L("No controller connected"),
-          message: L("The Siri Remote only navigates menus. Connect a controller to play."),
-          model: NoControllerNotice.model(onContinue: dismissNoControllerNotice, onControllers: openControllersFromNotice),
-          isTV: true, onBack: dismissNoControllerNotice)
-          // Nobody can play while it is up; Continue releases the pause.
-          .pauseClaim("no-controller")
-          .zIndex(6)
+        // One container, so the swap between the notice and its explanation keeps the pause claim.
+        ZStack {
+          if showUsePhoneHelp {
+            ICubeConfirmPanel(
+              title: L("Use Your iPhone"), message: NoControllerNotice.usePhoneHelpMessage,
+              model: NoControllerNotice.usePhoneHelpModel(onBack: { showUsePhoneHelp = false }),
+              isTV: true, onBack: { showUsePhoneHelp = false })
+          } else {
+            let shownPhone = phoneService.advertisingPhones.first?.advert
+            ICubeConfirmPanel(
+              title: L("No controller connected"),
+              message: L("The Siri Remote only navigates menus. Connect a controller to play."),
+              model: NoControllerNotice.model(
+                phoneName: shownPhone?.name, onContinue: dismissNoControllerNotice,
+                onControllers: openControllersFromNotice, onUsePhone: { usePhoneFromNotice(pid: shownPhone?.pid) }),
+              isTV: true, onBack: dismissNoControllerNotice)
+          }
+        }
+        // Nobody can play while it is up; Continue releases the pause.
+        .pauseClaim("no-controller")
+        .zIndex(6)
       }
     }
     .fullScreenCover(isPresented: $showPauseMenu) {
