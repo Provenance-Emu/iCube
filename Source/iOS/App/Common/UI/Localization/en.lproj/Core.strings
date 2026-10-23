@@ -4292,6 +4292,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Pinging %@…" = "Pinging %@…";
 "Platform filter" = "Platform filter";
 "Play %@" = "Play %@";
+"Play on Apple TV" = "Play on Apple TV";
 "Player %d" = "Player %d";
 "Playing %@" = "Playing %@";
 "Post-Processing Shader" = "Post-Processing Shader";

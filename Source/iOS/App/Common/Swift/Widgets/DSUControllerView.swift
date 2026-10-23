@@ -48,7 +48,7 @@ struct DSUControllerView: View {
   @State private var showStickFeel = false
   @State private var pointerModeLabel: String = ""
   @State private var showLayoutSheet = false
-  @AppStorage("dsu_controller_layout") private var layoutRaw: String = DSUControllerLayout.appleVirtual.rawValue
+  @AppStorage(DSUControllerLayout.storageKey) private var layoutRaw: String = DSUControllerLayout.appleVirtual.rawValue
   @AppStorage("dsu_apple_left_is_dpad") private var appleLeftIsDPad: Bool = false
   @AppStorage("dsu_restrict_client") private var restrictClient: String = ""
   @State private var hasClient: Bool = false
@@ -293,14 +293,7 @@ struct DSUControllerView: View {
 
   /// Starts the DSU server on the configured port unless it is already running.
   private func startServerIfNeeded() {
-    guard !DSUServerBridge.isRunning() else { return }
-    let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
-    let port = (p > 0 && p < 65536) ? p : 26760
-    let ok = DSUServerBridge.start(onPort: NSNumber(value: port).intValue)
-    if !ok {
-      let err = DSUServerBridge.lastError()
-      NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
-    }
+    startDSUServerIfNeeded()
   }
 
   /// Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping).
@@ -414,6 +407,19 @@ struct DSUControllerView: View {
   }
 }
 
+/// Starts the DSU server on the configured port unless it is already running, and says so on the
+/// snackbar when it cannot. Shared by the controller screen and the one-tap phone session.
+func startDSUServerIfNeeded() {
+  guard !DSUServerBridge.isRunning() else { return }
+  let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
+  let port = (p > 0 && p < 65536) ? p : 26760
+  let ok = DSUServerBridge.start(onPort: NSNumber(value: port).intValue)
+  if !ok {
+    let err = DSUServerBridge.lastError()
+    NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
+  }
+}
+
 private func publishLayoutTXT(raw: String) {
   let layout = (DSUControllerLayout(rawValue: raw) ?? .appleVirtual)
   switch layout {
@@ -446,7 +452,10 @@ private struct AppleVirtualControllerPlaceholder: View {
 
 // MARK: - Layout Picker
 
-private enum DSUControllerLayout: String, CaseIterable {
+enum DSUControllerLayout: String, CaseIterable {
+  /// The `UserDefaults` key the controller screen keeps the chosen layout under.
+  static let storageKey = "dsu_controller_layout"
+
   case appleVirtual
   case gamecube
   case wiiRemote

@@ -549,6 +549,10 @@ struct TVLibraryView: View {
   @State private var showWiiSystemFilesHelp = false
 #endif
   @State private var showDSUSession = false
+#if os(iOS)
+  /// The one-tap "Play on Apple TV" session; also started from the URL route and the App Intent.
+  @ObservedObject private var phoneControllerSession = PhoneControllerSession.Presentation.shared
+#endif
   /// Presents the About iCube sheet (tapped via the toolbar Dolphin logo on iOS).
   @State private var showAbout = false
   /// Live Wi-Fi upload address shown on the empty-library screen. Empty while the server
@@ -1690,6 +1694,11 @@ struct TVLibraryView: View {
         aboutDolphinToolbarButton
       }
     }
+    #if os(iOS)
+    ToolbarItem(placement: .navigationBarTrailing) {
+      playOnAppleTVButton
+    }
+    #endif
     ToolbarItem(placement: .navigationBarTrailing) {
       libraryViewMenu
     }
@@ -1807,6 +1816,16 @@ struct TVLibraryView: View {
     action()
 #endif
   }
+
+#if os(iOS)
+  /// One tap: this iPhone becomes a Wii Remote for iCube on the Apple TV.
+  private var playOnAppleTVButton: some View {
+    Button(action: { PhoneControllerSession.begin() }) {
+      Image(systemName: "appletv")
+    }
+    .accessibilityLabel(L("Play on Apple TV"))
+  }
+#endif
 
   @ViewBuilder
   private var librarySettingsButton: some View {
@@ -2119,6 +2138,13 @@ struct TVLibraryView: View {
 #endif
     // DSU controller session (iOS only)
 #if os(iOS)
+    .fullScreenCover(isPresented: Binding(
+      get: { phoneControllerSession.isPresented },
+      set: { if !$0 { PhoneControllerSession.end() } }
+    )) {
+      PhoneControllerSessionView()
+        .claimsController()
+    }
     .sheet(isPresented: $showDSUSession) {
       Group {
         if #available(iOS 17.0, *) {
@@ -2203,6 +2229,10 @@ struct TVLibraryView: View {
       }
       // Global DSU approval toast
       NotificationCenter.default.addObserver(forName: NSNotification.Name("DSUNewClientApproval"), object: nil, queue: .main) { note in
+#if os(iOS)
+        // The one-tap session asks on its own screen; the banner would only show up behind it.
+        if MainActor.assumeIsolated({ PhoneControllerSession.isActive }) { return }
+#endif
         if let addr = note.userInfo?["address"] as? String { approvalBannerAddr = addr }
       }
       // First-run onboarding

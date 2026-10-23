@@ -546,7 +546,7 @@ final class ContinuityManager: ObservableObject {
     }
 
     /// Device-type code for the browse list's glyph.
-    private static func deviceTypeCode() -> String {
+    static func deviceTypeCode() -> String {
         #if os(tvOS)
         return "tv"
         #else

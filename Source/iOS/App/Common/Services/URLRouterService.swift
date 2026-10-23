@@ -8,8 +8,12 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
     // Supported:
     // dolphinios://play?id=GALE01                       (Top Shelf / external launch)
     // dolphinios://dsu/add?ip=192.168.1.23&port=26760&desc=My%20iPhone
+    // dolphinios://dsu/controller                       (iOS: use this iPhone as a Wii Remote for Apple TV)
     // Also accept legacy: dsu://192.168.1.23:26760
     if handlePlayLink(url) { return true }
+#if os(iOS)
+    if handleControllerLink(url) { return true }
+#endif
     if handleDSULink(url) { return true }
     if handleEcosystemLink(url) { return true }
     return false
@@ -33,6 +37,19 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
     Task { @MainActor in GameLaunchRequest.launch(gameID: id) }
     return true
   }
+
+#if os(iOS)
+  /// Starts the one-tap phone controller session. A property so a test can stand in for the UI.
+  var beginPhoneControllerSession: @MainActor () -> Void = { PhoneControllerSession.begin() }
+
+  private func handleControllerLink(_ url: URL) -> Bool {
+    guard url.scheme?.lowercased() == "dolphinios", url.host?.lowercased() == "dsu",
+          url.path.lowercased() == "/controller" else { return false }
+    let begin = beginPhoneControllerSession
+    Task { @MainActor in begin() }
+    return true
+  }
+#endif
 
   private func handleDSULink(_ url: URL) -> Bool {
     if url.scheme?.lowercased() == "dolphinios" {
