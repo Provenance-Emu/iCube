@@ -218,6 +218,10 @@ final class ControllerManager: NSObject, ObservableObject {
     guard !isObserving else { return }
     isObserving = true
 
+    // Pads connected before the observer starts get no connect notification here: wrap them now,
+    // so `controllers` (and every route installed from it) sees the wrapper, never the real pad.
+    for controller in GCController.controllers() { _ = physicalProfileWrapper(for: controller) }
+
     // Initial configure
     refreshInputHandlers()
 

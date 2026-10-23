@@ -7,7 +7,8 @@
 NS_ASSUME_NONNULL_BEGIN
 
 /// A `GCController` stand-in the app substitutes for a pad the system exposes without an
-/// extended or micro gamepad (`PhysicalProfileController`). The core's MFi device holds the
+/// extended gamepad and that the core binds through its physical profile
+/// (`PhysicalProfileController`). The core's MFi device holds the
 /// real controller, so anything that resolves a controller to a core device goes through
 /// `+[DOLPhysicalProfileBridge baseController:]` first.
 @protocol DOLPhysicalBaseController <NSObject>
@@ -26,6 +27,15 @@ NS_SWIFT_NAME(PhysicalProfileBridge)
 /// True for the Nintendo Switch Online N64 controller.
 + (BOOL)isN64PadWithVendorName:(nullable NSString*)vendorName
                productCategory:(nullable NSString*)productCategory;
+
+/// True for the Nintendo Switch Online SNES controller (`Switch SNES Controller`).
++ (BOOL)isSnesPadWithVendorName:(nullable NSString*)vendorName
+                productCategory:(nullable NSString*)productCategory;
+
+/// True for the Switch Online pads (N64, SNES) the core binds through their physical profile
+/// whenever the system gives them no extended gamepad.
++ (BOOL)isSwitchOnlinePadWithVendorName:(nullable NSString*)vendorName
+                        productCategory:(nullable NSString*)productCategory;
 
 /// Element name -> MFi input name: `Button A`, `R Shoulder`, `Menu`, the C cluster as the
 /// R Stick direction it drives (`R Stick Y+`), and `D-Pad` / `L Stick` / `R Stick` for

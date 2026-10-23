@@ -136,6 +136,7 @@ private func presentPauseMenu(_ reason: String) {
 /// | Switch Pro "+"               | `buttonMenu`            | `"Menu"`        | `Buttons/Start = Menu` | Start only                             |
 /// | Switch Pro "-"                | `buttonOptions`         | `"Options"`     | not bound in GCPad     | pause menu                            |
 /// | Bare MFi controller (no Options/Home) | `buttonMenu`   | `"Menu"`        | `Buttons/Start = Menu` | Start only + shoulder-chord pause     |
+/// | Switch Online SNES Start / Select | `buttonMenu` / (none) | `"Menu"` / `"Options"` | `Buttons/Start = Menu` / not bound | Start only; Select + Start pauses (`PhysicalProfileController`) |
 ///
 /// GameController has no separate "Share" API: `GCExtendedGamepad.buttonOptions`
 /// is Apple's name for the PS4 Share / PS5 Create button on every deployment
@@ -500,6 +501,14 @@ func installExtraInputHandlers(_ c: GCController) {
         guard pressed else { return }
         presentPauseMenu("synthesized.buttonHome")
       }
+    }
+    // A wrapped pad with no Home whose Select is its only Options (the Switch Online SNES pad)
+    // pauses from Select + Start held together. The wrapper detects the chord on the physical
+    // elements; Start and Select alone still reach the game, and its `buttonOptions` stays nil
+    // so `installPauseMenuHandlers` gives Select no pause route of its own. A wrapped pad with
+    // no Home, Options or chord pauses from Start (`PhysicalProfileController.PauseTrigger`).
+    if let wrapper = c as? PhysicalProfileController {
+      wrapper.pauseRequestHandler = { reason in presentPauseMenu(reason) }
     }
   }
 

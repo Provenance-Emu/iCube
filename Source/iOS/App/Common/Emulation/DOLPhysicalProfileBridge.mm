@@ -25,6 +25,19 @@ namespace PP = ciface::iOS::PhysicalProfile;
                       std::string([productCategory ?: @"" UTF8String]));
 }
 
++ (BOOL)isSnesPadWithVendorName:(NSString*)vendorName productCategory:(NSString*)productCategory
+{
+  return PP::IsSnesPad(std::string([vendorName ?: @"" UTF8String]),
+                       std::string([productCategory ?: @"" UTF8String]));
+}
+
++ (BOOL)isSwitchOnlinePadWithVendorName:(NSString*)vendorName
+                        productCategory:(NSString*)productCategory
+{
+  return PP::IsSwitchOnlinePad(std::string([vendorName ?: @"" UTF8String]),
+                               std::string([productCategory ?: @"" UTF8String]));
+}
+
 + (NSDictionary<NSString*, NSString*>*)bindingsForElementNames:(NSArray<NSString*>*)names
                                                       isN64Pad:(BOOL)isN64Pad
 {

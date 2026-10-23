@@ -11,7 +11,8 @@
 // Maps the element names of a GCController's physical input profile onto the MFi input names
 // every Dolphin profile binds ("Button A", "R Stick Y+", ...), for pads the GameController
 // framework exposes with neither an extended nor a micro gamepad (the Nintendo Switch Online
-// N64 controller on tvOS 17). Pure strings, so it compiles and tests anywhere.
+// N64 controller on tvOS 17), and for the Switch Online pads it exposes with only the basic MFi
+// profile (the SNES controller). Pure strings, so it compiles and tests anywhere.
 //
 // Semantics are GameCube / Wii, not RetroPad: the N64 pad's A and B are the GameCube A and B,
 // its C cluster is the C-Stick (R Stick directions), Z is the GameCube Z trigger (the
@@ -55,6 +56,15 @@ bool IsCButton(Input input);
 
 // True for the Nintendo Switch Online N64 controller (vendor name "N64 Controller").
 bool IsN64Pad(const std::string& vendor_name, const std::string& product_category);
+
+// True for the Nintendo Switch Online SNES controller (057E:2017, vendor name "SNES Controller",
+// product category "Switch SNES Controller"). The system describes it with the basic MFi profile:
+// a legacy gamepad and a micro gamepad, no extended one, so neither carries Start or Select.
+bool IsSnesPad(const std::string& vendor_name, const std::string& product_category);
+
+// The Nintendo Switch Online pads bound through their physical profile whenever the system gives
+// them no extended gamepad, whatever else it exposes: the N64 and SNES controllers.
+bool IsSwitchOnlinePad(const std::string& vendor_name, const std::string& product_category);
 
 // Lowercases, turns '-' and '_' into spaces and collapses whitespace.
 std::string Normalize(const std::string& name);

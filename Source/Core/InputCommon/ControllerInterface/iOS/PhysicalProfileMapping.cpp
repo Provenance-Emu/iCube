@@ -166,6 +166,18 @@ bool IsN64Pad(const std::string& vendor_name, const std::string& product_categor
   return Normalize(vendor_name + " " + product_category).find("n64") != std::string::npos;
 }
 
+bool IsSnesPad(const std::string& vendor_name, const std::string& product_category)
+{
+  const std::string normalized = Normalize(vendor_name + " " + product_category);
+  return normalized.find("snes") != std::string::npos ||
+         normalized.find("super famicom") != std::string::npos;
+}
+
+bool IsSwitchOnlinePad(const std::string& vendor_name, const std::string& product_category)
+{
+  return IsN64Pad(vendor_name, product_category) || IsSnesPad(vendor_name, product_category);
+}
+
 std::string Normalize(const std::string& name)
 {
   std::string spaced;

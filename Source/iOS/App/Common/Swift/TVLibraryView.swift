@@ -1464,7 +1464,9 @@ struct TVLibraryView: View {
           // own nav handlers below and on controllerConnectedPublisher, which runs
           // after the manager's connect handler, so nav still wins for grid navigation.
           GCController.shouldMonitorBackgroundEvents = false
-          for c in GCController.controllers() {
+          // The manager's list, so a pad adapted from its physical profile is seen as its wrapper:
+          // the Switch Online SNES pad's own micro gamepad would put Start on the pause route.
+          for c in ControllerManager.shared.controllers {
             c.extendedGamepad?.valueChangedHandler = nil
             c.microGamepad?.valueChangedHandler = nil
             // Keep the app's Menu/Options handlers installed rather than a bare

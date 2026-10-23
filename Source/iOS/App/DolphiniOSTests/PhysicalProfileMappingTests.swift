@@ -112,6 +112,162 @@ final class PhysicalProfileMappingTests: XCTestCase {
     }
   }
 
+  // MARK: Switch Online SNES pad
+
+  /// The nine elements Apple's `_GCNintendoSuperFamicomControllerProfile` describes. There is no
+  /// Home, ZL or ZR.
+  private let snesElementNames = [
+    "Button A", "Button B", "Button X", "Button Y", "Left Shoulder", "Right Shoulder",
+    "Button Menu", "Button Options", "Direction Pad",
+  ]
+
+  private func snesBindings() -> [String: SynthesizedInput] {
+    PhysicalProfileController.resolveBindings(
+      elementNames: snesElementNames, vendorName: "SNES Controller", productCategory: "Switch SNES Controller")
+  }
+
+  func testSnesPadIsRecognisedAsASwitchOnlinePad() {
+    XCTAssertTrue(PhysicalProfileBridge.isSnesPad(withVendorName: "SNES Controller", productCategory: "Switch SNES Controller"))
+    XCTAssertTrue(PhysicalProfileBridge.isSnesPad(withVendorName: nil, productCategory: "Super Famicom Controller"))
+    XCTAssertFalse(PhysicalProfileBridge.isSnesPad(withVendorName: "N64 Controller", productCategory: "HID"))
+    XCTAssertFalse(PhysicalProfileBridge.isSnesPad(withVendorName: "Pro Controller", productCategory: "Switch Pro Controller"))
+
+    XCTAssertTrue(PhysicalProfileBridge.isSwitchOnlinePad(withVendorName: "SNES Controller", productCategory: "Switch SNES Controller"))
+    XCTAssertTrue(PhysicalProfileBridge.isSwitchOnlinePad(withVendorName: "N64 Controller", productCategory: "HID"))
+    XCTAssertFalse(PhysicalProfileBridge.isSwitchOnlinePad(withVendorName: "Remote", productCategory: "Siri Remote (2nd Generation)"))
+    XCTAssertFalse(PhysicalProfileBridge.isSwitchOnlinePad(withVendorName: nil, productCategory: nil))
+  }
+
+  /// Start is "Button Menu" (GameCube Start / Wii +, the `Menu` input every profile binds) and
+  /// Select is "Button Options". Face buttons keep the MFi positional names: "Button A" is the
+  /// bottom button (SNES B), as on every other MFi pad.
+  func testSnesProfileBindsStartAndSelect() {
+    let result = snesBindings()
+    XCTAssertEqual(result.count, snesElementNames.count, "every element is bound")
+    XCTAssertEqual(result["Button Menu"], .menu)
+    XCTAssertEqual(result["Button Options"], .options)
+    XCTAssertEqual(result["Button A"], .buttonA)
+    XCTAssertEqual(result["Button B"], .buttonB)
+    XCTAssertEqual(result["Button X"], .buttonX)
+    XCTAssertEqual(result["Button Y"], .buttonY)
+    XCTAssertEqual(result["Left Shoulder"], .leftShoulder)
+    XCTAssertEqual(result["Right Shoulder"], .rightShoulder)
+    XCTAssertEqual(result["Direction Pad"], .dpad)
+  }
+
+  func testSnesPadIsWrappedDespiteItsMicroGamepad() {
+    XCTAssertTrue(PhysicalProfileController.shouldWrap(
+      hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: false, isSwitchOnlinePad: true,
+      bindings: snesBindings()))
+  }
+
+  func testWrapGateKeepsEveryOtherShapeAsItWas() {
+    let bindings = snesBindings()
+    // N64 pad on tvOS 17: no extended or micro gamepad.
+    XCTAssertTrue(PhysicalProfileController.shouldWrap(
+      hasExtendedGamepad: false, hasMicroGamepad: false, isMenuRemote: false, isSwitchOnlinePad: true, bindings: bindings))
+    // Siri Remote: micro only, a remote. Its profile has a direction pad and Button A, so the
+    // bindings alone would pass; a wrapper would turn it into a player.
+    let remote = PhysicalProfileController.resolveBindings(
+      elementNames: ["Direction Pad", "Button A", "Button X", "Button Menu"], vendorName: "Remote",
+      productCategory: "Siri Remote (2nd Generation)")
+    XCTAssertFalse(remote.isEmpty)
+    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+      hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: true, isSwitchOnlinePad: false, bindings: remote))
+    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+      hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: true, isSwitchOnlinePad: true, bindings: remote),
+      "a remote is never wrapped")
+    // Another micro-gamepad pad that is not a Switch Online pad keeps the system's profiles.
+    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+      hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: false, isSwitchOnlinePad: false, bindings: bindings))
+    // An extended gamepad is never wrapped.
+    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+      hasExtendedGamepad: true, hasMicroGamepad: true, isMenuRemote: false, isSwitchOnlinePad: true, bindings: bindings))
+    // Nothing usable to synthesize from.
+    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+      hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: false, isSwitchOnlinePad: true, bindings: [:]))
+  }
+
+  // MARK: Pause trigger
+
+  func testSnesPadPausesFromSelectAndStart() {
+    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: snesBindings(), isSnesPad: true), .selectStartChord)
+  }
+
+  func testN64PadKeepsItsPauseRoutes() {
+    let withHome = bindings(["A", "B", "Start", "ZR", "Home", "Direction Pad"], n64: true)
+      .compactMapValues { SynthesizedInput(rawValue: $0) }
+    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: withHome, isSnesPad: false), .home)
+    // Whether Apple's N64 description has Home is unconfirmed; without it ZR (Options) still
+    // pauses on its own, never through a chord.
+    let withoutHome = bindings(["A", "B", "Start", "ZR", "Direction Pad"], n64: true)
+      .compactMapValues { SynthesizedInput(rawValue: $0) }
+    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: withoutHome, isSnesPad: false), .standard)
+  }
+
+  func testChordNeedsBothStartAndSelect() {
+    var startOnly = snesBindings()
+    startOnly["Button Options"] = nil
+    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: startOnly, isSnesPad: true), .start,
+                   "no Select: Start is the fallback, never a chord")
+    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: snesBindings(), isSnesPad: false), .standard,
+                   "the chord is for the SNES family; another pad keeps Options alone")
+  }
+
+  /// A pad with no Home, no Options and no chord still pauses, from Start.
+  func testPadWithNothingElsePausesFromStart() {
+    let bare = bindings(["A", "B", "Start", "Direction Pad"], n64: true).compactMapValues { SynthesizedInput(rawValue: $0) }
+    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: bare, isSnesPad: false), .start)
+    let noStart = bindings(["A", "B", "Direction Pad"], n64: true).compactMapValues { SynthesizedInput(rawValue: $0) }
+    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: noStart, isSnesPad: false), .standard)
+  }
+
+  // MARK: Select + Start chord
+
+  func testChordFiresOnceWhenBothAreHeldInEitherOrder() {
+    var chord = SelectStartChord()
+    XCTAssertFalse(chord.update(.options, pressed: true), "Select alone")
+    XCTAssertTrue(chord.update(.menu, pressed: true), "then Start")
+    XCTAssertFalse(chord.update(.menu, pressed: true), "a repeated value while held")
+    XCTAssertFalse(chord.update(.options, pressed: true))
+
+    var reversed = SelectStartChord()
+    XCTAssertFalse(reversed.update(.menu, pressed: true), "Start alone")
+    XCTAssertTrue(reversed.update(.options, pressed: true), "then Select")
+  }
+
+  func testChordNeverFiresOnOneButton() {
+    var chord = SelectStartChord()
+    for _ in 0 ..< 3 {
+      XCTAssertFalse(chord.update(.menu, pressed: true))
+      XCTAssertFalse(chord.update(.menu, pressed: false))
+      XCTAssertFalse(chord.update(.options, pressed: true))
+      XCTAssertFalse(chord.update(.options, pressed: false))
+    }
+  }
+
+  func testChordRearmsOnlyAfterBothAreReleased() {
+    var chord = SelectStartChord()
+    _ = chord.update(.options, pressed: true)
+    XCTAssertTrue(chord.update(.menu, pressed: true))
+    XCTAssertFalse(chord.update(.menu, pressed: false))
+    XCTAssertFalse(chord.update(.menu, pressed: true), "Select never let go")
+    XCTAssertFalse(chord.update(.menu, pressed: false))
+    XCTAssertFalse(chord.update(.options, pressed: false))
+    XCTAssertFalse(chord.selectHeld)
+    XCTAssertFalse(chord.startHeld)
+    _ = chord.update(.menu, pressed: true)
+    XCTAssertTrue(chord.update(.options, pressed: true), "a new chord after a full release")
+  }
+
+  func testChordIgnoresOtherInputs() {
+    var chord = SelectStartChord()
+    XCTAssertFalse(chord.update(.buttonA, pressed: true))
+    XCTAssertFalse(chord.update(.home, pressed: true))
+    XCTAssertFalse(chord.update(.menu, pressed: true))
+    XCTAssertTrue(chord.update(.options, pressed: true))
+  }
+
   // MARK: Synthesized elements
 
   func testButtonUpdateFiresPressedThenValueHandlers() {
