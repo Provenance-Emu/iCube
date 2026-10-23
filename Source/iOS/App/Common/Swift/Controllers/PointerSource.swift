@@ -236,7 +236,7 @@ struct PointerSourceModel: Equatable {
   /// The Pointer Source row's help line, while it offers a choice.
   var rowDescription: String {
     platform == .tvos
-      ? L("Automatic picks the controller's gyro, then its touchpad, then the Siri Remote.")
+      ? L("Automatic picks the controller's gyro, then its touchpad, then your iPhone, then the Siri Remote.")
       : L("Automatic picks the controller's gyro, then its touchpad.")
   }
 }

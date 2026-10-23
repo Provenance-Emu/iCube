@@ -135,6 +135,14 @@ struct ConnectedPadState: Equatable {
   var capabilities: PadCapabilities { PadCapabilities(hasGyro: hasGyro, hasTouchpad: hasTouchpad) }
 }
 
+/// A phone advertising itself as a controller (`PhoneControllerService.advertisingPhones`), as plain values.
+struct HubPhone: Equatable {
+  let pid: String
+  let name: String
+  /// The TV has allowed it and its DSU row is in: "Connected" rather than "Connect".
+  let isConnected: Bool
+}
+
 /// Plain snapshot of everything the hub shows. No bridge reads happen after it is built;
 /// `ControllerHubViewModel` rebuilds it.
 struct ControllerHubState {
@@ -155,6 +163,8 @@ struct ControllerHubState {
   var pointerIsThisGameOnly: Bool
   /// Wii Remote 1's pointer source and its choices; nil when the hub lists no Wii Remote.
   var pointerSource: PointerSourceModel?
+  /// Phones advertising as a controller now; the Phones section lists them and is absent while there are none.
+  var phones: [HubPhone] = []
   var backgroundInput: Bool
   var rumbleDestination: RumbleDestination
   var connectTakesPlayer1: Bool
@@ -229,4 +239,6 @@ struct ControllerHubActions {
   var lightsDestination: () -> AnyView
   /// Wii Remote 1's Pointer Source: nil is Automatic.
   var setPointerSourceOverride: (PointerSource.Kind?) -> Void = { _ in }
+  /// The Phones section's Connect row (the pid): the TV-side confirmation.
+  var connectPhone: (String) -> Void = { _ in }
 }

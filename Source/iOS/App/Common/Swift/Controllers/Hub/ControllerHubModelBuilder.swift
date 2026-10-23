@@ -7,6 +7,7 @@ import SwiftUI
 /// - Players: a row group per port (title, Device, Plays as, Pointer), unbound ports under "Show All Ports".
 /// - Touch Controls (iOS).
 /// - Connected Devices.
+/// - Phones (while any phone advertises itself as a controller).
 /// - Setup.
 /// - Help.
 ///
@@ -21,6 +22,7 @@ enum ControllerHubModelBuilder {
       sections.append(touchControlsSection(state: state, actions: actions))
     }
     sections.append(devicesSection(state: state, actions: actions, platform: platform))
+    if !state.phones.isEmpty { sections.append(phonesSection(state: state, actions: actions)) }
     sections.append(setupSection(state: state, actions: actions, platform: platform))
     sections.append(helpSection(platform: platform))
     return MenuModel(sections: sections, focusRequest: state.focusRequest)
@@ -247,6 +249,19 @@ enum ControllerHubModelBuilder {
         description: L("The colour of each controller's light bar.")))
     }
     return MenuSection(id: "devices", header: L("Connected Devices"), items: items)
+  }
+
+  // MARK: Phones
+
+  /// One row per advertising phone. A connected phone is already in, so its row connects nothing (an
+  /// enabled no-op: tvOS focus must reach it, as the Help rows do).
+  private static func phonesSection(state: ControllerHubState, actions: ControllerHubActions) -> MenuSection {
+    MenuSection(id: "phones", header: L("Phones"), items: state.phones.map { phone in
+      MenuItem(
+        id: "phone-\(phone.pid)", title: phone.name, icon: "iphone.radiowaves.left.and.right",
+        role: .action { if !phone.isConnected { actions.connectPhone(phone.pid) } },
+        badge: phone.isConnected ? L("Connected") : L("Connect"))
+    })
   }
 
   private static func batteryText(for pad: ConnectedPadState) -> String? {

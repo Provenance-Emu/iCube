@@ -33,7 +33,10 @@ final class ControllerHubViewModelTests: XCTestCase {
     var pinned: Set<String> = []
     /// Wii Remote ports with the IMU pointer on.
     var motion: Set<Int> = []
+    /// The phones advertising now; `connectPhone` marks one connected, as the service does.
+    var phones: [HubPhone] = []
 
+    func advertisingPhones() -> [HubPhone] { phones }
     func boundQualifier(forGCPort port: Int) -> String { gameCube[port] ?? "" }
     func boundQualifier(forWiimote index: Int) -> String { wii[index] ?? "" }
     func wiiExtension(forWiimote index: Int) -> Int { extensions[index] ?? 0 }
@@ -247,6 +250,10 @@ final class ControllerHubViewModelTests: XCTestCase {
     func resetOverlayLayouts() { log.append("resetLayouts") }
     func setTouchOverlayProgrammatic(_ enabled: Bool) { log.append("programmatic \(enabled)") }
     func setPointerSourceOverride(_ kind: PointerSource.Kind?) { log.append("pointer-source \(kind?.rawValue ?? "auto")") }
+    func connectPhone(pid: String) {
+      log.append("connect-phone \(pid)")
+      reader.phones = reader.phones.map { HubPhone(pid: $0.pid, name: $0.name, isConnected: $0.isConnected || $0.pid == pid) }
+    }
   }
 
   private static let xbox = "MFi/0/Xbox Wireless Controller"
@@ -768,6 +775,20 @@ final class ControllerHubViewModelTests: XCTestCase {
     let gameCubeModel = makeModel(system: .gamecube, reader: gameCube, writer: FakeWriter(reader: gameCube))
     XCTAssertNil(gameCubeModel.state.pointerSource)
     XCTAssertTrue(gameCube.pointerSourceReads.isEmpty)
+  }
+
+  /// The Phones section reads the advertising phones, and connecting one is written through the writer
+  /// and shows at once.
+  @MainActor
+  func test_reload_snapshotsAdvertisingPhones_andConnectingOneShowsAtOnce() {
+    let reader = FakeReader()
+    reader.phones = [HubPhone(pid: "A", name: "Joe's iPhone", isConnected: false)]
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    XCTAssertEqual(model.state.phones, [HubPhone(pid: "A", name: "Joe's iPhone", isConnected: false)])
+    model.actions.connectPhone("A")
+    XCTAssertEqual(writer.log, ["connect-phone A"])
+    XCTAssertEqual(model.state.phones.map(\.isConnected), [true])
   }
 
   /// M3: the hub's gyro Pointer toggle marks the profile edited, as the player screen's does.

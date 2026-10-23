@@ -149,6 +149,11 @@ final class PhoneControllerService: ObservableObject {
     respond(pid: pid, allow: true)
   }
 
+  /// The phone's DSU row is in (the TV allowed it): the hub's "Connected".
+  func isConnected(pid: String) -> Bool {
+    state.owned[pid] != nil
+  }
+
   // MARK: Discovery
 
   /// Applies the connector's decisions for the phones advertising now. Called on every browse change

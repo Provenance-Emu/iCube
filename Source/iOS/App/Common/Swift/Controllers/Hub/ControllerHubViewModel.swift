@@ -1,6 +1,7 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import Combine
 import CoreHaptics
 import GameController
 import Observation
@@ -37,9 +38,15 @@ protocol ControllerHubReading {
   /// Wii Remote 1's pointer source, from its bound device and `pads`. nil leaves the pointer rows
   /// without a source (test readers that predate it).
   func pointerSource(wiimote1Qualifier: String, pads: [ConnectedPadState]) -> PointerSourceModel?
+  /// Phones advertising as a controller now (tvOS; always empty on iOS, which does not browse for them).
+  func advertisingPhones() -> [HubPhone]
+  /// Fires when the advertising phones change, so the hub reloads.
+  var phoneChanges: AnyPublisher<Void, Never> { get }
 }
 
 extension ControllerHubReading {
+  func advertisingPhones() -> [HubPhone] { [] }
+  var phoneChanges: AnyPublisher<Void, Never> { Empty().eraseToAnyPublisher() }
   func pointerSource(wiimote1Qualifier: String, pads: [ConnectedPadState]) -> PointerSourceModel? { nil }
 }
 
@@ -94,6 +101,18 @@ struct LiveControllerHubReader: ControllerHubReading {
 
   func pointerSource(wiimote1Qualifier: String, pads: [ConnectedPadState]) -> PointerSourceModel? {
     PointerSourceLive.model(wiimote1Qualifier: wiimote1Qualifier, pads: pads)
+  }
+
+  func advertisingPhones() -> [HubPhone] {
+    let service = PhoneControllerService.shared
+    return service.advertisingPhones.compactMap { server in
+      server.advert.map { HubPhone(pid: $0.pid, name: $0.name, isConnected: service.isConnected(pid: $0.pid)) }
+    }
+  }
+
+  /// `@Published` emits before the value lands, so the hop to the next main-queue turn lets the reload see it.
+  var phoneChanges: AnyPublisher<Void, Never> {
+    PhoneControllerService.shared.$advertisingPhones.dropFirst().receive(on: DispatchQueue.main).map { _ in }.eraseToAnyPublisher()
   }
 
   func isGameRunning() -> Bool { TVEmulationBridge.isRunning() }
@@ -172,6 +191,7 @@ final class ControllerHubViewModel {
   @ObservationIgnored private var cancelSettle: (() -> Void)?
   private let notificationCenter: NotificationCenter
   @ObservationIgnored private var observers: [NSObjectProtocol] = []
+  @ObservationIgnored private var phoneSubscription: AnyCancellable?
   /// Keeps each Identify haptic engine alive until its pulse ends.
   @ObservationIgnored private var identifyEngines: [CHHapticEngine] = []
 
@@ -229,6 +249,7 @@ final class ControllerHubViewModel {
       pointerIsThisGameOnly: reader.pointerIsThisGameOnly(),
       pointerSource: system == .gamecube ? nil : reader.pointerSource(
         wiimote1Qualifier: players.first { $0.kind == .wiiRemote && $0.port == 1 }?.deviceQualifier ?? "", pads: pads),
+      phones: reader.advertisingPhones(),
       backgroundInput: reader.backgroundInput(),
       rumbleDestination: reader.rumbleDestination(),
       connectTakesPlayer1: reader.connectTakesPlayer1(),
@@ -254,12 +275,16 @@ final class ControllerHubViewModel {
         MainActor.assumeIsolated { self?.reload() }
       }
     }
+    phoneSubscription = reader.phoneChanges.sink { [weak self] in
+      MainActor.assumeIsolated { self?.reload() }
+    }
   }
 
   func stop() {
     flushPending()
     observers.forEach { notificationCenter.removeObserver($0) }
     observers.removeAll()
+    phoneSubscription = nil
   }
 
   // MARK: Actions
@@ -341,6 +366,10 @@ final class ControllerHubViewModel {
       },
       setPointerSourceOverride: { [weak self] kind in
         self?.writer.setPointerSourceOverride(kind)
+        self?.reload()
+      },
+      connectPhone: { [weak self] pid in
+        self?.writer.connectPhone(pid: pid)
         self?.reload()
       })
   }

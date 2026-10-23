@@ -52,17 +52,42 @@ final class NoControllerNoticeTests: XCTestCase {
     XCTAssertFalse(NoControllerNotice.isHarnessLaunch(arguments: ["iCube", "-ICubeAppearance", "dark"], screenshotMode: false))
   }
 
-  /// Continue first (a stray press plays on), then Controllers.
-  func test_model_continueThenControllers() {
+  /// Continue first (a stray press plays on), then the phone, then Controllers.
+  func test_model_continueThenPhoneThenControllers() {
     var calls: [String] = []
-    let model = NoControllerNotice.model(onContinue: { calls.append("continue") }, onControllers: { calls.append("controllers") })
+    let model = NoControllerNotice.model(
+      phoneName: nil, onContinue: { calls.append("continue") }, onControllers: { calls.append("controllers") },
+      onUsePhone: { calls.append("phone") })
     let items = model.sections.flatMap(\.items)
-    XCTAssertEqual(items.map(\.id), ["no-controller-continue", "no-controller-controllers"])
-    XCTAssertEqual(items.map(\.title), ["Continue", "Controllers"])
+    XCTAssertEqual(items.map(\.id), ["no-controller-continue", "use-phone", "no-controller-controllers"])
     for item in items {
       guard case .action(let action) = item.role else { return XCTFail("action rows") }
       action()
     }
-    XCTAssertEqual(calls, ["continue", "controllers"])
+    XCTAssertEqual(calls, ["continue", "phone", "controllers"])
+  }
+
+  func test_notice_offersTheAdvertisingPhoneByName() {
+    let model = NoControllerNotice.model(phoneName: "Joe's iPhone", onContinue: {}, onControllers: {}, onUsePhone: {})
+    XCTAssertEqual(model.item(id: "use-phone")?.title, "Use Joe's iPhone")
+    XCTAssertEqual(model.sections.flatMap(\.items).map(\.title), ["Continue", "Use Joe's iPhone", "Controllers"])
+  }
+
+  func test_notice_explainsHowWhenNoPhoneIsAdvertising() {
+    let model = NoControllerNotice.model(phoneName: nil, onContinue: {}, onControllers: {}, onUsePhone: {})
+    XCTAssertEqual(model.item(id: "use-phone")?.title, "Use Your iPhone")
+    XCTAssertEqual(NoControllerNotice.usePhoneHelpMessage, "Open iCube on your iPhone and tap Play on Apple TV.")
+  }
+
+  /// The explanation panel has one row, which goes back to the notice.
+  func test_usePhoneHelpModel_isOneBackRow() {
+    var backs = 0
+    let model = NoControllerNotice.usePhoneHelpModel(onBack: { backs += 1 })
+    let items = model.sections.flatMap(\.items)
+    XCTAssertEqual(items.map(\.id), ["use-phone-help-back"])
+    XCTAssertEqual(items.map(\.title), ["Back"])
+    guard case .action(let action) = items[0].role else { return XCTFail("action row") }
+    action()
+    XCTAssertEqual(backs, 1)
   }
 }

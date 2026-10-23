@@ -163,6 +163,17 @@ final class PointerSourceResolverTests: XCTestCase {
     XCTAssertTrue(nothing.choices.isEmpty)
   }
 
+  /// The tvOS help line names the phone, in the resolver's order: pad gyro, pad touchpad, phone, Siri Remote.
+  func test_model_rowDescription_namesThePhone_onTvOS() {
+    func description(_ platform: PlatformKind) -> String {
+      PointerSourceModel.make(
+        player1: .pad(name: "Xbox", capabilities: Self.plain), remoteHasMotion: true, platform: platform,
+        preferredMode: .touchFollow, userOverride: nil, deviceModel: "Apple TV").rowDescription
+    }
+    XCTAssertEqual(description(.tvos), "Automatic picks the controller's gyro, then its touchpad, then your iPhone, then the Siri Remote.")
+    XCTAssertEqual(description(.ios), "Automatic picks the controller's gyro, then its touchpad.")
+  }
+
   /// A stored override the setup cannot honour shows as Automatic, so the row never reads "—".
   func test_model_unhonouredOverride_selectsAutomatic() {
     let model = PointerSourceModel.make(
