@@ -5636,3 +5636,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Automatic picks the controller's gyro, then its touchpad." = "Automatic picks the controller's gyro, then its touchpad.";
 "No controller connected" = "No controller connected";
 "The Siri Remote only navigates menus. Connect a controller to play." = "The Siri Remote only navigates menus. Connect a controller to play.";
+"Browse games on a network share." = "Browse games on a network share.";
+"Send games from a browser on the same Wi-Fi." = "Send games from a browser on the same Wi-Fi.";

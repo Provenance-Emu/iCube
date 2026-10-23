@@ -5593,3 +5593,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Turn off Skip EFB Copy to RAM or Skip XFB Copy to RAM first." = "先に「EFB の RAM へのコピーをスキップ」または「XFB の RAM へのコピーをスキップ」をオフにしてください。";
 "Unmute Wii Speak first." = "先に Wii スピークのミュートを解除してください。";
 "Perf Graph" = "パフォーマンスグラフ";
+"Browse games on a network share." = "ネットワーク共有のゲームを参照します。";
+"Send games from a browser on the same Wi-Fi." = "同じ Wi-Fi のブラウザからゲームを送信します。";

@@ -190,6 +190,47 @@ extension ICubeDesign {
 }
 
 extension ICubeDesign {
+  /// The moving iCube mark (`ICubeAnimatedLogo`): About and the first-run welcome. Offsets and the sparkle ring are
+  /// fractions of the mark's height, so one shape serves every size.
+  enum Logo {
+    static let aboutHeight: CGFloat = 128
+    #if os(tvOS)
+    static let welcomeHeight: CGFloat = 220
+    static let emptyStateHeight: CGFloat = 140
+    #else
+    static let welcomeHeight: CGFloat = 132
+    static let emptyStateHeight: CGFloat = 88
+    #endif
+    static let sparkleCount = 6
+    static let sparkleRingRadius: CGFloat = 0.625
+    static let sparkleOpacity: Double = 0.6
+    static let sparkleFont = Font.system(size: 12)
+    /// The view's frame height over the mark's, so the pulse and the orbit never clip.
+    static let frameScale: CGFloat = 1.25
+    static let pulseRange: ClosedRange<CGFloat> = 0.94 ... 1.08
+    static let orbitScale: CGFloat = 1.02
+    static let orbitCenterX: CGFloat = 8 / 128
+    static let orbitRadiusX: CGFloat = 14 / 128
+    static let orbitRadiusY: CGFloat = 6 / 128
+    static let pulseDuration: Double = 3
+    static let orbitDuration: Double = 6
+    static let sparkleDuration: Double = 2
+    static let sparkleStagger: Double = 0.2
+  }
+
+  /// The first-run welcome and the empty library (`LibraryWelcomeView`).
+  enum Welcome {
+    #if os(tvOS)
+    static let columnWidth: CGFloat = 640
+    #else
+    static let columnWidth: CGFloat = 460
+    #endif
+    /// The wide layout's gap between the hero and the actions.
+    static let columnGap: CGFloat = Spacing.xl.rawValue
+  }
+}
+
+extension ICubeDesign {
   /// The row icon badge (spec §3 Row): a 44 pt rounded square tinted at 15 %.
   enum IconBadge {
     static let size: CGFloat = 44
