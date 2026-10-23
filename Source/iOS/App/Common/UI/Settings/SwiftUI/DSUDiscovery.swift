@@ -25,9 +25,11 @@ struct DSUDiscoveredServer: Identifiable, Equatable {
   let name: String
   let address: String
   let port: Int
+  /// Who the server says it is, when it is a phone publishing a DSU advert.
+  var advert: DSUAdvert?
 
   static func == (lhs: DSUDiscoveredServer, rhs: DSUDiscoveredServer) -> Bool {
-    return lhs.address == rhs.address && lhs.port == rhs.port
+    return lhs.address == rhs.address && lhs.port == rhs.port && lhs.advert?.pid == rhs.advert?.pid
   }
 }
 
@@ -96,8 +98,11 @@ extension DSUDiscoveryBrowser: NetServiceDelegate {
       guard let ip = ipv4 else { return }
       let port = sender.port
       let name = sender.name
-      let item = DSUDiscoveredServer(name: name.isEmpty ? "DSU" : name, address: ip, port: port)
+      let advert = sender.txtRecordData().flatMap { DSUAdvert.parse(NetService.dictionary(fromTXTRecord: $0)) }
+      let item = DSUDiscoveredServer(name: name.isEmpty ? "DSU" : name, address: ip, port: port, advert: advert)
       if !servers.contains(item) {
+        // The same service resolving again with a new address or advert replaces its old row.
+        servers.removeAll { $0.name == item.name }
         servers.append(item)
       }
     }
