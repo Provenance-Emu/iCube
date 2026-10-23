@@ -17,6 +17,7 @@ import GameController
 #if os(iOS)
 #endif
 import Foundation
+import os
 
 // MARK: - DSU Bonjour Discovery
 
@@ -53,8 +54,43 @@ final class DSUDiscoveryBrowser: NSObject, ObservableObject {
   func stop() {
     browser?.stop()
     browser = nil
-    services.forEach { $0.stop() }
+    services.forEach {
+      $0.stopMonitoring()
+      $0.stop()
+    }
     services.removeAll()
+  }
+
+  /// The row a resolve produced, in place of the service's earlier row. Nil when nothing changed, so
+  /// an unchanged resolve does not republish the list. The advert counts in full: a phone that only
+  /// gained or lost the controller role is a change.
+  nonisolated static func upserting(_ item: DSUDiscoveredServer, into servers: [DSUDiscoveredServer]) -> [DSUDiscoveredServer]? {
+    if let existing = servers.first(where: { $0.name == item.name }),
+       existing.address == item.address, existing.port == item.port, existing.advert == item.advert {
+      return nil
+    }
+    var updated = servers
+    updated.removeAll { $0.name == item.name }
+    updated.append(item)
+    return updated
+  }
+
+  /// A service's TXT record changed (a phone starting or leaving its controller session): its row
+  /// takes the new advert. Nil when the service has no row yet or its advert is unchanged.
+  nonisolated static func updatingAdvert(_ advert: DSUAdvert?, ofServiceNamed name: String,
+                             in servers: [DSUDiscoveredServer]) -> [DSUDiscoveredServer]? {
+    guard let index = servers.firstIndex(where: { $0.name == name }), servers[index].advert != advert else { return nil }
+    var updated = servers
+    updated[index].advert = advert
+    return updated
+  }
+
+  nonisolated fileprivate static func rowName(_ service: NetService) -> String {
+    service.name.isEmpty ? "DSU" : service.name
+  }
+
+  nonisolated fileprivate static func advert(of service: NetService) -> DSUAdvert? {
+    service.txtRecordData().flatMap { DSUAdvert.parse(NetService.dictionary(fromTXTRecord: $0)) }
   }
 }
 
@@ -69,6 +105,7 @@ extension DSUDiscoveryBrowser: NetServiceBrowserDelegate {
 
   nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
     Task { @MainActor in
+      service.stopMonitoring()
       services.removeAll { $0 == service }
       if let name = service.name as String? {
         servers.removeAll { $0.name == name }
@@ -96,15 +133,25 @@ extension DSUDiscoveryBrowser: NetServiceDelegate {
         if ipv4 != nil { break }
       }
       guard let ip = ipv4 else { return }
-      let port = sender.port
-      let name = sender.name
-      let advert = sender.txtRecordData().flatMap { DSUAdvert.parse(NetService.dictionary(fromTXTRecord: $0)) }
-      let item = DSUDiscoveredServer(name: name.isEmpty ? "DSU" : name, address: ip, port: port, advert: advert)
-      if !servers.contains(item) {
-        // The same service resolving again with a new address or advert replaces its old row.
-        servers.removeAll { $0.name == item.name }
-        servers.append(item)
+      let item = DSUDiscoveredServer(name: Self.rowName(sender), address: ip, port: sender.port,
+                                     advert: Self.advert(of: sender))
+      // The same service resolving again with a new address or advert replaces its old row.
+      if let updated = Self.upserting(item, into: servers) { servers = updated }
+      // The TXT record is read once here; later changes (the controller role) arrive as updates.
+      sender.startMonitoring()
+    }
+  }
+
+  nonisolated func netService(_ sender: NetService, didUpdateTXTRecord data: Data) {
+    Task { @MainActor in
+      let advert = DSUAdvert.parse(NetService.dictionary(fromTXTRecord: data))
+      if let updated = Self.updatingAdvert(advert, ofServiceNamed: Self.rowName(sender), in: servers) {
+        ICubeLog.logger("DSU").notice(
+          "DSU advert updated for \(sender.name, privacy: .public): controller \(advert?.isController ?? false, privacy: .public)")
+        servers = updated
       }
+      // An update can come with a new address (the phone moved networks): resolve again to pick it up.
+      sender.resolve(withTimeout: 5.0)
     }
   }
 }

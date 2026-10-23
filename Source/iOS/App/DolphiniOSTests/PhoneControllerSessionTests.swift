@@ -42,9 +42,9 @@ final class PhoneControllerSessionTests: XCTestCase {
     super.tearDown()
   }
 
-  private func begin() {
+  private func begin(serverRunning: Bool = false) {
     PhoneControllerSession.apply(PhoneControllerSession.configuration(pid: "PEER-1", name: "Phone"),
-                                 defaults: defaults, pointerMode: pointer.access)
+                                 defaults: defaults, pointerMode: pointer.access, serverRunning: serverRunning)
   }
 
   private func end() {
@@ -162,7 +162,8 @@ final class PhoneControllerSessionTests: XCTestCase {
     XCTAssertEqual(defaults.string(forKey: DSUControllerLayout.storageKey), "wiiRemote")
     XCTAssertEqual(pointer.mode, .gyro)
     XCTAssertEqual(PhoneControllerSession.Snapshot.load(from: defaults),
-                   .init(approvalRequired: false, layout: "gamecube", pointerMode: PointerMode.touchFollow.rawValue))
+                   .init(approvalRequired: false, layout: "gamecube", pointerMode: PointerMode.touchFollow.rawValue,
+                         serverWasRunning: false))
   }
 
   func test_ending_restoresTheSettingsAndClearsTheSnapshot() {
@@ -225,6 +226,46 @@ final class PhoneControllerSessionTests: XCTestCase {
 
     XCTAssertTrue(DSUServerBridge.approvalRequired())
     XCTAssertEqual(pointer.mode, .touchDrag)
+  }
+
+  // MARK: - The DSU server
+
+  func test_aServerAlreadyRunning_isRecordedInTheSnapshot() {
+    begin(serverRunning: true)
+    XCTAssertEqual(PhoneControllerSession.Snapshot.load(from: defaults)?.serverWasRunning, true)
+  }
+
+  func test_aSecondApply_keepsWhetherTheServerWasRunningBeforeTheSession() {
+    begin(serverRunning: false)
+    begin(serverRunning: true) // the session's own server is up by now
+    XCTAssertEqual(PhoneControllerSession.Snapshot.load(from: defaults)?.serverWasRunning, false)
+  }
+
+  /// Leaving stops the server the session started, and leaves one the user had running.
+  func test_leaving_stopsOnlyAServerTheSessionStarted() {
+    typealias Snapshot = PhoneControllerSession.Snapshot
+    let started = Snapshot(approvalRequired: false, layout: nil, pointerMode: nil, serverWasRunning: false)
+    let usersOwn = Snapshot(approvalRequired: false, layout: nil, pointerMode: nil, serverWasRunning: true)
+    let older = Snapshot(approvalRequired: false, layout: nil, pointerMode: nil, serverWasRunning: nil)
+    XCTAssertTrue(PhoneControllerSession.stopsServerOnEnd(snapshot: started))
+    XCTAssertFalse(PhoneControllerSession.stopsServerOnEnd(snapshot: usersOwn))
+    XCTAssertFalse(PhoneControllerSession.stopsServerOnEnd(snapshot: older), "unknown: leave it as it is")
+    XCTAssertFalse(PhoneControllerSession.stopsServerOnEnd(snapshot: nil), "no session ran: touch nothing")
+  }
+
+  /// A server already up is published again on its own port, so a TV re-resolves the controller record.
+  func test_appearing_startsAServer_orRestartsTheRunningOneOnItsPort() {
+    XCTAssertEqual(PhoneControllerSession.serverStart(serverRunning: false, runningPort: 0), .start)
+    XCTAssertEqual(PhoneControllerSession.serverStart(serverRunning: true, runningPort: 26770), .restart(port: 26770))
+  }
+
+  /// A snapshot written before the server flag existed still loads, so its settings are still restored.
+  func test_aSnapshotWithoutTheServerFlag_stillLoads() throws {
+    let json = #"{"approvalRequired":false,"layout":"gamecube","pointerMode":1}"#
+    defaults.set(Data(json.utf8), forKey: PhoneControllerSession.Snapshot.defaultsKey)
+    let snapshot = try XCTUnwrap(PhoneControllerSession.Snapshot.load(from: defaults))
+    XCTAssertEqual(snapshot.layout, "gamecube")
+    XCTAssertNil(snapshot.serverWasRunning)
   }
 
   // MARK: - Presentation

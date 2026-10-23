@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+import os
 import SwiftUI
 
 /// The one-tap "use this iPhone as a Wii Remote for the Apple TV" session.
@@ -41,6 +42,9 @@ enum PhoneControllerSession {
     let approvalRequired: Bool
     let layout: String?
     let pointerMode: Int?
+    /// Whether a DSU server was already running when the session began (the user started it).
+    /// Optional so a snapshot written before this field existed still loads; nil leaves the server alone.
+    var serverWasRunning: Bool?
 
     static func load(from defaults: UserDefaults) -> Snapshot? {
       defaults.data(forKey: defaultsKey).flatMap { try? JSONDecoder().decode(Snapshot.self, from: $0) }
@@ -91,6 +95,8 @@ enum PhoneControllerSession {
 
   static var isActive: Bool { Presentation.shared.isActive }
 
+  private static let log = ICubeLog.logger("DSU")
+
   static func configuration(pid: String, name: String) -> Configuration {
     Configuration(
       layout: DSUControllerLayout.wiiRemote.rawValue,
@@ -112,17 +118,48 @@ enum PhoneControllerSession {
     }
   }
 
+  /// What the session does with the DSU server when its controller screen appears.
+  enum ServerStart: Equatable {
+    /// No server yet: start one.
+    case start
+    /// A server is already up. It is published again so a TV that resolved it before the session
+    /// re-resolves a record that carries the controller role.
+    case restart(port: Int)
+  }
+
+  static func serverStart(serverRunning: Bool, runningPort: Int) -> ServerStart {
+    serverRunning ? .restart(port: runningPort) : .start
+  }
+
+  /// Leaving stops the server only when the session started it; a server the user had running before
+  /// is left running (its record loses the controller role, so the TV lets the phone go).
+  static func stopsServerOnEnd(snapshot: Snapshot?) -> Bool {
+    snapshot?.serverWasRunning == false
+  }
+
   /// The controller screen appeared: applies the setup and starts the DSU server.
   static func didAppear() {
     guard Presentation.shared.isRequested, !isActive else { return }
     apply(configuration(pid: ContinuityManager.shared.identity.id, name: ICubeDeviceName.current()))
-    startDSUServerIfNeeded()
+    switch serverStart(serverRunning: DSUServerBridge.isRunning(), runningPort: DSUServerBridge.port()) {
+    case .start:
+      startDSUServerIfNeeded()
+    case .restart(let port):
+      DSUServerBridge.stop()
+      if !DSUServerBridge.start(onPort: port) { startDSUServerIfNeeded() }
+    }
+    log.notice("Phone controller session began; DSU server running: \(DSUServerBridge.isRunning(), privacy: .public)")
     Presentation.shared.isActive = true
   }
 
   /// Leaves the session: the TV stops seeing a controller, the session's approvals are forgotten and
   /// the user's settings come back.
   static func end(defaults: UserDefaults = .standard, pointerMode: PointerModeAccess = .live) {
+    let snapshot = Snapshot.load(from: defaults)
+    if stopsServerOnEnd(snapshot: snapshot) {
+      DSUServerBridge.stop()
+      log.notice("Phone controller session ended; DSU server stopped")
+    }
     if let advertised {
       DSUServerBridge.setIdentity(DSUAdvert(pid: advertised.pid, name: advertised.name,
                                             deviceType: advertised.deviceType, isController: false).txtRecord())
@@ -130,7 +167,7 @@ enum PhoneControllerSession {
     advertised = nil
     DSUServerBridge.setSessionApprovalMode(false)
     approvedTV = nil
-    if let snapshot = Snapshot.load(from: defaults) {
+    if let snapshot {
       snapshot.restore(defaults: defaults, pointerMode: pointerMode)
       Snapshot.clear(from: defaults)
     }
@@ -151,11 +188,13 @@ enum PhoneControllerSession {
 
   /// Applies the setup, keeping the user's settings in the snapshot first (an existing snapshot is
   /// the user's real settings and is kept as it is).
-  static func apply(_ config: Configuration, defaults: UserDefaults = .standard, pointerMode: PointerModeAccess = .live) {
+  static func apply(_ config: Configuration, defaults: UserDefaults = .standard, pointerMode: PointerModeAccess = .live,
+                    serverRunning: Bool = DSUServerBridge.isRunning()) {
     if Snapshot.load(from: defaults) == nil {
       Snapshot(approvalRequired: DSUServerBridge.approvalRequired(),
                layout: defaults.string(forKey: DSUControllerLayout.storageKey),
-               pointerMode: pointerMode.read().rawValue).save(to: defaults)
+               pointerMode: pointerMode.read().rawValue,
+               serverWasRunning: serverRunning).save(to: defaults)
     }
     if priorRestriction == nil { priorRestriction = PriorRestriction(client: DSUServerBridge.restrictedClient()) }
     defaults.set(config.layout, forKey: DSUControllerLayout.storageKey)

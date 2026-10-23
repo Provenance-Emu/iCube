@@ -88,4 +88,45 @@ final class DSUAdvertTests: XCTestCase {
     let sixtyThree = String(repeating: "x", count: 63)
     XCTAssertEqual(DSUServerBridge.bonjourServiceName(forDeviceName: sixtyThree), sixtyThree)
   }
+  // MARK: Discovery rows (the TV re-reads a phone's record when it changes)
+
+  private func row(_ name: String = "Joe's iPhone", address: String = "192.168.1.20", controller: Bool?) -> DSUDiscoveredServer {
+    DSUDiscoveredServer(name: name, address: address, port: 26760,
+                        advert: controller.map { DSUAdvert(pid: "A", name: name, deviceType: "ip", isController: $0) })
+  }
+
+  /// A phone that starts a session after the TV resolved it gains the role; one that leaves loses it.
+  /// Row equality ignores the role, so the update must not be compared away.
+  func test_txtUpdate_replacesTheRowsAdvert_evenWhenOnlyTheRoleChanged() throws {
+    let plain = [row(controller: false), row("Desk PC", address: "10.0.0.5", controller: nil)]
+    let gained = try XCTUnwrap(DSUDiscoveryBrowser.updatingAdvert(
+      DSUAdvert(pid: "A", name: "Joe's iPhone", deviceType: "ip", isController: true), ofServiceNamed: "Joe's iPhone", in: plain))
+    XCTAssertEqual(gained.map { $0.advert?.isController }, [true, nil])
+    XCTAssertEqual(gained[0].address, "192.168.1.20", "the address stays until a resolve says otherwise")
+
+    let lost = try XCTUnwrap(DSUDiscoveryBrowser.updatingAdvert(
+      DSUAdvert(pid: "A", name: "Joe's iPhone", deviceType: "ip", isController: false), ofServiceNamed: "Joe's iPhone", in: gained))
+    XCTAssertEqual(lost[0].advert?.isController, false)
+  }
+
+  func test_txtUpdate_changesNothing_forAnUnknownServiceOrTheSameAdvert() {
+    let rows = [row(controller: true)]
+    XCTAssertNil(DSUDiscoveryBrowser.updatingAdvert(rows[0].advert, ofServiceNamed: "Joe's iPhone", in: rows))
+    XCTAssertNil(DSUDiscoveryBrowser.updatingAdvert(rows[0].advert, ofServiceNamed: "Other", in: rows))
+  }
+
+  func test_resolve_replacesTheServicesRow_whenTheAddressOrAdvertChanged() throws {
+    let rows = [row(controller: false), row("Desk PC", address: "10.0.0.5", controller: nil)]
+    XCTAssertNil(DSUDiscoveryBrowser.upserting(row(controller: false), into: rows), "unchanged: no republish")
+
+    let role = try XCTUnwrap(DSUDiscoveryBrowser.upserting(row(controller: true), into: rows))
+    XCTAssertEqual(role.filter { $0.name == "Joe's iPhone" }.map { $0.advert?.isController }, [true])
+
+    let moved = try XCTUnwrap(DSUDiscoveryBrowser.upserting(row(address: "192.168.1.77", controller: false), into: rows))
+    XCTAssertEqual(moved.filter { $0.name == "Joe's iPhone" }.map(\.address), ["192.168.1.77"])
+    XCTAssertEqual(moved.count, 2)
+
+    let added = try XCTUnwrap(DSUDiscoveryBrowser.upserting(row("Ann's iPhone", controller: true), into: rows))
+    XCTAssertEqual(added.map(\.name), ["Joe's iPhone", "Desk PC", "Ann's iPhone"])
+  }
 }
