@@ -179,13 +179,19 @@ final class PhoneControllerService: ObservableObject {
       phones.first { $0.advert?.pid == pid }?.advert?.name ?? ""
     }
 
-    var promptStillWanted = false
+    // One question at a time: keep the one up while its phone still asks, else ask the first that does.
+    let prompting = actions.compactMap { action -> String? in
+      if case .prompt(let pid, _) = action { return pid }
+      return nil
+    }
+    if let current = pendingPrompt?.pid, !prompting.contains(current) { pendingPrompt = nil }
+    if pendingPrompt == nil, let next = prompting.first { pendingPrompt = (next, displayName(next)) }
+
     var ownedChanged = false
     for action in actions {
       switch action {
-      case .prompt(let pid, _):
-        if pendingPrompt == nil { pendingPrompt = (pid, displayName(pid)) }
-        if pendingPrompt?.pid == pid { promptStillWanted = true }
+      case .prompt:
+        break
       case .add(let pid, let entry):
         writer.add(entry)
         // The bridge refuses an invalid address or port; only a row that landed is ours.
@@ -202,7 +208,6 @@ final class PhoneControllerService: ObservableObject {
         ownedChanged = true
       }
     }
-    if !promptStillWanted { pendingPrompt = nil }
     if ownedChanged { saveOwned() }
   }
 

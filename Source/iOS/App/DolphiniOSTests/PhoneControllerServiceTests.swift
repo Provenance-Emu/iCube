@@ -158,6 +158,18 @@ final class PhoneControllerServiceTests: XCTestCase {
     XCTAssertNil(service.pendingPrompt)
   }
 
+  /// The phone being asked leaves while another waits: the waiting one is asked in the same refresh.
+  func test_waitingPhone_isAsked_whenThePhoneBeingAskedLeaves() {
+    let service = makeService(writer: FakeDSUConfigWriter())
+    let a = phone(pid: "A", name: "Ann's iPhone", address: "192.168.1.21")
+    let b = phone(pid: "B", name: "Bob's iPhone", address: "192.168.1.22")
+    service.refresh(servers: [b, a])
+    XCTAssertEqual(service.pendingPrompt?.pid, "B")
+    service.refresh(servers: [a])
+    XCTAssertEqual(service.pendingPrompt?.pid, "A")
+    XCTAssertEqual(service.pendingPrompt?.name, "Ann's iPhone")
+  }
+
   func test_connect_addsWithoutAPrompt() {
     let writer = FakeDSUConfigWriter()
     let service = makeService(writer: writer)
