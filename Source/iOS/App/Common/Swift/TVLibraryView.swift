@@ -565,10 +565,6 @@ struct TVLibraryView: View {
   @State private var tvToolbarSheet: TVToolbarSheet?
   /// Present the next destination only after SwiftUI finishes dismissing the menu sheet.
   @State private var pendingLibraryMenuAction: (() -> Void)?
-  #if os(tvOS)
-  /// "Maybe Later" under the onboarding's two full-width actions: a row, not a third full-width bar.
-  private static let onboardingSecondaryWidth: CGFloat = 480
-  #endif
 #endif
 
   // MARK: - Navigation Configuration (extracted to prevent compiler timeout)
@@ -1531,7 +1527,7 @@ struct TVLibraryView: View {
 
       // Centered friendly message, plus the routes that actually get a game onto the device.
       VStack(spacing: 20) {
-        DolphinErrorView(
+        LibraryEmptyHeader(
           title: L("Library Empty"),
           message: L("No games found. Add GameCube & Wii ROMs to your library to get started with iCube! 🎮")
         )
@@ -1555,13 +1551,14 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var emptyLibraryUploadAddress: some View {
     if !emptyLibraryWebURL.isEmpty {
-      VStack(spacing: 4) {
+      VStack(spacing: ICubeDesign.Spacing.xxs.rawValue) {
         Text(L("Open this address in a browser on the same Wi-Fi:"))
-          .font(.footnote)
-          .foregroundStyle(.secondary)
+          .icubeText(.detail)
+          .foregroundStyle(ICubeDesign.color(.textSecondary))
         Text(emptyLibraryWebURL)
-          .font(.headline)
-          .foregroundStyle(.primary)
+          .icubeText(.body)
+          .fontWeight(.semibold)
+          .foregroundStyle(ICubeDesign.color(.accent))
           .lineLimit(2)
           .multilineTextAlignment(.center)
       }
@@ -2238,6 +2235,8 @@ struct TVLibraryView: View {
       // First-run onboarding
       if !UserDefaults.standard.bool(forKey: "onboarding_seen_v1") {
         withAnimation { showOnboarding = true }
+      } else {
+        LibraryTipsState.welcomeFinished(choseAnAction: false)
       }
     }
     .onDisappear {
@@ -2490,6 +2489,14 @@ struct TVLibraryView: View {
       .overlay(snackbar)
       .overlay(dsuApprovalBanner)
       .overlay(onboardingOverlay)
+#if os(tvOS)
+      .fullScreenCover(isPresented: $showOnboarding, onDismiss: {
+        finishOnboarding(chose: pendingWelcomeAction != nil)
+        let action = pendingWelcomeAction
+        pendingWelcomeAction = nil
+        action?()
+      }) { welcomeCover() }
+#endif
 #if os(iOS)
       .sheet(isPresented: Binding(get: { showGeckoEditorFor != nil }, set: { if !$0 { showGeckoEditorFor = nil } })) {
         if let item = showGeckoEditorFor { GeckoCodesModal(item: item).claimsController() }
@@ -2503,6 +2510,9 @@ struct TVLibraryView: View {
   @State private var snackbarText: String = ""
   @State private var snackbarVisible: Bool = false
   @State private var showOnboarding: Bool = false
+#if os(tvOS)
+  @State private var pendingWelcomeAction: (() -> Void)?
+#endif
   @StateObject private var storeForBanner = RemoteSourcesStore.shared
   @State private var offlineBannerDismissed: Bool = false
   // DSU approval banner state
@@ -2739,117 +2749,41 @@ struct TVLibraryView: View {
     }
   }
 
+  /// iOS: the first-run welcome fades in over the library. tvOS presents it as a full-screen cover instead, so
+  /// focus cannot wander to the library behind it and Menu dismisses it.
   @ViewBuilder private var onboardingOverlay: some View {
+#if !os(tvOS)
     if showOnboarding {
-      ZStack {
-        Color.black.opacity(0.5).ignoresSafeArea()
-        VStack(spacing: 20) {
-          // Header icon and title
-          VStack(spacing: 10) {
-            ZStack {
-              Circle()
-                .fill(.white.opacity(0.12))
-                .frame(width: 64, height: 64)
-              Image(systemName: "gamecontroller.fill")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundStyle(.white)
-            }
-            Text(L("Welcome to iCube"))
-              .font(.title2).fontWeight(.bold)
-              .foregroundStyle(.white)
-          }
-
-          // Subtitle
-          Text(L("Get started by importing a game or adding a remote source."))
-            .font(.subheadline)
-            .foregroundStyle(.white.opacity(0.85))
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 12)
-
-          // Primary actions
-          HStack(spacing: 12) {
-            Button(action: {
-#if os(iOS) || targetEnvironment(macCatalyst)
-              showImportSoftwarePicker = true
-#endif
-              UserDefaults.standard.set(true, forKey: "onboarding_seen_v1")
-              withAnimation { showOnboarding = false }
-            }) {
-              HStack(spacing: 8) {
-                Image(systemName: "square.and.arrow.down")
-                Text(L("Import Game"))
-              }
-              .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(Color("DolphinTint"))
-
-            Button(action: {
-              showSources = true
-              UserDefaults.standard.set(true, forKey: "onboarding_seen_v1")
-              withAnimation { showOnboarding = false }
-            }) {
-              HStack(spacing: 8) {
-                Image(systemName: "externaldrive.badge.plus")
-                Text(L("Add Remote Source"))
-              }
-              .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.green)
-          }
-
-          // Secondary action
-          Button {
-            UserDefaults.standard.set(true, forKey: "onboarding_seen_v1")
-            withAnimation { showOnboarding = false }
-          } label: {
-            Text(L("Maybe Later")).frame(maxWidth: .infinity)
-          }
-          #if os(tvOS)
-          // The system bordered capsule drew this label in its own tint on tvOS, so it rendered blank.
-          .buttonStyle(ICubeRowButtonStyle())
-          .frame(maxWidth: Self.onboardingSecondaryWidth)
-          #else
-          .buttonStyle(.bordered)
-          .tint(.white)
-          #endif
-
-          // Lineage / credits — iCube is a downstream fork; credit the projects it builds on.
-          VStack(spacing: 4) {
-            Text(L("iCube is a fork of DolphiniOS, based on the Dolphin emulator."))
-              .font(.caption2)
-              .foregroundStyle(.white.opacity(0.6))
-              .multilineTextAlignment(.center)
-#if os(iOS) || targetEnvironment(macCatalyst)
-            HStack(spacing: 16) {
-              if let u = URL(string: "https://dolphinios.oatmealdome.me") {
-                Link("DolphiniOS", destination: u)
-              }
-              if let u = URL(string: "https://dolphin-emu.org") {
-                Link("Dolphin", destination: u)
-              }
-            }
-            .font(.caption2.weight(.semibold))
-            .tint(Color("DolphinTint"))
-#endif
-          }
-          .padding(.top, 6)
-        }
-        .padding(22)
-        .background(
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .fill(.ultraThinMaterial)
-            .shadow(color: .black.opacity(0.25), radius: 18, x: 0, y: 10)
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 20, style: .continuous)
-            .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
-        .padding(.horizontal, 24)
-      }
+      LibraryWelcomeView(
+        onImport: {
+          finishOnboarding(chose: true)
+          showImportSoftwarePicker = true
+        },
+        onAddSource: {
+          finishOnboarding(chose: true)
+          showSources = true
+        },
+        onDismiss: { finishOnboarding(chose: false) })
       .transition(.opacity)
     }
+#endif
+  }
+
+#if os(tvOS)
+  /// The welcome's choice, run once its cover has finished dismissing (a sheet cannot present mid-dismiss).
+  private func welcomeCover() -> some View {
+    LibraryWelcomeView(
+      onImport: { pendingWelcomeAction = { showWebImportSheet = true }; showOnboarding = false },
+      onAddSource: { pendingWelcomeAction = { showSources = true }; showOnboarding = false },
+      onDismiss: { showOnboarding = false })
+  }
+#endif
+
+  /// Records that the welcome was seen. The Import tip waits for this; it is spent if the user already chose a route.
+  private func finishOnboarding(chose: Bool) {
+    UserDefaults.standard.set(true, forKey: "onboarding_seen_v1")
+    LibraryTipsState.welcomeFinished(choseAnAction: chose)
+    withAnimation { showOnboarding = false }
   }
 
   private func downloadGecko(for item: TVGameItem) {

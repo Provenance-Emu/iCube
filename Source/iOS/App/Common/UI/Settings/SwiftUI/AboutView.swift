@@ -18,11 +18,6 @@ import GameController
 #endif
 import Foundation
 
-private enum AboutLogoAnimationStyle {
-  case centerPulse
-  case orbitRight
-}
-
 struct AboutView: View {
   @Environment(\.openURL) private var openURL
   #if os(tvOS)
@@ -31,10 +26,6 @@ struct AboutView: View {
   @Environment(\.icubeLeafParentTitle) private var parentTitle
   @State private var confirmReset = false
   #endif
-  @State private var animationStyle: AboutLogoAnimationStyle = .centerPulse
-  @State private var logoScale: CGFloat = 1.0
-  @State private var orbitAngle: Double = 0.0
-  @State private var sparkleOpacity: Double = 0.3
 
   var body: some View {
     #if os(tvOS)
@@ -53,37 +44,7 @@ struct AboutView: View {
       VStack(spacing: 20) {
         // Top spacer to mimic storyboard padding
         Color.clear.frame(height: 0)
-        // Animated iCube logo with sparkle effects
-        ZStack {
-          // Subtle sparkles around the logo
-          ForEach(0..<6, id: \.self) { index in
-            Image(systemName: "sparkle")
-              .font(.system(size: 12))
-              .foregroundColor(.blue.opacity(0.6))
-              .offset(
-                x: cos(Double(index) * .pi / 3) * 80,
-                y: sin(Double(index) * .pi / 3) * 80
-              )
-              .opacity(sparkleOpacity)
-              .animation(.easeInOut(duration: 2.0).delay(Double(index) * 0.2).repeatForever(autoreverses: true), value: sparkleOpacity)
-          }
-
-          // Main logo — center pulse or right-biased orbit, chosen at random.
-          Image("iCube-Logo-Square-NoText")
-            .resizable()
-            .scaledToFit()
-            .frame(height: 128)
-            .scaleEffect(logoScale)
-            .offset(
-              x: animationStyle == .orbitRight ? 8 + 14 * cos(orbitAngle) : 0,
-              y: animationStyle == .orbitRight ? 6 * sin(orbitAngle) : 0
-            )
-            .tint(Color("DolphinTint"))
-        }
-        .frame(height: 160)
-        .onAppear {
-          startAboutAnimation()
-        }
+        ICubeAnimatedLogo()
 
         Text("iCube")
           .font(.system(size: 28, weight: .semibold))
@@ -164,23 +125,5 @@ struct AboutView: View {
     }
     .navigationTitle(L("About iCube"))
     #endif
-  }
-
-  private func startAboutAnimation() {
-    animationStyle = Bool.random() ? .centerPulse : .orbitRight
-    sparkleOpacity = 0.8
-    switch animationStyle {
-    case .centerPulse:
-      logoScale = 0.94
-      withAnimation(.easeInOut(duration: 3.0).repeatForever(autoreverses: true)) {
-        logoScale = 1.08
-      }
-    case .orbitRight:
-      logoScale = 1.02
-      orbitAngle = 0
-      withAnimation(.linear(duration: 6.0).repeatForever(autoreverses: false)) {
-        orbitAngle = 2 * .pi
-      }
-    }
   }
 }

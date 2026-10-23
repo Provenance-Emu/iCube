@@ -5647,3 +5647,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Open iCube on your iPhone and tap Play on Apple TV." = "Open iCube on your iPhone and tap Play on Apple TV.";
 "Phones" = "Phones";
 "Added" = "Added";
+"Browse games on a network share." = "Browse games on a network share.";
+"Send games from a browser on the same Wi-Fi." = "Send games from a browser on the same Wi-Fi.";
