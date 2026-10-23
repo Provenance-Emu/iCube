@@ -1,6 +1,16 @@
 # iPhone as the Wii Remote on Apple TV — one-tap design
 
-Status: DRAFT for owner review, 2026-10-22. Nothing here is built.
+Status: APPROVED 2026-10-23 for Phases 0 and 1. Nothing here is built yet.
+
+**Owner decisions (2026-10-23):**
+1. Trust model **(a)**: the TV confirms each new phone once per TV launch, and a phone in a one-tap
+   session switches its DSU server to approval-required and answers only the TV the user approves on
+   the phone's prompt. Nothing connects silently.
+2. Touch-drag pointer from the phone: later (Phase 3); gyro only for now.
+3. A pad already on Wii Remote 1: the phone takes Wii Remote 2.
+4. Device name: an editable "Device Name" in iCube's Settings → Nearby, defaulting to the system name,
+   used by Continuity and the DSU advert. No entitlement request.
+5. TV-initiated connect (Phase 2, PVContinuity route): deferred.
 Builds on the Siri Remote / pointer-source work
 ([design](2026-10-21-siri-remote-and-pointer-sources-design.md),
 [plan](../plans/2026-10-22-siri-remote-pointer-sources.md)).
@@ -81,10 +91,11 @@ always works is on the phone, which the user is holding anyway.
   `pid` (Continuity peer id), `name` (the iCube device name), `dt`, `role=controller`, `v=1`.
 - **TV side, automatic:** while iCube is in the foreground the TV browses `_dolphin-dsu._udp` (it already
   can). For an advert with `role=controller`:
-  - from a **paired** Continuity peer (`pid` in `trustedPeers`): add it to `DSUClient.ini`, enable the
-    client, and show a toast "Joe's iPhone joined as Wii Remote 1";
-  - from an unknown phone: a confirm panel "Use 'Joe's iPhone' as a controller?" (Allow / Not Now),
-    then the same. Allowing tells the phone (via its approval list) to send only to this TV.
+  - from any phone not yet confirmed in this TV launch: a confirm panel "Use 'Joe's iPhone' as a
+    controller?" (Allow / Not Now) on the TV (decision 1); on Allow, add it to `DSUClient.ini`, enable
+    the client, and show a toast "Joe's iPhone joined as Wii Remote 1";
+  - the phone, in approval-required mode, shows its existing new-client prompt for the TV's first
+    request and then answers only that TV (`setRestrictToClient`).
 - **Assignment:** the existing engine already seats a connected DSU device in the first free slot and
   lets it take Player 1. For a Wii title the phone becomes Wii Remote 1 when no physical pad holds it;
   if a pad does, the phone takes the next Wii Remote (owner question 3).
