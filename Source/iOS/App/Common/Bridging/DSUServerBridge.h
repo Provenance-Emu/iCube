@@ -63,6 +63,13 @@ NS_ASSUME_NONNULL_BEGIN
 /// Layout metadata for Bonjour TXT record
 + (void)setLayout:(NSString *)layout extension:(NSString * _Nullable)ext sideways:(BOOL)sideways;
 
+/// Identity keys for the Bonjour TXT record (see `DSUAdvert`). Merged with the layout keys and
+/// published at once, even before a layout is chosen.
++ (void)setIdentity:(NSDictionary<NSString *, NSString *> *)identity;
+
+/// The Bonjour service name for a device name: at most 63 UTF-8 bytes, cut on a character boundary.
++ (NSString *)bonjourServiceNameForDeviceName:(NSString *)name NS_SWIFT_NAME(bonjourServiceName(forDeviceName:));
+
 /// Shoulders (L1/R1) as analog (255/0)
 + (void)setShoulderL:(NSInteger)controller state:(BOOL)state;
 + (void)setShoulderR:(NSInteger)controller state:(BOOL)state;

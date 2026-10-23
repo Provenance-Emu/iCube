@@ -34,6 +34,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   dispatch_source_t _tickSource;
   NSNetService* _service;
   NSDictionary<NSString*, NSData*>* _txt;
+  NSArray<NSString*>* _identityKeys;
   NSString* _lastError;
   NSUInteger _txCount;
   NSUInteger _rxCount;
@@ -154,6 +155,36 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   txt[@"sideways"] = [[NSString stringWithFormat:@"%d", sideways ? 1 : 0] dataUsingEncoding:NSUTF8StringEncoding];
   s->_txt = [txt copy];
   if (s->_service) { [s->_service setTXTRecordData:[NSNetService dataFromTXTRecordDictionary:s->_txt]]; }
+}
+
++ (void)setIdentity:(NSDictionary<NSString *, NSString *> *)identity {
+  DSUServerBridge* s = [self shared];
+  NSMutableDictionary* txt = [NSMutableDictionary dictionaryWithDictionary:s->_txt ?: @{}];
+  // Identity keys are replaced as a set, so a key left out (`role`) disappears from the record.
+  for (NSString* key in s->_identityKeys) [txt removeObjectForKey:key];
+  for (NSString* key in identity) {
+    NSData* value = [identity[key] dataUsingEncoding:NSUTF8StringEncoding];
+    if (value) txt[key] = value;
+  }
+  s->_identityKeys = [identity.allKeys copy];
+  s->_txt = [txt copy];
+  if (s->_service) { [s->_service setTXTRecordData:[NSNetService dataFromTXTRecordDictionary:s->_txt]]; }
+}
+
++ (NSString *)bonjourServiceNameForDeviceName:(NSString *)name {
+  // DNS-SD limits a service instance name to 63 UTF-8 bytes; cut on a composed-character boundary.
+  static const NSUInteger kMaxServiceNameBytes = 63;
+  __block NSUInteger end = 0;
+  __block NSUInteger bytes = 0;
+  [name enumerateSubstringsInRange:NSMakeRange(0, name.length)
+                           options:NSStringEnumerationByComposedCharacterSequences
+                        usingBlock:^(NSString* piece, NSRange range, NSRange enclosing, BOOL* stop) {
+    NSUInteger pieceBytes = [piece lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+    if (bytes + pieceBytes > kMaxServiceNameBytes) { *stop = YES; return; }
+    bytes += pieceBytes;
+    end = NSMaxRange(enclosing);
+  }];
+  return [name substringToIndex:end];
 }
 
 + (void)setButton:(NSInteger)button controller:(NSInteger)controller state:(BOOL)state {
@@ -595,7 +626,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 - (void)publishBonjour {
   [_service stop]; _service = nil;
   // _dolphin-dsu._udp is custom; clients in our apps can browse this
-  _service = [[NSNetService alloc] initWithDomain:@"local." type:@"_dolphin-dsu._udp" name:[self bonjourDeviceName] port:_port];
+  _service = [[NSNetService alloc] initWithDomain:@"local." type:@"_dolphin-dsu._udp" name:[DSUServerBridge bonjourServiceNameForDeviceName:[self bonjourDeviceName]] port:_port];
   _service.delegate = self; [_service publishWithOptions:0];
   if (_txt) { [_service setTXTRecordData:[NSNetService dataFromTXTRecordDictionary:_txt]]; }
 }
