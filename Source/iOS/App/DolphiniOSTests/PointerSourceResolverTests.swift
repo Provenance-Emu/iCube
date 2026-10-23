@@ -159,7 +159,7 @@ final class PointerSourceResolverTests: XCTestCase {
       player1: .pad(name: "Xbox", capabilities: Self.plain), remoteHasMotion: false, platform: .tvos,
       preferredMode: .touchFollow, userOverride: nil, deviceModel: "Apple TV")
     XCTAssertEqual(nothing.headline, "No pointer")
-    XCTAssertEqual(nothing.explanation, "Connect a controller with motion, or use the Siri Remote.")
+    XCTAssertEqual(nothing.explanation, "Connect a controller with motion, or use your iPhone as the Wii Remote.")
     XCTAssertTrue(nothing.choices.isEmpty)
   }
 
@@ -183,8 +183,60 @@ final class PointerSourceResolverTests: XCTestCase {
     XCTAssertEqual(PointerPlayer1.from(qualifier: "iOS/4/Touchscreen", pads: pads), .touchscreen)
     XCTAssertEqual(PointerPlayer1.from(qualifier: "MFi/0/DualSense", pads: pads), .pad(name: "DualSense", capabilities: Self.both))
     XCTAssertEqual(
-      PointerPlayer1.from(qualifier: "DSUClient/0/Pad C", pads: pads), .pad(name: "Pad C", capabilities: Self.plain),
+      PointerPlayer1.from(qualifier: "MFi/3/Gone Pad", pads: pads), .pad(name: "Gone Pad", capabilities: Self.plain),
       "a device outside the pad list has no known capabilities")
+    XCTAssertEqual(
+      PointerPlayer1.from(qualifier: "DSUClient/0/Joe's iPhone", pads: pads), .phone(name: "Joe's iPhone"),
+      "a DSU device is a phone, named after the last path component")
+  }
+
+  // MARK: Phone as the Wii Remote
+
+  func test_tvOS_dsuPhoneAsPlayer1_resolvesToPhoneGyro_labelledWithItsName() {
+    let phone = PointerPlayer1.from(qualifier: "DSUClient/0/Joe's iPhone", pads: [])
+    check([
+      Row(player1: phone, remoteHasMotion: false, preferredMode: .touchFollow,
+          expected: .phoneGyro(phoneName: "Joe's iPhone"), line: #line),
+    ], platform: .tvos)
+    let source = PointerSource.phoneGyro(phoneName: "Joe's iPhone")
+    XCTAssertEqual(source.label(deviceModel: "Apple TV"), "Joe's iPhone gyro")
+    XCTAssertEqual(source.systemImage, "iphone.radiowaves.left.and.right")
+    XCTAssertEqual(source.kind, .phoneGyro)
+    XCTAssertEqual(PointerSourceResolver.sources(player1: phone, remoteHasMotion: false, platform: .tvos), [source])
+  }
+
+  /// A pad on Wii Remote 1 aims with its own gyro; a phone there beats the Siri Remote.
+  func test_tvOS_phoneRanksBelowAPadGyroAndAboveTheRemote() {
+    let phone = PointerPlayer1.phone(name: "Joe's iPhone")
+    check([
+      Row(player1: .pad(name: "DualSense", capabilities: Self.both), remoteHasMotion: true, preferredMode: .gyro,
+          expected: .padGyro(padName: "DualSense"), line: #line),
+      Row(player1: phone, remoteHasMotion: true, preferredMode: .gyro,
+          expected: .phoneGyro(phoneName: "Joe's iPhone"), line: #line),
+    ], platform: .tvos)
+    XCTAssertEqual(
+      PointerSourceResolver.sources(player1: phone, remoteHasMotion: true, platform: .tvos),
+      [.phoneGyro(phoneName: "Joe's iPhone"), .remoteGyro])
+    // The user can still pick the remote over the phone, and a pad override the phone cannot honour falls through.
+    check([
+      Row(player1: phone, remoteHasMotion: true, preferredMode: .gyro, expected: .remoteGyro, line: #line),
+    ], platform: .tvos, override: .remoteGyro)
+    check([
+      Row(player1: phone, remoteHasMotion: true, preferredMode: .gyro,
+          expected: .phoneGyro(phoneName: "Joe's iPhone"), line: #line),
+    ], platform: .tvos, override: .padGyro)
+  }
+
+  func test_kindRawValues_areUnchanged_andPhoneGyroIsNew() {
+    XCTAssertEqual(
+      PointerSource.Kind.allCases.map(\.rawValue),
+      ["padGyro", "padTouchpad", "remoteGyro", "deviceGyro", "touchFollow", "touchDrag", "none", "phoneGyro"])
+  }
+
+  func test_tvOS_noPointerExplanation_mentionsTheIPhone() {
+    let nothing = PointerSourceModel.make(
+      player1: .none, remoteHasMotion: false, platform: .tvos, preferredMode: .touchFollow, userOverride: nil, deviceModel: "Apple TV")
+    XCTAssertEqual(nothing.explanation, "Connect a controller with motion, or use your iPhone as the Wii Remote.")
   }
 
   func test_overrideStore_roundTrips() throws {

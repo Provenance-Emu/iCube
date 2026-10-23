@@ -321,7 +321,7 @@ final class ControllerHubModelBuilderTests: XCTestCase {
     hub.pointerSource = pointerSource(.pad(name: "Xbox", capabilities: PadCapabilities()), platform: .tvos)
     let row = make(hub, platform: .tvos).item(id: "wii-1-pointer-source")
     XCTAssertEqual(row?.badge, "No pointer")
-    XCTAssertEqual(row?.subtitle, "Connect a controller with motion, or use the Siri Remote.")
+    XCTAssertEqual(row?.subtitle, "Connect a controller with motion, or use your iPhone as the Wii Remote.")
     XCTAssertEqual(row?.isEnabled, true)
     guard case .action? = row?.role else { return XCTFail("no-op action") }
     XCTAssertNil(make(hub, platform: .tvos).item(id: "wii-1-pointer"))

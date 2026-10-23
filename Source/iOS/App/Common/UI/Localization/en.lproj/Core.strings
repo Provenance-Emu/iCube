@@ -5629,7 +5629,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Wii Sound" = "Wii Sound";
 "%@ gyro" = "%@ gyro";
 "%@ touchpad" = "%@ touchpad";
-"Connect a controller with motion, or use the Siri Remote." = "Connect a controller with motion, or use the Siri Remote.";
+"Connect a controller with motion, or use your iPhone as the Wii Remote." = "Connect a controller with motion, or use your iPhone as the Wii Remote.";
 "Connect a controller with motion." = "Connect a controller with motion.";
 "No pointer" = "No pointer";
 "Pointer Source" = "Pointer Source";
