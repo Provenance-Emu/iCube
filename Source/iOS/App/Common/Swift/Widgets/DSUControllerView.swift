@@ -41,6 +41,9 @@ private enum OrientationHelper {
 
 struct DSUControllerView: View {
   let onClose: () -> Void
+  @Environment(\.scenePhase) private var scenePhase
+  /// True while the controller screen is on screen (appear to disappear).
+  @State private var sessionOpen = false
   @State private var virtualController: GCVirtualController?
   @State private var showStickFeel = false
   @State private var pointerModeLabel: String = ""
@@ -149,24 +152,15 @@ struct DSUControllerView: View {
         if !lockLayout {
           OrientationHelper.lockToCurrentOrientation()
         }
-        if !DSUServerBridge.isRunning() {
-          let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
-          let port = (p > 0 && p < 65536) ? p : 26760
-          let ok = DSUServerBridge.start(onPort: NSNumber(value: port).intValue)
-          if !ok {
-            let err = DSUServerBridge.lastError()
-            NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
-          }
-        }
-        // Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping)
-        #if canImport(CoreMotion)
-        TCDeviceMotion.shared.setPort(0)
-        // The client gets the phone's own motion, whatever the pointer mode.
-        TCDeviceMotion.shared.setDSUStreaming(true)
-        TCDeviceMotion.shared.setMotionEnabled(true)
-        #endif
+        sessionOpen = true
+        // The phone is the controller: keep the screen on while it is open.
+        UIApplication.shared.isIdleTimerDisabled = true
+        startServerIfNeeded()
+        enableMotionStreaming()
       }
       .onDisappear {
+        sessionOpen = false
+        UIApplication.shared.isIdleTimerDisabled = false
         // Restore default orientation allowances when not using app-level lock
         if !lockLayout {
           OrientationHelper.unlock()
@@ -285,6 +279,7 @@ struct DSUControllerView: View {
         publishLayoutTXT(raw: layoutRaw)
       }
       .onChange(of: layoutRaw) { _, newVal in publishLayoutTXT(raw: newVal) }
+      .onChange(of: scenePhase) { _, newPhase in applySceneLifecycle(newPhase) }
       .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
         hasClient = DSUServerBridge.hasClient()
         clientAddr = DSUServerBridge.lastClientAddress()
@@ -293,6 +288,41 @@ struct DSUControllerView: View {
         clients = DSUServerBridge.clients()
         if !hasClient { DSUServerBridge.sendNow() }
       }
+    }
+  }
+
+  /// Starts the DSU server on the configured port unless it is already running.
+  private func startServerIfNeeded() {
+    guard !DSUServerBridge.isRunning() else { return }
+    let p = UserDefaults.standard.integer(forKey: "dsu_server_port")
+    let port = (p > 0 && p < 65536) ? p : 26760
+    let ok = DSUServerBridge.start(onPort: NSNumber(value: port).intValue)
+    if !ok {
+      let err = DSUServerBridge.lastError()
+      NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
+    }
+  }
+
+  /// Ensure device motion feeds DSU (gyro/accel + optional IR cursor mapping).
+  private func enableMotionStreaming() {
+    #if canImport(CoreMotion)
+    TCDeviceMotion.shared.setPort(0)
+    // The client gets the phone's own motion, whatever the pointer mode.
+    TCDeviceMotion.shared.setDSUStreaming(true)
+    TCDeviceMotion.shared.setMotionEnabled(true)
+    #endif
+  }
+
+  /// Stops the server in the background and brings it (and motion streaming) back on return.
+  private func applySceneLifecycle(_ phase: ScenePhase) {
+    switch DSUSessionLifecycle.action(for: phase, serverRunning: DSUServerBridge.isRunning(), sessionOpen: sessionOpen) {
+    case .stop:
+      DSUServerBridge.stop()
+    case .start:
+      startServerIfNeeded()
+      enableMotionStreaming()
+    case .none:
+      break
     }
   }
 
