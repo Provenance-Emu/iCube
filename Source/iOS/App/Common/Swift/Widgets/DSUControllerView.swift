@@ -41,7 +41,6 @@ private enum OrientationHelper {
 
 struct DSUControllerView: View {
   let onClose: () -> Void
-  @Environment(\.scenePhase) private var scenePhase
   /// True while the controller screen is on screen (appear to disappear).
   @State private var sessionOpen = false
   @State private var virtualController: GCVirtualController?
@@ -282,7 +281,7 @@ struct DSUControllerView: View {
         publishLayoutTXT(raw: layoutRaw)
       }
       .onChange(of: layoutRaw) { _, newVal in publishLayoutTXT(raw: newVal) }
-      .onChange(of: scenePhase) { _, newPhase in applySceneLifecycle(newPhase) }
+      .onAppLifecycle { phase in applySceneLifecycle(phase) }
       .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
         hasClient = DSUServerBridge.hasClient()
         clientAddr = DSUServerBridge.lastClientAddress()
@@ -311,7 +310,9 @@ struct DSUControllerView: View {
 
   /// Stops the server in the background and brings it (and motion streaming) back on return.
   private func applySceneLifecycle(_ phase: ScenePhase) {
-    switch DSUSessionLifecycle.action(for: phase, serverRunning: DSUServerBridge.isRunning(), sessionOpen: sessionOpen) {
+    let action = DSUSessionLifecycle.action(for: phase, serverRunning: DSUServerBridge.isRunning(), sessionOpen: sessionOpen)
+    DSUSessionLifecycle.log.notice("Controller screen: scene \(String(describing: phase), privacy: .public) -> \(String(describing: action), privacy: .public)")
+    switch action {
     case .stop:
       DSUServerBridge.stop()
     case .start:

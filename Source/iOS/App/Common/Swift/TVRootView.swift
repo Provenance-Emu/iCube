@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct TVRootView: View {
-  @Environment(\.scenePhase) private var scenePhase
-
   var body: some View {
     #if DEBUG
     // `-ICubePausePreview` opens the pause menu on a stand-in game, `-ICubeSettingsPreview <leafID>` opens one
@@ -89,7 +87,8 @@ struct TVRootView: View {
       .gameTagMessages()
       #if os(tvOS)
       // The TV looks for phones only while iCube is in the foreground; who was allowed is kept for the launch.
-      .onChange(of: scenePhase, initial: true) { _, phase in
+      .onAppear { PhoneControllerService.shared.start() }
+      .onAppLifecycle { phase in
         switch phase {
         case .active: PhoneControllerService.shared.start()
         case .background: PhoneControllerService.shared.stop()
