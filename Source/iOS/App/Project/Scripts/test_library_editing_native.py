@@ -34,7 +34,7 @@ def run(folder: Path) -> int:
             if link.is_symlink():
                 link.unlink()
             link.symlink_to(source)
-    return subprocess.run(["xcrun", "swift", "test", "--package-path", str(folder)], check=False).returncode
+    return subprocess.run(["xcrun", "swift", "test", "--package-path", str(folder), "--jobs", "2"], check=False).returncode
 
 
 def main() -> int:

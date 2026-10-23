@@ -365,6 +365,7 @@ let iCube = Target.target(
         // entry too, keep ONE — a duplicate `.local(path:)` fails generation.
         .package(product: "PVSyncRules"),
         .package(product: "PVCloudSync"),
+        .package(product: "PVLibraryMetadata"),
         .package(product: "PVLibrarySnapshot"),
         .package(product: "Zip"),
         // PLzmaSDK, through a local package: see Source/iOS/PLzmaShim/Package.swift.
@@ -552,6 +553,7 @@ let iCubeTests = Target.target(
         .package(product: "PVHelp"),
         // Cloud safety tests exercise the coordinator with real scanner/index types.
         .package(product: "PVCloudSync"),
+        .package(product: "PVLibraryMetadata"),
         .package(product: "PVSyncRules"),
         // SkinLibraryTests zips the skin fixture with `Zip.zipFiles`.
         .package(product: "Zip"),
@@ -755,7 +757,7 @@ let project = Project(
         .local(path: "../PLzmaShim"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
-        .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.1.0")),
         // Streaming patch engine shared with iFly and Provenance. Change it in that repo, tag a
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
