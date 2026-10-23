@@ -274,7 +274,10 @@ struct DSUControllerView: View {
       .onChange(of: layoutRaw) { reconfigureVirtualControllerIfNeeded() }
       .onChange(of: restrictClient) { _, newVal in DSUServerBridge.setRestrictToClient(newVal.isEmpty ? nil : newVal) }
       .onAppear {
-        DSUServerBridge.setRestrictToClient(restrictClient.isEmpty ? nil : restrictClient)
+        // A one-tap session sends to the TV approved on the phone alone: its restriction stays.
+        if !PhoneControllerSession.isActive {
+          DSUServerBridge.setRestrictToClient(restrictClient.isEmpty ? nil : restrictClient)
+        }
         // Publish layout metadata for auto-profile selection on receivers
         publishLayoutTXT(raw: layoutRaw)
       }

@@ -50,6 +50,20 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setClient:(NSString *)addr allowed:(BOOL)allowed;
 + (BOOL)isClientAllowed:(NSString *)addr;
 
+/// Session approval, for the phone's one-tap controller session. While on, only clients approved
+/// with `setSessionClient:allowed:` may receive input (the persisted allowlist is ignored, so a TV
+/// the user once always-allowed is still asked) and nothing is written to the persisted allowlist.
+/// Switching it either way clears the session's approvals and the remembered prompts, so the same
+/// TV is asked again the next time.
++ (void)setSessionApprovalMode:(BOOL)on;
++ (BOOL)sessionApprovalMode;
++ (void)setSessionClient:(NSString *)addr allowed:(BOOL)allowed;
+/// Whether input may be sent to `addr` (ip or ip:port) under the current approval mode.
++ (BOOL)isClientPermitted:(NSString *)addr;
+/// Whether the receive path should post `DSUNewClientApproval` for `ip` now. Marks it asked, so it
+/// answers YES once per IP until `setSessionApprovalMode:` clears the memory.
++ (BOOL)shouldPromptForClientIP:(NSString *)ip;
+
 /// Input updates from the touch controller (or other sources)
 + (void)setButton:(NSInteger)button controller:(NSInteger)controller state:(BOOL)state;
 + (void)setAxis:(NSInteger)axis controller:(NSInteger)controller value:(float)value;

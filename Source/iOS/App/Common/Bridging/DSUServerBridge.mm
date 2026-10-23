@@ -53,6 +53,10 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   NSMutableSet<NSString*>* _allowed;
   // track prompted addresses to avoid spamming alerts
   NSMutableSet<NSString*>* _prompted;
+  // Session approval (the phone's one-tap controller session): while on, only IPs approved in
+  // this process count, and the persisted allowlist is ignored. Never written to defaults.
+  BOOL _sessionOnly;
+  NSMutableSet<NSString*>* _sessionAllowed;
 
   // simple pad state (pad 0)
   ciface::DualShockUDPClient::Proto::MessageType::PadDataResponse _pad;
@@ -119,6 +123,39 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   // Persist allowlist
   NSArray* arr = [s->_allowed allObjects];
   [NSUserDefaults.standardUserDefaults setObject:arr forKey:@"dsu_allowed_clients"];
+}
++ (void)setSessionApprovalMode:(BOOL)on {
+  DSUServerBridge* s = [self shared];
+  s->_sessionOnly = on;
+  [s->_sessionAllowed removeAllObjects];
+  [s->_prompted removeAllObjects];
+}
++ (BOOL)sessionApprovalMode { return [self shared]->_sessionOnly; }
++ (void)setSessionClient:(NSString*)addr allowed:(BOOL)allowed {
+  NSString* key = [self bareIP:addr];
+  if (key.length == 0) return;
+  DSUServerBridge* s = [self shared];
+  if (allowed) { [s->_sessionAllowed addObject:key]; }
+  else { [s->_sessionAllowed removeObject:key]; }
+}
++ (BOOL)isClientPermitted:(NSString*)addr {
+  return [[self shared] isPermittedIP:[self bareIP:addr]];
+}
++ (BOOL)shouldPromptForClientIP:(NSString*)ip {
+  return [[self shared] shouldPromptForIP:[self bareIP:ip]];
+}
++ (NSString*)bareIP:(NSString*)addr {
+  NSRange colon = [addr rangeOfString:@":"];
+  return colon.location != NSNotFound ? [addr substringToIndex:colon.location] : addr;
+}
+- (BOOL)isPermittedIP:(NSString*)ip {
+  return _sessionOnly ? [_sessionAllowed containsObject:ip] : [_allowed containsObject:ip];
+}
+// True once per IP until the prompts are cleared: the IP needs approval and has not been asked.
+- (BOOL)shouldPromptForIP:(NSString*)ip {
+  if (!_approvalRequired || [self isPermittedIP:ip] || [_prompted containsObject:ip]) return NO;
+  [_prompted addObject:ip];
+  return YES;
 }
 + (BOOL)isClientAllowed:(NSString*)addr {
   if (addr.length == 0) return NO;
@@ -349,6 +386,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
       [defs setObject:[_allowed allObjects] forKey:@"dsu_allowed_clients"];
     }
     _prompted = [NSMutableSet set];
+    _sessionAllowed = [NSMutableSet set];
   }
   return self;
 }
@@ -425,8 +463,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
       // Cap list size
       if (selfRef->_clients.count > 8) { [selfRef->_clients removeLastObject]; }
       // If approval required and not allowed and newly seen (by IP), post approval prompt once (by IP)
-      if (selfRef->_approvalRequired && ![selfRef->_allowed containsObject:keyIP] && ![selfRef->_prompted containsObject:keyIP]) {
-        [selfRef->_prompted addObject:keyIP];
+      if ([selfRef shouldPromptForIP:keyIP]) {
         dispatch_async(dispatch_get_main_queue(), ^{
           [[NSNotificationCenter defaultCenter] postNotificationName:@"DSUNewClientApproval" object:nil userInfo:@{ @"address": addr }];
         });
@@ -467,7 +504,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
         char buf[INET_ADDRSTRLEN] = {0};
         const char* ip = inet_ntop(AF_INET, &src->sin_addr, buf, sizeof(buf));
         NSString* key = ip ? [NSString stringWithUTF8String:ip] : @"";
-        if (![_allowed containsObject:key]) break;
+        if (![self isPermittedIP:key]) break;
       }
       // advertise only pad 0
       Proto::Message<Proto::MessageType::PortInfo> pi(0);
@@ -487,7 +524,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
         char buf[INET_ADDRSTRLEN] = {0};
         const char* ip = inet_ntop(AF_INET, &src->sin_addr, buf, sizeof(buf));
         NSString* key = ip ? [NSString stringWithUTF8String:ip] : @"";
-        if (![_allowed containsObject:key]) break;
+        if (![self isPermittedIP:key]) break;
       }
       // On request, respond immediately with a frame; regular frames are sent by timer
       [self sendPadDataTo:src];
@@ -589,7 +626,7 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     char buf2[INET_ADDRSTRLEN] = {0};
     const char* ip2 = inet_ntop(AF_INET, &dst->sin_addr, buf2, sizeof(buf2));
     NSString* key2 = ip2 ? [NSString stringWithUTF8String:ip2] : @"";
-    if (![_allowed containsObject:key2]) return;
+    if (![self isPermittedIP:key2]) return;
   }
   // Build response
   // Increment packet counter per send so clients see changing HID counter

@@ -2139,7 +2139,7 @@ struct TVLibraryView: View {
     // DSU controller session (iOS only)
 #if os(iOS)
     .fullScreenCover(isPresented: Binding(
-      get: { phoneControllerSession.isPresented },
+      get: { phoneControllerSession.isRequested },
       set: { if !$0 { PhoneControllerSession.end() } }
     )) {
       PhoneControllerSessionView()
