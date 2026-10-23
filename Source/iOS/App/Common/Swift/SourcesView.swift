@@ -1,68 +1,282 @@
 import PVWebServer
 import SwiftUI
 
-#if os(iOS)
-#endif
-
+/// The remote sources the library browses (WebDAV servers), in the iCube design language: the room, card rows with
+/// an icon badge and an online chip, and an Add card that is the primary action when there are none yet (the
+/// welcome's "Add Remote Source" lands here on an empty list).
+///
+/// iOS keeps a `List` so a row still swipes to delete. tvOS draws the leaf header and the cards in a ScrollView,
+/// presented full screen from the library; Menu closes it, and a long press on a source offers Delete.
 struct SourcesView: View {
   @ObservedObject private var store = RemoteSourcesStore.shared
   @State private var showAddWebDAV = false
   @State private var editingSource: WebDAVSource?
 
+  #if os(tvOS)
+  private enum Focus: Hashable { case source(String), add }
+  @FocusState private var focus: Focus?
+  private static let contentWidth: CGFloat = 1100
+  #else
+  private static let contentWidth: CGFloat = 640
+  #endif
+
+  private var sources: [WebDAVSource] { store.sources.compactMap { $0 as? WebDAVSource } }
+
   var body: some View {
-    NavigationStack {
-      List {
-        Section("WebDAV") {
-          ForEach(Array(store.sources.enumerated()), id: \.1.id) { _, s in
-            Button(action: {
-              if let webdavSource = s as? WebDAVSource {
-                editingSource = webdavSource
-              }
-            }) {
-              HStack {
-                VStack(alignment: .leading) {
-                  Text((s as? WebDAVSource)?.name ?? "Remote")
-                    .foregroundColor(.primary)
-                  if let url = (s as? WebDAVSource)?.baseURL.absoluteString {
-                    Text(url)
-                      .font(.footnote)
-                      .foregroundStyle(.secondary)
-                  }
-                  if let sp = (s as? WebDAVSource)?.startPathComponent, !sp.isEmpty {
-                    Text("Start: \(sp)")
-                      .font(.footnote)
-                      .foregroundStyle(.tertiary)
-                  }
-                }
-                Spacer()
-                Circle().fill(((s as? WebDAVSource)?.isOnline ?? false) ? .green : .red).frame(width: 10, height: 10)
-                Image(systemName: "chevron.right")
-                  .foregroundStyle(.secondary)
-                  .font(.caption)
-              }
-            }
-            .buttonStyle(PlainButtonStyle())
-          }
-          .onDelete { idx in
-            for i in idx {
-              if let id = (store.sources[i] as? WebDAVSource)?.id { store.remove(id: id) }
-            }
-          }
-        }
-      }
-      .navigationTitle("Sources")
-      .toolbar {
-        ToolbarItem(placement: .topBarTrailing) {
-          Button { showAddWebDAV = true } label: { Image(systemName: "plus") }
-        }
-      }
+    content
       .sheet(isPresented: $showAddWebDAV) {
         AddWebDAVSourceView(store: store)
       }
       .sheet(item: $editingSource) { source in
         EditWebDAVSourceView(store: store, source: source)
       }
+  }
+
+  #if os(tvOS)
+  private var content: some View {
+    ZStack {
+      // A full-screen cover is transparent until something opaque fills it.
+      Color(uiColor: ICubeDesign.roomStops[0]).ignoresSafeArea()
+      ICubeRoom(style: .gradient)
+      ScrollView {
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
+          ICubeLeafHeader(title: L("Sources"), subtitle: L("Library"))
+          if sources.isEmpty {
+            SourcesEmptyState()
+          } else {
+            ICubeAccentHeader(text: L("WebDAV"))
+            ForEach(sources) { source in
+              SourceCard(source: source) { editingSource = source }
+                .focused($focus, equals: .source(source.id))
+                .contextMenu {
+                  Button(L("Delete Source"), role: .destructive) { store.remove(id: source.id) }
+                }
+            }
+          }
+          addCard
+            .focused($focus, equals: .add)
+        }
+        .focusSection()
+        .frame(maxWidth: Self.contentWidth)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, ICubeDesign.Spacing.l.rawValue)
+      }
+      // The focused card's lift and glow draw past the scroll view's edge.
+      .scrollClipDisabled()
     }
+    .defaultFocus($focus, sources.first.map { .source($0.id) } ?? .add)
+  }
+  #else
+  private var content: some View {
+    NavigationStack {
+      List {
+        Group {
+          if sources.isEmpty {
+            SourcesEmptyState()
+              .padding(.vertical, ICubeDesign.Spacing.l.rawValue)
+          } else {
+            ICubeAccentHeader(text: L("WebDAV"))
+              .padding(.top, ICubeDesign.Spacing.s.rawValue)
+            ForEach(sources) { source in
+              SourceCard(source: source) { editingSource = source }
+            }
+            .onDelete { offsets in
+              for id in offsets.map({ sources[$0].id }) { store.remove(id: id) }
+            }
+          }
+          addCard
+        }
+        .frame(maxWidth: Self.contentWidth, alignment: .leading)
+        .frame(maxWidth: .infinity)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: ICubeDesign.Spacing.xs.rawValue, leading: ICubeDesign.Spacing.m.rawValue,
+                                  bottom: ICubeDesign.Spacing.xs.rawValue, trailing: ICubeDesign.Spacing.m.rawValue))
+      }
+      .listStyle(.plain)
+      .scrollContentBackground(.hidden)
+      .background { ICubeRoom(style: .gradient) }
+      .navigationTitle(L("Sources"))
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button { showAddWebDAV = true } label: { Image(systemName: "plus") }
+            .accessibilityLabel(L("Add WebDAV Source"))
+        }
+      }
+    }
+    .tint(ICubeDesign.color(.accent))
+  }
+  #endif
+
+  private var addCard: some View {
+    SourcesActionCard(title: L("Add WebDAV Source"),
+                      detail: L("Connect to a server on your network, such as a NAS or another iCube."),
+                      systemImage: "plus", isPrimary: sources.isEmpty) { showAddWebDAV = true }
+  }
+}
+
+// MARK: - Rows
+
+private enum SourcesBadge {
+  #if os(tvOS)
+  static let size = ICubeDesign.TileBadge.size
+  static let glyphFont = ICubeDesign.TileBadge.glyphFont(prominent: false)
+  #else
+  static let size = ICubeDesign.IconBadge.size
+  static let glyphFont = ICubeDesign.standard.font(.body).weight(.semibold)
+  #endif
+
+  /// The row icon badge: tinted at 15 %, or filled with the accent for the primary action.
+  static func view(systemImage: String, filled: Bool = false) -> some View {
+    let accent = ICubeDesign.color(.accent)
+    return RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+      .fill(filled ? accent : accent.opacity(ICubeDesign.IconBadge.tintOpacity))
+      .frame(width: size, height: size)
+      .overlay {
+        Image(systemName: systemImage)
+          .font(glyphFont)
+          .foregroundStyle(filled ? Color.white : accent)
+      }
+      .accessibilityHidden(true)
+  }
+}
+
+/// The trailing chevron every card row ends with.
+private struct SourcesChevron: View {
+  var body: some View {
+    Image(systemName: "chevron.right")
+      .icubeText(.detail)
+      .fontWeight(.semibold)
+      .foregroundStyle(ICubeDesign.color(.textTertiary))
+      .accessibilityHidden(true)
+  }
+}
+
+/// A configured WebDAV server: name, address, start folder and whether it answered its last check. Opens Edit.
+private struct SourceCard: View {
+  let source: WebDAVSource
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+        SourcesBadge.view(systemImage: "server.rack")
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+          Text(source.name)
+            .icubeText(.body)
+            .fontWeight(.semibold)
+            .foregroundStyle(ICubeDesign.color(.textPrimary))
+            .lineLimit(1)
+          Text(source.baseURL.absoluteString)
+            .icubeText(.detail)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+            .lineLimit(1)
+            .truncationMode(.middle)
+          if let startPath = source.startPathComponent, !startPath.isEmpty {
+            Text(String(format: L("Start folder: %@"), startPath))
+              .icubeText(.detail)
+              .foregroundStyle(ICubeDesign.color(.textTertiary))
+              .lineLimit(1)
+              .truncationMode(.middle)
+          }
+        }
+        Spacer(minLength: 0)
+        SourceStatusChip(isOnline: source.isOnline)
+        SourcesChevron()
+      }
+      .padding(ICubeDesign.Spacing.m.rawValue)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .icubeCardSurface(cornerRadius: ICubeDesign.Card.rowCornerRadius)
+      .contentShape(RoundedRectangle(cornerRadius: ICubeDesign.Card.rowCornerRadius, style: .continuous))
+    }
+    .buttonStyle(ICubeCardButtonStyle())
+  }
+}
+
+/// "Online" with a green dot, or "Offline" in red.
+private struct SourceStatusChip: View {
+  let isOnline: Bool
+
+  #if os(tvOS)
+  private static let dot: CGFloat = 12
+  #else
+  private static let dot: CGFloat = 8
+  #endif
+
+  var body: some View {
+    let tint = isOnline
+      ? Color.green // design-lint: allow source status dot; no status colour token yet
+      : ICubeDesign.color(.destructive)
+    HStack(spacing: ICubeDesign.Spacing.xxs.rawValue) {
+      Circle()
+        .fill(tint)
+        .frame(width: Self.dot, height: Self.dot)
+      Text(isOnline ? L("Online") : L("Offline"))
+        .icubeText(.tag)
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
+    }
+    .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
+    .padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
+    .background(Capsule().fill(ICubeDesign.color(.rowSurface)))
+    .fixedSize()
+    .accessibilityElement(children: .combine)
+  }
+}
+
+/// A card that runs an action: the Add card. Primary (filled badge) when the list is empty.
+private struct SourcesActionCard: View {
+  let title: String
+  let detail: String
+  let systemImage: String
+  let isPrimary: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+        SourcesBadge.view(systemImage: systemImage, filled: isPrimary)
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+          Text(title)
+            .icubeText(.body)
+            .fontWeight(.semibold)
+            .foregroundStyle(ICubeDesign.color(.textPrimary))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+          Text(detail)
+            .icubeText(.detail)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        Spacer(minLength: 0)
+        SourcesChevron()
+      }
+      .padding(ICubeDesign.Spacing.m.rawValue)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .icubeCardSurface(cornerRadius: ICubeDesign.Card.rowCornerRadius)
+      .contentShape(RoundedRectangle(cornerRadius: ICubeDesign.Card.rowCornerRadius, style: .continuous))
+    }
+    .buttonStyle(ICubeCardButtonStyle())
+  }
+}
+
+/// No sources yet: what a source is, above the Add card.
+private struct SourcesEmptyState: View {
+  var body: some View {
+    VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+      SourcesBadge.view(systemImage: "externaldrive.connected.to.line.below")
+      Text(L("No Remote Sources"))
+        .icubeText(.section)
+        .foregroundStyle(ICubeDesign.color(.textPrimary))
+        .multilineTextAlignment(.center)
+      Text(L("Add a WebDAV server on your network to browse and play the games stored on it."))
+        .icubeText(.body)
+        .foregroundStyle(ICubeDesign.color(.textSecondary))
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(maxWidth: .infinity)
   }
 }
 
