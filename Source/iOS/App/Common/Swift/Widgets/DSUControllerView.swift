@@ -154,13 +154,13 @@ struct DSUControllerView: View {
         }
         sessionOpen = true
         // The phone is the controller: keep the screen on while it is open.
-        UIApplication.shared.isIdleTimerDisabled = true
+        KeepAwake.acquire(.dsuController)
         startServerIfNeeded()
         enableMotionStreaming()
       }
       .onDisappear {
         sessionOpen = false
-        UIApplication.shared.isIdleTimerDisabled = false
+        KeepAwake.release(.dsuController)
         // Restore default orientation allowances when not using app-level lock
         if !lockLayout {
           OrientationHelper.unlock()

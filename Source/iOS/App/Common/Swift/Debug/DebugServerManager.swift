@@ -38,6 +38,7 @@ enum KeepAwake {
   enum Reason: Hashable {
     case emulation
     case debugServer
+    case dsuController
   }
 
   private static let lock = NSLock()

@@ -12,6 +12,7 @@ import SwiftUI
 @available(iOS 17.0, *)
 struct DSUSessionView: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.scenePhase) private var scenePhase
   @State private var ip: String = ""
   @State private var port: Int = 26760
   @State private var portText: String = "26760"
@@ -232,6 +233,7 @@ struct DSUSessionView: View {
         }
       }
       .onChange(of: autoStart) { _, new in UserDefaults.standard.set(new, forKey: "dsu_server_autostart") }
+      .onChange(of: scenePhase) { _, phase in applySceneLifecycle(phase) }
       .onChange(of: portText) { _, new in if let p = Int(new), p >= 1 && p <= 65535 { UserDefaults.standard.set(p, forKey: "dsu_server_port") } }
       .fullScreenCover(isPresented: $showController) { DSUControllerView(onClose: { showController = false }) }
     }
@@ -240,6 +242,25 @@ struct DSUSessionView: View {
 
 @available(iOS 17.0, *)
 extension DSUSessionView {
+  /// The server toggle being on is an open session: the background stop leaves it on, and the
+  /// return to active restarts the server on the same port. A failed restart shows OFF.
+  private func applySceneLifecycle(_ phase: ScenePhase) {
+    switch DSUSessionLifecycle.action(for: phase, serverRunning: DSUServerBridge.isRunning(), sessionOpen: running) {
+    case .stop:
+      DSUServerBridge.stop()
+    case .start:
+      if DSUServerBridge.start(onPort: NSNumber(value: port).intValue) {
+        ip = DSUServerBridge.ipAddress()
+      } else {
+        let err = DSUServerBridge.lastError()
+        NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": err.isEmpty ? L("Failed to start DSU server") : err])
+      }
+    case .none:
+      break
+    }
+    if phase == .active, running { running = DSUServerBridge.isRunning() }
+  }
+
   private func validatedPort() -> Int {
     if let p = Int(portText), p >= 1 && p <= 65535 { return p }
     portText = "26760"
