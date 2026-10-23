@@ -106,7 +106,7 @@ struct LiveControllerHubReader: ControllerHubReading {
   func advertisingPhones() -> [HubPhone] {
     let service = PhoneControllerService.shared
     return service.advertisingPhones.compactMap { server in
-      server.advert.map { HubPhone(pid: $0.pid, name: $0.name, isConnected: service.isConnected(pid: $0.pid)) }
+      server.advert.map { HubPhone(pid: $0.pid, name: $0.name, isAdded: service.isAdded(pid: $0.pid)) }
     }
   }
 

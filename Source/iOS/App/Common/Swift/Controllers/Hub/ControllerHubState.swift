@@ -139,8 +139,9 @@ struct ConnectedPadState: Equatable {
 struct HubPhone: Equatable {
   let pid: String
   let name: String
-  /// The TV has allowed it and its DSU row is in: "Connected" rather than "Connect".
-  let isConnected: Bool
+  /// It has a DSU row (the TV allowed it, or the user added it by hand): "Added" rather than "Connect".
+  /// The phone may not have allowed the TV yet, so this is not "connected".
+  let isAdded: Bool
 }
 
 /// Plain snapshot of everything the hub shows. No bridge reads happen after it is built;

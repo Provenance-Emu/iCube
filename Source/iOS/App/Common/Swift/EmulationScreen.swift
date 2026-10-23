@@ -578,14 +578,15 @@ struct EmulationScreen: View {
     showUsePhoneHelp = false
   }
 
-  /// The notice's phone row: connects the advertising phone (picking it is the TV-side confirmation) and
-  /// plays on, or explains how to bring one when none advertises.
-  private func usePhoneFromNotice() {
-    guard let phone = phoneService.advertisingPhones.first?.advert else {
+  /// The notice's phone row: connects the phone the row named (picking it is the TV-side confirmation)
+  /// and plays on. It explains how to bring one when the row named none, or that phone has stopped
+  /// advertising since the row was drawn.
+  private func usePhoneFromNotice(pid: String?) {
+    guard let pid, phoneService.advertisingPhones.contains(where: { $0.advert?.pid == pid }) else {
       showUsePhoneHelp = true
       return
     }
-    phoneService.connect(pid: phone.pid)
+    phoneService.connect(pid: pid)
     dismissNoControllerNotice()
   }
 
@@ -643,12 +644,13 @@ struct EmulationScreen: View {
               model: NoControllerNotice.usePhoneHelpModel(onBack: { showUsePhoneHelp = false }),
               isTV: true, onBack: { showUsePhoneHelp = false })
           } else {
+            let shownPhone = phoneService.advertisingPhones.first?.advert
             ICubeConfirmPanel(
               title: L("No controller connected"),
               message: L("The Siri Remote only navigates menus. Connect a controller to play."),
               model: NoControllerNotice.model(
-                phoneName: phoneService.advertisingPhones.first?.advert?.name, onContinue: dismissNoControllerNotice,
-                onControllers: openControllersFromNotice, onUsePhone: usePhoneFromNotice),
+                phoneName: shownPhone?.name, onContinue: dismissNoControllerNotice,
+                onControllers: openControllersFromNotice, onUsePhone: { usePhoneFromNotice(pid: shownPhone?.pid) }),
               isTV: true, onBack: dismissNoControllerNotice)
           }
         }

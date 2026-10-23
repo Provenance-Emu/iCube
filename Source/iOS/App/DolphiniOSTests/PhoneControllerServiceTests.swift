@@ -75,9 +75,10 @@ final class PhoneControllerServiceTests: XCTestCase {
     XCTAssertNil(service.pendingPrompt)
     XCTAssertEqual(writer.rows, [DSUEntry(description: "Joe's iPhone", address: "192.168.1.20", port: 26760)])
     XCTAssertTrue(writer.enabled)
-    XCTAssertEqual(seen, [String(format: L("%@ is connected as a controller"), "Joe's iPhone")])
-    XCTAssertEqual(defaults.dictionary(forKey: PhoneControllerService.ownedEntriesKey) as? [String: String],
-                   ["A": "Joe's iPhone"], "the owned entry persists so a crash-left entry is cleaned up")
+    XCTAssertEqual(seen, [String(format: L("Waiting for %@ to allow this Apple TV"), "Joe's iPhone")])
+    XCTAssertEqual(PhoneControllerService.ownedEntries(in: defaults),
+                   ["A": DSUEntry(description: "Joe's iPhone", address: "192.168.1.20", port: 26760)],
+                   "the owned entry persists so a crash-left entry is cleaned up")
   }
 
   func test_notNow_marksDeclined_andAddsNothing() {
@@ -192,11 +193,12 @@ final class PhoneControllerServiceTests: XCTestCase {
   func test_launchCleanup_removesEveryOwnedEntry_once() {
     let pc = DSUEntry(description: "PC", address: "192.168.1.5", port: 26760)
     let writer = FakeDSUConfigWriter(rows: [DSUEntry(description: "Joe's iPhone", address: "192.168.1.20", port: 26760), pc])
-    defaults.set(["A": "Joe's iPhone"], forKey: PhoneControllerService.ownedEntriesKey)
+    PhoneControllerService.setOwnedEntries(["A": DSUEntry(description: "Joe's iPhone", address: "192.168.1.20", port: 26760)],
+                                           in: defaults)
     let service = makeService(writer: writer)
     service.removeEntriesLeftByAnEarlierLaunch()
     XCTAssertEqual(writer.rows, [pc])
-    XCTAssertEqual(defaults.dictionary(forKey: PhoneControllerService.ownedEntriesKey) as? [String: String], [:])
+    XCTAssertEqual(PhoneControllerService.ownedEntries(in: defaults), [:])
 
     // A phone owned later in this launch survives a second call (scene phase restarts the service).
     service.connect(pid: "A")
@@ -226,7 +228,7 @@ final class PhoneControllerServiceTests: XCTestCase {
     service.refresh(servers: [phone(pid: "A")])
     XCTAssertTrue(writer.rows.isEmpty)
     XCTAssertNil(service.pendingPrompt)
-    XCTAssertEqual(defaults.dictionary(forKey: PhoneControllerService.ownedEntriesKey) as? [String: String], [:])
+    XCTAssertEqual(PhoneControllerService.ownedEntries(in: defaults), [:])
   }
 
   /// A brief gap shorter than the grace keeps the entry, even when the phone was last seen long ago.
@@ -244,6 +246,62 @@ final class PhoneControllerServiceTests: XCTestCase {
     clock += 2
     service.refresh(servers: [])
     XCTAssertTrue(writer.rows.isEmpty)
+  }
+
+  /// The launch cleanup removes the row this service added, never a manual row that shares its name.
+  func test_launchCleanup_leavesASameNamedManualRowAtAnotherAddress() {
+    let manual = DSUEntry(description: "Joe's iPhone", address: "10.0.0.9", port: 26760)
+    let ours = DSUEntry(description: "Joe's iPhone", address: "192.168.1.20", port: 26760)
+    let writer = FakeDSUConfigWriter(rows: [manual, ours])
+    PhoneControllerService.setOwnedEntries(["A": ours], in: defaults)
+    makeService(writer: writer).removeEntriesLeftByAnEarlierLaunch()
+    XCTAssertEqual(writer.rows, [manual])
+  }
+
+  /// A record from a build that kept only the row's name cannot be matched safely: it is dropped, and
+  /// no row is removed on its say-so.
+  func test_ownedEntriesInTheOldNameOnlyShape_areDropped() {
+    let manual = DSUEntry(description: "Joe's iPhone", address: "10.0.0.9", port: 26760)
+    let writer = FakeDSUConfigWriter(rows: [manual])
+    defaults.set(["A": "Joe's iPhone"], forKey: PhoneControllerService.ownedEntriesKey)
+    XCTAssertEqual(PhoneControllerService.ownedEntries(in: defaults), [:])
+    makeService(writer: writer).removeEntriesLeftByAnEarlierLaunch()
+    XCTAssertEqual(writer.rows, [manual])
+  }
+
+  // MARK: A phone the owner added by hand
+
+  /// Manual "Add" names the row after the Bonjour name. The phone advertising at that address and port is
+  /// already in: no question, no second row, and the hub shows it as added.
+  func test_manualRowAtThePhonesAddress_getsNoSecondRow_andShowsAdded() {
+    let manual = DSUEntry(description: "Joe's iPhone", address: "192.168.1.20", port: 26760)
+    let writer = FakeDSUConfigWriter(rows: [manual])
+    let service = makeService(writer: writer)
+    let seen = toasts {
+      service.refresh(servers: [phone(pid: "A")])
+      XCTAssertNil(service.pendingPrompt, "nothing to ask: the owner already added it")
+      service.connect(pid: "A")
+      service.refresh(servers: [phone(pid: "A")])
+    }
+    XCTAssertEqual(writer.rows, [manual], "the manual row is untouched and there is no second one")
+    XCTAssertTrue(service.isAdded(pid: "A"))
+    XCTAssertEqual(seen, [])
+    XCTAssertEqual(PhoneControllerService.ownedEntries(in: defaults), [:], "the manual row is never ours")
+
+    // The phone leaves: the user's row stays.
+    clock += PhoneControllerConnector.departureGrace + 1
+    service.refresh(servers: [])
+    XCTAssertEqual(writer.rows, [manual])
+  }
+
+  func test_isAdded_onlyForAPhoneWithARow() {
+    let writer = FakeDSUConfigWriter(rows: [DSUEntry(description: "PC", address: "192.168.1.5", port: 26760)])
+    let service = makeService(writer: writer)
+    service.refresh(servers: [phone(pid: "A")])
+    XCTAssertFalse(service.isAdded(pid: "A"), "advertising but not allowed yet")
+    service.connect(pid: "A")
+    XCTAssertTrue(service.isAdded(pid: "A"))
+    XCTAssertFalse(service.isAdded(pid: "Z"))
   }
 
   /// `DOLConfigBridge` stores rows as `desc:address:port;` and strips `@`: a name holding those

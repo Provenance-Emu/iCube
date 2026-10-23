@@ -252,7 +252,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     func setPointerSourceOverride(_ kind: PointerSource.Kind?) { log.append("pointer-source \(kind?.rawValue ?? "auto")") }
     func connectPhone(pid: String) {
       log.append("connect-phone \(pid)")
-      reader.phones = reader.phones.map { HubPhone(pid: $0.pid, name: $0.name, isConnected: $0.isConnected || $0.pid == pid) }
+      reader.phones = reader.phones.map { HubPhone(pid: $0.pid, name: $0.name, isAdded: $0.isAdded || $0.pid == pid) }
     }
   }
 
@@ -782,13 +782,13 @@ final class ControllerHubViewModelTests: XCTestCase {
   @MainActor
   func test_reload_snapshotsAdvertisingPhones_andConnectingOneShowsAtOnce() {
     let reader = FakeReader()
-    reader.phones = [HubPhone(pid: "A", name: "Joe's iPhone", isConnected: false)]
+    reader.phones = [HubPhone(pid: "A", name: "Joe's iPhone", isAdded: false)]
     let writer = FakeWriter(reader: reader)
     let model = makeModel(reader: reader, writer: writer)
-    XCTAssertEqual(model.state.phones, [HubPhone(pid: "A", name: "Joe's iPhone", isConnected: false)])
+    XCTAssertEqual(model.state.phones, [HubPhone(pid: "A", name: "Joe's iPhone", isAdded: false)])
     model.actions.connectPhone("A")
     XCTAssertEqual(writer.log, ["connect-phone A"])
-    XCTAssertEqual(model.state.phones.map(\.isConnected), [true])
+    XCTAssertEqual(model.state.phones.map(\.isAdded), [true])
   }
 
   /// M3: the hub's gyro Pointer toggle marks the profile edited, as the player screen's does.

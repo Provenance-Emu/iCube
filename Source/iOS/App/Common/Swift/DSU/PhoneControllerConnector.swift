@@ -8,6 +8,11 @@ struct DSUEntry: Equatable {
   let description: String
   let address: String
   let port: Int
+
+  /// Whether this row points at `server`'s address and port, whatever it is called.
+  func targets(_ server: DSUDiscoveredServer) -> Bool {
+    address == server.address && port == server.port
+  }
 }
 
 enum PhoneConnectorAction: Equatable {
@@ -24,8 +29,9 @@ struct PhoneConnectorState: Equatable {
   var confirmed: Set<String> = []
   /// Phones answered "Not Now" this launch.
   var declined: Set<String> = []
-  /// pid -> description of the entry we added for it (persisted).
-  var owned: [String: String] = [:]
+  /// pid -> the entry we added for it (persisted). Rows are matched on description, address and
+  /// port together, so a manual row that shares a name is never mistaken for ours.
+  var owned: [String: DSUEntry] = [:]
   /// When each phone was last advertised as a controller. Kept by the caller from discovery.
   var lastSeen: [String: Date] = [:]
 }
@@ -48,15 +54,19 @@ enum PhoneControllerConnector {
     }
 
     var actions: [PhoneConnectorAction] = []
+    var removals: [(pid: String, index: Int)] = []
     var taken = entries.map(\.description)
 
     for phone in advertised {
       let pid = phone.pid
+      // The phone already has a row of the user's (added by hand, at its address and port): the core
+      // reaches it through that row, so it is in. A second row would seat it twice.
+      if state.owned[pid] == nil, entries.contains(where: { $0.targets(phone.server) }) { continue }
       guard state.confirmed.contains(pid) else {
         if !state.declined.contains(pid) { actions.append(.prompt(pid: pid, name: phone.name)) }
         continue
       }
-      guard let ownedDescription = state.owned[pid] else {
+      guard let ownedEntry = state.owned[pid] else {
         let description = uniqueDescription(for: phone.name, taken: taken)
         taken.append(description)
         actions.append(.add(pid: pid, entry: DSUEntry(description: description,
@@ -64,21 +74,24 @@ enum PhoneControllerConnector {
                                                       port: phone.server.port)))
         continue
       }
-      if let index = entries.firstIndex(where: { $0.description == ownedDescription }),
-         entries[index].address != phone.server.address || entries[index].port != phone.server.port {
+      if let index = entries.firstIndex(of: ownedEntry), !ownedEntry.targets(phone.server) {
+        // It moved to an address one of the user's rows already points at: that row carries it now.
+        if entries.contains(where: { $0 != ownedEntry && $0.targets(phone.server) }) {
+          removals.append((pid, index))
+          continue
+        }
         actions.append(.update(pid: pid, index: index,
-                               entry: DSUEntry(description: ownedDescription,
+                               entry: DSUEntry(description: ownedEntry.description,
                                                address: phone.server.address,
                                                port: phone.server.port)))
       }
     }
 
     let present = Set(advertised.map(\.pid))
-    var removals: [(pid: String, index: Int)] = []
-    for (pid, description) in state.owned where !present.contains(pid) {
+    for (pid, ownedEntry) in state.owned where !present.contains(pid) {
       let lastSeen = state.lastSeen[pid] ?? .distantPast
       guard now.timeIntervalSince(lastSeen) > departureGrace,
-            let index = entries.firstIndex(where: { $0.description == description }) else { continue }
+            let index = entries.firstIndex(of: ownedEntry) else { continue }
       removals.append((pid, index))
     }
     let ordered = removals.sorted { $0.index > $1.index }.map { PhoneConnectorAction.remove(pid: $0.pid, index: $0.index) }

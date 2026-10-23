@@ -116,17 +116,17 @@ final class ControllerHubModelBuilderTests: XCTestCase {
 
   func test_hub_listsAdvertisingPhones_withTheirState() {
     var connected: [String] = []
-    let phones = [HubPhone(pid: "A", name: "Joe's iPhone", isConnected: false), HubPhone(pid: "B", name: "Ann's iPhone", isConnected: true)]
+    let phones = [HubPhone(pid: "A", name: "Joe's iPhone", isAdded: false), HubPhone(pid: "B", name: "Ann's iPhone", isAdded: true)]
     let model = make(state(system: .wii, phones: phones), actions(connectPhone: { connected.append($0) }), platform: .tvos)
     XCTAssertEqual(model.sections.map(\.id), ["players", "devices", "phones", "setup", "help"])
     XCTAssertEqual(model.sections.first { $0.id == "phones" }?.header, "Phones")
     XCTAssertEqual(ids(model, section: "phones"), ["phone-A", "phone-B"])
     XCTAssertEqual(model.item(id: "phone-A")?.title, "Joe's iPhone")
     XCTAssertEqual(model.item(id: "phone-A")?.badge, "Connect")
-    XCTAssertEqual(model.item(id: "phone-B")?.badge, "Connected")
+    XCTAssertEqual(model.item(id: "phone-B")?.badge, "Added")
     run(model.item(id: "phone-A"))
     run(model.item(id: "phone-B"))
-    XCTAssertEqual(connected, ["A"], "a connected phone is already in: its row connects nothing again")
+    XCTAssertEqual(connected, ["A"], "an added phone already has its row: its row adds nothing again")
     XCTAssertTrue(model.item(id: "phone-B")?.isEnabled ?? false, "tvOS focus must reach it")
   }
 

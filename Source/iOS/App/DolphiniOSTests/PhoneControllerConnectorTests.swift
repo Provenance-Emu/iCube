@@ -44,7 +44,7 @@ final class PhoneControllerConnectorTests: XCTestCase {
   func test_ipChange_updatesTheSameEntry() {
     var state = PhoneConnectorState()
     state.confirmed = ["A"]
-    state.owned = ["A": "Joe's iPhone"]
+    state.owned = ["A": entry("Joe's iPhone")]
     let entries = [entry("Living room"), entry("Joe's iPhone", address: "192.168.1.20")]
     let moved = server(pid: "A", address: "192.168.1.77", port: 26761)
     let actions = PhoneControllerConnector.actions(servers: [moved], entries: entries, state: state, now: now)
@@ -54,7 +54,7 @@ final class PhoneControllerConnectorTests: XCTestCase {
   func test_unchangedAddress_doesNothing() {
     var state = PhoneConnectorState()
     state.confirmed = ["A"]
-    state.owned = ["A": "Joe's iPhone"]
+    state.owned = ["A": entry("Joe's iPhone")]
     let actions = PhoneControllerConnector.actions(servers: [server(pid: "A")], entries: [entry("Joe's iPhone")],
                                                    state: state, now: now)
     XCTAssertEqual(actions, [])
@@ -77,7 +77,7 @@ final class PhoneControllerConnectorTests: XCTestCase {
   func test_departedPhone_isRemovedOnlyAfterTheGrace() {
     var state = PhoneConnectorState()
     state.confirmed = ["A"]
-    state.owned = ["A": "Joe's iPhone"]
+    state.owned = ["A": entry("Joe's iPhone")]
     let entries = [entry("Living room"), entry("Joe's iPhone")]
 
     state.lastSeen = ["A": now.addingTimeInterval(-9)]
@@ -96,7 +96,7 @@ final class PhoneControllerConnectorTests: XCTestCase {
   func test_manualEntries_areNeverTouched() {
     var state = PhoneConnectorState()
     state.confirmed = ["A"]
-    state.owned = ["A": "Joe's iPhone"]
+    state.owned = ["A": entry("Joe's iPhone")]
     state.lastSeen = ["A": now.addingTimeInterval(-60)]
     // A manual entry with the phone's address, one for a phone not owned, and the owned one.
     let entries = [entry("Manual", address: "192.168.1.20"), entry("Desk PC", address: "10.0.0.5"), entry("Joe's iPhone")]
@@ -116,6 +116,54 @@ final class PhoneControllerConnectorTests: XCTestCase {
       servers: [server(pid: "A", isController: false), server(pid: "B", isController: false), plainDSUServer],
       entries: [], state: state, now: now)
     XCTAssertEqual(actions, [])
+  }
+
+  // MARK: A row the user added by hand
+
+  /// The owner added the phone by hand from the DSU list (named after its Bonjour name): it is already in,
+  /// so it is neither asked about nor given a second row, which would seat it on two Wii Remotes.
+  func test_manualRowAtThePhonesAddress_getsNoPromptAndNoSecondRow() {
+    let manual = [entry("Joe's iPhone")]
+    XCTAssertEqual(PhoneControllerConnector.actions(servers: [server(pid: "A")], entries: manual,
+                                                    state: PhoneConnectorState(), now: now), [])
+    var confirmed = PhoneConnectorState()
+    confirmed.confirmed = ["A"]
+    XCTAssertEqual(PhoneControllerConnector.actions(servers: [server(pid: "A")], entries: manual,
+                                                    state: confirmed, now: now), [], "allowing it adds nothing either")
+    // Same address, another port: a different server, so the phone still gets its own row.
+    XCTAssertEqual(PhoneControllerConnector.actions(servers: [server(pid: "A")], entries: [entry("PC", port: 26761)],
+                                                    state: confirmed, now: now),
+                   [.add(pid: "A", entry: entry("Joe's iPhone"))])
+  }
+
+  /// Ownership is the whole row: a manual row with the owned row's name at another address is the user's.
+  func test_ownedRow_isMatchedByAddressToo_notByNameAlone() {
+    var state = PhoneConnectorState()
+    state.confirmed = ["A"]
+    state.owned = ["A": entry("Joe's iPhone")]
+    let entries = [entry("Joe's iPhone", address: "10.0.0.9"), entry("Joe's iPhone")]
+
+    let moved = server(pid: "A", address: "192.168.1.77")
+    XCTAssertEqual(PhoneControllerConnector.actions(servers: [moved], entries: entries, state: state, now: now),
+                   [.update(pid: "A", index: 1, entry: entry("Joe's iPhone", address: "192.168.1.77"))])
+
+    state.lastSeen = ["A": now.addingTimeInterval(-60)]
+    XCTAssertEqual(PhoneControllerConnector.actions(servers: [], entries: entries, state: state, now: now),
+                   [.remove(pid: "A", index: 1)])
+
+    // Only the manual row is left: nothing of ours to remove.
+    XCTAssertEqual(PhoneControllerConnector.actions(servers: [], entries: [entries[0]], state: state, now: now), [])
+  }
+
+  /// The owned phone moves to an address a manual row already points at: its own row goes, not a duplicate.
+  func test_ownedPhoneMovingOntoAManualRow_dropsItsOwnRow() {
+    var state = PhoneConnectorState()
+    state.confirmed = ["A"]
+    state.owned = ["A": entry("Joe's iPhone")]
+    let entries = [entry("Joe's iPhone"), entry("Desk", address: "192.168.1.77")]
+    let moved = server(pid: "A", address: "192.168.1.77")
+    XCTAssertEqual(PhoneControllerConnector.actions(servers: [moved], entries: entries, state: state, now: now),
+                   [.remove(pid: "A", index: 0)])
   }
 
   func test_serverEquality_includesThePid() {

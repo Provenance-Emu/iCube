@@ -3,6 +3,7 @@
 
 import Combine
 import Foundation
+import os
 
 /// The TV's DSU server list (`DSUClient.ini`), behind a seam so tests run without the core.
 protocol DSUConfigWriting {
@@ -52,10 +53,11 @@ struct LiveDSUConfigWriter: DSUConfigWriting {
 final class PhoneControllerService: ObservableObject {
   static let shared = PhoneControllerService(writer: LiveDSUConfigWriter())
 
-  /// pid -> description of the row this service added.
+  /// pid -> the row this service added (description, address, port).
   static let ownedEntriesKey = "dsu_phone_controller_entries"
   /// How often a departing phone's grace is re-checked while the service runs.
   static let tickInterval: TimeInterval = 1
+  private static let log = ICubeLog.logger("DSU")
 
   /// The phone waiting for the user's answer. One at a time: the next one is asked after this is answered.
   @Published private(set) var pendingPrompt: (pid: String, name: String)?
@@ -78,7 +80,7 @@ final class PhoneControllerService: ObservableObject {
     self.writer = writer
     self.defaults = defaults
     self.now = now
-    state.owned = defaults.dictionary(forKey: Self.ownedEntriesKey) as? [String: String] ?? [:]
+    state.owned = Self.ownedEntries(in: defaults)
   }
 
   // MARK: Lifecycle
@@ -86,6 +88,7 @@ final class PhoneControllerService: ObservableObject {
   /// Scene became active. Browsing restarts from an empty list, so phones already connected get a
   /// fresh grace to be found again instead of being dropped and re-added.
   func start() {
+    Self.log.notice("Phone controller service started (browsing for phones)")
     removeEntriesLeftByAnEarlierLaunch()
     let stamp = now()
     for pid in state.owned.keys { state.lastSeen[pid] = stamp }
@@ -114,6 +117,7 @@ final class PhoneControllerService: ObservableObject {
   /// Scene left the foreground. The question is withdrawn and asked again on return; who was allowed
   /// or declined this launch is kept.
   func stop() {
+    Self.log.notice("Phone controller service stopped")
     tick?.invalidate()
     tick = nil
     browser?.stop()
@@ -149,9 +153,12 @@ final class PhoneControllerService: ObservableObject {
     respond(pid: pid, allow: true)
   }
 
-  /// The phone's DSU row is in (the TV allowed it): the hub's "Connected".
-  func isConnected(pid: String) -> Bool {
-    state.owned[pid] != nil
+  /// The phone has a DSU row: the one the TV added when it was allowed, or one the user added by hand
+  /// at its address. The hub's "Added"; it says nothing about the phone having answered yet.
+  func isAdded(pid: String) -> Bool {
+    if state.owned[pid] != nil { return true }
+    guard let server = advertisingPhones.first(where: { $0.advert?.pid == pid }) else { return false }
+    return writer.entries().contains { $0.targets(server) }
   }
 
   // MARK: Discovery
@@ -199,15 +206,25 @@ final class PhoneControllerService: ObservableObject {
         break
       case .add(let pid, let entry):
         writer.add(entry)
-        // The bridge refuses an invalid address or port; only a row that landed is ours.
-        guard writer.entries().contains(where: { $0.description == entry.description }) else { continue }
-        state.owned[pid] = entry.description
+        // The bridge refuses an invalid address or port; only a row that landed is ours. Record it as
+        // the bridge stored it (it trims the address), so later matches find it.
+        guard let landed = writer.entries().last(where: { $0.description == entry.description && $0.port == entry.port })
+        else { continue }
+        state.owned[pid] = landed
         ownedChanged = true
         writer.setEnabled(true)
-        EmulationToast.post(String(format: L("%@ is connected as a controller"), displayName(pid)))
+        // The phone still has to allow this TV on its own screen: nothing is connected yet.
+        EmulationToast.post(String(format: L("Waiting for %@ to allow this Apple TV"), displayName(pid)))
       case .update(let pid, _, let entry):
-        // Earlier actions in this batch may have moved rows: find it again by what we named it.
-        if let index = ownedIndex(of: pid) { writer.update(at: index, to: entry) }
+        // Earlier actions in this batch may have moved rows: find it again by the row we recorded.
+        guard let index = ownedIndex(of: pid) else { continue }
+        writer.update(at: index, to: entry)
+        if let landed = writer.entries().last(where: { $0.description == entry.description && $0.port == entry.port }) {
+          state.owned[pid] = landed
+        } else {
+          state.owned[pid] = nil
+        }
+        ownedChanged = true
       case .remove(let pid, _):
         removeOwnedEntry(of: pid)
         ownedChanged = true
@@ -219,8 +236,8 @@ final class PhoneControllerService: ObservableObject {
   /// A row the user deleted in DSU settings stays deleted: its phone counts as declined this launch,
   /// so it is neither re-added nor asked about again ("Use <phone>" can still bring it back).
   private func forgetEntriesTheUserDeleted() {
-    let descriptions = Set(writer.entries().map(\.description))
-    let deleted = state.owned.filter { !descriptions.contains($0.value) }.map(\.key)
+    let rows = writer.entries()
+    let deleted = state.owned.filter { !rows.contains($0.value) }.map(\.key)
     guard !deleted.isEmpty else { return }
     for pid in deleted {
       state.owned[pid] = nil
@@ -235,8 +252,8 @@ final class PhoneControllerService: ObservableObject {
   }
 
   private func ownedIndex(of pid: String) -> Int? {
-    guard let description = state.owned[pid] else { return nil }
-    return writer.entries().firstIndex { $0.description == description }
+    guard let owned = state.owned[pid] else { return nil }
+    return writer.entries().firstIndex(of: owned)
   }
 
   private func removeOwnedEntry(of pid: String) {
@@ -245,7 +262,23 @@ final class PhoneControllerService: ObservableObject {
   }
 
   private func saveOwned() {
-    defaults.set(state.owned, forKey: Self.ownedEntriesKey)
+    Self.setOwnedEntries(state.owned, in: defaults)
+  }
+
+  static func setOwnedEntries(_ owned: [String: DSUEntry], in defaults: UserDefaults) {
+    defaults.set(owned.mapValues { ["description": $0.description, "address": $0.address, "port": $0.port] },
+                 forKey: ownedEntriesKey)
+  }
+
+  /// A value in another shape (a build that kept only the description) cannot be matched safely and is
+  /// dropped: that build never shipped, so at worst a row it left stays for the user to delete.
+  static func ownedEntries(in defaults: UserDefaults) -> [String: DSUEntry] {
+    let stored = defaults.dictionary(forKey: ownedEntriesKey) ?? [:]
+    return stored.compactMapValues { value in
+      guard let row = value as? [String: Any], let description = row["description"] as? String,
+            let address = row["address"] as? String, let port = row["port"] as? Int else { return nil }
+      return DSUEntry(description: description, address: address, port: port)
+    }
   }
 
   /// The bridge stores rows as `description:address:port;`, trims them and strips every `@`, so a

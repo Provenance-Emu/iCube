@@ -253,14 +253,14 @@ enum ControllerHubModelBuilder {
 
   // MARK: Phones
 
-  /// One row per advertising phone. A connected phone is already in, so its row connects nothing (an
+  /// One row per advertising phone. An added phone already has its row, so its row connects nothing (an
   /// enabled no-op: tvOS focus must reach it, as the Help rows do).
   private static func phonesSection(state: ControllerHubState, actions: ControllerHubActions) -> MenuSection {
     MenuSection(id: "phones", header: L("Phones"), items: state.phones.map { phone in
       MenuItem(
         id: "phone-\(phone.pid)", title: phone.name, icon: "iphone.radiowaves.left.and.right",
-        role: .action { if !phone.isConnected { actions.connectPhone(phone.pid) } },
-        badge: phone.isConnected ? L("Connected") : L("Connect"))
+        role: .action { if !phone.isAdded { actions.connectPhone(phone.pid) } },
+        badge: phone.isAdded ? L("Added") : L("Connect"))
     })
   }
 
