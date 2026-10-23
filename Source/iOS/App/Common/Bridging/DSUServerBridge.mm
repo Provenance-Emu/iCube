@@ -585,10 +585,17 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
   }
 }
 
+// The name the user gave this device in Nearby (`ICubeDeviceName`), else the system name.
+- (NSString*)bonjourDeviceName {
+  NSString* custom = [[[NSUserDefaults standardUserDefaults] stringForKey:@"icube_device_name"]
+      stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  return custom.length > 0 ? custom : [[UIDevice currentDevice] name];
+}
+
 - (void)publishBonjour {
   [_service stop]; _service = nil;
   // _dolphin-dsu._udp is custom; clients in our apps can browse this
-  _service = [[NSNetService alloc] initWithDomain:@"local." type:@"_dolphin-dsu._udp" name:[[UIDevice currentDevice] name] port:_port];
+  _service = [[NSNetService alloc] initWithDomain:@"local." type:@"_dolphin-dsu._udp" name:[self bonjourDeviceName] port:_port];
   _service.delegate = self; [_service publishWithOptions:0];
   if (_txt) { [_service setTXTRecordData:[NSNetService dataFromTXTRecordDictionary:_txt]]; }
 }

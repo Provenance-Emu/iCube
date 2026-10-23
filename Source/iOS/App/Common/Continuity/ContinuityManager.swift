@@ -532,7 +532,7 @@ final class ContinuityManager: ObservableObject {
     // MARK: - Device description
 
     private static func deviceName() -> String {
-        UIDevice.current.name
+        ICubeDeviceName.current()
     }
 
     private static func sourceDevice() -> SourceDevice {
