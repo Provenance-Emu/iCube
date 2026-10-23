@@ -170,6 +170,9 @@
 		<!-- WS-4: continuity handoff + nearby library sharing. On tvOS this is the
 		     ONLY discovery path, since there is no system Handoff. -->
 		<string>_icube-continuity._tcp</string>
+		<!-- The phone publishes this (DSUServerBridge) and the TV browses it (DSUDiscovery).
+		     An undeclared type fails silently under local-network policy. -->
+		<string>_dolphin-dsu._udp</string>
 	</array>
 	<!-- Custom Handoff activity: continue a game in progress on another device
 	     (ContinuityAdvertisement.activityType). Handoff is iOS/iPadOS/macOS only;
