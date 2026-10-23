@@ -40,6 +40,9 @@ final class DSUDiscoveryBrowser: NSObject, ObservableObject {
 
   private var browser: NetServiceBrowser?
   private var services: [NetService] = []
+  /// Services whose TXT record is watched; each is started once (see `netServiceDidResolveAddress`).
+  private var monitored: [NetService] = []
+  private static let log = ICubeLog.logger("DSU")
 
   func start() {
     stop()
@@ -59,6 +62,7 @@ final class DSUDiscoveryBrowser: NSObject, ObservableObject {
       $0.stop()
     }
     services.removeAll()
+    monitored.removeAll()
   }
 
   /// The row a resolve produced, in place of the service's earlier row. Nil when nothing changed, so
@@ -106,6 +110,7 @@ extension DSUDiscoveryBrowser: NetServiceBrowserDelegate {
   nonisolated func netServiceBrowser(_ browser: NetServiceBrowser, didRemove service: NetService, moreComing: Bool) {
     Task { @MainActor in
       service.stopMonitoring()
+      monitored.removeAll { $0 == service }
       services.removeAll { $0 == service }
       if let name = service.name as String? {
         servers.removeAll { $0.name == name }
@@ -136,21 +141,28 @@ extension DSUDiscoveryBrowser: NetServiceDelegate {
       let item = DSUDiscoveredServer(name: Self.rowName(sender), address: ip, port: sender.port,
                                      advert: Self.advert(of: sender))
       // The same service resolving again with a new address or advert replaces its old row.
-      if let updated = Self.upserting(item, into: servers) { servers = updated }
+      if let updated = Self.upserting(item, into: servers) {
+        Self.log.notice("DSU server resolved: \(item.name, privacy: .public) at \(ip, privacy: .public):\(item.port, privacy: .public)")
+        servers = updated
+      }
       // The TXT record is read once here; later changes (the controller role) arrive as updates.
-      sender.startMonitoring()
+      // Started once per service: monitoring can deliver the current record straight away.
+      if !monitored.contains(sender) {
+        monitored.append(sender)
+        sender.startMonitoring()
+      }
     }
   }
 
   nonisolated func netService(_ sender: NetService, didUpdateTXTRecord data: Data) {
     Task { @MainActor in
       let advert = DSUAdvert.parse(NetService.dictionary(fromTXTRecord: data))
-      if let updated = Self.updatingAdvert(advert, ofServiceNamed: Self.rowName(sender), in: servers) {
-        ICubeLog.logger("DSU").notice(
-          "DSU advert updated for \(sender.name, privacy: .public): controller \(advert?.isController ?? false, privacy: .public)")
-        servers = updated
-      }
-      // An update can come with a new address (the phone moved networks): resolve again to pick it up.
+      // An unchanged record (monitoring repeats the current one) does nothing, so it never loops.
+      guard let updated = Self.updatingAdvert(advert, ofServiceNamed: Self.rowName(sender), in: servers) else { return }
+      Self.log.notice(
+        "DSU advert updated for \(sender.name, privacy: .public): controller \(advert?.isController ?? false, privacy: .public)")
+      servers = updated
+      // A changed record may come with a new address (the phone moved networks): resolve again for it.
       sender.resolve(withTimeout: 5.0)
     }
   }
