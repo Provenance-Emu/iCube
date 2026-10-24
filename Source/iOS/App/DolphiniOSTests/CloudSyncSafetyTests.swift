@@ -288,8 +288,11 @@ final class CloudSyncSafetyTests: XCTestCase {
     await f.coordinator.waitForCurrentSyncCompletion()
     let expected = try LibraryMetadataDocument.merge(local: local, remote: remote, filename: identity.fileName)
     XCTAssertEqual(try Data(contentsOf: f.file), expected)
+    // The tie keeps the greater canonical bytes, the remote 9, so the merge equals the
+    // remote copy and the coordinator has nothing to upload.
+    XCTAssertEqual(expected, remote)
     let uploaded = await f.provider.uploadedBytes(path: path)
-    XCTAssertEqual(uploaded, expected)
+    XCTAssertNil(uploaded)
   }
 
   func testFirstDownloadUsesCanonicalMergerForNewLocalOpaquePrimitives() async throws {
