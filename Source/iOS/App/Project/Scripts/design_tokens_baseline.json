@@ -25,7 +25,7 @@
   "Common/Swift/SaveStatesBrowserView.swift": 2,
   "Common/Swift/Shaders/ShaderQuickPickerView.swift": 16,
   "Common/Swift/Shaders/ShaderSettingsView.swift": 1,
-  "Common/Swift/SourcesView.swift": 7,
+  "Common/Swift/SourcesView.swift": 4,
   "Common/Swift/TVFloatStepper.swift": 2,
   "Common/Swift/TVLibraryView.swift": 32,
   "Common/Swift/TVSoftwarePropertiesView.swift": 19,

@@ -3730,6 +3730,16 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Add Gecko Code" = "Add Gecko Code";
 "Add ROMs from Files or other apps." = "Add ROMs from Files or other apps.";
 "Add Remote Source" = "Add Remote Source";
+"Sources" = "Sources";
+"WebDAV" = "WebDAV";
+"Delete Source" = "Delete Source";
+"Add WebDAV Source" = "Add WebDAV Source";
+"Connect to a server on your network, such as a NAS or another iCube." = "Connect to a server on your network, such as a NAS or another iCube.";
+"Start folder: %@" = "Start folder: %@";
+"Online" = "Online";
+"Offline" = "Offline";
+"No Remote Sources" = "No Remote Sources";
+"Add a WebDAV server on your network to browse and play the games stored on it." = "Add a WebDAV server on your network to browse and play the games stored on it.";
 "Add Server" = "Add Server";
 "Added DSU server: %@" = "Added DSU server: %@";
 "Adds a third frame buffer to smooth pacing at a small latency/memory cost. Default ON; turn off only if you want minimum latency." = "Adds a third frame buffer to smooth pacing at a small latency/memory cost. Default ON; turn off only if you want minimum latency.";

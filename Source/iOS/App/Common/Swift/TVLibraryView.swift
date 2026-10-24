@@ -2374,7 +2374,12 @@ struct TVLibraryView: View {
         }
       }
     // Sources sheet
+#if os(tvOS)
+      // Full screen: tvOS draws a `.sheet` as a small centred card.
+      .fullScreenCover(isPresented: $showSources) { SourcesView().claimsController() }
+#else
       .sheet(isPresented: $showSources) { SourcesView().claimsController() }
+#endif
       .modBrowserSheet(libraryGames: model.games)
 #if os(tvOS)
       // Full screen: tvOS 26 draws a `.sheet` as a small centred card, which truncated this screen.
