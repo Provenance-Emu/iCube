@@ -103,7 +103,7 @@ final class SkinModelTests: XCTestCase {
     XCTAssertThrowsError(try SkinInfo.decode(Data(json.utf8)))
   }
 
-  // MARK: Rules SkinKitCore does not apply on its own (SkinInfoSanitizer)
+  // MARK: Rules SkinKitCore does not apply on its own (`DeltaSkin.DecodingOptions.lenient`)
 
   func testOnlyGameCubeAndWiiAreAcceptedBySuffix() throws {
     func decode(_ identifier: String) -> SkinInfo? {

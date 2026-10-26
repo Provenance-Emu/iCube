@@ -35,9 +35,8 @@ enum SkinDisplayType: String, CaseIterable, Sendable {
 
 // MARK: - What the overlay draws and hit-tests
 
-// These are the values `SkinLayout`, `SkinOverlayInput` and `SkinOverlayView` work with. They are no
-// longer decoded from `info.json` by the app: `SkinInfo` reads the file through SkinKitCore's
-// `DeltaSkin.Info` and projects it onto these.
+// These are the values `SkinLayout`, `SkinOverlayInput` and `SkinOverlayView` work with. The app no longer
+// decodes `info.json`: `SkinInfo` reads it with SkinKitCore (`DeltaSkin.Info`, `.lenient`) and projects it onto these.
 
 /// A skin image reference. One shape serves a Manic per-item asset (`normal`) and a
 /// representation's background (`resizable`, or a fixed `small` / `medium` / `large` raster).
@@ -112,9 +111,11 @@ enum SkinInfoError: Error, Equatable {
 
 /// The parsed `info.json` of a Delta/Manic skin directory.
 ///
-/// The file is decoded by SkinKitCore (`DeltaSkin.Info`). SkinKitCore's decoder is strict, reads no `//`
-/// comments and has no frame limits, so `SkinInfoSanitizer` first applies iCube's import rules to the
-/// raw JSON (see its documentation); what reaches SkinKitCore is already clean.
+/// Decoded by SkinKitCore with `DeltaSkin.DecodingOptions.lenient`, which carries iCube's import rules: `//` comments
+/// are stripped, a bad representation, item or screen is dropped on its own, every frame is limited, item edges
+/// inherit the representation's, d-pads must be complete, Manic per-item art is kept, and only the canonical game
+/// type spellings are read. This type only projects the result onto the overlay's values and applies the one rule that
+/// is iCube's alone: the skin must be a GameCube or Wii skin.
 struct SkinInfo {
   private static let infoFileName = "info.json"
 
@@ -133,11 +134,18 @@ struct SkinInfo {
     return nil
   }
 
-  /// Decodes an `info.json` body. Authoring tools and hand-edited skins carry `//` comments, which
-  /// are stripped first.
+  /// Decodes an `info.json` body.
   static func decode(_ data: Data) throws -> SkinInfo {
-    let sanitized = try SkinInfoSanitizer.sanitize(data)
-    let info = try JSONDecoder().decode(DeltaSkin.Info.self, from: sanitized.json)
+    let info: DeltaSkin.Info
+    do {
+      info = try DeltaSkin.Info.decode(data, options: .lenient)
+    } catch DeltaSkinInfoError.noUsableRepresentation {
+      throw SkinInfoError.noUsableRepresentation
+    }
+    guard let gameType = SkinGameType(info.gameTypeIdentifier) else {
+      throw DecodingError.dataCorrupted(DecodingError.Context(codingPath: [], debugDescription: "Unsupported game type \(info.gameTypeIdentifier)"))
+    }
+
     var parsed: [SkinDevice: [SkinDisplayType: [TouchOverlayOrientation: SkinRepresentation]]] = [:]
     for device in SkinDevice.allCases {
       guard let kitDevice = info.representations[device.kitDevice] else { continue }
@@ -145,14 +153,14 @@ struct SkinInfo {
         let orientations = display == .standard ? kitDevice.standard : kitDevice.edgeToEdge
         for orientation in TouchOverlayOrientation.allCases {
           guard let kit = orientations?[orientation.rawValue] else { continue }
-          let key = SkinInfoSanitizer.Key(device: device.rawValue, display: display.rawValue, orientation: orientation.rawValue)
-          parsed[device, default: [:]][display, default: [:]][orientation] =
-            SkinRepresentation(kit, itemAssets: sanitized.itemAssets[key] ?? [])
+          parsed[device, default: [:]][display, default: [:]][orientation] = SkinRepresentation(kit)
         }
       }
     }
+    // SkinKitCore keeps buckets this app has no use for (iPad models, split view, tvOS, ...); a skin that only has those
+    // has nothing to show here.
     guard !parsed.isEmpty else { throw SkinInfoError.noUsableRepresentation }
-    return SkinInfo(name: info.name, identifier: info.identifier, gameType: sanitized.gameType, representations: parsed)
+    return SkinInfo(name: info.name, identifier: info.identifier, gameType: gameType, representations: parsed)
   }
 
   /// Reads `<directory>/info.json`.
@@ -162,18 +170,47 @@ struct SkinInfo {
 
   /// Removes `//` comments (whole-line or trailing) without touching `//` inside a string, such as a URL.
   static func stripComments(_ data: Data) throws -> Data {
-    try SkinInfoSanitizer.stripComments(data)
+    try DeltaSkin.stripComments(data)
+  }
+}
+
+private extension SkinGameType {
+  /// The only two types iCube runs; every other SkinKit game type (N64 included) is not a skin for this app.
+  init?(_ kit: DeltaSkinGameType) {
+    switch kit {
+    case .gamecube: self = .gameCube
+    case .wii: self = .wii
+    default: return nil
+    }
+  }
+}
+
+/// Bounds for the numbers a skin's `info.json` supplies. The rules live in SkinKitCore (`DeltaSkin.DecodingOptions.limitsFrames`).
+enum SkinFrameLimits {
+  /// Largest magnitude any coordinate, size or edge may have.
+  static let maxMagnitude = DeltaSkin.DecodingOptions.maxFrameMagnitude
+
+  /// Whether `value` is a usable coordinate: finite and within `maxMagnitude` either way.
+  static func isSane(_ value: CGFloat) -> Bool {
+    value.isFinite && abs(value) <= maxMagnitude
+  }
+
+  /// A size whose sides are sane and not negative (a zero side is legal; layout skips it).
+  static func isSane(_ size: CGSize) -> Bool {
+    isSane(size.width) && isSane(size.height) && size.width >= 0 && size.height >= 0
+  }
+
+  /// A frame with a sane origin and a sane, non-negative size.
+  static func isSane(_ rect: CGRect) -> Bool {
+    isSane(rect.origin.x) && isSane(rect.origin.y) && isSane(rect.size)
   }
 }
 
 // MARK: - SkinKitCore → overlay values
 
 private extension SkinRepresentation {
-  /// `itemAssets` runs parallel to `kit.items`: SkinKitCore has no per-item `asset` key (Manic's `asset.normal`).
-  init(_ kit: DeltaSkin.OrientationRepresentations, itemAssets: [SkinAsset?]) {
-    let items = (kit.items ?? []).enumerated().map { index, item in
-      SkinItem(item, asset: itemAssets.indices.contains(index) ? itemAssets[index] : nil)
-    }
+  init(_ kit: DeltaSkin.OrientationRepresentations) {
+    let items = (kit.items ?? []).map(SkinItem.init)
     self.init(
       mappingSize: kit.mappingSize ?? .zero,
       items: items,
@@ -190,17 +227,17 @@ private extension SkinRepresentation {
 }
 
 private extension SkinItem {
-  init(_ kit: DeltaSkin.ItemRepresentation, asset: SkinAsset?) {
+  init(_ kit: DeltaSkin.ItemRepresentation) {
     let inputs: SkinItemInputs
     switch kit.inputs {
     case .single(let names):
       inputs = .buttons(names)
     case .directional(let directions):
-      // The sanitizer only lets complete d-pads through, so the four names are always there.
+      // `requiresCompleteDirections` only lets complete d-pads through, so the four names are always there.
       inputs = .directional(up: directions["up"] ?? "", down: directions["down"] ?? "",
                             left: directions["left"] ?? "", right: directions["right"] ?? "")
     }
-    self.init(inputs: inputs, frame: kit.frame, extendedEdges: kit.extendedEdges ?? .zero, asset: asset,
+    self.init(inputs: inputs, frame: kit.frame, extendedEdges: kit.extendedEdges ?? .zero, asset: kit.asset.map { SkinAsset(normal: $0.normal) },
               thumbstick: kit.thumbstick.map { SkinThumbstick(name: $0.name, width: $0.width, height: $0.height) })
   }
 }
