@@ -189,6 +189,25 @@ final class SkinModelTests: XCTestCase {
     XCTAssertEqual(background, SkinAsset(resizable: "bg.pdf", small: "s.png", medium: "m.png", large: "l.png"))
   }
 
+  func testThumbstickSizesAreLimitedAndABadOneDropsOnlyItsItem() throws {
+    func items(width: String) throws -> [SkinItem] {
+      let json = skinJSON(representations: """
+      {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"items":[
+        {"inputs":{"up":"rightThumbstickUp","down":"rightThumbstickDown","left":"rightThumbstickLeft","right":"rightThumbstickRight"},
+         "frame":[0,0,10,10],"thumbstick":{"name":"stick.pdf","width":\(width),"height":8}},
+        {"inputs":["a"],"frame":[1,2,3,4]}]}}}}
+      """)
+      return try XCTUnwrap(portrait(of: SkinInfo.decode(json))).items
+    }
+    // -1e999 parses to -infinity; re-serialising that would raise an uncatchable Objective-C exception.
+    for bad in ["-1e999", "-5", "1e308", "100001"] {
+      XCTAssertEqual(try items(width: bad).map(\.inputs), [.buttons(["a"])], "width \(bad) drops the thumbstick item")
+    }
+    let kept = try items(width: "6")
+    XCTAssertEqual(kept.count, 2)
+    XCTAssertEqual(kept.first?.thumbstick, SkinThumbstick(name: "stick.pdf", width: 6, height: 8))
+  }
+
   // MARK: Frame sanity
 
   func testItemFramesOutOfRangeAreDroppedNextToGoodItem() throws {

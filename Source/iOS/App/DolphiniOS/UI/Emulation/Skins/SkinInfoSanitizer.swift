@@ -103,6 +103,9 @@ enum SkinInfoSanitizer {
       "gameTypeIdentifier": gameType.manicIdentifier,
       "representations": representations
     ]
+    // `JSONSerialization.data` raises an Objective-C exception, which `try` cannot catch, on a non-finite number.
+    // Every number above is checked, and `1e999` parses to infinity, so this guards the next one added.
+    guard JSONSerialization.isValidJSONObject(json) else { throw invalid("info.json holds a value that cannot be represented") }
     return Output(json: try JSONSerialization.data(withJSONObject: json), gameType: gameType, itemAssets: itemAssets)
   }
 
@@ -197,8 +200,8 @@ enum SkinInfoSanitizer {
     ]
     if let present = raw["thumbstick"], !(present is NSNull) {
       guard let stick = present as? [String: Any], let name = stick["name"] as? String,
-            let width = number(stick["width"]), let height = number(stick["height"]) else { return nil }
-      node["thumbstick"] = ["name": name, "width": Double(width), "height": Double(height)] as [String: Any]
+            let stickSize = size(stick) else { return nil }
+      node["thumbstick"] = ["name": name, "width": Double(stickSize.width), "height": Double(stickSize.height)] as [String: Any]
     }
     return (node, itemAsset)
   }
