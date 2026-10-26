@@ -30,9 +30,9 @@ struct iCubeShortcuts: AppShortcutsProvider {
         )
         AppShortcut(
             intent: UseAsWiiRemoteIntent(),
-            phrases: ["Use my iPhone as a Wii Remote in \(.applicationName)"],
+            phrases: ["Use my phone as a Wii Remote in \(.applicationName)"],
             shortTitle: "Wii Remote",
-            systemImageName: "appletv"
+            systemImageName: "tv"
         )
     }
 }
