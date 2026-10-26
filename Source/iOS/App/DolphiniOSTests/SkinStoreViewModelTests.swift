@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+import SkinCatalogKit
+import SkinKitManager
 import XCTest
 @testable import iCube
 
@@ -28,7 +30,7 @@ final class SkinStoreViewModelTests: XCTestCase {
   }
 
   private func installer() -> SkinStoreInstaller {
-    SkinStoreInstaller(downloader: URLSessionSkinStoreDownloader(),
+    SkinStoreInstaller(policy: .iCube, downloader: URLSessionSkinStoreDownloader(),
                        record: SkinStoreInstalledRecord(fileURL: directory.appendingPathComponent("store.json")),
                        installStep: { _, _ in throw SkinImportError.unreadableArchive })
   }
@@ -55,7 +57,8 @@ final class SkinStoreViewModelTests: XCTestCase {
     await model.refresh()
     XCTAssertEqual(model.loadState, .loaded)
     XCTAssertEqual(model.shelves.count, 3)
-    XCTAssertNotNil(model.offlineMessage)
+    // The banner is built from the error, so it runs through iCube's `L()` lookup like every other store message.
+    XCTAssertTrue(model.offlineMessage?.hasPrefix("The skin catalog could not be downloaded:") == true, "\(model.offlineMessage ?? "nil")")
   }
 }
 #endif

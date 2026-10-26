@@ -368,6 +368,12 @@ let iCube = Target.target(
         .package(product: "PVLibraryMetadata"),
         .package(product: "PVLibrarySnapshot"),
         .package(product: "Zip"),
+        // Controller skins, shared with Provenance and iFly (Provenance-Emu/SkinKit). iCube links the
+        // non-UI modules only: `SkinKitCore` (info.json model), `SkinCatalogKit` (catalog + store policy) and
+        // `SkinKitManager` (store installer + record). The picker, store and overlay views stay iCube's own.
+        .package(product: "SkinKitCore", condition: .when([.ios, .catalyst])),
+        .package(product: "SkinCatalogKit", condition: .when([.ios, .catalyst])),
+        .package(product: "SkinKitManager", condition: .when([.ios, .catalyst])),
         // PLzmaSDK, through a local package: see Source/iOS/PLzmaShim/Package.swift.
         .package(product: "PLzmaShim"),
         .package(product: "SWCompression"),
@@ -557,6 +563,10 @@ let iCubeTests = Target.target(
         .package(product: "PVSyncRules"),
         // SkinLibraryTests zips the skin fixture with `Zip.zipFiles`.
         .package(product: "Zip"),
+        // The skin tests decode catalog entries and drive the store installer directly.
+        .package(product: "SkinKitCore"),
+        .package(product: "SkinCatalogKit"),
+        .package(product: "SkinKitManager"),
     ],
     settings: .settings(
         base: [
@@ -762,6 +772,9 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
+        // SkinKit has no tags yet, so it is pinned by revision. This is the head of
+        // Provenance-Emu/SkinKit#38 (the lenient decoding options); the pin moves to the merge commit once that lands.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("448b8f6288646206f0a64b0f8b132d3bf686b7d6")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),

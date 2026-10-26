@@ -103,6 +103,111 @@ final class SkinModelTests: XCTestCase {
     XCTAssertThrowsError(try SkinInfo.decode(Data(json.utf8)))
   }
 
+  // MARK: Rules SkinKitCore does not apply on its own (`DeltaSkin.DecodingOptions.lenient`)
+
+  func testOnlyGameCubeAndWiiAreAcceptedBySuffix() throws {
+    func decode(_ identifier: String) -> SkinInfo? {
+      try? SkinInfo.decode(Data(#"{"name":"N","identifier":"x","gameTypeIdentifier":"\#(identifier)","representations":{"iphone":{"standard":{"portrait":{"mappingSize":{"width":1,"height":1}}}}}}"#.utf8))
+    }
+    XCTAssertEqual(decode("public.aoshuang.game.ngc")?.gameType, .gameCube)
+    XCTAssertEqual(decode("com.rileytestut.delta.game.GC")?.gameType, .gameCube)
+    XCTAssertEqual(decode("com.rileytestut.delta.game.wii")?.gameType, .wii)
+    XCTAssertNil(decode("com.example.game.gcn"), "SkinKitCore reads gcn as GameCube; iCube never did")
+    XCTAssertNil(decode("com.example.game.nintendogamecube"))
+    XCTAssertNil(decode("com.rileytestut.delta.game.n64"))
+  }
+
+  func testPartialRepresentationEdgesFillWithZeroAndItemsInheritThem() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"extendedEdges":{"left":7},"items":[
+      {"inputs":["a"],"frame":[0,0,1,1]},
+      {"inputs":["b"],"frame":[0,0,1,1],"extendedEdges":{"top":3,"left":null}}]}}}}
+    """)
+    let rep = try XCTUnwrap(portrait(of: SkinInfo.decode(json)))
+    XCTAssertEqual(rep.extendedEdges, UIEdgeInsets(top: 0, left: 7, bottom: 0, right: 0))
+    XCTAssertEqual(rep.items[0].extendedEdges, UIEdgeInsets(top: 0, left: 7, bottom: 0, right: 0))
+    XCTAssertEqual(rep.items[1].extendedEdges, UIEdgeInsets(top: 3, left: 7, bottom: 0, right: 0), "a null side is absent, so it inherits")
+  }
+
+  func testWrongTypesDropTheRepresentationNotTheSkin() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{
+      "portrait":{"mappingSize":{"width":10,"height":20},"translucent":"yes"},
+      "landscape":{"mappingSize":{"width":20,"height":10},"items":"nope"}}},
+     "ipad":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"assets":{"resizable":3}},
+                          "landscape":{"mappingSize":{"width":20,"height":10}}}}}
+    """)
+    let info = try SkinInfo.decode(json)
+    XCTAssertNil(info.representation(device: .iphone, orientation: .portrait))
+    XCTAssertNil(info.representation(device: .iphone, orientation: .landscape))
+    XCTAssertNil(info.representation(device: .ipad, orientation: .portrait))
+    XCTAssertNotNil(info.representation(device: .ipad, orientation: .landscape))
+  }
+
+  func testBucketsTheOverlayDoesNotUseAreIgnored() throws {
+    let json = skinJSON(representations: """
+    {"tv":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20}}}},
+     "iphone":{"splitView":{"portrait":{"mappingSize":{"width":10,"height":20}}},
+               "standard":{"portrait":{"mappingSize":{"width":10,"height":20}},"upsideDown":{"mappingSize":{"width":10,"height":20}}}}}
+    """)
+    let info = try SkinInfo.decode(json)
+    XCTAssertEqual(info.representations.keys.map(\.rawValue), ["iphone"])
+    XCTAssertEqual(info.representations[.iphone]?.keys.map(\.rawValue), ["standard"])
+    XCTAssertEqual(info.representations[.iphone]?[.standard]?.keys.map(\.rawValue), ["portrait"])
+  }
+
+  func testThingsTheOverlayNeverReadsCannotRejectASkin() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},
+      "screens":[{"outputFrame":[0,0,10,10],"filters":"garbage","placement":42}],
+      "items":[{"inputs":["a"],"frame":[0,0,1,1],"haptic":"???","states":[1,2]}],
+      "backgroundAnimation":"oops","gameScreenFrame":"nope"}}}}
+    """)
+    let rep = try XCTUnwrap(portrait(of: SkinInfo.decode(json)))
+    XCTAssertEqual(rep.screens.map(\.outputFrame), [CGRect(x: 0, y: 0, width: 10, height: 10)])
+    XCTAssertEqual(rep.items.count, 1)
+  }
+
+  func testScreenInputFrameIsKeptAndABadOneDropsTheScreen() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"screens":[
+      {"outputFrame":[0,0,10,10],"inputFrame":{"x":0,"y":0,"width":320,"height":240}},
+      {"outputFrame":[0,0,5,5],"inputFrame":"bad"},
+      {"inputFrame":[0,0,1,1]}]}}}}
+    """)
+    let screens = try XCTUnwrap(portrait(of: SkinInfo.decode(json))).screens
+    XCTAssertEqual(screens, [SkinScreen(outputFrame: CGRect(x: 0, y: 0, width: 10, height: 10),
+                                        inputFrame: CGRect(x: 0, y: 0, width: 320, height: 240))])
+  }
+
+  func testBackgroundAssetKeysComeThrough() throws {
+    let json = skinJSON(representations: """
+    {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},
+      "assets":{"resizable":"bg.pdf","large":"l.png","medium":"m.png","small":"s.png"}}}}}
+    """)
+    let background = try XCTUnwrap(portrait(of: SkinInfo.decode(json))?.background)
+    XCTAssertEqual(background, SkinAsset(resizable: "bg.pdf", small: "s.png", medium: "m.png", large: "l.png"))
+  }
+
+  func testThumbstickSizesAreLimitedAndABadOneDropsOnlyItsItem() throws {
+    func items(width: String) throws -> [SkinItem] {
+      let json = skinJSON(representations: """
+      {"iphone":{"standard":{"portrait":{"mappingSize":{"width":10,"height":20},"items":[
+        {"inputs":{"up":"rightThumbstickUp","down":"rightThumbstickDown","left":"rightThumbstickLeft","right":"rightThumbstickRight"},
+         "frame":[0,0,10,10],"thumbstick":{"name":"stick.pdf","width":\(width),"height":8}},
+        {"inputs":["a"],"frame":[1,2,3,4]}]}}}}
+      """)
+      return try XCTUnwrap(portrait(of: SkinInfo.decode(json))).items
+    }
+    // -1e999 parses to -infinity; re-serialising that would raise an uncatchable Objective-C exception.
+    for bad in ["-1e999", "-5", "1e308", "100001"] {
+      XCTAssertEqual(try items(width: bad).map(\.inputs), [.buttons(["a"])], "width \(bad) drops the thumbstick item")
+    }
+    let kept = try items(width: "6")
+    XCTAssertEqual(kept.count, 2)
+    XCTAssertEqual(kept.first?.thumbstick, SkinThumbstick(name: "stick.pdf", width: 6, height: 8))
+  }
+
   // MARK: Frame sanity
 
   func testItemFramesOutOfRangeAreDroppedNextToGoodItem() throws {

@@ -3,13 +3,15 @@
 
 #if os(iOS)
 import Foundation
+import SkinCatalogKit
+import SkinKitManager
 
 /// One shelf of the store as shown: the section and its visible entries, in policy order.
 struct SkinStoreShelf: Identifiable {
   let section: SkinStoreSection
   let entries: [SkinCatalogEntry]
 
-  var id: SkinStoreSection { section }
+  var id: String { section.id }
 }
 
 /// What the store screen can show.
@@ -36,12 +38,15 @@ final class SkinStoreViewModel: ObservableObject {
   let installer: SkinStoreInstaller
   private let service: SkinCatalogService
   private let library: SkinLibrary
+  private let policy: SkinStorePolicy
   private var hasLoaded = false
 
-  init(service: SkinCatalogService = .shared, installer: SkinStoreInstaller = .shared, library: SkinLibrary = .shared) {
+  init(service: SkinCatalogService = .shared, installer: SkinStoreInstaller = .shared, library: SkinLibrary = .shared,
+       policy: SkinStorePolicy = .iCube) {
     self.service = service
     self.installer = installer
     self.library = library
+    self.policy = policy
   }
 
   /// First appearance: cache first, then the network if the cache is stale.
@@ -69,18 +74,19 @@ final class SkinStoreViewModel: ObservableObject {
     do {
       let result = try await service.load(forceRefresh: forceRefresh)
       apply(result.catalog)
-      offlineMessage = result.networkError
+      // The error itself, so the banner is in the player's language; the text is the fallback.
+      offlineMessage = result.error.map(SkinStoreMessages.describe) ?? result.networkError
     } catch {
       if loadState == .loaded {
-        offlineMessage = error.localizedDescription
+        offlineMessage = SkinStoreMessages.describe(error)
       } else {
-        loadState = .failed(message: error.localizedDescription)
+        loadState = .failed(message: SkinStoreMessages.describe(error))
       }
     }
   }
 
   private func apply(_ catalog: SkinCatalog) {
-    shelves = SkinStorePolicy.sections(for: catalog.skins).map { SkinStoreShelf(section: $0.section, entries: $0.entries) }
+    shelves = policy.sections(for: catalog.skins).map { SkinStoreShelf(section: $0.section, entries: $0.entries) }
     loadState = .loaded
   }
 }

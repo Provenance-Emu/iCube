@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+import SkinCatalogKit
+import SkinKitManager
 import SwiftUI
 
 /// Browse and install controller skins from the provenance-emu.com catalog. Shelves follow
@@ -159,27 +161,29 @@ struct SkinStoreView: View {
 /// Store-screen copy for each shelf, kept out of the policy so wording can change without touching routing.
 private extension SkinStoreSection {
   var storeHeader: String {
-    switch self {
-    case .gameCube: return L("GameCube")
-    case .wii: return L("Wii")
-    case .nintendo64: return L("N64-style layout")
+    switch id {
+    case SkinStoreSection.gameCube.id: return L("GameCube")
+    case SkinStoreSection.wii.id: return L("Wii")
+    case SkinStoreSection.nintendo64.id: return L("N64-style layout")
+    default: return title
     }
   }
 
   var storeNote: String? {
-    switch self {
-    case .gameCube, .wii: return nil
-    case .nintendo64:
+    switch id {
+    case SkinStoreSection.nintendo64.id:
       return L("Built for N64-style layouts. iCube puts A, B, Z, L, R, Start, the D-pad and the stick on the GameCube pad and the C buttons on the C-stick, so the art keeps its N64 labels.")
+    default: return nil
     }
   }
 
   /// The badge on a card: the console the skin was made for.
   var badge: String {
-    switch self {
-    case .gameCube: return L("GameCube")
-    case .wii: return L("Wii")
-    case .nintendo64: return L("N64")
+    switch id {
+    case SkinStoreSection.gameCube.id: return L("GameCube")
+    case SkinStoreSection.wii.id: return L("Wii")
+    case SkinStoreSection.nintendo64.id: return L("N64")
+    default: return title
     }
   }
 }
