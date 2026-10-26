@@ -57,7 +57,8 @@ final class SkinStoreViewModelTests: XCTestCase {
     await model.refresh()
     XCTAssertEqual(model.loadState, .loaded)
     XCTAssertEqual(model.shelves.count, 3)
-    XCTAssertNotNil(model.offlineMessage)
+    // The banner is built from the error, so it runs through iCube's `L()` lookup like every other store message.
+    XCTAssertTrue(model.offlineMessage?.hasPrefix("The skin catalog could not be downloaded:") == true, "\(model.offlineMessage ?? "nil")")
   }
 }
 #endif

@@ -74,7 +74,8 @@ final class SkinStoreViewModel: ObservableObject {
     do {
       let result = try await service.load(forceRefresh: forceRefresh)
       apply(result.catalog)
-      offlineMessage = result.networkError
+      // The error itself, so the banner is in the player's language; the text is the fallback.
+      offlineMessage = result.error.map(SkinStoreMessages.describe) ?? result.networkError
     } catch {
       if loadState == .loaded {
         offlineMessage = SkinStoreMessages.describe(error)
