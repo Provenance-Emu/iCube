@@ -9,6 +9,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     // Before anything logs: a JIT debugger's undrained stdio pipe must not block main (ICUBE-AC).
     DebuggerStdio.makeStdioNonBlocking()
+    #if os(iOS)
+    // SkinKit's log hooks, before the first skin or catalog line.
+    SkinKitSetup.configure()
+    #endif
     MotionSettings.registerDefaults()
     DSUSettings.registerDefaults()
 

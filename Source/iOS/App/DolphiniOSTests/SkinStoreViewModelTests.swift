@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+import SkinCatalogKit
+import SkinKitManager
 import XCTest
 @testable import iCube
 
@@ -28,7 +30,7 @@ final class SkinStoreViewModelTests: XCTestCase {
   }
 
   private func installer() -> SkinStoreInstaller {
-    SkinStoreInstaller(downloader: URLSessionSkinStoreDownloader(),
+    SkinStoreInstaller(policy: .iCube, downloader: URLSessionSkinStoreDownloader(),
                        record: SkinStoreInstalledRecord(fileURL: directory.appendingPathComponent("store.json")),
                        installStep: { _, _ in throw SkinImportError.unreadableArchive })
   }

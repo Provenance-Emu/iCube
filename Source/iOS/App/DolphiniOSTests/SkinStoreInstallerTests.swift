@@ -3,6 +3,8 @@
 
 #if os(iOS)
 import Combine
+import SkinCatalogKit
+import SkinKitManager
 import XCTest
 import Zip
 @testable import iCube
@@ -42,8 +44,16 @@ final class SkinStoreInstallerTests: XCTestCase {
 
   private func record() -> SkinStoreInstalledRecord { SkinStoreInstalledRecord(fileURL: recordURL) }
 
-  private func installed(id: String = "x", name: String = "Skin", gameType: SkinGameType = .gameCube) -> InstalledSkin {
-    InstalledSkin(id: id, name: name, gameType: gameType, directory: scratch.appendingPathComponent(id))
+  private func installed(id: String = "x") -> SkinStoreInstaller.InstallResult {
+    .installed(identifier: id)
+  }
+
+  /// The store's installer with a scripted download and install step, wired like the app's (policy, wording).
+  private func makeInstaller(downloader: any SkinStoreDownloading, record: SkinStoreInstalledRecord? = nil,
+                             installStep: @escaping SkinStoreInstaller.InstallStep) -> SkinStoreInstaller {
+    SkinStoreInstaller(policy: .iCube, downloader: downloader, record: record ?? self.record(), appName: "iCube",
+                       notInstallableMessage: SkinStoreMessages.notInstallable, describeError: SkinStoreMessages.describe,
+                       installStep: installStep)
   }
 
   private func entry(id: String = SkinCatalogFixture.gameCubePocketID, systems: [String] = ["gamecube"],
@@ -53,7 +63,7 @@ final class SkinStoreInstallerTests: XCTestCase {
 
   func testSuccessfulInstallRecordsTheCatalogId() async throws {
     var seen: [(file: String, section: SkinStoreSection, fileExists: Bool)] = []
-    let installer = SkinStoreInstaller(downloader: FakeDownloader(), record: record(), installStep: { file, section in
+    let installer = makeInstaller(downloader: FakeDownloader(), record: record(), installStep: { file, section in
       seen.append((file.lastPathComponent, section, FileManager.default.fileExists(atPath: file.path)))
       return self.installed(id: "com.starvingartist.gamecubepocket")
     })
@@ -71,10 +81,10 @@ final class SkinStoreInstallerTests: XCTestCase {
   }
 
   func testInstalledStateSurvivesANewInstaller() async throws {
-    let first = SkinStoreInstaller(downloader: FakeDownloader(), record: record(), installStep: { _, _ in self.installed() })
+    let first = makeInstaller(downloader: FakeDownloader(), record: record(), installStep: { _, _ in self.installed() })
     let skin = try entry()
     await first.install(skin)
-    let second = SkinStoreInstaller(downloader: FakeDownloader(), record: record(), installStep: { _, _ in
+    let second = makeInstaller(downloader: FakeDownloader(), record: record(), installStep: { _, _ in
       XCTFail("must not install")
       return self.installed()
     })
@@ -82,21 +92,21 @@ final class SkinStoreInstallerTests: XCTestCase {
   }
 
   func testDownloadFailureSurfacesMessage() async throws {
-    let installer = SkinStoreInstaller(downloader: FakeDownloader(error: URLSessionSkinStoreDownloader.HTTPStatusError(statusCode: 404)),
-                                       record: record(), installStep: { _, _ in
+    let installer = makeInstaller(downloader: FakeDownloader(error: URLSessionSkinStoreDownloader.HTTPStatusError(statusCode: 404)),
+                                  record: record(), installStep: { _, _ in
       XCTFail("install must not run after a failed download")
       return self.installed()
     })
     let skin = try entry()
     await installer.install(skin)
-    XCTAssertEqual(installer.state(for: skin), .failed(message: URLSessionSkinStoreDownloader.HTTPStatusError(statusCode: 404).localizedDescription))
+    XCTAssertEqual(installer.state(for: skin), .failed(message: SkinStoreMessages.describe(URLSessionSkinStoreDownloader.HTTPStatusError(statusCode: 404))))
     XCTAssertFalse(installer.installedIds.contains(skin.id))
   }
 
   /// A dead link that answers HTML with 200 reaches the library as a non-archive.
   func testInstallStepFailureSurfacesMessage() async throws {
-    let installer = SkinStoreInstaller(downloader: FakeDownloader(), record: record(),
-                                       installStep: { _, _ in throw SkinImportError.unreadableArchive })
+    let installer = makeInstaller(downloader: FakeDownloader(), record: record(),
+                                  installStep: { _, _ in throw SkinImportError.unreadableArchive })
     let skin = try entry()
     await installer.install(skin)
     XCTAssertEqual(installer.state(for: skin), .failed(message: SkinImportError.describe(SkinImportError.unreadableArchive)))
@@ -105,7 +115,7 @@ final class SkinStoreInstallerTests: XCTestCase {
 
   func testStatesPassThroughDownloadingAndInstalling() async throws {
     var observed: [SkinStoreInstallState] = []
-    let installer = SkinStoreInstaller(downloader: FakeDownloader(), record: record(), installStep: { _, _ in self.installed() })
+    let installer = makeInstaller(downloader: FakeDownloader(), record: record(), installStep: { _, _ in self.installed() })
     let skin = try entry()
     let cancellable = installer.$states.sink { states in
       if let state = states[skin.id] { observed.append(state) }
@@ -120,8 +130,8 @@ final class SkinStoreInstallerTests: XCTestCase {
   }
 
   func testCancellationReturnsToIdle() async throws {
-    let installer = SkinStoreInstaller(downloader: FakeDownloader(error: CancellationError()), record: record(),
-                                       installStep: { _, _ in self.installed() })
+    let installer = makeInstaller(downloader: FakeDownloader(error: CancellationError()), record: record(),
+                                  installStep: { _, _ in self.installed() })
     let skin = try entry()
     await installer.install(skin)
     XCTAssertEqual(installer.state(for: skin), .idle)
@@ -129,7 +139,7 @@ final class SkinStoreInstallerTests: XCTestCase {
 
   func testTemporaryDownloadFolderIsRemoved() async throws {
     var downloadedTo: URL?
-    let installer = SkinStoreInstaller(downloader: FakeDownloader(), record: record(), installStep: { file, _ in
+    let installer = makeInstaller(downloader: FakeDownloader(), record: record(), installStep: { file, _ in
       downloadedTo = file
       return self.installed()
     })
@@ -139,8 +149,8 @@ final class SkinStoreInstallerTests: XCTestCase {
   }
 
   func testHiddenEntryFailsWithoutDownloading() async throws {
-    let installer = SkinStoreInstaller(downloader: FakeDownloader(error: URLError(.badURL)), record: record(),
-                                       installStep: { _, _ in self.installed() })
+    let installer = makeInstaller(downloader: FakeDownloader(error: URLError(.badURL)), record: record(),
+                                  installStep: { _, _ in self.installed() })
     let zip = try entry(id: SkinCatalogFixture.n64ZipID, systems: ["n64"], url: "https://deltastyles.com/files/skins/758/x.zip")
     await installer.install(zip)
     guard case .failed = installer.state(for: zip) else { return XCTFail("a .zip entry must not install") }
@@ -150,7 +160,7 @@ final class SkinStoreInstallerTests: XCTestCase {
     let record = record()
     record.markInstalled(catalogId: "kept", skinIdentifier: "skin.kept")
     record.markInstalled(catalogId: "deleted", skinIdentifier: "skin.deleted")
-    let installer = SkinStoreInstaller(downloader: FakeDownloader(), record: record, installStep: { _, _ in self.installed() })
+    let installer = makeInstaller(downloader: FakeDownloader(), record: record, installStep: { _, _ in self.installed() })
     XCTAssertEqual(installer.installedIds, ["kept", "deleted"])
 
     installer.reconcileInstalled(with: ["skin.kept", "something.else"])
@@ -173,8 +183,8 @@ final class SkinStoreInstallerTests: XCTestCase {
                      zipFilePath: archive, password: nil, progress: nil)
 
     let library = SkinLibrary(rootURL: scratch.appendingPathComponent("Skins"))
-    let installer = SkinStoreInstaller(downloader: FakeDownloader(source: archive), record: record(),
-                                       installStep: SkinStoreInstaller.libraryInstallStep(library))
+    let installer = makeInstaller(downloader: FakeDownloader(source: archive), record: record(),
+                                  installStep: SkinStoreInstaller.libraryInstallStep(library, policy: .iCube))
     let n64 = try entry(id: SkinCatalogFixture.n64PackID, systems: ["n64"], url: "https://deltastyles.com/files/skins/551/x.deltaskin")
 
     await installer.install(n64)
@@ -183,6 +193,39 @@ final class SkinStoreInstallerTests: XCTestCase {
     XCTAssertEqual(library.skins.map(\.id), ["com.joemattiello.icube.testcube-gamecube"])
     XCTAssertEqual(library.skins.first?.gameType, .gameCube)
     XCTAssertEqual(record().load(), [SkinCatalogFixture.n64PackID: "com.joemattiello.icube.testcube-gamecube"])
+  }
+
+  /// A player who installed from the store before the move: `store.json` in the old format and the skin's folder in
+  /// the library. The new installer must read the record as it is, show the entry installed, and keep it through a
+  /// reconcile against the library's skins.
+  func testExistingStoreRecordStillMarksTheEntryInstalled() throws {
+    let root = scratch.appendingPathComponent("Skins", isDirectory: true)
+    let folder = root.appendingPathComponent("com.joemattiello.icube.testcube", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try FileManager.default.copyItem(at: XCTUnwrap(Bundle(for: Self.self).url(forResource: "TestCube", withExtension: "deltaskin", subdirectory: "Skins")),
+                                     to: folder)
+    // Written by the previous release's `SkinStoreInstalledRecord`: a flat JSON object, beside `selection.json`.
+    let oldRecord = #"{"\#(SkinCatalogFixture.gameCubePocketID)":"com.joemattiello.icube.testcube"}"#
+    try Data(oldRecord.utf8).write(to: root.appendingPathComponent(SkinLibrary.storeRecordFileName))
+
+    let library = SkinLibrary(rootURL: root)
+    let installer = SkinStoreInstaller.iCube(library: library, record: .iCube(rootURL: root))
+    let skin = try entry()
+
+    XCTAssertEqual(installer.state(for: skin), .installed)
+    installer.reconcileInstalled(with: Set(library.skins.map(\.id)))
+    XCTAssertEqual(installer.state(for: skin), .installed, "the skin is in the library, so the record stays")
+    XCTAssertEqual(SkinStoreInstalledRecord.iCubeFileName, SkinLibrary.storeRecordFileName, "SkinKit's record file is iCube's")
+
+    try library.delete(XCTUnwrap(library.skins.first))
+    installer.reconcileInstalled(with: Set(library.skins.map(\.id)))
+    XCTAssertEqual(installer.state(for: skin), .idle, "a deleted skin is offered again")
+  }
+
+  func testNotInstallableAndCatalogMessagesUseICubeWording() {
+    XCTAssertEqual(SkinStoreMessages.notInstallable("Foo"), "Foo isn't a skin iCube can install.")
+    XCTAssertEqual(SkinStoreMessages.describe(SkinCatalogError.httpStatus(503)), "The skin catalog server answered with HTTP 503.")
+    XCTAssertEqual(SkinStoreMessages.describe(SkinImportError.missingInfo), SkinImportError.describe(SkinImportError.missingInfo))
   }
 }
 #endif
