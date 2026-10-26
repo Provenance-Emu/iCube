@@ -772,9 +772,9 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // SkinKit has no tags yet, so it is pinned by revision. This is the head of
-        // Provenance-Emu/SkinKit#38 (the lenient decoding options); the pin moves to the merge commit once that lands.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("448b8f6288646206f0a64b0f8b132d3bf686b7d6")),
+        // SkinKit has no tags yet, so it is pinned by revision: SkinKit main at the #38 merge
+        // (lenient decoding options), which also has #37's arcade game types.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("ede51db93663e0ccf3c5e7e4f5eace9cb1b5725b")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
