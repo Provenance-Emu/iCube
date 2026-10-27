@@ -280,7 +280,9 @@ final class CloudSyncCoordinator: ObservableObject {
     func start() async {
         guard isEnabled else {
             if let root = DolphinPaths.userDirectoryURL() {
-                prepareLocalRecovery(root: root, kind: Self.makeProvider(deviceIdentifier: SyncDeviceIdentity.deviceIdentifier()).kind)
+                // Only the kind is needed here. Building a provider would create a
+                // CKContainer at every launch while sync is off.
+                prepareLocalRecovery(root: root, kind: Self.providerKind)
                 await refreshTrash()
             }
             // Still resolve availability so Settings can explain itself before
@@ -380,13 +382,40 @@ final class CloudSyncCoordinator: ObservableObject {
     /// one carrying the reason. Never optional at the call site: the sync path
     /// runs unchanged either way and simply finds nothing to do.
     private static func makeProvider(deviceIdentifier: String) -> any SyncProvider {
-        if let reason = CloudKitAvailability.buildLevelUnavailableReason(for: ICubeCloudSync.configuration) {
+        if let reason = installUnavailableReason() {
             return InertSyncProvider(reason: reason)
         }
         if let cloudKit = CloudKitSyncProvider(configuration: ICubeCloudSync.configuration, deviceIdentifier: deviceIdentifier) {
             return cloudKit
         }
         return InertSyncProvider(reason: .entitlementMissing)
+    }
+
+    /// The kind every provider `makeProvider` returns reports, inert or not.
+    static let providerKind: SyncProviderKind = .iCloud
+
+    /// Why this install cannot use CloudKit, or nil when it can.
+    private static func installUnavailableReason() -> SyncUnavailableReason? {
+        installUnavailableReason(
+            buildReason: CloudKitAvailability.buildLevelUnavailableReason(for: ICubeCloudSync.configuration),
+            canCreateContainer: { containerIsCreatable })
+    }
+
+    /// Probed once: signed entitlements cannot change while the app runs.
+    private static let containerIsCreatable: Bool = DOLCloudKitProbe.canCreateContainer(
+        withIdentifier: ICubeCloudSync.configuration.containerIdentifier
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+
+    /// The build-level reason wins, and when there is one the probe never runs: on the
+    /// simulator creating a container traps, which the probe cannot catch. Past that,
+    /// a container the probe cannot create (malformed entitlements on a re-signed
+    /// install) means CloudKit is off for this install.
+    nonisolated static func installUnavailableReason(
+        buildReason: SyncUnavailableReason?,
+        canCreateContainer: () -> Bool
+    ) -> SyncUnavailableReason? {
+        if let buildReason { return buildReason }
+        return canCreateContainer() ? nil : .entitlementMissing
     }
 
     /// Where the index and the trash live. Not under `User/`, so neither is
@@ -1082,8 +1111,8 @@ final class CloudSyncCoordinator: ObservableObject {
     }
 
     func refreshAvailability() async {
-        if let buildReason = CloudKitAvailability.buildLevelUnavailableReason(for: ICubeCloudSync.configuration) {
-            unavailableReason = buildReason
+        if let installReason = Self.installUnavailableReason() {
+            unavailableReason = installReason
             return
         }
         unavailableReason = await provider?.unavailableReason()
