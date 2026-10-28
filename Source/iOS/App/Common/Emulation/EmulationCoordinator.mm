@@ -3,6 +3,7 @@
 
 #import "EmulationCoordinator.h"
 #import "AudioVolumeRuntime.h"
+#include "AdaptiveClockFrameGuard.h"
 
 NSString* const DOLEmulationWillStartNotification = @"DOLEmulationWillStartNotification";
 NSString* const DOLEmulationDidStartNotification = @"DOLEmulationDidStartNotification";
@@ -317,25 +318,22 @@ static const double ACUnderrunPerTickBudget = 1.0;
 // and we stay put (converged) instead of oscillating.
 static const float ACUpMargin           = 0.04f;  // estimated cliff must exceed the post-probe clock by this
 static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an up-probe overshoot
-// --- Starvation guard (RELATIVE dup-ratio, unlike the absolute veto removed above). ---
+// --- Starvation guard: new game frames per wall second (AdaptiveClockFrameGuard.h). ---
 // The speed sensor is blind to a title whose own frame rate is what the clock buys: on a CPU-bound
-// 60fps title (Melee, 4 players) every underclock step raises VPS-speed toward 1.0 while the game
-// presents FEWER new frames per field (observed on iPhone 16 Pro Max: clock 1.0 -> 25-30 game fps
-// at 85 % speed; clock 0.4 -> 18 game fps at "100 %"). The sweep therefore walks to the floor,
-// persists it, and every later boot of that title starts in slow-motion. A 30fps-by-design title is
-// NOT caught here: its duplicate-present ratio is ~0.5 at EVERY clock that keeps up, so the ratio
-// does not RISE when the clock drops. Only a rise versus the ratio measured at the highest clock
-// seen this session marks the underclock as starving the game; then the reference clock is
-// restored and the CPU lever parked (same parking as the GPU-wall guard).
-static const double ACStarveDupRise = 0.10;   // dup-ratio rise vs the reference clock = starving
-static const unsigned long long ACStarveMinPresents = 30;  // presents a window needs before judging
-static const double ACStarveRefMaxDup = 0.90;  // a window above this is loading/black, never a reference
-// A trip is only a suspicion: the reference may come from another scene (a 60fps menu before 30fps
-// gameplay reads as a dup-ratio rise at ANY lower clock). The guard first re-measures at the
-// reference clock; only if that window presents clearly more new frames than the tripped one is the
-// underclock the cause. Otherwise the scene changed: re-base the reference there and resume.
-static const double ACStarveConfirmDrop = 0.05;  // ratio must fall this much back at the reference
-static const int ACStarveMaxUnconfirmed = 2;     // unconfirmed trips before the guard stands down
+// 60fps title (Melee with 4 players, F-Zero GX) every underclock step raises VPS-speed toward 1.0
+// while the game finishes FEWER frames per real second (observed on iPhone 16 Pro Max: Melee at
+// clock 1.0 -> 25-30 game fps at 85 % speed; clock 0.4 -> 18 game fps at "100 %"). The sweep
+// therefore walks to the floor, persists it, and every later boot of that title starts in
+// slow-motion. Every window below the reference point (CPU and VI at their ceiling, measured this
+// run) is judged by the frames it delivers; a point that delivers clearly less is re-measured at
+// the reference and, if confirmed, the reference is restored and the CPU lever parked (same
+// parking as the GPU-wall guard). The first guard compared duplicate-present ratios, but with Skip
+// Duplicate XFBs on (the default) duplicates are never presented or counted, so it never tripped.
+// A 30fps-by-design title is not caught: it delivers 30 frames per second at every clock that
+// keeps up, so a lower clock that reaches full speed delivers MORE, not fewer.
+
+// A window spanning a gap this long (four missed ticks: pause, background) is stale: measure again.
+static const double ACWindowGapSeconds = 4.0 * ACTickMs / 1000.0;
 
 @implementation EmulationCoordinator {
   UIView* _renderHost;
@@ -384,13 +382,16 @@ static const int ACStarveMaxUnconfirmed = 2;     // unconfirmed trips before the
   float _acProbeBaseCPU;       // clock just before the predictive jump (restore target if not CPU-bound)
   double _acProbeBaseSpeed;    // achieved speed just before the jump (CPU-bound = lowering raised it)
   BOOL  _acCpuLeverParked;     // GPU/video wall: CPU lever gives no gain -> stop fighting it with clock
-  float  _acRefCPU;            // highest applied clock with a trusted dup-ratio sample this run (-1 = none)
-  double _acRefDupRatio;       // duplicate-present ratio measured at _acRefCPU (starvation reference)
-  BOOL _acStarveConfirming;    // tripped: re-measuring at the reference clock before parking
-  double _acStarveTripRatio;   // dup ratio of the window that tripped the guard
-  float _acStarveTripCPU;      // clock that tripped it (resumed if the trip is not confirmed)
+  // Frame-rate starvation guard (AdaptiveClockFrameGuard.h).
+  AdaptiveClockFrameGuard::Reference _acRef;  // highest point measured this run and its frame rate
+  BOOL _acStarveConfirming;    // tripped: re-measuring at the reference point before parking
+  double _acStarveTripRate;    // frame rate of the window that tripped the guard
+  float _acStarveTripCPU;      // clocks that tripped it (resumed if the trip is not confirmed)
+  float _acStarveTripVI;
   int _acStarveResumePhase;    // phase to resume if the trip is not confirmed
-  int _acStarveUnconfirmed;    // unconfirmed trips this run; the guard stands down at the max
+  BOOL _acPointVetted;         // a window at the current point passed the guard (gates persisting)
+  CFTimeInterval _acWindowStart;  // wall time the observation window began
+  CFTimeInterval _acLastTick;     // wall time of the previous tick (gap = stale window)
 
   int   _acPhase;          // ACPhase_* below
   int   _acPhaseTicks;     // ticks elapsed in the current phase (timer fires every ACTickMs)
@@ -728,7 +729,10 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   // schema_v < 5: clocks learned before the starvation guard existed could be floor-pinned by a
   //   CPU-bound title (Melee, 4 players: 0.4 persisted on an iPhone 16 Pro Max, so every boot of
   //   the title — including its auto-resume — started in slow-motion). Purge and relearn.
-  if ([defaults integerForKey:@"adaptive_clock_schema_v"] < 5) {
+  // schema_v < 6: that guard compared duplicate-present ratios, which stay 0 with Skip Duplicate
+  //   XFBs on (the default), so it never tripped and CPU-bound titles kept persisting floor clocks
+  //   (F-Zero GX at ~0.3). Purge once more for the frame-rate guard.
+  if ([defaults integerForKey:@"adaptive_clock_schema_v"] < 6) {
     for (NSString* key in [[defaults dictionaryRepresentation] allKeys]) {
       if ([key hasPrefix:@"adaptive_clock_cpu_"] || [key hasPrefix:@"adaptive_clock_vi_"])
         [defaults removeObjectForKey:key];
@@ -748,7 +752,7 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
       repaired = true;
     }
     if (repaired) Config::Save();
-    [defaults setInteger:5 forKey:@"adaptive_clock_schema_v"];
+    [defaults setInteger:6 forKey:@"adaptive_clock_schema_v"];
   }
 
   // Learned clocks are kept across core revisions. Every app update changes the revision, so
@@ -788,13 +792,15 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   _acViRecoveryStalled = NO;
   _acFineConfirmed = NO;
   _acCpuLeverParked = NO;
-  _acRefCPU = -1.f;
-  _acRefDupRatio = -1.0;
+  _acRef = AdaptiveClockFrameGuard::Reference{};
   _acStarveConfirming = NO;
-  _acStarveTripRatio = 0.0;
+  _acStarveTripRate = 0.0;
   _acStarveTripCPU = 1.0f;
+  _acStarveTripVI = 1.0f;
   _acStarveResumePhase = ACPhase_Search;
-  _acStarveUnconfirmed = 0;
+  _acPointVetted = NO;
+  _acWindowStart = CACurrentMediaTime();
+  _acLastTick = _acWindowStart;
   _acPhase = ACPhase_Search;  // default: full descending sweep from 1.0
   _acPhaseTicks = 0;
   _acUnderrunBase = PerformanceMetrics::GetAudioUnderrunCount();
@@ -907,17 +913,21 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
           PerformanceMetrics::ClassifyBound(speed, maxSpeed, speedThreshold));
       const PerformanceMetrics::Bound bound = PerformanceMetrics::GetBound();
 
+      const CFTimeInterval now = CACurrentMediaTime();
       const auto resetWindow = ^{
         self->_acUnderrunBase = underruns;
         self->_acDupBase = dups;
         self->_acTotalBase = total;
         self->_acPhaseTicks = 0;
+        self->_acWindowStart = now;
       };
       const auto applyCPU = ^(float v) {
         // CPU lever yielded to manual control: don't fight the user's slider (step #2).
         if (self->_acCpuYielded) return;
         self->_acCPU = MIN(1.0f, MAX(ACCpuFloor, v));
         const float applied = MIN(self->_acCPU, ceiling);
+        if (fabsf(applied - self->_acLastApplied) > AdaptiveClockFrameGuard::kClockEpsilon)
+          self->_acPointVetted = NO;
         Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, applied < 1.0f);
         Config::SetCurrent(Config::MAIN_OVERCLOCK, applied);
         self->_acLastApplied = applied;
@@ -926,12 +936,19 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
         // VI lever yielded to manual control: leave it to the user (step #2).
         if (self->_acViYielded) return;
         self->_acVI = MAX(ACViFloor, MIN(1.0f, v));
+        if (fabsf(self->_acVI - self->_acLastAppliedVI) > AdaptiveClockFrameGuard::kClockEpsilon)
+          self->_acPointVetted = NO;
         Config::SetCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, self->_acVI < 1.0f);
         Config::SetCurrent(Config::MAIN_VI_OVERCLOCK, self->_acVI);
         self->_acLastAppliedVI = self->_acVI;
       };
       const auto persistConverged = ^{
         if (!cool || !self->_adaptiveGameID) return;
+        // Only a point the frame guard passed this run is learned (1.0/1.0 needs no vetting): an
+        // unchecked underclock saved here is where every later boot of the title would start.
+        const bool atNative = self->_acCPU >= 1.0f - AdaptiveClockFrameGuard::kClockEpsilon &&
+                              self->_acVI >= 1.0f - AdaptiveClockFrameGuard::kClockEpsilon;
+        if (!atNative && !self->_acPointVetted) return;
         if (self->_acCPU != self->_acLastPersisted) {
           [NSUserDefaults.standardUserDefaults
               setFloat:self->_acCPU
@@ -943,15 +960,24 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
               forKey:[@"adaptive_clock_vi_" stringByAppendingString:self->_adaptiveGameID]];
       };
 
+      // A window that spans a pause or a stalled host thread does not measure the current point.
+      if (now - self->_acLastTick > ACWindowGapSeconds) {
+        self->_acLastTick = now;
+        resetWindow();
+        return;
+      }
+      self->_acLastTick = now;
+
       self->_acPhaseTicks++;
 
-      // Starvation guard: evaluated once per completed window (same tick thresholds the phases use).
-      // If this window ran at a clock BELOW the reference and the game presented a markedly larger
-      // share of duplicate fields than it did at the reference clock, the underclock is starving
-      // the game (its frame rate is the thing the clock buys) -> restore the reference clock and
-      // park the CPU lever. Windows at/above the reference refresh it, so the comparison always
-      // tracks the current scene at the highest clock seen.
+      // Starvation guard (AdaptiveClockFrameGuard.h): evaluated once per completed window (same tick
+      // thresholds the phases use). A window below the reference point that delivers clearly fewer
+      // new game frames per second is re-measured at the reference; if the reference delivers more,
+      // it is restored and the CPU lever parked. Windows at the reference point refresh it, so the
+      // comparison tracks the current scene. With no reference yet (a seeded boot starts below
+      // native) the top point is measured before any lower point is trusted.
       {
+        namespace FG = AdaptiveClockFrameGuard;
         int needTicks = ACHoldTicks;
         switch (self->_acPhase) {
           case ACPhase_Verify:   needTicks = ACVerifyTicks;     break;
@@ -960,28 +986,37 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
           case ACPhase_Settle:   needTicks = ACSettleTicks;     break;
           default: break;
         }
-        // While confirming a trip, the phases wait: the window runs at the reference clock.
+        // While confirming a trip, the phases wait: the window runs at the reference point.
         if (self->_acStarveConfirming && self->_acPhaseTicks < needTicks)
           return;
         if (self->_acPhaseTicks >= needTicks) {
           const unsigned long long wTotal = (total > self->_acTotalBase) ? (total - self->_acTotalBase) : 0ULL;
           const unsigned long long wDups = (dups > self->_acDupBase) ? (dups - self->_acDupBase) : 0ULL;
-          if (self->_acStarveConfirming && wTotal < ACStarveMinPresents)
-          {
-            // Loading or a black screen: measure the confirmation again.
-            resetWindow();
-            return;
-          }
+          const FG::FrameWindow window{wTotal > wDups ? wTotal - wDups : 0ULL, now - self->_acWindowStart};
+          // A lever under manual control is the user's, not a point the guard judges.
+          const FG::OperatingPoint top{self->_acCpuYielded ? curOC : ceiling,
+                                       self->_acViYielded ? curVI : 1.0f};
+          const FG::OperatingPoint bar = self->_acRef.valid ? self->_acRef.point : top;
+          const FG::OperatingPoint point{self->_acCpuYielded ? bar.cpu : MIN(self->_acCPU, ceiling),
+                                         self->_acViYielded ? bar.vi : self->_acVI};
+          const double rate = FG::Rate(window);
           if (self->_acStarveConfirming)
           {
-            self->_acStarveConfirming = NO;
-            const double dupRatio = (double)wDups / (double)wTotal;
-            const float appliedNow = MIN(self->_acCPU, ceiling);
-            if (dupRatio <= self->_acStarveTripRatio - ACStarveConfirmDrop)
+            if (!FG::CanConfirm(window))
             {
-              INFO_LOG_FMT(CORE, "AdaptiveClock: starvation at {:.2f} confirmed, keeping {:.2f}",
-                           self->_acStarveTripCPU, appliedNow);
-              self->_acRefDupRatio = dupRatio;
+              // Loading or a black screen: measure the confirmation again.
+              resetWindow();
+              return;
+            }
+            self->_acStarveConfirming = NO;
+            self->_acRef = FG::Reference{true, point, rate};
+            if (FG::ConfirmsStarvation(self->_acStarveTripRate, window))
+            {
+              INFO_LOG_FMT(CORE, "AdaptiveClock: starvation at cpu {:.2f} vi {:.2f} confirmed "
+                           "({:.1f} vs {:.1f} fps), keeping cpu {:.2f} vi {:.2f}",
+                           self->_acStarveTripCPU, self->_acStarveTripVI, self->_acStarveTripRate,
+                           rate, point.cpu, point.vi);
+              self->_acPointVetted = YES;
               self->_acStableCPU = self->_acCPU;
               self->_acCpuLeverParked = YES;
               self->_acUpProbeLever = AC_LEVER_NONE;
@@ -990,48 +1025,50 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
               resetWindow();
               return;
             }
-            // The reference clock presents no more new frames than the tripped one: the scene
-            // changed, not the clock's effect. Re-base the reference on this scene and resume.
-            self->_acStarveUnconfirmed++;
-            INFO_LOG_FMT(CORE, "AdaptiveClock: starvation not confirmed, resuming {:.2f}",
-                         self->_acStarveTripCPU);
-            if (dupRatio < ACStarveRefMaxDup)
-            {
-              self->_acRefCPU = appliedNow;
-              self->_acRefDupRatio = dupRatio;
-            }
+            // The reference delivers no more new frames than the tripped point: the scene changed,
+            // not the clock's effect. The reference is re-based on this scene; resume.
+            INFO_LOG_FMT(CORE, "AdaptiveClock: starvation not confirmed ({:.1f} vs {:.1f} fps), "
+                         "resuming cpu {:.2f} vi {:.2f}", self->_acStarveTripRate, rate,
+                         self->_acStarveTripCPU, self->_acStarveTripVI);
             applyCPU(self->_acStarveTripCPU);
+            applyVI(self->_acStarveTripVI);
             self->_acPhase = self->_acStarveResumePhase;
             resetWindow();
             return;
           }
-          if (wTotal >= ACStarveMinPresents)
-          {
-            const double dupRatio = (double)wDups / (double)wTotal;
-            const float appliedNow = MIN(self->_acCPU, ceiling);
-            if (self->_acRefCPU >= 0.f && appliedNow < self->_acRefCPU - 0.001f &&
-                dupRatio > self->_acRefDupRatio + ACStarveDupRise && !self->_acCpuYielded &&
-                self->_acStarveUnconfirmed < ACStarveMaxUnconfirmed)
-            {
-              INFO_LOG_FMT(CORE, "AdaptiveClock: starvation suspected at {:.2f}", appliedNow);
+          const FG::Verdict verdict = FG::Judge(point, window, self->_acRef, top);
+          switch (verdict) {
+            case FG::Verdict::Suspect:
+            case FG::Verdict::NeedsReference: {
+              const FG::OperatingPoint target = (verdict == FG::Verdict::Suspect) ? self->_acRef.point : top;
+              INFO_LOG_FMT(CORE, "AdaptiveClock: {} at cpu {:.2f} vi {:.2f} ({:.1f} fps), measuring "
+                           "cpu {:.2f} vi {:.2f}",
+                           verdict == FG::Verdict::Suspect ? "starvation suspected" : "no reference",
+                           point.cpu, point.vi, rate, target.cpu, target.vi);
               self->_acStarveConfirming = YES;
-              self->_acStarveTripRatio = dupRatio;
+              self->_acStarveTripRate = rate;
               self->_acStarveTripCPU = self->_acCPU;
+              self->_acStarveTripVI = self->_acVI;
               self->_acStarveResumePhase = self->_acPhase;
-              applyCPU(self->_acRefCPU);
+              applyCPU(target.cpu);
+              applyVI(target.vi);
               resetWindow();
               return;
             }
-            // A window with (almost) no new game frames is loading / a black screen, not a
-            // measurement of what this clock buys; never let it become the reference.
-            if (appliedNow >= self->_acRefCPU - 0.001f && dupRatio < ACStarveRefMaxDup) {
-              if (fabs(dupRatio - self->_acRefDupRatio) > 0.02 || appliedNow != self->_acRefCPU) {
-                INFO_LOG_FMT(CORE, "AdaptiveClock: reference clock {:.2f} dup-ratio {:.2f} ({} presents)",
-                             appliedNow, dupRatio, wTotal);
+            case FG::Verdict::Reference:
+              if (!self->_acRef.valid || FG::IsBelow(self->_acRef.point, point) ||
+                  fabs(rate - self->_acRef.rate) > 0.10 * self->_acRef.rate) {
+                INFO_LOG_FMT(CORE, "AdaptiveClock: reference cpu {:.2f} vi {:.2f} at {:.1f} fps "
+                             "({} frames)", point.cpu, point.vi, rate, window.uniqueFrames);
               }
-              self->_acRefCPU = appliedNow;
-              self->_acRefDupRatio = dupRatio;
-            }
+              self->_acRef = FG::Reference{true, point, rate};
+              self->_acPointVetted = YES;
+              break;
+            case FG::Verdict::Keep:
+              self->_acPointVetted = YES;
+              break;
+            case FG::Verdict::Ignore:
+              break;
           }
         }
       }

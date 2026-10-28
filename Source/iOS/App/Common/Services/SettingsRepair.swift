@@ -20,7 +20,7 @@ final class SettingsRepair: NSObject {
   static let versionKey = "settings_repair_v"
   /// The adaptive clock's own one-time purge (EmulationCoordinator) runs below this schema. The
   /// repair covers what it did, so it marks the schema current instead of letting it run later.
-  static let adaptiveClockSchemaVersion = 5
+  static let adaptiveClockSchemaVersion = 6
   static let adaptiveClockSchemaKey = "adaptive_clock_schema_v"
 
   enum Condition: Equatable {

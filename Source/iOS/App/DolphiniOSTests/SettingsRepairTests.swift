@@ -231,7 +231,7 @@ final class SettingsRepairTests: XCTestCase {
     XCTAssertTrue(defaults.bool(forKey: "ICubeBenchServerEnabled"))
     XCTAssertNotNil(defaults.data(forKey: "icube.perfSnapshots"))
     XCTAssertTrue(defaults.bool(forKey: "adaptive_clock_enable"))
-    XCTAssertEqual(defaults.integer(forKey: "adaptive_clock_schema_v"), 5)
+    XCTAssertEqual(defaults.integer(forKey: "adaptive_clock_schema_v"), 6)
   }
 
   func testCleanUserDefaultsNeverLowersTheAdaptiveClockSchema() {
