@@ -39,7 +39,15 @@ final class GameTagCenter: ObservableObject {
     private init() {}
 
     /// True on hardware that can read NDEF tags (iPhone with NFC, not iPad, not the simulator).
-    nonisolated static var isAvailable: Bool {
+    /// Never blocks: `readingAvailable` has stalled the main thread for seconds inside the
+    /// library grid's context menu (Sentry ICUBE-K8), so it is read once off the main thread
+    /// and this is false until that read returns.
+    nonisolated static var isAvailable: Bool { readingSupport.value }
+
+    /// Starts the one background read. Called at launch so the answer is in before the library shows.
+    nonisolated static func resolveAvailability() { readingSupport.resolve() }
+
+    private nonisolated static let readingSupport = NonBlockingCapability {
         #if canImport(CoreNFC)
         return NFCNDEFReaderSession.readingAvailable
         #else

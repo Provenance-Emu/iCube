@@ -5,7 +5,7 @@ import Foundation
 import PVWebServer
 import UIKit
 
-/// Registers the continuity routes at launch.
+/// Registers the continuity routes at launch, and starts the NFC tag-support check.
 ///
 /// Registration is independent of the web server's listener: routes registered
 /// while the server is stopped are live the moment it binds, and they survive
@@ -21,6 +21,9 @@ final class ContinuityService: NSObject, UIApplicationDelegate {
         MainActor.assumeIsolated {
             ContinuityManager.shared.registerRoutes(on: PVWebServer.shared)
         }
+        // Tap-to-play tags: learn whether this device reads NFC before the library
+        // asks, off the main thread (see `GameTagCenter.isAvailable`).
+        GameTagCenter.resolveAvailability()
         return true
     }
 
