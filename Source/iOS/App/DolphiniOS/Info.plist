@@ -2,15 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDisplayName</key>
-	<string>$(DOL_APP_DISPLAY_NAME)</string>
 	<key>ALTDeviceID</key>
 	<string>NotSet</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>UIAppSupportsHDR</key>
 	<true/>
 	<key>CFBundleDocumentTypes</key>
 	<array>
@@ -101,16 +95,6 @@
 			</array>
 		</dict>
 	</array>
-	<key>LSApplicationQueriesSchemes</key>
-	<array>
-		<string>stikdebug</string>
-		<string>stikjit</string>
-		<!-- Sibling emulator apps (see Common/Ecosystem/EcosystemSchemes.swift):
-		     Provenance for gameInfo callbacks and the "Send to Provenance" probe,
-		     iFly for the Connected Apps settings leaf. -->
-		<string>provenance</string>
-		<string>ifly</string>
-	</array>
 	<key>DOLBuildSource</key>
 	<string>$(DOL_BUILD_SOURCE)</string>
 	<key>DOLCoreVersion</key>
@@ -130,15 +114,17 @@
 			<string>DirectionalGamepad</string>
 		</dict>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>stikdebug</string>
+		<string>stikjit</string>
+		<string>provenance</string>
+		<string>ifly</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
-		<!-- Continuity pulls talk plain HTTP to .local / raw-IP peers on the LAN.
-		     ATS exempts local connections by default, but the explicit key removes
-		     any ambiguity on device. This is the transport tradeoff documented in
-		     PVContinuity/ContinuityPairingMath: pairing authenticates the peer and
-		     adds no confidentiality. -->
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 		<key>NSExceptionDomains</key>
@@ -162,26 +148,22 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_altserver._tcp</string>
-		<!-- ROMUploadServer advertises _http._tcp through its NWListener and _webdav._tcp
-		     through NetService; both must be declared or local-network policy can park the
-		     listener in .waiting. -->
 		<string>_http._tcp</string>
 		<string>_webdav._tcp</string>
-		<!-- WS-4: continuity handoff + nearby library sharing. On tvOS this is the
-		     ONLY discovery path, since there is no system Handoff. -->
 		<string>_icube-continuity._tcp</string>
-		<!-- The phone publishes this (DSUServerBridge) and the TV browses it (DSUDiscovery).
-		     An undeclared type fails silently under local-network policy. -->
 		<string>_dolphin-dsu._udp</string>
 	</array>
-	<!-- Custom Handoff activity: continue a game in progress on another device
-	     (ContinuityAdvertisement.activityType). Handoff is iOS/iPadOS/macOS only;
-	     tvOS uses the in-app Bonjour browser instead, but the key is harmless
-	     there and keeps the two plists from drifting. -->
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>com.joemattiello.icube.continuity.play</string>
 	</array>
+	<key>UIAppFonts</key>
+	<array>
+		<string>RoundedMplus1c-Medium.ttf</string>
+		<string>RoundedMplus1c-Bold.ttf</string>
+	</array>
+	<key>UIAppSupportsHDR</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -236,11 +218,6 @@
 			<key>UIApplicationShortcutItemType</key>
 			<string>dios.quick.settings</string>
 		</dict>
-	</array>
-	<key>UIAppFonts</key>
-	<array>
-		<string>RoundedMplus1c-Medium.ttf</string>
-		<string>RoundedMplus1c-Bold.ttf</string>
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
@@ -600,11 +577,5 @@
 			</dict>
 		</dict>
 	</array>
-	<key>NFCReaderUsageDescription</key>
-	<string>iCube reads and writes NFC tags that launch a game from your library.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>The microphone stands in for the GameCube Microphone and Wii Speak in games that support them.</string>
-	<key>NSMotionUsageDescription</key>
-	<string>Headphone motion keeps spatial game audio anchored while you turn your head.</string>
 </dict>
 </plist>
