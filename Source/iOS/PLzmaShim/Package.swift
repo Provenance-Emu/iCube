@@ -13,8 +13,11 @@ let package = Package(
         .library(name: "PLzmaShim", targets: ["PLzmaShim"])
     ],
     dependencies: [
-        // Tag 1.6.2. Revision-pinned because a version requirement would reject the unsafe flags.
-        .package(url: "https://github.com/OlehKulykov/PLzmaSDK.git", revision: "4dbac7ac03ffd7f69ea5b03ec149683a351c37a9")
+        // Provenance-Emu fork, tag 1.6.2-provenance.1: upstream 1.6.2 plus the arm64 assembly LZMA decoder
+        // switched on (about 25 % faster extraction), hardware CRC32 on Apple arm64, and no linker
+        // "debug note" warnings from that decoder. Revision-pinned because a version requirement would
+        // reject the unsafe flags.
+        .package(url: "https://github.com/Provenance-Emu/PLzmaSDK.git", revision: "eea50ce18a00beb85b645f5b305cded3384de060")
     ],
     targets: [
         .target(name: "PLzmaShim", dependencies: [.product(name: "PLzmaSDK", package: "PLzmaSDK")])
