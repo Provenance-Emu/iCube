@@ -1,5 +1,6 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
+import PVLibraryMetadata
 import SwiftUI
 import UniformTypeIdentifiers
 
