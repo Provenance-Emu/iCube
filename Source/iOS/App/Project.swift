@@ -772,9 +772,9 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // Keep the shared SkinKit baseline aligned with Provenance and iFly until its first tag.
+        // Keep the exact SkinKit release aligned with Provenance and iFly.
         // iCube retains its own overlay and consumes the model, catalog and manager modules.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("599030369e2ed8d052618128e169e6d08405c527")),
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .exact("0.1.0")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
