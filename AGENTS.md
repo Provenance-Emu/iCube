@@ -2,7 +2,9 @@
 
 This repository is a Dolphin emulator fork with an iOS/tvOS app (**iCube**). Most agent work happens in `Source/iOS/App/` (Swift/ObjC UI) or `Source/Core/` (C++ emulator).
 
-**Start with [`docs/HANDOFF.md`](docs/HANDOFF.md)**: current state, the owner's priorities (tvOS library), the design system, and the traps.
+**Start with [GitHub ownership and handoffs](docs/dev/github-work-coordination.md)** for current issue/PR ownership and release priorities. GitHub issues, pull requests and milestones are the project-management source of truth for Claude, Codex and local sessions. Check the owner and linked PRs before editing, record the session/branch/checkpoint, and preserve tested versus pending work before handing off or archiving. Do not start a second implementation for already-owned work.
+
+Read [`docs/HANDOFF.md`](docs/HANDOFF.md) for implementation history, design-system context and traps; reconcile its dated snapshots against the live GitHub records. Continue release work through the existing [App Store tracker #51](https://github.com/Provenance-Emu/iCube/issues/51) and linked milestone/issues.
 
 ## Quick orientation
 
