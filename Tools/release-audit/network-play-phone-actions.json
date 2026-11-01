@@ -1,0 +1,120 @@
+[
+  {
+    "op": "launch",
+    "arguments": [
+      "-onboarding_seen_v1",
+      "YES",
+      "-ICubeAppearance",
+      "dark",
+      "-ICubeNetworkPlayPreview",
+      "-SCREENSHOT_MODE",
+      "1"
+    ]
+  },
+  {
+    "op": "assert",
+    "label": "Network Play is not available in this iCube build.",
+    "timeout": 10
+  },
+  {
+    "op": "assert",
+    "label": "Unverified",
+    "type": "button",
+    "exists": false
+  },
+  {
+    "op": "capture",
+    "name": "network-play-phone-games",
+    "ax": true
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.settings"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "value": "0"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-phone-settings",
+    "ax": true
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.unverifiedToggle"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "value": "1"
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.back"
+  },
+  {
+    "op": "assert",
+    "label": "Unverified",
+    "type": "button"
+  },
+  {
+    "op": "tap",
+    "label": "Nearby Rooms",
+    "type": "button"
+  },
+  {
+    "op": "assert",
+    "label": "Room discovery unavailable"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-phone-rooms",
+    "ax": true
+  },
+  {
+    "op": "launch",
+    "arguments": [
+      "-onboarding_seen_v1",
+      "YES",
+      "-ICubeAppearance",
+      "dark",
+      "-ICubeNetworkPlayPreview",
+      "-SCREENSHOT_MODE",
+      "1"
+    ]
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.settings"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "value": "1"
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.unverifiedToggle"
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.back"
+  },
+  {
+    "op": "assert",
+    "label": "Unverified",
+    "type": "button",
+    "exists": false
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.back"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.settings",
+    "exists": false
+  }
+]

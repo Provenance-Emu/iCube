@@ -107,7 +107,9 @@ struct NetworkPlayView: View {
         gamesContent.frame(maxWidth: .infinity, alignment: .topLeading)
         roomsContent.frame(maxWidth: .infinity, alignment: .topLeading)
       }
+      #if os(tvOS)
       .focusSection()
+      #endif
     } else {
       HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
         tab(L("Your Games"), selected: !roomsTab) { roomsTab = false }
@@ -167,7 +169,9 @@ struct NetworkPlayView: View {
         }
       }
     }
+    #if os(tvOS)
     .focusSection()
+    #endif
   }
 
   private func gameCard(_ item: TVGameItem) -> some View {
@@ -200,7 +204,9 @@ struct NetworkPlayView: View {
         .foregroundStyle(ICubeDesign.color(.textSecondary))
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+    #if os(tvOS)
     .focusSection()
+    #endif
   }
 
   private var settingsContent: some View {

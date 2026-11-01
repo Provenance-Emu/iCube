@@ -541,6 +541,9 @@ struct TVLibraryView: View {
 
   @StateObject private var model = TVLibraryViewModel()
   @State private var networkPlayRequest: NetworkPlayRequest?
+#if DEBUG
+  @State private var didPresentNetworkPlayPreview = false
+#endif
   @State private var showSettings = false
   @State private var didReloadOnce = false
   @State private var navigateTo: TVGameItem?
@@ -2512,7 +2515,8 @@ struct TVLibraryView: View {
       }
       .task {
 #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-ICubeNetworkPlayPreview") {
+        if !didPresentNetworkPlayPreview, ProcessInfo.processInfo.arguments.contains("-ICubeNetworkPlayPreview") {
+          didPresentNetworkPlayPreview = true
           networkPlayRequest = NetworkPlayRequest(game: nil)
         }
 #endif

@@ -13,7 +13,7 @@ enum NetworkPlayLibrary {
     let singlePlayerOnly: Bool
   }
   struct Game: Equatable, Identifiable {
-    let id: String // Full file identity; multiple dumps with the same disc ID remain distinct.
+    let id: String // Library path for ordering only, never a ROM digest or a room-join identity.
     let title: String
     let system: String
     let local: Bool
