@@ -128,6 +128,33 @@
   },
   {
     "op": "remote",
+    "button": "down"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.search",
+    "focused": true
+  },
+  {
+    "op": "capture",
+    "name": "network-play-tv-search-focused",
+    "ax": true
+  },
+  {
+    "op": "remote",
+    "button": "menu"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.back",
+    "focused": true
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.settings"
+  },
+  {
+    "op": "remote",
     "button": "menu"
   },
   {

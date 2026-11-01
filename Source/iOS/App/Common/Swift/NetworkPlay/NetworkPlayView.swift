@@ -19,7 +19,8 @@ struct NetworkPlayView: View {
   @State private var roomsTab = false
   @State private var settings = false
   @State private var selected: TVGameItem?
-  @FocusState private var searchFocused: Bool
+  private enum FocusTarget: Hashable { case back, settings, search, unverified }
+  @FocusState private var focus: FocusTarget?
 
   private var visibleGames: [NetworkPlayLibrary.Game] {
     NetworkPlayLibrary.games(libraryGames, filter: filter,
@@ -52,17 +53,25 @@ struct NetworkPlayView: View {
     .foregroundStyle(ICubeDesign.color(.textPrimary))
     .onAppear {
       selected = initialGame
+      #if os(tvOS)
+      focus = .back
+      #endif
       libraryGames = items.map(NetworkPlayLibrary.Game.init)
     }
     .onChange(of: items.map(\.filePath)) { _, _ in
       libraryGames = items.map(NetworkPlayLibrary.Game.init)
+    }
+    .onChange(of: settings) { _, _ in
+      #if os(tvOS)
+      focus = .back
+      #endif
     }
     .onChange(of: showUnverified) { _, enabled in
       if !enabled, filter == .unverified { filter = .suggested }
     }
     #if os(tvOS)
     .onExitCommand {
-      if searchFocused { searchFocused = false } else { back() }
+      if focus == .search { focus = .back } else { back() }
     }
     #endif
   }
@@ -71,7 +80,18 @@ struct NetworkPlayView: View {
     if settings { settings = false }
     else if selected != nil { selected = nil }
     else { dismiss() }
+    #if os(tvOS)
+    focus = .back
+    #endif
   }
+
+  #if os(tvOS)
+  private func moveDownFromHeader(_ direction: MoveCommandDirection) {
+    guard direction == .down else { return }
+    if settings { focus = .unverified }
+    else if selected == nil { focus = .search }
+  }
+  #endif
 
   private var header: some View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
@@ -83,6 +103,10 @@ struct NetworkPlayView: View {
         }
         .buttonStyle(ICubeRowButtonStyle())
         .accessibilityIdentifier("networkPlay.back")
+        .focused($focus, equals: .back)
+        #if os(tvOS)
+        .onMoveCommand(perform: moveDownFromHeader)
+        #endif
         Spacer()
         if !settings {
           Button { settings = true } label: {
@@ -92,6 +116,10 @@ struct NetworkPlayView: View {
           }
           .buttonStyle(ICubeRowButtonStyle())
           .accessibilityIdentifier("networkPlay.settings")
+          .focused($focus, equals: .settings)
+          #if os(tvOS)
+          .onMoveCommand(perform: moveDownFromHeader)
+          #endif
         }
       }
       ICubeLeafHeader(title: settings ? L("Network Play Settings") : L("Network Play"), subtitle: "iCube")
@@ -130,10 +158,15 @@ struct NetworkPlayView: View {
       TextField(L("Search games or systems"), text: $search,
                 prompt: Text(L("Search games or systems")).foregroundStyle(ICubeDesign.color(.textSecondary)))
         .icubeText(.body)
-        .focused($searchFocused)
+        .focused($focus, equals: .search)
         .padding(ICubeDesign.Spacing.s.rawValue)
         .background(ICubeDesign.Card.surface, in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
         .accessibilityIdentifier("networkPlay.search")
+        #if os(tvOS)
+        .onMoveCommand { direction in
+          if direction == .up { focus = .back }
+        }
+        #endif
       ScrollView(.horizontal) {
         HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
           ForEach(NetworkPlayLibrary.Filter.allCases.filter { showUnverified || $0 != .unverified }, id: \.self) { value in
@@ -178,7 +211,7 @@ struct NetworkPlayView: View {
 
   private func gameCard(_ item: TVGameItem) -> some View {
     Button {
-      searchFocused = false
+      focus = nil
       selected = item
     } label: {
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
@@ -241,6 +274,10 @@ struct NetworkPlayView: View {
       .icubeCardSurface()
     }
     .buttonStyle(ICubeCardButtonStyle())
+    .focused($focus, equals: .unverified)
+    .onMoveCommand { direction in
+      if direction == .up { focus = .back }
+    }
     .accessibilityValue(showUnverified ? L("On") : L("Off"))
     .accessibilityIdentifier("networkPlay.unverifiedToggle")
     #else
