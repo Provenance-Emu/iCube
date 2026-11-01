@@ -540,6 +540,7 @@ struct TVLibraryView: View {
   @Environment(\.tipsService) private var tipsService
 
   @StateObject private var model = TVLibraryViewModel()
+  @State private var networkPlayRequest: NetworkPlayRequest?
   @State private var showSettings = false
   @State private var didReloadOnce = false
   @State private var navigateTo: TVGameItem?
@@ -1845,6 +1846,12 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var libraryViewMenuSection: some View {
     Section(L("View")) {
+      Button {
+        libraryMenuAction { networkPlayRequest = NetworkPlayRequest(game: nil) }
+      } label: {
+        Label(L("Network Play"), systemImage: "network")
+      }
+
       Button(action: {
         libraryMenuAction {
           if isSelectionMode {
@@ -2495,6 +2502,21 @@ struct TVLibraryView: View {
       .overlay(searchHintBanner)
       .overlay(snackbar)
       .overlay(dsuApprovalBanner)
+      .fullScreenCover(item: $networkPlayRequest) { request in
+        NetworkPlayView(items: model.games, initialGame: request.game)
+          .claimsController()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .iCubeShowNetworkPlay)) { note in
+        guard let item = note.object as? TVGameItem else { return }
+        networkPlayRequest = NetworkPlayRequest(game: item)
+      }
+      .task {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-ICubeNetworkPlayPreview") {
+          networkPlayRequest = NetworkPlayRequest(game: nil)
+        }
+#endif
+      }
       .overlay(onboardingOverlay)
 #if os(tvOS)
       .fullScreenCover(isPresented: $showOnboarding, onDismiss: {
