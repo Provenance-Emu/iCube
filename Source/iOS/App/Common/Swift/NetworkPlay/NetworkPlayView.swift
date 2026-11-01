@@ -127,7 +127,9 @@ struct NetworkPlayView: View {
       Text(L("Choose a game to review its multiplayer details."))
         .icubeText(.detail)
         .foregroundStyle(ICubeDesign.color(.textSecondary))
-      TextField(L("Search games or systems"), text: $search)
+      TextField(L("Search games or systems"), text: $search,
+                prompt: Text(L("Search games or systems")).foregroundStyle(ICubeDesign.color(.textSecondary)))
+        .icubeText(.body)
         .focused($searchFocused)
         .padding(ICubeDesign.Spacing.s.rawValue)
         .background(ICubeDesign.Card.surface, in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
