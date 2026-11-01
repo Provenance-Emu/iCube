@@ -6,34 +6,28 @@ import PVCloudSync
 import XCTest
 @testable import iCube
 
-/// Re-signed installs with malformed iCloud entitlements made `CKContainer` raise at
-/// launch (Sentry ICUBE-HY, GY, J5). These pin the order of the checks and that the
-/// raise is caught.
+/// Build policy must short-circuit the signed entitlement gate before any
+/// provider can construct a container.
 final class CloudKitProbeTests: XCTestCase {
-  func testBuildReasonWinsAndTheProbeNeverRuns() {
-    var probed = false
+  func testBuildReasonWinsAndTheSignedCheckNeverRuns() {
+    var checked = false
     let reason = CloudSyncCoordinator.installUnavailableReason(
       buildReason: .containerNotProvisioned,
-      canCreateContainer: { probed = true; return true })
+      signedEntitlementsAllowCloudKit: { checked = true
+        return true
+      })
     XCTAssertEqual(reason, .containerNotProvisioned)
-    // On the simulator creating a container traps, so the probe must not run.
-    XCTAssertFalse(probed)
+    // Simulator/build policy short-circuits even the signed entitlement read.
+    XCTAssertFalse(checked)
   }
 
-  func testAContainerThatCannotBeCreatedMeansTheEntitlementIsMissing() {
-    let reason = CloudSyncCoordinator.installUnavailableReason(buildReason: nil, canCreateContainer: { false })
+  func testInvalidSignedEntitlementsDisableCloudKit() {
+    let reason = CloudSyncCoordinator.installUnavailableReason(buildReason: nil, signedEntitlementsAllowCloudKit: { false })
     XCTAssertEqual(reason, .entitlementMissing)
   }
 
-  func testAContainerThatCanBeCreatedLeavesCloudKitOn() {
-    XCTAssertNil(CloudSyncCoordinator.installUnavailableReason(buildReason: nil, canCreateContainer: { true }))
-  }
-
-  func testTheProbeCatchesAnObjectiveCException() {
-    XCTAssertFalse(DOLCloudKitProbe.succeedsWithoutException {
-      NSException(name: .genericException, reason: "malformed entitlements", userInfo: nil).raise()
-    })
-    XCTAssertTrue(DOLCloudKitProbe.succeedsWithoutException {})
+  func testValidSignedEntitlementsLeaveCloudKitOn() {
+    XCTAssertNil(CloudSyncCoordinator.installUnavailableReason(buildReason: nil, signedEntitlementsAllowCloudKit: { true }))
   }
 
   func testTheDisabledPathRecordsTheKindAnInertProviderReports() {

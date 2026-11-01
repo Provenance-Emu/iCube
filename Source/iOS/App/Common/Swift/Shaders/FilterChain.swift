@@ -130,6 +130,8 @@ public final class FilterChain {
 
   private var renderTargetsNeedResize = true
   private var historyNeedsInit = false
+  private var shaderFrameReady = false
+  private var fallbackTexture: MTLTexture?
 
   public private(set) var sourceRect = CGRect.zero
 
@@ -346,11 +348,11 @@ public final class FilterChain {
     }
   }
 
-  private func updateHistory() {
-    guard historyCount > 0 else { return }
+  private func updateHistory() -> Bool {
+    guard historyCount > 0 else { return true }
 
     if historyNeedsInit {
-      initHistory()
+      return initHistory()
     } else {
       // shift history and move last texture into first position
       let tmp = historyTextures[historyCount]
@@ -359,6 +361,7 @@ public final class FilterChain {
       }
       historyTextures[0] = tmp
     }
+    return true
   }
 
   /*
@@ -418,6 +421,7 @@ public final class FilterChain {
       return
     }
 
+    renderTargetsNeedResize = true
     sourceRect = rect
     aspectSize = aspect
     resize()
@@ -432,45 +436,53 @@ public final class FilterChain {
   /// A list of textures to be cleared before rendering begins.
   var _clearTextures = [MTLTexture]()
 
-  private func clearTexturesWithCommandBuffer(_ commandBuffer: MTLCommandBuffer) {
-    guard !_clearTextures.isEmpty else { return }
-
-    defer { _clearTextures.removeAll(keepingCapacity: true) }
-
-    guard #available(macOS 10.15, *) else { return }
-
-    // Find the size of the largest texture, in order to allocate a buffer with at least enough space for all textures.
-    var sizeMax = 0
-    for t in _clearTextures {
-      let bytesPerPixel = t.pixelFormat.bytesPerPixel
-      precondition(bytesPerPixel > 0, "Unable to determine bytes per pixel for pixel format \(t.pixelFormat)")
-
-      let bytesPerRow = t.width * bytesPerPixel
-      let bytesPerImage = t.height * bytesPerRow
-      if bytesPerImage > sizeMax {
-        sizeMax = bytesPerImage
-      }
-    }
-
-    // Allocate a buffer over the entire heap and fill it with zeros
-    if let bce = commandBuffer.makeBlitCommandEncoder(),
-       let buf = device.makeBuffer(length: sizeMax, options: [.storageModePrivate]) {
-      bce.fill(buffer: buf, range: 0 ..< sizeMax, value: 0)
-
-      // Use the cleared buffer to clear the destination texture.
-      for t in _clearTextures {
-        let bytesPerPixel = t.pixelFormat.bytesPerPixel
-        let bytesPerRow = t.width * bytesPerPixel
-        let bytesPerImage = t.height * bytesPerRow
-        let sourceSize = MTLSize(width: t.width, height: t.height, depth: 1)
-        bce.copy(from: buf, sourceOffset: 0, sourceBytesPerRow: bytesPerRow, sourceBytesPerImage: bytesPerImage, sourceSize: sourceSize,
-                 to: t, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init())
-      }
-      bce.endEncoding()
-    }
+  static func clearTextureLayout(width: Int, height: Int, bytesPerPixel: Int,
+                                 maxBufferLength: Int) -> (bytesPerRow: Int, bytesPerImage: Int)? {
+    guard width > 0, height > 0, bytesPerPixel > 0, maxBufferLength > 0 else { return nil }
+    let row = width.multipliedReportingOverflow(by: bytesPerPixel)
+    guard !row.overflow else { return nil }
+    let image = height.multipliedReportingOverflow(by: row.partialValue)
+    guard !image.overflow, image.partialValue <= maxBufferLength else { return nil }
+    return (row.partialValue, image.partialValue)
   }
 
-  private func fetchNextHistoryTexture() -> MTLTexture {
+  private func clearTexturesWithCommandBuffer(_ commandBuffer: MTLCommandBuffer) -> Bool {
+    guard !_clearTextures.isEmpty else { return true }
+
+    guard #available(macOS 10.15, *) else { return false }
+
+    // Preflight every copy layout before requesting storage. Even valid texture
+    // dimensions can require a clear buffer larger than the device permits.
+    let maxBufferLength = device.maxBufferLength
+    var layouts: [(texture: MTLTexture, bytesPerRow: Int, bytesPerImage: Int)] = []
+    var sizeMax = 0
+    for t in _clearTextures {
+      guard let layout = Self.clearTextureLayout(width: t.width, height: t.height,
+                                                 bytesPerPixel: t.pixelFormat.bytesPerPixel,
+                                                 maxBufferLength: maxBufferLength) else { return false }
+      layouts.append((t, layout.bytesPerRow, layout.bytesPerImage))
+      sizeMax = max(sizeMax, layout.bytesPerImage)
+    }
+
+    // Allocate before opening an encoder, so allocation failure cannot leave
+    // encoding in progress when the caller draws the fallback frame.
+    guard let buf = device.makeBuffer(length: sizeMax, options: [.storageModePrivate]),
+          let bce = commandBuffer.makeBlitCommandEncoder() else { return false }
+    defer { bce.endEncoding() }
+    bce.fill(buffer: buf, range: 0 ..< sizeMax, value: 0)
+
+    // Use the cleared buffer to clear the destination texture.
+    for layout in layouts {
+      let t = layout.texture
+      let sourceSize = MTLSize(width: t.width, height: t.height, depth: 1)
+      bce.copy(from: buf, sourceOffset: 0, sourceBytesPerRow: layout.bytesPerRow, sourceBytesPerImage: layout.bytesPerImage, sourceSize: sourceSize,
+               to: t, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init())
+    }
+    _clearTextures.removeAll(keepingCapacity: true)
+    return true
+  }
+
+  private func fetchNextHistoryTexture() -> MTLTexture? {
     precondition(historyCount > 0, "Current shader does not require history")
 
     // either no history, or we moved a texture of a different size in the front slot
@@ -481,40 +493,66 @@ public final class FilterChain {
                                                         mipmapped: false)
       td.storageMode = .private
       td.usage = [.shaderRead, .shaderWrite]
-      initTexture(&historyTextures[0], withDescriptor: td)
+      guard initTexture(&historyTextures[0], withDescriptor: td) else { return nil }
     }
 
-    return historyTextures[0].view!
+    return historyTextures[0].view
   }
 
   private func prepareNextFrame(sourceTexture: MTLTexture, commandBuffer: MTLCommandBuffer) {
+    shaderFrameReady = false
+    fallbackTexture = sourceTexture
+    defer {
+      if !shaderFrameReady {
+        // A partial allocation must not survive into the next frame as a valid
+        // target, or keep accumulating textures waiting to be cleared.
+        _clearTextures.removeAll(keepingCapacity: true)
+        for i in 0 ..< passCount {
+          pass[i].renderTarget = .init()
+          pass[i].feedbackTarget = .init()
+        }
+        if historyCount > 0 {
+          for i in 0 ... historyCount { historyTextures[i] = .init() }
+          historyNeedsInit = true
+        }
+        renderTargetsNeedResize = true
+      }
+    }
+    // Validate before converting to Int or submitting any allocation/copy to Metal.
+    guard Self.textureDimensions(sourceRect.size, limit: maxTextureDimension2D) != nil,
+          sourceRect.origin.x.isFinite, sourceRect.origin.y.isFinite,
+          sourceRect.origin.x >= 0, sourceRect.origin.y >= 0,
+          sourceRect.maxX <= CGFloat(sourceTexture.width),
+          sourceRect.maxY <= CGFloat(sourceTexture.height),
+          Self.textureDimensions(CGSize(width: outputFrame.viewport.width,
+                                        height: outputFrame.viewport.height), limit: maxTextureDimension2D) != nil,
+          resizeRenderTargets(), updateHistory() else { return }
     frameCount += 1
-
-    resizeRenderTargets()
-    updateHistory()
-    clearTexturesWithCommandBuffer(commandBuffer)
+    guard clearTexturesWithCommandBuffer(commandBuffer) else { return }
 
     if historyCount == 0 {
       // No need to copy, set the sourceTexture to Original / OriginalHistory0 semantic
       initTexture(&historyTextures[0], withTexture: sourceTexture)
     } else {
-      let texture = fetchNextHistoryTexture()
+      guard let texture = fetchNextHistoryTexture() else { return }
 
       let orig = MTLOrigin(x: Int(sourceRect.origin.x), y: Int(sourceRect.origin.y), z: 0)
       let size = MTLSize(width: Int(sourceRect.width), height: Int(sourceRect.height), depth: 1)
       let zero = MTLOrigin()
 
-      if let bce = commandBuffer.makeBlitCommandEncoder() {
-        bce.copy(from: sourceTexture, sourceSlice: 0, sourceLevel: 0, sourceOrigin: orig, sourceSize: size,
-                 to: texture, destinationSlice: 0, destinationLevel: 0, destinationOrigin: zero)
-        bce.endEncoding()
-      }
+      guard let bce = commandBuffer.makeBlitCommandEncoder() else { return }
+      bce.copy(from: sourceTexture, sourceSlice: 0, sourceLevel: 0, sourceOrigin: orig, sourceSize: size,
+               to: texture, destinationSlice: 0, destinationLevel: 0, destinationOrigin: zero)
+      bce.endEncoding()
     }
+    shaderFrameReady = true
   }
 
-  private func initTexture(_ t: inout Texture, withDescriptor td: MTLTextureDescriptor) {
-    t.view = device.makeTexture(descriptor: td)
-    t.size = .init(width: td.width, height: td.height)
+  @discardableResult
+  private func initTexture(_ t: inout Texture, withDescriptor td: MTLTextureDescriptor) -> Bool {
+    guard let texture = device.makeTexture(descriptor: td) else { return false }
+    initTexture(&t, withTexture: texture)
+    return true
   }
 
   private func initTexture(_ t: inout Texture, withTexture tex: MTLTexture) {
@@ -522,7 +560,7 @@ public final class FilterChain {
     t.size = .init(width: tex.width, height: tex.height)
   }
 
-  private func initHistory() {
+  private func initHistory() -> Bool {
     let td = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm,
                                                       width: Int(sourceRect.width),
                                                       height: Int(sourceRect.height),
@@ -531,10 +569,12 @@ public final class FilterChain {
     td.usage = [.shaderRead, .shaderWrite]
 
     for i in 0 ... historyCount {
-      initTexture(&historyTextures[i], withDescriptor: td)
-      _clearTextures.append(historyTextures[i].view!)
+      guard initTexture(&historyTextures[i], withDescriptor: td),
+            let view = historyTextures[i].view else { return false }
+      _clearTextures.append(view)
     }
     historyNeedsInit = false
+    return true
   }
 
   private func renderTexture(_ texture: MTLTexture, renderCommandEncoder rce: MTLRenderCommandEncoder) {
@@ -576,8 +616,8 @@ public final class FilterChain {
               missingDetail.append("p\(i): \(names.joined(separator: ","))")
             }
           }
-          os_log("[Shaders] First render: drawable=%dx%d src=%dx%d fmt out=%d src=%d missing=%{public}@ details=%{public}@", log: .default, type: .info,
-                 Int(outputFrame.outputSize.x), Int(outputFrame.outputSize.y), sourceTexture.width, sourceTexture.height,
+          os_log("[Shaders] First render: drawable=%gx%g src=%dx%d fmt out=%d src=%d missing=%{public}@ details=%{public}@", log: .default, type: .info,
+                 Double(outputFrame.outputSize.x), Double(outputFrame.outputSize.y), sourceTexture.width, sourceTexture.height,
                  outputColorPixelFormat.rawValue, sourceTexture.pixelFormat.rawValue, String(describing: missingTotals),
                  missingDetail.joined(separator: " | "))
         }
@@ -591,6 +631,7 @@ public final class FilterChain {
 
   public func renderOffscreenPasses(sourceTexture: MTLTexture, commandBuffer: MTLCommandBuffer) {
     prepareNextFrame(sourceTexture: sourceTexture, commandBuffer: commandBuffer)
+    guard shaderFrameReady else { return }
     updateBuffersForPasses()
 
     guard hasShader, passCount > 0 else { return }
@@ -786,11 +827,19 @@ public final class FilterChain {
   }
 
   public func renderFinalPass(withCommandEncoder rce: MTLRenderCommandEncoder, flipVertically: Bool) {
+    guard outputFrame.viewport.originX.isFinite, outputFrame.viewport.originY.isFinite,
+          Self.textureDimensions(CGSize(width: outputFrame.viewport.width,
+                                        height: outputFrame.viewport.height), limit: maxTextureDimension2D) != nil else { return }
     rce.setViewport(outputFrame.viewport)
     if flipVertically {
       rce.setVertexBytes(&vertexFlipped, length: vertexSizeBytes, index: BufferIndex.positions.rawValue)
     } else {
       rce.setVertexBytes(&vertex, length: vertexSizeBytes, index: BufferIndex.positions.rawValue)
+    }
+
+    if !shaderFrameReady {
+      guard let texture = fallbackTexture else { return }
+      return renderTexture(texture, renderCommandEncoder: rce)
     }
 
     if !hasShader || passCount == 0 {
@@ -806,25 +855,40 @@ public final class FilterChain {
     }
   }
 
-  private func resizeRenderTargets() {
-    guard renderTargetsNeedResize else { return }
+  // Metal's published 2D limits, queried without requiring newer SDK enum cases.
+  // https://developer.apple.com/metal/capabilities/
+  private var maxTextureDimension2D: Int {
+    if #available(iOS 26, tvOS 26, macOS 26, *),
+       let apple10 = MTLGPUFamily(rawValue: 1010), device.supportsFamily(apple10) { return 32768 }
+    return device.supportsFamily(.apple3) || device.supportsFamily(.mac2) ? 16384 : 8192
+  }
 
-    // current source size
+  static func textureDimensions(_ size: CGSize, limit: Int) -> (width: Int, height: Int)? {
+    guard size.width.isFinite, size.height.isFinite,
+          size.width >= 1, size.height >= 1,
+          size.width <= CGFloat(limit), size.height <= CGFloat(limit) else { return nil }
+    return (Int(size.width), Int(size.height))
+  }
+
+  private func resizeRenderTargets() -> Bool {
+    guard renderTargetsNeedResize else { return true }
+
     var sourceSize = sourceRect.size
-
     let viewportSize = CGSize(width: outputFrame.viewport.width, height: outputFrame.viewport.height)
+    var sizes: [CGSize] = []
+    // Preflight the entire chain before modifying targets or asking Metal to allocate.
+    for i in 0 ..< passCount {
+      let p = pass[i]
+      let size = p.isScaled ? p.getOutputSize(viewport: viewportSize, source: sourceSize)
+        : (i == lastPassIndex ? viewportSize : sourceSize)
+      guard Self.textureDimensions(size, limit: maxTextureDimension2D) != nil else { return false }
+      sizes.append(size)
+      sourceSize = size
+    }
 
     for i in 0 ..< passCount {
       let pass = pass[i]
-
-      let passSize: CGSize
-      if !pass.isScaled {
-        passSize = i == lastPassIndex ? viewportSize : sourceSize
-      } else {
-        passSize = pass.getOutputSize(viewport: viewportSize, source: sourceSize)
-      }
-
-      sourceSize = passSize // capture source size for next pass
+      let passSize = sizes[i]
 
       // Ensure per-pass viewport matches the render target size
       self.pass[i].viewport = MTLViewport(originX: 0,
@@ -840,7 +904,9 @@ public final class FilterChain {
       if let tex = self.pass[i].renderTarget.view,
          tex.width == Int(passSize.width),
          tex.height == Int(passSize.height),
-         tex.width != 0, tex.height != 0 {
+         !self.pass[i].hasFeedback ||
+         (self.pass[i].feedbackTarget.view?.width == tex.width &&
+           self.pass[i].feedbackTarget.view?.height == tex.height) {
         os_log("pass %d: 🏎️🔥 skip resize, tex (w: %d, h: %d) == pass (w: %d, h: %d)",
                log: .default, type: .debug,
                i, tex.width, tex.height, Int(passSize.width), Int(passSize.height))
@@ -855,7 +921,7 @@ public final class FilterChain {
       let width = Int(passSize.width)
       let height = Int(passSize.height)
       // If last pass fully matches the output viewport and BGRA8, render directly to final target
-      if i == lastPassIndex, passSize == viewportSize, fmt == .bgra8Unorm {
+      if i == lastPassIndex, passSize == viewportSize, fmt == .bgra8Unorm, !pass.hasFeedback {
         self.pass[i].renderTarget.size = .init(width: width, height: height)
         self.pass[i].renderTarget.view = nil
       } else {
@@ -867,14 +933,14 @@ public final class FilterChain {
         td.usage = [.shaderRead, .renderTarget]
         td.resourceOptions = .storageModePrivate
         td.allowGPUOptimizedContents = true
-        initTexture(&self.pass[i].renderTarget, withDescriptor: td)
+        guard initTexture(&self.pass[i].renderTarget, withDescriptor: td) else { return false }
         // textures should be cleared before first use
         if let view = self.pass[i].renderTarget.view { _clearTextures.append(view) }
 
         let label = String(format: "Pass %02d Output", i)
         self.pass[i].renderTarget.view?.label = label
         if self.pass[i].hasFeedback {
-          initTexture(&self.pass[i].feedbackTarget, withDescriptor: td)
+          guard initTexture(&self.pass[i].feedbackTarget, withDescriptor: td) else { return false }
           self.pass[i].feedbackTarget.view?.label = label
           if let fb = self.pass[i].feedbackTarget.view { _clearTextures.append(fb) }
         }
@@ -882,6 +948,7 @@ public final class FilterChain {
     }
 
     renderTargetsNeedResize = false
+    return true
   }
 
   private func freeShaderResources() {
@@ -897,6 +964,8 @@ public final class FilterChain {
     passCount = 0
     lastPassIndex = 0
     hasShader = false
+    shaderFrameReady = false
+    fallbackTexture = nil
   }
 
   public func setCompiledShader(_ container: CompiledShaderContainer) throws {
