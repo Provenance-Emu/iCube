@@ -214,11 +214,7 @@ struct NetworkPlayView: View {
   private var settingsContent: some View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.l.rawValue) {
       ICubeAccentHeader(text: L("Suggestions"))
-      Toggle(L("Show unverified games"), isOn: $showUnverified)
-        .icubeText(.body)
-        .accessibilityIdentifier("networkPlay.unverifiedToggle")
-        .padding(ICubeDesign.Spacing.m.rawValue)
-        .background(ICubeDesign.Card.surface, in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue))
+      unverifiedControl
       Text(L("Unverified games never appear in Suggested, All Supported, Recent or Favorites. Browsing them does not enable hosting."))
         .icubeText(.detail)
       notice(L("How recommendations work"),
@@ -226,6 +222,31 @@ struct NetworkPlayView: View {
       notice(L("Connection settings unavailable"),
              detail: L("Player limits, spectators, relay and timing are unavailable because this version cannot connect to Network Play."), icon: "network.slash")
     }
+  }
+
+  @ViewBuilder private var unverifiedControl: some View {
+    #if os(tvOS)
+    // A stock Toggle outside a Form/List is not a directional focus target on tvOS.
+    Button { showUnverified.toggle() } label: {
+      HStack(spacing: ICubeDesign.Spacing.m.rawValue) {
+        Label(L("Show unverified games"), systemImage: showUnverified ? "checkmark.square.fill" : "square")
+        Spacer()
+        Text(showUnverified ? L("On") : L("Off"))
+      }
+      .icubeText(.body)
+      .padding(ICubeDesign.Spacing.m.rawValue)
+      .icubeCardSurface()
+    }
+    .buttonStyle(ICubeCardButtonStyle())
+    .accessibilityValue(showUnverified ? L("On") : L("Off"))
+    .accessibilityIdentifier("networkPlay.unverifiedToggle")
+    #else
+    Toggle(L("Show unverified games"), isOn: $showUnverified)
+      .icubeText(.body)
+      .accessibilityIdentifier("networkPlay.unverifiedToggle")
+      .padding(ICubeDesign.Spacing.m.rawValue)
+      .background(ICubeDesign.Card.surface, in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue))
+    #endif
   }
 
   @ViewBuilder private func detail(_ item: TVGameItem, wide: Bool) -> some View {

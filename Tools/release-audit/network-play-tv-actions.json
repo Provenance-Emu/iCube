@@ -1,0 +1,138 @@
+[
+  {
+    "op": "launch",
+    "arguments": [
+      "-onboarding_seen_v1",
+      "YES",
+      "-ICubeAppearance",
+      "dark",
+      "-ICubeNetworkPlayPreview",
+      "-SCREENSHOT_MODE",
+      "1"
+    ]
+  },
+  {
+    "op": "assert",
+    "label": "Network Play is not available in this iCube build.",
+    "timeout": 10
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.back",
+    "focused": true
+  },
+  {
+    "op": "capture",
+    "name": "network-play-tv-games",
+    "ax": true
+  },
+  {
+    "op": "remote",
+    "button": "right"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.settings",
+    "focused": true
+  },
+  {
+    "op": "remote",
+    "button": "select"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "value": "Off"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-tv-settings",
+    "ax": true
+  },
+  {
+    "op": "remote",
+    "button": "down"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "focused": true
+  },
+  {
+    "op": "remote",
+    "button": "select"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "value": "On"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-tv-toggle-focused",
+    "ax": true
+  },
+  {
+    "op": "remote",
+    "button": "menu"
+  },
+  {
+    "op": "assert",
+    "label": "Network Play is not available in this iCube build."
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.game",
+    "exists": false
+  },
+  {
+    "op": "capture",
+    "name": "network-play-tv-returned",
+    "ax": true
+  },
+  {
+    "op": "remote",
+    "button": "right"
+  },
+  {
+    "op": "remote",
+    "button": "select"
+  },
+  {
+    "op": "remote",
+    "button": "down"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "focused": true
+  },
+  {
+    "op": "remote",
+    "button": "select"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "value": "Off"
+  },
+  {
+    "op": "remote",
+    "button": "menu"
+  },
+  {
+    "op": "assert",
+    "label": "Unverified",
+    "type": "button",
+    "exists": false
+  },
+  {
+    "op": "remote",
+    "button": "menu"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.settings",
+    "exists": false
+  }
+]
