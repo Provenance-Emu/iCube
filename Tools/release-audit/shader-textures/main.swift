@@ -13,10 +13,19 @@ func auditMakeTexture(_ device: MTLDevice, _ descriptor: MTLTextureDescriptor) -
 }
 var failClearBuffer = false
 var failClearEncoder = false
+var forcedMaxBufferLength: Int?
+var oversizedClearBufferRequests = 0
+func auditMaxBufferLength(_ device: MTLDevice) -> Int {
+  min(forcedMaxBufferLength ?? device.maxBufferLength, device.maxBufferLength)
+}
 var clearBufferAttempts = 0
 var clearEncoderAttempts = 0
 func auditMakeClearBuffer(_ device: MTLDevice, _ length: Int) -> MTLBuffer? {
   clearBufferAttempts += 1
+  if length > auditMaxBufferLength(device) {
+    oversizedClearBufferRequests += 1
+    return nil
+  }
   return failClearBuffer ? nil : device.makeBuffer(length: length, options: [.storageModePrivate])
 }
 func auditMakeClearEncoder(_ commandBuffer: MTLCommandBuffer) -> MTLBlitCommandEncoder? {
@@ -91,6 +100,7 @@ func chain(_ c: Container) throws -> FilterChain {
   allocations = []; failAllocation = nil
   failClearBuffer = false; failClearEncoder = false
   clearBufferAttempts = 0; clearEncoderAttempts = 0
+  forcedMaxBufferLength = nil; oversizedClearBufferRequests = 0
   return f
 }
 let red: [UInt8] = [0,0,255,255], green: [UInt8] = [0,255,0,255]
@@ -159,6 +169,45 @@ for failBuffer in [true, false] {
   require(allocations.count == 4, "Retry must rebuild feedback and history resources")
   require(clearBufferAttempts == 1 && clearEncoderAttempts == 1, "Recovery must clear the rebuilt resources")
 }
+// Exercise the production checked arithmetic without requesting large resources.
+let gib = 1_073_741_824
+let rgba32 = FilterChain.clearTextureLayout(width: 8192, height: 8192,
+                                          bytesPerPixel: MTLPixelFormat.rgba32Float.bytesPerPixel, maxBufferLength: gib)
+require(rgba32?.bytesPerRow == 131072 && rgba32?.bytesPerImage == gib, "Exact GiB limit must be allowed")
+require(FilterChain.clearTextureLayout(width: 8192, height: 8192, bytesPerPixel: 16,
+                                      maxBufferLength: gib - 1) == nil, "One byte above device limit must be rejected")
+for bpp in [1,2,4,8,16] {
+  let layout = FilterChain.clearTextureLayout(width: 7, height: 5, bytesPerPixel: bpp, maxBufferLength: 35 * bpp)
+  require(layout?.bytesPerRow == 7 * bpp && layout?.bytesPerImage == 35 * bpp, "Valid pixel layout changed")
+  require(FilterChain.clearTextureLayout(width: 7, height: 5, bytesPerPixel: bpp,
+                                        maxBufferLength: 35 * bpp - 1) == nil, "Over-limit pixel layout accepted")
+}
+for (width, height, bpp, limit) in [(0,1,4,64), (-1,1,4,64), (1,0,4,64), (1,-1,4,64),
+                                    (1,1,0,64), (1,1,-1,64), (1,1,4,0), (1,1,4,-1),
+                                    (Int.max,1,2,Int.max), (Int.max,2,1,Int.max)] {
+  require(FilterChain.clearTextureLayout(width: width, height: height, bytesPerPixel: bpp,
+                                        maxBufferLength: limit) == nil, "Invalid/overflowing layout must fail gracefully")
+}
+require(FilterChain.clearTextureLayout(width: 1, height: 1, bytesPerPixel: MTLPixelFormat.invalid.bytesPerPixel,
+                                      maxBufferLength: 64) == nil, "Unknown pixel layout must fail gracefully")
+let limited = try chain(preset(scales: [1.5], feedback: true, history: 1))
+// This fixture allocates only 6x6 BGRA targets (144 bytes), never GiB buffers.
+forcedMaxBufferLength = 143
+for i in 0..<3 {
+  clearBufferAttempts = 0; clearEncoderAttempts = 0; oversizedClearBufferRequests = 0
+  let currentSource: [UInt8] = i % 2 == 0 ? red : [255,0,0,255]
+  require(frame(limited, sourceColor: currentSource) == currentSource, "Buffer limit must fall back to the current source")
+  require(clearBufferAttempts == 0 && oversizedClearBufferRequests == 0,
+          "Oversized clear buffer must be rejected before makeBuffer")
+  require(clearEncoderAttempts == 0, "Oversized clear must not open an encoder")
+  require(limited._clearTextures.isEmpty, "Oversized clear must discard pending textures")
+}
+forcedMaxBufferLength = 144
+require(frame(limited) == green, "An exact-limit buffer must recover on the next frame")
+require(clearBufferAttempts == 1 && clearEncoderAttempts == 1, "Exact-limit clear must allocate and encode normally")
+require(oversizedClearBufferRequests == 0, "A clear exceeded its modeled device limit")
+forcedMaxBufferLength = nil
+print("PASS: tiny modeled maxBufferLength rejects before buffer/encoder, current-source fallback repeats, exact-limit next frame recovers")
 let lifecycle = try chain(preset(scales: [1.5]))
 _ = frame(lifecycle, drawableSize: 0)
 require(allocations.isEmpty, "Zero viewport lifecycle must not allocate")

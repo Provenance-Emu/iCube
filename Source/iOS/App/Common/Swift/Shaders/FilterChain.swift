@@ -436,22 +436,32 @@ public final class FilterChain {
   /// A list of textures to be cleared before rendering begins.
   var _clearTextures = [MTLTexture]()
 
+  static func clearTextureLayout(width: Int, height: Int, bytesPerPixel: Int,
+                                 maxBufferLength: Int) -> (bytesPerRow: Int, bytesPerImage: Int)? {
+    guard width > 0, height > 0, bytesPerPixel > 0, maxBufferLength > 0 else { return nil }
+    let row = width.multipliedReportingOverflow(by: bytesPerPixel)
+    guard !row.overflow else { return nil }
+    let image = height.multipliedReportingOverflow(by: row.partialValue)
+    guard !image.overflow, image.partialValue <= maxBufferLength else { return nil }
+    return (row.partialValue, image.partialValue)
+  }
+
   private func clearTexturesWithCommandBuffer(_ commandBuffer: MTLCommandBuffer) -> Bool {
     guard !_clearTextures.isEmpty else { return true }
 
     guard #available(macOS 10.15, *) else { return false }
 
-    // Find the size of the largest texture, in order to allocate a buffer with at least enough space for all textures.
+    // Preflight every copy layout before requesting storage. Even valid texture
+    // dimensions can require a clear buffer larger than the device permits.
+    let maxBufferLength = device.maxBufferLength
+    var layouts: [(texture: MTLTexture, bytesPerRow: Int, bytesPerImage: Int)] = []
     var sizeMax = 0
     for t in _clearTextures {
-      let bytesPerPixel = t.pixelFormat.bytesPerPixel
-      precondition(bytesPerPixel > 0, "Unable to determine bytes per pixel for pixel format \(t.pixelFormat)")
-
-      let bytesPerRow = t.width * bytesPerPixel
-      let bytesPerImage = t.height * bytesPerRow
-      if bytesPerImage > sizeMax {
-        sizeMax = bytesPerImage
-      }
+      guard let layout = Self.clearTextureLayout(width: t.width, height: t.height,
+                                                 bytesPerPixel: t.pixelFormat.bytesPerPixel,
+                                                 maxBufferLength: maxBufferLength) else { return false }
+      layouts.append((t, layout.bytesPerRow, layout.bytesPerImage))
+      sizeMax = max(sizeMax, layout.bytesPerImage)
     }
 
     // Allocate before opening an encoder, so allocation failure cannot leave
@@ -462,12 +472,10 @@ public final class FilterChain {
     bce.fill(buffer: buf, range: 0 ..< sizeMax, value: 0)
 
     // Use the cleared buffer to clear the destination texture.
-    for t in _clearTextures {
-      let bytesPerPixel = t.pixelFormat.bytesPerPixel
-      let bytesPerRow = t.width * bytesPerPixel
-      let bytesPerImage = t.height * bytesPerRow
+    for layout in layouts {
+      let t = layout.texture
       let sourceSize = MTLSize(width: t.width, height: t.height, depth: 1)
-      bce.copy(from: buf, sourceOffset: 0, sourceBytesPerRow: bytesPerRow, sourceBytesPerImage: bytesPerImage, sourceSize: sourceSize,
+      bce.copy(from: buf, sourceOffset: 0, sourceBytesPerRow: layout.bytesPerRow, sourceBytesPerImage: layout.bytesPerImage, sourceSize: sourceSize,
                to: t, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init())
     }
     _clearTextures.removeAll(keepingCapacity: true)

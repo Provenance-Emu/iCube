@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile the production FilterChain against host Metal, with a fault-only allocator seam.
+"""Compile the production FilterChain against host Metal, with fault and bounded-capability seams.
 Use --baseline REV to demonstrate the real invalid-descriptor abort in that revision.
 """
 import argparse
@@ -24,8 +24,8 @@ with tempfile.TemporaryDirectory(prefix='icube-shader-textures-') as temp:
     path = str((shader / 'FilterChain.swift').relative_to(root))
     source = (subprocess.check_output(['git', 'show', f'{args.baseline}:{path}'], cwd=root).decode()
               if args.baseline else (shader / 'FilterChain.swift').read_text())
-    # Only inject recoverable allocation failure; descriptor validation is still
-    # performed by the real driver for every allocation that reaches Metal.
+    # Inject allocation/encoder failures and optionally reduce the clear-buffer
+    # capability. Real Metal still validates every allocation that reaches it.
     needle = 'device.makeTexture(descriptor: td)'
     assert source.count(needle) == 1
     source = source.replace(needle, 'auditMakeTexture(device, td)')
@@ -39,6 +39,9 @@ with tempfile.TemporaryDirectory(prefix='icube-shader-textures-') as temp:
         for needle, replacement in faults.items():
             assert source.count(needle) == 1
             source = source.replace(needle, replacement)
+    if 'device.maxBufferLength' in source:
+        assert source.count('device.maxBufferLength') == 1
+        source = source.replace('device.maxBufferLength', 'auditMaxBufferLength(device)')
     (build / 'FilterChain.swift').write_text(source)
     harness = (Path(__file__).parent / 'main.swift').read_text()
     if args.baseline:

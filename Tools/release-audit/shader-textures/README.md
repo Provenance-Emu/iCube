@@ -28,3 +28,13 @@ same fixtures with DEBUG diagnostics. An additional first-frame zero-viewport
 fixture explicitly enables first-render logging through a process-local
 preference override, checks completed command-buffer/clear output, then verifies
 immediate valid-frame recovery. No persisted host preference is changed.
+
+Clear-buffer limits are checked with a temporary capability seam that returns
+`min(forcedLimit, device.maxBufferLength)`. A 6x6 BGRA clear requires 144 bytes:
+the 143-byte forced-cap fixture must reject it before any buffer or encoder
+request, draw the current source on repeated failures, then recover immediately
+at an exact 144-byte cap. The allocator also rejects/counts any request above
+this modeled cap, so regressions never request a large real GPU buffer.
+Pure production-layout checks cover the 8192x8192 RGBA32Float 1 GiB calculation,
+exact-limit acceptance, one-byte-over rejection, varying bytes per pixel,
+unknown/nonpositive layouts and overflow. No oversized-driver abort is induced.
