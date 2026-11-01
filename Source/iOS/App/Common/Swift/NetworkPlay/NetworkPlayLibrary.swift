@@ -12,6 +12,7 @@ enum NetworkPlayLibrary {
     let source: String
     let singlePlayerOnly: Bool
   }
+
   struct Game: Equatable, Identifiable {
     let id: String // Library path for ordering only, never a ROM digest or a room-join identity.
     let title: String
@@ -21,6 +22,7 @@ enum NetworkPlayLibrary {
     let lastPlayed: Date?
     let documentation: Documentation?
   }
+
   struct Backend {
     let available: Bool
     let modes: Set<Mode>
@@ -29,6 +31,7 @@ enum NetworkPlayLibrary {
     /// Source audit: there is no app session, discovery or NetPlay launch adapter in iCube yet.
     static let installed = Backend(available: false, modes: [], joinableGameIDs: [])
   }
+
   enum Eligibility: Equatable { case eligible, unverified, excluded }
 
   static func eligibility(_ game: Game, backend: Backend) -> Eligibility {

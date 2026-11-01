@@ -177,7 +177,10 @@ struct NetworkPlayView: View {
   }
 
   private func gameCard(_ item: TVGameItem) -> some View {
-    Button { searchFocused = false; selected = item } label: {
+    Button {
+      searchFocused = false
+      selected = item
+    } label: {
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
         Image(uiImage: item.coverImage)
           .resizable().scaledToFit()
