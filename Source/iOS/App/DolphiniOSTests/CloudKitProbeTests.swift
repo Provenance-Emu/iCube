@@ -13,7 +13,9 @@ final class CloudKitProbeTests: XCTestCase {
     var checked = false
     let reason = CloudSyncCoordinator.installUnavailableReason(
       buildReason: .containerNotProvisioned,
-      signedEntitlementsAllowCloudKit: { checked = true; return true })
+      signedEntitlementsAllowCloudKit: { checked = true
+        return true
+      })
     XCTAssertEqual(reason, .containerNotProvisioned)
     // Simulator/build policy short-circuits even the signed entitlement read.
     XCTAssertFalse(checked)

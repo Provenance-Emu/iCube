@@ -897,8 +897,8 @@ public final class FilterChain {
          tex.width == Int(passSize.width),
          tex.height == Int(passSize.height),
          !self.pass[i].hasFeedback ||
-           (self.pass[i].feedbackTarget.view?.width == tex.width &&
-            self.pass[i].feedbackTarget.view?.height == tex.height) {
+         (self.pass[i].feedbackTarget.view?.width == tex.width &&
+           self.pass[i].feedbackTarget.view?.height == tex.height) {
         os_log("pass %d: 🏎️🔥 skip resize, tex (w: %d, h: %d) == pass (w: %d, h: %d)",
                log: .default, type: .debug,
                i, tex.width, tex.height, Int(passSize.width), Int(passSize.height))
