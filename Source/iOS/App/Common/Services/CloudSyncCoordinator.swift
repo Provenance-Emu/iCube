@@ -398,24 +398,23 @@ final class CloudSyncCoordinator: ObservableObject {
     private static func installUnavailableReason() -> SyncUnavailableReason? {
         installUnavailableReason(
             buildReason: CloudKitAvailability.buildLevelUnavailableReason(for: ICubeCloudSync.configuration),
-            canCreateContainer: { containerIsCreatable })
+            signedEntitlementsAllowCloudKit: { signedEntitlementsAllowCloudKit })
     }
 
-    /// Probed once: signed entitlements cannot change while the app runs.
-    private static let containerIsCreatable: Bool = DOLCloudKitProbe.canCreateContainer(
-        withIdentifier: ICubeCloudSync.configuration.containerIdentifier
+    /// Cached without constructing a container: malformed entitlements can make
+    /// CloudKit trap, which an Objective-C exception boundary cannot catch.
+    private static let signedEntitlementsAllowCloudKit = SignedCloudKitEntitlements.allowsCloudKit(
+        identifier: ICubeCloudSync.configuration.containerIdentifier
             .trimmingCharacters(in: .whitespacesAndNewlines))
 
-    /// The build-level reason wins, and when there is one the probe never runs: on the
-    /// simulator creating a container traps, which the probe cannot catch. Past that,
-    /// a container the probe cannot create (malformed entitlements on a re-signed
-    /// install) means CloudKit is off for this install.
+    /// Build policy wins (including the simulator exclusion). The signed gate
+    /// runs before startup availability checks and every provider factory path.
     nonisolated static func installUnavailableReason(
         buildReason: SyncUnavailableReason?,
-        canCreateContainer: () -> Bool
+        signedEntitlementsAllowCloudKit: () -> Bool
     ) -> SyncUnavailableReason? {
         if let buildReason { return buildReason }
-        return canCreateContainer() ? nil : .entitlementMissing
+        return signedEntitlementsAllowCloudKit() ? nil : .entitlementMissing
     }
 
     /// Where the index and the trash live. Not under `User/`, so neither is

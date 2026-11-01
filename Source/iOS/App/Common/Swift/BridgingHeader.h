@@ -38,7 +38,7 @@
 #import "DOLConfigBridge.h"
 #import "DOLDebugBridge.h"
 #import "DOLPerfBridge.h"
-#import "DOLCloudKitProbe.h"
+#import "DOLNFCCapability.h"
 #import "DOLSettingsKeyBridge.h"
 #import "DSUServerBridge.h"
 #import "DSUPingBridge.h"
