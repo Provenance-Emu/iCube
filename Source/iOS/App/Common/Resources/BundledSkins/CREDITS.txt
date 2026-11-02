@@ -1,0 +1,15 @@
+GameCube Pocket by starvingartist (Stanley Sy)
+Original creator: https://starvingartist.deviantart.com
+Source: https://deltastyles.com/skins/760-gamecube-pocket
+Skin identifier: starvingartist.ngc.gcpocket-indigo
+Original archive: gamecubepocket.manicskin (unchanged)
+SHA-256: 16a83a56eef89b656b142c2c56144291f11ee13db76624e1709a577c2ee8371d
+
+Source-page license notice:
+"Other creators may modify and share this work so long as they provide credit to the original author."
+
+Made for Manic; bundled with iCube as a free, offline, optional GameCube controller
+skin. Select it in Settings > Controllers > Controller Skins. Includes iPhone
+portrait and landscape artwork. No games or ROMs are included.
+The skin artwork remains credited to its creator; the app's code license does not
+replace the creator's permission notice above.
