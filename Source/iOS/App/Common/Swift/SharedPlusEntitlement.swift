@@ -114,6 +114,7 @@ enum SharedPlusMirrorReader {
 final class SharedPlusEntitlement {
     static let shared = SharedPlusEntitlement()
     private var observation: NSObjectProtocol?
+    private var refreshTimer: Timer?
     private init() {}
 
     /// Read at the decision boundary so expiry never relies on a launch latch.
@@ -128,6 +129,9 @@ final class SharedPlusEntitlement {
 
     func start() {
         guard observation == nil else { return }
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
+            NotificationCenter.default.post(name: .sharedPlusEntitlementDidChange, object: nil)
+        }
         observation = NotificationCenter.default.addObserver(
             forName: NSNotification.Name("UIApplicationDidBecomeActiveNotification"),
             object: nil, queue: .main
