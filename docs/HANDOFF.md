@@ -1,5 +1,18 @@
 # iCube handoff (2026-10-10)
 
+## Plus implementation and launch/library follow-up — November 2, 2026
+
+[Implementation, source branches, native proof and limits](app-store/release-evidence/2026-11-02-plus-policy-implementation.md):
+iFly draft PR908 and Provenance draft PR3787 implement free manual/imported/basic
+configuration access and shared ownership reconciliation. iCube adds read-only
+membership status, library zoom sizing/limit fixes, a single toolbar glass layer,
+a compact adaptive launch screen, and offline optional GameCube Pocket by
+starvingartist. Existing free access and undecided extras are preserved.
+Native policy/package tests and UIKit launch previews pass; full app/StoreKit/
+CloudKit/device acceptance remains pending. Skin selections are not overwritten;
+restore the seller app on each target device to seed its local Plus mirror.
+No App Review submission or new iCube purchase product.
+
 ## Shared Plus policy and gate audit — November 2, 2026
 
 The [shared iCube/iFly/Provenance Plus policy](superpowers/specs/2026-11-02-shared-plus-policy-design.md)

@@ -2,6 +2,8 @@
 
 Date: November 2, 2026. Policy: [shared Plus design](../../superpowers/specs/2026-11-02-shared-plus-policy-design.md).
 
+Historical before-state. See the [implementation follow-up](2026-11-02-plus-policy-implementation.md) for fixes now on isolated review branches.
+
 Static source audit, not an installed-build or purchase acceptance test. No gates
 changed. No builds, device tests, purchases, website deployments or App Review
 submissions performed. Prior release artifacts and unrelated working changes
