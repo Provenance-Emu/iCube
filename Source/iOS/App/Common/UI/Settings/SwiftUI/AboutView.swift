@@ -20,6 +20,7 @@ import Foundation
 
 struct AboutView: View {
   @Environment(\.openURL) private var openURL
+  @State private var membershipStatus = ""
   #if os(tvOS)
   @Environment(\.dismiss) private var dismiss
   @Environment(\.settingsPaneBack) private var paneBack
@@ -28,11 +29,12 @@ struct AboutView: View {
   #endif
 
   var body: some View {
+    Group {
     #if os(tvOS)
     MenuScreen(model: AboutModelBuilder.make(
       appVersion: VersionManager.shared().appVersion.userFacing, coreVersion: VersionManager.shared().coreVersion,
       open: { openURL($0) }, blog: AnyView(DolphinBlogView()), help: AnyView(WikiHelpView()),
-      resetAll: { confirmReset = true }),
+      resetAll: { confirmReset = true }, membershipStatus: membershipStatus),
       style: .list, onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
       tvHeader: SettingsLeafScreen.header(title: L("About"), parentTitle: parentTitle), tvInset: .xxl)
       .alert(L("Reset All Settings"), isPresented: $confirmReset) {
@@ -59,6 +61,13 @@ struct AboutView: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
+
+        VStack(spacing: 8) {
+          Text(L("Shared Plus Membership")).font(.headline)
+          Text(L(membershipStatus)).font(.subheadline)
+          Text(L(SharedPlusEntitlement.restoreGuidance)).font(.caption).foregroundStyle(.secondary)
+        }
+        .multilineTextAlignment(.center)
 
         Text("© 2003-2015+ Dolphin Team.\n© 2025+ iCube Project.")
           .multilineTextAlignment(.center)
@@ -125,5 +134,10 @@ struct AboutView: View {
     }
     .navigationTitle(L("About iCube"))
     #endif
+    }
+    .onAppear { membershipStatus = SharedPlusEntitlement.shared.statusText }
+    .onReceive(NotificationCenter.default.publisher(for: .sharedPlusEntitlementDidChange)) { _ in
+      membershipStatus = SharedPlusEntitlement.shared.statusText
+    }
   }
 }
