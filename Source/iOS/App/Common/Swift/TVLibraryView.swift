@@ -46,6 +46,21 @@ enum LibraryLayout {
     return CGSize(width: 140, height: 210)
 #endif
   }
+  /// Clamp before stepping so an action at a limit cannot accumulate invisible zoom steps.
+  static func adjustedColumnOffset(autoFit: Int, offset: Int, delta: Int) -> Int {
+    let base = min(8, max(2, autoFit))
+    let minimum = max(-3, 2 - base)
+    let maximum = min(4, 8 - base)
+    let visibleOffset = min(maximum, max(minimum, offset))
+    return min(maximum, max(minimum, visibleOffset + delta))
+  }
+
+  /// Fit cover artwork to its grid slot while preserving the standard case aspect ratio.
+  static func cardSize(availableWidth: CGFloat, columns: Int, spacing: CGFloat) -> CGSize {
+    let count = max(1, columns)
+    let width = max(0, (availableWidth - CGFloat(count - 1) * spacing) / CGFloat(count))
+    return CGSize(width: width, height: width * cardSize.height / cardSize.width)
+  }
 }
 
 private final class KeyInputView: UIView {
@@ -320,6 +335,7 @@ struct TVLibraryView: View {
 
   @AppStorage("library_platform_filter") private var platformFilter: LibraryPlatformCategory = .all
   @AppStorage("library_grid_column_offset") private var gridColumnOffset: Int = 0
+  @State private var gridAutoColumnCount = 2
 #if os(tvOS)
   /// Home, all games, or one platform. The left rail writes this; the grid reads it.
   @State private var tvLibraryDestination: TVLibraryRailDestination = .home
@@ -886,7 +902,7 @@ struct TVLibraryView: View {
 
   /// Shared grid item builder wired to selection mode and context actions.
   @ViewBuilder
-  private func gameGridItem(for item: TVGameItem, platform: LibraryPlatformCategory? = nil) -> some View {
+  private func gameGridItem(for item: TVGameItem, platform: LibraryPlatformCategory? = nil, cardSize: CGSize = LibraryLayout.cardSize) -> some View {
     GameGridItem(
       item: item,
       select: selectGame,
@@ -930,7 +946,8 @@ struct TVLibraryView: View {
       onEnterSelectionMode: { enterSelectionMode(selecting: item) },
       editLibraryMetadata: { editLibraryMetadataFor = $0 },
       platform: platform,
-      metadataRevision: model.metadataRevision
+      metadataRevision: model.metadataRevision,
+      cardSize: cardSize
     )
   }
 
@@ -1330,9 +1347,10 @@ struct TVLibraryView: View {
       let spacingH = Constants.gridHorizontalSpacing
       let cardW = LibraryLayout.cardSize.width
       let available = max(0, proxy.size.width - (paddingH * 2))
-      let autoCount = max(2, Int((available + spacingH) / (cardW + spacingH)))
+      let autoCount = min(8, max(2, Int((available + spacingH) / (cardW + spacingH))))
       let count = effectiveColumnCount(autoFit: autoCount)
       let columns = Array(repeating: GridItem(.flexible(), spacing: spacingH), count: count)
+      let cardSize = LibraryLayout.cardSize(availableWidth: available, columns: count, spacing: spacingH)
       ScrollViewReader { scr in
         ScrollView {
           if !isSearching, let favs = favorites(), !favs.isEmpty {
@@ -1367,7 +1385,7 @@ struct TVLibraryView: View {
               ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: spacingH) {
                   ForEach(favs, id: \.filePath) { fav in
-                    gameGridItem(for: fav)
+                    gameGridItem(for: fav, cardSize: cardSize)
                   }
                 }
                 .padding(.horizontal, paddingH)
@@ -1388,7 +1406,7 @@ struct TVLibraryView: View {
           }
           LazyVGrid(columns: columns, spacing: Constants.gridVerticalSpacing) {
             ForEach(displayGames, id: \.filePath) { item in
-              gameGridItem(for: item)
+              gameGridItem(for: item, cardSize: cardSize)
               .id(item.filePath)
               .overlay(
                 RoundedRectangle(cornerRadius: 14)
@@ -1486,6 +1504,9 @@ struct TVLibraryView: View {
             teardownControllerNavigation()
           }
           emuEndObs = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in emulationRunning = false }
+        }
+        .onChangeCompat(of: autoCount, initial: true) { _, newVal in
+          gridAutoColumnCount = newVal
         }
         .task {
           gridColumnCount = count
@@ -1885,7 +1906,7 @@ struct TVLibraryView: View {
 #endif
   }
 
-  /// Tappable dolphin logo for the library toolbar leading slot.
+  /// The toolbar supplies its system glass background; keep the mark itself undecorated.
   @ViewBuilder
   private var aboutDolphinToolbarButton: some View {
     Button(action: { showAbout = true }) {
@@ -1896,17 +1917,7 @@ struct TVLibraryView: View {
         .padding(6)
     }
     .buttonStyle(.plain)
-    .background { aboutDolphinToolbarBackground }
     .accessibilityLabel(L("About iCube"))
-  }
-
-  @ViewBuilder
-  private var aboutDolphinToolbarBackground: some View {
-    if #available(iOS 26.0, tvOS 26.0, watchOS 26.0, *) {
-      Circle()
-        .fill(.clear)
-        .glassEffect()
-    }
   }
 
   @ViewBuilder
@@ -2031,9 +2042,11 @@ struct TVLibraryView: View {
     Button(action: { adjustGridZoom(delta: -1) }) {
       Label(L("Fewer Per Row"), systemImage: "minus.magnifyingglass")
     }
+    .disabled(!canAdjustGridZoom(delta: -1))
     Button(action: { adjustGridZoom(delta: 1) }) {
       Label(L("More Per Row"), systemImage: "plus.magnifyingglass")
     }
+    .disabled(!canAdjustGridZoom(delta: 1))
     Button(action: { gridColumnOffset = 0 }) {
       Label(L("Reset Grid Size"), systemImage: "arrow.counterclockwise")
     }
@@ -2108,8 +2121,23 @@ struct TVLibraryView: View {
     return pad
   }
 
+  private func canAdjustGridZoom(delta: Int) -> Bool {
+#if os(tvOS)
+    return (-3...4).contains(gridColumnOffset + delta)
+#else
+    let nextOffset = LibraryLayout.adjustedColumnOffset(
+      autoFit: gridAutoColumnCount, offset: gridColumnOffset, delta: delta)
+    return effectiveColumnCount(autoFit: gridAutoColumnCount) != min(8, max(2, gridAutoColumnCount + nextOffset))
+#endif
+  }
+
   private func adjustGridZoom(delta: Int) {
+#if os(tvOS)
     gridColumnOffset = min(4, max(-3, gridColumnOffset + delta))
+#else
+    gridColumnOffset = LibraryLayout.adjustedColumnOffset(
+      autoFit: gridAutoColumnCount, offset: gridColumnOffset, delta: delta)
+#endif
   }
 
   var body: some View {
