@@ -1,5 +1,17 @@
 # iCube handoff (2026-10-10)
 
+## Shared Plus policy and gate audit — November 2, 2026
+
+The [shared iCube/iFly/Provenance Plus policy](superpowers/specs/2026-11-02-shared-plus-policy-design.md)
+preserves basic/imported shaders, core functionality and manual sharing as free;
+additional curated shader packs and ROM-library automation are Plus targets.
+The [source audit](app-store/release-evidence/2026-11-02-shared-plus-gates-audit.md)
+records imported-shader and manual-transfer restrictions in iFly, broad cloud/audio
+gates and launch-time support prompts in Provenance, and iCube's currently ungated
+baseline. Gate changes, new purchases, prices and deployment were not performed.
+Prompt cadence and app-specific extras remain explicitly undecided; do not treat
+this audit as passed purchase, hardware or cross-app sync acceptance.
+
 ## Shared library edits / distribution continuation — October 21 evening
 
 Owner approved [different-account nearby custom edit sharing](superpowers/specs/2026-10-21-shared-library-edits-design.md): bidirectional titles/covers/tags, separate per-peer consent, explicit merging of existing and future custom edits. The [implementation plan](superpowers/plans/2026-10-21-shared-library-edits.md) defines the shared package, verified identity bindings, effective Provenance projections, separately authenticated nearby transport and metadata-only same-account adapter. These app integrations are not implemented or accepted yet. The isolated PVCloudSync extraction at `da3815c5ef83ca53b1dad14f4a37c690e8b89661` passes 38 metadata tests / 142 total package tests and independent spec/quality review; it is not yet published or consumed by either app. Original-store fixed-date fixtures were captured before extraction. The pure merger, atomic remote store boundary and revocation gate now pass 175 total package tests with clear independent reviews through `57ccb7281b1710189c6ed6146f0857366691a83c`; bounded wire models remain in progress. Current installed physical testing remains deferred.
