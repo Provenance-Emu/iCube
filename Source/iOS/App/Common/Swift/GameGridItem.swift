@@ -40,6 +40,8 @@ struct GameGridItem: View {
   var platform: LibraryPlatformCategory? = nil
   /// Changes without replacing the card identity, preserving focus/selection.
   var metadataRevision: UInt = 0
+  /// Actual grid slot dimensions; shelves retain the platform default.
+  var cardSize: CGSize = LibraryLayout.cardSize
 
   @AppStorage("library_disable_artwork") private var disableArtwork: Bool = false
 
@@ -181,7 +183,7 @@ struct GameGridItem: View {
           .padding(10)
           .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
       }
-      .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height)
+      .frame(width: cardSize.width, height: cardSize.height)
       .allowsHitTesting(false)
     }
   }
@@ -327,8 +329,8 @@ struct GameGridItem: View {
         .resizable()
         .aspectRatio(contentMode: .fill)
         .frame(
-          width: LibraryLayout.cardSize.width * 0.95,
-          height: LibraryLayout.cardSize.height * 0.95
+          width: cardSize.width * 0.95,
+          height: cardSize.height * 0.95
         )
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .blendMode(.overlay)
@@ -470,7 +472,7 @@ struct GameGridItem: View {
           .scaleEffect(0.8)
       }
     }
-    .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height)
+    .frame(width: cardSize.width, height: cardSize.height)
     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     #if !os(tvOS)
     // iOS only: tvOS cards take their tilt from icubeCardFocus.
@@ -526,7 +528,7 @@ struct GameGridItem: View {
                 .resizable()
                 .interpolation(.high)
                 .aspectRatio(contentMode: .fill)
-                .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height)
+                .frame(width: cardSize.width, height: cardSize.height)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
                 .overlay(
@@ -584,7 +586,7 @@ struct GameGridItem: View {
             .padding(8)
             .background(.ultraThinMaterial, in: Circle())
             .padding(8)
-            .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height, alignment: .topLeading)
+            .frame(width: cardSize.width, height: cardSize.height, alignment: .topLeading)
             .allowsHitTesting(false)
         }
 
@@ -633,7 +635,7 @@ struct GameGridItem: View {
         }
       }
     }
-    .frame(width: LibraryLayout.cardSize.width)
+    .frame(width: cardSize.width)
     .icubeCardFocus(isFocused: isFocused)
     // The focused card paints over its neighbours, so its lift and glow are never covered by the next card.
     .zIndex(isFocused ? 1 : 0)
@@ -775,7 +777,7 @@ struct GameGridItem: View {
               Image(uiImage: item.coverImage)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: LibraryLayout.cardSize.width, height: LibraryLayout.cardSize.height)
+                .frame(width: cardSize.width, height: cardSize.height)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .shadow(color: .black.opacity(0.25), radius: 8, x: 0, y: 4)
                 .overlay(
@@ -872,7 +874,7 @@ struct GameGridItem: View {
           }
         }
       }
-      .frame(width: LibraryLayout.cardSize.width)
+      .frame(width: cardSize.width)
     }
     .buttonStyle(.plain)
     .scaleEffect(1.0)

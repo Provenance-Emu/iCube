@@ -35,8 +35,20 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // never leave two observers racing to consume the one-shot "Start Fresh" flag.
     SaveStateService.installDidStartObserver()
     PauseArbiter.shared.installObservers()
+    SharedPlusEntitlement.shared.start()
 
-    return ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
+    let started = ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
+    #if os(iOS)
+    // Seed local bundled skins after the user folder exists, without delaying launch or changing picks.
+    Task { @MainActor in
+      do {
+        try await BundledControllerSkins.installIfNeededInBackground()
+      } catch {
+        NSLog("Bundled controller skin could not be installed: %@", error.localizedDescription)
+      }
+    }
+    #endif
+    return started
   }
 
   func applicationWillTerminate(_ application: UIApplication) {
