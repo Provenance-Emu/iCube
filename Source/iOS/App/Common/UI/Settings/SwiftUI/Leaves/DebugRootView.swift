@@ -72,7 +72,8 @@ struct DebugRootView: View {
     case .loggingVerbosity(let v): state.loggingVerbosity = v; defaults.set(v, forKey: DebugDefaultsKey.loggingVerbosity)
     case .inputDebug(let v): state.inputDebug = v; defaults.set(v, forKey: DebugDefaultsKey.inputDebug)
     case .templateCovers(let v): state.disableArtwork = v; defaults.set(v, forKey: DebugDefaultsKey.disableArtwork)
-    case .showTestSkins(let v): state.showTestSkins = v; defaults.set(v, forKey: DebugDefaultsKey.showTestSkins)
+    case .showTestSkins(let v): state.showTestSkins = v
+      defaults.set(v, forKey: DebugDefaultsKey.showTestSkins)
     case .resetLaunchTimes: state.launchTimes = 0; defaults.set(0, forKey: DebugDefaultsKey.launchTimes)
     case .retryJitAuthorization:
       JitManager.shared().clearTXMHandshakeCookie()

@@ -130,6 +130,13 @@ final class SkinLibrary: ObservableObject {
 
     let skinFolder = try Self.skinFolder(in: extracted)
     if let target { try Self.retarget(folder: skinFolder, to: target) }
+    return try importUnpackedSkin(from: skinFolder)
+  }
+
+  /// Commits a staged skin after background extraction. Callers retain staging cleanup ownership.
+  @discardableResult
+  func importUnpackedSkin(from skinFolder: URL) throws -> InstalledSkin {
+    let fileManager = FileManager.default
     let info = try Self.loadInfo(from: skinFolder)
     guard Self.isUsableFolderName(info.identifier) else { throw SkinImportError.invalidIdentifier }
 

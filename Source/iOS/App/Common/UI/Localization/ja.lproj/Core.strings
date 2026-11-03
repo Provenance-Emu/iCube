@@ -5605,6 +5605,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Perf Graph" = "パフォーマンスグラフ";
 "Browse games on a network share." = "ネットワーク共有のゲームを参照します。";
 "Send games from a browser on the same Wi-Fi." = "同じ Wi-Fi のブラウザからゲームを送信します。";
+
+"Membership recognized on this device." = "Membership recognized on this device.";
+
+"Shared Plus Membership" = "Shared Plus Membership";
 "Hosting requires a working Network Play connection in iCube." = "ホストを開始するには、iCube で利用可能なネットワークプレイ接続が必要です。";
 "All Supported" = "対応するすべてのゲーム";
 "Connection availability" = "接続機能の状況";
@@ -5638,3 +5642,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Unverified" = "未確認";
 "Unverified games never appear in Suggested, All Supported, Recent or Favorites. Browsing them does not enable hosting." = "未確認のゲームは「おすすめ」「対応するすべてのゲーム」「最近のゲーム」「お気に入り」には表示されません。閲覧してもホストは有効になりません。";
 "Unverified means multiplayer and netplay have not been established for this dump." = "「未確認」は、このダンプのマルチプレイおよびネットワークプレイが確認されていないことを示します。";
+
+/* Skin store variant families. */
+"%ld variants" = "%ld variants";
+"All Installed" = "All Installed";
+"Includes %@" = "Includes %@";
+"Includes skins the catalog marks as mature in the Skin Store." = "Includes skins the catalog marks as mature in the Skin Store.";
+"Install All (%ld)" = "Install All (%ld)";
+"Show Test Skins" = "Show Test Skins";
+"Show mature skins" = "Show mature skins";
+"Shows the catalog's sample-tagged test skins in the Skin Store." = "Shows the catalog's sample-tagged test skins in the Skin Store.";

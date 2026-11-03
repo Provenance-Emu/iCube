@@ -41,7 +41,8 @@ struct ConfigInterfaceView: View {
     case .osdMessages(let v): state.osdMessages = v; DOLConfigBridge.setMainOSDMessages(v)
     case .recordingWatermark(let v): state.recordingWatermark = v; defaults.set(v, forKey: ConfigInterfaceDefaultsKey.recordingWatermark)
     case .recordingCamera(let v): state.recordingCamera = v; defaults.set(v, forKey: ConfigInterfaceDefaultsKey.recordingCamera)
-    case .showMatureSkins(let v): state.showMatureSkins = v; defaults.set(v, forKey: SkinStoreVisibilityDefaultsKey.showMatureSkins)
+    case .showMatureSkins(let v): state.showMatureSkins = v
+      defaults.set(v, forKey: SkinStoreVisibilityDefaultsKey.showMatureSkins)
     }
   }
 }

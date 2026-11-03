@@ -81,7 +81,7 @@ struct SkinPickerView: View {
               HStack {
                 VStack(alignment: .leading, spacing: 2) {
                   Text(family.name).foregroundStyle(.primary)
-                  Text(String(format: L("%ld variants"), family.members.count)).font(.caption).foregroundStyle(.secondary)
+                  Text(String(format: L("%ld variants"), family.members.count)).icubeText(.detail).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if let selected, family.members.contains(selected) { Image(systemName: "checkmark").foregroundStyle(.tint) }
