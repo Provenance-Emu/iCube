@@ -5659,3 +5659,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Added" = "Added";
 "Browse games on a network share." = "Browse games on a network share.";
 "Send games from a browser on the same Wi-Fi." = "Send games from a browser on the same Wi-Fi.";
+
+"Membership recognized on this device." = "Membership recognized on this device.";
+
+"Shared Plus Membership" = "Shared Plus Membership";
