@@ -6,7 +6,7 @@ import SkinCatalogKit
 import SkinKitManager
 import SwiftUI
 
-/// Browse and install controller skins from the provenance-emu.com catalog. Shelves follow
+/// Browse and install controller skins from the emuskins.com catalog. Shelves follow
 /// `SkinStorePolicy`: GameCube, Wii, then N64 layouts rewritten to the GameCube pad. Files download
 /// from each author's host; iCube never re-hosts them. Callers wrap it in a `NavigationStack`.
 struct SkinStoreView: View {
@@ -17,7 +17,7 @@ struct SkinStoreView: View {
   @StateObject private var model: SkinStoreViewModel
   @ObservedObject private var installer: SkinStoreInstaller
 
-  private static let submitURL = URL(string: "https://provenance-emu.com/skins/submit.html")
+  private static let submitURL = URL(string: "https://emuskins.com/submit.html")
   private static let cardMinimumWidth: CGFloat = 160
   private static let cardMaximumWidth: CGFloat = 240
 
