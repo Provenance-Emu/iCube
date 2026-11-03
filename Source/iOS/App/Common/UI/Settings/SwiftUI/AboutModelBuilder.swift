@@ -47,7 +47,7 @@ enum AboutModelBuilder {
     if let membershipStatus {
       sections.insert(MenuSection(id: "shared-plus", header: L("Shared Plus Membership"),
                                   footer: L(SharedPlusEntitlement.restoreGuidance), items: [
-                                    SettingsRow.action("shared-plus-status", L(membershipStatus), L("Membership recognized on this device."), icon: "checkmark.seal") {},
+                                    SettingsRow.action("shared-plus-status", L("Shared Plus Membership"), L(membershipStatus), icon: "info.circle") {},
                                   ]), at: 1)
     }
     return MenuModel(sections: sections)

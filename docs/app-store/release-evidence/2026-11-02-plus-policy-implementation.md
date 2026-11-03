@@ -152,3 +152,13 @@ CloudKit save protection, library sizing/header appearance, skin transitions,
 and prior outstanding hardware/library-sync release gates. Neither iCube
 platform has been submitted for review. Existing content-rights and storefront
 choices are not changed by this engineering branch.
+
+
+Review follow-up: tvOS About now presents the actual membership status with a neutral
+information icon rather than an unconditional recognized subtitle/checkmark. The
+launch bootstrap hashes and extracts the verified bundled archive in a detached
+utility task, then rechecks seed/import state before publishing on the main actor.
+Existing choices and same-ID imports remain protected. The archive lifecycle tests
+now exercise this async launch path; generic imports share the same commit step.
+Develop's intervening PR79 SkinKit0.1.1 pin is preserved; this remains an interim
+pin and does not establish completion of the Claude-owned combined package release.

@@ -22,14 +22,14 @@ final class BundledControllerSkinsTests: XCTestCase {
     defaults.removePersistentDomain(forName: suite)
   }
 
-  private func seed(_ library: SkinLibrary) throws {
-    try BundledControllerSkins.installIfNeeded(library: library, defaults: defaults,
-                                               bundle: Bundle(for: AppDelegate.self))
+  private func seed(_ library: SkinLibrary) async throws {
+    try await BundledControllerSkins.installIfNeededInBackground(library: library, defaults: defaults,
+                                                                 bundle: Bundle(for: AppDelegate.self))
   }
 
-  func testShippedArchiveImportsAndHasUsablePhoneLayoutsAndMappedControls() throws {
+  func testShippedArchiveImportsAndHasUsablePhoneLayoutsAndMappedControls() async throws {
     let library = SkinLibrary(rootURL: root)
-    try seed(library)
+    try await seed(library)
     let skin = try XCTUnwrap(library.skins.first)
     XCTAssertEqual(skin.id, BundledControllerSkins.identifier)
     XCTAssertEqual(skin.gameType, .gameCube)
@@ -65,9 +65,9 @@ final class BundledControllerSkinsTests: XCTestCase {
     }
   }
 
-  func testFreshLibraryGetsAvailabilityWithoutSelectingAnyPad() throws {
+  func testFreshLibraryGetsAvailabilityWithoutSelectingAnyPad() async throws {
     let library = SkinLibrary(rootURL: root)
-    try seed(library)
+    try await seed(library)
     for orientation in TouchOverlayOrientation.allCases {
       for kind in TouchOverlayPadKind.allCases {
         XCTAssertNil(library.selectedSkin(for: kind, orientation: orientation))
@@ -76,9 +76,9 @@ final class BundledControllerSkinsTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("selection.json").path))
   }
 
-  func testExistingSelectionsAndExplicitNoneSurviveMigration() throws {
+  func testExistingSelectionsAndExplicitNoneSurviveMigration() async throws {
     let library = SkinLibrary(rootURL: root)
-    try seed(library)
+    try await seed(library)
     let skin = try XCTUnwrap(library.skins.first)
     library.select(skin, for: .gameCube, orientation: .landscape)
     library.select(skin, for: .gameCube, orientation: .portrait)
@@ -87,18 +87,18 @@ final class BundledControllerSkinsTests: XCTestCase {
     let before = try Data(contentsOf: selectionURL)
     defaults.removeObject(forKey: BundledControllerSkins.seedKey)
     let reloaded = SkinLibrary(rootURL: root)
-    try seed(reloaded)
+    try await seed(reloaded)
     XCTAssertEqual(try Data(contentsOf: selectionURL), before)
     XCTAssertNil(reloaded.selectedSkin(for: .gameCube, orientation: .portrait))
     XCTAssertEqual(reloaded.selectedSkin(for: .gameCube, orientation: .landscape)?.id, skin.id)
   }
 
-  func testDeletingBundledSkinDoesNotReinstallOnNextLaunch() throws {
+  func testDeletingBundledSkinDoesNotReinstallOnNextLaunch() async throws {
     let library = SkinLibrary(rootURL: root)
-    try seed(library)
+    try await seed(library)
     try library.delete(XCTUnwrap(library.skins.first))
     let reloaded = SkinLibrary(rootURL: root)
-    try seed(reloaded)
+    try await seed(reloaded)
     XCTAssertTrue(reloaded.skins.isEmpty)
   }
 

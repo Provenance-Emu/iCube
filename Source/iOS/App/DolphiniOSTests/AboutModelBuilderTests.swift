@@ -10,6 +10,17 @@ final class AboutModelBuilderTests: XCTestCase {
                            blog: AnyView(EmptyView()), help: AnyView(EmptyView()), resetAll: { self.resets += 1 })
   }
 
+  func test_membershipRowShowsActualStatusWithoutClaimingRecognition() throws {
+    for status in ["Plus membership is not recognized on this device", "Plus recognized via Provenance"] {
+      let model = AboutModelBuilder.make(appVersion: "1", coreVersion: "1", open: { _ in },
+                                         blog: AnyView(EmptyView()), help: AnyView(EmptyView()), resetAll: {}, membershipStatus: status)
+      let row = try XCTUnwrap(model.item(id: "shared-plus-status"))
+      XCTAssertEqual(row.title, "Shared Plus Membership")
+      XCTAssertEqual(row.description, status)
+      XCTAssertEqual(row.icon, "info.circle")
+    }
+  }
+
   func test_sections_andOrder() {
     XCTAssertEqual(model().sections.map(\.header), ["Version", "iCube", "Dolphin", "Help", nil])
     XCTAssertEqual(model().allItems.map(\.id),
@@ -21,7 +32,9 @@ final class AboutModelBuilderTests: XCTestCase {
     let m = model()
     for (id, url) in [("icube-site", AboutLinks.icube), ("source", AboutLinks.source), ("dolphin", AboutLinks.dolphin)] {
       guard case .action(let run) = m.item(id: id)?.role else { return XCTFail(id) }
-      opened = []; run(); XCTAssertEqual(opened, [url], id)
+      opened = []
+      run()
+      XCTAssertEqual(opened, [url], id)
     }
   }
 

@@ -42,7 +42,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // Seed local bundled skins after the user folder exists, without delaying launch or changing picks.
     Task { @MainActor in
       do {
-        try BundledControllerSkins.installIfNeeded()
+        try await BundledControllerSkins.installIfNeededInBackground()
       } catch {
         NSLog("Bundled controller skin could not be installed: %@", error.localizedDescription)
       }
