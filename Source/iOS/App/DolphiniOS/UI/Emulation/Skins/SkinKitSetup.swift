@@ -17,6 +17,7 @@ enum SkinKitSetup {
   private static let logPrefix = "[SKINSTORE]"
   private static let lock = NSLock()
   private static var isConfigured = false
+  private static var visibilityObserver: NSObjectProtocol?
 
   /// Idempotent. Everything it sets is a seam with an inert default, so calling late changes only where lines are logged.
   static func configure() {
@@ -30,6 +31,18 @@ enum SkinKitSetup {
     SkinCatalogLog.logger = { _, message in NSLog("%@ %@", logPrefix, message) }
     SkinManagerLog.logger = { _, message in NSLog("%@ %@", logPrefix, message) }
     SkinKitCoreLog.logger = { _, message in NSLog("%@ %@", logPrefix, message) }
+
+    // The store hides `sample`-tagged test skins (Debug) and `mature`-tagged skins (Interface) unless their switch is on.
+    applyContentVisibility()
+    visibilityObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil,
+                                                                queue: nil) { _ in applyContentVisibility() }
+  }
+
+  /// Sets SkinKit's `SkinContentVisibility.current` (lock-protected; read each time the store filters) from the settings.
+  static func applyContentVisibility(defaults: UserDefaults = .standard) {
+    let visibility = SkinContentVisibility(showTestSkins: defaults.bool(forKey: SkinStoreVisibilityDefaultsKey.showTestSkins),
+                                           showMatureSkins: defaults.bool(forKey: SkinStoreVisibilityDefaultsKey.showMatureSkins))
+    if visibility != SkinContentVisibility.current { SkinContentVisibility.current = visibility }
   }
 }
 

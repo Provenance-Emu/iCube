@@ -41,6 +41,9 @@ final class SkinStoreViewModelTests: XCTestCase {
     XCTAssertEqual(model.loadState, .loaded)
     XCTAssertEqual(model.shelves.map(\.section), [.gameCube, .wii, .nintendo64])
     XCTAssertEqual(model.shelves.map(\.entries.count), [2, 1, 3])
+    // Every entry lands in exactly one family card, and installs record their family with the catalog's labels.
+    XCTAssertEqual(model.shelves.map { shelf in shelf.families.map(\.members.count).reduce(0, +) }, [2, 1, 3])
+    XCTAssertNotNil(model.installer.familyIndex)
     XCTAssertNil(model.offlineMessage)
   }
 

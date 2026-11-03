@@ -77,7 +77,7 @@ final class DebugRootModelBuilderTests: XCTestCase {
   func test_rowOrder_defaultState() {
     let expected = ["fastmem", "instant-replay",
                     "user-folder", "jit-status", "debugger-status", "jit-error", "jit-guide", "fastmem-available",
-                    "launch-times", "reset-launch-times"] + debugOnlyDiagnostics + ["stall-metrics", "perf-bench",
+                    "launch-times", "reset-launch-times"] + debugOnlyDiagnostics + ["stall-metrics", "show-test-skins", "perf-bench",
                     "wireframe", "console-logging", "logging-verbosity", "input-debug", "template-covers"]
     XCTAssertEqual(model().allItems.map(\.id), expected)
   }
@@ -86,7 +86,7 @@ final class DebugRootModelBuilderTests: XCTestCase {
     let expected = ["fastmem", "instant-replay",
                     "user-folder", "jit-status", "debugger-status", "txm-region", "jit-error", "retry-jit-authorization",
                     "enable-jit-stikdebug", "stikdebug-help", "jit-guide", "fastmem-available",
-                    "launch-times", "reset-launch-times"] + debugOnlyDiagnostics + ["stall-metrics", "perf-bench", "bench-token", "forget-approved-devices",
+                    "launch-times", "reset-launch-times"] + debugOnlyDiagnostics + ["stall-metrics", "show-test-skins", "perf-bench", "bench-token", "forget-approved-devices",
                     "wireframe", "console-logging", "logging-verbosity", "input-debug", "template-covers"]
     XCTAssertEqual(model(populated).allItems.map(\.id), expected)
   }
@@ -107,6 +107,7 @@ final class DebugRootModelBuilderTests: XCTestCase {
     let m = model(state { $0.isIOS = false })
     XCTAssertFalse(m.sections.contains { $0.id == "recording" })
     XCTAssertNil(m.item(id: "instant-replay"))
+    XCTAssertNil(m.item(id: "show-test-skins"), "skins are iOS only")
   }
 
   // MARK: Toggles
@@ -115,6 +116,7 @@ final class DebugRootModelBuilderTests: XCTestCase {
     let rows: [(String, WritableKeyPath<DebugRootState, Bool>, (Bool) -> DebugRootChange)] = [
       ("instant-replay", \.instantReplay, { .instantReplay($0) }),
       ("stall-metrics", \.stallMetrics, { .stallMetrics($0) }),
+      ("show-test-skins", \.showTestSkins, { .showTestSkins($0) }),
       ("perf-bench", \.benchEnabled, { .perfBench($0) }),
       ("wireframe", \.wireframe, { .wireframe($0) }),
       ("console-logging", \.loggingEnabled, { .consoleLogging($0) }),

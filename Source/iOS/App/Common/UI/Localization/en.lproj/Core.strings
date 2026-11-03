@@ -5696,3 +5696,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Unverified" = "Unverified";
 "Unverified games never appear in Suggested, All Supported, Recent or Favorites. Browsing them does not enable hosting." = "Unverified games never appear in Suggested, All Supported, Recent or Favorites. Browsing them does not enable hosting.";
 "Unverified means multiplayer and netplay have not been established for this dump." = "Unverified means multiplayer and netplay have not been established for this dump.";
+
+/* Skin store variant families. */
+"%ld variants" = "%ld variants";
+"All Installed" = "All Installed";
+"Includes %@" = "Includes %@";
+"Includes skins the catalog marks as mature in the Skin Store." = "Includes skins the catalog marks as mature in the Skin Store.";
+"Install All (%ld)" = "Install All (%ld)";
+"Show Test Skins" = "Show Test Skins";
+"Show mature skins" = "Show mature skins";
+"Shows the catalog's sample-tagged test skins in the Skin Store." = "Shows the catalog's sample-tagged test skins in the Skin Store.";

@@ -120,6 +120,11 @@ enum DebugRootModelBuilder {
     items.append(SettingsRow.toggle("stall-metrics", L("Stall Metrics"), state.stallMetrics,
                                     L("Measures where the CPU thread waits during emulation. Adds the data to Copy State as a STALL REPORT section. <0.5% overhead."),
                                     set: { apply(.stallMetrics($0)) }))
+    if state.isIOS {
+      items.append(SettingsRow.toggle("show-test-skins", L("Show Test Skins"), state.showTestSkins,
+                                      L("Shows the catalog's sample-tagged test skins in the Skin Store."),
+                                      set: { apply(.showTestSkins($0)) }))
+    }
     items.append(SettingsRow.toggle("perf-bench", L("Perf Test Bench (HTTP)"), state.benchEnabled,
                                     L("Runs an HTTP server on port 8723 for automated perf testing. Over USB: `iproxy 8723 8723`. On a non-debug build it is also reachable over Wi-Fi, because USB forwarding does not reach App Store builds — those requests need the token below. Takes effect at the next game boot."),
                                     set: { apply(.perfBench($0)) }))

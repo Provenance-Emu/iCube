@@ -53,6 +53,15 @@ enum ConfigInterfaceModelBuilder {
     #endif
     let recording = MenuSection(id: "recording", header: L("Recording"), items: recordingItems)
 
-    return MenuModel(sections: [gameList, libraryUI, general, recording])
+    var sections = [gameList, libraryUI, general, recording]
+    #if os(iOS)
+    // Skins are iOS only. The test-skins switch sits in Debug; this one is for players.
+    sections.append(MenuSection(id: "skin-store", header: L("Skin Store"), items: [
+      SettingsRow.toggle("show-mature-skins", L("Show mature skins"), state.showMatureSkins,
+                         L("Includes skins the catalog marks as mature in the Skin Store."),
+                         icon: "eye.trianglebadge.exclamationmark", set: { apply(.showMatureSkins($0)) }),
+    ]))
+    #endif
+    return MenuModel(sections: sections)
   }
 }

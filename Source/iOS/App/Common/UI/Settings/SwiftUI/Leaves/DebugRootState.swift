@@ -14,6 +14,7 @@ enum DebugDefaultsKey {
   static let loggingVerbosity = "logger_console_verbosity"
   static let inputDebug = "input_debug"
   static let disableArtwork = "library_disable_artwork"
+  static let showTestSkins = SkinStoreVisibilityDefaultsKey.showTestSkins
 }
 
 /// Facts about the device and the process that the host reads ONCE, when the screen first appears. Reading them has side
@@ -49,6 +50,8 @@ struct DebugRootState: Equatable {
   var inputDebug = false
   var instantReplay = false
   var disableArtwork = false
+  /// Skins are iOS only, so the row shows only when `isIOS`.
+  var showTestSkins = false
   var hydrated = DebugHydratedState()
 
   /// The verbosity levels the cycle offers, 1 (errors only) to 5 (everything).
@@ -82,6 +85,7 @@ enum DebugRootChange: Equatable {
   case loggingVerbosity(Int)
   case inputDebug(Bool)
   case templateCovers(Bool)
+  case showTestSkins(Bool)
   case retryJitAuthorization
   case enableJitViaStikDebug
   case resetLaunchTimes
