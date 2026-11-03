@@ -663,6 +663,11 @@ struct GameGridItem: View {
           Label(L("Start Fresh (Skip Resume)"), systemImage: "arrow.counterclockwise")
         }
       }
+      Button {
+        NotificationCenter.default.post(name: .iCubeShowNetworkPlay, object: item)
+      } label: {
+        Label(L("Network Play"), systemImage: "network")
+      }
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")
       }
@@ -899,6 +904,11 @@ struct GameGridItem: View {
         }) {
           Label(L("Start Fresh (Skip Resume)"), systemImage: "arrow.counterclockwise")
         }
+      }
+      Button {
+        NotificationCenter.default.post(name: .iCubeShowNetworkPlay, object: item)
+      } label: {
+        Label(L("Network Play"), systemImage: "network")
       }
       Button(action: { showProperties(item) }) {
         Label(L("Properties"), systemImage: "info.circle")

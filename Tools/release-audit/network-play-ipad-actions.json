@@ -1,0 +1,103 @@
+[
+  {
+    "op": "launch",
+    "arguments": [
+      "-onboarding_seen_v1",
+      "YES",
+      "-ICubeAppearance",
+      "dark",
+      "-ICubeNetworkPlayPreview",
+      "-SCREENSHOT_MODE",
+      "1"
+    ]
+  },
+  {
+    "op": "assert",
+    "label": "Network Play is not available in this iCube build.",
+    "timeout": 10
+  },
+  {
+    "op": "assert",
+    "label": "Your Games",
+    "type": "staticText"
+  },
+  {
+    "op": "assert",
+    "label": "Nearby Rooms",
+    "type": "staticText"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-ipad-games",
+    "ax": true
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.settings"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "value": "0"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-ipad-settings",
+    "ax": true
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.unverifiedToggle"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "value": "1"
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.back"
+  },
+  {
+    "op": "assert",
+    "label": "Unverified",
+    "type": "button"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.game",
+    "exists": false
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.settings"
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.unverifiedToggle"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.unverifiedToggle",
+    "value": "0"
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.back"
+  },
+  {
+    "op": "assert",
+    "label": "Unverified",
+    "type": "button",
+    "exists": false
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.back"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.settings",
+    "exists": false
+  }
+]

@@ -395,28 +395,27 @@ final class CloudSyncCoordinator: ObservableObject {
     static let providerKind: SyncProviderKind = .iCloud
 
     /// Why this install cannot use CloudKit, or nil when it can.
-    private static func installUnavailableReason() -> SyncUnavailableReason? {
-        installUnavailableReason(
-            buildReason: CloudKitAvailability.buildLevelUnavailableReason(for: ICubeCloudSync.configuration),
-            canCreateContainer: { containerIsCreatable })
-    }
+  private static func installUnavailableReason() -> SyncUnavailableReason? {
+    installUnavailableReason(
+      buildReason: CloudKitAvailability.buildLevelUnavailableReason(for: ICubeCloudSync.configuration),
+      signedEntitlementsAllowCloudKit: { signedEntitlementsAllowCloudKit })
+  }
 
-    /// Probed once: signed entitlements cannot change while the app runs.
-    private static let containerIsCreatable: Bool = DOLCloudKitProbe.canCreateContainer(
-        withIdentifier: ICubeCloudSync.configuration.containerIdentifier
-            .trimmingCharacters(in: .whitespacesAndNewlines))
+  /// Cached without constructing a container: malformed entitlements can make
+  /// CloudKit trap, which an Objective-C exception boundary cannot catch.
+  private static let signedEntitlementsAllowCloudKit = SignedCloudKitEntitlements.allowsCloudKit(
+    identifier: ICubeCloudSync.configuration.containerIdentifier
+      .trimmingCharacters(in: .whitespacesAndNewlines))
 
-    /// The build-level reason wins, and when there is one the probe never runs: on the
-    /// simulator creating a container traps, which the probe cannot catch. Past that,
-    /// a container the probe cannot create (malformed entitlements on a re-signed
-    /// install) means CloudKit is off for this install.
-    nonisolated static func installUnavailableReason(
-        buildReason: SyncUnavailableReason?,
-        canCreateContainer: () -> Bool
-    ) -> SyncUnavailableReason? {
-        if let buildReason { return buildReason }
-        return canCreateContainer() ? nil : .entitlementMissing
-    }
+  /// Build policy wins (including the simulator exclusion). The signed gate
+  /// runs before startup availability checks and every provider factory path.
+  nonisolated static func installUnavailableReason(
+    buildReason: SyncUnavailableReason?,
+    signedEntitlementsAllowCloudKit: () -> Bool
+  ) -> SyncUnavailableReason? {
+    if let buildReason { return buildReason }
+    return signedEntitlementsAllowCloudKit() ? nil : .entitlementMissing
+  }
 
     /// Where the index and the trash live. Not under `User/`, so neither is
     /// visible in Files nor ever a candidate for the classifier. tvOS can only
