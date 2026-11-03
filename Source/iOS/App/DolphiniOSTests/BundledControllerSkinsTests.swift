@@ -24,7 +24,7 @@ final class BundledControllerSkinsTests: XCTestCase {
 
   private func seed(_ library: SkinLibrary) throws {
     try BundledControllerSkins.installIfNeeded(library: library, defaults: defaults,
-                                             bundle: Bundle(for: AppDelegate.self))
+                                               bundle: Bundle(for: AppDelegate.self))
   }
 
   func testShippedArchiveImportsAndHasUsablePhoneLayoutsAndMappedControls() throws {

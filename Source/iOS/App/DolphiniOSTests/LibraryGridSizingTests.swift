@@ -26,7 +26,7 @@ final class LibraryGridSizingTests: XCTestCase {
 
   func test_coverAspectRatioSurvivesPhoneAndTabletColumnCounts() {
     for available: CGFloat in [358, 736, 992] {
-      for columns in 2...8 {
+      for columns in 2 ... 8 {
         let size = LibraryLayout.cardSize(availableWidth: available, columns: columns, spacing: 16)
         XCTAssertEqual(size.height / size.width, 1.5, accuracy: 0.001)
         XCTAssertEqual(size.width * CGFloat(columns) + CGFloat(columns - 1) * 16, available, accuracy: 0.001)
