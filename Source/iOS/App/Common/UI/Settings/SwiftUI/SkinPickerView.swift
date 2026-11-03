@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+import SkinCatalogKit
+import SkinKitManager
 import SwiftUI
 
 extension ControllerSetupSystem {
@@ -32,6 +34,11 @@ struct SkinPickerView: View {
   @State private var showImporter = false
   @State private var showStore = false
   @State private var alertMessage: String?
+  /// Store-installed skins' variant families, keyed by `InstalledSkin.id` (SkinKit#17). Skins missing here (imported by
+  /// hand, or installed before families) are standalone.
+  @State private var memberships: [String: SkinFamilyMembership] = [:]
+  /// Families shown open. The one holding the current pick opens on load.
+  @State private var expandedFamilies: Set<String> = []
 
   init(padKinds: [TouchOverlayPadKind], library: SkinLibrary = .shared) {
     self.padKinds = padKinds
@@ -63,14 +70,27 @@ struct SkinPickerView: View {
             .font(.title2)
             .frame(width: Self.thumbnailHeight, height: Self.thumbnailHeight)
         })
-        ForEach(skins) { skin in
-          row(title: skin.name, subtitle: hasLayout(skin) ? nil : L("No layout for this orientation"), isSelected: selected == skin, onSelect: { library.select(skin, for: padKind, orientation: orientation) }, thumbnail: {
-            SkinThumbnail(skin: skin, padKind: padKind, orientation: orientation,
-                          canvas: orientation == .portrait ? Self.portraitCanvas : Self.landscapeCanvas,
-                          height: Self.thumbnailHeight, cornerRadius: Self.thumbnailCornerRadius)
-          })
+        // Variants of one pack sit under a disclosure group; each variant is still picked on its own.
+        ForEach(families(of: skins)) { family in
+          if family.isMultiMember {
+            DisclosureGroup(isExpanded: expansion(for: family.id)) {
+              ForEach(Array(family.members.enumerated()), id: \.element.id) { index, skin in
+                skinRow(skin, title: family.labels[index], selected: selected)
+              }
+            } label: {
+              HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(family.name).foregroundStyle(.primary)
+                  Text(String(format: L("%ld variants"), family.members.count)).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let selected, family.members.contains(selected) { Image(systemName: "checkmark").foregroundStyle(.tint) }
+              }
+            }
+          } else {
+            skinRow(family.members[0], title: family.members[0].name, selected: selected)
+          }
         }
-        .onDelete { offsets in delete(offsets.map { skins[$0] }) }
       } footer: {
         if skins.isEmpty { Text(L("No skins imported for this controller yet. Use Import… to add a .deltaskin or .manicskin file.")) }
       }
@@ -98,6 +118,44 @@ struct SkinPickerView: View {
     }
     // A running game forgets picks whose files are gone here, not while it draws.
     .onAppear { SkinMount.forgetDeadSelections(in: library) }
+    .task(id: library.skins.count) { await loadMemberships() }
+  }
+
+  /// Installed skins grouped into variant families by their stored membership; a lone skin is a family of one.
+  private func families(of skins: [InstalledSkin]) -> [SkinInstalledFamily<InstalledSkin>] {
+    SkinInstalledFamily.families(skins, key: { $0.id }, name: { $0.name }, membership: { memberships[$0.id] })
+  }
+
+  private func expansion(for id: String) -> Binding<Bool> {
+    Binding(get: { expandedFamilies.contains(id) },
+            set: { isOpen in if isOpen { expandedFamilies.insert(id) } else { expandedFamilies.remove(id) } })
+  }
+
+  /// Reads which family each store-installed skin belongs to. Records from before families migrate against the cached
+  /// catalog (never a network fetch); with no cache they stay standalone until one exists.
+  private func loadMemberships() async {
+    let catalog = await SkinCatalogService.shared.cachedCatalog()
+    let loaded = SkinStoreInstaller.shared.installedRecord.membershipsBySkinIdentifier(migratingWith: catalog)
+    memberships = loaded
+    for kind in padKinds {
+      for orientation in [TouchOverlayOrientation.portrait, .landscape] {
+        if let pick = library.selectedSkin(for: kind, orientation: orientation), let groupId = loaded[pick.id]?.groupId {
+          expandedFamilies.insert("group:\(groupId)")
+        }
+      }
+    }
+  }
+
+  private func skinRow(_ skin: InstalledSkin, title: String, selected: InstalledSkin?) -> some View {
+    row(title: title, subtitle: hasLayout(skin) ? nil : L("No layout for this orientation"), isSelected: selected == skin, onSelect: { library.select(skin, for: padKind, orientation: orientation) }, thumbnail: {
+      SkinThumbnail(skin: skin, padKind: padKind, orientation: orientation,
+                    canvas: orientation == .portrait ? Self.portraitCanvas : Self.landscapeCanvas,
+                    height: Self.thumbnailHeight, cornerRadius: Self.thumbnailCornerRadius)
+    })
+    // Per row rather than `.onDelete`, so deleting inside a family removes that variant only.
+    .swipeActions {
+      Button(role: .destructive) { delete([skin]) } label: { Label(L("Delete"), systemImage: "trash") }
+    }
   }
 
   /// The orientation the app's window is in. The device orientation reads unknown when the phone lies flat.

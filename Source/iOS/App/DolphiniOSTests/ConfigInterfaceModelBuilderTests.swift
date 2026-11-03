@@ -15,13 +15,19 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
   func test_rowOrder_andSections() {
     #if os(iOS)
     let recordingIDs = ["recording-watermark", "recording-camera"]
+    let skinStoreIDs = ["show-mature-skins"]
+    let headers = ["Game List", "Library UI", "General", "Recording", "Skin Store"]
+    let counts = [2, 3, 3, recordingIDs.count, skinStoreIDs.count]
     #else
     let recordingIDs = ["recording-watermark"]
+    let skinStoreIDs: [String] = []
+    let headers = ["Game List", "Library UI", "General", "Recording"]
+    let counts = [2, 3, 3, recordingIDs.count]
     #endif
     XCTAssertEqual(model().allItems.map(\.id),
-                   ["names-db", "covers", "background-style", "show-subtitles", "show-patched-separately", "confirm-on-stop", "panic-handlers", "osd-messages"] + recordingIDs)
-    XCTAssertEqual(model().sections.map(\.header), ["Game List", "Library UI", "General", "Recording"])
-    XCTAssertEqual(model().sections.map(\.items.count), [2, 3, 3, recordingIDs.count])
+                   ["names-db", "covers", "background-style", "show-subtitles", "show-patched-separately", "confirm-on-stop", "panic-handlers", "osd-messages"] + recordingIDs + skinStoreIDs)
+    XCTAssertEqual(model().sections.map(\.header), headers)
+    XCTAssertEqual(model().sections.map(\.items.count), counts)
   }
 
   func test_everyRow_hasADescription() {
@@ -45,6 +51,20 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
       }
     }
   }
+
+  #if os(iOS)
+  func test_showMatureSkins_readsAndEmits() {
+    for value in [true, false] {
+      var s = ConfigInterfaceState()
+      s.showMatureSkins = value
+      guard case .toggle(let binding)? = model(s).item(id: "show-mature-skins")?.role else { return XCTFail("toggle") }
+      XCTAssertEqual(binding.wrappedValue, value)
+      changes = []
+      binding.wrappedValue = !value
+      XCTAssertEqual(changes, [.showMatureSkins(!value)])
+    }
+  }
+  #endif
 
   func test_backgroundStyleCycle_offersEveryStyle_andEmits() {
     guard case .cycle(let options, let selection)? = model().item(id: "background-style")?.role else { return XCTFail("cycle") }

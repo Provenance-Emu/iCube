@@ -77,7 +77,7 @@ struct SkinStoreView: View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
       HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
         Text(shelf.section.storeHeader).icubeText(.section)
-        Text("\(shelf.entries.count)").icubeText(.tag).foregroundStyle(ICubeDesign.color(.textSecondary))
+        Text("\(shelf.families.count)").icubeText(.tag).foregroundStyle(ICubeDesign.color(.textSecondary))
       }
       .accessibilityElement(children: .combine)
       .accessibilityAddTraits(.isHeader)
@@ -88,9 +88,14 @@ struct SkinStoreView: View {
       LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.cardMinimumWidth, maximum: Self.cardMaximumWidth),
                                    spacing: ICubeDesign.Spacing.s.rawValue, alignment: .top)],
                 alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
-        ForEach(shelf.entries) { entry in
-          SkinStoreCard(entry: entry, section: shelf.section, state: installer.state(for: entry),
-                        onInstall: { installer.startInstall(entry) }, onCancel: { installer.cancelInstall(entry) })
+        ForEach(shelf.families) { family in
+          if family.isMultiFile {
+            SkinStoreFamilyCard(family: family, section: shelf.section, installer: installer, policy: model.policy)
+          } else {
+            let entry = family.primary
+            SkinStoreCard(entry: entry, section: shelf.section, state: installer.state(for: entry),
+                          onInstall: { installer.startInstall(entry) }, onCancel: { installer.cancelInstall(entry) })
+          }
         }
       }
     }
@@ -210,6 +215,11 @@ private struct SkinStoreCard: View {
         if let author = entry.author, !author.isEmpty {
           Text(String(format: L("by %@"), author)).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary)).lineLimit(1)
         }
+        if entry.hasPackedVariants {
+          // A single-file skin that packs several layouts: one download brings them all.
+          Text(String(format: L("Includes %@"), entry.variants.map(\.label).joined(separator: ", ")))
+            .icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary)).lineLimit(2)
+        }
         if let host = entry.sourceHost {
           Text(host).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textTertiary)).lineLimit(1)
         }
@@ -220,6 +230,70 @@ private struct SkinStoreCard: View {
     .padding(ICubeDesign.Spacing.s.rawValue)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .background(ICubeDesign.color(.rowSurface), in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous))
+  }
+}
+
+/// A variant family (SkinKit#17): one card for every file of a pack, each variant by its label with its own install
+/// control, and Install All, which fetches the rest one file at a time through the family's download plan.
+private struct SkinStoreFamilyCard: View {
+  let family: SkinFamily
+  let section: SkinStoreSection
+  @ObservedObject var installer: SkinStoreInstaller
+  let policy: SkinStorePolicy
+
+  /// Every member iCube can install, one URL per file.
+  private var plan: SkinDownloadPlan { family.downloadPlan(policy: policy) }
+
+  private var creditLine: String? {
+    let names = family.authors
+    switch names.count {
+    case 0: return nil
+    case 1, 2: return String(format: L("by %@"), names.joined(separator: " & "))
+    default: return String(format: L("by %@"), "\(names[0]) & \(names.count - 1)+")
+    }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
+      SkinStoreThumbnail(url: family.primary.thumbnailURL, badge: section.badge)
+        .overlay(alignment: .topLeading) {
+          Label(String(format: L("%ld variants"), family.variantCount), systemImage: "square.stack.3d.up.fill").icubeText(.tag)
+            .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue).padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
+            .background(.ultraThinMaterial, in: Capsule())
+            .padding(ICubeDesign.Spacing.xs.rawValue)
+        }
+      Text(family.name).icubeText(.body).lineLimit(2).fixedSize(horizontal: false, vertical: true)
+      if let creditLine {
+        Text(creditLine).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary)).lineLimit(1)
+      }
+      ForEach(family.members) { member in
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+          Text(family.label(for: member)).icubeText(.detail).lineLimit(1)
+          SkinStoreActionView(state: installer.state(for: member),
+                              onInstall: { installer.startInstall(member) }, onCancel: { installer.cancelInstall(member) })
+        }
+        .accessibilityElement(children: .contain)
+      }
+      Spacer(minLength: 0)
+      installAllButton
+    }
+    .padding(ICubeDesign.Spacing.s.rawValue)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .background(ICubeDesign.color(.rowSurface), in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous))
+  }
+
+  private var installAllButton: some View {
+    let remaining = installer.remaining(plan).count
+    return Button { installer.startInstall(plan) } label: {
+      Label(remaining == 0 ? L("All Installed") : String(format: L("Install All (%ld)"), remaining),
+            systemImage: remaining == 0 ? "checkmark.circle.fill" : "square.and.arrow.down.on.square")
+        .icubeText(.detail)
+        .padding(.horizontal, ICubeDesign.Spacing.s.rawValue).padding(.vertical, ICubeDesign.Spacing.xxs.rawValue)
+        .background(ICubeDesign.color(.selectedFill), in: Capsule())
+        .foregroundStyle(ICubeDesign.color(.accent))
+    }
+    .buttonStyle(.plain)
+    .disabled(remaining == 0 || installer.isBusy(plan))
   }
 }
 

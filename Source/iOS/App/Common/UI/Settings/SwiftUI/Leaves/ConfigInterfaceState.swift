@@ -12,6 +12,15 @@ enum ConfigInterfaceDefaultsKey {
   static let recordingCamera = "recording_camera_overlay"
 }
 
+/// UserDefaults keys for what the skin store shows (SkinKit#17, SkinKit#13). Unset is off. `SkinKitSetup` applies them to
+/// SkinKit's `SkinContentVisibility` at launch and whenever they change.
+enum SkinStoreVisibilityDefaultsKey {
+  /// Debug: show the catalog's `sample`-tagged test skins.
+  static let showTestSkins = "skin_store_show_test_skins"
+  /// Interface: show skins the catalog tags `mature`.
+  static let showMatureSkins = "skin_store_show_mature_skins"
+}
+
 /// Snapshot of Config and UserDefaults for the Interface screen. Defaults match the old view's `@State` / `@AppStorage` defaults.
 struct ConfigInterfaceState: Equatable {
   var useNamesDB = false
@@ -24,6 +33,7 @@ struct ConfigInterfaceState: Equatable {
   var osdMessages = true
   var recordingWatermark = true
   var recordingCamera = false
+  var showMatureSkins = false
 
   /// `@AppStorage` supplied `true` for an unset key; `bool(forKey:)` would read false.
   static func storedShowSubtitles(_ stored: Bool?) -> Bool { stored ?? true }
@@ -47,4 +57,5 @@ enum ConfigInterfaceChange: Equatable {
   case osdMessages(Bool)
   case recordingWatermark(Bool)
   case recordingCamera(Bool)
+  case showMatureSkins(Bool)
 }

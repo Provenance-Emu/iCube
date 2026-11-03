@@ -6,10 +6,13 @@ import Foundation
 import SkinCatalogKit
 import SkinKitManager
 
-/// One shelf of the store as shown: the section and its visible entries, in policy order.
+/// One shelf of the store as shown: the section and its visible entries, in policy order, grouped into variant families
+/// (a family of one for a lone skin).
 struct SkinStoreShelf: Identifiable {
   let section: SkinStoreSection
-  let entries: [SkinCatalogEntry]
+  let families: [SkinFamily]
+
+  var entries: [SkinCatalogEntry] { families.flatMap(\.members) }
 
   var id: String { section.id }
 }
@@ -38,7 +41,7 @@ final class SkinStoreViewModel: ObservableObject {
   let installer: SkinStoreInstaller
   private let service: SkinCatalogService
   private let library: SkinLibrary
-  private let policy: SkinStorePolicy
+  let policy: SkinStorePolicy
   private var hasLoaded = false
 
   init(service: SkinCatalogService = .shared, installer: SkinStoreInstaller = .shared, library: SkinLibrary = .shared,
@@ -86,7 +89,11 @@ final class SkinStoreViewModel: ObservableObject {
   }
 
   private func apply(_ catalog: SkinCatalog) {
-    shelves = policy.sections(for: catalog.skins).map { SkinStoreShelf(section: $0.section, entries: $0.entries) }
+    // Labels come from the whole catalog, so hiding entries never renames a variant; the installer records each
+    // install's family (store-families.json) with the same labels.
+    let index = catalog.familyIndex
+    installer.familyIndex = index
+    shelves = policy.familySections(for: catalog.skins, index: index).map { SkinStoreShelf(section: $0.section, families: $0.families) }
     loadState = .loaded
   }
 }
