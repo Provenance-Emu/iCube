@@ -10,7 +10,7 @@ import Foundation
 @MainActor
 enum BundledControllerSkins {
   static let identifier = "starvingartist.ngc.gcpocket-indigo"
-  static let archiveSHA256 = "16a83a56eef89b656b142c2c56144291f11ee13db76624e1709a577c2ee8371d"
+  static let archiveSHA256 = "1da985d4a6f5cefdf94e21aac5a8251ae072c7ada98c44ebf11436d35bd71634"
   static let seedKey = "bundledControllerSkins.gameCubePocket.v1"
 
   enum InstallError: Error { case missingArchive, archiveMismatch, unexpectedSkin }

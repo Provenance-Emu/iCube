@@ -55,6 +55,8 @@ final class BundledControllerSkinsTests: XCTestCase {
         }
         for asset in [item.asset?.normal, item.thumbstick?.name].compactMap({ $0 }) {
           XCTAssertTrue(FileManager.default.fileExists(atPath: skin.directory.appendingPathComponent(asset).path), asset)
+          XCTAssertNotNil(SkinAssetRenderer.image(named: asset, in: skin.directory,
+                                                  size: CGSize(width: 44, height: 44), scale: 2), asset)
         }
       }
       for expected in ["a", "b", "x", "y", "r1", "start", "l2", "r2", "quickSave", "quickLoad"] {

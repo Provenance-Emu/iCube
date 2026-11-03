@@ -101,11 +101,16 @@ issue. Temporary preview apps were closed after capture.
 
 ## GameCube Pocket
 
-The unchanged GameCube Pocket archive by starvingartist is bundled free with
+The GameCube Pocket archive by starvingartist is bundled free with
 source, author credit, permission notice and SHA-256 in BundledSkins/CREDITS.txt.
 Actual SkinKit decoding finds both iPhone orientations; both 14-item layouts
 fit, all button/stick/action names map to iCube, and skin artwork stays separate
 from the app code licence. No games/ROMs are bundled.
+
+CI run 41563021395 exposed two missing-menu-art assertions: the original archive
+references `menu.pdf` in both orientations but omits that file. The bundled copy
+now adds an iCube-authored vector menu glyph, preserving every original entry.
+CREDITS records both hashes and the repair; asset assertions remain enabled.
 
 The bootstrap seeds it once after user-folder setup, with no network fetch and
 no selection changes. A completed seed marker preserves intentional deletion;
