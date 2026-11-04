@@ -248,8 +248,9 @@ bool WriteProtectMemory(void* ptr, size_t size, bool allowExecute)
   }
 #elif defined(__APPLE__) && defined(_M_ARM_64)
   // On iOS/tvOS, JIT memory permissions are managed by the per-JIT-type implementations
-  // (pthread_jit_write_protect_np for Legacy, vm_remap mirrors for LuckNoTXM, lwmem for
-  // LuckTXM). mprotect() returns EPERM on MAP_JIT and vm_remap'd pages — skip it on iOS/tvOS.
+  // (vm_remap mirrors for LuckNoTXM, lwmem for LuckTXM), whose pages refuse mprotect — skip it.
+  // Legacy (an RX anonymous mapping) does need mprotect: JITMemoryTracker calls it directly and
+  // must never be routed through this function (iCube#46: the region stayed RX forever).
 #if !(TARGET_OS_IOS || TARGET_OS_TV)
   // macOS-ARM64 desktop: only mprotect on the legacy (no JIT-toggle) path; when
   // pthread_jit_write_protect_np is present, W^X is toggled per-thread and mprotect on
@@ -283,7 +284,8 @@ bool UnWriteProtectMemory(void* ptr, size_t size, bool allowExecute)
     return false;
   }
 #elif defined(__APPLE__) && defined(_M_ARM_64)
-  // On iOS/tvOS, mprotect() returns EPERM on MAP_JIT and vm_remap'd pages — skip it entirely.
+  // On iOS/tvOS, skip mprotect (see WriteProtectMemory). The Legacy JIT toggles its region in
+  // JITMemoryTracker instead.
 #if !(TARGET_OS_IOS || TARGET_OS_TV)
   // macOS-ARM64 desktop: only mprotect on the legacy (no JIT-toggle) path; preserves 2509 skip.
   if (!AppleHasJitToggle())
