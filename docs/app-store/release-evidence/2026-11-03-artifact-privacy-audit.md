@@ -64,7 +64,7 @@ Reading order: section 5 (findings, ranked) is the summary; sections 1-4 are the
 
 ## 2. Entitlements review
 
-Which file signs which configuration (`Project.swift:39-78`, `appCfg`): `Debug (AppStore)` and `Release (AppStore)` use `DolphiniOS/iCube AppStore.entitlements`. Every other configuration uses `DolphiniOS/DolphiniOS.entitlements`. `Project/Entitlements/{Public,Private}.entitlements` are applied by CI re-signing of sideload artifacts only (`.github/workflows/build.yml:300-306`, `release.yml:164-170`) and never reach the store build. `Live ActivityExtension.entitlements` signs a target that is not embedded (`Project.swift:13`, `:404`). `Project/Entitlements/Extension.entitlements` signs all three shipping extensions in every configuration.
+Which file signs which configuration (`Project.swift:46-76`, `appCfg` and `configTable`): `Debug (AppStore)` and `Release (AppStore)` use `DolphiniOS/iCube AppStore.entitlements`. Every other configuration uses `DolphiniOS/DolphiniOS.entitlements`. `Project/Entitlements/{Public,Private}.entitlements` are applied by CI re-signing of sideload artifacts only (`.github/workflows/build.yml:300-306`, `release.yml:164-170`) and never reach the store build. `Live ActivityExtension.entitlements` signs a target that is not embedded (`Project.swift:13`, `:404`). `Project/Entitlements/Extension.entitlements` signs all three shipping extensions in every configuration.
 
 What a store archive carries is the AppStore file plus whatever the distribution profile and Xcode add at export (`aps-environment` value, `icloud-container-environment`, `application-identifier`, `team-identifier`, `beta-reports-active`). Those added values need the signed IPA (section 6).
 
@@ -94,7 +94,7 @@ What a store archive carries is the AppStore file plus whatever the distribution
 
 Absent on purpose and confirmed absent: `com.apple.security.cs.allow-jit`, `cs.allow-unsigned-executable-memory`, `cs.disable-executable-page-protection`, `cs.disable-library-validation`, `cs.allow-dyld-environment-variables`, `inter-app-audio`, `get-task-allow`, `kernel.increased-debugging-memory-limit`, `com.apple.developer.activities`, `platform-application`. (`grep -c "cs\.\|inter-app"` on the file is 0, as the checklist states.) `get-task-allow` is added by Xcode only for development signing, which is what lets `Debug (AppStore)` offer JIT; the distribution profile does not carry it, so `JitManager.jitSupported` is false on a store install. **ARTIFACT**: `codesign -d --entitlements :-` on the exported app must not contain `get-task-allow`.
 
-Capabilities the code relies on that need **no** entitlement: Local Network (Info.plist `NSLocalNetworkUsageDescription` via `INFOPLIST_KEY`, `Project.swift:~423`; `NSBonjourServices`), motion (`NSMotionUsageDescription`), photo add-only (`NSPhotoLibraryAddUsageDescription`), microphone, Game Controller, App Intents, Spotlight, Keychain. No camera, location, Bluetooth, contacts, Siri-kit, Game Center, HealthKit or background-mode code was found, and none is declared.
+Capabilities the code relies on that need **no** entitlement: Local Network (Info.plist `NSLocalNetworkUsageDescription` via `INFOPLIST_KEY`, `Project.swift:424`; `NSBonjourServices`), motion (`NSMotionUsageDescription`), photo add-only (`NSPhotoLibraryAddUsageDescription`), microphone, Game Controller, App Intents, Spotlight, Keychain. No camera, location, Bluetooth, contacts, Siri-kit, Game Center, HealthKit or background-mode code was found, and none is declared.
 
 One possible gap, not provable from source: Dolphin's built-in BBA broadcasts UDP on the host network (`Source/Core/Core/HW/EXI/BBA/BuiltIn.cpp`, `IOS/Network/Socket.cpp`, `SO_BROADCAST`). iOS requires `com.apple.developer.networking.multicast` for multicast/broadcast sends. It is absent. Only emulated-network games that broadcast are affected, and it is not a review item. Needs an on-device test if online play is in the 1.0 claims.
 
@@ -102,7 +102,7 @@ One possible gap, not provable from source: Dolphin's built-in BBA broadcasts UD
 
 | File | Used by | Contents of note | Store relevance |
 |---|---|---|---|
-| `DolphiniOS/DolphiniOS.entitlements` | Debug/Release Non-Jailbroken, Jailbroken, TrollStore, Beta | Everything in the store file **plus** `cs.allow-jit`, `cs.allow-unsigned-executable-memory`, `cs.disable-executable-page-protection`, `cs.disable-library-validation`, `cs.allow-dyld-environment-variables`, `inter-app-audio`, `increased-debugging-memory-limit` (and without `aps-environment`, `associated-domains`, NFC) | None. Must never be pointed at an AppStore configuration; `Project.swift:64-77` keeps the two apart (checked per row). |
+| `DolphiniOS/DolphiniOS.entitlements` | Debug/Release Non-Jailbroken, Jailbroken, TrollStore, Beta | Everything in the store file **plus** `cs.allow-jit`, `cs.allow-unsigned-executable-memory`, `cs.disable-executable-page-protection`, `cs.disable-library-validation`, `cs.allow-dyld-environment-variables`, `inter-app-audio`, `increased-debugging-memory-limit` (and without `aps-environment`, `associated-domains`, NFC) | None. Must never be pointed at an AppStore configuration; `Project.swift:64-76` keeps the two apart (checked per row). |
 | `Project/Entitlements/Public.entitlements` | CI re-sign of the sideload IPA | `com.apple.developer.activities` = `com.apple.activitykit`, `cs.allow-jit`, `cs.allow-unsigned-executable-memory`, `get-task-allow` | None. |
 | `Project/Entitlements/Private.entitlements` | CI re-sign for TrollStore and the jailbreak `.deb` | `platform-application`, `com.apple.private.security.no-sandbox`, `com.apple.private.security.storage.AppDataContainers`, IOKit user clients, `get-task-allow` | None. Private entitlements; a store upload of this would be rejected. Not referenced by any Xcode configuration. |
 | `Project/Entitlements/Extension.entitlements` | Top Shelf, Thumbnail, Quick Look Preview, every configuration | `app-sandbox`, `application-groups` = `group.com.joemattiello.icube` | Correct and minimal. **ARTIFACT**: the three extension App IDs (`com.joemattiello.iCube.topshelf|thumbnail|preview`) must carry App Groups in the profile, or the extensions load with no data (`docs/app-group-entitlements.md`). |
@@ -110,10 +110,58 @@ One possible gap, not provable from source: Dolphin's built-in BBA broadcasts UD
 
 ### 2.3 Extension signing and bundle identity (store configuration)
 
-- Bundle ids are `<app id>.<suffix>` for every configuration (`Project.swift:88-95`, `extensionConfigs`), so the store ids are `com.joemattiello.iCube.topshelf|thumbnail|preview`, prefixed by the parent id as validation requires.
-- Extensions use automatic signing with team `S32Z3HMYVQ` (`Project.swift:~632-640`), `SKIP_INSTALL = YES`, deployment target iOS/tvOS 17 (matches the app), `UIRequiredDeviceCapabilities = arm64`, and each ships its own `PrivacyInfo.xcprivacy` (`Project.swift:~662,675,687`).
-- Version strings: extensions hard-code `MARKETING_VERSION = 1.0.0` and `CURRENT_PROJECT_VERSION = 13`, the same literals as the app (`Project.swift:~420-425,~634-635`). They agree only while the release pipeline overrides both identically; **ARTIFACT**: compare `CFBundleShortVersionString`/`CFBundleVersion` of the app and the three appex in the exported IPA.
-- Extensions link only `PVLibrarySnapshot` and system frameworks (`Project.swift:~626`); no Sentry, no core. Extension crash/timing signal reaches Sentry only through the app-side `ExtensionMetricsReporter` (`Common/Services/ExtensionMetricsReporter.swift`).
+- Bundle ids are `<app id>.<suffix>` for every configuration (`Project.swift:83-90`, `extensionConfigs`), so the store ids are `com.joemattiello.iCube.topshelf|thumbnail|preview`, prefixed by the parent id as validation requires.
+- Extensions use automatic signing with team `S32Z3HMYVQ` (`Project.swift:634`), `SKIP_INSTALL = YES`, deployment target iOS/tvOS 17 (matches the app), `UIRequiredDeviceCapabilities = arm64`, and each ships its own `PrivacyInfo.xcprivacy` (`Project.swift:663,677,692`).
+- Version strings: extensions hard-code `MARKETING_VERSION = 1.0.0` and `CURRENT_PROJECT_VERSION = 13`, the same literals as the app (app `Project.swift:443-444`, extensions `:638-639`). They agree only while the release pipeline overrides both identically; **ARTIFACT**: compare `CFBundleShortVersionString`/`CFBundleVersion` of the app and the three appex in the exported IPA.
+- Extensions link only `PVLibrarySnapshot` and system frameworks (`Project.swift:626`); no Sentry, no core. Extension crash/timing signal reaches Sentry only through the app-side `ExtensionMetricsReporter` (`Common/Services/ExtensionMetricsReporter.swift`).
 - Extension privacy manifests are wrong for app-group UserDefaults: see section 3.2 (fixed in a separate commit).
 - Not shipped: `RecentGamesWidget`/Live Activity (not embedded), `NSSupportsLiveActivities` and `NSSupportsLiveActivitiesFrequentUpdates` are still set on the app (`Project.swift:426-427`). ActivityKit requests will fail without an extension; harmless, but Info.plist claims a feature that has no UI. No review risk expected; remove the two keys or embed the extension when the widget ships.
+
+## 3. Privacy manifest review
+
+### 3.1 What is declared
+
+| Manifest | Where bundled | Declares |
+|---|---|---|
+| App: `Source/iOS/App/DolphiniOS/PrivacyInfo.xcprivacy` | `Project.swift:333` (resource of the `iCube` target, every configuration) | `NSPrivacyTracking` false; `NSPrivacyTrackingDomains` empty; collected data: Crash Data, Performance Data, Other Diagnostic Data (each not linked, no tracking, purpose App Functionality). Required-reason APIs: UserDefaults `CA92.1` + `1C8F.1`; File timestamp `C617.1` + `3B52.1`; Disk space `E174.1`; System boot time `35F9.1`. |
+| Top Shelf, Thumbnail, Quick Look Preview: `Source/iOS/Extensions/*/PrivacyInfo.xcprivacy` (byte-identical) | `Project.swift:663,677,692` | No tracking, no collected data, UserDefaults `CA92.1` only. |
+| Live Activity extension | none | Not embedded, so not shipped. Add one before it is. |
+
+### 3.2 Declared required-reason APIs against actual use
+
+Greps run over `Source/iOS/App`, `Source/iOS/Extensions` and the resolved package sources (patterns: Apple's five categories plus their symbol/Foundation spellings). Test sources and `#if DEBUG`-only code excluded.
+
+| Category | Actual use in the app target | Reason covered? |
+|---|---|---|
+| UserDefaults | Everywhere in the app; app-group suite in `Common/SharedDefaults.m:5` and through `PVLibrarySnapshot` (`LibrarySnapshotAppGroup.defaults`, `UserDefaults(suiteName:)`) | `CA92.1` (own app) and `1C8F.1` (same app group) are both declared. **Covered.** |
+| File timestamp | `contentModificationDate`/`creationDate`/`fileModificationDate`/`lstat` on files inside the app container, the App Group, or user-granted files: `Common/Swift/LibraryAddedDateStore.swift:37-72`, `FilesystemSaveStateProvider.swift:35-63`, `SaveStateService.swift:224`, `Continuity/ContinuityFileDigestCache.swift:62-71`, `Mods/DiscPatch/DiscPatchService.swift:379,405`, `Mods/DiscPatch/DiscPatchStore.swift:46-53`, `Mods/Browser/ModDownloadManager.swift:99-101`, `Swift/Shaders/ShaderQuickPickerView.swift:387`, `Swift/TopBar/QuickScreenshot.swift:80`, `Services/CloudSyncCoordinator.swift:800-1241`, `DolphiniOS/UI/Import/NANDImportManager.mm:17`, `DolphiniOS/UI/Emulation/Skins/SkinMount.swift:108`, `SkinAssetRenderer.swift:82`, `Swift/TVEmulationBridge.mm:127`; the core's `File::` helpers use `stat` | `C617.1` (app container) and `3B52.1` (user-granted files, imports from Files and picked folders). **Covered.** |
+| Disk space | `volumeAvailableCapacity*Key` only to decide whether a write can proceed: `Common/Swift/TVLibraryView.swift:786-798` (pre-cache), `Mods/DiscPatch/DiscPatchService.swift:337-351`, `Mods/Browser/ModDownloadPolicy.swift:31-33`. Nothing shows free space to the user. | `E174.1` (check space before writing). **Covered.** Do not add a free-space display without adding `85F4.1`. |
+| System boot time | `ProcessInfo.systemUptime`: `Common/Swift/Controllers/Player/PlayerScreenViewModel.swift:213`, `Common/Swift/Performance/LivePerformanceSession.swift:142` (elapsed-time clocks). No `mach_absolute_time` or `kern.boottime` in app sources. | `35F9.1` (measure time elapsed). **Covered.** The core's own timers use `std::chrono::steady_clock` (libc++); that is not a symbol in our binary. **ARTIFACT**: Apple's upload scan checks the binary, so confirm no ITMS-91053 mail after the next upload. |
+| Active keyboard | No `UITextInputMode.activeInputModes` or `currentInputMode` anywhere in the app, extensions or packages. | Not declared, not needed. |
+
+**Gap found (PROVEN): the three extension manifests declare only `CA92.1`.** All three read the library snapshot through the App Group suite (`LibrarySnapshotStore()` in `Shared/Snapshot/ICubeSnapshot.swift:15` -> `LibrarySnapshotAppGroup.defaults` -> `UserDefaults(suiteName: "group.com.joemattiello.icube")`; Top Shelf at `TopShelfContentProvider.swift:32`, Quick Look through `LibraryLookup.resolve`). Apple's reason for app-group defaults is `1C8F.1`, not `CA92.1`. Fixed in a separate commit that adds `1C8F.1` to the three manifests. It was not built. Extensions use no other required-reason category (the Quick Look preview reads `.fileSizeKey` only, which is not a timestamp: `PreviewProvider.swift:24`).
+
+### 3.3 SDKs and packages in the dependency graph
+
+Remote packages are declared in `Project.swift:~700-740` (`packages:`) and linked from the `iCube` target (`:376-390`). Versions are those resolved in the local checkout; CI resolves fresh.
+
+| Package (resolved) | Ships a `PrivacyInfo.xcprivacy` | Required-reason API use found | Note |
+|---|---|---|---|
+| Sentry 9.32.0 locally (floor 9.29.2) | Yes (`Sources/Resources/PrivacyInfo.xcprivacy`): Crash, Performance, Other Diagnostic data (not linked, App Functionality); UserDefaults `CA92.1`, boot time `35F9.1`, file timestamp `C617.1` | SDK-internal | The only SDK on Apple's published list of commonly used third-party SDKs in this graph that I can identify; ships a manifest. Apple also requires a signature for listed SDKs when they ship as an XCFramework or binary; Sentry here is source SwiftPM. **ARTIFACT**: confirm no "missing signature" mail. |
+| SWCompression 4.9.x | Yes | n/a | via `Project.swift` |
+| BitByteData | Yes | n/a | transitive |
+| PLzmaSDK (Provenance-Emu fork `1.6.2-provenance.1` through `PLzmaShim`) | Yes (`resources/PrivacyInfo.xcprivacy`, copied as a resource by its target) | n/a | `Source/iOS/PLzmaShim/Package.swift` |
+| ZIPFoundation | Yes | n/a | transitive through SkinKit |
+| Zip 2.1.2 (marmelroy) | No | `.creationDate`/`.modificationDate` when writing directories (`Zip/Zip.swift:181-191`) | Statically compiled into the app; covered by the app's `C617.1`. |
+| PVWebServer 1.0.0 | No | `contentModificationDateKey`, `creationDateKey` for PROPFIND (`ROMUploadServer.swift:2140-2157`) | Container files; covered by `C617.1`. |
+| PVCloudSync 1.1.0 | No | `contentModificationDate` (`UserDataScanner.swift:58,93`), UserDefaults | Covered. |
+| PVHelp 1.0.0 | No | UserDefaults (`WikiContentCache.swift:45-53`) | Covered by `CA92.1`. |
+| SkinKit 0.2.0 | No | UserDefaults (`DeltaSkinAppHooks.swift`), `DeltaSkinPreferences`, `SkinSystemID` | Covered by `CA92.1`. |
+| PVLibrarySnapshot 1.0.0 | No | App-group UserDefaults | Covered by `1C8F.1` in the app; **not** covered in the extensions until the fix above. |
+| PVPatchEngine 1.0.1 | No | `fstat` (`Internal/PosixFile.swift:44-45`) | Reads size; covered by `3B52.1`/`C617.1` anyway. |
+| PVContinuity 1.0.0, PVSyncRules 1.0.2, AltKit 0.0.2, UICollectionViewLeftAlignedLayout | No | None found | |
+
+All first-party and small third-party packages are SwiftPM libraries with automatic linkage (the one explicit dynamic product, `PVWebServer-Dynamic`, is not the product the app links: `Project.swift:155` uses `PVWebServer`). They are therefore expected to be statically linked into the app executable, in which case Xcode builds the privacy report from the app manifest plus the manifests of bundled resources and the missing per-package manifests are harmless. **ARTIFACT**: `ls iCube.app/Frameworks` in the exported IPA. If any `PV*.framework` or `Zip.framework` is embedded, it needs its own manifest (add `PrivacyInfo.xcprivacy` to that package) because Apple evaluates each embedded framework separately.
+
+Not a package but a vendored binary: `Externals/MoltenVK-iOS/MoltenVK.xcframework` (iOS only, `Project.swift:~385`) and the Dolphin core xcframework. Neither ships a manifest. MoltenVK is not on Apple's commonly-used-SDK list; the core is first-party and covered by the app manifest. **ARTIFACT**: Organizer > Archive > Generate Privacy Report, compare against section 3.1 (the privacy-label doc already asks for this).
 
