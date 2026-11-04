@@ -5571,6 +5571,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "This replaces the state in the selected classic slot." = "This replaces the state in the selected classic slot.";
 "Wii Pointer" = "Wii Pointer";
 "Couldn't create save state" = "Couldn't create save state";
+"Couldn't load save state" = "Couldn't load save state";
 "Couldn't update Keep" = "Couldn't update Keep";
 "Loading save state" = "Loading save state";
 "No save state available" = "No save state available";
