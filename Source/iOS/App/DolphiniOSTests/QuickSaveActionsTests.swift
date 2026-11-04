@@ -32,4 +32,13 @@ final class QuickSaveActionsTests: XCTestCase {
     XCTAssertTrue(QuickSaveActions.Outcome.loadRequested(URL(fileURLWithPath: "/state")).isSuccess)
     XCTAssertEqual(QuickSaveActions.Outcome.loadRequested(URL(fileURLWithPath: "/state")).message, "Loading save state")
   }
+
+  func testRejectedLoadIsReportedAsFailedOnlyWhenTheCoreCouldTakeIt() {
+    let url = URL(fileURLWithPath: "/states/GALE01.s01")
+    XCTAssertEqual(QuickSaveActions.loadOutcome(url, loaded: true, allowed: true), .loadRequested(url))
+    XCTAssertEqual(QuickSaveActions.loadOutcome(url, loaded: false, allowed: true), .loadFailed(url))
+    XCTAssertEqual(QuickSaveActions.loadOutcome(url, loaded: false, allowed: false), .unavailable)
+    XCTAssertFalse(QuickSaveActions.Outcome.loadFailed(url).isSuccess)
+    XCTAssertNotEqual(QuickSaveActions.Outcome.loadFailed(url).message, QuickSaveActions.Outcome.unavailable.message)
+  }
 }

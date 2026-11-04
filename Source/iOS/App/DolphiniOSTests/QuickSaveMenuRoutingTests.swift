@@ -171,8 +171,9 @@ final class QuickSaveMenuRoutingTests: XCTestCase {
     XCTAssertTrue(fixture.loaded.isEmpty, "Legacy admission-only path must not run")
     finish?.resume(returning: false)
     let outcome = await task.value
-    XCTAssertEqual(outcome, .unavailable)
+    XCTAssertEqual(outcome, .loadFailed(fixture.classic))
     XCTAssertFalse(outcome.isSuccess)
+    XCTAssertEqual(outcome.message, "Couldn't load save state")
   }
 
   func testHistorySaveCompletionFromReplacedSessionHasNoSuccessMessage() async {
