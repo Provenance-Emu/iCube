@@ -21,14 +21,14 @@ Base commit: `49b114f18c` (origin/develop at the time). Code reading only: nothi
 
 - **Kind**: toggle, cycle (tap steps through choices), picker (menu / tvOS option rows), stepper, action, destructive, destination (pushes a sub-screen), custom, caption.
 - **Persistence**: `` `KEY` File [Section] Key `` is a Dolphin Config key and its INI location, written through `DOLConfigBridge`; the bracketed word in parentheses is the write layer. `UD key` is `UserDefaults.standard`. The effective default is the compiled default unless a launch seed (`DolphinCoreService.seedLaunchDefaults...`) overrides it on first run.
-- **Layer**: `B` = `SetBase`, `BoC` = `SetBaseOrCurrent` (see 1.2).
+- **Write layer** (in the Persistence cell, in parentheses): `SetBase` or `SetBaseOrCurrent`, spelled out in full (see 1.2).
 - **Live / restart**: whether a running game picks the value up.
 - **Reset**: whether "Reset All Settings" (About, and the toolbar on iOS/iPad) restores it.
 - **Scope**: device-local, synced preference (rides `Config/*.ini` through iCloud sync), per-game (`GameSettings/*.ini` or `game_profiles.json`).
 
 ## Summary
 
-- 21 root entries in 9 sections, about 285 rows; tables below cover every one that the menu models generate, plus the hand-built leaves, the pushed controller sub-screens and the pause-menu surfaces that write the same keys.
+- 21 root entries in 9 sections, about 300 table rows (a few rows stand for a family, such as one per player or per peer). The tables cover every row the root leaves' menu models and local row helpers generate (`SettingsRow.*`, `flag`/`flagRow`/`validateRow`/`percentStepper`/`status`), the hand-built leaves, the DSU, Advanced Motion and Stick Feel screens, and the pause-menu surfaces that write the same keys. The per-player controller screens are not enumerated row by row (section 5).
 - Settings reach another device only as files (`Config/*.ini` whole-file, SYSCONF with Wii saves, `GameSettings/*.ini`, `Profiles/*.json`); `UserDefaults` never syncs (no KVS use). The single guard is a two-filename filter in `CloudSyncCoordinator`. Section 3 lists 23 items with evidence.
 - Top findings (section 4): **F1** Reset All from the pause menu deletes the running game's per-game keys from `GameSettings/<id>.ini`; **F2** device-bound and identifying keys ride in the synced INI files; **F3** Wii Speaker Volume range 0-7 on a 0-127 key; **F4** several rows write to the CurrentRun layer in game and lose the value at game end; **F6/F7/F8** three rows do nothing (touchpad IR follow, camera overlay, tvOS background style); **F10** search opens leaves, not rows, and seven entries are unsearchable.
 - Not done: no build, no device, no simulator. Section 5 lists what the code does not settle.
@@ -134,8 +134,8 @@ iOS-only rows are marked. Backend has two copies (F9). Overscan row: external di
 
 | Row (id) | Kind | Choices / range | Default (effective) | Persistence (layer) | Live / restart | Reset | Scope |
 |---|---|---|---|---|---|---|---|
-| Backend (`backend`) | cycle | Metal, OpenGL, Vulkan (all three always listed) | Metal (first-run seed `FirstRunInitializationService.mm:56`); compiled default `VideoBackendBase::GetDefaultBackendConfigName()` | `MAIN_GFX_BACKEND` Dolphin.ini [Core] GFXBackend (SetBaseOrCurrent) **and** UD `ui_gfx_backend` mirror; the row displays the UD copy first (Findings F9) | boot* (backend read at boot) | Reset All (both copies) | synced, device-bound #12 (Config copy); UD copy device-local |
-| Aspect Ratio (`aspect-ratio`) | cycle | Auto, Stretch to Window, 4:3, 16:9 (raw 0,3,2,1) | AspectMode::Auto | `GFX_ASPECT_RATIO` GFX.ini [Settings] AspectRatio (SetBaseOrCurrent) | n/c | Reset All | synced |
+| Backend (`backend`) | cycle | Metal, OpenGL, Vulkan (all three always listed) | Metal (first-run seed `FirstRunInitializationService.mm:56`); compiled default: the platform's default backend (`VideoBackendBase::GetDefaultBackendConfigName()`) | `MAIN_GFX_BACKEND` Dolphin.ini [Core] GFXBackend (SetBaseOrCurrent) **and** UD `ui_gfx_backend` mirror; the row displays the UD copy first (Findings F9) | boot* (backend read at boot) | Reset All (both copies) | synced, device-bound #12 (Config copy); UD copy device-local |
+| Aspect Ratio (`aspect-ratio`) | cycle | Auto, Stretch to Window, 4:3, 16:9 (raw 0,3,2,1) | Auto | `GFX_ASPECT_RATIO` GFX.ini [Settings] AspectRatio (SetBaseOrCurrent) | n/c | Reset All | synced |
 | V-Sync (`vsync`) | toggle | on/off | false (compiled; no seed). The caption says "leave ON" (Findings F13) | `GFX_VSYNC` GFX.ini [Hardware] VSync (SetBaseOrCurrent) | live* | Reset All | synced |
 | Triple Buffering (`triple-buffering`) | toggle | on/off | true (unset) | UD `gfx_triple_buffering` | n/c | Reset All | device-local |
 | Force scale 1.0 on non‑ProMotion (`force-scale-one`) | toggle | on/off | false (unset) | UD `gfx_force_scale_one_non_promo` | n/c | Reset All | device-local |
@@ -156,10 +156,10 @@ Internal Resolution is the only row that is **SetBase** and carries an override 
 |---|---|---|---|---|---|---|---|
 | Internal Resolution (`efb-scale`) | cycle | 1× (Native) up to the backend max (`GFX_MAX_EFB_SCALE`, 6 in the placeholder); auto-fit is not offered | 1× (seed) | `GFX_EFB_SCALE` GFX.ini [Settings] InternalResolution (**SetBase**, always Base) | live* | Reset All | synced |
 | MetalFX Upscaling (`metalfx-upscale`) | toggle | on/off | false | `GFX_MTL_METALFX_SPATIAL_UPSCALE` GFX.ini [Settings] MetalFXSpatialUpscale (SetBaseOrCurrent) | live* | Reset All | synced |
-| Anisotropic Filtering (`anisotropy`) | cycle | 1×, 2×, 4×, 8×, 16× (stored as exponent 0…4) | AnisotropicFilteringMode::Force4x | `GFX_ENHANCE_MAX_ANISOTROPY` GFX.ini [Enhancements] MaxAnisotropy (SetBaseOrCurrent) | live* (key table: `gfxEnhanceAnisotropySamples`) | Reset All | synced |
+| Anisotropic Filtering (`anisotropy`) | cycle | 1×, 2×, 4×, 8×, 16× (stored as exponent 0…4) | 4× | `GFX_ENHANCE_MAX_ANISOTROPY` GFX.ini [Enhancements] MaxAnisotropy (SetBaseOrCurrent) | live* (key table: `gfxEnhanceAnisotropySamples`) | Reset All | synced |
 | Anti-Aliasing (MSAA) (`msaa`) | cycle | None, 2×, 4×, 8× | 1 | `GFX_MSAA` GFX.ini [Settings] MSAA (SetBaseOrCurrent) | n/c | Reset All | synced |
 | Supersampling (SSAA) (`ssaa`) | toggle | on/off | false | `GFX_SSAA` GFX.ini [Settings] SSAA (SetBaseOrCurrent) | n/c | Reset All | synced |
-| Output Resampling (`output-resampling`) | cycle | Standard, Bilinear, B-Spline, Mitchell-Netravali, Catmull-Rom, Sharp Bilinear, Area Sampling | OutputResamplingMode::Default | `GFX_ENHANCE_OUTPUT_RESAMPLING` GFX.ini [Enhancements] OutputResampling (SetBaseOrCurrent) | n/c | Reset All | synced |
+| Output Resampling (`output-resampling`) | cycle | Standard, Bilinear, B-Spline, Mitchell-Netravali, Catmull-Rom, Sharp Bilinear, Area Sampling | Standard | `GFX_ENHANCE_OUTPUT_RESAMPLING` GFX.ini [Enhancements] OutputResampling (SetBaseOrCurrent) | n/c | Reset All | synced |
 | Force 24-bit Color (`true-color`) | toggle | on/off | true | `GFX_ENHANCE_FORCE_TRUE_COLOR` GFX.ini [Enhancements] ForceTrueColor (SetBaseOrCurrent) | n/c | Reset All | synced |
 | Disable Copy Filter (`disable-copy-filter`) | toggle | on/off | true | `GFX_ENHANCE_DISABLE_COPY_FILTER` GFX.ini [Enhancements] DisableCopyFilter (SetBaseOrCurrent) | n/c | Reset All | synced |
 | Widescreen Hack (`widescreen-hack`) | toggle | on/off | false | `GFX_WIDESCREEN_HACK` GFX.ini [Settings] wideScreenHack (SetBaseOrCurrent) | live* | Reset All | synced |
@@ -204,8 +204,8 @@ Includes the performance-statistics overlays (not reset, cosmetic), debugging sw
 | Compiler Threads (`compiler-threads`) | stepper | 1…(cores−1), min range 1…1 on ≤2-core devices (slider hidden; see "Checked, no defect found") | 1 → seed min(2,cores-1) | `GFX_SHADER_COMPILER_THREADS` GFX.ini [Settings] ShaderCompilerThreads (SetBaseOrCurrent) | n/c | Reset All | synced, device-bound #11 |
 | Precompiler Threads (`precompiler-threads`) | stepper | 1…(cores−1) | −1 compiled (auto) → seed min(2, cores−1) | `GFX_SHADER_PRECOMPILER_THREADS` GFX.ini [Settings] ShaderPrecompilerThreads (SetBaseOrCurrent) | n/c | Reset All | synced, device-bound #11 |
 | Texture-pack memory warning (`texture-pack-warning`) | custom (read-only warning, shown when hi-res textures + prefetch are on and the pack is too large for physical memory) |  | — | — | — | — | — |
-| Use Present Drawable (`use-present-drawable`) | cycle | Auto, Off, On | TriState::Auto | `GFX_MTL_USE_PRESENT_DRAWABLE` GFX.ini [Settings] MTLUsePresentDrawable (SetBaseOrCurrent) | n/c | Reset All | synced |
-| Manually Upload Buffers (`manually-upload-buffers`) | cycle | Auto, Off, On | TriState::Auto | `GFX_MTL_MANUALLY_UPLOAD_BUFFERS` GFX.ini [Settings] ManuallyUploadBuffers (SetBaseOrCurrent) | n/c | Reset All | synced |
+| Use Present Drawable (`use-present-drawable`) | cycle | Auto, Off, On | Auto | `GFX_MTL_USE_PRESENT_DRAWABLE` GFX.ini [Settings] MTLUsePresentDrawable (SetBaseOrCurrent) | n/c | Reset All | synced |
+| Manually Upload Buffers (`manually-upload-buffers`) | cycle | Auto, Off, On | Auto | `GFX_MTL_MANUALLY_UPLOAD_BUFFERS` GFX.ini [Settings] ManuallyUploadBuffers (SetBaseOrCurrent) | n/c | Reset All | synced |
 | Show FPS (`show-fps`) | toggle | on/off | false | `GFX_SHOW_FPS` GFX.ini [Settings] ShowFPS (SetBaseOrCurrent) | live* | not reset | synced |
 | Show VPS (`show-vps`) | toggle | on/off | false | `GFX_SHOW_VPS` GFX.ini [Settings] ShowVPS (SetBaseOrCurrent) | n/c | not reset | synced |
 | Show Speed (`show-speed`) | toggle | on/off | false | `GFX_SHOW_SPEED` GFX.ini [Settings] ShowSpeed (SetBaseOrCurrent) | n/c | not reset | synced |
@@ -282,7 +282,7 @@ Microphone row iOS only.
 |---|---|---|---|---|---|---|---|
 | Load GameCube Main Menu (`load-main-menu`) | toggle | on/off | true | `MAIN_SKIP_IPL` Dolphin.ini [Core] SkipIPL (SetBaseOrCurrent) | n/c | Reset All | synced |
 | System Language (`language`) | cycle | English, German, French, Spanish, Italian, Dutch | `GetDefaultGameCubeLanguage()` (locale) | `MAIN_GC_LANGUAGE` Dolphin.ini [Core] SelectedLanguage (SetBaseOrCurrent) | n/c | not reset (identity) | synced |
-| Microphone in Slot B (`slot-b-microphone`) — iOS only | toggle | on/off | ExpansionInterface::EXIDeviceType::None | `MAIN_SLOT_B` Dolphin.ini [Core] SlotB (SetBaseOrCurrent) | next boot (caption: "Takes effect when a game starts") | Reset All only removes the microphone assignment (DOLConfigBridge.mm ~1272-1278) | synced |
+| Microphone in Slot B (`slot-b-microphone`) — iOS only | toggle | on/off | off (slot B empty) | `MAIN_SLOT_B` Dolphin.ini [Core] SlotB (SetBaseOrCurrent) | next boot (caption: "Takes effect when a game starts") | Reset All only removes the microphone assignment (DOLConfigBridge.mm ~1272-1278) | synced |
 
 #### Wii (`console-wii`)
 SYSCONF rows apply when SYSCONF is next written/read at Wii boot.
@@ -293,9 +293,9 @@ SYSCONF rows apply when SYSCONF is next written/read at Wii boot.
 | Aspect Ratio (`aspect-ratio`) | cycle | 4:3, 16:9 | 16:9 (true) | `SYSCONF_WIDESCREEN` SYSCONF [IPL] AR (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | Enable Screen Saver (`screensaver`) | toggle | on/off | false | `SYSCONF_SCREENSAVER` SYSCONF [IPL] SSV (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | System Language (`language`) | cycle | Japanese, English, German, French, Spanish, Italian, Dutch, Simplified Chinese, Traditional Chinese, Korean | locale-derived (`GetDefaultLanguage()`) | `SYSCONF_LANGUAGE` SYSCONF [IPL] LNG (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
-| Audio Settings (`sound-mode`) | cycle | Mono, Stereo, Surround | 0x01 | `SYSCONF_SOUND_MODE` SYSCONF [IPL] SND (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
-| Sensor Bar Position (`sensor-bar-position`) | cycle | Bottom, Top | 0x01 | `SYSCONF_SENSOR_BAR_POSITION` SYSCONF [BT] BAR (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
-| Sensor Bar Sensitivity (`sensor-bar-sensitivity`) | stepper | 1…5 step 1 | 0x03 | `SYSCONF_SENSOR_BAR_SENSITIVITY` SYSCONF [BT] SENS (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
+| Audio Settings (`sound-mode`) | cycle | Mono, Stereo, Surround | Stereo (0x01) | `SYSCONF_SOUND_MODE` SYSCONF [IPL] SND (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
+| Sensor Bar Position (`sensor-bar-position`) | cycle | Bottom, Top | Top (0x01) | `SYSCONF_SENSOR_BAR_POSITION` SYSCONF [BT] BAR (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
+| Sensor Bar Sensitivity (`sensor-bar-sensitivity`) | stepper | 1…5 step 1 | 3 (0x03) | `SYSCONF_SENSOR_BAR_SENSITIVITY` SYSCONF [BT] SENS (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | Speaker Volume (`speaker-volume`) | stepper | 0…7 (Findings F3: desktop Dolphin range is 0…127) | 88 (0x58) compiled; state placeholder 4 | `SYSCONF_SPEAKER_VOLUME` SYSCONF [BT] SPKV (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | Rumble (`rumble`) | toggle | on/off | true | `SYSCONF_WIIMOTE_MOTOR` SYSCONF [BT] MOT (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | Allow Touchpad IR Follow Without Click (`touchpad-ir-follow`) | toggle | on/off | false (unset) | UD `touchpad_ir_follow_without_click` | n/c | not reset | device-local; **no reader anywhere** (Findings F6) |
@@ -392,7 +392,9 @@ Engine rows depend on `JitManager.acquiredJit`: JIT engines are listed only when
 | Reset Optimizations to Recommended (`reset-optimizations`) | action |  | — | deletes every `CIR*` key from Base and CurrentRun (`resetCirOptimizationsToDefaults`) | next game launch (caption) | n/a | n/a |
 | CIR Hot-Block Profiler (`cir-profiler`) | toggle | on/off | false (unset) | UD `icube.cirProfile` | n/c | not reset | device-local |
 | Enable Emulated CPU Clock Override (`cpu-clock-enabled`) | toggle | on/off | false | `MAIN_OVERCLOCK_ENABLE` Dolphin.ini [Core] OverclockEnable (SetBase) | live* | Reset All | synced, device-tuned #13 |
+| Emulated CPU Clock (`cpu-clock-percent`) | stepper | 1…400 % step 1 | 100 % | `MAIN_OVERCLOCK` Dolphin.ini [Core] Overclock (`setMainOverclockPercent`: SetBase; stored as a float fraction) | live* | Reset All | synced, device-tuned #13. Disabled with a badge while the adaptive clock (CurrentRun) or a game INI owns the key; shows the Base value |
 | Enable VBI Frequency Override (`vbi-enabled`) | toggle | on/off | false | `MAIN_VI_OVERCLOCK_ENABLE` Dolphin.ini [Core] VIOverclockEnable (SetBase) | live* | Reset All | synced, device-tuned #13 |
+| VBI Frequency (`vbi-percent`) | stepper | 1…400 % step 1 | 100 % | `MAIN_VI_OVERCLOCK` Dolphin.ini [Core] VIOverclock (`setMainViOverclockPercent`: SetBase) | live* | Reset All | synced, device-tuned #13. Same override rule as the CPU clock |
 | Enable MMU (`mmu`) | toggle | on/off | false | `MAIN_MMU` Dolphin.ini [Core] MMU (SetBaseOrCurrent) | boot* | Reset All | synced |
 | Adaptive Clock (auto VI/CPU) (`adaptive-clock`) | toggle | on/off | true (registered in DolphinCoreService; unset = on) | UD `adaptive_clock_enable` | next boot (caption) | Reset All | device-local |
 | Pause on Panic (`pause-on-panic`) | toggle | on/off | false | `MAIN_PAUSE_ON_PANIC` Dolphin.ini [Core] PauseOnPanic (SetBaseOrCurrent) | n/c | not reset | synced |
@@ -441,25 +443,32 @@ In APPSTORE only the Environment section exists, and with no JIT support it is r
 
 | Row (id) | Kind | Choices / range | Default (effective) | Persistence (layer) | Live / restart | Reset | Scope |
 |---|---|---|---|---|---|---|---|
-| Fastmem (`fastmem`) | toggle | on/off (disabled unless this device reports fastmem available) | device capability (seed `fastmemAvailable`) | `MAIN_FASTMEM` Dolphin.ini [Core] Fastmem (SetBaseOrCurrent) | boot* | Reset All | synced, device-bound #11 |
-| User Folder (`user-folder`) | status or destination |  | — | file path of the User directory (not stored) | — | n/a | device-local |
-| Enable ReplayKit Instant Replay (`instant-replay`) — iOS only | toggle | on/off | false (unset) | UD `replaykit_instant_replay_enabled` | n/c | not reset | device-local |
-| Retry JIT Authorization (`retry-jit-authorization`) | action |  | — | JIT crash cookie (JitManager) | immediate | n/a | device-local |
-| Enable JIT via StikDebug (`enable-jit-stikdebug`) | action |  | — | — | immediate (relaunches the app) | n/a | device-local |
-| JIT Setup Guide (`jit-guide`) | destination |  | — | — | — | — | — |
-| Reset Launch Times (`reset-launch-times`) | action |  | 0 | UD `launch_times` | immediate | not reset | device-local |
-| Motion Debug (`motion-debug`) — DEBUG builds only | destination |  | — | — | — | — | — |
-| Gallery (`gallery`) — DEBUG builds only, iOS | destination |  | — | — | — | — | — |
-| Stall Metrics (`stall-metrics`) | toggle | on/off | **true** (compiled) | `MAIN_STALL_METRICS` Dolphin.ini [Core] StallMetrics (SetBaseOrCurrent/SetCurrent) | n/c | Reset All | synced |
-| Show Test Skins (`show-test-skins`) — iOS only | toggle | on/off | false (unset) | UD `skin_store_show_test_skins` | n/c | not reset | device-local |
-| Perf Test Bench (HTTP) (`perf-bench`) | toggle | on/off | false (unset) | UD `ICubeBenchServerEnabled` | next game boot (caption) | not reset | device-local |
-| Bench Token (`bench-token`) — **credential shown in clear** | custom |  | — | UD (DebugServerManager.tokenDefaultsKey); minted on first LAN start | — | not reset | device-local |
-| Forget N Approved Device(s) (`forget-approved-devices`) | destructive |  | — | BenchAccessApproval (remembered client addresses) | immediate | not reset | device-local |
-| Wireframe (`wireframe`) | toggle | on/off | false | `GFX_ENABLE_WIREFRAME` GFX.ini [Settings] WireFrame (SetBaseOrCurrent) | n/c | Reset All | synced |
-| Enable Console Logging (`console-logging`) | toggle | on/off | false (unset) | UD `logger_console_enabled` | next launch | not reset | device-local |
-| Verbosity (`logging-verbosity`) | cycle | 1…5 | `LoggerIniMigration.defaultVerbosity` | UD `logger_console_verbosity` | next launch (applied to Logger.ini in `didFinishLaunching`) | not reset | device-local |
-| Input Event Debug (`input-debug`) | toggle | on/off | false (unset) | UD `input_debug` | n/c | not reset | device-local |
-| Use Template Covers (Disable Artwork) (`template-covers`) | toggle | on/off | false (unset) | UD `library_disable_artwork` | n/c | not reset | device-local |
+| Fastmem (`fastmem`) [full only] | toggle | on/off (disabled unless this device reports fastmem available) | device capability (seed `fastmemAvailable`) | `MAIN_FASTMEM` Dolphin.ini [Core] Fastmem (SetBaseOrCurrent) | boot* | Reset All | synced, device-bound #11 |
+| User Folder (`user-folder`) [APPSTORE: all scopes] | status or destination |  | — | file path of the User directory (not stored) | — | n/a | device-local |
+| JIT (`jit-status`) [APPSTORE: all scopes] | read-only status | Acquired / Not Acquired | — | `JitManager.acquiredJit` (read once on appear) | — | n/a | device-local |
+| Debugger (`debugger-status`) [APPSTORE: all scopes] | read-only status | Attached / Not Attached | — | `JitManager.debuggerAttached` | — | n/a | device-local |
+| TXM JIT Region (`txm-region`) [APPSTORE: all scopes; only on TXM devices] | read-only status | Authorized / Not Authorized | — | `JitManager.txmAuthorized` | — | n/a | device-local |
+| JIT Error (`jit-error`) [APPSTORE: all scopes] | read-only status | text or (none) | — | `JitManager.acquisitionError` | — | n/a | device-local |
+| Fastmem availability (`fastmem-available`) [APPSTORE: all scopes] | read-only status | Available / Not Available | — | `FastmemManager.fastmemAvailable` | — | n/a | device-local |
+| StikDebug help (`stikdebug-help`) [APPSTORE: jitOnly and full; iOS] | caption | — | — | shown only after StikDebug was asked and did not attach | — | n/a | n/a |
+| Launch Times (`launch-times`) [full only] | read-only status | count | 0 | UD `launch_times` (also registered in `DefaultPreferences.plist`) | — | n/a | device-local |
+| Enable ReplayKit Instant Replay (`instant-replay`) [full only] — iOS only | toggle | on/off | false (unset) | UD `replaykit_instant_replay_enabled` | n/c | not reset | device-local |
+| Retry JIT Authorization (`retry-jit-authorization`) [APPSTORE: jitOnly and full] | action |  | — | JIT crash cookie (JitManager) | immediate | n/a | device-local |
+| Enable JIT via StikDebug (`enable-jit-stikdebug`) [APPSTORE: jitOnly and full] | action |  | — | — | immediate (relaunches the app) | n/a | device-local |
+| JIT Setup Guide (`jit-guide`) [APPSTORE: jitOnly and full] | destination |  | — | — | — | — | — |
+| Reset Launch Times (`reset-launch-times`) [full only] | action |  | 0 | UD `launch_times` | immediate | not reset | device-local |
+| Motion Debug (`motion-debug`) [DEBUG builds only] — DEBUG builds only | destination |  | — | — | — | — | — |
+| Gallery (`gallery`) [DEBUG builds only] — DEBUG builds only, iOS | destination |  | — | — | — | — | — |
+| Stall Metrics (`stall-metrics`) [full only] | toggle | on/off | **true** (compiled) | `MAIN_STALL_METRICS` Dolphin.ini [Core] StallMetrics (SetBaseOrCurrent/SetCurrent) | n/c | Reset All | synced |
+| Show Test Skins (`show-test-skins`) [full only] — iOS only | toggle | on/off | false (unset) | UD `skin_store_show_test_skins` | n/c | not reset | device-local |
+| Perf Test Bench (HTTP) (`perf-bench`) [full only] | toggle | on/off | false (unset) | UD `ICubeBenchServerEnabled` | next game boot (caption) | not reset | device-local |
+| Bench Token (`bench-token`) [full only] — **credential shown in clear** | custom |  | — | UD (DebugServerManager.tokenDefaultsKey); minted on first LAN start | — | not reset | device-local |
+| Forget N Approved Device(s) (`forget-approved-devices`) [full only] | destructive |  | — | BenchAccessApproval (remembered client addresses) | immediate | not reset | device-local |
+| Wireframe (`wireframe`) [full only] | toggle | on/off | false | `GFX_ENABLE_WIREFRAME` GFX.ini [Settings] WireFrame (SetBaseOrCurrent) | n/c | Reset All | synced |
+| Enable Console Logging (`console-logging`) [full only] | toggle | on/off | false (unset) | UD `logger_console_enabled` | next launch | not reset | device-local |
+| Verbosity (`logging-verbosity`) [full only] | cycle | 1…5 | `LoggerIniMigration.defaultVerbosity` | UD `logger_console_verbosity` | next launch (applied to Logger.ini in `didFinishLaunching`) | not reset | device-local |
+| Input Event Debug (`input-debug`) [full only] | toggle | on/off | false (unset) | UD `input_debug` | n/c | not reset | device-local |
+| Use Template Covers (Disable Artwork) (`template-covers`) [full only] | toggle | on/off | false (unset) | UD `library_disable_artwork` | n/c | not reset | device-local |
 
 ### 1.3.7 Sync & Network
 
@@ -666,7 +675,8 @@ Ranked by release impact. "Proven" = follows from the cited source; "device" = t
 - `Layer::DeleteKey` marks the entry as removed and the layer dirty (Layer.cpp:40-50); `INIGameConfigLayerLoader::Save` writes removed keys as `ini.DeleteKey` into `GameSettings/<id>.ini` for the LocalGame layer (GameConfigLoader.cpp:283-325). The comment above the function (DOLConfigBridge.mm:1195-1199) assumes Reset is tapped "from root Settings" with no game running.
 - Settings is hosted by the pause menu (`SettingsRootView` inside PauseMenuView.swift:525 and :540, `onClose` doc in SettingsRootView.swift), and Reset All sits in the iPhone toolbar and in About on every platform.
 - Result: one tap in a game removes that game's saved overrides (and the file is a synced `.gameSettings` document, so the deletion propagates). Cheat sections are not config-mapped and survive.
-- Rule: skip LocalGame and GlobalGame in the layer loop, or disable Reset All while a core is running (`EmulationState`).
+- The same pass also deletes `MAIN_CPU_CORE` from CurrentRun (which is where a jitless boot parks its Cached Interpreter fallback) and the shipped GlobalGame keys in memory (for example GMSE04's `FastDiscSpeed = False`) until the next boot: *device check*.
+- Rule: skip LocalGame, GlobalGame and CurrentRun in the layer loop, or disable Reset All while a core is running (`EmulationState`).
 
 **F2. The iCloud engine mirrors device-bound and identifying keys, and the only exclusions are two file names.** *Proven.* Full list with evidence and a proposed rule in section 3.2 and 3.3. Highest items: `Logger.ini` is rewritten per device at launch yet synced as a shared file (#17); `[Analytics] ID` and `[General] WirelessMac` are created per install and ride in `Dolphin.ini` (#7, #8); `Fastmem`, shader thread counts, `CPUCore`, `GFXBackend`, the CIR/overclock tuning (#11-#13) and the controller `Device =` files (#16) are hardware-specific and last-writer-wins. The tvOS and iOS iCloud screens both tell the user "Settings … sync" without scope (F11).
 
@@ -696,7 +706,7 @@ Ranked by release impact. "Proven" = follows from the cited source; "device" = t
 
 **F13. V-Sync caption contradicts its default.** *Proven.* The caption says "leave ON" (GraphicsGeneralModelBuilder.swift) while `GFX_VSYNC` defaults to false, nothing seeds it, and Reset returns it to false.
 
-**F14. `resetPageToDefaults:` is dead code with an out-of-range index.** *Proven.* No caller outside the header (`DOLConfigBridge.h:596`); page 2 loops `p = 1…4` into `GetInfoForSIDevice(p)` / `GetInfoForWiimoteSource(p)`, which index zero-based arrays of four (the same trap `gcPortDeviceForPort:` documents at DOLConfigBridge.mm ~228-240), so for the four-entry SI array `p == 4` reads past the end and `p == 1…3` address the wrong port (DOLConfigBridge.mm:1639-1642). Delete the method.
+**F14. `resetPageToDefaults:` has no production caller and its controllers page indexes out of range.** *Proven.* Swift name `resetPage(toDefaults:)` (DOLConfigBridge.h:596); the only caller is `SettingsWriteBackTests.swift:49`, which exercises page 1 only, so the page-2 path is untested; page 2 loops `p = 1…4` into `GetInfoForSIDevice(p)` / `GetInfoForWiimoteSource(p)`, which index zero-based arrays of four (the same trap `gcPortDeviceForPort:` documents at DOLConfigBridge.mm ~228-240), so for the four-entry SI array `p == 4` reads past the end and `p == 1…3` address the wrong port (DOLConfigBridge.mm:1639-1642). Delete the method (and the test call), or fix the loop to `0…3`.
 
 **F15. DSU "add" deep link lands one level too high on iPad and tvOS.** *Proven.* `jumpToControllersRequested` pushes `DSUSettingsView` only in the phone list; the sidebar reaches only the Controllers hub (SettingsRootView.swift:89-92, :125-127).
 
