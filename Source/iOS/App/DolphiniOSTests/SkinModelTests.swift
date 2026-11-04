@@ -105,7 +105,7 @@ final class SkinModelTests: XCTestCase {
 
   // MARK: Rules SkinKitCore does not apply on its own (`DeltaSkin.DecodingOptions.lenient`)
 
-  func testOnlyGameCubeAndWiiAreAcceptedBySuffix() throws {
+  func testOnlyGameCubeWiiNESAndSNESAreAcceptedBySuffix() throws {
     func decode(_ identifier: String) -> SkinInfo? {
       try? SkinInfo.decode(Data(#"{"name":"N","identifier":"x","gameTypeIdentifier":"\#(identifier)","representations":{"iphone":{"standard":{"portrait":{"mappingSize":{"width":1,"height":1}}}}}}"#.utf8))
     }

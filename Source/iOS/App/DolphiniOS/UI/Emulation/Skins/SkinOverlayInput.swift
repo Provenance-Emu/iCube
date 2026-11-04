@@ -109,11 +109,12 @@ struct SkinOverlayInput {
   private let pointerArea: CGRect
   let sticks: [Stick]
 
-  init(layout: SkinLayout, padKind: TouchOverlayPadKind) {
+  /// `gameType` is the skin's: a NES or SNES skin maps its buttons through that system's table for `padKind`.
+  init(layout: SkinLayout, padKind: TouchOverlayPadKind, gameType: SkinGameType? = nil) {
     self.padKind = padKind
     pointerArea = layout.gameRect.flatMap { $0.isEmpty ? nil : $0 } ?? layout.skinRect
     items = layout.items
-    controls = layout.items.map { Self.resolve($0.item, padKind: padKind) }
+    controls = layout.items.map { Self.resolve($0.item, padKind: padKind, gameType: gameType) }
     sticks = zip(layout.items, controls).enumerated().compactMap { index, pair in
       guard case .stick(let baseId)? = pair.1 else { return nil }
       let entry = pair.0
@@ -160,13 +161,13 @@ struct SkinOverlayInput {
 
   // MARK: Resolving items
 
-  private static func resolve(_ item: SkinItem, padKind: TouchOverlayPadKind) -> Control? {
+  private static func resolve(_ item: SkinItem, padKind: TouchOverlayPadKind, gameType: SkinGameType?) -> Control? {
     switch item.inputs {
     case .buttons(let names):
       var kinds: [TouchOverlayControlKind] = []
       var actions: [SkinAction] = []
       for name in names {
-        guard let action = SkinInputMap.action(for: [name], padKind: padKind) else { continue }
+        guard let action = SkinInputMap.action(for: [name], padKind: padKind, gameType: gameType) else { continue }
         if case .control(let kind) = action {
           if !kinds.contains(kind) { kinds.append(kind) }
         } else if !actions.contains(action) {

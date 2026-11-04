@@ -175,11 +175,14 @@ struct SkinInfo {
 }
 
 private extension SkinGameType {
-  /// The only two types iCube runs; every other SkinKit game type (N64 included) is not a skin for this app.
+  /// The types iCube runs: GameCube and Wii, and NES and Super NES for Virtual Console titles. Every other
+  /// SkinKit game type (N64 included) is not a skin for this app.
   init?(_ kit: DeltaSkinGameType) {
     switch kit {
     case .gamecube: self = .gameCube
     case .wii: self = .wii
+    case .nes: self = .nes
+    case .snes: self = .snes
     default: return nil
     }
   }

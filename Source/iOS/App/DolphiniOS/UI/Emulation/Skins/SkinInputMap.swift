@@ -12,6 +12,8 @@ enum SkinInputName {
   static let x = "x"
   static let y = "y"
   static let start = "start"
+  /// NES and SNES Select.
+  static let select = "select"
   static let z = "z"
   static let c = "c"
   static let l = "l"
@@ -112,20 +114,76 @@ enum SkinInputMap {
     SkinInputName.r2: .axisButton(id: ID.classicTriggerR)
   ]
 
+  /// NES on each pad a VC NES title accepts, by button name the way the Virtual Console maps it: the VC
+  /// emulator reads A as A, so a skin's A presses A. The d-pad is the pad's own (see `dpad(padKind:)`).
+  private static let nesGameCubeControls: [String: TouchOverlayControlKind] = [
+    SkinInputName.a: .button(id: ID.gcA),
+    SkinInputName.b: .button(id: ID.gcB),
+    SkinInputName.start: .button(id: ID.gcStart),
+    SkinInputName.select: .button(id: ID.gcZ)
+  ]
+
+  private static let nesClassicControls: [String: TouchOverlayControlKind] = [
+    SkinInputName.a: .button(id: ID.classicA),
+    SkinInputName.b: .button(id: ID.classicB),
+    SkinInputName.start: .button(id: ID.classicPlus),
+    SkinInputName.select: .button(id: ID.classicMinus)
+  ]
+
+  /// The sideways remote is held like a NES pad: 2 is A and 1 is B.
+  private static let nesSidewaysControls: [String: TouchOverlayControlKind] = [
+    SkinInputName.a: .button(id: ID.wiiTwo),
+    SkinInputName.b: .button(id: ID.wiiOne),
+    SkinInputName.start: .button(id: ID.wiiPlus),
+    SkinInputName.select: .button(id: ID.wiiMinus)
+  ]
+
+  /// SNES adds X, Y, L and R by name. Y lands on the GameCube's top Y, not its left B; on a touch skin the
+  /// art is where its creator drew it, so the thumb still finds the right picture.
+  private static let snesGameCubeControls: [String: TouchOverlayControlKind] = nesGameCubeControls.merging([
+    SkinInputName.x: .button(id: ID.gcX),
+    SkinInputName.y: .button(id: ID.gcY),
+    SkinInputName.l: .axisButton(id: ID.gcTriggerL),
+    SkinInputName.r: .axisButton(id: ID.gcTriggerR)
+  ]) { _, new in new }
+
+  private static let snesClassicControls: [String: TouchOverlayControlKind] = nesClassicControls.merging([
+    SkinInputName.x: .button(id: ID.classicX),
+    SkinInputName.y: .button(id: ID.classicY),
+    SkinInputName.l: .axisButton(id: ID.classicTriggerL),
+    SkinInputName.r: .axisButton(id: ID.classicTriggerR)
+  ]) { _, new in new }
+
   private static let specialActions: [String: SkinAction] = [
     SkinInputName.menu: .menu,
     SkinInputName.quickSave: .quickSave,
     SkinInputName.quickLoad: .quickLoad
   ]
 
+  private static func lowercased(_ controls: [String: TouchOverlayControlKind]) -> [String: SkinAction] {
+    var table = Dictionary(uniqueKeysWithValues: controls.map { ($0.key.lowercased(), SkinAction.control($0.value)) })
+    for (name, action) in specialActions { table[name.lowercased()] = action }
+    return table
+  }
+
+  private struct GameTypePad: Hashable {
+    let gameType: SkinGameType
+    let padKind: TouchOverlayPadKind
+  }
+
+  /// Virtual Console skins, looked up before (and instead of) the pad tables: a NES skin's `x` means
+  /// nothing, rather than the pad's X.
+  private static let virtualConsoleTables: [GameTypePad: [String: SkinAction]] = [
+    GameTypePad(gameType: .nes, padKind: .gameCube): lowercased(nesGameCubeControls),
+    GameTypePad(gameType: .nes, padKind: .wiiClassic): lowercased(nesClassicControls),
+    GameTypePad(gameType: .nes, padKind: .wiiRemoteSideways): lowercased(nesSidewaysControls),
+    GameTypePad(gameType: .snes, padKind: .gameCube): lowercased(snesGameCubeControls),
+    GameTypePad(gameType: .snes, padKind: .wiiClassic): lowercased(snesClassicControls)
+  ]
+
   /// Lookup tables are written with the canonical spellings; matching is case-insensitive.
   private static let tables: [TouchOverlayPadKind: [String: SkinAction]] = {
-    func lowercased(_ controls: [String: TouchOverlayControlKind]) -> [String: SkinAction] {
-      var table = Dictionary(uniqueKeysWithValues: controls.map { ($0.key.lowercased(), SkinAction.control($0.value)) })
-      for (name, action) in specialActions { table[name.lowercased()] = action }
-      return table
-    }
-    return [
+    [
       .gameCube: lowercased(gameCubeControls),
       .wiiRemote: lowercased(wiiRemoteControls),
       .wiiRemoteSideways: lowercased(wiiRemoteControls),
@@ -133,9 +191,19 @@ enum SkinInputMap {
     ]
   }()
 
-  /// The action of the first input in `inputs` the pad knows; unknown names are skipped.
-  static func action(for inputs: [String], padKind: TouchOverlayPadKind) -> SkinAction? {
-    guard let table = tables[padKind] else { return nil }
+  /// The action of the first input in `inputs` the pad knows; unknown names are skipped. A NES or SNES
+  /// `gameType` uses that system's table for the pad, and a pad the system cannot use maps nothing.
+  static func action(for inputs: [String], padKind: TouchOverlayPadKind, gameType: SkinGameType? = nil) -> SkinAction? {
+    let table: [String: SkinAction]?
+    switch gameType {
+    case .nes?:
+      table = virtualConsoleTables[GameTypePad(gameType: .nes, padKind: padKind)]
+    case .snes?:
+      table = virtualConsoleTables[GameTypePad(gameType: .snes, padKind: padKind)]
+    case .gameCube?, .wii?, nil:
+      table = tables[padKind]
+    }
+    guard let table else { return nil }
     for input in inputs {
       if let action = table[input.lowercased()] { return action }
     }
@@ -159,6 +227,7 @@ enum SkinInputMap {
     }
   }
 
+  /// The pad's own d-pad. NES and SNES skins use it too, on every pad they can replace.
   static func dpad(padKind: TouchOverlayPadKind) -> TouchOverlayControlKind {
     switch padKind {
     case .gameCube: return .dpad(baseId: ID.gcDpadUp)

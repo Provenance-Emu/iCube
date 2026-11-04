@@ -776,7 +776,9 @@ let project = Project(
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         // Keep the exact SkinKit release aligned with Provenance and iFly.
         // iCube retains its own overlay and consumes the model, catalog and manager modules.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .exact("0.2.0")),
+        // TEMPORARY: SkinKit main (381c6cd) for the NES and Super NES shelves (SkinKit#86) until 0.3.0 is tagged;
+        // switch back to .exact("0.3.0") before merging.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("381c6cd415580ade738c382c42083581f27a4e82")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
