@@ -589,3 +589,52 @@ Models in Continuity/UI/*ModelBuilder.swift.
 | Pause › Shaders, Save States, Controllers, Continue Elsewhere | open the Shaders leaf, the save-state pane, the hub, Nearby | as the leaves above | |
 | Top bar (in-game) | Volume / quick mute, Fast Forward, Instant Replay, overlay visibility | `setAudioVolume` (BoC); `fast_forward_speed_percent`; `replaykit_instant_replay_enabled`; `ControllerManager.overlayVisible` | fast-forward writes `MAIN_EMULATION_SPEED` on CurrentRun (follow-up in the 2026-10-16 audit). |
 <!-- END:inventory -->
+
+<!-- BEGIN:search -->
+## 2. Search and deep-link coverage
+
+### 2.1 Search
+
+- **Platforms.** iPhone list and iPad sidebar only. tvOS builds no index (`searchIndex: nil`, SettingsRootView.swift:74), so Apple TV has no settings search at all.
+- **What is indexed** (`SettingsSearchIndex`, built once per appearance in `.task`): each entry's title, description and `keywords`; and, for entries with a `makeModel`, every top-level row's title and description. `keywords:` is never passed anywhere (grep of `Source/iOS/App/Common/UI/Settings`: 0 uses), so hand-built leaves are findable by title and description only. Matching folds case, punctuation and diacritics; there is no ranking and no de-duplication of equal row titles across leaves ("Micro-Op Fusion" appears twice, as do "Specialized Ops", "Backend", "Instant Replay").
+- **A row hit opens the leaf, not the row.** `SettingsSearchResults` shows the row title as a caption but calls `onSelect(entry)` with no row id (SettingsSearchIndex.swift, `SettingsSearchResults`); the phone list sets `pushed = entry` and the sidebar selects the entry. `SettingsRowTarget`/`settingsRowTarget` already exists for pause-menu deep links and could carry the row (Findings F14).
+- **Entries with a model (rows searchable):** General, Interface, Advanced, Video, Enhancements, Hacks, Graphics Advanced, Audio, GameCube, Wii, Performance Tuning, Debug, Connected Apps, Privacy: 14 of 21 entries.
+- **Entries without a model (rows not searchable; leaf found by title and description only):**
+
+| Entry | Rows a user would search for and cannot find |
+|---|---|
+| Shaders | Enable Shader, Preset, Flip vertically, Pre-copy |
+| Achievements | Hardcore, Spectator, Username, Log In, Server URL |
+| Controllers | every hub row (Plays as, Device, Opacity, Skins, Background Input, Rumble, Siri Remote menu action, DSU) |
+| Web UI & WebDAV | Web UI, Finder / WebDAV |
+| iCloud Sync | Sync Now, Clear iCloud Data, GameCube Firmware, Wii Channels, Full Wii NAND, Large Files Over Wi-Fi Only, Recently Deleted |
+| Nearby Devices | Share My Library, Automatic Game Copying |
+| About | Reset All Settings (found only through the entry description "…and Reset All Settings."), Dolphin Blog, Help |
+
+- **Rows missing even in indexed leaves.** The index calls each builder with a default `State()` (the `makeModel` closures in SettingsRootModelBuilder.swift), so any row gated on state is absent:
+  - Performance Tuning: all Cached Interpreter IR rows (`ir-constant-address-fusion`, `ir-micro-op-fusion`, `ir-dead-cr-flag-elimination` and the five `ir-validate-*` rows) because the default engine resolves to the plain Cached Interpreter (`jitAvailable == false`, `effectiveEngine`); the JIT engine choices.
+  - Debug: `retry-jit-authorization`, `enable-jit-stikdebug`, `txm-region`, `bench-token`, `forget-approved-devices`; in APPSTORE only the Environment section exists at all.
+  - Connected Apps: the Provenance and iFly rows (the model is built with `apps: []`) and the NFC row.
+  - Audio: the Audio Unit Plug-ins section (needs AVAudioEngine), microphone rows (permission state), spatial rows are present but disabled.
+  - Graphics Advanced: the texture-pack warning. Advanced Motion and On-Screen Stick Feel are not root entries at all.
+- **Existing tests** (`SettingsSearchIndexTests`, 16 tests) pin that each indexed leaf's row titles are found and that a hand-built leaf is found by description; none pins which entries lack a model, and none exercises tvOS.
+
+### 2.2 Deep links
+
+Producers found (grep of `SettingsDeepLink(`, `initialRowID:`, `initialLeafID:`, `dolSettingsSelectControllers`):
+
+| Producer | Leaf id | Row id | Resolves? |
+|---|---|---|---|
+| Pause tile "Upscaling", long-press (PauseMenuView.swift:1151) | `graphics-enhancements` | `efb-scale` | yes (Enhancements builder) |
+| Pause tile "Audio", long-press (:1152) | `audio` | `volume` | yes |
+| Pause tile "Performance", long-press (:1153) | `performance-tuning` | `cpu-engine` | yes |
+| Pause › Audio › "All Audio Settings" (:252) | `audio` | none | yes |
+| Pause › Audio › "Wii Sound" (:256) | `console-wii` | `sound-mode` | yes |
+| `dolphinios://dsu/add` and legacy `dsu://` (URLRouterService.swift:77) → `.dolSettingsSelectControllers` | `controllers` | none | iPhone: pushes the DSU server list. iPad/tvOS: only selects the Controllers hub; the DSU list is one level down (Findings F15) |
+| DEBUG launch args `-ICubeSettingsPreview <leaf>` / `-ICubeSettingsRow <row>` (TVRootView.swift:25) | any | any | n/a (debug only) |
+
+- Every row id above exists in its builder, and `PauseSettingsDeepLinkTests.test_everyLink_resolvesToALeafAndRow_onIOSAndTVOS` pins that; no mismatch found.
+- There is no `settings` URL route and no App Intent that opens a leaf or row.
+- A deep link to a leaf that is not listed on the platform (Connected Apps on tvOS, Achievements without `USE_RETRO_ACHIEVEMENTS`, Debug when `storeDebugLeaf` is nil) silently opens the root: `pushed = sections.flatMap(\.entries).first { $0.id == id }` is nil.
+- Leaves and rows that no deep link or search can reach: everything in the table of 2.1, the sub-screens listed in 1.1, and every row hidden by default state.
+<!-- END:search -->
