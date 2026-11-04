@@ -18,6 +18,22 @@ typedef NS_ENUM(NSInteger, DOLActionReplayCodeMixedResult) {
   DOLActionReplayCodeMixedResultAbort
 };
 
+// iCube (ICUBE-M5, iCube#45): the text view does not scroll, so its cell is self-sizing. Asking the
+// table to re-measure (begin/endUpdates) on every keystroke relaid out every row and, with a long
+// code, cascaded into NSTextLayoutManager relayout that hung the main thread for 20 s. Only
+// re-measure when the text's fitting height no longer matches the height the text view was laid out
+// at, which happens when a line is added or removed, not on ordinary typing.
+static bool TextViewNeedsRowResize(UITextView* textView)
+{
+  const CGFloat width = CGRectGetWidth(textView.bounds);
+  if (width <= 0)
+  {
+    return true;
+  }
+  const CGFloat fitting = ceil([textView sizeThatFits:CGSizeMake(width, CGFLOAT_MAX)].height);
+  return fabs(fitting - ceil(CGRectGetHeight(textView.bounds))) >= 1;
+}
+
 @interface ActionReplayCodeEditViewController () <UITextViewDelegate>
 
 @end
@@ -48,8 +64,14 @@ typedef NS_ENUM(NSInteger, DOLActionReplayCodeMixedResult) {
 }
 
 - (void)textViewDidChange:(UITextView*)textView {
-  [self.tableView beginUpdates];
-  [self.tableView endUpdates];
+  if (!TextViewNeedsRowResize(textView))
+  {
+    return;
+  }
+  [UIView performWithoutAnimation:^{
+    [self.tableView beginUpdates];
+    [self.tableView endUpdates];
+  }];
 }
 
 - (IBAction)savePressed:(id)sender {

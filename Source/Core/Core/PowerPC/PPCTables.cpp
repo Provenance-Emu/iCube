@@ -30,8 +30,13 @@ struct GekkoOPTemplate
   u64 flags;
 };
 
-constexpr GekkoOPTemplate s_unknown_op_info = {0, "unknown_instruction", OpType::Unknown, 0,
-                                               FL_ENDBLOCK};
+// iCube (ICUBE-AW): unknown_instruction raises a program exception, which clears MSR.IR/DR.
+// FL_SET_MSR makes the JITs reload their memory-base register after falling back to it. It costs
+// one cycle: an illegal word at 0x700 (or a handler that faults again) now loops instead of
+// crashing, and a zero-cycle loop would never let downcount expire, so CoreTiming and the CPU
+// state check (pause/stop) would never run again.
+constexpr GekkoOPTemplate s_unknown_op_info = {0, "unknown_instruction", OpType::Unknown, 1,
+                                               FL_ENDBLOCK | FL_SET_MSR};
 
 constexpr std::array<GekkoOPTemplate, 54> s_primary_table{{
     {4, "RunTable4", OpType::Subtable, 0, 0},

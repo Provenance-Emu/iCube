@@ -545,6 +545,16 @@ final class DOLSentryTelemetryBridge: NSObject {
     SentrySDK.addBreadcrumb(crumb)
   }
 
+  /// Records a non-interactive note from the Dolphin core (Common::RecordBreadcrumb). The core
+  /// rate-limits its own calls, e.g. an undecoded PowerPC opcode names the instruction, PC and game
+  /// for the first few distinct occurrences (ICUBE-AW).
+  @objc(recordCoreBreadcrumbWithCategory:message:)
+  static func recordCoreBreadcrumb(category: String, message: String) {
+    let crumb = Breadcrumb(level: .warning, category: category)
+    crumb.message = message
+    SentrySDK.addBreadcrumb(crumb)
+  }
+
   @objc(traceSyncWithName:operation:tags:work:)
   static func traceSync(
     name: String,

@@ -43,6 +43,16 @@ final class SentryBreadcrumbFilterTests: XCTestCase {
         category: "touch", message: "menuActionTriggered:", url: nil, emulationActive: true))
   }
 
+  /// Unknown-opcode reports from the core (ICUBE-AW) arrive mid-game and must survive the filter.
+  func testKeepsCoreCPUBreadcrumbsWhileEmulating() {
+    XCTAssertTrue(
+      SentryBreadcrumbFilter.shouldKeep(
+        category: "dolphin.cpu",
+        message: "unknown instruction 00000001 at pc 80001234 lr 80001200 game GALE01 cpu_core 5",
+        url: nil,
+        emulationActive: true))
+  }
+
   func testDropsSpotlightSidecarRequests() {
     XCTAssertFalse(
       SentryBreadcrumbFilter.shouldKeep(

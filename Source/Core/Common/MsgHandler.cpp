@@ -3,6 +3,7 @@
 
 #include "Common/MsgHandler.h"
 
+#include <atomic>
 #include <cstdlib>
 #include <string>
 
@@ -99,6 +100,19 @@ void RegisterMsgAlertHandler(MsgAlertHandler handler)
 void RegisterStringTranslator(StringTranslator translator)
 {
   s_str_translator = translator;
+}
+
+static std::atomic<BreadcrumbHandler> s_breadcrumb_handler{nullptr};
+
+void RegisterBreadcrumbHandler(BreadcrumbHandler handler)
+{
+  s_breadcrumb_handler.store(handler, std::memory_order_release);
+}
+
+void RecordBreadcrumb(const char* category, const char* message)
+{
+  if (const BreadcrumbHandler handler = s_breadcrumb_handler.load(std::memory_order_acquire))
+    handler(category, message);
 }
 
 // enable/disable the alert handler
