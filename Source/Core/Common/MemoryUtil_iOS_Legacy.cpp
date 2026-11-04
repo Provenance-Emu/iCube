@@ -4,12 +4,15 @@
 #include "Common/MemoryUtil.h"
 
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <stdio.h>
 #include <string>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include <mach/mach.h>
 
 #include "Common/CommonFuncs.h"
 #include "Common/CommonTypes.h"
@@ -26,6 +29,10 @@ static JITMemoryTracker g_jit_memory_tracker;
 static std::atomic<LegacyJITFaultReporter> g_fault_reporter{nullptr};
 // One alert per process: after a failed toggle every block compile would raise another.
 static std::atomic<bool> g_toggle_failure_alerted{false};
+// The first toggle of the process is reported once through the fault reporter. The boot-time
+// emission (JitArm64::Init -> GenerateAsm) runs before EMM::InstallExceptionHandler, so a fault
+// there never reaches ReportJITFault; this breadcrumb says whether the toggle took effect.
+static std::atomic<bool> g_first_toggle_reported{false};
 
 // Ring events included in the fault reporter's text (Sentry breadcrumbs are size-limited).
 static constexpr std::size_t FAULT_REPORT_EVENTS = 16;
@@ -102,12 +109,45 @@ static void ReportToggleResult(const JITMemoryTracker::Result& result, void* ptr
   }
 }
 
+// Current protection of the page at ptr as VM_PROT_* bits, or -1 if it cannot be read.
+static int QueryProtection(const void* ptr)
+{
+  vm_address_t address = reinterpret_cast<vm_address_t>(ptr);
+  vm_size_t size = 0;
+  vm_region_basic_info_data_64_t info{};
+  mach_msg_type_number_t count = VM_REGION_BASIC_INFO_COUNT_64;
+  mach_port_t object = MACH_PORT_NULL;
+  if (vm_region_64(mach_task_self(), &address, &size, VM_REGION_BASIC_INFO_64,
+                   reinterpret_cast<vm_region_info_t>(&info), &count, &object) != KERN_SUCCESS)
+  {
+    return -1;
+  }
+  return info.protection;
+}
+
+static void ReportFirstToggle(const JITMemoryTracker::Result& result)
+{
+  const LegacyJITFaultReporter reporter = g_fault_reporter.load();
+  if (!reporter || g_first_toggle_reported.exchange(true))
+    return;
+
+  char text[192];
+  std::snprintf(text, sizeof(text),
+                "legacy JIT first RW toggle: region %p+0x%zx mprotect errno=%d protection=%d"
+                " (3 = RW expected)",
+                result.region_start, result.region_size, result.error,
+                QueryProtection(result.region_start));
+  reporter(text);
+}
+
 void JITPageWriteEnableExecuteDisable_Legacy(void* ptr)
 {
   // The tracker's lock is released before anything is reported.
   const auto result = g_jit_memory_tracker.JITRegionWriteEnableExecuteDisable(ptr);
   if (!result.tracked || result.error != 0)
     ReportToggleResult(result, ptr, true);
+  if (result.tracked && !g_first_toggle_reported.load(std::memory_order_relaxed))
+    ReportFirstToggle(result);
 }
 
 void JITPageWriteDisableExecuteEnable_Legacy(void* ptr)

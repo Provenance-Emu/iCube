@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <atomic>
+#include <csignal>
 #include <cstdint>
 #include <cstring>
 #include <thread>
@@ -251,13 +252,16 @@ TEST(JITMemoryTracker, TwoThreadsOnOneRegion)
 TEST(JITMemoryTrackerDeathTest, NoOpToggleLeavesRegionRX)
 {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
-  EXPECT_DEATH(
+  void* ptr = MapRX(REGION_SIZE);
+  ASSERT_NE(nullptr, ptr);
+  // Darwin reports a write to a mapped page without write permission as SIGBUS.
+  EXPECT_EXIT(
       {
-        void* ptr = MapRX(REGION_SIZE);
         JITMemoryTracker tracker(&NoOpProtect);
         tracker.RegisterJITRegion(ptr, REGION_SIZE);
         tracker.JITRegionWriteEnableExecuteDisable(ptr);
         *static_cast<volatile std::uint32_t*>(ptr) = 0xD503201F;  // NOP
       },
-      "");
+      testing::KilledBySignal(SIGBUS), "");
+  munmap(ptr, REGION_SIZE);
 }

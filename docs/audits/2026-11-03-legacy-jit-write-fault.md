@@ -123,9 +123,17 @@ Ranked by how much they could contribute. None of them is needed to explain the 
   reporter, `Common::SetLegacyJITFaultReporter`. The app registers that reporter on Legacy
   boots and turns the text into a Sentry breadcrumb before the crash is forwarded. It never
   raises an alert from the fault path.
-- Limit: Dolphin's Mach exception port is installed only on the CPU thread
-  (`MemTools.cpp:230-235`). A fault on the video thread (vertex loader) goes straight to the
-  crash reporter without this dump. There, the PanicAlert on `mprotect` failure is the signal.
+- Limit: Dolphin's Mach exception port is per thread (`thread_set_exception_ports(mach_thread_self())`,
+  `MemTools.cpp:230-235`). It is installed in `CpuThread` (`Core.cpp:408`), which runs *after*
+  `HW::Init` → `PowerPC::Init` → `JitArm64::Init` → `GenerateAsm` on the same EmuThread. So the
+  ICUBE-AA crash site (boot-time `GenerateAsm`) never reaches `HandleFault`. The fault dump covers
+  only later CPU-thread faults (`ClearCache`, `DoJit`, backpatching). The video thread
+  (vertex loader) has no handler at all.
+- To cover the boot-time site, the reporter also gets **one line for the first RW toggle of the
+  process**. That line carries the mprotect errno and the page protection read back with
+  `vm_region_64`, where 3 = RW. A crash after "errno=0 protection=3" means mprotect is not the
+  cure. A crash after "protection=5" (RX) means the kernel ignored the change. Neither line means
+  this fix never ran. A failed mprotect also raises the PanicAlert, which is a breadcrumb too.
 
 ## Verification
 
@@ -138,7 +146,8 @@ Ranked by how much they could contribute. None of them is needed to explain the 
   - Real `mmap` RX region: writable inside the scope and `VM_PROT_READ|VM_PROT_EXECUTE` after
     (checked with `mach_vm_region`).
   - Two threads toggling and writing one region.
-  - A death test showing the pre-fix no-op toggle faults on the first write. That test models
+  - A death test (`KilledBySignal(SIGBUS)`) showing the pre-fix no-op toggle faults on the
+    first write. That test models
     the old behaviour with a no-op protect function. The old tracker itself was not built on
     the host, because it needs MemoryUtil, MsgHandler and fmt.
 - **CMake wiring of the test** (`Source/UnitTests/Common/CMakeLists.txt`, under `if(APPLE)`):
