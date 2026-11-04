@@ -132,8 +132,8 @@ Ranked by how much they could contribute. None of them is needed to explain the 
 - To cover the boot-time site, the reporter also gets **one line for the first RW toggle of the
   process**. That line carries the mprotect errno and the page protection read back with
   `vm_region_64`, where 3 = RW. A crash after "errno=0 protection=3" means mprotect is not the
-  cure. A crash after "protection=5" (RX) means the kernel ignored the change. Neither line means
-  this fix never ran. A failed mprotect also raises the PanicAlert, which is a breadcrumb too.
+  cure. A crash after "protection=5" (RX) means the kernel ignored the change. If the line is absent,
+  the build predates this fix. A failed mprotect also raises the PanicAlert, which is a breadcrumb too.
 
 ## Verification
 
@@ -155,7 +155,15 @@ Ranked by how much they could contribute. None of them is needed to explain the 
 - **Syntax check, iOS 17 and tvOS 17 SDKs** (`-fsyntax-only -DIPHONEOS`): `JITMemoryTracker.cpp`,
   `MemoryUtil_iOS_Legacy.cpp`, `MemoryUtil_iOS.cpp`, `MemoryUtil.cpp`,
   `JitArm64/Jit.cpp` (`-std=c++23`). All clean.
+- **iOS device slice rebuilt** with `python3 BuildiOSXCFramework.py -p OS64`. The run used
+  Externals temporarily symlinked to the main checkout, which has identical submodule pins.
+  - `nm -gU` on the `ios-arm64` binary shows `Common::SetLegacyJITFaultReporter`,
+    `ReportJITFault` and `ReportJITFault_Legacy` exported.
+  - The repacked `Info.plist` keeps all four slices; only their order changed.
+  - The tvOS and simulator slices were **not** rebuilt and still contain the unfixed tracker.
 - **`EmulationCoordinator.mm` (the reporter registration)**: not compiled in this session.
+  `DOLSentryTelemetryBridge.recordJitStep` is not `@MainActor`, so calling it from the Mach
+  exception thread is allowed.
 - **Not verified on a device.** No legacy iOS 17/18 + debugger device is available to this
   session. The owed device test: boot any game on iOS 17/18 with debugger JIT and CPU core 4 or
   5, and confirm it no longer crashes at boot.
