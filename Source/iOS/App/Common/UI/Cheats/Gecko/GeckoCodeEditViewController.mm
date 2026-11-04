@@ -18,9 +18,11 @@
 // code, cascaded into NSTextLayoutManager relayout that hung the main thread for 20 s. Only
 // re-measure when the text's fitting height no longer matches the height the text view was laid out
 // at, which happens when a line is added or removed, not on ordinary typing.
-static bool TextViewNeedsRowResize(UITextView* textView) {
+static bool TextViewNeedsRowResize(UITextView* textView)
+{
   const CGFloat width = CGRectGetWidth(textView.bounds);
-  if (width <= 0) {
+  if (width <= 0)
+  {
     return true;
   }
   const CGFloat fitting = ceil([textView sizeThatFits:CGSizeMake(width, CGFLOAT_MAX)].height);
@@ -69,7 +71,8 @@ static bool TextViewNeedsRowResize(UITextView* textView) {
 }
 
 - (void)textViewDidChange:(UITextView*)textView {
-  if (!TextViewNeedsRowResize(textView)) {
+  if (!TextViewNeedsRowResize(textView))
+  {
     return;
   }
   [UIView performWithoutAnimation:^{

@@ -52,12 +52,15 @@ static bool MsgAlert(const char* caption, const char* text, bool question, Commo
   return [[MsgAlertManager shared] handleAlertWithCaption:caption text:text question:question style:style];
 }
 
-// Non-interactive core notes (Common::RecordBreadcrumb), e.g. an undecoded PowerPC opcode (ICUBE-AW).
-// Called on the CPU thread; SentrySDK.addBreadcrumb is thread-safe.
-static void CoreBreadcrumb(const char* category, const char* message) {
-  @autoreleasepool {
-    [DOLSentryTelemetryBridge recordCoreBreadcrumbWithCategory:CToFoundationString(category) ?: @"dolphin"
-                                                       message:CToFoundationString(message) ?: @""];
+// Non-interactive core notes (Common::RecordBreadcrumb), e.g. an undecoded PowerPC opcode
+// (ICUBE-AW). Called on the CPU thread; SentrySDK.addBreadcrumb is thread-safe.
+static void CoreBreadcrumb(const char* category, const char* message)
+{
+  @autoreleasepool
+  {
+    [DOLSentryTelemetryBridge
+        recordCoreBreadcrumbWithCategory:CToFoundationString(category) ?: @"dolphin"
+                                 message:CToFoundationString(message) ?: @""];
   }
 }
 
