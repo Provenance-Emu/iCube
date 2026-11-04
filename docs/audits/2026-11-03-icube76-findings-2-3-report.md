@@ -61,11 +61,11 @@ one exists and alerts are enabled or the style is Question/Critical. iCube regis
 
 **The core's default handler traps too.** *(Corrected after review: an earlier draft said the core
 skips the assert when no handler is registered.)* `s_msg_handler` starts as `DefaultMsgHandler`
-(`MsgHandler.cpp:49`), not null. On non-Windows builds that handler prints the text and returns
+(`MsgHandler.cpp:50`), not null. On non-Windows builds that handler prints the text and returns
 `false`, with the upstream comment "Return no to any question (which will in general crash the
 emulator)" (`MsgHandler.cpp:36-40`). `ShowMessageAlert` returns `true` (ignore and continue) only
 when the handler is null, or when alerts are disabled and the style is not Question or Critical
-(:137-144). `ASSERT_MSG` goes through `PanicYesNoFmtAssert`, which is `MsgType::Warning`
+(:136-142). `ASSERT_MSG` goes through `PanicYesNoFmtAssert`, which is `MsgType::Warning`
 (`MsgHandler.h:146-147`), so the one non-fatal default is "Use Panic Handlers" turned off.
 `SetAbortOnPanicAlert` is false by default (`MsgHandler.cpp:53`). So the trap is the core's own
 design: upstream treats an unknown opcode as a developer question whose "No" ends the process.
