@@ -129,5 +129,24 @@ Ranked by how much they could contribute. None of them is needed to explain the 
 
 ## Verification
 
-See the commit messages for the exact commands. Not verified on a device: there is no legacy
-iOS 17/18 + debugger device available to this session.
+- **Host gtest** `Source/UnitTests/Common/JITMemoryTrackerTest.cpp`, built standalone against
+  googletest with the Xcode toolchain on macOS arm64. 8/8 pass:
+  `clang++ -std=c++20 -I<gtest>/include -ISource/Core Source/Core/Common/JITMemoryTracker.cpp
+  Source/UnitTests/Common/JITMemoryTrackerTest.cpp gtest-all.o gtest_main.o`
+  - Covered: nesting, half-open bounds, adjacent regions, miss/underflow/duplicate recorded,
+    errno returned, ring wrap.
+  - Real `mmap` RX region: writable inside the scope and `VM_PROT_READ|VM_PROT_EXECUTE` after
+    (checked with `mach_vm_region`).
+  - Two threads toggling and writing one region.
+  - A death test showing the pre-fix no-op toggle faults on the first write. That test models
+    the old behaviour with a no-op protect function. The old tracker itself was not built on
+    the host, because it needs MemoryUtil, MsgHandler and fmt.
+- **CMake wiring of the test** (`Source/UnitTests/Common/CMakeLists.txt`, under `if(APPLE)`):
+  not run through CMake.
+- **Syntax check, iOS 17 and tvOS 17 SDKs** (`-fsyntax-only -DIPHONEOS`): `JITMemoryTracker.cpp`,
+  `MemoryUtil_iOS_Legacy.cpp`, `MemoryUtil_iOS.cpp`, `MemoryUtil.cpp`,
+  `JitArm64/Jit.cpp` (`-std=c++23`). All clean.
+- **`EmulationCoordinator.mm` (the reporter registration)**: not compiled in this session.
+- **Not verified on a device.** No legacy iOS 17/18 + debugger device is available to this
+  session. The owed device test: boot any game on iOS 17/18 with debugger JIT and CPU core 4 or
+  5, and confirm it no longer crashes at boot.
