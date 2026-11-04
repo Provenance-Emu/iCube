@@ -82,8 +82,6 @@
 	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
 		<!-- Continuity pulls talk plain HTTP to .local / raw-IP peers on the LAN.
 		     ATS exempts local connections by default, but the explicit key removes
 		     any ambiguity on device. This is the transport tradeoff documented in
