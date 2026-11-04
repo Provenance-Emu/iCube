@@ -1909,6 +1909,15 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
       {
         Common::SetJitType(Common::JitType::Legacy);
         Common::AllocateExecutableMemoryRegion(); // no-op for Legacy
+        // iCube#46: an unhandled fault inside a Legacy JIT region reports the write-protect
+        // tracker's state (region, nest count, recent toggles) from the Mach exception thread.
+        // addBreadcrumb does not block, so the crash report that follows carries it.
+        Common::SetLegacyJITFaultReporter([](const char* text) {
+          [DOLSentryTelemetryBridge recordJitStep:@"legacy JIT fault"
+                                             data:@{
+                                               @"tracker" : @(text ?: "")
+                                             }];
+        });
         jitMode = @"legacy";
       }
 

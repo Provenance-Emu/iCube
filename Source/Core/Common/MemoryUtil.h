@@ -102,6 +102,17 @@ void FreeExecutableMemory_Legacy(void* ptr, size_t size);
 void JITPageWriteEnableExecuteDisable_Legacy(void* ptr);
 void JITPageWriteDisableExecuteEnable_Legacy(void* ptr);
 
+// Fault diagnostics. ReportJITFault is called from the JIT's unhandled-fault path (the Mach
+// exception thread, faulting thread suspended). On the Legacy JIT, when the address is in a
+// tracked region, it logs the tracker state (region, nest count, recent toggles) and passes the
+// text to the reporter, which must not block (the app turns it into a Sentry breadcrumb). The
+// reporter also gets one line for the first RW toggle of the process (errno and the resulting
+// page protection), because boot-time emission runs before the exception handler is installed.
+using LegacyJITFaultReporter = void (*)(const char* text);
+void SetLegacyJITFaultReporter(LegacyJITFaultReporter reporter);
+void ReportJITFault(uintptr_t fault_address);
+void ReportJITFault_Legacy(uintptr_t fault_address);
+
 #endif
 
 }  // namespace Common

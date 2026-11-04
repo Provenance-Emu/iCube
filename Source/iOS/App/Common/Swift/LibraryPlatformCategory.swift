@@ -169,9 +169,13 @@ enum LibraryGameSystem {
 /// "Liquid glass" background shared by every platform-filter/search pill so
 /// the tvOS-only bar and the iOS combined search+filter bar (see
 /// `LibrarySearchFilterBar`) can never visually drift apart.
+///
+/// Glass starts at 26.1, not 26.0: on iOS 26.0 `glassEffect()` resolves to a
+/// missing weak symbol and aborts at launch (Sentry ICUBE-86, issue #47). The
+/// material fallback below serves 26.0 like every earlier OS.
 @ViewBuilder
 func libraryFilterGlassBackground<S: Shape>(_ shape: S) -> some View {
-  if #available(iOS 26.0, tvOS 26.0, *) {
+  if #available(iOS 26.1, tvOS 26.1, *) {
     shape
       .fill(.clear)
       .glassEffect()
@@ -547,7 +551,7 @@ struct LibrarySelectionActionBar: View {
 
   @ViewBuilder
   private var selectionBarBackground: some View {
-    if #available(iOS 26.0, tvOS 26.0, *) {
+    if #available(iOS 26.1, tvOS 26.1, *) {
       RoundedRectangle(cornerRadius: 20, style: .continuous)
         .fill(.clear)
         .glassEffect()

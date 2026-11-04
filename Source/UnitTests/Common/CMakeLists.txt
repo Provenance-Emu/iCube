@@ -30,3 +30,12 @@ if (_M_X86_64)
 elseif (_M_ARM_64)
   add_dolphin_test(Arm64EmitterTest Arm64EmitterTest.cpp)
 endif()
+
+# The Legacy iOS JIT write-protect tracker is POSIX-only and compiled into `common` only for iOS;
+# test it on the macOS host by compiling it into the test directly.
+if(APPLE)
+  add_dolphin_test(JITMemoryTrackerTest JITMemoryTrackerTest.cpp)
+  if(NOT IOS)
+    target_sources(JITMemoryTrackerTest PRIVATE ${CMAKE_SOURCE_DIR}/Source/Core/Common/JITMemoryTracker.cpp)
+  endif()
+endif()
