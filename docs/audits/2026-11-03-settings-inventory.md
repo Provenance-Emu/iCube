@@ -638,3 +638,67 @@ Producers found (grep of `SettingsDeepLink(`, `initialRowID:`, `initialLeafID:`,
 - A deep link to a leaf that is not listed on the platform (Connected Apps on tvOS, Achievements without `USE_RETRO_ACHIEVEMENTS`, Debug when `storeDebugLeaf` is nil) silently opens the root: `pushed = sections.flatMap(\.entries).first { $0.id == id }` is nil.
 - Leaves and rows that no deep link or search can reach: everything in the table of 2.1, the sub-screens listed in 1.1, and every row hidden by default state.
 <!-- END:search -->
+
+<!-- BEGIN:findings -->
+## 4. Findings
+
+Ranked by release impact. "Proven" = follows from the cited source; "device" = the source leaves the outcome open and a device check is needed. No code was changed and nothing was run except `check_settings_wiring.py` (clean: 200 UI-writable Config keys, 165 reset-covered, 19 + 4 prefixes preserved) and `scripts/icube_config_lint.py` (not usable here: see section 5).
+
+### High
+
+**F1. Reset All Settings, opened from the pause menu, can delete the running game's per-game settings from `GameSettings/<id>.ini`.** *Proven (code); reachable in a game: device.*
+- `resetGameplayConfigKeys` deletes every listed key from CurrentRun, LocalGame, GlobalGame **and** Base (DOLConfigBridge.mm:1207-1230); `resetAllToDefaults` then calls `Config::Save()` (:1583-1595).
+- `Layer::DeleteKey` marks the entry as removed and the layer dirty (Layer.cpp:40-50); `INIGameConfigLayerLoader::Save` writes removed keys as `ini.DeleteKey` into `GameSettings/<id>.ini` for the LocalGame layer (GameConfigLoader.cpp:283-325). The comment above the function (DOLConfigBridge.mm:1195-1199) assumes Reset is tapped "from root Settings" with no game running.
+- Settings is hosted by the pause menu (`SettingsRootView` inside PauseMenuView.swift:525 and :540, `onClose` doc in SettingsRootView.swift), and Reset All sits in the iPhone toolbar and in About on every platform.
+- Result: one tap in a game removes that game's saved overrides (and the file is a synced `.gameSettings` document, so the deletion propagates). Cheat sections are not config-mapped and survive.
+- Rule: skip LocalGame and GlobalGame in the layer loop, or disable Reset All while a core is running (`EmulationState`).
+
+**F2. The iCloud engine mirrors device-bound and identifying keys, and the only exclusions are two file names.** *Proven.* Full list with evidence and a proposed rule in section 3.2 and 3.3. Highest items: `Logger.ini` is rewritten per device at launch yet synced as a shared file (#17); `[Analytics] ID` and `[General] WirelessMac` are created per install and ride in `Dolphin.ini` (#7, #8); `Fastmem`, shader thread counts, `CPUCore`, `GFXBackend`, the CIR/overclock tuning (#11-#13) and the controller `Device =` files (#16) are hardware-specific and last-writer-wins. The tvOS and iOS iCloud screens both tell the user "Settings … sync" without scope (F12).
+
+### Medium
+
+**F3. Wii "Speaker Volume" uses a 0…7 range on a 0…127 key.** *Proven; audible effect: device.* `SYSCONF_SPEAKER_VOLUME` defaults to 0x58 (88) (SYSCONFSettings.cpp:25) and Dolphin's own slider is `ConfigSliderU32(0, 127, …)` (WiiPane.cpp:322). The Wii leaf uses `ConfigWiiLimits.speakerVolume = 0…7` (ConfigWiiState.swift:9) with state default 4, passes the raw number to `setSysconfSpeakerVolume` (DOLConfigBridge.mm:941-942, no scaling) and the pause menu's "Remote Speaker" cycle offers the same 0…7 (PauseAudioModelBuilder.swift:18). On a fresh install the row shows 88 outside its own range, and the first change writes at most 7/127. `ConfigWiiModelBuilderTests.swift:136` pins the 0…7 range.
+
+**F4. Rows that write with `SetBaseOrCurrent` lose the change at game end when the key is already on CurrentRun.** *Proven; user-visible frequency: device.* Generalises the "Not changed" note in the 2026-10-16 audit. App code puts these keys on CurrentRun (section 1.2): the Settings rows that write them with `SetBaseOrCurrent` are **Audio › Volume** (`setAudioVolume`, DOLConfigBridge.mm:672), **General › Speed Limit** (:422), **Audio › Mute When Disabling Speed Limit** (:701) and **Enhancements › Widescreen Hack** (:285). The pause Audio tile writes volume on CurrentRun by design (`TVEmulationBridge.mm:644-646`), so after using it the Audio row's next write also lands on CurrentRun (the layer that now holds the key) and is dropped at game end; fast-forward puts the speed limit on CurrentRun too (`TVEmulationBridge.mm:78`, restored at :666). Any row whose key a game INI sets behaves the same. Rule: pick, per key, "Base always" (`SetBase`) or "per-run" and show which in the row.
+
+**F5. After "Reset All", two first-run seeds read differently from a fresh install until the next launch.** *Proven.* `resetGameplayConfigKeys` deletes `GFX_HACK_EFB_EMULATE_FORMAT_CHANGES` (compiled false; fresh install seeds true), `GFX_SHADER_COMPILER_THREADS` and `GFX_SHADER_PRECOMPILER_THREADS` (compiled 1 / −1; fresh install seeds min(2, cores−1)) and does not re-seed them (DOLConfigBridge.mm:1260-1420; `DolphinCoreService.mm:104`, :129-131). The adjacent comment lists the keys that needed forcing and misses these. `MAIN_USE_GAME_COVERS` (seed true) is not reset at all. `SetBaseIfUnspecified` re-applies the seeds at the next launch.
+
+**F6. Dead row: Wii › "Allow Touchpad IR Follow Without Click".** *Proven.* The key `touchpad_ir_follow_without_click` is written and read only by the Wii leaf itself (grep of `Source`: ConfigWiiState/View/ModelBuilder only; `docs/superpowers/specs/2026-10-21-siri-remote-and-pointer-sources-design.md:54` says the same). It is also shown on tvOS, where there is no touch IR.
+
+**F7. Dead row: Interface › "Camera Overlay" (iOS).** *Proven.* `recording_camera_overlay` has a writer and no reader: `RecordingManager`/`RecordingWatermarkView` contain no camera code (grep `camera` in `Common/Swift/Recording`: none) and `ConfigInterfaceDefaultsKey.recordingCamera` is referenced only by the leaf.
+
+**F8. Interface › "Background Style" does nothing on tvOS.** *Proven.* `TVLibraryView` uses `ICubeRoom(style: .animated)` on tvOS regardless (TVLibraryView.swift:867-869); the row (no `#if`) is shown in the tvOS Interface leaf.
+
+**F9. Video › Backend has two stores and a display that prefers the one the engine does not read.** *Proven; backend availability: device.* The row writes `MAIN_GFX_BACKEND` and the UD mirror `ui_gfx_backend` (GraphicsGeneralView.swift:41-45) but displays the UD copy first (`effectiveBackendKey`, :21); the core activates the backend from Config only (`UICommon.cpp:141`, `VideoBackendBase.cpp:265`), and nothing else reads `ui_gfx_backend`. A Config-only change (synced `Dolphin.ini`, per-game INI, debug API) leaves the row showing the stale UD value. Reset clears both. The picker always lists Metal, OpenGL and Vulkan; no code decides which backends this build ships (`DOLConfigBridge` has no backend list, unlike `audioBackends()`), so whether OpenGL/Vulkan work on iOS/tvOS is undetermined.
+
+**F10. Search finds rows but never opens them, tvOS has no search, and 7 of 21 entries have no searchable rows.** *Proven.* Section 2.
+
+**F11. The tvOS iCloud screen has fewer controls than iOS and both describe scope loosely.** *Proven.* `CloudSyncModelBuilder` (tvOS) has no "Also Sync" switches (firmware, channels, NAND), no "Large Files Over Wi-Fi Only", no Recently Deleted; their stored values are whatever iOS set (default off). The "What Is Synced" lists differ between platforms (the iOS list adds touch layout/skins and favorites/play time). Neither mentions that RetroAchievements and DSU files are excluded, or that some keys inside the synced files are device-bound. The file header (CloudSyncSettingsView.swift:11-14) still says the container is not provisioned. Add per-row scope labels and a short "never synced" list.
+
+**F12. Hardcore Mode defaults ON once RetroAchievements is enabled.** *Proven (default); behaviour: device.* `RA_HARDCORE_ENABLED` compiles to true (AchievementSettings.cpp) while the row caption says it disables save states, cheats and speed changes; the view's `@State` starts false until `sync()`. A user who flips "Enable Integration" therefore loses save states and cheats without choosing to.
+
+### Low
+
+**F13. V-Sync caption contradicts its default.** *Proven.* The caption says "leave ON" (GraphicsGeneralModelBuilder.swift) while `GFX_VSYNC` defaults to false, nothing seeds it, and Reset returns it to false.
+
+**F14. `resetPageToDefaults:` is dead code with an out-of-range index.** *Proven.* No caller outside the header (`DOLConfigBridge.h:596`); page 2 loops `p = 1…4` into `GetInfoForSIDevice(p)` / `GetInfoForWiimoteSource(p)`, which index zero-based arrays of four (the same trap `gcPortDeviceForPort:` documents at DOLConfigBridge.mm ~228-240), so for the four-entry SI array `p == 4` reads past the end and `p == 1…3` address the wrong port (DOLConfigBridge.mm:1639-1642). Delete the method.
+
+**F15. DSU "add" deep link lands one level too high on iPad and tvOS.** *Proven.* `jumpToControllersRequested` pushes `DSUSettingsView` only in the phone list; the sidebar reaches only the Controllers hub (SettingsRootView.swift:89-92, :125-127).
+
+**F16. tvOS Web UI & WebDAV reads its addresses once.** *Proven.* The 20 × 100 ms polling loop is `#if os(iOS)` (WebUISettingsView.swift `refresh()`); on tvOS the screen can show "Not Running" while the server is still binding.
+
+**F17. "Progressive Scan" is a Wii SYSCONF key shown under Graphics Advanced beside "Force Progressive Scan" (Hacks).** *Proven.* Two similarly named rows with different keys (`SYSCONF_PROGRESSIVE_SCAN`, `GFX_HACK_FORCE_PROGRESSIVE`), on different pages; SYSCONF is the only one that is not reset.
+
+**F18. Hidden switches.** *Proven.* `profiles_enabled` (GameProfiles.swift:228, :249) gates per-game profiles and has no row; `Show DSU Debug HUD` is a developer toggle in the shipping DSU screen; `Stall Metrics` is on by default (`MAIN_STALL_METRICS` compiled true) and its only switch is in the non-store Debug leaf.
+
+**F19. Bench Token is shown in clear.** *Proven.* Debug › Bench Token (DebugRootModelBuilder.swift:132-136) prints the bearer token and offers selection. Hidden in APPSTORE builds, present in other configurations that enable the bench.
+
+### Checked, no defect found
+
+- **Zero-width ranges.** Compiler/Precompiler Threads use `1…max(1, max(2,cores)−1)` (GraphicsAdvancedState.swift:102-104): a 1…1 range is possible on a ≤2-core device and `ValueStepper` draws no slider for it (ValueStepper.swift); tvOS `MenuStepper.stepped` returns the upper bound. No other stepper has equal bounds (ranges in the tables).
+- **Defaults vs `defaultValue:` hints.** All 30 `defaultValue:` annotations in the builders match the compiled or seeded default (Texture Cache 0 = seed, Internal Resolution 1 = seed, VI Skip Auto, hack toggles as compiled). The `State()` placeholders (dual core false, sensor bar 2, etc.) differ from the real defaults but are replaced by `sync()` before display and matter only to the search index.
+- **Deep-link ids.** All five pause-menu links resolve (section 2.2) and are pinned by a test.
+- **Engine silently switching.** The Performance engine row shows `effectiveEngine`, writes only when the user changes it, and writes Base even in a game (`setMainCpuCore`, fixed by the 2026-10-16 audit). A stored JIT core on a jitless build is shown as Cached Interpreter and not rewritten.
+- **Library background default.** The Interface leaf, `LibraryBackgroundStyle.default` and `TVLibraryView`'s `@AppStorage` all default to Animated.
+- **DefaultPreferences.plist** registers four keys (`launch_times`, `touch_overlay_programmatic`, `update_required`, `last_version`); only `touch_overlay_programmatic` (Controllers › Editable Controls, true) has a row and it agrees with the code fallback.
+<!-- END:findings -->
