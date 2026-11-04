@@ -188,6 +188,10 @@ bool JitArm64::HandleFault(uintptr_t access_address, SContext* ctx)
   {
     ERROR_LOG_FMT(DYNA_REC, "Exception handler - Unhandled fault");
     DoBacktrace(access_address, ctx);
+#ifdef IPHONEOS
+    // Legacy JIT: name the tracker state when the fault is inside a JIT region (iCube#46).
+    Common::ReportJITFault(access_address);
+#endif
   }
   return success;
 }

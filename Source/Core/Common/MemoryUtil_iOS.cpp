@@ -99,6 +99,14 @@ void JITPageWriteDisableExecuteEnable(void* ptr)
   }
 }
 
+void ReportJITFault(uintptr_t fault_address)
+{
+  if (g_jit_type == JitType::Legacy)
+  {
+    ReportJITFault_Legacy(fault_address);
+  }
+}
+
 bool IsTXMAvailable()
 {
   if (g_jit_type == JitType::LuckTXM)
