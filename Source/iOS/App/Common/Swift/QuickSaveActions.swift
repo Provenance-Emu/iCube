@@ -11,6 +11,8 @@ enum QuickSaveActions {
     case savedWithCleanupWarning(URL)
     case saveFailed
     case loadRequested(URL)
+    /// The core was running and the request was admitted, but it rejected or could not read the state.
+    case loadFailed(URL)
     case empty
     case incompatible(URL)
     case unavailable
@@ -29,6 +31,7 @@ enum QuickSaveActions {
       case .savedWithCleanupWarning: return L("Quick save created; couldn't remove older saves")
       case .saveFailed: return L("Couldn't create save state")
       case .loadRequested: return L("Loading save state")
+      case .loadFailed: return L("Couldn't load save state")
       case .empty: return L("No save state available")
       case .incompatible: return L("This save state is incompatible with this build")
       case .unavailable: return L("Game isn't ready to load yet")
@@ -114,7 +117,15 @@ enum QuickSaveActions {
     if let completed = environment.requestCompletion { loaded = await completed(url, session) }
     else { loaded = environment.request(url, session) }
     guard environment.isCurrent(session) else { return .cancelled }
-    return loaded ? .loadRequested(url) : .unavailable
+    return loadOutcome(url, loaded: loaded, allowed: environment.allowed())
+  }
+
+  /// A refused load is "not ready" only when the core could not take state operations at all. When it was
+  /// running and the session is unchanged, the core read the file and rejected it (truncated, corrupt,
+  /// another game's state, Netplay or hardcore mode), which the user must not be told to retry later.
+  static func loadOutcome(_ url: URL, loaded: Bool, allowed: Bool) -> Outcome {
+    if loaded { return .loadRequested(url) }
+    return allowed ? .loadFailed(url) : .unavailable
   }
 
   static func effectiveMode(_ mode: QuickSaveMode, modded: Bool) -> QuickSaveMode {
@@ -179,7 +190,7 @@ enum QuickSaveActions {
     guard TVEmulationBridge.stateFileIsCompatible(atPath: url.path) else { return .incompatible(url) }
     let loaded = await completedLoad(url, session: .init(gameID: session.gameID, identifier: session.identifier))
     guard session.isCurrent else { return .cancelled }
-    return loaded ? .loadRequested(url) : .unavailable
+    return loadOutcome(url, loaded: loaded, allowed: TVEmulationBridge.isStateOperationAllowed())
   }
   private static func completedLoad(_ url: URL, session: QuickSaveSurfaceSession) async -> Bool {
     await withCheckedContinuation { continuation in
