@@ -292,7 +292,7 @@ SYSCONF rows apply when SYSCONF is next written/read at Wii boot.
 | Use PAL60 Mode (EuRGB60) (`pal60`) — SYSCONF rows write the Base layer and reach the SYSCONF file on `Config::Save`; skipped while a Wii title controls SYSCONF (BaseConfigLoader.cpp:151-176) | toggle | on/off | true | `SYSCONF_PAL60` SYSCONF [IPL] E60 (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | Aspect Ratio (`aspect-ratio`) | cycle | 4:3, 16:9 | 16:9 (true) | `SYSCONF_WIDESCREEN` SYSCONF [IPL] AR (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | Enable Screen Saver (`screensaver`) | toggle | on/off | false | `SYSCONF_SCREENSAVER` SYSCONF [IPL] SSV (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
-| System Language (`language`) | cycle | languageOptions(including: state.language) | static_cast<u32>(GetDefaultLanguage()) | `SYSCONF_LANGUAGE` SYSCONF [IPL] LNG (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
+| System Language (`language`) | cycle | Japanese, English, German, French, Spanish, Italian, Dutch, Simplified Chinese, Traditional Chinese, Korean | locale-derived (`GetDefaultLanguage()`) | `SYSCONF_LANGUAGE` SYSCONF [IPL] LNG (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | Audio Settings (`sound-mode`) | cycle | Mono, Stereo, Surround | 0x01 | `SYSCONF_SOUND_MODE` SYSCONF [IPL] SND (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | Sensor Bar Position (`sensor-bar-position`) | cycle | Bottom, Top | 0x01 | `SYSCONF_SENSOR_BAR_POSITION` SYSCONF [BT] BAR (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
 | Sensor Bar Sensitivity (`sensor-bar-sensitivity`) | stepper | 1…5 step 1 | 0x03 | `SYSCONF_SENSOR_BAR_SENSITIVITY` SYSCONF [BT] SENS (SetBase) | n/c | not reset | synced via SYSCONF (Wii save category) |
@@ -387,9 +387,9 @@ Engine rows depend on `JitManager.acquiredJit`: JIT engines are listed only when
 
 | Row (id) | Kind | Choices / range | Default (effective) | Persistence (layer) | Live / restart | Reset | Scope |
 |---|---|---|---|---|---|---|---|
-| CPU Emulation Engine (`cpu-engine`) | cycle | engines.map { ($0.label, $0) } | PowerPC::DefaultCPUCore() | `MAIN_CPU_CORE` Dolphin.ini [Core] CPUCore (SetBase/DeleteKey) | boot* | Reset All | synced, device-bound #12 |
-| Vertex Loader (`vertex-loader`) | cycle | VertexLoaderMode.allCases.map { ($0.label, $0.rawValue) } | Self.default.rawValue (unset; helper storedRawValue) | UD `icube_vertex_loader_mode` | n/c | Reset All | device-local |
-| Reset Optimizations to Recommended (`reset-optimizations`) | action |  | — | — | — | — | — |
+| CPU Emulation Engine (`cpu-engine`) | cycle | Interpreter, Cached Interpreter, Cached Interpreter IR; plus JIT Recompiler x86-64 / ARM64 only when JIT is acquired | ARM64 JIT compiled (`DefaultCPUCore()`); every jitless boot runs Cached Interpreter (core 5) on CurrentRun | `MAIN_CPU_CORE` Dolphin.ini [Core] CPUCore (`setMainCpuCore`: always Base, also in game; deletes a CurrentRun copy outside a game) | boot* | Reset All | synced, device-bound #12 |
+| Vertex Loader (`vertex-loader`) | cycle | Software, NEON SIMD (default), Compare (validate) | NEON SIMD (unset) | UD `icube_vertex_loader_mode` | n/c | Reset All | device-local |
+| Reset Optimizations to Recommended (`reset-optimizations`) | action |  | — | deletes every `CIR*` key from Base and CurrentRun (`resetCirOptimizationsToDefaults`) | next game launch (caption) | n/a | n/a |
 | CIR Hot-Block Profiler (`cir-profiler`) | toggle | on/off | false (unset) | UD `icube.cirProfile` | n/c | not reset | device-local |
 | Enable Emulated CPU Clock Override (`cpu-clock-enabled`) | toggle | on/off | false | `MAIN_OVERCLOCK_ENABLE` Dolphin.ini [Core] OverclockEnable (SetBase) | live* | Reset All | synced, device-tuned #13 |
 | Enable VBI Frequency Override (`vbi-enabled`) | toggle | on/off | false | `MAIN_VI_OVERCLOCK_ENABLE` Dolphin.ini [Core] VIOverclockEnable (SetBase) | live* | Reset All | synced, device-tuned #13 |
@@ -478,7 +478,7 @@ tvOS renders `CloudSyncModelBuilder` (fewer controls), iOS/iPadOS a hand-built F
 |---|---|---|---|---|---|---|---|
 | Sync This Device (`enabled`) | toggle | on/off | off | UD `icube.cloudSync.enabled` | immediate (`apply(.enabledChanged)`) | not reset | device-local |
 | Sync Now (`sync-now`) | action | — | — | — | immediate | n/a | n/a |
-| Conflicts (`conflicts`) | destination | keep local / keep remote / keep both | — | pending conflicts held by `CloudSyncCoordinator` (index in Application Support/…/index.json) | immediate | n/a | device-local |
+| Conflicts (`conflicts`) | destination | Keep Both / Keep This Device's Copy / Keep iCloud's Copy; for remote deletes Keep It / Delete It Here Too; plus "everywhere" bulk buttons | — | pending conflicts held by `CloudSyncCoordinator` (index in Application Support/…/index.json) | immediate | n/a | device-local |
 | Clear iCloud Data (`clear`) | destructive (confirmation) | — | — | deletes the CloudKit zone `iCubeUserData`; local files untouched | immediate | n/a | n/a |
 | GameCube Firmware / Wii Channels & DLC / Full Wii NAND — **iOS/iPadOS only** | toggle ×3 | on/off | off | `SyncPolicy` JSON in UD `icube.cloudSync.policy` (firmwareEnabled, wiiChannelsEnabled, fullWiiNANDEnabled) | next sync (policy change triggers a rescan) | not reset | device-local |
 | Large Files Over Wi-Fi Only — **iOS/iPadOS only** | toggle | on/off | on | `SyncPolicy.largeFilesOverWiFiOnly` | next sync | not reset | device-local |
@@ -633,6 +633,20 @@ Producers found (grep of `SettingsDeepLink(`, `initialRowID:`, `initialLeafID:`,
 3. **Credentials stay out of INI altogether.** The RetroAchievements token is the only live credential; it is protected today by a filename exclusion only.
 4. **Display the scope.** The settings UI shows no scope today (grep of the leaf builders: none of the 200+ rows carries a scope badge or footer). The tables in section 1 are the proposed labelling.
 5. **Test.** Pin each exclusion with a unit test next to `CloudSyncSafetyTests` (the existing app-level tests) so a PVSyncRules bump cannot silently widen the set.
+
+### 3.3a Proposed scope per setting class (for the "Scope" column and a visible label)
+
+| Class | Examples (from section 1.3) | Proposed scope | Today |
+|---|---|---|---|
+| Gameplay preferences a person expects to follow them | Speed Limit, Aspect Ratio, Internal Resolution, MSAA, hacks, audio balance, Interface toggles, Wii SYSCONF choices | **Synced preference** | synced (whole file) |
+| Hardware or install bound Config keys | Fastmem, shader thread counts, CPU engine, GFX backend, AU chain, CIR/overclock tuning, Analytics ID, Wireless MAC, absolute paths, NetPlay identity, BT/USB passthrough | **Device-local** (strip from upload, ignore on download) | synced (#7-#15) |
+| Controller bindings and device strings | `GCPadNew.ini`, `WiimoteNew.ini`, Plays as, Device | **Device-local** (or keyed by controller family) | synced (#16) |
+| Credentials and tokens | RetroAchievements token, Bench Token, WebDAV passwords, pairing key | **Device-local, Keychain where possible** | RA file excluded by name; others never in a synced file |
+| Pairing grants and endpoints | `trusted-peers.json`, `library-grants.json`, `DSUClient.ini` | **Device-local** | not classified / excluded |
+| App presentation and diagnostics | `UserDefaults` rows: library look, recording, motion, stick feel, logging, debug | **Device-local** | never synced |
+| Per-game settings | `GameSettings/<id>.ini`, `game_profiles.json` (shader preset, IR mode, widescreen, opacity, sensor-bar sensitivity, nearby-sharing exclusion) | **Per-game profile, synced** | synced (merge by game for the JSON) |
+| Screen-size dependent layout | `touch_overlay_layout_v2.json`, skins | **Per device class** (iPhone, iPad) or synced with a check | synced whole-file (#21) |
+| Cloud opt-ins | `icube.cloudSync.enabled`, `SyncPolicy` | **Device-local** | UserDefaults |
 
 ### 3.4 Not determined from code in this section
 
