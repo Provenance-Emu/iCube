@@ -90,7 +90,7 @@ final class SkinStorePolicyTests: XCTestCase {
     ]
     let grouped = policy.sections(for: entries)
     XCTAssertEqual(grouped.map(\.section), [.gameCube, .nintendo64])
-    XCTAssertEqual(policy.sections, [.gameCube, .wii, .nintendo64])
+    XCTAssertEqual(policy.sections, [.gameCube, .wii, .nintendo64, .nes, .snes])
   }
 
   func testRetargetOnlyForTheN64Shelf() {

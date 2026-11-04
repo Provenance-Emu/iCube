@@ -78,7 +78,7 @@ private struct SkinOverlayContent: View {
         let opacity = representation.translucent
           ? TouchOverlayInput.resolvedOpacity(isEditing: false, configuredOpacity: DOLConfigBridge.mainTouchPadOpacity())
           : 1.0
-        let input = SkinOverlayInput(layout: layout, padKind: padKind)
+        let input = SkinOverlayInput(layout: layout, padKind: padKind, gameType: info.gameType)
         ZStack(alignment: .topLeading) {
           SkinArtLayer(representation: representation, layout: layout, directory: skin.directory,
                        displayScale: displayScale, controlOpacity: opacity)

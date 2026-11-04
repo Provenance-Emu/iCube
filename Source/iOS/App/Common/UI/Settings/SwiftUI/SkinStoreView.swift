@@ -15,6 +15,8 @@ struct SkinStoreView: View {
 
   @Environment(\.dismiss) private var dismiss
   @StateObject private var model: SkinStoreViewModel
+  /// Shelves showing every card; the others show `SkinStoreShelf.collapsedFamilyLimit`.
+  @State private var expandedShelves: Set<String> = []
   @ObservedObject private var installer: SkinStoreInstaller
 
   private static let submitURL = URL(string: "https://emuskins.com/submit.html")
@@ -74,13 +76,23 @@ struct SkinStoreView: View {
   // MARK: - Shelves
 
   private func shelfView(_ shelf: SkinStoreShelf) -> some View {
-    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
+    let expanded = expandedShelves.contains(shelf.id)
+    return VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
       HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
-        Text(shelf.section.storeHeader).icubeText(.section)
-        Text("\(shelf.families.count)").icubeText(.tag).foregroundStyle(ICubeDesign.color(.textSecondary))
+        HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+          Text(shelf.section.storeHeader).icubeText(.section)
+          Text("\(shelf.families.count)").icubeText(.tag).foregroundStyle(ICubeDesign.color(.textSecondary))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+        Spacer(minLength: 0)
+        if shelf.isCollapsible {
+          Button(expanded ? L("Show fewer") : L("Show all")) {
+            if expanded { expandedShelves.remove(shelf.id) } else { expandedShelves.insert(shelf.id) }
+          }
+          .icubeText(.detail)
+        }
       }
-      .accessibilityElement(children: .combine)
-      .accessibilityAddTraits(.isHeader)
       if let note = shelf.section.storeNote {
         Text(note).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
           .fixedSize(horizontal: false, vertical: true)
@@ -88,7 +100,7 @@ struct SkinStoreView: View {
       LazyVGrid(columns: [GridItem(.adaptive(minimum: Self.cardMinimumWidth, maximum: Self.cardMaximumWidth),
                                    spacing: ICubeDesign.Spacing.s.rawValue, alignment: .top)],
                 alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) {
-        ForEach(shelf.families) { family in
+        ForEach(shelf.visibleFamilies(expanded: expanded)) { family in
           if family.isMultiFile {
             SkinStoreFamilyCard(family: family, section: shelf.section, installer: installer, policy: model.policy)
           } else {
@@ -148,11 +160,17 @@ struct SkinStoreView: View {
 
   private var emptyView: some View {
     VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
-      Text(L("No GameCube or Wii skins in the catalog yet.")).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
+      Text(emptyMessage).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
       if let url = Self.submitURL { Link(L("Submit a skin"), destination: url).icubeText(.body) }
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, ICubeDesign.Spacing.xl.rawValue)
+  }
+
+  /// Names every console the store has a shelf for, so the message stays right when the policy changes.
+  private var emptyMessage: String {
+    let systems = ListFormatter.localizedString(byJoining: model.policy.sections.map(\.badge))
+    return String(format: L("No %@ skins in the catalog yet."), systems)
   }
 
   private var creditFooter: some View {
@@ -170,6 +188,8 @@ private extension SkinStoreSection {
     case SkinStoreSection.gameCube.id: return L("GameCube")
     case SkinStoreSection.wii.id: return L("Wii")
     case SkinStoreSection.nintendo64.id: return L("N64-style layout")
+    case SkinStoreSection.nes.id: return L("NES")
+    case SkinStoreSection.snes.id: return L("Super NES")
     default: return title
     }
   }
@@ -178,6 +198,8 @@ private extension SkinStoreSection {
     switch id {
     case SkinStoreSection.nintendo64.id:
       return L("Built for N64-style layouts. iCube puts A, B, Z, L, R, Start, the D-pad and the stick on the GameCube pad and the C buttons on the C-stick, so the art keeps its N64 labels.")
+    case SkinStoreSection.nes.id, SkinStoreSection.snes.id:
+      return L("For Virtual Console and WiiWare games. iCube puts A, B, Start and Select on the GameCube pad or Classic Controller the way the Virtual Console does; the skin picker lets you choose one per game type.")
     default: return nil
     }
   }
@@ -188,6 +210,8 @@ private extension SkinStoreSection {
     case SkinStoreSection.gameCube.id: return L("GameCube")
     case SkinStoreSection.wii.id: return L("Wii")
     case SkinStoreSection.nintendo64.id: return L("N64")
+    case SkinStoreSection.nes.id: return L("NES")
+    case SkinStoreSection.snes.id: return L("SNES")
     default: return title
     }
   }

@@ -15,6 +15,17 @@ struct SkinStoreShelf: Identifiable {
   var entries: [SkinCatalogEntry] { families.flatMap(\.members) }
 
   var id: String { section.id }
+
+  /// Cards a collapsed shelf shows; the rest wait behind "Show all" so a big shelf (NES has about 200) does
+  /// not push the ones after it off the screen.
+  static let collapsedFamilyLimit = 6
+
+  /// Whether the shelf has more families than it shows collapsed.
+  var isCollapsible: Bool { families.count > Self.collapsedFamilyLimit }
+
+  func visibleFamilies(expanded: Bool) -> [SkinFamily] {
+    expanded ? families : Array(families.prefix(Self.collapsedFamilyLimit))
+  }
 }
 
 /// What the store screen can show.
