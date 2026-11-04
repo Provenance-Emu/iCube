@@ -59,10 +59,17 @@ one exists and alerts are enabled or the style is Question/Critical. iCube regis
   thread waits on `_waitEvent` (:203-205). "No" returns false and traps. The dialog text is the raw
   assert ("An error occurred ... Ignore and continue?"), so a player has no basis to choose.
 
-**The core's own fallback is already non-fatal when no handler is registered.** `ShowMessageAlert`
-returns `true` (ignore and continue) when `s_msg_handler` is null (:144), and `SetAbortOnPanicAlert`
-is false by default (`MsgHandler.cpp:53`). The trap is a consequence of iCube registering an
-interactive handler on a code path upstream treats as "developer question", not of the core design.
+**The core's default handler traps too.** *(Corrected after review: an earlier draft said the core
+skips the assert when no handler is registered.)* `s_msg_handler` starts as `DefaultMsgHandler`
+(`MsgHandler.cpp:49`), not null. On non-Windows builds that handler prints the text and returns
+`false`, with the upstream comment "Return no to any question (which will in general crash the
+emulator)" (`MsgHandler.cpp:36-40`). `ShowMessageAlert` returns `true` (ignore and continue) only
+when the handler is null, or when alerts are disabled and the style is not Question or Critical
+(:137-144). `ASSERT_MSG` goes through `PanicYesNoFmtAssert`, which is `MsgType::Warning`
+(`MsgHandler.h:146-147`), so the one non-fatal default is "Use Panic Handlers" turned off.
+`SetAbortOnPanicAlert` is false by default (`MsgHandler.cpp:53`). So the trap is the core's own
+design: upstream treats an unknown opcode as a developer question whose "No" ends the process.
+iCube's no-scene path (a) reproduces the default handler's answer without a user.
 
 **The breadcrumb exists but is not enough to name the instruction.** The handler records a
 `dolphin.msgalert` breadcrumb with the alert text (:83-85) and the answer
@@ -126,8 +133,23 @@ ProgramExceptionCause::IllegalInstruction)` then `CheckExceptions()` for invalid
 
 In `Interpreter::unknown_instruction` only:
 1. Replace `ASSERT_MSG` with `GenerateProgramException(ppc_state, ProgramExceptionCause::IllegalInstruction)`
-   so the guest sees the exception on its next `CheckExceptions`, as hardware does. Keep
-   `if (system.IsPauseOnPanicMode()) system.GetCPU().Break();` so developers who want a stop still get one.
+   **and deliver it before execution advances**. *(Corrected after review: setting the flag alone is
+   not enough.)* `SingleStepInner` checks only `EXCEPTION_DSI` after `RunInterpreterOp` and then calls
+   `UpdatePC()` (`Interpreter.cpp:162-192`), and `CheckExceptions` takes SRR0 from the current PC
+   (`PowerPC.cpp:480-487`). A pending flag would let the next instructions run and record the wrong
+   fault address. So the op must call `CheckExceptions()` itself and set `m_end_block`, exactly as
+   `Interpreter::sc` does (`Interpreter_Branch.cpp:172-179`). Each engine then needs its own check:
+   - Interpreter: pc = npc = 0x700 after the op, and `UpdatePC` keeps it.
+   - Cached interpreter: the op is `FL_ENDBLOCK`, so it runs through `Interpret<true>` (pc written
+     first) and the block ends with a plain EndBlock, as `sc` does.
+   - JIT: the fallback writes pc/npc first and exits to npc. Because the exception is already
+     delivered, `WriteExceptionExit` sees no pending exception and skips its membase reload, so the op
+     info must carry `FL_SET_MSR` to reload the memory base for the new MSR.
+   - All engines: the op must cost at least one cycle. An illegal word at 0x700 then loops, and a
+     zero-cycle loop never lets downcount expire, so pause and stop would never run.
+
+   Keep `if (system.IsPauseOnPanicMode()) system.GetCPU().Break();` so developers who want a stop
+   still get one.
 2. Keep the NOTICE logging, but gate the callstack and GPR dump behind a per-session rate limit
    (first N distinct pairs), so a guest spinning in bad code cannot flood the log or stall the thread.
 3. Emit the breadcrumb of 2.5 through the existing Sentry bridge (`DOLSentryTelemetryBridge`).
@@ -138,10 +160,15 @@ Why not "log and skip": see 2.3 item 2. Why not keep the dialog: the dialog is a
 path only a game can reach, and it traps with no user when no scene is attached.
 
 Risk: a game that previously "worked" because the player tapped Yes (continue, skipping the
-instruction) will now take a program exception. On real hardware that is what it would do; on
-Dolphin desktop with no handler it already skips (returns true). If the owner prefers desktop parity
-(skip, never exception), step 1 becomes "do nothing after logging", which is also non-fatal; the
-report recommends the exception because skipping hides the fault from the guest.
+instruction) will now take a program exception. On real hardware that is what it would do. Dolphin
+desktop skips only when the player answers Yes or has panic handlers disabled; otherwise it traps
+like iCube. If the owner prefers skipping, step 1 becomes "do nothing after logging", which is also
+non-fatal; the report recommends the exception because skipping hides the fault from the guest.
+
+**Implemented in #89** with all of the above. A test disc (`Tools/unknown-op-disc`) records SRR0 = the
+bad word and SRR1[IllegalInstruction] on the interpreter and the cached interpreter in the simulator.
+A variant with an illegal word at 0x700 hung on stop before the one-cycle change and stops in 2 s
+after it. The JIT path is unverified there: the simulator has no JIT.
 
 Verification required before merge: the core slices under `build/xcframework` are tracked and must be
 rebuilt with the change (the project's convention, see commit `87b3d34ee1`); then a Debug-build
