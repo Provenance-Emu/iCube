@@ -1914,7 +1914,9 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
         // addBreadcrumb does not block, so the crash report that follows carries it.
         Common::SetLegacyJITFaultReporter([](const char* text) {
           [DOLSentryTelemetryBridge recordJitStep:@"legacy JIT fault"
-                                             data:@{ @"tracker" : @(text ?: "") }];
+                                             data:@{
+                                               @"tracker" : @(text ?: "")
+                                             }];
         });
         jitMode = @"legacy";
       }
