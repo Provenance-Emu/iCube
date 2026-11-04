@@ -3,7 +3,9 @@
 
 #include "Core/PowerPC/Interpreter/Interpreter.h"
 
+#include <algorithm>
 #include <array>
+#include <mutex>
 #include <string>
 
 #include <fmt/format.h>
@@ -12,7 +14,9 @@
 #include "Common/CommonTypes.h"
 #include "Common/GekkoDisassembler.h"
 #include "Common/Logging/Log.h"
+#include "Common/MsgHandler.h"
 #include "Core/Config/MainSettings.h"
+#include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
 #include "Core/Debugger/Debugger_SymbolMap.h"
@@ -286,33 +290,106 @@ void Interpreter::Run()
   }
 }
 
+namespace
+{
+// iCube (ICUBE-AW): the full callstack/register dump and the telemetry breadcrumb are emitted for at
+// most this many distinct (pc, opcode) pairs per game. A guest handler that returns to the same word
+// would otherwise log and breadcrumb once per executed instruction.
+constexpr std::size_t MAX_REPORTED_UNKNOWN_INSTRUCTIONS = 8;
+
+struct UnknownInstructionReports
+{
+  std::mutex mutex;
+  std::string game_id;
+  std::array<u64, MAX_REPORTED_UNKNOWN_INSTRUCTIONS> keys{};
+  std::size_t num_keys = 0;
+  u64 total = 0;
+};
+
+// True when this (pc, opcode) pair is new and still under the cap, i.e. it should be reported in
+// full. `total` is the running count of unknown instructions executed in this game.
+bool ShouldReportUnknownInstruction(const std::string& game_id, u32 pc, u32 opcode, u64* total)
+{
+  static UnknownInstructionReports s_reports;
+  std::lock_guard lock(s_reports.mutex);
+  if (s_reports.game_id != game_id)
+  {
+    s_reports.game_id = game_id;
+    s_reports.num_keys = 0;
+    s_reports.total = 0;
+  }
+  *total = ++s_reports.total;
+
+  const u64 key = (u64{pc} << 32) | opcode;
+  const auto end = s_reports.keys.begin() + s_reports.num_keys;
+  if (std::find(s_reports.keys.begin(), end, key) != end ||
+      s_reports.num_keys == s_reports.keys.size())
+  {
+    return false;
+  }
+  s_reports.keys[s_reports.num_keys++] = key;
+  return true;
+}
+}  // namespace
+
+// iCube (ICUBE-AW, iCube#81): an opcode no table decodes. This used to end in ASSERT_MSG, whose
+// "No" answer (or a dismissed alert) called Crash() and killed the app. Real Gekko hardware raises
+// a program exception with SRR1[IllegalInstruction] for an illegal opcode, so do that and let the
+// game's own exception handler deal with it. Every engine reaches this function: the interpreter
+// tables are filled with it, and the CachedInterpreter, the IR engine and the JIT fall back to
+// Interpreter::GetInterpreterOp for anything they do not compile. The unknown op is FL_ENDBLOCK,
+// so those engines write pc/npc before the call and SRR0 is the faulting instruction everywhere.
+// The exception is delivered here (pc = npc = 0x700), the same way SingleStepInner delivers an
+// invalid paired-single; the JITs then exit to npc and, because the op info carries FL_SET_MSR,
+// reload the memory base for the MSR the exception installed.
 void Interpreter::unknown_instruction(Interpreter& interpreter, UGeckoInstruction inst)
 {
-  ASSERT(Core::IsCPUThread());
+  DEBUG_ASSERT(Core::IsCPUThread());
   auto& system = interpreter.m_system;
-  Core::CPUThreadGuard guard(system);
+  auto& ppc_state = interpreter.m_ppc_state;
+  // ppc_state.pc is the faulting instruction in every engine; m_last_pc is only kept by the plain
+  // interpreter's UpdatePC (it is the previous instruction there, and stale under CIR/JIT).
+  const u32 pc = ppc_state.pc;
+  const u32 lr = LR(ppc_state);
+  const std::string game_id = SConfig::GetInstance().GetGameID();
 
-  const u32 last_pc = interpreter.m_last_pc;
-  const u32 opcode = PowerPC::MMU::HostRead<u32>(guard, last_pc);
-  const std::string disasm = Common::GekkoDisassembler::Disassemble(opcode, last_pc);
-  NOTICE_LOG_FMT(POWERPC, "Last PC = {:08x} : {}", last_pc, disasm);
-  Dolphin_Debugger::PrintCallstack(guard, Common::Log::LogType::POWERPC,
-                                   Common::Log::LogLevel::LNOTICE);
-
-  const auto& ppc_state = interpreter.m_ppc_state;
-  NOTICE_LOG_FMT(
-      POWERPC,
-      "\nIntCPU: Unknown instruction {:08x} at PC = {:08x}  last_PC = {:08x}  LR = {:08x}\n",
-      inst.hex, ppc_state.pc, last_pc, LR(ppc_state));
-  for (int i = 0; i < 32; i += 4)
+  u64 total = 0;
+  if (ShouldReportUnknownInstruction(game_id, pc, inst.hex, &total))
   {
-    NOTICE_LOG_FMT(POWERPC, "r{}: {:#010x} r{}: {:#010x} r{}: {:#010x} r{}: {:#010x}", i,
-                   ppc_state.gpr[i], i + 1, ppc_state.gpr[i + 1], i + 2, ppc_state.gpr[i + 2],
-                   i + 3, ppc_state.gpr[i + 3]);
+    const std::string disasm = Common::GekkoDisassembler::Disassemble(inst.hex, pc);
+    ERROR_LOG_FMT(POWERPC,
+                  "IntCPU: Unknown instruction {:08x} at PC = {:08x}  last_PC = {:08x}  LR = {:08x} "
+                  "({}), game {}; raising a program exception",
+                  inst.hex, pc, interpreter.m_last_pc, lr, disasm, game_id);
+    {
+      Core::CPUThreadGuard guard(system);
+      Dolphin_Debugger::PrintCallstack(guard, Common::Log::LogType::POWERPC,
+                                       Common::Log::LogLevel::LNOTICE);
+    }
+    for (int i = 0; i < 32; i += 4)
+    {
+      NOTICE_LOG_FMT(POWERPC, "r{}: {:#010x} r{}: {:#010x} r{}: {:#010x} r{}: {:#010x}", i,
+                     ppc_state.gpr[i], i + 1, ppc_state.gpr[i + 1], i + 2, ppc_state.gpr[i + 2],
+                     i + 3, ppc_state.gpr[i + 3]);
+    }
+
+    const std::string crumb =
+        fmt::format("unknown instruction {:08x} at pc {:08x} lr {:08x} game {} cpu_core {}",
+                    inst.hex, pc, lr, game_id.empty() ? "?" : game_id,
+                    static_cast<int>(Config::Get(Config::MAIN_CPU_CORE)));
+    Common::RecordBreadcrumb("dolphin.cpu", crumb.c_str());
   }
-  ASSERT_MSG(POWERPC, 0,
-             "\nIntCPU: Unknown instruction {:08x} at PC = {:08x}  last_PC = {:08x}  LR = {:08x}\n",
-             inst.hex, ppc_state.pc, last_pc, LR(ppc_state));
+  else if ((total & (total - 1)) == 0)
+  {
+    // Past the cap, keep a trace that this is still happening without one line per instruction.
+    ERROR_LOG_FMT(POWERPC, "IntCPU: {} unknown instructions so far (latest {:08x} at PC = {:08x})",
+                  total, inst.hex, pc);
+  }
+
+  GenerateProgramException(ppc_state, ProgramExceptionCause::IllegalInstruction);
+  system.GetPowerPC().CheckExceptions();
+  interpreter.m_end_block = true;
+
   if (system.IsPauseOnPanicMode())
     system.GetCPU().Break();
 }

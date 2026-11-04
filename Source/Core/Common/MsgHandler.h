@@ -27,6 +27,13 @@ using StringTranslator = std::string (*)(const char* text);
 void RegisterMsgAlertHandler(MsgAlertHandler handler);
 void RegisterStringTranslator(StringTranslator translator);
 
+// iCube: a non-interactive note from the core for the host's crash reporter (a Sentry breadcrumb
+// on iOS). Never shows UI and never blocks; without a registered handler it does nothing. May be
+// called from any thread, so the handler must be thread-safe.
+using BreadcrumbHandler = void (*)(const char* category, const char* message);
+void RegisterBreadcrumbHandler(BreadcrumbHandler handler);
+void RecordBreadcrumb(const char* category, const char* message);
+
 [[nodiscard]] std::string GetStringT(const char* string);
 
 bool MsgAlertFmtImpl(bool yes_no, MsgType style, Common::Log::LogType log_type, const char* file,
