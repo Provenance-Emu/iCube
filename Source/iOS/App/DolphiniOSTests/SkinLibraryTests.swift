@@ -155,6 +155,18 @@ final class SkinLibraryTests: XCTestCase {
     }
   }
 
+  func testReservedStoreRecordFileNamesAreRefused() throws {
+    // `store.json` and the SkinKit 0.2.0 `store-families.json` sit beside `selection.json`; a skin whose identifier
+    // matched one would be unpacked over the store's record.
+    let library = SkinLibrary(rootURL: root)
+    for name in ["store.json", "Store-Families.JSON"] {
+      let archive = try makeArchive(identifier: name)
+      XCTAssertThrowsError(try library.importSkin(from: archive), name) {
+        XCTAssertEqual($0 as? SkinImportError, .invalidIdentifier, name)
+      }
+    }
+  }
+
   func testSelectionRoundTripsThroughFreshLibrary() throws {
     let library = SkinLibrary(rootURL: root)
     let skin = try library.importSkin(from: makeArchive())

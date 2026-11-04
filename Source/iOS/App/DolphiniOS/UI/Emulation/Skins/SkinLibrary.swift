@@ -70,6 +70,8 @@ final class SkinLibrary: ObservableObject {
   private nonisolated static let selectionFileName = "selection.json"
   /// The store's record of which catalog entries it installed, beside `selection.json`.
   nonisolated static let storeRecordFileName = "store.json"
+  /// The store's record of each installed skin's variant family (SkinKit 0.2.0), beside `store.json`.
+  nonisolated static let storeFamiliesFileName = "store-families.json"
   private static let identifierKey = "identifier"
   private static let infoFileName = "info.json"
   private static let stagingArchiveName = "archive.zip"
@@ -257,7 +259,7 @@ final class SkinLibrary: ObservableObject {
   /// An identifier becomes a folder name, so it must not be able to climb out of the library or hide.
   private static func isUsableFolderName(_ name: String) -> Bool {
     !name.isEmpty && !name.hasPrefix(".") && !name.contains("/") && name.lowercased() != selectionFileName
-      && name.lowercased() != storeRecordFileName
+      && name.lowercased() != storeRecordFileName && name.lowercased() != storeFamiliesFileName
       && ZipEntryScanner.isSafeRelativePath(name)
   }
 
