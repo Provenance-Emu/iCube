@@ -1349,9 +1349,9 @@ struct TVLibraryView: View {
     GeometryReader { proxy in
       let paddingH = Constants.gridHorizontalPadding
       let spacingH = Constants.gridHorizontalSpacing
-      let cardW = LibraryLayout.cardSize.width
+      let targetCardWidth = LibraryLayout.cardSize.width / 2
       let available = max(0, proxy.size.width - (paddingH * 2))
-      let autoCount = min(8, max(2, Int((available + spacingH) / (cardW + spacingH))))
+      let autoCount = min(8, max(4, Int((available + spacingH) / (targetCardWidth + spacingH))))
       let count = effectiveColumnCount(autoFit: autoCount)
       let columns = Array(repeating: GridItem(.flexible(), spacing: spacingH), count: count)
       let cardSize = LibraryLayout.cardSize(availableWidth: available, columns: count, spacing: spacingH)
