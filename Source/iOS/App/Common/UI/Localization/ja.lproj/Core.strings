@@ -5649,3 +5649,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Show Test Skins" = "Show Test Skins";
 "Show mature skins" = "Show mature skins";
 "Shows the catalog's sample-tagged test skins in the Skin Store." = "Shows the catalog's sample-tagged test skins in the Skin Store.";
+"For Virtual Console and WiiWare games. iCube puts A, B, Start and Select on the GameCube pad or Classic Controller the way the Virtual Console does; the skin picker lets you choose one per game type." = "For Virtual Console and WiiWare games. iCube puts A, B, Start and Select on the GameCube pad or Classic Controller the way the Virtual Console does; the skin picker lets you choose one per game type.";
+"NES" = "NES";
+"No %@ skins in the catalog yet." = "No %@ skins in the catalog yet.";
+"SNES" = "SNES";
+"Show all" = "Show all";
+"Show fewer" = "Show fewer";
+"Super NES" = "Super NES";
