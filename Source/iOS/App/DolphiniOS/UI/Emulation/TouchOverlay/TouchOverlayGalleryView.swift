@@ -40,6 +40,16 @@ struct TouchOverlayPreviewDevice: Identifiable, Hashable {
     TouchOverlayPreviewDevice(name: "iPhone 16 Pro Max", portraitSize: CGSize(width: 440, height: 956),
                               portraitInsets: UIEdgeInsets(top: 62, left: 0, bottom: 34, right: 0),
                               landscapeInsets: UIEdgeInsets(top: 0, left: 62, bottom: 21, right: 62)),
+    // iPhone Duo outer screen, measured in the iOS 27.1 simulator: in portrait the Dynamic Island and the
+    // status bar make a column down the RIGHT edge (no top inset); landscape moves it to the leading edge.
+    TouchOverlayPreviewDevice(name: "iPhone Duo outer", portraitSize: CGSize(width: 466, height: 678),
+                              portraitInsets: UIEdgeInsets(top: 0, left: 0, bottom: 34, right: 84),
+                              landscapeInsets: UIEdgeInsets(top: 0, left: 84, bottom: 34, right: 0)),
+    // iPhone Duo inner (unfolded) screen. The size is the simulator's; Xcode 27.1 has no way to unfold the
+    // simulator, so these insets assume the same right-hand status column as the outer screen.
+    TouchOverlayPreviewDevice(name: "iPhone Duo inner", portraitSize: CGSize(width: 669, height: 951),
+                              portraitInsets: UIEdgeInsets(top: 0, left: 0, bottom: 20, right: 84),
+                              landscapeInsets: UIEdgeInsets(top: 0, left: 84, bottom: 20, right: 0)),
     TouchOverlayPreviewDevice(name: "iPad mini", portraitSize: CGSize(width: 744, height: 1133),
                               portraitInsets: UIEdgeInsets(top: 24, left: 0, bottom: 20, right: 0),
                               landscapeInsets: UIEdgeInsets(top: 24, left: 0, bottom: 20, right: 0), isPad: true),
