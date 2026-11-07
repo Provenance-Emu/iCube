@@ -129,6 +129,8 @@ enum TouchOverlayDefaults {
     /// controllers' own diagonal); portrait stacks them straight down to fit the width.
     static let landscapeDiagonal: CGFloat = 70
     static let referenceShortSide: CGFloat = 390
+    /// The usable landscape width the scale-1 layouts fit, centre column included.
+    static let referenceLandscapeWidth: CGFloat = 600
     static let maxScale: CGFloat = 1.35
     /// Round "system" buttons (Wii −/HOME/+): the smallest comfortable touch target.
     static let systemButton: CGFloat = 44
@@ -144,6 +146,9 @@ enum TouchOverlayDefaults {
     let left: CGFloat
     let right: CGFloat
     let bottom: CGFloat
+    /// The middle of the safe area across: where the centre column (Start, −/HOME/+) goes. Only the
+    /// iPhone Duo has a side inset on one edge alone (its status column), so elsewhere it is `w / 2`.
+    let midX: CGFloat
     /// Portrait: just under the game picture (drawn aspect-fit at the top). Landscape: the top edge.
     let regionTop: CGFloat
     let diagonal: CGFloat
@@ -152,10 +157,19 @@ enum TouchOverlayDefaults {
     init(canvas: CGSize, safeArea: UIEdgeInsets, orientation: TouchOverlayOrientation) {
       w = canvas.width
       h = canvas.height
-      u = min(max(min(w, h) / Spacing.referenceShortSide, 1), Spacing.maxScale)
+      // Scale by the width the controls actually get. A portrait iPhone Duo outer screen is 466 pt wide
+      // but 84 pt of that is the status column; scaling by 466 drew every control a fifth too big
+      // and the face buttons ran into the sticks.
+      let usableWidth = w - safeArea.left - safeArea.right
+      var scale = min(usableWidth, h) / Spacing.referenceShortSide
+      // Landscape puts both hands and the centre column side by side, so the width caps the scale too.
+      // Phones and iPads clear this easily; the Duo outer screen (594 pt usable) is the one it limits.
+      if orientation == .landscape { scale = min(scale, usableWidth / Spacing.referenceLandscapeWidth) }
+      u = min(max(scale, 1), Spacing.maxScale)
       gap = Spacing.gap * u
       left = max(safeArea.left, Spacing.edge) + Spacing.edge
       right = w - max(safeArea.right, Spacing.edge) - Spacing.edge
+      midX = (safeArea.left + w - safeArea.right) / 2
       bottom = h - max(safeArea.bottom, Spacing.edge) - Spacing.bottomGuard
       let gameBottom = safeArea.top + (w - safeArea.left - safeArea.right) * 3 / 4
       regionTop = orientation == .portrait ? gameBottom + gap : max(safeArea.top, Spacing.edge) + Spacing.edge
@@ -242,10 +256,10 @@ enum TouchOverlayDefaults {
     let rzCenter = CGPoint(x: right - rzSize.width / 2,
                            y: max(top + rzSize.height / 2, faceCenter.y - face.size.height / 2 - gap - rzSize.height / 2))
 
-    let startCenter = CGPoint(x: s.w / 2, y: bottom - startSize.height / 2)
+    let startCenter = CGPoint(x: s.midX, y: bottom - startSize.height / 2)
     // The Microphone's button sits above Start in the middle column, between the main stick and
     // the face buttons; beside Start it would run into the C-stick on a phone.
-    let micCenter = CGPoint(x: s.w / 2, y: startCenter.y - startSize.height / 2 - gap - micSize.height / 2)
+    let micCenter = CGPoint(x: s.midX, y: startCenter.y - startSize.height / 2 - gap - micSize.height / 2)
 
     return [
       single(.gcMainStick, s.leading(stickCenter), size: CGSize(width: stick, height: stick),
@@ -425,8 +439,8 @@ enum TouchOverlayDefaults {
 
     // Landscape has room between the sticks; portrait doesn't, so the row goes on top.
     let systemCenter = orientation == .landscape
-      ? CGPoint(x: s.w / 2, y: s.bottom - system.size.height / 2)
-      : CGPoint(x: s.w / 2, y: min(leftShoulderTop, rightShoulderTop) - gap - system.size.height / 2)
+      ? CGPoint(x: s.midX, y: s.bottom - system.size.height / 2)
+      : CGPoint(x: s.midX, y: min(leftShoulderTop, rightShoulderTop) - gap - system.size.height / 2)
 
     return [
       single(.classicLeftStick, s.leading(leftStickCenter), size: CGSize(width: stick, height: stick),

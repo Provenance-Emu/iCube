@@ -165,6 +165,18 @@ final class TouchOverlayDefaultLayoutTests: XCTestCase {
     }
   }
 
+  /// Start and −/HOME/+ sit in the middle of the safe area, not of the screen. The iPhone Duo's status
+  /// column insets one side only; centring on the screen put Start on the D-pad there.
+  func testCentreColumnSitsInTheMiddleOfTheSafeArea() throws {
+    let centreGroups: [TouchOverlayPadKind: TouchOverlayGroup] = [.gameCube: .gcStart, .wiiClassic: .classicMinusPlusHome]
+    for c in cases(Array(centreGroups.keys)) {
+      let group = try XCTUnwrap(centreGroups[c.kind])
+      let box = try XCTUnwrap(c.layouts.first { $0.group == group }, c.label).placement.box(in: c.bounds)
+      let safe = c.bounds.inset(by: c.safeArea)
+      XCTAssertEqual(box.midX, safe.midX, accuracy: 0.01, "\(c.label): \(group)")
+    }
+  }
+
   /// Only the GameCube Microphone group is conditional, and only on the slot B setting.
   func testShownDropsTheMicrophoneUnlessSlotBHasOne() {
     for c in cases() {
