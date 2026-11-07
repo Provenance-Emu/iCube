@@ -16,6 +16,7 @@ NSString* const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDi
 #include <mutex>
 #include <string>
 #include <sys/sysctl.h>
+#include <utility>
 #include <variant>
 #include "Common/ScopeGuard.h"
 
@@ -338,11 +339,13 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
 // A window spanning a gap this long (four missed ticks: pause, background) is stale: measure again.
 static const double ACWindowGapSeconds = 4.0 * ACTickMs / 1000.0;
 
-// The controller's last guard or learning decision. Release builds have no core log sink by
-// default, so without this a TestFlight report of "auto made it slow" could not say what the
-// controller chose or why. Copy State prints it; the core log gets it at NOTICE.
+// The controller's last guard decision and the last clock it learned, kept apart because a
+// confirmed starvation is persisted right after it is recorded. Release builds have no core log
+// sink by default, so without these a TestFlight report of "auto made it slow" could not say what
+// the controller chose or why. Copy State prints both; the core log gets them at NOTICE.
 static std::mutex s_acDecisionMutex;
 static std::string s_acDecision;
+static std::string s_acLearned;
 
 static void ACRecordDecision(const std::string& text)
 {
@@ -351,10 +354,17 @@ static void ACRecordDecision(const std::string& text)
   s_acDecision = text;
 }
 
-static std::string ACLastDecision()
+static void ACRecordLearned(const std::string& text)
+{
+  NOTICE_LOG_FMT(CORE, "AdaptiveClock: {}", text);
+  std::lock_guard lock(s_acDecisionMutex);
+  s_acLearned = text;
+}
+
+static std::pair<std::string, std::string> ACLastDecisionAndLearned()
 {
   std::lock_guard lock(s_acDecisionMutex);
-  return s_acDecision;
+  return {s_acDecision, s_acLearned};
 }
 
 @implementation EmulationCoordinator {
@@ -982,7 +992,7 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
                               self->_acVI >= 1.0f - AdaptiveClockFrameGuard::kClockEpsilon;
         if (!atNative && !self->_acPointVetted) return;
         if (self->_acCPU != self->_acLastPersisted) {
-          ACRecordDecision(fmt::format("learned cpu {:.3f} vi {:.3f}", self->_acCPU, self->_acVI));
+          ACRecordLearned(fmt::format("learned cpu {:.3f} vi {:.3f}", self->_acCPU, self->_acVI));
           [NSUserDefaults.standardUserDefaults
               setFloat:self->_acCPU
                 forKey:[@"adaptive_clock_cpu_" stringByAppendingString:self->_adaptiveGameID]];
@@ -1530,9 +1540,10 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
         b += "  adaptive_clock_vi_seed=" + std::string(buf) + "\n";
       }
     }
-    const std::string acLast = ACLastDecision();
-    b += "  adaptive_clock_last=" + (acLast.empty() ? std::string("(none this launch)") : acLast) +
-         "\n";
+    const auto [acLast, acLearned] = ACLastDecisionAndLearned();
+    const std::string none = "(none this launch)";
+    b += "  adaptive_clock_last=" + (acLast.empty() ? none : acLast) + "\n";
+    b += "  adaptive_clock_learned=" + (acLearned.empty() ? none : acLearned) + "\n";
     b += "  ab_hint=Compare fps/speed/max_speed with adaptive OFF and MAIN_OVERCLOCK=1.0 vs this capture\n";
   }
 
