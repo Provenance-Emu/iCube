@@ -58,7 +58,39 @@ Reference ReferenceAt(OperatingPoint point, double fps)
 {
   const Reference ref = ReferenceAt(kNative, 60.0);
   XCTAssertEqual(Judge({0.60f, 1.0f}, Window(58.5), ref, kNative), Verdict::Keep);
-  XCTAssertEqual(Judge({0.60f, 1.0f}, Window(56.0), ref, kNative), Verdict::Suspect);
+  XCTAssertEqual(Judge({0.60f, 1.0f}, Window(56.0), ref, kNative), Verdict::Keep);
+  XCTAssertEqual(Judge({0.60f, 1.0f}, Window(48.0), ref, kNative), Verdict::Suspect);
+}
+
+// GoldenEye 007 (SJBE52) on an iPad Pro A12Z: auto learned 1.0 (slow motion) where a hand-set 0.68
+// ran at full speed. The rates below are illustrative, not measured (~20 presents per second was
+// seen at 0.68). Running at full speed costs a little host time (more VI fields, audio and XFB
+// copies per wall second), so a game that already struggles shows a few percent fewer frames at
+// the lower clock. That is not starvation: the underclock is what makes it playable.
+- (void)testSmallFrameCostOfFullSpeedIsKept
+{
+  const Reference ref = ReferenceAt(kNative, 20.0);
+  XCTAssertEqual(Judge({0.68f, 1.0f}, Window(18.5), ref, kNative), Verdict::Keep);
+}
+
+// The same title on a seeded or fresh run with no reference yet: the top is measured, and a top
+// that is only ~5 % ahead must not park the CPU lever at native.
+- (void)testSmallLeadAtTheTopDoesNotConfirm
+{
+  XCTAssertEqual(Judge({0.68f, 1.0f}, Window(18.5), Reference{}, kNative), Verdict::NeedsReference);
+  XCTAssertFalse(ConfirmsStarvation(18.5, Window(19.5)));
+  XCTAssertFalse(ConfirmsStarvation(18.5, Window(21.0)));
+}
+
+// Melee with 4 players on an iPhone 16 Pro Max: 1.0 gives 25-30 game fps at 85 % speed, 0.40
+// gives 18 at "100 %". A loss this size is still caught and confirmed.
+- (void)testMeleeSizedLossIsSuspectAndConfirms
+{
+  const Reference ref = ReferenceAt(kNative, 27.0);
+  XCTAssertEqual(Judge({0.40f, 1.0f}, Window(18.0), ref, kNative), Verdict::Suspect);
+  XCTAssertTrue(ConfirmsStarvation(18.0, Window(27.0)));
+  XCTAssertEqual(Judge({0.40f, 1.0f}, Window(18.0), Reference{}, kNative), Verdict::NeedsReference);
+  XCTAssertTrue(ConfirmsStarvation(18.0, Window(26.0)));
 }
 
 // Shedding VI (lower field rate) must be judged like the CPU lever, not waved through.
