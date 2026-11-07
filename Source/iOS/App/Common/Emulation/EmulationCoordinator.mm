@@ -11,10 +11,13 @@ NSString* const DOLEmulationDidEndNotification = @"DOLEmulationDidEndNotificatio
 NSString* const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDidChangeNotification";
 
 #include <cmath>
-#include "Common/ScopeGuard.h"
-#include <variant>
+#include <fmt/format.h>
 #include <mach/mach.h>
+#include <mutex>
+#include <string>
 #include <sys/sysctl.h>
+#include <variant>
+#include "Common/ScopeGuard.h"
 
 #import <Metal/Metal.h>
 #import <UIKit/UIKit.h>
@@ -334,6 +337,25 @@ static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an
 
 // A window spanning a gap this long (four missed ticks: pause, background) is stale: measure again.
 static const double ACWindowGapSeconds = 4.0 * ACTickMs / 1000.0;
+
+// The controller's last guard or learning decision. Release builds have no core log sink by
+// default, so without this a TestFlight report of "auto made it slow" could not say what the
+// controller chose or why. Copy State prints it; the core log gets it at NOTICE.
+static std::mutex s_acDecisionMutex;
+static std::string s_acDecision;
+
+static void ACRecordDecision(const std::string& text)
+{
+  NOTICE_LOG_FMT(CORE, "AdaptiveClock: {}", text);
+  std::lock_guard lock(s_acDecisionMutex);
+  s_acDecision = text;
+}
+
+static std::string ACLastDecision()
+{
+  std::lock_guard lock(s_acDecisionMutex);
+  return s_acDecision;
+}
 
 @implementation EmulationCoordinator {
   UIView* _renderHost;
@@ -724,22 +746,33 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   //   inversion).
   // schema_v < 4: the v2 descending-MINIMIZE loop persisted the LOWEST-stable clock. v3's stored
   //   value is f* = the HIGHEST clock at full speed — a DIFFERENT meaning. A v2 "lowest-stable"
-  //   value is below f* and, if reused as a seed, would settle the controller below f* (slow-motion).
-  //   Purge per-game clocks and relearn so no stale lowest-stable value is ever reused as f*.
+  //   value is below f* and, if reused as a seed, would settle the controller below f*
+  //   (slow-motion). Purge per-game clocks and relearn so no stale lowest-stable value is ever
+  //   reused as f*.
   // schema_v < 5: clocks learned before the starvation guard existed could be floor-pinned by a
   //   CPU-bound title (Melee, 4 players: 0.4 persisted on an iPhone 16 Pro Max, so every boot of
   //   the title — including its auto-resume — started in slow-motion). Purge and relearn.
   // schema_v < 6: that guard compared duplicate-present ratios, which stay 0 with Skip Duplicate
   //   XFBs on (the default), so it never tripped and CPU-bound titles kept persisting floor clocks
   //   (F-Zero GX at ~0.3). Purge once more for the frame-rate guard.
-  if ([defaults integerForKey:@"adaptive_clock_schema_v"] < 6) {
+  // schema_v < 7: the frame-rate guard parked the CPU lever at native over a 3-5 % frame gap, the
+  //   small cost of running at full speed, and learned 1.0 for titles that only play well
+  //   underclocked (GoldenEye 007 on an iPad Pro A12Z: auto pinned 1.0 in slow motion, a hand-set
+  //   0.68 ran at full speed). Purge those learned clocks for the wider thresholds.
+  const NSInteger schema = [defaults integerForKey:@"adaptive_clock_schema_v"];
+  if (schema < 7)
+  {
     for (NSString* key in [[defaults dictionaryRepresentation] allKeys]) {
       if ([key hasPrefix:@"adaptive_clock_cpu_"] || [key hasPrefix:@"adaptive_clock_vi_"])
         [defaults removeObjectForKey:key];
     }
-    // Older loops wrote overclock via the Base layer (serializes to Dolphin.ini), so a stale
-    // underclock can be baked into saved config, invisible to the NSUserDefaults purge. Reset
-    // artifact underclocks (< 1.0) to default; a deliberate overclock (> 1.0) is left untouched.
+    [defaults setInteger:7 forKey:@"adaptive_clock_schema_v"];
+  }
+  // Before schema 6, older loops wrote the clock to the Base layer (Dolphin.ini). Since then the
+  // controller writes only CurrentRun, so a Base underclock is the user's own setting and is kept.
+  if (schema < 6)
+  {
+    // Reset artifact underclocks (< 1.0) to default; a deliberate overclock (> 1.0) is untouched.
     bool repaired = false;
     if (Config::Get(Config::MAIN_OVERCLOCK) < 1.0f) {
       Config::SetBase(Config::MAIN_OVERCLOCK, 1.0f);
@@ -752,7 +785,6 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
       repaired = true;
     }
     if (repaired) Config::Save();
-    [defaults setInteger:6 forKey:@"adaptive_clock_schema_v"];
   }
 
   // Learned clocks are kept across core revisions. Every app update changes the revision, so
@@ -950,6 +982,7 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
                               self->_acVI >= 1.0f - AdaptiveClockFrameGuard::kClockEpsilon;
         if (!atNative && !self->_acPointVetted) return;
         if (self->_acCPU != self->_acLastPersisted) {
+          ACRecordDecision(fmt::format("learned cpu {:.3f} vi {:.3f}", self->_acCPU, self->_acVI));
           [NSUserDefaults.standardUserDefaults
               setFloat:self->_acCPU
                 forKey:[@"adaptive_clock_cpu_" stringByAppendingString:self->_adaptiveGameID]];
@@ -1012,10 +1045,11 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
             self->_acRef = FG::Reference{true, point, rate};
             if (FG::ConfirmsStarvation(self->_acStarveTripRate, window))
             {
-              INFO_LOG_FMT(CORE, "AdaptiveClock: starvation at cpu {:.2f} vi {:.2f} confirmed "
-                           "({:.1f} vs {:.1f} fps), keeping cpu {:.2f} vi {:.2f}",
-                           self->_acStarveTripCPU, self->_acStarveTripVI, self->_acStarveTripRate,
-                           rate, point.cpu, point.vi);
+              ACRecordDecision(fmt::format(
+                  "starvation at cpu {:.2f} vi {:.2f} confirmed ({:.1f} vs {:.1f} fps), keeping "
+                  "cpu {:.2f} vi {:.2f}, CPU lever parked",
+                  self->_acStarveTripCPU, self->_acStarveTripVI, self->_acStarveTripRate, rate,
+                  point.cpu, point.vi));
               self->_acPointVetted = YES;
               self->_acStableCPU = self->_acCPU;
               self->_acCpuLeverParked = YES;
@@ -1027,9 +1061,9 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
             }
             // The reference delivers no more new frames than the tripped point: the scene changed,
             // not the clock's effect. The reference is re-based on this scene; resume.
-            INFO_LOG_FMT(CORE, "AdaptiveClock: starvation not confirmed ({:.1f} vs {:.1f} fps), "
-                         "resuming cpu {:.2f} vi {:.2f}", self->_acStarveTripRate, rate,
-                         self->_acStarveTripCPU, self->_acStarveTripVI);
+            ACRecordDecision(fmt::format(
+                "starvation not confirmed ({:.1f} vs {:.1f} fps), resuming cpu {:.2f} vi {:.2f}",
+                self->_acStarveTripRate, rate, self->_acStarveTripCPU, self->_acStarveTripVI));
             applyCPU(self->_acStarveTripCPU);
             applyVI(self->_acStarveTripVI);
             self->_acPhase = self->_acStarveResumePhase;
@@ -1041,10 +1075,10 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
             case FG::Verdict::Suspect:
             case FG::Verdict::NeedsReference: {
               const FG::OperatingPoint target = (verdict == FG::Verdict::Suspect) ? self->_acRef.point : top;
-              INFO_LOG_FMT(CORE, "AdaptiveClock: {} at cpu {:.2f} vi {:.2f} ({:.1f} fps), measuring "
-                           "cpu {:.2f} vi {:.2f}",
-                           verdict == FG::Verdict::Suspect ? "starvation suspected" : "no reference",
-                           point.cpu, point.vi, rate, target.cpu, target.vi);
+              ACRecordDecision(fmt::format(
+                  "{} at cpu {:.2f} vi {:.2f} ({:.1f} fps), measuring cpu {:.2f} vi {:.2f}",
+                  verdict == FG::Verdict::Suspect ? "starvation suspected" : "no reference",
+                  point.cpu, point.vi, rate, target.cpu, target.vi));
               self->_acStarveConfirming = YES;
               self->_acStarveTripRate = rate;
               self->_acStarveTripCPU = self->_acCPU;
@@ -1204,6 +1238,9 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
           // achieved speed, the CPU lever isn't the bottleneck (GPU/video wall misread as CpuBound on
           // single-core) — restore the baseline clock and PARK the lever so we don't ratchet to slow-mo.
           if ((speed - self->_acProbeBaseSpeed) < ACProbeMinGain) {
+            ACRecordDecision(
+                fmt::format("no speed gain below cpu {:.2f} ({:.2f} vs {:.2f}), CPU lever parked",
+                            self->_acProbeBaseCPU, speed, self->_acProbeBaseSpeed));
             applyCPU(self->_acProbeBaseCPU);
             self->_acCpuLeverParked = YES;
             self->_acPhase = ACPhase_Hold;
@@ -1493,6 +1530,9 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
         b += "  adaptive_clock_vi_seed=" + std::string(buf) + "\n";
       }
     }
+    const std::string acLast = ACLastDecision();
+    b += "  adaptive_clock_last=" + (acLast.empty() ? std::string("(none this launch)") : acLast) +
+         "\n";
     b += "  ab_hint=Compare fps/speed/max_speed with adaptive OFF and MAIN_OVERCLOCK=1.0 vs this capture\n";
   }
 

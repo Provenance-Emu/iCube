@@ -15,6 +15,12 @@
 // delivers clearly less is suspect; the controller re-measures at the reference and, if the
 // reference really delivers more, goes back to it.
 //
+// Only a LARGE loss counts. Running at full speed costs host time (more VI fields, audio and XFB
+// copies per wall second), so a struggling title shows a few percent fewer frames at the clock that
+// makes it playable. Thresholds of 5 % (suspect) and 3 % (confirm) read that cost as starvation and
+// parked GoldenEye 007 on an iPad Pro A12Z at 1.0 in slow motion, where a hand-set 0.68 ran at full
+// speed. The losses this guard exists for are a third of the frames (Melee: 27 -> 18 fps).
+//
 // The rate counts unique presents (total minus duplicates). With Skip Duplicate XFBs on (the
 // default) duplicates are never presented and so never counted; the total is then the unique
 // count. The guard this replaces compared duplicate ratios and was blind in that configuration.
@@ -58,11 +64,10 @@ constexpr unsigned long long kMinReferenceFrames = 30;
 // A lower point is judged from this many new frames. Below it the window is loading, not play
 // (a starving 60 fps game still finishes ~15 frames per second).
 constexpr unsigned long long kMinJudgedFrames = 10;
-// A lower point losing more than this share of the reference rate is suspect.
-constexpr double kSuspectLoss = 0.05;
-// Back at the reference, the rate must beat the suspect window by this share to confirm that the
-// underclock (not a scene change) cost the frames.
-constexpr double kConfirmGain = 0.03;
+// A lower point losing more than this share of the reference rate is suspect, and the same loss
+// against the re-measured reference confirms it. One rule for both paths: a seeded or fresh run has
+// no reference when it trips (NeedsReference), so the confirmation is the only comparison it gets.
+constexpr double kStarvationLoss = 0.15;
 
 inline double Rate(const FrameWindow& w)
 {
@@ -87,14 +92,15 @@ inline Verdict Judge(const OperatingPoint& point, const FrameWindow& w, const Re
     return Verdict::Ignore;
   if (!ref.valid)
     return Verdict::NeedsReference;
-  return Rate(w) < ref.rate * (1.0 - kSuspectLoss) ? Verdict::Suspect : Verdict::Keep;
+  return Rate(w) < ref.rate * (1.0 - kStarvationLoss) ? Verdict::Suspect : Verdict::Keep;
 }
 
-// The re-measurement at the reference after a Suspect (or NeedsReference) window. True: the
-// reference delivers more, so the lower point was starving the game.
+// The re-measurement at the reference after a Suspect (or NeedsReference) window. True: the lower
+// point lost more than kStarvationLoss of what the reference delivers now, so it was starving the
+// game (not a scene change, and not the small cost of running at full speed).
 inline bool ConfirmsStarvation(double suspectRate, const FrameWindow& atReference)
 {
-  return Rate(atReference) >= suspectRate * (1.0 + kConfirmGain);
+  return suspectRate < Rate(atReference) * (1.0 - kStarvationLoss);
 }
 
 // A confirmation window needs as many frames as a reference; fewer means measure again.
