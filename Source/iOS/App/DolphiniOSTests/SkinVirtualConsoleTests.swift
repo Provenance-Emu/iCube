@@ -137,8 +137,9 @@ final class SkinVirtualConsoleTests: XCTestCase {
   func testShelvesCollapseAfterTheLimit() {
     func shelf(_ count: Int) -> SkinStoreShelf {
       let families = (0 ..< count).map { index in
-        SkinFamily(entry: SkinCatalogEntry(id: "\(index)", name: "\(index)", systems: ["nes"],
-                                           downloadURL: URL(string: "https://e.com/\(index).deltaskin")!))
+        let entry = SkinCatalogEntry(id: "\(index)", name: "\(index)", systems: ["nes"],
+                                     downloadURL: URL(string: "https://e.com/\(index).deltaskin")!)
+        return SkinFamily(id: "entry:\(index)", groupId: nil, name: entry.name, members: [entry], labels: [:])
       }
       return SkinStoreShelf(section: .nes, families: families)
     }
