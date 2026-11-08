@@ -112,13 +112,13 @@ extension ICubeDesign.PauseCard {
       let leadTitle: CGFloat
 
       /// iPhone portrait.
-      static let regular = Size(cellHeight: 92, cellSpacing: 6, circle: 52, glyph: 21, title: 12, value: smallValue,
-                                focusCornerRadius: 16, leadHeight: 60, leadGlyph: 20, leadTitle: 18)
+      static let regular = Size(cellHeight: 85, cellSpacing: 6, circle: 46, glyph: 19, title: 12, value: smallValue,
+                                focusCornerRadius: 16, leadHeight: 56, leadGlyph: 18, leadTitle: 18)
       /// iPad.
-      static let large = Size(cellHeight: 120, cellSpacing: 8, circle: 68, glyph: 27, title: 14, value: largeValue,
-                              focusCornerRadius: 20, leadHeight: 72, leadGlyph: 24, leadTitle: 22)
+      static let large = Size(cellHeight: 146, cellSpacing: 10, circle: 84, glyph: 34, title: 15, value: largeValue,
+                              focusCornerRadius: 22, leadHeight: 84, leadGlyph: 28, leadTitle: 26)
       /// iPhone landscape.
-      static let compact = Size(cellHeight: 76, cellSpacing: 4, circle: 42, glyph: 17, title: 11, value: smallValue,
+      static let compact = Size(cellHeight: 78, cellSpacing: 4, circle: 42, glyph: 17, title: 11, value: smallValue,
                                 focusCornerRadius: 14, leadHeight: 48, leadGlyph: 16, leadTitle: 16)
 
       var glyphFont: Font { .system(size: glyph, weight: .semibold) }
@@ -134,7 +134,7 @@ extension ICubeDesign.PauseCard {
     static let leadHorizontalPadding: CGFloat = ICubeDesign.Spacing.s.rawValue
     static let cellHorizontalPadding: CGFloat = 2
     /// Keeps the circle clear of the box a press or a pad's focus draws around the cell.
-    static let cellTopPadding: CGFloat = 4
+    static let cellTopPadding: CGFloat = 3
     static let titleValueSpacing: CGFloat = 1
     static let titleMinimumScale: CGFloat = 0.8
     static let valueMinimumScale: CGFloat = 0.8
@@ -145,14 +145,16 @@ extension ICubeDesign.PauseCard {
                                           startPoint: .top, endPoint: .bottom)
 
     static let gridSpacing: CGFloat = 8
-    static let sectionSpacing: CGFloat = 14
+    static let rowSpacing: CGFloat = 4
+    static let sectionSpacing: CGFloat = 10
     /// Between a section's quiet label and its row.
-    static let sectionLabelSpacing: CGFloat = 8
+    static let sectionLabelSpacing: CGFloat = 6
     static let sectionFont = Font.system(.footnote, design: .rounded, weight: .semibold)
     static let hintFont = Font.footnote
     static let hintHeight: CGFloat = 38
-    /// Room inside the scroll view for the focus scale and glow, cancelled outside it so the cells stay put.
-    static let scrollInset: CGFloat = 14
+    /// Room inside the scroll view for the focus scale and the widest glow (`Card.secondaryGlowRadius` and its offset),
+    /// cancelled outside it so the cells stay put.
+    static let scrollInset: CGFloat = 44
     /// The cells fade out over this height above the hint line, instead of being cut by it.
     static let scrollFadeHeight: CGFloat = 24
   }

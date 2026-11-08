@@ -102,6 +102,9 @@ struct MenuModal {
 /// over another one silences the covered screen's input even though SwiftUI
 /// does not fire `onDisappear` for a merely-covered view (design doc §2/§3).
 struct MenuScreen: View {
+  #if !os(tvOS)
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  #endif
   let model: MenuModel
   var style: MenuStyle
   /// Fires on B / tvOS `.onExitCommand`. `nil` for a screen with nothing to
@@ -690,43 +693,47 @@ struct MenuScreen: View {
     let columns = style.columns
     typealias Touch = ICubeDesign.PauseCard.Touch
     return VStack(spacing: Touch.gridSpacing) {
-      ScrollViewReader { proxy in
-        ScrollView(.vertical, showsIndicators: false) {
-          VStack(alignment: .leading, spacing: Touch.sectionSpacing) {
-            ForEach(model.sections) { section in
-              if let header = section.header {
-                VStack(alignment: .leading, spacing: Touch.sectionLabelSpacing) {
-                  Text(header)
-                    .font(Touch.sectionFont)
-                    .foregroundStyle(ICubeDesign.color(.textSecondary))
-                  LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Touch.gridSpacing), count: columns),
-                            spacing: Touch.gridSpacing) {
-                    ForEach(section.items) { item in
-                      card(item, prominent: false, isLead: false)
+      GeometryReader { viewport in
+        ScrollViewReader { proxy in
+          ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: Touch.sectionSpacing) {
+              ForEach(model.sections) { section in
+                if let header = section.header {
+                  VStack(alignment: .leading, spacing: Touch.sectionLabelSpacing) {
+                    Text(header)
+                      .font(Touch.sectionFont)
+                      .foregroundStyle(ICubeDesign.color(.textSecondary))
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Touch.gridSpacing), count: columns),
+                              spacing: Touch.rowSpacing) {
+                      ForEach(section.items) { item in
+                        card(item, prominent: false, isLead: false)
+                      }
                     }
                   }
+                } else {
+                  primaryRow(section, spacing: Touch.gridSpacing)
                 }
-              } else {
-                primaryRow(section, spacing: Touch.gridSpacing)
               }
             }
+            // Room for the focus scale and glow inside the scroll view's clip, cancelled outside so the cells stay put.
+            .padding(Touch.scrollInset)
+            .padding(.bottom, Touch.scrollFadeHeight)
+            // An iPad has height to spare: the cells sit in the middle of it instead of leaving it all below them.
+            .frame(minHeight: viewport.size.height, alignment: horizontalSizeClass == .regular ? .center : .top)
           }
-          // Room for the focus scale and glow inside the scroll view's clip, cancelled outside so the cells stay put.
-          .padding(Touch.scrollInset)
-          .padding(.bottom, Touch.scrollFadeHeight)
-        }
-        .mask {
-          VStack(spacing: 0) {
-            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: Touch.scrollInset)
-            Rectangle()
-            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: Touch.scrollFadeHeight)
+          .mask {
+            VStack(spacing: 0) {
+              LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: Touch.scrollInset)
+              Rectangle()
+              LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: Touch.scrollFadeHeight)
+            }
           }
-        }
-        .padding(-Touch.scrollInset)
-        .onChange(of: focusedID) { _, id in
-          if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+          .onChange(of: focusedID) { _, id in
+            if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+          }
         }
       }
+      .padding(-Touch.scrollInset)
       PauseHintLine(text: (focusedItem ?? lastTouchedID.flatMap { model.item(id: $0) })?.description
         ?? L("Tap a tile to use it. Long-press for all of its options."))
     }

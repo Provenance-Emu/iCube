@@ -632,6 +632,8 @@ internal struct PauseMenuView: View {
             HStack(alignment: .top, spacing: hero.gap) {
               VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
                 closeButton
+                // On an iPad the hero sits level with the centred cells.
+                if !compactHeight { Spacer(minLength: 0) }
                 PauseHeroView(game: game, layout: compactHeight ? .textOnly : .column(artWidth: Touch.heroArtWidth),
                               engineChip: engineChipText, jitAcquired: jitAcquired)
                 Spacer(minLength: 0)

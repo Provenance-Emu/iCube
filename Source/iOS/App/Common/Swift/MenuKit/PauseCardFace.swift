@@ -150,11 +150,13 @@ struct PauseCardFace: View {
             .minimumScaleFactor(Touch.valueMinimumScale)
         }
       }
+      // Tall enough for its text: a title shrinks only for width, or the titles in a row come out different sizes.
+      .fixedSize(horizontal: false, vertical: true)
     }
     .padding(.horizontal, Touch.cellHorizontalPadding)
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .frame(maxWidth: .infinity, alignment: .top)
     .padding(.top, Touch.cellTopPadding)
-    .frame(height: size.cellHeight)
+    .frame(minHeight: size.cellHeight, alignment: .top)
     .background {
       if focused { shape.fill(ICubeDesign.Card.surface) }
     }
@@ -163,9 +165,17 @@ struct PauseCardFace: View {
     }
   }
 
+  /// The glass circle is already the ring, so a circled symbol drops its own where the bare form exists.
+  private static func uncircled(_ icon: String) -> String {
+    let suffix = ".circle"
+    guard icon.hasSuffix(suffix) else { return icon }
+    let bare = String(icon.dropLast(suffix.count))
+    return UIImage(systemName: bare) == nil ? icon : bare
+  }
+
   @ViewBuilder private var glyph: some View {
     if let icon = item.icon {
-      Image(systemName: icon)
+      Image(systemName: Self.uncircled(icon))
         // The solid glyphs hold up at this size; a symbol with no fill form stays as it is.
         .symbolVariant(.fill)
         .font(size.glyphFont)

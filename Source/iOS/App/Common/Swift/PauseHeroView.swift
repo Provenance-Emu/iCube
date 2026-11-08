@@ -113,7 +113,7 @@ extension ICubeDesign {
   enum PauseHero {
     static let columnTitleLines = 3
     static let bannerTitleLines = 2
-    static let bannerArtWidth: CGFloat = 72
+    static let bannerArtWidth: CGFloat = 66
     static let bannerArtShadowOpacity: Double = 0.5
     static let bannerArtShadowRadius: CGFloat = 12
     static let bannerArtShadowY: CGFloat = 6
