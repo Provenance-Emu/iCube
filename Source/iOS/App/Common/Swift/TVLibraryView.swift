@@ -560,6 +560,14 @@ struct TVLibraryView: View {
   @ObservedObject private var nearby = NearbyLibrariesModel.shared
   /// A nearby library opened in a sheet (iOS cards; the empty library on iOS).
   @State private var nearbySheet: NearbySheetRoute?
+#if !os(tvOS)
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @Environment(\.verticalSizeClass) private var verticalSizeClass
+  /// The dashboard's route to pairing and handoff when no device is sharing a library.
+  @State private var showNearbyDevices = false
+  /// Bumped when the Save States browser closes, since saves may have been deleted or renamed in it.
+  @State private var libraryDashboardRefresh = 0
+#endif
 #if os(tvOS)
   /// The nearby library's first control, where a right press out of the rail lands.
   @FocusState private var tvNearbyFocus: Bool
@@ -632,6 +640,19 @@ struct TVLibraryView: View {
       .sheet(item: $nearbySheet) { route in
         NearbyPeerLibrarySheet(peerID: route.id, ownedGameIDs: ownedGameIDs) { nearbySheet = nil }
       }
+#if !os(tvOS)
+      .sheet(isPresented: $showNearbyDevices) {
+        NavigationStack {
+          ContinuityBrowseView()
+            .toolbar {
+              ToolbarItem(placement: .confirmationAction) {
+                Button(L("Done")) { showNearbyDevices = false }
+              }
+            }
+        }
+        .claimsController()
+      }
+#endif
       .onAppear { nearby.setLibraryVisible(true) }
       .onDisappear { nearby.setLibraryVisible(false) }
   }
@@ -1446,6 +1467,46 @@ struct TVLibraryView: View {
   #endif // os(tvOS)
 
   #if !os(tvOS)
+  /// A full-size iPad window. Not a Plus or Max iPhone in landscape, which is regular only across, and not an iPad
+  /// narrowed by multitasking: both keep the phone layout.
+  private var usesLibraryDashboardLayout: Bool {
+    horizontalSizeClass == .regular && verticalSizeClass == .regular
+  }
+
+  private func libraryDashboard(_ displayGames: [TVGameItem], size: CGSize, cardSize: CGSize) -> some View {
+    let filtered = showPlatformFilterBar && platformFilter != .all
+    let overrides = platformOverrides
+    return LibraryDashboardView(
+      games: displayGames,
+      isWide: size.width > size.height && size.width >= ICubeDesign.LibraryDashboard.sideBySideMinimumWidth,
+      horizontalInset: Constants.gridHorizontalPadding,
+      shelfSpacing: Constants.gridHorizontalSpacing,
+      activity: .init(isScanning: model.isRescanning, cachingCount: autoPreCacheActive.count),
+      refreshToken: libraryDashboardRefresh,
+      gridTitle: filtered ? platformFilter.displayName : L("All Games"),
+      platformName: { LibraryPlatformMapper.category(for: $0, override: overrides[$0.filePath]).displayName },
+      onPlay: selectGame,
+      onBootSave: bootIntoSave,
+      onOpenPeer: { nearbySheet = NearbySheetRoute(id: $0.id) },
+      onBrowseNearby: { showNearbyDevices = true },
+      onShowSaves: { showSaveStatesBrowser = true },
+      onShowActivity: { showSources = true }
+    ) { game in
+      gameGridItem(for: game, cardSize: cardSize)
+    }
+  }
+
+  /// Boots the base game straight into `state`: patched copies and mod descriptors share its ID but do not own
+  /// its states, so this skips the source picker `selectGame` offers.
+  private func bootIntoSave(_ state: SaveStateInfo) {
+    guard state.isCompatible,
+          let item = ModdedLibrary.baseGame(withGameID: state.gameID, in: model.games) else { return }
+    SaveStateService.pendingBootStatePath = state.path.path
+    emulationRunning = true
+    teardownControllerNavigation()
+    launchGame(item)
+  }
+
   @ViewBuilder
   private func libraryView_iOS(_ displayGames: [TVGameItem]) -> some View {
     GeometryReader { proxy in
@@ -1459,7 +1520,11 @@ struct TVLibraryView: View {
       let cardSize = LibraryLayout.cardSize(availableWidth: available, columns: count, spacing: spacingH)
       ScrollViewReader { scr in
         ScrollView {
-          if !isSearching, !nearby.peers.isEmpty {
+          if usesLibraryDashboardLayout {
+            if !isSearching, !isSelectionMode {
+              libraryDashboard(displayGames, size: proxy.size, cardSize: cardSize)
+            }
+          } else if !isSearching, !nearby.peers.isEmpty {
             NearbyLibrariesStrip(model: nearby) { nearbySheet = NearbySheetRoute(id: $0.id) }
               .padding(.horizontal, paddingH)
               .padding(.top, Constants.gridVerticalSpacing / 2)
@@ -2295,10 +2360,24 @@ struct TVLibraryView: View {
       navigationConfiguration
     }
     // SaveStatesBrowserView presention
+#if os(tvOS)
     .sheet(isPresented: $showSaveStatesBrowser) {
       NavigationStack { SaveStatesBrowserView() }
         .claimsController()
     }
+#else
+    .sheet(isPresented: $showSaveStatesBrowser, onDismiss: { libraryDashboardRefresh += 1 }) {
+      NavigationStack {
+        SaveStatesBrowserView()
+          .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+              Button(L("Done")) { showSaveStatesBrowser = false }
+            }
+          }
+      }
+      .claimsController()
+    }
+#endif
     // About iCube sheet (presented from the tappable toolbar Dolphin logo on iOS)
 #if os(iOS) || targetEnvironment(macCatalyst)
     .sheet(isPresented: $showAbout) {
@@ -2510,9 +2589,13 @@ struct TVLibraryView: View {
         // one-shot flag is already armed and would otherwise sit there and silently
         // eat the *next*, unrelated launch's auto-resume. No-op when it wasn't armed.
         SaveStateService.skipResumeOnce = false
+        SaveStateService.pendingBootStatePath = nil
         if let current = model.currentGame { navigateTo = current }
       }
-      Button(L("Cancel")) { SaveStateService.skipResumeOnce = false }
+      Button(L("Cancel")) {
+        SaveStateService.skipResumeOnce = false
+        SaveStateService.pendingBootStatePath = nil
+      }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
       #if os(tvOS)
@@ -2659,7 +2742,8 @@ struct TVLibraryView: View {
             proceedWithGameLaunch(item)
           }
         }
-        Button(L("Cancel"), role: .cancel) {}
+        // A save the library was about to boot into must not land on the next, unrelated launch.
+        Button(L("Cancel"), role: .cancel) { SaveStateService.pendingBootStatePath = nil }
       } message: { Text(storageAlertMessage) }
       .sheet(item: $showCacheInfoFor) { item in
         CacheInfoView(item: item, showSubtitles: showSubtitles)

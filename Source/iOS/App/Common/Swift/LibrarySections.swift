@@ -21,6 +21,8 @@ struct LibraryShelfSpec: Equatable, Identifiable {
 enum LibrarySectionBuilder {
   /// Cap for Recently Played.
   static let recentLimit = 12
+  /// `LibraryShelfSpec.id` of Recently Played.
+  static let recentShelfID = "recent"
 
   /// Recently Played, then Favorites. Empty shelves are omitted. Recently Played is newest first.
   /// The whole library follows them as a grid, and the rail switches platforms, so neither is a shelf.
@@ -46,7 +48,7 @@ enum LibrarySectionBuilder {
       .prefix(max(0, recentLimit))
       .map(\.key)
     if !recent.isEmpty {
-      shelves.append(LibraryShelfSpec(id: "recent", titleKey: "Recently Played", gameIDs: Array(recent)))
+      shelves.append(LibraryShelfSpec(id: recentShelfID, titleKey: "Recently Played", gameIDs: Array(recent)))
     }
 
     let favorites = order.filter { favoriteIDs.contains($0) }
