@@ -22,7 +22,7 @@ enum MenuStyle: Equatable {
   /// Pause-overlay tiles (unified menu UX spec §5): `columns` per row, an `InfoShelf` beneath, rendered
   /// natively on BOTH platforms (unlike `.grid`/`.list`, which tvOS flattens to a `List`).
   case tiles(columns: Int, compact: Bool = false)
-  /// The iPhone and iPad pause screen, on iFly's pause cards: a headerless section is one row of prominent cards,
+  /// The iPhone and iPad pause screen: a headerless section is one row of prominent cards,
   /// each headed section a `columns`-wide grid under an accent header, with the help shelf beneath. `compact` is
   /// iPhone landscape. tvOS draws its pause screen with `TVPauseGridView` instead.
   case cards(columns: Int, compact: Bool = false)
@@ -688,36 +688,60 @@ struct MenuScreen: View {
 
   private var cardsBody: some View {
     let columns = style.columns
-    typealias Metrics = ICubeDesign.PauseCard
-    return ScrollViewReader { proxy in
-      ScrollView(.vertical, showsIndicators: false) {
-        VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
-          ForEach(model.sections) { section in
-            if let header = section.header {
-              ICubeAccentHeader(text: header)
-              LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Metrics.gridSpacing), count: columns),
-                        spacing: Metrics.gridSpacing) {
-                ForEach(section.items) { item in card(item, prominent: false, isLead: false) }
-              }
-            } else {
-              HStack(spacing: Metrics.gridSpacing) {
-                ForEach(Array(section.items.enumerated()), id: \.element.id) { index, item in
-                  card(item, prominent: true, isLead: index == 0)
+    typealias Touch = ICubeDesign.PauseCard.Touch
+    return VStack(spacing: Touch.gridSpacing) {
+      ScrollViewReader { proxy in
+        ScrollView(.vertical, showsIndicators: false) {
+          VStack(alignment: .leading, spacing: Touch.sectionSpacing) {
+            ForEach(model.sections) { section in
+              if let header = section.header {
+                VStack(alignment: .leading, spacing: Touch.sectionLabelSpacing) {
+                  Text(header)
+                    .font(Touch.sectionFont)
+                    .foregroundStyle(ICubeDesign.color(.textSecondary))
+                  LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Touch.gridSpacing), count: columns),
+                            spacing: Touch.gridSpacing) {
+                    ForEach(section.items) { item in
+                      card(item, prominent: false, isLead: false)
+                    }
+                  }
                 }
+              } else {
+                primaryRow(section, spacing: Touch.gridSpacing)
               }
             }
           }
+          // Room for the focus scale and glow inside the scroll view's clip, cancelled outside so the cells stay put.
+          .padding(Touch.scrollInset)
+          .padding(.bottom, Touch.scrollFadeHeight)
         }
-        // Room for the focus scale and glow inside the scroll view's clip, cancelled outside so the cards stay put.
-        .padding(Metrics.scrollInset)
+        .mask {
+          VStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom).frame(height: Touch.scrollInset)
+            Rectangle()
+            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: Touch.scrollFadeHeight)
+          }
+        }
+        .padding(-Touch.scrollInset)
+        .onChange(of: focusedID) { _, id in
+          if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+        }
       }
-      .padding(-Metrics.scrollInset)
-      .safeAreaInset(edge: .bottom, spacing: Metrics.gridSpacing) {
-        PauseHelpShelf(item: focusedItem ?? lastTouchedID.flatMap { model.item(id: $0) },
-                       placeholder: L("Tap a tile to use it. Long-press for all of its options."))
-      }
-      .onChange(of: focusedID) { _, id in
-        if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+      PauseHintLine(text: (focusedItem ?? lastTouchedID.flatMap { model.item(id: $0) })?.description
+        ?? L("Tap a tile to use it. Long-press for all of its options."))
+    }
+  }
+
+  /// A headerless section's row. Resume takes half of it and the other cells share the rest, which lines them up
+  /// with an even-columned grid below; a row with no Resume (the Audio pane's) shares it equally.
+  private func primaryRow(_ section: MenuSection, spacing: CGFloat) -> some View {
+    let lead = section.items.first { $0.id == PauseMenuModelBuilder.touchPrimaryIDs.first }
+    return HStack(spacing: spacing) {
+      if let lead { card(lead, prominent: true, isLead: true) }
+      HStack(spacing: spacing) {
+        ForEach(section.items.filter { $0.id != lead?.id }) { item in
+          card(item, prominent: true, isLead: false)
+        }
       }
     }
   }

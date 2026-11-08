@@ -676,7 +676,7 @@ internal struct PauseMenuView: View {
       }
       .frame(width: proxy.size.width, height: proxy.size.height)
       // A background, not a ZStack sibling: the fill-scaled art would otherwise widen the ZStack past the window.
-      .background { ICubeTVRoomBackground(art: game.bannerImage ?? (game.hasCoverArt ? game.coverImage : nil)) }
+      .background { ICubeTVRoomBackground(art: game.hasCoverArt ? game.coverImage : game.bannerImage, artForward: true) }
     }
     // `MenuScreen` row text takes no explicit color; pin the dark-mode values so titles stay legible over the
     // always-dark room whatever the system appearance. `.environment`, not `.preferredColorScheme`, so the
@@ -719,7 +719,7 @@ internal struct PauseMenuView: View {
   private func tiles(columns: Int, compact: Bool) -> some View {
     // Modal while a confirm overlay is up: on tvOS the focus engine can otherwise land back on a tile.
     let confirmUp = showResetDialog || showExitDialog || quitSaveFailure != nil || quitRequestInFlight
-    return MenuScreen(model: PauseMenuModelBuilder.primaryLayout(pauseMenuModel), style: .cards(columns: columns, compact: compact), onBack: {
+    return MenuScreen(model: PauseMenuModelBuilder.touchLayout(pauseMenuModel), style: .cards(columns: columns, compact: compact), onBack: {
       guard !quitRequestInFlight else { return }
       guard BackCoalescer.shouldHonor(openedAt: openedAt, now: Date()) else { return }
       onClose()
@@ -1142,6 +1142,23 @@ enum PauseMenuModelBuilder {
     return MenuModel(sections: [
       MenuSection(id: "primary", items: primary),
       MenuSection(id: "options", header: L("Options"), items: options),
+    ])
+  }
+
+  /// The iPhone and iPad session row: Resume spans half of it, Reset and Exit share the rest.
+  static let touchPrimaryIDs = ["resume", "reset", "exit"]
+
+  /// The iPhone and iPad regroup of `make`'s tiles: the session row, then the rest under `make`'s own Quick and Game
+  /// headers, with what is left of System (Settings) closing Game.
+  static func touchLayout(_ model: MenuModel) -> MenuModel {
+    let all = model.sections.flatMap(\.items)
+    let primary = touchPrimaryIDs.compactMap { id in all.first { $0.id == id } }
+    let rest = all.filter { !touchPrimaryIDs.contains($0.id) && !audioPaneIDs.contains($0.id) }
+    let quickIDs = Set(model.sections.first { $0.id == "quick" }?.items.map(\.id) ?? [])
+    return MenuModel(sections: [
+      MenuSection(id: "primary", items: primary),
+      MenuSection(id: "quick", header: L("Quick"), items: rest.filter { quickIDs.contains($0.id) }),
+      MenuSection(id: "game", header: L("Game"), items: rest.filter { !quickIDs.contains($0.id) }),
     ])
   }
 

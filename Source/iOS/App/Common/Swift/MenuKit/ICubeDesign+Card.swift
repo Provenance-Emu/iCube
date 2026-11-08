@@ -40,6 +40,8 @@ extension ICubeDesign {
       ? UIColor(red: 0x1C / 255, green: 0x27 / 255, blue: 0x48 / 255, alpha: 1)
       : UIColor(red: 0xF5 / 255, green: 0xF7 / 255, blue: 0xFF / 255, alpha: 1) }
     static var surface: Color { Color(uiColor: uiSurface) }
+    /// Text on a white pill.
+    static let leadInk = UIColor(red: 0x0A / 255, green: 0x0F / 255, blue: 0x26 / 255, alpha: 1)
   }
 
   /// The tvOS pause screen's geometry (iFly's numbers at 1080p).
@@ -84,8 +86,78 @@ extension ICubeDesign {
     static let artBlur: CGFloat = 60
     static let artOpacity: Double = 0.18
     static let glossOpacity: Double = 0.05
+    /// iPhone and iPad (`ICubeTVRoomBackground.artForward`): the game's own art is the room, darkened enough to read on.
+    static let forwardArtBlur: CGFloat = 70
+    static let forwardArtSaturation: Double = 1.6
+    static let forwardScrimTop: Double = 0.42
+    static let forwardScrimBottom: Double = 0.78
   }
 }
+
+#if !os(tvOS)
+/// The iPhone and iPad pause tile (`PauseCardFace`) and the grid around it (`MenuStyle.cards`).
+extension ICubeDesign.PauseCard {
+  enum Touch {
+    /// One screen class's numbers.
+    struct Size {
+      let cellHeight: CGFloat
+      let cellSpacing: CGFloat
+      let circle: CGFloat
+      let glyph: CGFloat
+      let title: CGFloat
+      let value: Font
+      let focusCornerRadius: CGFloat
+      let leadHeight: CGFloat
+      let leadGlyph: CGFloat
+      let leadTitle: CGFloat
+
+      /// iPhone portrait.
+      static let regular = Size(cellHeight: 92, cellSpacing: 6, circle: 52, glyph: 21, title: 12, value: smallValue,
+                                focusCornerRadius: 16, leadHeight: 60, leadGlyph: 20, leadTitle: 18)
+      /// iPad.
+      static let large = Size(cellHeight: 120, cellSpacing: 8, circle: 68, glyph: 27, title: 14, value: largeValue,
+                              focusCornerRadius: 20, leadHeight: 72, leadGlyph: 24, leadTitle: 22)
+      /// iPhone landscape.
+      static let compact = Size(cellHeight: 76, cellSpacing: 4, circle: 42, glyph: 17, title: 11, value: smallValue,
+                                focusCornerRadius: 14, leadHeight: 48, leadGlyph: 16, leadTitle: 16)
+
+      var glyphFont: Font { .system(size: glyph, weight: .semibold) }
+      var leadGlyphFont: Font { .system(size: leadGlyph, weight: .bold) }
+
+      private static let smallValue = Font.system(.caption2, design: .rounded, weight: .medium)
+      private static let largeValue = Font.system(.caption, design: .rounded, weight: .medium)
+    }
+
+    static let leadFill = Color.white
+    static let leadInk = Color(uiColor: ICubeDesign.Card.leadInk)
+    static let leadSpacing: CGFloat = ICubeDesign.Spacing.xs.rawValue
+    static let leadHorizontalPadding: CGFloat = ICubeDesign.Spacing.s.rawValue
+    static let cellHorizontalPadding: CGFloat = 2
+    /// Keeps the circle clear of the box a press or a pad's focus draws around the cell.
+    static let cellTopPadding: CGFloat = 4
+    static let titleValueSpacing: CGFloat = 1
+    static let titleMinimumScale: CGFloat = 0.8
+    static let valueMinimumScale: CGFloat = 0.8
+
+    static let glassFill = LinearGradient(colors: [Color.white.opacity(0.2), Color.white.opacity(0.08)],
+                                          startPoint: .top, endPoint: .bottom)
+    static let glassEdge = LinearGradient(colors: [Color.white.opacity(0.35), Color.white.opacity(0.06)],
+                                          startPoint: .top, endPoint: .bottom)
+
+    static let gridSpacing: CGFloat = 8
+    static let sectionSpacing: CGFloat = 14
+    /// Between a section's quiet label and its row.
+    static let sectionLabelSpacing: CGFloat = 8
+    static let sectionFont = Font.system(.footnote, design: .rounded, weight: .semibold)
+    static let hintFont = Font.footnote
+    static let hintHeight: CGFloat = 38
+    /// Room inside the scroll view for the focus scale and glow, cancelled outside it so the cells stay put.
+    static let scrollInset: CGFloat = 14
+    /// The cells fade out over this height above the hint line, instead of being cut by it.
+    static let scrollFadeHeight: CGFloat = 24
+  }
+}
+#endif
 
 extension EnvironmentValues {
   /// Published by `ICubeCardButtonStyle` on its label, so a card face can swap its fill and border on focus.

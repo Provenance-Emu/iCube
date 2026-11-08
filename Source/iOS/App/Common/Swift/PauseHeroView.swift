@@ -39,6 +39,7 @@ struct PauseHeroView: View {
     case .banner:
       HStack(alignment: .center, spacing: ICubeDesign.Spacing.m.rawValue) {
         art(width: Metrics.bannerArtWidth)
+          .shadow(color: .black.opacity(Metrics.bannerArtShadowOpacity), radius: Metrics.bannerArtShadowRadius, x: 0, y: Metrics.bannerArtShadowY)
         text(titleLines: Metrics.bannerTitleLines)
       }
     case .textOnly:
@@ -49,15 +50,11 @@ struct PauseHeroView: View {
   private func text(titleLines: Int) -> some View {
     VStack(alignment: .leading, spacing: Metrics.textSpacing) {
       Label(L("Paused"), systemImage: "pause.fill")
+        .font(Metrics.pausedFont)
         .icubeText(.nav)
-        .tracking(ICubeDesign.TVPause.pausedTracking)
+        .tracking(Metrics.pausedTracking)
         .foregroundStyle(accent)
-      Text(game.title)
-        .font(Metrics.titleFont)
-        // Before `icubeText`: the role's own `textCase(nil)` would otherwise sit closer to the text and win.
-        .textCase(.uppercase)
-        .icubeText(.title)
-        .foregroundStyle(LinearGradient(colors: [ICubeDesign.color(.textPrimary), accent], startPoint: .top, endPoint: .bottom))
+      titleText
         .lineLimit(titleLines)
         .minimumScaleFactor(Metrics.titleMinimumScale)
         .fixedSize(horizontal: false, vertical: true)
@@ -73,6 +70,22 @@ struct PauseHeroView: View {
           .background(Capsule().fill(jitAcquired ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface)))
       }
     }
+  }
+
+  @ViewBuilder private var titleText: some View {
+    #if os(tvOS)
+    Text(game.title)
+      .font(Metrics.titleFont)
+      // Before `icubeText`: the role's own `textCase(nil)` would otherwise sit closer to the text and win.
+      .textCase(.uppercase)
+      .icubeText(.title)
+      .foregroundStyle(LinearGradient(colors: [ICubeDesign.color(.textPrimary), accent], startPoint: .top, endPoint: .bottom))
+    #else
+    Text(game.title)
+      .font(Metrics.titleFont)
+      .icubeText(.title)
+      .foregroundStyle(ICubeDesign.color(.textPrimary))
+    #endif
   }
 
   /// The cover, filled into a 2:3 case and clipped; without one, the platform's case template on its accent, never a
@@ -100,17 +113,24 @@ extension ICubeDesign {
   enum PauseHero {
     static let columnTitleLines = 3
     static let bannerTitleLines = 2
-    static let bannerArtWidth: CGFloat = 64
+    static let bannerArtWidth: CGFloat = 72
+    static let bannerArtShadowOpacity: Double = 0.5
+    static let bannerArtShadowRadius: CGFloat = 12
+    static let bannerArtShadowY: CGFloat = 6
     /// Below this the cover takes the small radius.
     static let smallArtThreshold: CGFloat = 120
     static let titleMinimumScale: CGFloat = 0.6
     #if os(tvOS)
     static let textSpacing: CGFloat = Spacing.m.rawValue
     static let titleFont: Font = ICubeDesign.standard.font(.title)
+    static let pausedFont: Font = ICubeDesign.standard.font(.nav)
+    static let pausedTracking: CGFloat = TVPause.pausedTracking
     #else
     static let textSpacing: CGFloat = Spacing.xs.rawValue
     /// The title role is 34 pt on iOS, too big beside a cover at the top of a phone.
-    static let titleFont: Font = ICubeDesign.displayFont(size: 24, relativeTo: .title2, bold: true)
+    static let titleFont: Font = ICubeDesign.displayFont(size: 26, relativeTo: .title2, bold: true)
+    static let pausedFont: Font = ICubeDesign.displayFont(size: 12, relativeTo: .caption, bold: true)
+    static let pausedTracking: CGFloat = 1.5
     #endif
   }
 }

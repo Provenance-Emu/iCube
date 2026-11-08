@@ -3,10 +3,10 @@
 
 import SwiftUI
 
-/// The pause tile, iFly's `TileFace` on every platform: a glyph over an uppercase title, white while focused or
-/// pressed. Destructive tiles keep their own tint (Reset orange, Exit red); the lead tile (Resume) is in the platform
-/// accent. The current value (SLOT 1, OFF, 2X, NATIVE, CIR) sits in a chip in the top-trailing corner. Used inside
-/// `ICubeCardButtonStyle`, which publishes focus as `\.icubeCardFocused`; the face draws its own card surface.
+/// The pause tile. tvOS keeps iFly's `TileFace`: a glyph over an uppercase title with the value in a corner chip.
+/// iPhone and iPad draw no card at rest: a glass circle with the glyph in the tile's own colour, the title and value
+/// beneath it, and Resume as a solid pill. A setting that is on fills its circle. A press or a pad's focus draws the
+/// box. Used inside `ICubeCardButtonStyle`, which publishes focus as `\.icubeCardFocused`.
 struct PauseCardFace: View {
   let item: MenuItem
   let prominent: Bool
@@ -15,88 +15,199 @@ struct PauseCardFace: View {
   var compact = false
   @Environment(\.icubeCardFocused) private var focused
   @Environment(\.icubePlatformAccent) private var platformAccent
-  #if os(iOS)
+  #if !os(tvOS)
   @Environment(\.horizontalSizeClass) private var sizeClass
   /// An iPad has the room for bigger cards.
   private var large: Bool { sizeClass == .regular && !compact }
-  #else
-  private var large: Bool { false }
   #endif
 
   private typealias Metrics = ICubeDesign.PauseCard
-
-  var body: some View {
-    let accent = platformAccent ?? ICubeDesign.color(.accent)
-    let foreground: Color = item.role.isDestructive
-      ? (item.tint ?? ICubeDesign.color(.destructive))
-      : (focused ? .white : (isLead ? accent : ICubeDesign.color(.textPrimary)))
-    return ZStack(alignment: .topTrailing) {
-      Group {
-        if compact {
-          // A short card has no corner to spare: the value is a line under a one-line title.
-          HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
-            glyph
-            VStack(alignment: .leading, spacing: 1) {
-              title(lines: value == nil ? 2 : 1)
-                .multilineTextAlignment(.leading)
-              if let value {
-                Text(value)
-                  .icubeText(.tag)
-                  .lineLimit(1)
-                  .foregroundStyle(focused ? .white : platformAccent ?? ICubeDesign.color(.accent))
-              }
-            }
-            Spacer(minLength: 0)
-          }
-          .padding(.horizontal, ICubeDesign.Spacing.s.rawValue)
-        } else {
-          VStack(spacing: Metrics.glyphTitleSpacing) {
-            glyph
-            title(lines: 2).multilineTextAlignment(.center)
-          }
-          .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
-          // A narrow card keeps the chip's corner clear, on every card of the grid so the glyphs line up.
-          .padding(.top, prominent ? 0 : Metrics.chipClearance)
-        }
-      }
-      .foregroundStyle(foreground)
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-      if !compact, let value {
-        PauseValueChip(text: value, focused: focused)
-          .padding(Metrics.chipInset)
-      }
-    }
-    .frame(height: Metrics.height(prominent: prominent, compact: compact, large: large))
-    .icubeCardSurface(cornerRadius: Metrics.cornerRadius)
-    .opacity(item.isEnabled ? 1 : Metrics.disabledOpacity)
-    .accessibilityElement(children: .combine)
-    .accessibilityValue(value ?? "")
-  }
 
   private var value: String? {
     guard let value = item.currentValueTitle ?? item.badge, !value.isEmpty else { return nil }
     return value
   }
 
-  @ViewBuilder private var glyph: some View {
-    if let icon = item.icon {
-      Image(systemName: icon)
-        .font(Metrics.glyphFont(prominent: prominent, compact: compact, large: large))
+  var body: some View {
+    #if os(tvOS)
+    tvBody
+    #else
+    touchBody
+    #endif
+  }
+
+  #if os(tvOS)
+  private var tvBody: some View {
+    let accent = platformAccent ?? ICubeDesign.color(.accent)
+    let foreground: Color = item.role.isDestructive
+      ? (item.tint ?? ICubeDesign.color(.destructive))
+      : (focused ? .white : (isLead ? accent : ICubeDesign.color(.textPrimary)))
+    return ZStack(alignment: .topTrailing) {
+      VStack(spacing: Metrics.glyphTitleSpacing) {
+        if let icon = item.icon {
+          Image(systemName: icon)
+            .font(Metrics.glyphFont(prominent: prominent))
+        }
+        // The size first: the font closest to the text wins, and the role still sets case and tracking.
+        Text(item.title)
+          .font(Metrics.titleFont)
+          .icubeText(.nav)
+          .lineLimit(2)
+          // A gentle floor: a lower one shrank long titles below legibility.
+          .minimumScaleFactor(Metrics.titleMinimumScale)
+          .multilineTextAlignment(.center)
+      }
+      .padding(.horizontal, ICubeDesign.Spacing.xs.rawValue)
+      .foregroundStyle(foreground)
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+      if let value {
+        PauseValueChip(text: value, focused: focused)
+          .padding(Metrics.chipInset)
+      }
+    }
+    .frame(height: Metrics.height(prominent: prominent))
+    .icubeCardSurface(cornerRadius: Metrics.cornerRadius)
+    .opacity(item.isEnabled ? 1 : Metrics.disabledOpacity)
+    .accessibilityElement(children: .combine)
+    .accessibilityValue(value ?? "")
+  }
+  #else
+  private typealias Touch = Metrics.Touch
+
+  private var size: Touch.Size {
+    if compact { return .compact }
+    return large ? .large : .regular
+  }
+
+  /// The tile's own colour from the model. Reset and Exit carry theirs; an untinted tile takes the platform accent.
+  private var tone: Color {
+    item.tint ?? (item.role.isDestructive ? ICubeDesign.color(.destructive) : platformAccent ?? ICubeDesign.color(.accent))
+  }
+
+  /// A toggle that is on, or a cycle with an Off position that is away from it (Fast Forward).
+  private var isActive: Bool {
+    switch item.role {
+    case .toggle(let binding):
+      return binding.wrappedValue
+    case .cycle(let options, _):
+      return options.contains { $0.0 == L("Off") } && value != L("Off")
+    default:
+      return false
     }
   }
 
-  private func title(lines: Int) -> some View {
-    // The size first: the font closest to the text wins, and the role still sets case and tracking.
-    Text(item.title)
-      .font(large ? Metrics.largeTitleFont : Metrics.titleFont)
-      .icubeText(.nav)
-      .lineLimit(lines)
-      // A gentle floor: a lower one shrank long titles below legibility. A compact card's one line may go further.
-      .minimumScaleFactor(compact ? Metrics.compactTitleMinimumScale : Metrics.titleMinimumScale)
+  private var touchBody: some View {
+    Group {
+      if isLead { leadContent } else { cellContent }
+    }
+    .contentShape(Rectangle())
+    .opacity(item.isEnabled ? 1 : Metrics.disabledOpacity)
+    .accessibilityElement(children: .combine)
+    .accessibilityValue(value ?? "")
   }
+
+  /// Resume: dark ink on a solid pill, the one bright thing on the screen.
+  private var leadContent: some View {
+    let accent = platformAccent ?? ICubeDesign.color(.accent)
+    return HStack(spacing: Touch.leadSpacing) {
+      if let icon = item.icon {
+        Image(systemName: icon).font(size.leadGlyphFont)
+      }
+      Text(item.title)
+        .font(ICubeDesign.displayFont(size: size.leadTitle, relativeTo: .headline, bold: true))
+        .lineLimit(1)
+        .minimumScaleFactor(Touch.titleMinimumScale)
+    }
+    .foregroundStyle(Touch.leadInk)
+    .padding(.horizontal, Touch.leadHorizontalPadding)
+    .frame(maxWidth: .infinity)
+    .frame(height: size.leadHeight)
+    .background(Capsule().fill(Touch.leadFill))
+    .overlay {
+      if focused { Capsule().strokeBorder(accent, lineWidth: ICubeDesign.Card.borderWidth) }
+    }
+  }
+
+  private var cellContent: some View {
+    let accent = platformAccent ?? ICubeDesign.color(.accent)
+    let shape = RoundedRectangle(cornerRadius: size.focusCornerRadius, style: .continuous)
+    return VStack(spacing: size.cellSpacing) {
+      glyph
+      VStack(spacing: Touch.titleValueSpacing) {
+        Text(item.title)
+          .font(ICubeDesign.displayFont(size: size.title, relativeTo: .footnote))
+          .foregroundStyle(ICubeDesign.color(.textPrimary))
+          .multilineTextAlignment(.center)
+          // A single word shrinks rather than breaking across two lines.
+          .lineLimit(value == nil && item.title.contains(" ") ? 2 : 1)
+          .minimumScaleFactor(Touch.titleMinimumScale)
+        if let value {
+          Text(value)
+            .font(size.value)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+            .lineLimit(1)
+            .minimumScaleFactor(Touch.valueMinimumScale)
+        }
+      }
+    }
+    .padding(.horizontal, Touch.cellHorizontalPadding)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .padding(.top, Touch.cellTopPadding)
+    .frame(height: size.cellHeight)
+    .background {
+      if focused { shape.fill(ICubeDesign.Card.surface) }
+    }
+    .overlay {
+      if focused { shape.strokeBorder(accent, lineWidth: ICubeDesign.Card.borderWidth) }
+    }
+  }
+
+  @ViewBuilder private var glyph: some View {
+    if let icon = item.icon {
+      Image(systemName: icon)
+        // The solid glyphs hold up at this size; a symbol with no fill form stays as it is.
+        .symbolVariant(.fill)
+        .font(size.glyphFont)
+        .foregroundStyle(isActive ? Color.white : tone)
+        .frame(width: size.circle, height: size.circle)
+        .background {
+          if isActive {
+            Circle().fill(tone.gradient)
+          } else {
+            Circle().fill(Touch.glassFill)
+          }
+        }
+        .overlay(Circle().strokeBorder(Touch.glassEdge, lineWidth: ICubeDesign.Line.hairline.rawValue))
+    }
+  }
+  #endif
 }
 
+#if os(iOS)
+/// The plain line under the iPhone and iPad tiles: what the focused or last touched tile does.
+struct PauseHintLine: View {
+  let text: String
+
+  private typealias Touch = ICubeDesign.PauseCard.Touch
+
+  var body: some View {
+    Text(text)
+      .font(Touch.hintFont)
+      .foregroundStyle(ICubeDesign.color(.textSecondary))
+      .multilineTextAlignment(.center)
+      .lineLimit(2)
+      .minimumScaleFactor(Touch.valueMinimumScale)
+      .frame(maxWidth: .infinity)
+      .frame(height: Touch.hintHeight)
+      .id(text)
+      .transition(.opacity)
+      .animation(ICubeDesign.Motion.selection, value: text)
+  }
+}
+#endif
+
+#if os(tvOS)
 /// A tile's or the help shelf's current value, as a `tag` capsule in the platform accent.
 struct PauseValueChip: View {
   let text: String
@@ -166,22 +277,17 @@ struct PauseHelpShelf<Trailing: View>: View {
   }
 }
 
-extension PauseHelpShelf where Trailing == EmptyView {
-  init(item: MenuItem?, placeholder: String = "") {
-    self.init(item: item, placeholder: placeholder) { EmptyView() }
-  }
-}
+#endif
 
 extension ICubeDesign {
-  /// Pause card and help-shelf geometry. tvOS keeps iFly's 1080p numbers (`TVPause`); iPhone and iPad scale them
-  /// down for touch, with a shorter compact card for iPhone landscape.
+  /// Pause card and help-shelf geometry: iFly's 1080p numbers on tvOS (`TVPause`). The iPhone and iPad tile has its
+  /// own (`PauseCard.Touch`).
   enum PauseCard {
     #if os(tvOS)
     static let cornerRadius: CGFloat = Card.cornerRadius
     static let glyphTitleSpacing: CGFloat = Spacing.s.rawValue
     static let chipInset: CGFloat = Spacing.s.rawValue
     static let titleFont: Font = ICubeDesign.standard.font(.nav)
-    static let largeTitleFont: Font = titleFont
     static let shelfBodyFont: Font = ICubeDesign.standard.font(.body)
     static let shelfHeight: CGFloat = TVPause.footerHeight
     static let shelfCornerRadius: CGFloat = TVPause.footerCornerRadius
@@ -189,66 +295,22 @@ extension ICubeDesign {
     static let shelfGlyphColumn: CGFloat = IconBadge.size
     static let shelfSpacing: CGFloat = Spacing.l.rawValue
     static let shelfHorizontalPadding: CGFloat = Spacing.l.rawValue
-    /// A TV card is wide enough that the chip never reaches the centred glyph.
-    static let chipClearance: CGFloat = 0
     static let shelfFillOpacity: Double = TVPause.footerFillOpacity
-    #else
-    static let cornerRadius: CGFloat = 16
-    static let glyphTitleSpacing: CGFloat = Spacing.xs.rawValue
-    static let chipInset: CGFloat = 6
-    /// 13 pt display face: "PERFORMANCE HUD" fits a third of an iPhone in two lines.
-    static let titleFont: Font = ICubeDesign.displayFont(size: 13, relativeTo: .footnote)
-    static let largeTitleFont: Font = ICubeDesign.displayFont(size: 15, relativeTo: .subheadline)
-    static let shelfBodyFont: Font = .subheadline
-    static let shelfHeight: CGFloat = 64
-    static let shelfCornerRadius: CGFloat = 14
-    static let shelfGlyph: CGFloat = 20
-    static let shelfGlyphColumn: CGFloat = 28
-    static let shelfSpacing: CGFloat = Spacing.s.rawValue
-    static let shelfHorizontalPadding: CGFloat = Spacing.m.rawValue
-    /// A phone card is about as wide as the chip plus the glyph: the glyph and title sit below the chip's row.
-    static let chipClearance: CGFloat = 18
-    /// Cards scroll under the shelf on a phone, so it is nearly opaque.
-    static let shelfFillOpacity: Double = 0.92
-    #endif
-    /// iOS card grid (`MenuStyle.cards`); tvOS spaces its grid with `TVPause`.
-    static let gridSpacing: CGFloat = 12
-    static let sectionSpacing: CGFloat = 16
-    /// Room inside the cards' scroll view for the focus scale and glow. Small on a phone: the band also lets cards
-    /// scroll under the hero above.
-    static let scrollInset: CGFloat = 14
     static let titleMinimumScale: CGFloat = 0.85
-    static let compactTitleMinimumScale: CGFloat = 0.7
     static let shelfMinimumScale: CGFloat = 0.8
-    static let disabledOpacity: Double = 0.45
     static let focusedChipOpacity: Double = 0.35
     static let shelfBorderOpacity: Double = TVPause.footerBorderOpacity
     static var shelfGlyphFont: Font { .system(size: shelfGlyph, weight: .medium) }
 
-    static func glyphFont(prominent: Bool, compact: Bool, large: Bool) -> Font {
-      .system(size: glyphSize(prominent: prominent, compact: compact, large: large), weight: .medium)
+    static func glyphFont(prominent: Bool) -> Font {
+      .system(size: prominent ? Symbol.tilePrimary.rawValue : Symbol.tile.rawValue, weight: .medium)
     }
 
-    /// `large`: an iPad (regular width).
-    static func height(prominent: Bool, compact: Bool, large: Bool) -> CGFloat {
-      #if os(tvOS)
-      return prominent ? TVPause.primaryTileHeight : TVPause.tileHeight
-      #else
-      if compact { return prominent ? 60 : 54 }
-      if large { return prominent ? 136 : 124 }
-      return prominent ? 104 : 96
-      #endif
+    static func height(prominent: Bool) -> CGFloat {
+      prominent ? TVPause.primaryTileHeight : TVPause.tileHeight
     }
-
-    static func glyphSize(prominent: Bool, compact: Bool, large: Bool) -> CGFloat {
-      #if os(tvOS)
-      return prominent ? Symbol.tilePrimary.rawValue : Symbol.tile.rawValue
-      #else
-      if compact { return 17 }
-      if large { return prominent ? 32 : 28 }
-      return prominent ? 26 : 22
-      #endif
-    }
+    #endif
+    static let disabledOpacity: Double = 0.45
   }
 
   /// The display face at an explicit size (the type roles' sizes are fixed), following Dynamic Type on iOS.

@@ -20,9 +20,9 @@ final class PauseTileLayoutTests: XCTestCase {
   }
 
   func test_cardColumns_byGridWidth() {
-    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 370), 3, "iPhone portrait")
-    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 528), 4, "iPhone landscape beside the hero")
-    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 752), 4, "iPad portrait beside the hero")
-    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 1096), 5, "iPad landscape beside the hero")
+    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 370), 4, "iPhone portrait")
+    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 528), 6, "iPhone landscape beside the hero")
+    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 752), 6, "iPad portrait beside the hero")
+    XCTAssertEqual(PauseTileLayout.cardColumns(forGridWidth: 1096), 8, "iPad landscape beside the hero")
   }
 }

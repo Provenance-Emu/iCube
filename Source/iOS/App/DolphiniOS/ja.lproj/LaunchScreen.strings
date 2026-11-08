@@ -1,2 +1,5 @@
 /* Static launch identity; credits remain in About. */
 "SUB-ti-tle.text" = "GameCube & Wii";
+
+/* Class = "UILabel"; text = "iCube"; ObjectID = "APP-na-me"; */
+"APP-na-me.text" = "iCube";

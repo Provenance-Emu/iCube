@@ -310,6 +310,21 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     }
   }
 
+  func test_touchLayout_sessionRowThenQuickAndGame_keepsEveryTileOnce() {
+    let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    let touch = PauseMenuModelBuilder.touchLayout(model)
+    XCTAssertEqual(touch.sections.map(\.id), ["primary", "quick", "game"])
+    XCTAssertNil(touch.sections[0].header)
+    XCTAssertEqual(touch.sections[0].items.map(\.id), ["resume", "reset", "exit"])
+    XCTAssertEqual(touch.sections[1].items.map(\.id), ["quick-save", "quick-load", "save-states", "fast-forward", "screenshot", "record"])
+    XCTAssertEqual(touch.sections[2].items.first?.id, "change-disc")
+    XCTAssertEqual(touch.sections[2].items.last?.id, "settings")
+    XCTAssertTrue(touch.sections[2].items.contains { $0.id == "perf-hud" })
+    let ids = touch.sections.flatMap(\.items).map(\.id)
+    XCTAssertEqual(ids.count, Set(ids).count)
+    XCTAssertEqual(Set(ids), Set(model.sections.flatMap(\.items).map(\.id)).subtracting(PauseMenuModelBuilder.audioPaneIDs))
+  }
+
   func test_primaryLayout_primaryRowThenOptions_keepsEveryTileOnce() {
     let model = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     let tv = PauseMenuModelBuilder.primaryLayout(model)

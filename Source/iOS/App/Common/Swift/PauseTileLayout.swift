@@ -27,13 +27,13 @@ enum PauseTileLayout {
     return width >= heroColumnMinWidth ? iPadHero : bannerHero
   }
 
-  /// Cards per row for the width the grid gets: three on a phone in portrait, four in landscape and on an iPad in
-  /// portrait, five on a landscape iPad. Fewer, wider cards than the old tiles: a centred glyph and title need room.
+  /// Cells per row for the width the grid gets: four on a phone in portrait, six in landscape and on an iPad in
+  /// portrait, eight on a landscape iPad. Even, so Resume can span exactly half a row.
   static func cardColumns(forGridWidth width: CGFloat) -> Int {
     switch width {
-    case ..<520: return 3
-    case ..<900: return 4
-    default: return 5
+    case ..<500: return 4
+    case ..<900: return 6
+    default: return 8
     }
   }
 }

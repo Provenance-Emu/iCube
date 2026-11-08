@@ -11,11 +11,18 @@ import UIKit
 /// The room ignores the safe area, so nothing is left black at the screen edges. Static: nothing animates.
 struct ICubeTVRoomBackground: View {
   var art: UIImage?
+  /// iPhone and iPad: the game's art fills the room, saturated and darkened, in place of the gradient and blobs, so
+  /// the screen takes each game's colours. Without art it is the ordinary room.
+  var artForward = false
   @Environment(\.icubePlatformAccent) private var platformAccent
 
   var body: some View {
     GeometryReader { proxy in
-      room(scale: RoomScale(size: proxy.size))
+      if artForward, let art {
+        artRoom(art)
+      } else {
+        room(scale: RoomScale(size: proxy.size))
+      }
     }
     .ignoresSafeArea()
     .allowsHitTesting(false)
@@ -34,6 +41,25 @@ struct ICubeTVRoomBackground: View {
     }
 
     func offset(_ offset: CGSize) -> CGSize { CGSize(width: offset.width * x, height: offset.height * y) }
+  }
+
+  private func artRoom(_ art: UIImage) -> some View {
+    let room = ICubeDesign.TVRoom.self
+    return ZStack {
+      Color.black
+      // An overlay on a flexible view, so the fill-scaled image never widens the room.
+      Color.clear
+        .overlay {
+          Image(uiImage: art).resizable().scaledToFill()
+            .blur(radius: room.forwardArtBlur)
+            .saturation(room.forwardArtSaturation)
+        }
+        .clipped()
+      LinearGradient(colors: [.black.opacity(room.forwardScrimTop), .black.opacity(room.forwardScrimBottom)],
+                     startPoint: .top, endPoint: .bottom)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .clipped()
   }
 
   private func room(scale: RoomScale) -> some View {
