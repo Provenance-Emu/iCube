@@ -11,15 +11,26 @@ enum TVLibraryRailDestination: Hashable {
   case all
   /// One platform's games.
   case platform(LibraryPlatformCategory)
+  /// A nearby device's shared library, by its pairing id (`NearbyLibrariesModel.Peer.id`).
+  case nearby(String)
 
   /// L1/R1 on a controller: My Library, All Games, then each platform the rail shows, wrapping around.
-  /// A destination the rail no longer shows (its platform's last game was removed) steps from My Library.
+  /// A destination the rail no longer shows (its platform's last game was removed) steps from My Library, and so
+  /// does a nearby library: the shoulders page through this device's games, not other devices.
   func stepped(by delta: Int, platforms: [LibraryPlatformCategory]) -> TVLibraryRailDestination {
     let order: [TVLibraryRailDestination] = [.home, .all] + platforms.map { .platform($0) }
     let index = order.firstIndex(of: self) ?? 0
     let count = order.count
     return order[((index + delta) % count + count) % count]
   }
+}
+
+/// A nearby library as the rail lists it.
+struct TVLibraryRailPeer: Identifiable, Equatable {
+  let id: String
+  let name: String
+  /// SF Symbol for the device kind.
+  let glyph: String
 }
 
 #if os(tvOS)
@@ -30,6 +41,8 @@ struct TVLibraryRail: View {
   @Binding var searchText: String
   @Binding var presentedMenu: TVToolbarSheet?
   let platforms: [LibraryPlatformCategory]
+  /// Nearby devices sharing their library, listed after the platforms.
+  var nearbyPeers: [TVLibraryRailPeer] = []
   let isSelecting: Bool
   let onToggleSelect: () -> Void
   let onSettings: () -> Void
@@ -51,6 +64,7 @@ struct TVLibraryRail: View {
     case library
     case all
     case platform(LibraryPlatformCategory)
+    case nearby(String)
     case select
     case importGames
     case view
@@ -82,6 +96,16 @@ struct TVLibraryRail: View {
           selected: destination == .platform(platform)
         ) {
           destination = .platform(platform)
+        }
+      }
+      ForEach(nearbyPeers) { peer in
+        libraryRow(
+          icon: .symbol(peer.glyph),
+          title: peer.name,
+          item: .nearby(peer.id),
+          selected: destination == .nearby(peer.id)
+        ) {
+          destination = .nearby(peer.id)
         }
       }
       Spacer(minLength: ICubeDesign.Spacing.l.rawValue)
@@ -133,6 +157,10 @@ struct TVLibraryRail: View {
       DispatchQueue.main.asyncAfter(deadline: .now() + Self.stuckMoveDelay) {
         if (item != nil && focusedItem == item) || (onField && searchFieldFocused) { onStuckRight() }
       }
+    }
+    .onChange(of: nearbyPeers.map(\.id)) { _, ids in
+      // A focused row that vanishes leaves tvOS focus nowhere and the remote dead; hand it to My Library.
+      if case .nearby(let id) = focusedItem, !ids.contains(id) { focusedItem = .library }
     }
     .onChange(of: focusedItem) { _, item in
       if item == nil, !searchFieldFocused, !searchActivating {

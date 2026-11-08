@@ -20,6 +20,7 @@ struct ContinuityPeerLibraryView: View {
         identity: ContinuityManager.shared.identity
     )
     @State private var pairingCode = ""
+    @State private var codeRejected = false
 
     var body: some View {
         List {
@@ -36,13 +37,11 @@ struct ContinuityPeerLibraryView: View {
                 }
 
             case .awaitingPairing:
-                Section {
-                    Text(L("Enter the 6-digit code shown on the other device."))
-                    TextField(L("000000"), text: $pairingCode)
-                    Button(L("Pair")) {
-                        Task { await controller.submitPairingCode(pairingCode) }
-                    }
-                    .disabled(pairingCode.count != 6 || !pairingCode.allSatisfy(\.isNumber))
+                Section(footer: codeRejected ? Text(L("That code didn't match. Check the other device and try again.")) : nil) {
+                    Text(String(format: L("Enter the 6-digit code shown on %@."), peerName))
+                    ContinuityPairingCodeField(code: $pairingCode, onSubmit: submit)
+                    Button(L("Pair")) { submit(pairingCode) }
+                        .disabled(!ContinuityPairingCodeField.isComplete(pairingCode))
                     Button(L("Cancel"), role: .destructive) { controller.cancel() }
                 }
 
@@ -103,6 +102,17 @@ struct ContinuityPeerLibraryView: View {
         .navigationTitle(peerName)
         .task { await controller.load(from: advertisement) }
         .onDisappear { controller.cancel() }
+    }
+
+    /// The controller drops back to `.awaitingPairing` on a wrong code without
+    /// saying so; the footer is how the user finds out.
+    private func submit(_ code: String) {
+        guard ContinuityPairingCodeField.isComplete(code) else { return }
+        pairingCode = ""
+        Task {
+            await controller.submitPairingCode(code)
+            codeRejected = controller.phase == .awaitingPairing
+        }
     }
 
     private static func transferred(_ progress: PullProgress) -> String {

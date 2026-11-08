@@ -556,6 +556,17 @@ struct TVLibraryView: View {
   @Environment(\.tipsService) private var tipsService
 
   @StateObject private var model = TVLibraryViewModel()
+  /// Other devices sharing their library on this network.
+  @ObservedObject private var nearby = NearbyLibrariesModel.shared
+  /// A nearby library opened in a sheet (iOS cards; the empty library on iOS).
+  @State private var nearbySheet: NearbySheetRoute?
+#if os(tvOS)
+  /// The nearby library's first control, where a right press out of the rail lands.
+  @FocusState private var tvNearbyFocus: Bool
+  /// Set when the empty state opens a nearby device: the rail appears with the column and takes the default focus
+  /// after the hand-off was sent, so the first time it does, focus goes on into the column.
+  @State private var tvNearbyFocusPending = false
+#endif
   @State private var networkPlayRequest: NetworkPlayRequest?
 #if DEBUG
   @State private var didPresentNetworkPlayPreview = false
@@ -618,6 +629,29 @@ struct TVLibraryView: View {
       .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
         SaveStateFilmstripView(gameID: route.id)
       }
+      .sheet(item: $nearbySheet) { route in
+        NearbyPeerLibrarySheet(peerID: route.id, ownedGameIDs: ownedGameIDs) { nearbySheet = nil }
+      }
+      .onAppear { nearby.setLibraryVisible(true) }
+      .onDisappear { nearby.setLibraryVisible(false) }
+  }
+
+  private struct NearbySheetRoute: Identifiable {
+    let id: String
+  }
+
+  /// Disc IDs in this library, so a nearby library can mark what is already here.
+  private var ownedGameIDs: Set<String> {
+    Set(model.games.map(\.gameID).filter { !$0.isEmpty })
+  }
+
+  /// The tvOS column shows a nearby library; it does so even with no local games.
+  private var showsNearbyColumn: Bool {
+#if os(tvOS)
+    tvNearbyPeerID != nil
+#else
+    false
+#endif
   }
 
   @ViewBuilder
@@ -869,7 +903,9 @@ struct TVLibraryView: View {
       ICubeRoom(style: LibraryBackgroundStyle(rawValue: backgroundStyle.rawValue) ?? .gradient)
 #endif
 
-      if model.games.isEmpty {
+      if showsNearbyColumn {
+        libraryView
+      } else if model.games.isEmpty {
         emptyLibraryView
       } else if filteredGames(from: model.games).isEmpty {
         filteredEmptyLibraryView
@@ -993,7 +1029,30 @@ struct TVLibraryView: View {
       platformFilter = .all
     case .platform(let category):
       platformFilter = category
+    case .nearby:
+      // Leaves the persisted platform filter alone; another device's library is not a filter on this one.
+      break
     }
+  }
+
+  /// The nearby device the column shows, if any.
+  private var tvNearbyPeerID: String? {
+    if case .nearby(let id) = tvLibraryDestination { return id }
+    return nil
+  }
+
+  private var tvRailNearbyPeers: [TVLibraryRailPeer] {
+    nearby.peers.map {
+      TVLibraryRailPeer(id: $0.id, name: $0.name, glyph: NearbyLibrariesModel.glyph(for: $0.deviceType))
+    }
+  }
+
+  /// The column header's subtitle: the nearby device and its status, or the local view and count.
+  private func tvHeaderSubtitle(count: Int) -> String {
+    if let id = tvNearbyPeerID, let peer = nearby.peer(withID: id) {
+      return "\(peer.name) · \(nearby.subtitle(for: peer))"
+    }
+    return Self.libraryHeaderSubtitle(destination: libraryHeaderDestination(), count: count)
   }
 
   /// Subtitle under the "iCube" title: the view's name, plus the game count on the grid views.
@@ -1005,6 +1064,8 @@ struct TVLibraryView: View {
       return "\(L("All Games")) · \(count)"
     case .platform(let category):
       return "\(category.displayName) · \(count)"
+    case .nearby:
+      return L("Nearby Library")
     }
   }
 
@@ -1106,7 +1167,7 @@ struct TVLibraryView: View {
           VStack(alignment: .leading, spacing: 0) {
             ICubeLeafHeader(
               title: "iCube",
-              subtitle: Self.libraryHeaderSubtitle(destination: libraryHeaderDestination(), count: displayGames.count)
+              subtitle: tvHeaderSubtitle(count: displayGames.count)
             )
             .padding(.leading, TVLayout.leadingInset)
             .animation(ICubeDesign.Motion.selection, value: tvLibraryDestination)
@@ -1125,6 +1186,7 @@ struct TVLibraryView: View {
           searchText: $searchText,
           presentedMenu: $tvToolbarSheet,
           platforms: tvRailPlatforms,
+          nearbyPeers: tvRailNearbyPeers,
           isSelecting: isSelectionMode,
           onToggleSelect: {
             if isSelectionMode {
@@ -1137,13 +1199,24 @@ struct TVLibraryView: View {
           // The content is disabled while the rail holds focus, so every right press out of the rail lands
           // here: on the card focused last, or the first one.
           onStuckRight: {
+            if tvNearbyPeerID != nil {
+              focusNearbyColumn()
+              return
+            }
             guard let target = tvRailExitTarget(displayGames) else { return }
             tvRailHasFocus = false
             scroller.scrollTo(Self.tvScrollID(for: target))
             // Next runloop: the content has to be enabled, and a lazy card realised, before it can take focus.
             DispatchQueue.main.async { tvCardFocus = target }
           },
-          onFocusChange: { tvRailHasFocus = $0 }
+          onFocusChange: { railFocused in
+            if railFocused, tvNearbyFocusPending, tvNearbyPeerID != nil {
+              tvNearbyFocusPending = false
+              focusNearbyColumn()
+              return
+            }
+            tvRailHasFocus = railFocused
+          }
         )
         .padding(.leading, TVLayout.railInset)
         .padding(.bottom, ICubeDesign.Spacing.xl.rawValue)
@@ -1160,6 +1233,13 @@ struct TVLibraryView: View {
     .onChange(of: tvLibraryDestination) { _, destination in
       applyTVLibraryDestination(destination)
     }
+    .onChange(of: nearby.peers.map(\.id)) { _, ids in
+      // The device left the network: back to this library rather than a dead column.
+      if let id = tvNearbyPeerID, !ids.contains(id) { tvLibraryDestination = .home }
+    }
+    // The hand-off landed (or the user left the device): a later move into the rail is the user's own.
+    .onChange(of: tvNearbyFocus) { _, focused in if focused { tvNearbyFocusPending = false } }
+    .onChange(of: tvNearbyPeerID) { _, id in if id == nil { tvNearbyFocusPending = false } }
     .modifier(TVCardFocusMemory(focus: $tvCardFocus, last: $tvLastCardFocus))
     .controllerScope(tvShoulderScopeID)
     .onReceive(ControllerFocusCoordinator.shared.$activeScope) { active in
@@ -1179,7 +1259,7 @@ struct TVLibraryView: View {
   /// card's lift and glow fade out instead of stopping at a box.
   private func tvLibraryScroller(_ displayGames: [TVGameItem], columnWidth: CGFloat, scroller: ScrollViewProxy) -> some View {
     let metrics = tvGridMetrics(columnWidth: columnWidth - TVLibraryScrollIndex.width - TVLayout.indexTrailing)
-    let buckets = tvScrollIndex(for: displayGames, columns: metrics.count)
+    let buckets = tvNearbyPeerID != nil ? [] : tvScrollIndex(for: displayGames, columns: metrics.count)
     let gridMetrics = buckets.isEmpty ? tvGridMetrics(columnWidth: columnWidth) : metrics
     // One read of the override store per render, not one per card.
     let overrides = platformOverrides
@@ -1193,10 +1273,14 @@ struct TVLibraryView: View {
     return HStack(alignment: .center, spacing: 0) {
       ScrollView {
         VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xl.rawValue) {
-          if tvShowsHomeShelves {
-            libraryHomeShelves(tvHomeShelves(), spacing: gridMetrics.spacing, platform: platform)
+          if let peerID = tvNearbyPeerID {
+            tvNearbyColumn(peerID)
+          } else {
+            if tvShowsHomeShelves {
+              libraryHomeShelves(tvHomeShelves(), spacing: gridMetrics.spacing, platform: platform)
+            }
+            tvLibraryGrid(displayGames, metrics: gridMetrics, platform: platform)
           }
-          tvLibraryGrid(displayGames, metrics: gridMetrics, platform: platform)
         }
       }
       .scrollClipDisabled()
@@ -1230,6 +1314,23 @@ struct TVLibraryView: View {
         .focusSection()
       }
     }
+  }
+
+  /// A nearby device's library in the column, with pairing inline when this device is not paired yet.
+  @ViewBuilder
+  private func tvNearbyColumn(_ peerID: String) -> some View {
+    Group {
+      if let peer = nearby.peer(withID: peerID) {
+        NearbyPeerLibraryView(peer: peer, ownedGameIDs: ownedGameIDs, showsHeader: false, initialFocus: $tvNearbyFocus)
+          .id(peer.id)
+      } else {
+        tvEmptyStateRow(L("Back to My Library"), systemImage: "house.fill") { tvLibraryDestination = .home }
+          .frame(maxWidth: ICubeDesign.Motion.railExpandedWidth * 2)
+      }
+    }
+    .focusSection()
+    .padding(.leading, TVLayout.leadingInset)
+    .padding(.trailing, TVLayout.contentInset)
   }
 
   /// Home: Recently Played and Favorites as shelves above the full library grid.
@@ -1304,12 +1405,13 @@ struct TVLibraryView: View {
     switch libraryHeaderDestination() {
     case .home, .all: return L("All Games")
     case .platform(let category): return category.displayName
+    case .nearby: return L("Nearby Library")
     }
   }
 
   private func libraryGridSectionAccent() -> Color {
     switch libraryHeaderDestination() {
-    case .home, .all: return ICubeDesign.color(.accent)
+    case .home, .all, .nearby: return ICubeDesign.color(.accent)
     case .platform(let category): return ICubeDesign.platformAccent(category)
     }
   }
@@ -1357,6 +1459,11 @@ struct TVLibraryView: View {
       let cardSize = LibraryLayout.cardSize(availableWidth: available, columns: count, spacing: spacingH)
       ScrollViewReader { scr in
         ScrollView {
+          if !isSearching, !nearby.peers.isEmpty {
+            NearbyLibrariesStrip(model: nearby) { nearbySheet = NearbySheetRoute(id: $0.id) }
+              .padding(.horizontal, paddingH)
+              .padding(.top, Constants.gridVerticalSpacing / 2)
+          }
           if !isSearching, let favs = favorites(), !favs.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
               // Premium favorites header
@@ -1592,21 +1699,54 @@ struct TVLibraryView: View {
     }
   }
 
-  /// tvOS only: the iOS empty state is unchanged, and this row is too wide for a phone.
+  /// tvOS: focusable rows for every way in, nearby libraries first. iOS: the nearby cards only; the rest of the iOS
+  /// empty state is unchanged, and the tvOS rows are too wide for a phone.
   @ViewBuilder
   private var emptyLibraryActions: some View {
 #if os(tvOS)
     VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+      ForEach(nearby.peers) { peer in
+        tvEmptyStateRow(
+          String(format: L("Browse %@"), peer.name),
+          systemImage: NearbyLibrariesModel.glyph(for: peer.deviceType)
+        ) {
+          tvLibraryDestination = .nearby(peer.id)
+          // The rail appears with the column and takes focus; the user chose this device, so hand focus to its
+          // library (the code field, or its first cover).
+          tvNearbyFocusPending = true
+          focusNearbyColumn()
+        }
+      }
       tvEmptyStateRow(L("Upload via Wi-Fi…"), systemImage: "wifi") { showWebImportSheet = true }
       tvEmptyStateRow(L("Manage Sources"), systemImage: "externaldrive.badge.plus") { showSources = true }
       tvEmptyStateRow(L("Rescan"), systemImage: "arrow.clockwise") { model.rescan() }
         .disabled(model.isRescanning)
     }
     .frame(maxWidth: ICubeDesign.Motion.railExpandedWidth * 2)
+#else
+    if !nearby.peers.isEmpty {
+      NearbyLibrariesStrip(model: nearby) { nearbySheet = NearbySheetRoute(id: $0.id) }
+        .frame(maxWidth: Self.emptyNearbyMaxWidth)
+    }
 #endif
   }
 
+#if !os(tvOS)
+  /// The empty library's nearby cards stay a readable width on an iPad.
+  private static let emptyNearbyMaxWidth: CGFloat = 600
+#endif
+
 #if os(tvOS)
+  /// Long enough for the column to be enabled (and, from the empty state, on screen) before focus is sent into it.
+  /// A request on the same runloop as `tvRailHasFocus = false` is rejected: the column is still disabled then.
+  private static let nearbyFocusDelay: TimeInterval = 0.15
+
+  /// Moves focus out of the rail into the nearby device's column: its code field, or its first cover.
+  private func focusNearbyColumn() {
+    tvRailHasFocus = false
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.nearbyFocusDelay) { tvNearbyFocus = true }
+  }
+
   /// One focusable row of the tvOS empty states.
   private func tvEmptyStateRow(_ title: String, systemImage: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
@@ -3240,6 +3380,9 @@ struct TVLibraryView: View {
     case .platform(let category):
       title = category.displayName
       count = LibraryPlatformMapper.count(in: model.games, for: category, overrides: platformOverrides)
+    case .nearby:
+      // `stepped` never lands on a nearby library.
+      return
     }
     NotificationCenter.default.post(
       name: NSNotification.Name("DOLShowSnackbar"),

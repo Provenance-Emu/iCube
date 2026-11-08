@@ -319,13 +319,11 @@ private struct ContinuityPeerDetailView: View {
             // A code entry field and a submit button are separate rows: on tvOS
             // a row holding both would collapse into one focus target and the
             // button would be unreachable.
-            Text(L("Enter the 6-digit code shown on the other device."))
+            Text(String(format: L("Enter the 6-digit code shown on %@."), peer.serviceName))
                 .foregroundColor(.secondary)
-            TextField(L("000000"), text: $pairingCode)
-            Button(L("Pair")) {
-                Task { await controller.submitPairingCode(pairingCode) }
-            }
-            .disabled(pairingCode.count != 6)
+            ContinuityPairingCodeField(code: $pairingCode, onSubmit: submitPairingCode)
+            Button(L("Pair")) { submitPairingCode(pairingCode) }
+                .disabled(!ContinuityPairingCodeField.isComplete(pairingCode))
             Button(L("Cancel"), role: .destructive) { controller.cancel() }
         case .fetchingManifest:
             Text(L("Asking the other device to save…")).foregroundColor(.secondary)
@@ -337,6 +335,12 @@ private struct ContinuityPeerDetailView: View {
         case .finished(let outcome):
             Text(Self.describe(outcome))
         }
+    }
+
+    private func submitPairingCode(_ code: String) {
+        guard ContinuityPairingCodeField.isComplete(code) else { return }
+        pairingCode = ""
+        Task { await controller.submitPairingCode(code) }
     }
 
     private var isBusy: Bool {

@@ -104,6 +104,8 @@ final class ContinuityManager: ObservableObject {
     private var browseGeneration: UInt64 = 0
     private var manualBrowsing = false
     private var mirrorBrowsing = false
+    /// The library screen lists nearby libraries while it is on screen.
+    private var libraryBrowsing = false
 
     /// Absolute path of the disc image currently being offered.
     ///
@@ -408,8 +410,17 @@ final class ContinuityManager: ObservableObject {
         reconcileBrowsing()
     }
 
+    /// Held by `NearbyLibrariesModel` while the library is visible. Separate
+    /// from `startBrowsing`/`stopBrowsing`: leaving Settings' Nearby screen
+    /// must not stop discovery the library still shows.
+    func setLibraryBrowsingRequired(_ required: Bool) {
+        guard libraryBrowsing != required else { return }
+        libraryBrowsing = required
+        reconcileBrowsing()
+    }
+
     private func reconcileBrowsing() {
-        guard manualBrowsing || mirrorBrowsing else {
+        guard manualBrowsing || mirrorBrowsing || libraryBrowsing else {
             browseGeneration &+= 1
             browseTask?.cancel()
             browseTask = nil

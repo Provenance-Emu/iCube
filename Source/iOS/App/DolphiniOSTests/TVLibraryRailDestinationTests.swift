@@ -27,4 +27,9 @@ final class TVLibraryRailDestinationTests: XCTestCase {
   func testWithoutPlatformsItTogglesMyLibraryAndAllGames() {
     XCTAssertEqual(TVLibraryRailDestination.all.stepped(by: 1, platforms: []), .home)
   }
+
+  func testANearbyLibraryStepsFromMyLibrary() {
+    XCTAssertEqual(TVLibraryRailDestination.nearby("peer").stepped(by: 1, platforms: platforms), .all)
+    XCTAssertEqual(TVLibraryRailDestination.nearby("peer").stepped(by: -1, platforms: platforms), .platform(.wii))
+  }
 }
