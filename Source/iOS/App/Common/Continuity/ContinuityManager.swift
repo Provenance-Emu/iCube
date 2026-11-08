@@ -98,6 +98,17 @@ final class ContinuityManager: ObservableObject {
     /// releasing the lifecycle HOLD, and `WebServerLifecyclePolicy` counts
     /// begin/end notifications, so an unbalanced pair unbinds the socket.
     private var holdsLibraryServerSession = false
+    /// The advert the network should see (handoff or library presence). Kept while
+    /// the server is down, so the record comes back when the server does.
+    private var wantedAdvertisement: ContinuityAdvertisement?
+    /// The port the live Bonjour record names; `nil` while nothing is published.
+    private var advertisedPort: Int?
+    /// Re-checks the server while an advert is wanted. The PVWebServer facade has
+    /// no state callback, and iOS can defunct the listener while iCube is suspended.
+    private var serverWatchTask: Task<Void, Never>?
+    private var foregroundObserver: NSObjectProtocol?
+    /// Serialises advert syncs: two interleaved ones would each publish a record.
+    private var advertSyncTask: Task<Void, Never>?
     private let browser = ContinuityBrowser()
     private var browseTask: Task<Void, Never>?
     private var browserStopTask: Task<Void, Never>?
@@ -229,9 +240,7 @@ final class ContinuityManager: ObservableObject {
             return
         }
 
-        let advertiser = ContinuityBonjourAdvertiser(port: Self.serverPort())
-        self.advertiser = advertiser
-        await advertiser.publish(ContinuityAdvertisement(
+        await publishAdvertisement(ContinuityAdvertisement(
             sessionId: session.sessionId,
             token: session.token,
             game: identity,
@@ -353,18 +362,16 @@ final class ContinuityManager: ObservableObject {
             holdsLibraryServerSession = true
             NotificationCenter.default.post(name: .continuitySessionDidBegin, object: nil)
         }
-        // Already publishing. The hold above is idempotent and the record does
-        // not need replacing, so there is nothing else to do.
-        guard advertiser == nil else { return }
+        // Already publishing (or waiting for the server to come back). The hold
+        // above is idempotent and the server watch keeps the record current.
+        guard wantedAdvertisement == nil else { return }
 
         guard let candidates = await Self.awaitServerURLCandidates(), !candidates.isEmpty else {
             lastError = L("Couldn't start the local server, so other devices can't see this library. Check that Wi-Fi is on.")
             await stopAdvertisingLibrary()
             return
         }
-        let advertiser = ContinuityBonjourAdvertiser(port: Self.serverPort())
-        self.advertiser = advertiser
-        await advertiser.publish(ContinuityAdvertisement(
+        await publishAdvertisement(ContinuityAdvertisement(
             sessionId: UUID().uuidString,
             token: "",
             game: nil,
@@ -391,8 +398,95 @@ final class ContinuityManager: ObservableObject {
     /// and releasing the hold in between would stop and restart the listener
     /// for no reason. See the call site in `beginHandoff`.
     private func withdrawAdvertisement() async {
-        await advertiser?.withdraw()
+        wantedAdvertisement = nil
+        serverWatchTask?.cancel()
+        serverWatchTask = nil
+        await takeDownRecord()
+    }
+
+    /// Withdraws the live record but keeps `wantedAdvertisement`.
+    private func takeDownRecord() async {
+        let live = advertiser
         advertiser = nil
+        advertisedPort = nil
+        await live?.withdraw()
+    }
+
+    // MARK: - Following the server
+
+    /// Makes `advertisement` the wanted advert and publishes it from the live
+    /// server: its port and URLs come from what the server holds right now.
+    private func publishAdvertisement(_ advertisement: ContinuityAdvertisement) async {
+        wantedAdvertisement = advertisement
+        watchServer()
+        requestAdvertSync()
+        await advertSyncTask?.value
+    }
+
+    private func watchServer() {
+        if foregroundObserver == nil {
+            foregroundObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { _ in
+                Task { @MainActor in ContinuityManager.shared.requestAdvertSync() }
+            }
+        }
+        guard serverWatchTask == nil else { return }
+        serverWatchTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: Self.serverWatchInterval)
+                guard !Task.isCancelled else { return }
+                ContinuityManager.shared.requestAdvertSync()
+            }
+        }
+    }
+
+    private func requestAdvertSync() {
+        guard wantedAdvertisement != nil else { return }
+        let previous = advertSyncTask
+        advertSyncTask = Task { @MainActor in
+            await previous?.value
+            await self.syncAdvertWithServer()
+        }
+    }
+
+    /// Withdraws the record while the server is down, and rebuilds it from the
+    /// live server when it is back, possibly on another port: iFly or Provenance
+    /// may have taken ours while iCube was suspended.
+    private func syncAdvertWithServer() async {
+        guard var advert = wantedAdvertisement else { return }
+        let server = PVWebServer.shared
+        let url = server.url
+        let port = ContinuityAdvertSync.boundPort(isRunning: server.isWWWUploadServerRunning, url: url)
+        let candidates = ContinuityAdvertSync.candidates(serverURL: url, bonjourURL: server.bonjourSeverURL, boundPort: port)
+        let action = ContinuityAdvertSync.action(
+            serverPort: candidates.isEmpty ? nil : port,
+            advertisedPort: advertisedPort,
+            candidatesChanged: candidates != advert.urlCandidates
+        )
+        switch action {
+        case .keep:
+            return
+        case .withdraw:
+            NSLog("[Continuity] web server is down; withdrawing the advert for port %d", advertisedPort ?? 0)
+            await takeDownRecord()
+        case .republish:
+            guard let port else { return }
+            if let old = advertisedPort, old != port {
+                NSLog("[Continuity] web server moved from port %d to %d; republishing the advert", old, port)
+            }
+            advert.urlCandidates = candidates
+            wantedAdvertisement = advert
+            await takeDownRecord()
+            let advertiser = ContinuityBonjourAdvertiser(port: port)
+            self.advertiser = advertiser
+            advertisedPort = port
+            await advertiser.publish(advert)
+            // Withdrawn while publishing: don't leave this record behind.
+            if self.advertiser !== advertiser || wantedAdvertisement == nil {
+                await advertiser.withdraw()
+            }
+        }
     }
 
     // MARK: - Browsing
@@ -554,12 +648,8 @@ final class ContinuityManager: ObservableObject {
         #endif
     }
 
-    /// Continuity rides the upload server's listener, so this is that server's
-    /// port. Falls back to 80 only for the advertisement — a peer that cannot
-    /// reach it gets a clear connection failure rather than silence.
-    private static func serverPort() -> Int {
-        PVWebServer.shared.url?.port ?? 80
-    }
+    /// How often to re-check the server while an advert is wanted.
+    private static let serverWatchInterval: UInt64 = 2_000_000_000 // 2 s
 
     /// How long to wait for the web server's listener to bind before giving up
     /// on a handoff. Generous enough for a cold start, short enough that a user
@@ -578,13 +668,16 @@ final class ContinuityManager: ObservableObject {
         return nil
     }
 
+    /// Continuity rides the upload server's listener, so these are that
+    /// server's URLs, and only while it holds a port.
     private static func serverURLCandidates() -> [URL] {
-        var candidates: [URL] = []
-        if let url = PVWebServer.shared.url { candidates.append(url) }
-        if let bonjour = PVWebServer.shared.bonjourSeverURL, !candidates.contains(bonjour) {
-            candidates.append(bonjour)
-        }
-        return candidates
+        let server = PVWebServer.shared
+        let url = server.url
+        return ContinuityAdvertSync.candidates(
+            serverURL: url,
+            bonjourURL: server.bonjourSeverURL,
+            boundPort: ContinuityAdvertSync.boundPort(isRunning: server.isWWWUploadServerRunning, url: url)
+        )
     }
 }
 
