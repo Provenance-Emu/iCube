@@ -457,7 +457,7 @@ final class ContinuityManager: ObservableObject {
         guard var advert = wantedAdvertisement else { return }
         let server = PVWebServer.shared
         let url = server.url
-        let port = ContinuityAdvertSync.boundPort(isRunning: server.isWWWUploadServerRunning, url: url)
+        let port = ContinuityAdvertSync.boundPort(serverPort: server.port)
         let candidates = ContinuityAdvertSync.candidates(serverURL: url, bonjourURL: server.bonjourSeverURL, boundPort: port)
         let action = ContinuityAdvertSync.action(
             serverPort: candidates.isEmpty ? nil : port,
@@ -676,7 +676,7 @@ final class ContinuityManager: ObservableObject {
         return ContinuityAdvertSync.candidates(
             serverURL: url,
             bonjourURL: server.bonjourSeverURL,
-            boundPort: ContinuityAdvertSync.boundPort(isRunning: server.isWWWUploadServerRunning, url: url)
+            boundPort: ContinuityAdvertSync.boundPort(serverPort: server.port)
         )
     }
 }

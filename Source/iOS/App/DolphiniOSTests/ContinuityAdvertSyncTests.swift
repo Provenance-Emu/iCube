@@ -9,20 +9,18 @@ import XCTest
 /// iCube's server is down sends peers to another app.
 final class ContinuityAdvertSyncTests: XCTestCase {
     private let ip80 = URL(string: "http://192.168.1.20/")!
-    private let ip8080 = URL(string: "http://192.168.1.20:8080/")!
+    private let ipHome = URL(string: "http://192.168.1.20:8091/")!
 
     // MARK: Bound port
 
-    func testPortlessHTTPURLMeans80() {
-        XCTAssertEqual(ContinuityAdvertSync.boundPort(isRunning: true, url: ip80), 80)
-        XCTAssertEqual(ContinuityAdvertSync.boundPort(isRunning: true, url: ip8080), 8080)
+    func testBoundPortComesFromTheServer() {
+        XCTAssertEqual(ContinuityAdvertSync.boundPort(serverPort: 8091), 8091)
+        XCTAssertEqual(ContinuityAdvertSync.boundPort(serverPort: 8190), 8190)
     }
 
     func testNoPortWhileTheServerIsDown() {
-        // The old code advertised `url?.port ?? 80` here: port 80, possibly another app's.
-        XCTAssertNil(ContinuityAdvertSync.boundPort(isRunning: false, url: nil))
-        XCTAssertNil(ContinuityAdvertSync.boundPort(isRunning: true, url: nil))
-        XCTAssertNil(ContinuityAdvertSync.boundPort(isRunning: false, url: ip80))
+        // The old code advertised `url?.port ?? 80` here: port 80, which is Provenance's.
+        XCTAssertNil(ContinuityAdvertSync.boundPort(serverPort: 0))
     }
 
     // MARK: Candidates
@@ -30,13 +28,13 @@ final class ContinuityAdvertSyncTests: XCTestCase {
     func testStaleBonjourURLOnAnotherPortIsDropped() {
         let staleBonjour = URL(string: "http://icube.local/")!
         XCTAssertEqual(
-            ContinuityAdvertSync.candidates(serverURL: ip8080, bonjourURL: staleBonjour, boundPort: 8080),
-            [ip8080]
+            ContinuityAdvertSync.candidates(serverURL: ipHome, bonjourURL: staleBonjour, boundPort: 8091),
+            [ipHome]
         )
-        let liveBonjour = URL(string: "http://icube.local:8080/")!
+        let liveBonjour = URL(string: "http://icube.local:8091/")!
         XCTAssertEqual(
-            ContinuityAdvertSync.candidates(serverURL: ip8080, bonjourURL: liveBonjour, boundPort: 8080),
-            [ip8080, liveBonjour]
+            ContinuityAdvertSync.candidates(serverURL: ipHome, bonjourURL: liveBonjour, boundPort: 8091),
+            [ipHome, liveBonjour]
         )
     }
 

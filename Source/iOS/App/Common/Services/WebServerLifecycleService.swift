@@ -139,6 +139,7 @@ final class WebServerLifecycleService: NSObject, UIApplicationDelegate {
             // record published on the old port until `stopServers()`, and the port
             // may belong to iFly or Provenance by now. Clear it before binding again.
             PVWebServer.shared.stopServers()
+            PVWebServer.shared.preferredPorts = ICubeServerPorts.candidates
             PVWebServer.shared.startServers()
         case .stop: PVWebServer.shared.stopServers()
         case .none: break

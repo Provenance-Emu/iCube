@@ -5,10 +5,11 @@ import Foundation
 
 /// Keeps iCube's continuity advert on the port iCube's web server actually holds.
 ///
-/// iFly and Provenance run their own servers on the same device and also want
-/// port 80. Whoever binds first owns it, and iOS defuncts a suspended app's
-/// listener, so after a resume our old port can belong to another app. An
-/// advert naming it sends peers to the wrong app. So the advert is withdrawn
+/// iFly and Provenance run their own servers on the same device. Each app has
+/// its own home port (`ICubeServerPorts`), but whoever binds a port first owns
+/// it, and iOS defuncts a suspended app's listener, so after a resume our old
+/// port can be gone or belong to another app. An advert naming it sends peers
+/// to the wrong app. So the advert is withdrawn
 /// while the server is down and rebuilt from the live server when it is back.
 /// Same rule as iFly's `ContinuitySessionAdvertSync`.
 enum ContinuityAdvertSync {
@@ -23,19 +24,14 @@ enum ContinuityAdvertSync {
     }
 
     /// The upload server's bound port, or `nil` while it is down.
-    ///
-    /// The PVWebServer facade doesn't expose `ROMUploadServer.port`, but its
-    /// `url` is built from that bound port and is `nil` unless the listener is
-    /// `.ready`. So while the server reports running, the URL's port is the
-    /// bound port. `URL.port` is `nil` for `http://ip/` because the server
-    /// leaves `:80` out, so `nil` there means 80. With no URL there is no port:
-    /// never fall back to a guess.
-    static func boundPort(isRunning: Bool, url: URL?) -> Int? {
-        guard isRunning, let url, url.scheme?.lowercased() == "http" else { return nil }
-        return url.port ?? 80
+    /// `PVWebServer.port` is 0 unless the listener is `.ready`. Never fall back to
+    /// a guess: on a shared device a guessed port can be another app's server.
+    static func boundPort(serverPort: Int) -> Int? {
+        serverPort > 0 ? serverPort : nil
     }
 
     /// The URLs a peer should try, keeping only those that reach `boundPort`.
+    /// A portless `http://ip/` means port 80.
     /// The Bonjour URL outlives a dead listener (only `stopServers()` clears it),
     /// so a stale one is dropped rather than advertised.
     static func candidates(serverURL: URL?, bonjourURL: URL?, boundPort: Int?) -> [URL] {
