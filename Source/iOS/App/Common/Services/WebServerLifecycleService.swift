@@ -61,7 +61,19 @@ final class WebServerLifecycleService: NSObject, UIApplicationDelegate {
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         apply(.appForegrounded)
+        // The policy assumes a suspended listener resumes on its own, but iOS can
+        // defunct it instead (iFly logged `DefunctConnection` on port 80 after a
+        // suspension). Network.framework may report that only after this callback,
+        // when the server still reads as running and the policy says "nothing to do".
+        // Ask again once the failure has had time to land.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.foregroundRecheckDelay) { [weak self] in
+            let active = MainActor.assumeIsolated { UIApplication.shared.applicationState == .active }
+            guard active else { return }
+            self?.apply(.appForegrounded)
+        }
     }
+
+    private static let foregroundRecheckDelay: TimeInterval = 1.5
 
     func applicationDidEnterBackground(_ application: UIApplication) {
         apply(.appBackgrounded)
@@ -122,7 +134,13 @@ final class WebServerLifecycleService: NSObject, UIApplicationDelegate {
         lock.unlock()
 
         switch action {
-        case .start: PVWebServer.shared.startServers()
+        case .start:
+            // A listener that died (not one we stopped) leaves its `_webdav._tcp`
+            // record published on the old port until `stopServers()`, and the port
+            // may belong to iFly or Provenance by now. Clear it before binding again.
+            PVWebServer.shared.stopServers()
+            PVWebServer.shared.preferredPorts = ICubeServerPorts.candidates
+            PVWebServer.shared.startServers()
         case .stop: PVWebServer.shared.stopServers()
         case .none: break
         }
