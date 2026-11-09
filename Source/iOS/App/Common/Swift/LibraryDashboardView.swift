@@ -509,6 +509,7 @@ private struct DashboardSaveCard: View {
         .overlay {
           shape.strokeBorder(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue)
         }
+        .opacity(save.isCompatible ? 1 : Metrics.incompatibleSaveOpacity)
         .accessibilityHidden(true)
       Text(gameTitle)
         .icubeText(.detail)
@@ -520,7 +521,6 @@ private struct DashboardSaveCard: View {
     }
     .lineLimit(1)
     .frame(width: Metrics.saveCardWidth)
-    .opacity(save.isCompatible ? 1 : Metrics.incompatibleSaveOpacity)
     .contentShape(Rectangle())
     .accessibilityElement(children: .combine)
     .task(id: save.thumbnailURL) { thumbnail = await Self.loadThumbnail(save.thumbnailURL) }

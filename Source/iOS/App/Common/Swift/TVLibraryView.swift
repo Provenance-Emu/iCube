@@ -1602,7 +1602,10 @@ struct TVLibraryView: View {
                 RoundedRectangle(cornerRadius: 14)
                   .stroke(focusedFilePath == item.filePath ? Color.accentColor : Color.clear, lineWidth: 3)
               )
-              .onChangeCompat(of: focusedFilePath) { _, newVal in
+              .onChangeCompat(of: focusedFilePath) { oldVal, newVal in
+                // Seeding the first grid selection must not scroll the iPad dashboard
+                // offscreen on launch. Subsequent navigation still follows the selection.
+                guard !usesLibraryDashboardLayout || (oldVal ?? nil) != nil else { return }
                 if newVal == item.filePath {
                   let gen = UIImpactFeedbackGenerator(style: .light)
                   gen.impactOccurred()
