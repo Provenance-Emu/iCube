@@ -42,6 +42,9 @@ env:
   HOMEBREW_NO_AUTO_UPDATE: 1
   HOMEBREW_NO_INSTALL_CLEANUP: 1
 
+permissions:
+  contents: read
+
 jobs:
   build:
     # GitHub-hosted by default (see the runner toggle below). This was `[self-hosted, macOS]`, but the repo had ZERO

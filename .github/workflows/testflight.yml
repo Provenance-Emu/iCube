@@ -24,9 +24,8 @@ on:
   schedule:
     - cron: '0 10 * * *'   # 10:00 UTC, an hour after Provenance's
 
-# The `nightly` tag is moved after a successful upload; that needs write access.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: testflight-${{ github.ref }}
@@ -452,6 +451,9 @@ jobs:
     name: Move the nightly marker
     needs: [plan, testflight]
     if: needs.plan.outputs.should_build == 'true' && needs.testflight.result == 'success'
+    # The `nightly` tag is moved after a successful upload; that needs write access.
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

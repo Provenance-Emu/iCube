@@ -19,6 +19,9 @@ concurrency:
   group: mcp-tests-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   pytest:
     name: pytest (Tools/mcp)

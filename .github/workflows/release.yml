@@ -28,6 +28,9 @@ env:
   HOMEBREW_NO_AUTO_UPDATE: 1
   HOMEBREW_NO_INSTALL_CLEANUP: 1
 
+permissions:
+  contents: read
+
 jobs:
   build:
     # Runner toggle: set the repo variable MACOS_RUNNER_LABELS (JSON array, e.g.
