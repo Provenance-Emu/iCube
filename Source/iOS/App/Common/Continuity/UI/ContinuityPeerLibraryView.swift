@@ -74,8 +74,7 @@ struct ContinuityPeerLibraryView: View {
                 Section(header: Text(L("Copying"))) {
                     Text(entry.game.displayName)
                     if let progress {
-                        ProgressView(value: progress.fractionComplete)
-                        Text(Self.transferred(progress)).foregroundColor(.secondary)
+                        NearbyTransferProgress(bytes: progress.bytesTransferred, total: progress.totalBytes)
                     } else {
                         Text(L("Asking the other device…")).foregroundColor(.secondary)
                     }
@@ -115,15 +114,7 @@ struct ContinuityPeerLibraryView: View {
         }
     }
 
-    private static func transferred(_ progress: PullProgress) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return String(
-            format: L("%@ of %@"),
-            formatter.string(fromByteCount: progress.bytesTransferred),
-            formatter.string(fromByteCount: progress.totalBytes)
-        )
-    }
+
 }
 
 /// One shared title, as a single focusable unit.

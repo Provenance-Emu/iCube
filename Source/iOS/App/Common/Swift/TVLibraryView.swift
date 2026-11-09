@@ -560,6 +560,7 @@ struct TVLibraryView: View {
   @ObservedObject private var nearby = NearbyLibrariesModel.shared
   /// A nearby library opened in a sheet (iOS cards; the empty library on iOS).
   @State private var nearbySheet: NearbySheetRoute?
+  @State private var pendingNearbyPlay: (TVGameItem, URL?)?
 #if !os(tvOS)
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -637,8 +638,17 @@ struct TVLibraryView: View {
       .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
         SaveStateFilmstripView(gameID: route.id)
       }
-      .sheet(item: $nearbySheet) { route in
-        NearbyPeerLibrarySheet(peerID: route.id, ownedGameIDs: ownedGameIDs) { nearbySheet = nil }
+      .sheet(item: $nearbySheet, onDismiss: {
+        if let pendingNearbyPlay {
+          self.pendingNearbyPlay = nil
+          playNearbyGame(pendingNearbyPlay.0, state: pendingNearbyPlay.1)
+        }
+      }) { route in
+        NearbyPeerLibrarySheet(peerID: route.id, ownedGameIDs: ownedGameIDs,
+          onDone: { nearbySheet = nil }, onPlay: { game, state in
+            pendingNearbyPlay = (game, state)
+            nearbySheet = nil
+          })
       }
 #if !os(tvOS)
       .sheet(isPresented: $showNearbyDevices) {
@@ -1295,7 +1305,7 @@ struct TVLibraryView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xl.rawValue) {
           if let peerID = tvNearbyPeerID {
-            tvNearbyColumn(peerID)
+            tvNearbyColumn(peerID, scroller: scroller)
           } else {
             if tvShowsHomeShelves {
               libraryHomeShelves(tvHomeShelves(), spacing: gridMetrics.spacing, platform: platform)
@@ -1339,10 +1349,14 @@ struct TVLibraryView: View {
 
   /// A nearby device's library in the column, with pairing inline when this device is not paired yet.
   @ViewBuilder
-  private func tvNearbyColumn(_ peerID: String) -> some View {
+  private func tvNearbyColumn(_ peerID: String, scroller: ScrollViewProxy) -> some View {
     Group {
       if let peer = nearby.peer(withID: peerID) {
-        NearbyPeerLibraryView(peer: peer, ownedGameIDs: ownedGameIDs, showsHeader: false, initialFocus: $tvNearbyFocus)
+        NearbyPeerLibraryView(peer: peer, ownedGameIDs: ownedGameIDs, showsHeader: false, initialFocus: $tvNearbyFocus,
+          onShowStatus: {
+            withAnimation { scroller.scrollTo(NearbyPeerLibraryView.statusID, anchor: .top) }
+            focusNearbyColumn()
+          }, onPlay: { playNearbyGame($0, state: $1) })
           .id(peer.id)
       } else {
         tvEmptyStateRow(L("Back to My Library"), systemImage: "house.fill") { tvLibraryDestination = .home }
@@ -2743,7 +2757,10 @@ struct TVLibraryView: View {
           }
         }
         // A save the library was about to boot into must not land on the next, unrelated launch.
-        Button(L("Cancel"), role: .cancel) { SaveStateService.pendingBootStatePath = nil }
+        Button(L("Cancel"), role: .cancel) {
+          SaveStateService.pendingBootStatePath = nil
+          SaveStateService.skipResumeOnce = false
+        }
       } message: { Text(storageAlertMessage) }
       .sheet(item: $showCacheInfoFor) { item in
         CacheInfoView(item: item, showSubtitles: showSubtitles)
@@ -3091,6 +3108,15 @@ struct TVLibraryView: View {
     }
     cheatInputFor = nil
 #endif
+  }
+
+  /// Use the normal storage, replacement and profile gates, but honour the explicit boot choice.
+  private func playNearbyGame(_ item: TVGameItem, state: URL?) {
+    SaveStateService.pendingBootStatePath = state?.path
+    SaveStateService.skipResumeOnce = state == nil
+    emulationRunning = true
+    teardownControllerNavigation()
+    launchGame(item)
   }
 
   private func selectGame(_ item: TVGameItem) {

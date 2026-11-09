@@ -23,6 +23,32 @@ struct NearbyPeerLibraryView: View {
     /// tvOS: the first control takes this focus, so the rail can hand focus
     /// into the column.
     var initialFocus: FocusState<Bool>.Binding?
+    var onShowStatus: () -> Void = {}
+    var onPlay: (TVGameItem, URL?) -> Void = { _, _ in }
+    static let statusID = "nearby-transfer-status"
+
+    private enum Sheet: Identifiable {
+        case options(ContinuityLibraryEntry)
+        case boot(TVGameItem)
+        var id: String {
+            switch self {
+            case .options(let entry): return "options:" + entry.key
+            case .boot(let game): return "boot:" + game.filePath
+            }
+        }
+    }
+    @State private var sheet: Sheet?
+    @State private var transferTask: Task<Void, Never>?
+    @State private var transferID = UUID()
+    @State private var saveProgress: (bytes: Int64, total: Int64)?
+    @State private var copyingSaves = false
+    @State private var transferError: String?
+    @State private var completedEntry: ContinuityLibraryEntry?
+    @State private var downloaded: [String: TVGameItem] = [:]
+    @State private var pendingPlay: (TVGameItem, URL?)?
+    @State private var pendingCopy: (ContinuityLibraryEntry, NearbyCopyOptions)?
+    @State private var pendingBootGame: TVGameItem?
+
 
     @StateObject private var controller = ContinuityLibraryBrowseController(
         identity: ContinuityManager.shared.identity
@@ -32,15 +58,42 @@ struct NearbyPeerLibraryView: View {
     /// The catalog stays on screen while a copy runs and after it lands.
     @State private var entries: [ContinuityLibraryEntry] = []
     @State private var hasCatalog = false
+    @State private var loadedPeerID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
             if showsHeader { header }
-            statusContent
+            Group {
+                if let transferError {
+                    card {
+                        Text(transferError)
+                        actionButton(L("Try Again"), systemImage: "arrow.clockwise") {
+                            self.transferError = nil
+                            if let completedEntry { sheet = .options(completedEntry) }
+                        }
+                    }
+                } else if copyingSaves {
+                    card {
+                        Text(L("Copying Save States"))
+                        if let saveProgress {
+                            NearbyTransferProgress(bytes: saveProgress.bytes, total: saveProgress.total)
+                        }
+                        actionButton(L("Cancel"), systemImage: "xmark", role: .cancel) { cancelCopy() }
+                            .modifier(FirstFocus(binding: initialFocus))
+                    }
+                } else {
+                    statusContent
+                }
+            }
+            .id(Self.statusID)
             if hasCatalog { grid }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task(id: peer.id) { await load() }
+        .task(id: peer.id) {
+            guard loadedPeerID != peer.id else { return }
+            loadedPeerID = peer.id
+            await load()
+        }
         .onChange(of: controller.phase) { _, phase in
             if case .browsing(let list) = phase {
                 entries = list
@@ -48,7 +101,38 @@ struct NearbyPeerLibraryView: View {
                 NearbyLibrariesModel.shared.noteCatalog(peerID: peer.id, count: list.count)
             }
         }
-        .onDisappear { controller.cancel() }
+        .onChange(of: isCopying) { _, copying in
+            if copying { onShowStatus() }
+        }
+        .sheet(item: $sheet, onDismiss: {
+            if let pendingPlay {
+                self.pendingPlay = nil
+                onPlay(pendingPlay.0, pendingPlay.1)
+            } else if let pendingCopy {
+                self.pendingCopy = nil
+                startCopy(pendingCopy.0, options: pendingCopy.1)
+            } else if let pendingBootGame {
+                self.pendingBootGame = nil
+                sheet = .boot(pendingBootGame)
+            }
+        }) { route in
+            switch route {
+            case .options(let entry):
+                NearbyGameOptionsView(entry: entry, peer: peer, isOwned: localGame(for: entry) != nil,
+                    onCopy: { options in pendingCopy = (entry, options); sheet = nil },
+                    onBoot: {
+                        if let game = localGame(for: entry) { pendingBootGame = game; sheet = nil }
+                    })
+            case .boot(let game):
+                NearbyBootOptionsView(game: game) { state in
+                    pendingPlay = (game, state)
+                    sheet = nil
+                }
+            }
+        }
+        .onDisappear {
+            if sheet == nil { transferTask?.cancel(); controller.cancel() }
+        }
     }
 
     // MARK: - Pieces
@@ -91,8 +175,7 @@ struct NearbyPeerLibraryView: View {
             card {
                 Text(String(format: L("Copying %@"), entry.game.displayName)).font(.headline)
                 if let progress {
-                    ProgressView(value: progress.fractionComplete)
-                    Text(Self.transferred(progress)).font(.footnote).foregroundStyle(.secondary)
+                    NearbyTransferProgress(bytes: progress.bytesTransferred, total: progress.totalBytes)
                 } else {
                     Text(String(format: L("Asking %@…"), peer.name)).foregroundStyle(.secondary)
                 }
@@ -101,9 +184,15 @@ struct NearbyPeerLibraryView: View {
             }
 
         case .copied(let entry):
-            Label(String(format: L("%@ is now in your library."), entry.game.displayName),
-                  systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            card {
+                Label(String(format: L("%@ is now in your library."), entry.game.displayName),
+                      systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                if let game = localGame(for: entry) {
+                    actionButton(L("Play Local Copy…"), systemImage: "play.fill", prominent: true) { sheet = .boot(game) }
+                        .modifier(FirstFocus(binding: initialFocus))
+                }
+            }
 
         case .failed(let message):
             card {
@@ -144,11 +233,11 @@ struct NearbyPeerLibraryView: View {
             spacing: Metrics.gridSpacing
         ) {
             ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
-                Button { Task { await controller.copy(entry) } } label: {
+                Button { sheet = .options(entry) } label: {
                     NearbyGameTile(
                         entry: entry,
                         artwork: controller.artwork[entry.key],
-                        isOwned: entry.game.gameID.map { ownedGameIDs.contains($0) } ?? false
+                        isOwned: localGame(for: entry) != nil
                     )
                 }
                 #if os(tvOS)
@@ -210,6 +299,7 @@ struct NearbyPeerLibraryView: View {
     // MARK: - Actions
 
     private var isCopying: Bool {
+        if copyingSaves { return true }
         if case .copying = controller.phase { return true }
         return false
     }
@@ -218,7 +308,7 @@ struct NearbyPeerLibraryView: View {
     /// instead of the first cover.
     private var hasStatusControl: Bool {
         switch controller.phase {
-        case .awaitingPairing, .copying, .failed: return true
+        case .awaitingPairing, .copying, .copied, .failed: return true
         default: return false
         }
     }
@@ -242,24 +332,75 @@ struct NearbyPeerLibraryView: View {
 
     /// Cancelling a copy returns to the covers, not to an error screen.
     private func cancelCopy() {
+        transferTask?.cancel()
+        transferTask = nil
+        transferID = UUID()
+        copyingSaves = false
+        saveProgress = nil
         controller.cancel()
         Task { await load() }
+    }
+
+    /// Match disc and revision, not just GameID (multi-disc and patched games share IDs).
+    private func localGame(for entry: ContinuityLibraryEntry) -> TVGameItem? {
+        if let game = downloaded[entry.key], Self.existsLocally(game.filePath) { return game }
+        return TVLibraryBridge.currentGames().first {
+            !$0.isDemoItem && GameIdentity(gameItem: $0).stableKey == entry.game.stableKey &&
+                Self.existsLocally($0.filePath)
+        }
+    }
+
+    private static func existsLocally(_ path: String) -> Bool {
+        if path.hasPrefix("/") { return FileManager.default.fileExists(atPath: path) }
+        guard let url = URL(string: path), url.isFileURL else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    private func startCopy(_ entry: ContinuityLibraryEntry, options: NearbyCopyOptions) {
+        transferTask?.cancel()
+        transferError = nil
+        completedEntry = entry
+        let id = UUID()
+        transferID = id
+        transferTask = Task {
+            if let catalog = options.catalog, !options.states.isEmpty {
+                copyingSaves = true
+                saveProgress = (0, options.states.reduce(0) { $0 + $1.size })
+                onShowStatus()
+                do {
+                    _ = try await NearbySaveClient(identity: ContinuityManager.shared.identity)
+                        .copy(options.states, catalog: catalog, from: peer.advertisement, entry: entry) { bytes, total in
+                            Task { @MainActor in
+                                if transferID == id, copyingSaves { saveProgress = (bytes, total) }
+                            }
+                        }
+                    try Task.checkCancellation()
+                } catch {
+                    guard transferID == id else { return }
+                    if !Task.isCancelled { transferError = error.localizedDescription }
+                    copyingSaves = false
+                    return
+                }
+                guard transferID == id, !Task.isCancelled else { return }
+                copyingSaves = false
+            }
+            guard transferID == id, !Task.isCancelled else { return }
+            if localGame(for: entry) == nil {
+                await controller.copy(entry)
+                guard !Task.isCancelled, case .copied = controller.phase,
+                      let path = controller.copiedFileURL?.path,
+                      let game = DiscImageBridge.gameItem(forPath: path) else { return }
+                downloaded[entry.key] = game
+            }
+            guard !Task.isCancelled else { return }
+            if let game = localGame(for: entry) { sheet = .boot(game) }
+        }
     }
 
     // MARK: - Formatting
 
     static func gameCount(_ count: Int) -> String {
         count == 1 ? L("1 game") : String(format: L("%d games"), count)
-    }
-
-    private static func transferred(_ progress: PullProgress) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return String(
-            format: L("%@ of %@"),
-            formatter.string(fromByteCount: progress.bytesTransferred),
-            formatter.string(fromByteCount: progress.totalBytes)
-        )
     }
 
     private enum Metrics {
@@ -328,7 +469,7 @@ private struct NearbyGameTile: View {
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityHint(L("Copies this game to this device."))
+        .accessibilityHint(isOwned ? L("Play the local copy or copy save states.") : L("Choose download and save options."))
     }
 
     @ViewBuilder
