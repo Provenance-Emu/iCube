@@ -32,12 +32,17 @@ final class NearbyLibrariesModel: ObservableObject {
         let id: String
         let name: String
         let deviceType: String?
-        let advertisement: ContinuityAdvertisement
+        let advertisement: ContinuityAdvertisement?
+        var server: EmulationServer? = nil
         let isPaired: Bool
+        var serverConnected = false
+        var canLoadCatalog: Bool { isPaired || serverConnected }
+        var needsServerConnection: Bool { server != nil && !serverConnected }
     }
 
     enum Status: Equatable {
         case notPaired
+        case notConnected
         case loading
         case games(Int)
         /// Paired, but the catalog didn't come back (stopped sharing, revoked,
@@ -48,6 +53,33 @@ final class NearbyLibrariesModel: ObservableObject {
     @Published private(set) var peers: [Peer] = []
     @Published private(set) var statuses: [String: Status] = [:]
 
+    @Published private(set) var servers: [EmulationServer] = {
+        guard let data = UserDefaults.standard.data(forKey: "icube.emulationServers") else { return [] }
+        return (try? JSONDecoder().decode([EmulationServer].self, from: data)) ?? []
+    }()
+
+    func addServer(_ server: EmulationServer, token: String) throws {
+        guard KeychainService.setPassword(token, for: server.id) else {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        if !servers.contains(server) { servers.append(server) }
+        saveServers()
+        refresh(peerID: server.id)
+    }
+
+    func removeServer(_ server: EmulationServer) {
+        KeychainService.deletePassword(for: server.id)
+        servers.removeAll { $0.id == server.id }
+        saveServers()
+    }
+
+    private func saveServers() {
+        UserDefaults.standard.set(try? JSONEncoder().encode(servers), forKey: "icube.emulationServers")
+        rebuild(discovered: manager.discoveredPeers, trusted: manager.trustedPeers)
+    }
+
+    private let serverDiscovery = EmulationServerDiscovery()
+    private var serverAdvertisements: [EmulationServerAdvertisement] = []
     private let manager: ContinuityManager
     private var cancellables: Set<AnyCancellable> = []
     private var fetches: [String: Task<Void, Never>] = [:]
@@ -63,6 +95,11 @@ final class NearbyLibrariesModel: ObservableObject {
                 MainActor.assumeIsolated { self?.rebuild(discovered: discovered, trusted: trusted) }
             }
             .store(in: &cancellables)
+        serverDiscovery.onChange = { [weak self] advertisements in
+            guard let self else { return }
+            self.serverAdvertisements = advertisements
+            self.rebuild(discovered: self.manager.discoveredPeers, trusted: self.manager.trustedPeers)
+        }
         EmulationState.shared.addTransitionHandler { [weak self] active in
             guard let self else { return }
             self.emulating = active
@@ -107,13 +144,15 @@ final class NearbyLibrariesModel: ObservableObject {
     }
 
     func status(for peer: Peer) -> Status {
-        guard peer.isPaired else { return .notPaired }
+        if peer.needsServerConnection { return .notConnected }
+        guard peer.canLoadCatalog else { return .notPaired }
         return statuses[peer.id] ?? .loading
     }
 
     func subtitle(for peer: Peer) -> String {
         switch status(for: peer) {
         case .notPaired: return L("Pair to browse")
+        case .notConnected: return L("Connect to browse")
         case .loading: return L("Loading library…")
         case .games(let count):
             return count == 1 ? L("1 game") : String(format: L("%d games"), count)
@@ -126,6 +165,7 @@ final class NearbyLibrariesModel: ObservableObject {
         case "tv": return "appletv"
         case "pd": return "ipad"
         case "mc": return "desktopcomputer"
+        case "server": return "server.rack"
         default: return "iphone"
         }
     }
@@ -133,7 +173,9 @@ final class NearbyLibrariesModel: ObservableObject {
     // MARK: - Private
 
     private func reconcileBrowsing() {
-        manager.setLibraryBrowsingRequired(libraryVisible && !emulating)
+        let required = libraryVisible && !emulating
+        manager.setLibraryBrowsingRequired(required)
+        serverDiscovery.setBrowsing(required)
     }
 
     private func rebuild(discovered: [ContinuityPeer], trusted: [TrustedPeer]) {
@@ -142,7 +184,7 @@ final class NearbyLibrariesModel: ObservableObject {
         var next: [Peer] = []
         for peer in discovered {
             guard let ad = peer.advertisement, ad.sharesLibrary, !ad.urlCandidates.isEmpty,
-                  let id = ad.peerId, !id.isEmpty, id != manager.identity.id,
+                  let id = ad.peerId, !id.isEmpty, !id.hasPrefix("ecs:"), id != manager.identity.id,
                   seen.insert(id).inserted else { continue }
             next.append(Peer(
                 id: id,
@@ -152,15 +194,37 @@ final class NearbyLibrariesModel: ObservableObject {
                 isPaired: trustedIDs.contains(id)
             ))
         }
+        let connectedOrigins = Set(servers.map(\.id))
+        var seenServerIDs = Set<UUID>()
+        // Prefer a configured origin when a server advertises multiple interfaces.
+        let advertisements = serverAdvertisements.sorted { lhs, rhs in
+            let left = connectedOrigins.contains(lhs.server.id)
+            let right = connectedOrigins.contains(rhs.server.id)
+            if left != right { return left }
+            let leftTLS = lhs.server.origin.scheme == "https"
+            let rightTLS = rhs.server.origin.scheme == "https"
+            if leftTLS != rightTLS { return leftTLS }
+            return lhs.server.id < rhs.server.id
+        }
+        for advertisement in advertisements where seenServerIDs.insert(advertisement.id).inserted {
+            let server = advertisement.server
+            guard seen.insert(server.id).inserted else { continue }
+            next.append(Peer(id: server.id, name: advertisement.name, deviceType: "server", advertisement: nil,
+                             server: server, isPaired: false, serverConnected: connectedOrigins.contains(server.id)))
+        }
+        for server in servers where seen.insert(server.id).inserted {
+            next.append(Peer(id: server.id, name: server.name, deviceType: "server", advertisement: nil,
+                             server: server, isPaired: false, serverConnected: true))
+        }
         next.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         // A device that re-advertised (relaunched, turned sharing back on) may answer now: retry a failed count.
-        let previous = Dictionary(uniqueKeysWithValues: peers.map { ($0.id, $0.advertisement) })
-        for peer in next where statuses[peer.id] == .unavailable && previous[peer.id] != peer.advertisement {
+        let previous = Dictionary(uniqueKeysWithValues: peers.map { ($0.id, $0) })
+        for peer in next where statuses[peer.id] == .unavailable && previous[peer.id] != peer {
             statuses[peer.id] = nil
         }
         if next != peers { peers = next }
         // A device that left, or was unpaired, loses its count.
-        let pairedIDs = Set(next.filter(\.isPaired).map(\.id))
+        let pairedIDs = Set(next.filter(\.canLoadCatalog).map(\.id))
         for id in statuses.keys where !pairedIDs.contains(id) {
             statuses[id] = nil
             fetches[id]?.cancel()
@@ -171,13 +235,12 @@ final class NearbyLibrariesModel: ObservableObject {
 
     private func fetchMissingCounts() {
         guard libraryVisible, !emulating else { return }
-        for peer in peers where peer.isPaired && statuses[peer.id] == nil && fetches[peer.id] == nil {
+        for peer in peers where peer.canLoadCatalog && statuses[peer.id] == nil && fetches[peer.id] == nil {
             statuses[peer.id] = .loading
-            let advertisement = peer.advertisement
             let id = peer.id
             fetches[id] = Task { [weak self, manager] in
                 let browser = ContinuityLibraryBrowseController(identity: manager.identity)
-                await browser.load(from: advertisement, allowsPairing: false)
+                await browser.load(peer: peer, allowsPairing: false)
                 guard let self, !Task.isCancelled else { return }
                 self.fetches[id] = nil
                 if case .browsing(let entries) = browser.phase {

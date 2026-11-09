@@ -5771,3 +5771,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Stop the game before importing save states." = "Stop the game before importing save states.";
 "The save transfer could not be verified. Nothing was replaced." = "The save transfer could not be verified. Nothing was replaced.";
 "This device doesn't support copying save states. You can still copy the game." = "This device doesn't support copying save states. You can still copy the game.";
+"Access Token" = "Access Token";
+"Connected Servers" = "Connected Servers";
+"Emulation Server" = "Emulation Server";
+"Enter the Emulation Server address and an access token with library read permission." = "Enter the Emulation Server address and an access token with library read permission.";
+"Preparing download…" = "Preparing download…";
+"Remove %@" = "Remove %@";
+"The server denied access. Check your access token and library permissions." = "The server denied access. Check your access token and library permissions.";
+"The server did not provide a valid single-file game." = "The server did not provide a valid single-file game.";
+"This Emulation Server version is unsupported." = "This Emulation Server version is unsupported.";
+"Connect to browse" = "Connect to browse";

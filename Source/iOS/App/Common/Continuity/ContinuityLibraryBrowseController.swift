@@ -42,6 +42,7 @@ final class ContinuityLibraryBrowseController: ObservableObject {
     private let pairingClient: ContinuityPairingClient
     private let fileProvider: any ContinuityFileProviding
     private let didPair: @MainActor (ContinuityPairingClient.PairingHandle) async -> Void
+    private var serverLibrary: EmulationServerLibrary?
     private var baseURL: URL?
     private var expectedPeerID: String?
     private var pendingPairing: ContinuityPairingClient.PairingHandle?
@@ -67,7 +68,32 @@ final class ContinuityLibraryBrowseController: ObservableObject {
     // MARK: - Browsing
 
     func load(from advertisement: ContinuityAdvertisement, allowsPairing: Bool = true) async {
+        serverLibrary = nil
         await runOperation { await self.loadCatalog(from: advertisement, allowsPairing: allowsPairing) }
+    }
+
+    func load(peer: NearbyLibrariesModel.Peer, allowsPairing: Bool = true) async {
+        if let advertisement = peer.advertisement {
+            await load(from: advertisement, allowsPairing: allowsPairing)
+            return
+        }
+        guard let server = peer.server, let token = KeychainService.getPassword(for: server.id) else {
+            phase = .failed(L("The server denied access. Check your access token and library permissions."))
+            return
+        }
+        await runOperation {
+            let library = EmulationServerLibrary(server: server, token: token)
+            self.serverLibrary = library
+            self.phase = .loading
+            do {
+                let entries = try await library.catalog()
+                try Task.checkCancellation()
+                self.phase = .browsing(entries)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.phase = .failed(error.localizedDescription)
+            }
+        }
     }
 
     private func loadCatalog(from advertisement: ContinuityAdvertisement, allowsPairing: Bool) async {
@@ -183,7 +209,12 @@ final class ContinuityLibraryBrowseController: ObservableObject {
     /// Fetches one cover, once. A missing cover is a placeholder, never an
     /// error the user sees.
     func loadArtwork(for entry: ContinuityLibraryEntry) async {
-        guard entry.hasArtwork, artwork[entry.key] == nil, let baseURL else { return }
+        guard entry.hasArtwork, artwork[entry.key] == nil else { return }
+        if let serverLibrary {
+            artwork[entry.key] = await serverLibrary.artwork(for: entry)
+            return
+        }
+        guard let baseURL else { return }
         if let data = await client.artwork(from: baseURL, key: entry.key) {
             artwork[entry.key] = data
         }
@@ -207,7 +238,37 @@ final class ContinuityLibraryBrowseController: ObservableObject {
     // MARK: - Copying
 
     func copy(_ entry: ContinuityLibraryEntry) async {
-        await runOperation { await self.copyEntry(entry) }
+        await runOperation {
+            if let serverLibrary = self.serverLibrary {
+                await self.copyServerEntry(entry, from: serverLibrary)
+            } else {
+                await self.copyEntry(entry)
+            }
+        }
+    }
+
+    private func copyServerEntry(_ entry: ContinuityLibraryEntry, from library: EmulationServerLibrary) async {
+        copiedFileURLs = []
+        verifiedDescriptors = []
+        let id = operationID
+        phase = .copying(entry: entry, progress: nil)
+        do {
+            try await ContinuityTransferGate.shared.withPermit {
+                let url = try await library.copy(entry) { [weak self] progress in
+                    Task { @MainActor in
+                        guard let self, self.operationID == id, case .copying = self.phase else { return }
+                        self.phase = .copying(entry: entry, progress: progress)
+                    }
+                }
+                TVLibraryBridge.updateLibrary(withRemotePaths: [url.path], fetchMetadata: true)
+                guard !Task.isCancelled else { return }
+                copiedFileURLs = [url]
+                phase = .copied(entry)
+            }
+        } catch {
+            guard !Task.isCancelled else { return }
+            phase = .failed(error.localizedDescription)
+        }
     }
 
     private func copyEntry(_ entry: ContinuityLibraryEntry) async {
