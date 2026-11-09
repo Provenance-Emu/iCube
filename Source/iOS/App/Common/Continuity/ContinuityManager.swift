@@ -78,6 +78,7 @@ final class ContinuityManager: ObservableObject {
         let id: UUID
         let peerName: String
         let gameName: String
+        let saveStates: Bool
         let respond: (ContinuityLibraryPullDecision) -> Void
     }
 
@@ -90,6 +91,7 @@ final class ContinuityManager: ObservableObject {
     private var sessionServer: ContinuitySessionServer?
     private var pairingServer: ContinuityPairingServer?
     private var libraryServer: ContinuityLibraryServer?
+    private var saveServer: NearbySaveServer?
     private var advertiser: ContinuityBonjourAdvertiser?
     /// True while this device holds a `sessionDidBegin` on behalf of library
     /// sharing — i.e. it has told `WebServerLifecycleService` to keep the
@@ -177,11 +179,14 @@ final class ContinuityManager: ObservableObject {
             }
         )
         self.libraryServer = libraryServer
+        let saveServer = NearbySaveServer(manager: self)
+        self.saveServer = saveServer
 
         Task {
             await sessionServer.activate(on: registrar)
             await pairingServer.activate(on: registrar)
             await libraryServer.activate(on: registrar)
+            await saveServer.activate(on: registrar)
             await self.refreshTrustedPeers()
             await self.refreshLibraryGrants()
             // A host that opted in should be findable from launch, not only
@@ -301,6 +306,7 @@ final class ContinuityManager: ObservableObject {
             // able to ask. Dropping them stops an in-flight transfer rather
             // than letting it run to completion after the user said stop.
             await libraryServer?.forgetAllPeers()
+            await saveServer?.forgetAllPeers()
         }
         await refreshLibraryAdvertising()
     }
@@ -315,7 +321,10 @@ final class ContinuityManager: ObservableObject {
     /// approvals, so "Don't Share" is immediate rather than next-launch.
     func setLibraryGrant(_ grant: ContinuityLibraryGrant, forPeerId peerId: String) async {
         await grantStore.setGrant(grant, forPeerId: peerId)
-        if grant == .denied { await libraryServer?.forgetPeer(peerId) }
+        if grant == .denied {
+            await libraryServer?.forgetPeer(peerId)
+            await saveServer?.forgetPeer(peerId)
+        }
         await refreshLibraryGrants()
     }
 
@@ -326,6 +335,7 @@ final class ContinuityManager: ObservableObject {
     func clearLibraryGrant(forPeerId peerId: String) async {
         await grantStore.removeGrant(forPeerId: peerId)
         await libraryServer?.forgetPeer(peerId)
+        await saveServer?.forgetPeer(peerId)
         await refreshLibraryGrants()
     }
 
@@ -577,6 +587,7 @@ final class ContinuityManager: ObservableObject {
         // transfer already under way would run to completion after the user
         // forgot the device.
         await libraryServer?.forgetPeer(peerId)
+        await saveServer?.forgetPeer(peerId)
         await refreshTrustedPeers()
         await refreshLibraryGrants()
     }
@@ -586,6 +597,7 @@ final class ContinuityManager: ObservableObject {
         await trustStore.removeAll()
         await grantStore.removeAll()
         await libraryServer?.forgetAllPeers()
+        await saveServer?.forgetAllPeers()
         await refreshTrustedPeers()
         await refreshLibraryGrants()
     }
@@ -613,8 +625,8 @@ final class ContinuityManager: ObservableObject {
     /// Presents the per-pull approval prompt and suspends until the user
     /// answers. The library server races this against its own timeout, so an
     /// unanswered prompt resolves as a decline rather than wedging the seam.
-    fileprivate func awaitLibraryPullApproval(
-        peerName: String, gameName: String
+    func awaitLibraryPullApproval(
+        peerName: String, gameName: String, saveStates: Bool = false
     ) async -> ContinuityLibraryPullDecision {
         guard !Task.isCancelled, pendingLibraryPull == nil else { return .denyOnce }
         let approval = ContinuityApprovalRequest<ContinuityLibraryPullDecision>(
@@ -624,7 +636,7 @@ final class ContinuityManager: ObservableObject {
             self?.pendingLibraryPull = nil
         }
         pendingLibraryPull = PendingLibraryPullPrompt(
-            id: approval.id, peerName: peerName, gameName: gameName,
+            id: approval.id, peerName: peerName, gameName: gameName, saveStates: saveStates,
             respond: { approval.resolve($0) }
         )
         let decision = await approval.wait()

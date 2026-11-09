@@ -374,7 +374,7 @@ private struct ContinuityLibraryPullPromptModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content.alert(
-            L("Copy This Game?"),
+            manager.pendingLibraryPull?.saveStates == true ? L("Share Save States?") : L("Copy This Game?"),
             isPresented: Binding(
                 get: { manager.pendingLibraryPull != nil },
                 // Dismissal without an answer declines **this** request only.
@@ -385,12 +385,16 @@ private struct ContinuityLibraryPullPromptModifier: ViewModifier {
             presenting: manager.pendingLibraryPull
         ) { prompt in
             Button(L("Allow Once")) { prompt.respond(.allowOnce) }
-            Button(L("Always Allow This Device")) { prompt.respond(.allowAlways) }
-            Button(L("Don't Share"), role: .destructive) { prompt.respond(.denyAlways) }
+            if !prompt.saveStates {
+                Button(L("Always Allow This Device")) { prompt.respond(.allowAlways) }
+                Button(L("Don't Share"), role: .destructive) { prompt.respond(.denyAlways) }
+            }
             Button(L("Not Now"), role: .cancel) { prompt.respond(.denyOnce) }
         } message: { prompt in
             Text(String(
-                format: L("%@ wants to copy %@ from this device. Only the game is sent — your saves stay here.\n\n%@"),
+                format: prompt.saveStates
+                    ? L("%@ wants to browse and copy save states for %@. Memory cards and Wii saves are not sent. This permission expires in 10 minutes.\n\n%@")
+                    : L("%@ wants to copy %@ from this device. Only the game is sent — your saves stay here.\n\n%@"),
                 prompt.peerName,
                 prompt.gameName,
                 ContinuityManager.transportSecurityNotice

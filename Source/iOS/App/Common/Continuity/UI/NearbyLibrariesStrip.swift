@@ -127,21 +127,26 @@ struct NearbyPeerLibrarySheet: View {
     let peerID: String
     let ownedGameIDs: Set<String>
     let onDone: () -> Void
+    var onPlay: (TVGameItem, URL?) -> Void = { _, _ in }
     @ObservedObject private var model = NearbyLibrariesModel.shared
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                Group {
-                    if let peer = model.peer(withID: peerID) {
-                        NearbyPeerLibraryView(peer: peer, ownedGameIDs: ownedGameIDs)
-                            .id(peer.id)
-                    } else {
-                        Label(L("That device is no longer nearby."), systemImage: "wifi.slash")
-                            .foregroundStyle(.secondary)
+            ScrollViewReader { scroller in
+                ScrollView {
+                    Group {
+                        if let peer = model.peer(withID: peerID) {
+                            NearbyPeerLibraryView(peer: peer, ownedGameIDs: ownedGameIDs,
+                                onShowStatus: { withAnimation { scroller.scrollTo(NearbyPeerLibraryView.statusID, anchor: .top) } },
+                                onPlay: onPlay)
+                                .id(peer.id)
+                        } else {
+                            Label(L("That device is no longer nearby."), systemImage: "wifi.slash")
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .padding()
                 }
-                .padding()
             }
             .navigationTitle(model.peer(withID: peerID)?.name ?? L("Nearby"))
             #if !os(tvOS)
