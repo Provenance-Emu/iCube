@@ -45,45 +45,47 @@ struct NearbyGameOptionsView: View {
               Button(L("Play Local Copy…")) { onBoot() }
             }
           }
-          Section(header: Text(L("Copy Save States")), footer: Text(L("Save states are imported as new copies. Your existing saves, memory cards and Wii saves are not replaced."))) {
-            ForEach(SaveChoice.allCases, id: \.self) { choice in
-              Button {
-                mode = choice
-                if choice != .none, catalog == nil, !requesting { requestCatalog() }
-              } label: {
-                HStack {
-                  Text(choice.title)
-                  Spacer()
-                  if mode == choice { Image(systemName: "checkmark") }
+          if peer.advertisement != nil {
+            Section(header: Text(L("Copy Save States")), footer: Text(L("Save states are imported as new copies. Your existing saves, memory cards and Wii saves are not replaced."))) {
+              ForEach(SaveChoice.allCases, id: \.self) { choice in
+                Button {
+                  mode = choice
+                  if choice != .none, catalog == nil, !requesting { requestCatalog() }
+                } label: {
+                  HStack {
+                    Text(choice.title)
+                    Spacer()
+                    if mode == choice { Image(systemName: "checkmark") }
+                  }
                 }
               }
             }
-          }
-          if requesting {
-            Section {
-              Text(String(format: L("Asking %@ to share save states…"), peer.name))
-                .id("save-sharing-status")
-              ProgressView()
+            if requesting {
+              Section {
+                Text(String(format: L("Asking %@ to share save states…"), peer.name))
+                  .id("save-sharing-status")
+                ProgressView()
+              }
             }
-          }
-          if let error { Section { Text(error)
-            Button(L("Try Again")) { requestCatalog() }
-          } }
-          if let catalog, mode != .none {
-            Section(header: Text(L("Save States"))) {
-              if catalog.states.isEmpty { Text(L("No save states are available on this device.")) }
-              if mode == .specific {
-                ForEach(catalog.states) { state in
-                  Button {
-                    if selected.contains(state.id) { selected.remove(state.id) } else { selected.insert(state.id) }
-                  } label: {
-                    HStack {
-                      VStack(alignment: .leading) {
-                        Text(state.title)
-                        Text(state.savedAt, style: .date).font(.caption)
+            if let error { Section { Text(error)
+              Button(L("Try Again")) { requestCatalog() }
+            } }
+            if let catalog, mode != .none {
+              Section(header: Text(L("Save States"))) {
+                if catalog.states.isEmpty { Text(L("No save states are available on this device.")) }
+                if mode == .specific {
+                  ForEach(catalog.states) { state in
+                    Button {
+                      if selected.contains(state.id) { selected.remove(state.id) } else { selected.insert(state.id) }
+                    } label: {
+                      HStack {
+                        VStack(alignment: .leading) {
+                          Text(state.title)
+                          Text(state.savedAt, style: .date).font(.caption)
+                        }
+                        Spacer()
+                        if selected.contains(state.id) { Image(systemName: "checkmark") }
                       }
-                      Spacer()
-                      if selected.contains(state.id) { Image(systemName: "checkmark") }
                     }
                   }
                 }
@@ -91,11 +93,13 @@ struct NearbyGameOptionsView: View {
             }
           }
           Section {
-            Button(isOwned ? L("Copy Save States") : L("Download")) { confirm() }
-              .disabled(!canCopy)
+            if !isOwned || peer.advertisement != nil {
+              Button(isOwned ? L("Copy Save States") : L("Download")) { confirm() }
+                .disabled(!canCopy)
+            }
             Button(L("Cancel"), role: .cancel) { dismiss() }
           }
-          Section { ContinuitySecurityNotice() }
+          if peer.advertisement != nil { Section { ContinuitySecurityNotice() } }
         }
         .onChange(of: requesting) { _, active in
           if active {
@@ -129,13 +133,14 @@ struct NearbyGameOptionsView: View {
   }
 
   private func requestCatalog() {
+    guard let advertisement = peer.advertisement else { return }
     requestTask?.cancel()
     requesting = true
     error = nil
     requestTask = Task {
       do {
         let result = try await NearbySaveClient(identity: ContinuityManager.shared.identity)
-          .catalog(from: peer.advertisement, entry: entry)
+          .catalog(from: advertisement, entry: entry)
         try Task.checkCancellation()
         catalog = result
       } catch {

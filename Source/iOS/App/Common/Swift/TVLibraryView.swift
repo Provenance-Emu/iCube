@@ -560,6 +560,7 @@ struct TVLibraryView: View {
   @ObservedObject private var nearby = NearbyLibrariesModel.shared
   /// A nearby library opened in a sheet (iOS cards; the empty library on iOS).
   @State private var nearbySheet: NearbySheetRoute?
+  @State private var showEmulationServers = false
   @State private var pendingNearbyPlay: (TVGameItem, URL?)?
 #if !os(tvOS)
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -638,6 +639,7 @@ struct TVLibraryView: View {
       .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
         SaveStateFilmstripView(gameID: route.id)
       }
+      .sheet(isPresented: $showEmulationServers) { EmulationServerSettingsView(model: nearby) }
       .sheet(item: $nearbySheet, onDismiss: {
         if let pendingNearbyPlay {
           self.pendingNearbyPlay = nil
@@ -1800,6 +1802,7 @@ struct TVLibraryView: View {
         }
       }
       tvEmptyStateRow(L("Upload via Wi-Fi…"), systemImage: "wifi") { showWebImportSheet = true }
+      tvEmptyStateRow(L("Emulation Server"), systemImage: "server.rack") { showEmulationServers = true }
       tvEmptyStateRow(L("Manage Sources"), systemImage: "externaldrive.badge.plus") { showSources = true }
       tvEmptyStateRow(L("Rescan"), systemImage: "arrow.clockwise") { model.rescan() }
         .disabled(model.isRescanning)
@@ -2219,6 +2222,9 @@ struct TVLibraryView: View {
 #if os(iOS)
       Divider()
 #endif
+      Button(action: { libraryMenuAction { showEmulationServers = true } }) {
+        Label(L("Emulation Server"), systemImage: "server.rack")
+      }
       Button(action: { libraryMenuAction { showSources = true } }) {
         Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")
       }

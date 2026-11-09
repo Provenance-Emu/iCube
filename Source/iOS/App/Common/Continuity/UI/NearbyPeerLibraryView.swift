@@ -64,7 +64,12 @@ struct NearbyPeerLibraryView: View {
         VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
             if showsHeader { header }
             Group {
-                if let transferError {
+                if let server = peer.server, peer.needsServerConnection {
+                    card {
+                        Text(L("Connect to browse")).font(.headline)
+                        EmulationServerConnectionFields(model: .shared, discoveredServer: server, initialFocus: initialFocus)
+                    }
+                } else if let transferError {
                     card {
                         Text(transferError)
                         actionButton(L("Try Again"), systemImage: "arrow.clockwise") {
@@ -86,10 +91,14 @@ struct NearbyPeerLibraryView: View {
                 }
             }
             .id(Self.statusID)
-            if hasCatalog { grid }
+            if hasCatalog, !peer.needsServerConnection { grid }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task(id: peer.id) {
+        .task(id: peer.needsServerConnection) {
+            if peer.needsServerConnection {
+                loadedPeerID = nil
+                return
+            }
             guard loadedPeerID != peer.id else { return }
             loadedPeerID = peer.id
             await load()
@@ -177,7 +186,7 @@ struct NearbyPeerLibraryView: View {
                 if let progress {
                     NearbyTransferProgress(bytes: progress.bytesTransferred, total: progress.totalBytes)
                 } else {
-                    Text(String(format: L("Asking %@…"), peer.name)).foregroundStyle(.secondary)
+                    Text(peer.server == nil ? String(format: L("Asking %@…"), peer.name) : L("Preparing download…")).foregroundStyle(.secondary)
                 }
                 actionButton(L("Cancel"), systemImage: "xmark", role: .destructive) { cancelCopy() }
                     .modifier(FirstFocus(binding: initialFocus))
@@ -237,7 +246,8 @@ struct NearbyPeerLibraryView: View {
                     NearbyGameTile(
                         entry: entry,
                         artwork: controller.artwork[entry.key],
-                        isOwned: localGame(for: entry) != nil
+                        isOwned: localGame(for: entry) != nil,
+                        supportsSaveTransfer: peer.advertisement != nil
                     )
                 }
                 #if os(tvOS)
@@ -315,7 +325,7 @@ struct NearbyPeerLibraryView: View {
 
     private func load() async {
         codeRejected = false
-        await controller.load(from: peer.advertisement)
+        await controller.load(peer: peer)
     }
 
     /// The controller drops back to `.awaitingPairing` on a wrong code without
@@ -344,6 +354,13 @@ struct NearbyPeerLibraryView: View {
     /// Match disc and revision, not just GameID (multi-disc and patched games share IDs).
     private func localGame(for entry: ContinuityLibraryEntry) -> TVGameItem? {
         if let game = downloaded[entry.key], Self.existsLocally(game.filePath) { return game }
+        if let server = peer.server, let folder = try? server.folder(for: entry) {
+            return TVLibraryBridge.currentGames().first { item in
+                guard Self.existsLocally(item.filePath) else { return false }
+                let url = item.filePath.hasPrefix("/") ? URL(fileURLWithPath: item.filePath) : URL(string: item.filePath)
+                return url?.deletingLastPathComponent().resolvingSymlinksInPath().path == folder.path
+            }
+        }
         return TVLibraryBridge.currentGames().first {
             !$0.isDemoItem && GameIdentity(gameItem: $0).stableKey == entry.game.stableKey &&
                 Self.existsLocally($0.filePath)
@@ -363,13 +380,13 @@ struct NearbyPeerLibraryView: View {
         let id = UUID()
         transferID = id
         transferTask = Task {
-            if let catalog = options.catalog, !options.states.isEmpty {
+            if let advertisement = peer.advertisement, let catalog = options.catalog, !options.states.isEmpty {
                 copyingSaves = true
                 saveProgress = (0, options.states.reduce(0) { $0 + $1.size })
                 onShowStatus()
                 do {
                     _ = try await NearbySaveClient(identity: ContinuityManager.shared.identity)
-                        .copy(options.states, catalog: catalog, from: peer.advertisement, entry: entry) { bytes, total in
+                        .copy(options.states, catalog: catalog, from: advertisement, entry: entry) { bytes, total in
                             Task { @MainActor in
                                 if transferID == id, copyingSaves { saveProgress = (bytes, total) }
                             }
@@ -441,6 +458,7 @@ private struct NearbyGameTile: View {
     let entry: ContinuityLibraryEntry
     let artwork: Data?
     let isOwned: Bool
+    let supportsSaveTransfer: Bool
 
     /// GameCube/Wii case proportions, as the library's own cards.
     private static let coverAspect: CGFloat = 2.0 / 3.0
@@ -464,12 +482,19 @@ private struct NearbyGameTile: View {
                 .font(.footnote.weight(.semibold))
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
-            Text(isOwned ? L("In Library") : Self.size(entry.sizeBytes))
+            Text(isOwned ? L("In Library") : (entry.sizeBytes > 0 ? Self.size(entry.sizeBytes) : L("Download")))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityHint(isOwned ? L("Play the local copy or copy save states.") : L("Choose download and save options."))
+        .accessibilityHint(actionHint)
+    }
+
+    private var actionHint: String {
+        if supportsSaveTransfer {
+            return isOwned ? L("Play the local copy or copy save states.") : L("Choose download and save options.")
+        }
+        return isOwned ? L("Play Local Copy…") : L("Download")
     }
 
     @ViewBuilder

@@ -5717,3 +5717,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Stop the game before importing save states." = "Stop the game before importing save states.";
 "The save transfer could not be verified. Nothing was replaced." = "The save transfer could not be verified. Nothing was replaced.";
 "This device doesn't support copying save states. You can still copy the game." = "This device doesn't support copying save states. You can still copy the game.";
+"Access Token" = "アクセストークン";
+"Connected Servers" = "接続済みサーバー";
+"Emulation Server" = "Emulation Server";
+"Enter the Emulation Server address and an access token with library read permission." = "Emulation Server のアドレスと、ライブラリの読み取り権限を持つアクセストークンを入力してください。";
+"Preparing download…" = "ダウンロードを準備中…";
+"Remove %@" = "%@ を削除";
+"The server denied access. Check your access token and library permissions." = "サーバーがアクセスを拒否しました。アクセストークンとライブラリの権限を確認してください。";
+"The server did not provide a valid single-file game." = "サーバーから有効な単一ファイルのゲームを取得できませんでした。";
+"This Emulation Server version is unsupported." = "このバージョンの Emulation Server には対応していません。";
+"Connect to browse" = "接続して閲覧";
