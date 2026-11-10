@@ -256,11 +256,39 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(recorder.calls, ["pointer-source:remoteGyro"])
   }
 
-  /// Wii Remote 1 on a gyro pad: the source, then the motion switch it reads.
-  func test_wiiRemote1_gyroPad_showsTheSourceThenTheMotionSwitch() {
+  func test_wiiRemote1_gyroPad_editsEachAxisInThePortProfileOnBothPlatforms() {
     var screen = state(.wiiRemote, device: Self.dualSense, pads: [pad(Self.dualSense, "DualSense", gyro: true)])
-    screen.pointerSource = pointerSource(.pad(name: "DualSense", capabilities: PadCapabilities(hasGyro: true)), platform: .ios)
-    XCTAssertEqual(ids(make(screen), section: "pointer"), ["pointer-source", "pointer-motion"])
+    let group = AdvancedSettingGroups.imuPointGroup
+    let axes = ["Invert X", "Invert Y"].enumerated().map { index, name in
+      NumericSettingState(
+        owner: .wiimote, groupId: group, index: index, name: name, suffix: "",
+        isToggle: true, isInteger: false, value: Double(index), minimum: 0, maximum: 1,
+        defaultValue: 0, isExpression: false, coreName: name)
+    }
+    screen.advanced = [AdvancedGroupState(owner: .wiimote, groupId: group, title: "Point", settings: axes)]
+    screen.showsAdvanced = true
+
+    for platform in [PlatformKind.ios, .tvos] {
+      let recorder = Recorder()
+      screen.pointerSource = pointerSource(.pad(name: "DualSense", capabilities: PadCapabilities(hasGyro: true)), platform: platform)
+      let model = make(screen, recorder, platform: platform)
+      XCTAssertEqual(ids(model, section: "pointer"), ["pointer-source", "pointer-motion"] + axes.map(\.id))
+      XCTAssertEqual(model.sections.flatMap(\.items).filter { $0.id == axes[0].id }.count, 1)
+      guard case .toggle(let x)? = model.item(id: axes[0].id)?.role,
+        case .toggle(let y)? = model.item(id: axes[1].id)?.role
+      else { return XCTFail("Expected independent axis toggles") }
+      XCTAssertFalse(x.wrappedValue)
+      XCTAssertTrue(y.wrappedValue)
+      x.wrappedValue = true
+      y.wrappedValue = false
+      XCTAssertEqual(recorder.calls, ["setting:\(axes[0].id)=1.0", "setting:\(axes[1].id)=0.0"])
+
+      screen.pointerSource = nil
+      XCTAssertEqual(ids(make(screen, platform: platform), section: "pointer"), ["pointer-motion"])
+      screen.motionPointerEnabled = true
+      XCTAssertEqual(ids(make(screen, platform: platform), section: "pointer"), ["pointer-motion"] + axes.map(\.id))
+      screen.motionPointerEnabled = false
+    }
   }
 
   /// A plain pad on iOS has no pointer (plan call 4); the section says so instead of vanishing.

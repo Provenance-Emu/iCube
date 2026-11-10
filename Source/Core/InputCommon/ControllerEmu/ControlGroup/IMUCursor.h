@@ -21,8 +21,13 @@ public:
 
   ControlState GetAccelWeight() const;
 
+  bool GetInvertX() const { return m_invert_x_setting.GetValue(); }
+  bool GetInvertY() const { return m_invert_y_setting.GetValue(); }
+
 private:
   SettingValue<double> m_yaw_setting;
   SettingValue<double> m_accel_weight_setting;
+  SettingValue<bool> m_invert_x_setting;
+  SettingValue<bool> m_invert_y_setting;
 };
 }  // namespace ControllerEmu

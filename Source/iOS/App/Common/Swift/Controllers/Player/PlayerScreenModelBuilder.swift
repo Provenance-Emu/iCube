@@ -6,7 +6,7 @@ import SwiftUI
 /// Builds one player's screen (controller hub spec, "Player screen"):
 /// - Device (a pushed list), then Profile.
 /// - Buttons: capture rows under Face / D-Pad / Sticks / Triggers / System / Motion.
-/// - Pointer & Motion: iOS, Wii ports bound to the touchscreen or a gyro pad.
+/// - Pointer & Motion: Wii ports with a pointer source, including gyro pads on iOS and tvOS.
 /// - On-Screen Stick Feel: a port bound to the touchscreen.
 /// - Advanced, collapsed: numeric settings and raw expressions.
 ///
@@ -227,8 +227,8 @@ enum PlayerScreenModelBuilder {
   }
 
   /// A pad's port (or tvOS Wii Remote 1 on the idle touchscreen device). Wii Remote 1 gets its Pointer
-  /// Source row and then only what the source in use reads; another port's gyro pad gets the Wii
-  /// Remote's IMU pointer switch (decision 2), labelled with the pad.
+  /// Source row and then only what the selected source reads. On other ports, the motion switch
+  /// selects the gyro pointer and reveals its axis settings.
   private static func padPointerItems(state: PlayerScreenState, actions: PlayerScreenActions) -> [MenuItem] {
     let motionToggle = { (subtitle: String?) in
       MenuItem(
@@ -238,12 +238,17 @@ enum PlayerScreenModelBuilder {
     }
     guard let source = state.pointerSource else {
       let label = state.boundPad.map { String(format: L("Pointer: %@"), PointerSource.padGyro(padName: $0.name).label(deviceModel: "")) }
-      return [motionToggle(label)]
+      var items = [motionToggle(label)]
+      if state.motionPointerEnabled {
+        items += padPointerAxes(state: state, actions: actions)
+      }
+      return items
     }
     var items = [ControllerHubModelBuilder.pointerSourceRow(id: "pointer-source", source: source, setOverride: actions.setPointerSourceOverride)]
     switch source.source {
     case .padGyro where state.boundPad?.hasGyro == true:
       items.append(motionToggle(nil))
+      items += padPointerAxes(state: state, actions: actions)
     case .remoteGyro:
       // The remote's motion is integrated by the app (`RemotePointerBinding`): the same sensitivity and
       // invert keys as the phone-gyro pointer, and a recenter, since a relative pointer drifts.
@@ -262,6 +267,21 @@ enum PlayerScreenModelBuilder {
       break
     }
     return items
+  }
+
+  private static func padPointerAxes(state: PlayerScreenState, actions: PlayerScreenActions) -> [MenuItem] {
+    return state.advanced.flatMap(\.settings).filter(isPadPointerAxis).map { setting in
+      let horizontal = setting.coreName == "Invert X"
+      var item = settingItem(setting, sensorBarOnTop: state.isSensorBarOnTop, actions: actions)
+      item.title = horizontal ? L("Invert X") : L("Invert Y")
+      item.icon = horizontal ? "arrow.left.and.right" : "arrow.up.and.down"
+      return item
+    }
+  }
+
+  private static func isPadPointerAxis(_ setting: NumericSettingState) -> Bool {
+    setting.owner == .wiimote && setting.groupId == AdvancedSettingGroups.imuPointGroup
+      && (setting.coreName == "Invert X" || setting.coreName == "Invert Y")
   }
 
   /// The mode's sensitivity row (drag gain or gyro multiplier): a stepped multiplier, one compact
@@ -288,9 +308,11 @@ enum PlayerScreenModelBuilder {
         icon: state.showsAdvanced ? "chevron.up" : "chevron.down", role: .action(actions.toggleAdvanced)),
     ])]
     guard state.showsAdvanced else { return sections }
-    for group in state.advanced where !group.settings.isEmpty {
-      var items = group.settings.map { settingItem($0, sensorBarOnTop: state.isSensorBarOnTop, actions: actions) }
-      if let offset = group.settings.first(where: isVerticalOffset), !offset.isExpression, offset.value != offset.defaultValue {
+    for group in state.advanced {
+      let settings = group.settings.filter { !isPadPointerAxis($0) }
+      guard !settings.isEmpty else { continue }
+      var items = settings.map { settingItem($0, sensorBarOnTop: state.isSensorBarOnTop, actions: actions) }
+      if let offset = settings.first(where: isVerticalOffset), !offset.isExpression, offset.value != offset.defaultValue {
         items.append(MenuItem(
           id: "advanced-reset-vertical-offset", title: L("Reset Vertical Offset"),
           subtitle: String(format: L("Back to %@, the default."), NumericSettingSteps.label(offset.defaultValue, suffix: offset.suffix)),

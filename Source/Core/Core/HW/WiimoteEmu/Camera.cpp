@@ -50,7 +50,8 @@ int CameraLogic::BusWrite(u8 slave_addr, u8 addr, int count, const u8* data_in)
 }
 
 std::array<CameraPoint, CameraLogic::NUM_POINTS>
-CameraLogic::GetCameraPoints(const Common::Matrix44& transform, Common::Vec2 field_of_view)
+CameraLogic::GetCameraPoints(const Common::Matrix44& transform, Common::Vec2 field_of_view,
+                             bool invert_x, bool invert_y)
 {
   using Common::Matrix33;
   using Common::Matrix44;
@@ -76,8 +77,8 @@ CameraLogic::GetCameraPoints(const Common::Matrix44& transform, Common::Vec2 fie
       return CameraPoint();
 
     // FYI: truncating vs. rounding seems to produce more symmetrical cursor positioning.
-    const auto x = s32((1 - point.x / point.w) * CAMERA_RES_X / 2);
-    const auto y = s32((1 - point.y / point.w) * CAMERA_RES_Y / 2);
+    const auto x = s32((1 - (invert_x ? -point.x : point.x) / point.w) * CAMERA_RES_X / 2);
+    const auto y = s32((1 - (invert_y ? -point.y : point.y) / point.w) * CAMERA_RES_Y / 2);
 
     // Check if LED is outside of view.
     if (x < 0 || y < 0 || x >= CAMERA_RES_X || y >= CAMERA_RES_Y)
