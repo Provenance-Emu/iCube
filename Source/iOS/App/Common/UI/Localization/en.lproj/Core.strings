@@ -5781,3 +5781,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The server did not provide a valid single-file game." = "The server did not provide a valid single-file game.";
 "This Emulation Server version is unsupported." = "This Emulation Server version is unsupported.";
 "Connect to browse" = "Connect to browse";
+"Enter the server address. An access token is needed only if the server requires sign-in." = "Enter the server address. An access token is needed only if the server requires sign-in.";
+"Or open the server’s Settings → Devices and enter this PIN:" = "Or open the server’s Settings → Devices and enter this PIN:";
+"Pair Apple TV" = "Pair Apple TV";
+"Pairing is unavailable. Use a read access token to connect." = "Pairing is unavailable. Use a read access token to connect.";
+"Scan with your phone to approve this Apple TV." = "Scan with your phone to approve this Apple TV.";
+"The pairing code expired. Start pairing again." = "The pairing code expired. Start pairing again.";
+"This server requires sign-in." = "This server requires sign-in.";

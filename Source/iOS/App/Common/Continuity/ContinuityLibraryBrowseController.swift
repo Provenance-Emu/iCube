@@ -29,6 +29,7 @@ final class ContinuityLibraryBrowseController: ObservableObject {
     }
 
     @Published private(set) var phase: Phase = .idle
+    @Published private(set) var serverNeedsAuthorization = false
     /// Verified primary file registered by the last successful copy, including
     /// a matching file already on disk. Cleared before the next operation.
     private(set) var copiedFileURLs: [URL] = []
@@ -77,18 +78,23 @@ final class ContinuityLibraryBrowseController: ObservableObject {
             await load(from: advertisement, allowsPairing: allowsPairing)
             return
         }
-        guard let server = peer.server, let token = KeychainService.getPassword(for: server.id) else {
+        guard let server = peer.server else {
             phase = .failed(L("The server denied access. Check your access token and library permissions."))
             return
         }
         await runOperation {
-            let library = EmulationServerLibrary(server: server, token: token)
+            let library = EmulationServerLibrary(server: server, token: KeychainService.getPassword(for: server.id))
             self.serverLibrary = library
             self.phase = .loading
             do {
                 let entries = try await library.catalog()
                 try Task.checkCancellation()
+                self.serverNeedsAuthorization = false
                 self.phase = .browsing(entries)
+            } catch EmulationServerLibrary.ServerError.accessDenied {
+                guard !Task.isCancelled else { return }
+                self.serverNeedsAuthorization = true
+                self.phase = .failed(L("The server denied access. Check your access token and library permissions."))
             } catch {
                 guard !Task.isCancelled else { return }
                 self.phase = .failed(error.localizedDescription)
