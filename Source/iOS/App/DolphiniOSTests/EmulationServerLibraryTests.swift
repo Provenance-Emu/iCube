@@ -48,6 +48,96 @@ final class EmulationServerLibraryTests: XCTestCase {
     XCTAssertNil(page.next)
   }
 
+  // Generated TEST01 GameCube headers, two 32 KiB discs and a text file.
+  private static let archiveFixture = "N3q8ryccAATUZjpEEQEAAAAAAAAiAAAAAAAAADf0o37hABAAc10AKhFGrOZlh7L12hrO2arWVvG6q71uPWwtm2W1jjKSnDw/Qa6thy3nQTXdRkS+MxCugNNd7HARbuLuAPaOf1BcYGj8SJVOIOibzjE1Rkz1HEUHie2Q2cbRzg7IPjjzPMZpYOvzzvOmPiMBou6/cpcdo2IgVgAAAIEzB64P1OxLiUIV9rNFfWyKVFKTyoG2wVx6csbct8b6zFJ3wsZZP+eUbg26E4p3VlcudeSAE+VzvJJAN/nl7VqMyf7/YWh1HHusjS4awgLKw3md/H2ZqnCnjUAkslNVh7LhcnVXKvEhwrlcp3P266RABXSaY5iiPwsg9wlQ2GHalqYLATnTrEICeilQkU8gqArAAAAXBnsBCYCWAAcLAQABIwMBAQVdABAAAAyA5goBk1VRkAAA"
+
+  func testSevenZipCatalogDownloadImportsAllDiscsAndRetryReusesThem() async throws {
+    let bytes = try XCTUnwrap(Data(base64Encoded: Self.archiveFixture))
+    let transport = ArchiveTransport(bytes: bytes)
+    let server = try EmulationServer(address: "http://archive-\(UUID().uuidString).invalid")
+    let library = EmulationServerLibrary(server: server, token: "generated-token", transport: transport)
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
+    XCTAssertEqual(entry.game.platform, "gc")
+    let folder = try server.folder(for: entry)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let files = try await library.copy(entry) { _ in }
+    XCTAssertEqual(files.map(\.lastPathComponent), ["Disc1.iso", "Disc2.iso"])
+    for (index, file) in files.enumerated() {
+      let data = try Data(contentsOf: file)
+      XCTAssertEqual(data.count, 0x8000)
+      XCTAssertEqual(data[6], UInt8(index))
+      XCTAssertTrue(file.path.hasPrefix(folder.path + "/"))
+    }
+    XCTAssertFalse(FileManager.default.fileExists(atPath: folder.appendingPathComponent("readme.txt").path))
+    let repeated = try await library.copy(entry) { _ in }
+    XCTAssertEqual(repeated, files)
+
+    try Data("existing user data".utf8).write(to: files[0])
+    do {
+      _ = try await library.copy(entry) { _ in }
+      XCTFail("A different existing file must be preserved")
+    } catch {
+      XCTAssertEqual(try Data(contentsOf: files[0]), Data("existing user data".utf8))
+      XCTAssertEqual(try Data(contentsOf: files[1]).count, 0x8000)
+    }
+  }
+
+  func testCorruptAndEscapingSevenZipDownloadsDoNotPublishGames() async throws {
+    // Generated ../escape.txt archive, also exercised by ZipImportHelperTests.
+    let hostile = try XCTUnwrap(Data(base64Encoded: "N3q8ryccAARJoG80CAAAAAAAAABSAAAAAAAAAF59QUdlc2NhcGVkCgEEBgABCQgABwsBAAEBAAwIAAgKAeN2/M4AAAUBER0ALgAuAC8AZQBzAGMAYQBwAGUALgB0AHgAdAAAABQKAQAAmOf7FlLdARUGAQAggKSBAAA="))
+    let noGames = try XCTUnwrap(Data(base64Encoded: "N3q8ryccAAQffpTFEgAAAAAAAABiAAAAAAAAALuO3a4BAA1ObyBkaXNjIGltYWdlcwABBAYAAQkSAAcLAQABISEBAAwOAAgKATi7/q4AAAUBGQwAAAAAAAAAAAAAAAARFwByAGUAYQBkAG0AZQAuAHQAeAB0AAAAGQQAAAAAFAoBAOX5obZicd0BFQYBACCApIEAAA=="))
+    let invalidDisc = try XCTUnwrap(Data(base64Encoded: "N3q8ryccAATX+P4TFwAAAAAAAABaAAAAAAAAAJT5tWsBABJJbnZhbGlkIGRpc2MgaGVhZGVyAAEEBgABCRcABwsBAAEhIQEADBMACAoBxlKPWgAABQEZDAAAAAAAAAAAAAAAABERAGIAYQBkAC4AaQBzAG8AAAAZAgAAFAoBALI2pbZicd0BFQYBACCApIEAAA=="))
+    for bytes in [Data("not an archive".utf8), hostile, noGames, invalidDisc] {
+      let server = try EmulationServer(address: "http://rejected-\(UUID().uuidString).invalid")
+      let library = EmulationServerLibrary(server: server, token: nil, transport: ArchiveTransport(bytes: bytes))
+      let page = try await library.catalog()
+      let entry = try XCTUnwrap(page.entries.first)
+      let folder = try server.folder(for: entry)
+      do {
+        _ = try await library.copy(entry) { _ in }
+        XCTFail("Invalid archives must be rejected")
+      } catch {
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+      }
+    }
+  }
+
+  func testPlainDiscStillImportsAndReusesItsDestination() async throws {
+    var bytes = Data(repeating: 0, count: 0x8000)
+    bytes.replaceSubrange(0 ..< 6, with: Data("TEST01".utf8))
+    bytes.replaceSubrange(0x1C ..< 0x20, with: [0xC2, 0x33, 0x9F, 0x3D])
+    let server = try EmulationServer(address: "http://plain-\(UUID().uuidString).invalid")
+    let transport = ArchiveTransport(bytes: bytes, name: "Generated.iso")
+    let library = EmulationServerLibrary(server: server, token: nil, transport: transport)
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
+    let folder = try server.folder(for: entry)
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let files = try await library.copy(entry) { _ in }
+    XCTAssertEqual(files.map(\.lastPathComponent), ["Game.iso"])
+    XCTAssertEqual(try Data(contentsOf: files[0]), bytes)
+    let repeated = try await library.copy(entry) { _ in }
+    XCTAssertEqual(repeated, files)
+  }
+
+  func testCancelledArchiveDownloadDoesNotPublishGames() async throws {
+    let bytes = try XCTUnwrap(Data(base64Encoded: Self.archiveFixture))
+    let server = try EmulationServer(address: "http://cancelled-\(UUID().uuidString).invalid")
+    let transport = ArchiveTransport(bytes: bytes, cancelDownload: true)
+    let library = EmulationServerLibrary(server: server, token: nil, transport: transport)
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
+    let folder = try server.folder(for: entry)
+    let task = Task { try await library.copy(entry) { _ in } }
+    do {
+      _ = try await task.value
+      XCTFail("Cancelled downloads must be rejected")
+    } catch is CancellationError {
+      XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
+  }
+
   func testTokenlessCatalogSendsNoAuthorizationHeader() async throws {
     let transport = FixtureTransport()
     let server = try EmulationServer(address: "media.local")
@@ -148,5 +238,44 @@ private actor FixtureTransport: ContinuityTransport {
   func download(_ request: ContinuityRequest, to destination: URL, resumeOffset: Int64,
                 progress: (@Sendable (Int64, Int64?) -> Void)?) async throws -> Int64 {
     throw URLError(.unsupportedURL)
+  }
+}
+
+// Generated archive download with the published source browse shape.
+private actor ArchiveTransport: ContinuityTransport {
+  let bytes: Data
+  let name: String
+  let cancelDownload: Bool
+
+  init(bytes: Data, name: String = "Generated.7z", cancelDownload: Bool = false) {
+    self.bytes = bytes
+    self.name = name
+    self.cancelDownload = cancelDownload
+  }
+
+  func request(_ request: ContinuityRequest) async throws -> ContinuityResponse {
+    let body: String
+    switch request.url.path {
+    case "/api/v1/capabilities":
+      body = #"{"protocol":{"major":1}}"#
+    case "/api/v1/browse-libraries":
+      body = #"{"items":[{"id":"lib1"}],"nextCursor":null}"#
+    case "/api/v1/browse":
+      body = """
+      {"items":[{"entityType":"source","source":{"id":"archive1","name":"\(name)","systemId":"com.provenance.gamecube","size":\(bytes.count),"availability":"local"}}],"nextCursor":null}
+      """
+    default:
+      throw URLError(.unsupportedURL)
+    }
+    return ContinuityResponse(status: 200, body: Data(body.utf8))
+  }
+
+  func download(_ request: ContinuityRequest, to destination: URL, resumeOffset: Int64,
+                progress: (@Sendable (Int64, Int64?) -> Void)?) async throws -> Int64 {
+    guard request.url.path == "/api/v1/sources/archive1/content" else { throw URLError(.unsupportedURL) }
+    try bytes.write(to: destination)
+    if cancelDownload { withUnsafeCurrentTask { $0?.cancel() } }
+    progress?(Int64(bytes.count), Int64(bytes.count))
+    return Int64(bytes.count)
   }
 }

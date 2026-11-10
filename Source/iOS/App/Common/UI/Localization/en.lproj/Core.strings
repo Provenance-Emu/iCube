@@ -5790,3 +5790,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "This server requires sign-in." = "This server requires sign-in.";
 "No GameCube or Wii games are available. Check the server’s library permissions and system labels." = "No GameCube or Wii games are available. Check the server’s library permissions and system labels.";
 "Load More" = "Load More";
+
+"Extracting archive…" = "Extracting archive…";
+
+"The server did not provide valid game files." = "The server did not provide valid game files.";

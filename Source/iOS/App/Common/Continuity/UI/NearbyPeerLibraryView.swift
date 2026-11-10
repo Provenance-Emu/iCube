@@ -243,7 +243,10 @@ struct NearbyPeerLibraryView: View {
     case .copying(let entry, let progress):
       card {
         Text(String(format: L("Copying %@"), entry.game.displayName)).font(icube.font(.nav))
-        if let progress {
+        if let progress, progress.bytesTransferred == progress.totalBytes,
+           progress.currentFile.relativePath.lowercased().hasSuffix(".7z") {
+          ProgressView(L("Extracting archive…"))
+        } else if let progress {
           NearbyTransferProgress(bytes: progress.bytesTransferred, total: progress.totalBytes)
         } else {
           Text(peer.server == nil ? String(format: L("Asking %@…"), peer.name) : L("Preparing download…")).foregroundStyle(.secondary)

@@ -28,27 +28,27 @@ final class ContinuityLibraryBrowseController: ObservableObject {
         case failed(String)
     }
 
-    @Published private(set) var phase: Phase = .idle
-    @Published private(set) var serverNeedsAuthorization = false
-    @Published private(set) var hasMoreServerGames = false
-    @Published private(set) var isLoadingMoreServerGames = false
-    /// Verified primary file registered by the last successful copy, including
-    /// a matching file already on disk. Cleared before the next operation.
-    private(set) var copiedFileURLs: [URL] = []
-    private(set) var verifiedDescriptors: [FileDescriptor] = []
-    var copiedFileURL: URL? { copiedFileURLs.first }
-    /// Cover art, keyed by catalog key. Fetched lazily per visible row.
-    @Published private(set) var artwork: [String: Data] = [:]
+  @Published private(set) var phase: Phase = .idle
+  @Published private(set) var serverNeedsAuthorization = false
+  @Published private(set) var hasMoreServerGames = false
+  @Published private(set) var isLoadingMoreServerGames = false
+  /// Verified primary file registered by the last successful copy, including
+  /// a matching file already on disk. Cleared before the next operation.
+  private(set) var copiedFileURLs: [URL] = []
+  private(set) var verifiedDescriptors: [FileDescriptor] = []
+  var copiedFileURL: URL? { copiedFileURLs.first }
+  /// Cover art, keyed by catalog key. Fetched lazily per visible row.
+  @Published private(set) var artwork: [String: Data] = [:]
 
     private let boundTransport: PeerBoundContinuityTransport
     private let client: ContinuityLibraryClient
     private let pairingClient: ContinuityPairingClient
     private let fileProvider: any ContinuityFileProviding
     private let didPair: @MainActor (ContinuityPairingClient.PairingHandle) async -> Void
-    private var serverLibrary: EmulationServerLibrary?
-    private var serverCatalogCursor: EmulationServerLibrary.CatalogCursor?
-    private var serverEntries: [ContinuityLibraryEntry] = []
-    private var serverEntryKeys = Set<String>()
+  private var serverLibrary: EmulationServerLibrary?
+  private var serverCatalogCursor: EmulationServerLibrary.CatalogCursor?
+  private var serverEntries: [ContinuityLibraryEntry] = []
+  private var serverEntryKeys = Set<String>()
     private var baseURL: URL?
     private var expectedPeerID: String?
     private var pendingPairing: ContinuityPairingClient.PairingHandle?
@@ -73,79 +73,79 @@ final class ContinuityLibraryBrowseController: ObservableObject {
 
     // MARK: - Browsing
 
-    func load(from advertisement: ContinuityAdvertisement, allowsPairing: Bool = true) async {
-        serverLibrary = nil
-        resetServerCatalog()
-        await runOperation { await self.loadCatalog(from: advertisement, allowsPairing: allowsPairing) }
-    }
+  func load(from advertisement: ContinuityAdvertisement, allowsPairing: Bool = true) async {
+    serverLibrary = nil
+    resetServerCatalog()
+    await runOperation { await self.loadCatalog(from: advertisement, allowsPairing: allowsPairing) }
+  }
 
-    func load(peer: NearbyLibrariesModel.Peer, allowsPairing: Bool = true, search: String = "") async {
-        if let advertisement = peer.advertisement {
-            await load(from: advertisement, allowsPairing: allowsPairing)
-            return
-        }
-        guard let server = peer.server else {
-            phase = .failed(L("The server denied access. Check your access token and library permissions."))
-            return
-        }
-        await runOperation {
-            let library = EmulationServerLibrary(server: server, token: KeychainService.getPassword(for: server.id))
-            self.serverLibrary = library
-            self.resetServerCatalog()
-            self.phase = .loading
-            do {
-                let page = try await library.catalog(search: search)
-                try Task.checkCancellation()
-                self.serverNeedsAuthorization = false
-                self.showServerPage(page)
-            } catch EmulationServerLibrary.ServerError.accessDenied {
-                guard !Task.isCancelled else { return }
-                self.serverNeedsAuthorization = true
-                self.phase = .failed(L("The server denied access. Check your access token and library permissions."))
-            } catch {
-                guard !Task.isCancelled else { return }
-                self.phase = .failed(error.localizedDescription)
-            }
-        }
+  func load(peer: NearbyLibrariesModel.Peer, allowsPairing: Bool = true, search: String = "") async {
+    if let advertisement = peer.advertisement {
+      await load(from: advertisement, allowsPairing: allowsPairing)
+      return
     }
+    guard let server = peer.server else {
+      phase = .failed(L("The server denied access. Check your access token and library permissions."))
+      return
+    }
+    await runOperation {
+      let library = EmulationServerLibrary(server: server, token: KeychainService.getPassword(for: server.id))
+      self.serverLibrary = library
+      self.resetServerCatalog()
+      self.phase = .loading
+      do {
+        let page = try await library.catalog(search: search)
+        try Task.checkCancellation()
+        self.serverNeedsAuthorization = false
+        self.showServerPage(page)
+      } catch EmulationServerLibrary.ServerError.accessDenied {
+        guard !Task.isCancelled else { return }
+        self.serverNeedsAuthorization = true
+        self.phase = .failed(L("The server denied access. Check your access token and library permissions."))
+      } catch {
+        guard !Task.isCancelled else { return }
+        self.phase = .failed(error.localizedDescription)
+      }
+    }
+  }
 
-    func loadMoreServerGames() async {
-        guard let library = serverLibrary, let cursor = serverCatalogCursor, !isLoadingMoreServerGames else { return }
-        await runOperation {
-            self.isLoadingMoreServerGames = true
-            defer {
-                if self.serverLibrary === library { self.isLoadingMoreServerGames = false }
-            }
-            do {
-                let page = try await library.catalogPage(after: cursor)
-                try Task.checkCancellation()
-                self.showServerPage(page)
-            } catch EmulationServerLibrary.ServerError.accessDenied {
-                guard !Task.isCancelled else { return }
-                self.serverNeedsAuthorization = true
-                self.phase = .failed(L("The server denied access. Check your access token and library permissions."))
-            } catch {
-                guard !Task.isCancelled else { return }
-                self.phase = .failed(error.localizedDescription)
-            }
-        }
+  func loadMoreServerGames() async {
+    guard let library = serverLibrary, let cursor = serverCatalogCursor, !isLoadingMoreServerGames else { return }
+    await runOperation {
+      self.isLoadingMoreServerGames = true
+      defer {
+        if self.serverLibrary === library { self.isLoadingMoreServerGames = false }
+      }
+      do {
+        let page = try await library.catalogPage(after: cursor)
+        try Task.checkCancellation()
+        self.showServerPage(page)
+      } catch EmulationServerLibrary.ServerError.accessDenied {
+        guard !Task.isCancelled else { return }
+        self.serverNeedsAuthorization = true
+        self.phase = .failed(L("The server denied access. Check your access token and library permissions."))
+      } catch {
+        guard !Task.isCancelled else { return }
+        self.phase = .failed(error.localizedDescription)
+      }
     }
+  }
 
-    private func resetServerCatalog() {
-        serverCatalogCursor = nil
-        serverEntries = []
-        serverEntryKeys.removeAll()
-        hasMoreServerGames = false
-        isLoadingMoreServerGames = false
-    }
+  private func resetServerCatalog() {
+    serverCatalogCursor = nil
+    serverEntries = []
+    serverEntryKeys.removeAll()
+    hasMoreServerGames = false
+    isLoadingMoreServerGames = false
+  }
 
-    private func showServerPage(_ page: EmulationServerLibrary.CatalogPage) {
-        serverCatalogCursor = page.next
-        hasMoreServerGames = page.next != nil
-        serverEntries.append(contentsOf: page.entries.filter { serverEntryKeys.insert($0.key).inserted })
-        serverEntries.sort { $0.game.displayName.localizedStandardCompare($1.game.displayName) == .orderedAscending }
-        phase = .browsing(serverEntries)
-    }
+  private func showServerPage(_ page: EmulationServerLibrary.CatalogPage) {
+    serverCatalogCursor = page.next
+    hasMoreServerGames = page.next != nil
+    serverEntries.append(contentsOf: page.entries.filter { serverEntryKeys.insert($0.key).inserted })
+    serverEntries.sort { $0.game.displayName.localizedStandardCompare($1.game.displayName) == .orderedAscending }
+    phase = .browsing(serverEntries)
+  }
 
     private func loadCatalog(from advertisement: ContinuityAdvertisement, allowsPairing: Bool) async {
         copiedFileURLs = []
@@ -298,29 +298,30 @@ final class ContinuityLibraryBrowseController: ObservableObject {
         }
     }
 
-    private func copyServerEntry(_ entry: ContinuityLibraryEntry, from library: EmulationServerLibrary) async {
-        copiedFileURLs = []
-        verifiedDescriptors = []
-        let id = operationID
-        phase = .copying(entry: entry, progress: nil)
-        do {
-            try await ContinuityTransferGate.shared.withPermit {
-                let url = try await library.copy(entry) { [weak self] progress in
-                    Task { @MainActor in
-                        guard let self, self.operationID == id, case .copying = self.phase else { return }
-                        self.phase = .copying(entry: entry, progress: progress)
-                    }
-                }
-                TVLibraryBridge.updateLibrary(withRemotePaths: [url.path], fetchMetadata: true)
-                guard !Task.isCancelled else { return }
-                copiedFileURLs = [url]
-                phase = .copied(entry)
-            }
-        } catch {
-            guard !Task.isCancelled else { return }
-            phase = .failed(error.localizedDescription)
+  private func copyServerEntry(_ entry: ContinuityLibraryEntry, from library: EmulationServerLibrary) async {
+    copiedFileURLs = []
+    verifiedDescriptors = []
+    let id = operationID
+    phase = .copying(entry: entry, progress: nil)
+    do {
+      try await ContinuityTransferGate.shared.withPermit {
+        let urls = try await library.copy(entry) { [weak self] progress in
+          Task { @MainActor in
+            guard let self, self.operationID == id, case .copying = self.phase else { return }
+            self.phase = .copying(entry: entry, progress: progress)
+          }
         }
+        try Task.checkCancellation()
+        TVLibraryBridge.updateLibrary(withRemotePaths: urls.map(\.path), fetchMetadata: true)
+        guard !Task.isCancelled else { return }
+        copiedFileURLs = urls
+        phase = .copied(entry)
+      }
+    } catch {
+      guard !Task.isCancelled else { return }
+      phase = .failed(error.localizedDescription)
     }
+  }
 
     private func copyEntry(_ entry: ContinuityLibraryEntry) async {
         guard let baseURL else { return }
