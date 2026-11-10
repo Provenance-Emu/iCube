@@ -12,7 +12,14 @@ final class EmulationServerLibraryTests: XCTestCase {
     let transport = FixtureTransport()
     let server = try EmulationServer(address: "Example.local")
     let library = EmulationServerLibrary(server: server, token: "test-token", transport: transport)
-    let entries = try await library.catalog()
+    let first = try await library.catalog(search: " Wii + GC ")
+    XCTAssertEqual(first.entries.map(\.key), ["item:gc1"])
+    let firstRequests = await transport.requests
+    XCTAssertEqual(firstRequests.filter { $0.url.path == "/api/v1/browse" }.count, 1)
+    let cursor = try XCTUnwrap(first.next)
+    let second = try await library.catalogPage(after: cursor)
+    XCTAssertNil(second.next)
+    let entries = first.entries + second.entries
     XCTAssertEqual(entries.map(\.key), ["item:gc1", "source:wii1"])
     XCTAssertEqual(entries.map(\.game.platform), ["gc", "wii"])
     XCTAssertEqual(entries.first?.hasArtwork, true)
@@ -24,15 +31,29 @@ final class EmulationServerLibraryTests: XCTestCase {
     let query = requests.last.flatMap { URLComponents(url: $0.url, resolvingAgainstBaseURL: false)?.queryItems }
     XCTAssertEqual(query?.first(where: { $0.name == "libraryId" })?.value, "lib1")
     XCTAssertEqual(query?.first(where: { $0.name == "cursor" })?.value, "opaque+cursor/=")
+    for request in requests.filter({ $0.url.path == "/api/v1/browse" }) {
+      let query = URLComponents(url: request.url, resolvingAgainstBaseURL: false)?.queryItems
+      XCTAssertEqual(query?.first(where: { $0.name == "systemIds" })?.value, "com.provenance.gamecube,com.provenance.wii")
+      XCTAssertEqual(query?.first(where: { $0.name == "search" })?.value, "Wii + GC")
+    }
     XCTAssertTrue(requests.last?.url.absoluteString.contains("cursor=opaque%2B") == true)
+  }
+
+  func testFirstPageSkipsRowsThatCannotBePlayed() async throws {
+    let transport = FixtureTransport(skipFirstGame: true)
+    let server = try EmulationServer(address: "media.local")
+    let library = EmulationServerLibrary(server: server, token: nil, transport: transport)
+    let page = try await library.catalog()
+    XCTAssertEqual(page.entries.map(\.key), ["source:wii1"])
+    XCTAssertNil(page.next)
   }
 
   func testTokenlessCatalogSendsNoAuthorizationHeader() async throws {
     let transport = FixtureTransport()
     let server = try EmulationServer(address: "media.local")
     let library = EmulationServerLibrary(server: server, token: nil, transport: transport)
-    let entries = try await library.catalog()
-    XCTAssertEqual(entries.count, 2)
+    let page = try await library.catalog()
+    XCTAssertEqual(page.entries.count, 1)
     let requests = await transport.requests
     XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
   }
@@ -82,6 +103,11 @@ final class EmulationServerLibraryTests: XCTestCase {
 private actor FixtureTransport: ContinuityTransport {
   private(set) var requests: [ContinuityRequest] = []
   private var redemptionAttempts = 0
+  private let skipFirstGame: Bool
+
+  init(skipFirstGame: Bool = false) {
+    self.skipFirstGame = skipFirstGame
+  }
 
   func request(_ request: ContinuityRequest) async throws -> ContinuityResponse {
     requests.append(request)
@@ -104,6 +130,8 @@ private actor FixtureTransport: ContinuityTransport {
         {"entityType":"source","source":{"id":"offline","name":"Gone.iso","systemId":"com.provenance.wii","size":1234,"availability":"offline"}}
       ],"nextCursor":null}
       """
+    case "/api/v1/browse" where skipFirstGame:
+      body = #"{"items":[{"entityType":"item","item":{"id":"jag1","title":"Jaguar title","systemIdentifier":"com.provenance.jaguar"}}],"nextCursor":"opaque+cursor/="}"#
     case "/api/v1/browse":
       body = """
       {"items":[

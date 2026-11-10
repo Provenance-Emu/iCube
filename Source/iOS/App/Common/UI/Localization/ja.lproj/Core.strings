@@ -5734,3 +5734,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Scan with your phone to approve this Apple TV." = "スマートフォンでスキャンして、この Apple TV を承認してください。";
 "The pairing code expired. Start pairing again." = "ペアリングコードの有効期限が切れました。ペアリングをやり直してください。";
 "This server requires sign-in." = "このサーバーにはサインインが必要です。";
+"No GameCube or Wii games are available. Check the server’s library permissions and system labels." = "利用できるゲームキューブまたは Wii のゲームがありません。サーバーのライブラリのアクセス権と機種の分類を確認してください。";
+"Load More" = "さらに読み込む";

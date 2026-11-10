@@ -170,14 +170,50 @@ actor EmulationServerLibrary {
     !token.isEmpty && token.utf8.allSatisfy { (33 ... 126).contains($0) }
   }
 
-  func catalog() async throws -> [ContinuityLibraryEntry] {
-    let libraries = try await libraries()
+  struct CatalogCursor: Sendable {
+    fileprivate var libraries: ArraySlice<String>
+    fileprivate var cursor: String?
+    fileprivate var seenCursors = Set<String>()
+    fileprivate let search: String
+  }
+
+  struct CatalogPage: Sendable {
+    let entries: [ContinuityLibraryEntry]
+    let next: CatalogCursor?
+  }
+
+  func catalog(search: String = "") async throws -> CatalogPage {
+    let libraries = try await libraries().map(\.id)
+    try Task.checkCancellation()
+    games.removeAll()
+    return try await catalogPage(after: CatalogCursor(
+      libraries: libraries[...],
+      search: search.trimmingCharacters(in: .whitespacesAndNewlines)
+    ))
+  }
+
+  func catalogPage(after cursor: CatalogCursor) async throws -> CatalogPage {
+    var remaining = cursor
     var entries: [ContinuityLibraryEntry] = []
-    var nextGames: [String: Game] = [:]
-    for library in libraries {
-      let query = [URLQueryItem(name: "libraryId", value: library.id), URLQueryItem(name: "category", value: "games")]
-      let rows: [Row] = try await pages("browse", query: query)
-      for row in rows {
+    while let library = remaining.libraries.first, entries.isEmpty {
+      try Task.checkCancellation()
+      var query = [
+        URLQueryItem(name: "libraryId", value: library),
+        URLQueryItem(name: "category", value: "games"),
+        URLQueryItem(name: "systemIds", value: "com.provenance.gamecube,com.provenance.wii"),
+      ]
+      if !remaining.search.isEmpty { query.append(URLQueryItem(name: "search", value: remaining.search)) }
+      if let cursor = remaining.cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+      let page: Page<Row> = try await read("browse", query: query)
+      try Task.checkCancellation()
+      remaining.cursor = page.nextCursor
+      if let cursor = remaining.cursor {
+        guard remaining.seenCursors.insert(cursor).inserted else { throw ServerError.invalidContent }
+      } else {
+        remaining.libraries.removeFirst()
+        remaining.seenCursors.removeAll()
+      }
+      for row in page.items {
         let entry: ContinuityLibraryEntry
         let game: Game
         if row.entityType == "item", let item = row.item, let platform = Self.platform(item.systemIdentifier) {
@@ -195,11 +231,11 @@ actor EmulationServerLibrary {
         } else {
           continue
         }
-        if nextGames.updateValue(game, forKey: entry.key) == nil { entries.append(entry) }
+        games[entry.key] = game
+        entries.append(entry)
       }
     }
-    games = nextGames
-    return entries.sorted { $0.game.displayName.localizedStandardCompare($1.game.displayName) == .orderedAscending }
+    return CatalogPage(entries: entries, next: remaining.libraries.isEmpty ? nil : remaining)
   }
 
   func artwork(for entry: ContinuityLibraryEntry) async -> Data? {

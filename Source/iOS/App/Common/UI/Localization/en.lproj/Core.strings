@@ -5788,3 +5788,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Scan with your phone to approve this Apple TV." = "Scan with your phone to approve this Apple TV.";
 "The pairing code expired. Start pairing again." = "The pairing code expired. Start pairing again.";
 "This server requires sign-in." = "This server requires sign-in.";
+"No GameCube or Wii games are available. Check the server’s library permissions and system labels." = "No GameCube or Wii games are available. Check the server’s library permissions and system labels.";
+"Load More" = "Load More";

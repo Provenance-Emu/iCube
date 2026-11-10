@@ -30,6 +30,8 @@ final class ContinuityLibraryBrowseController: ObservableObject {
 
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var serverNeedsAuthorization = false
+    @Published private(set) var hasMoreServerGames = false
+    @Published private(set) var isLoadingMoreServerGames = false
     /// Verified primary file registered by the last successful copy, including
     /// a matching file already on disk. Cleared before the next operation.
     private(set) var copiedFileURLs: [URL] = []
@@ -44,6 +46,9 @@ final class ContinuityLibraryBrowseController: ObservableObject {
     private let fileProvider: any ContinuityFileProviding
     private let didPair: @MainActor (ContinuityPairingClient.PairingHandle) async -> Void
     private var serverLibrary: EmulationServerLibrary?
+    private var serverCatalogCursor: EmulationServerLibrary.CatalogCursor?
+    private var serverEntries: [ContinuityLibraryEntry] = []
+    private var serverEntryKeys = Set<String>()
     private var baseURL: URL?
     private var expectedPeerID: String?
     private var pendingPairing: ContinuityPairingClient.PairingHandle?
@@ -70,10 +75,11 @@ final class ContinuityLibraryBrowseController: ObservableObject {
 
     func load(from advertisement: ContinuityAdvertisement, allowsPairing: Bool = true) async {
         serverLibrary = nil
+        resetServerCatalog()
         await runOperation { await self.loadCatalog(from: advertisement, allowsPairing: allowsPairing) }
     }
 
-    func load(peer: NearbyLibrariesModel.Peer, allowsPairing: Bool = true) async {
+    func load(peer: NearbyLibrariesModel.Peer, allowsPairing: Bool = true, search: String = "") async {
         if let advertisement = peer.advertisement {
             await load(from: advertisement, allowsPairing: allowsPairing)
             return
@@ -85,12 +91,13 @@ final class ContinuityLibraryBrowseController: ObservableObject {
         await runOperation {
             let library = EmulationServerLibrary(server: server, token: KeychainService.getPassword(for: server.id))
             self.serverLibrary = library
+            self.resetServerCatalog()
             self.phase = .loading
             do {
-                let entries = try await library.catalog()
+                let page = try await library.catalog(search: search)
                 try Task.checkCancellation()
                 self.serverNeedsAuthorization = false
-                self.phase = .browsing(entries)
+                self.showServerPage(page)
             } catch EmulationServerLibrary.ServerError.accessDenied {
                 guard !Task.isCancelled else { return }
                 self.serverNeedsAuthorization = true
@@ -100,6 +107,44 @@ final class ContinuityLibraryBrowseController: ObservableObject {
                 self.phase = .failed(error.localizedDescription)
             }
         }
+    }
+
+    func loadMoreServerGames() async {
+        guard let library = serverLibrary, let cursor = serverCatalogCursor, !isLoadingMoreServerGames else { return }
+        await runOperation {
+            self.isLoadingMoreServerGames = true
+            defer {
+                if self.serverLibrary === library { self.isLoadingMoreServerGames = false }
+            }
+            do {
+                let page = try await library.catalogPage(after: cursor)
+                try Task.checkCancellation()
+                self.showServerPage(page)
+            } catch EmulationServerLibrary.ServerError.accessDenied {
+                guard !Task.isCancelled else { return }
+                self.serverNeedsAuthorization = true
+                self.phase = .failed(L("The server denied access. Check your access token and library permissions."))
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.phase = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    private func resetServerCatalog() {
+        serverCatalogCursor = nil
+        serverEntries = []
+        serverEntryKeys.removeAll()
+        hasMoreServerGames = false
+        isLoadingMoreServerGames = false
+    }
+
+    private func showServerPage(_ page: EmulationServerLibrary.CatalogPage) {
+        serverCatalogCursor = page.next
+        hasMoreServerGames = page.next != nil
+        serverEntries.append(contentsOf: page.entries.filter { serverEntryKeys.insert($0.key).inserted })
+        serverEntries.sort { $0.game.displayName.localizedStandardCompare($1.game.displayName) == .orderedAscending }
+        phase = .browsing(serverEntries)
     }
 
     private func loadCatalog(from advertisement: ContinuityAdvertisement, allowsPairing: Bool) async {
