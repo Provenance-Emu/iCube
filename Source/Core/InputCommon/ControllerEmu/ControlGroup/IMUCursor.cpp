@@ -45,6 +45,9 @@ IMUCursor::IMUCursor(std::string name_, std::string ui_name_)
               _trans("Influence of accelerometer data on pitch and roll. Higher values will reduce "
                      "drift at the cost of noise. Consider values between 1% and 3%.")},
              2, 0, 100);
+
+  AddSetting(&m_invert_x_setting, {_trans("Invert X")}, false);
+  AddSetting(&m_invert_y_setting, {_trans("Invert Y")}, false);
 }
 
 ControlState IMUCursor::GetTotalYaw() const

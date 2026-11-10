@@ -24,6 +24,7 @@ public:
   StateData GetRawState() const;
   // Also updates the state by default
   std::optional<StateData> GetState(bool update = true);
+  bool AreInputsBound() const;
 
   // Value is in rad/s.
   ControlState GetDeadzone() const;
@@ -33,7 +34,6 @@ public:
 private:
   using Clock = std::chrono::steady_clock;
 
-  bool AreInputsBound() const;
   bool CanCalibrate() const;
   void RestartCalibration();
   void UpdateCalibration(const StateData&);
