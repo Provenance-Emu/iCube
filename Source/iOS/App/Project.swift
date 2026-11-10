@@ -761,7 +761,7 @@ let project = Project(
     packages: [
         // Shared packages are maintained and tested in their own repositories.
         .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .exact("0.1.7-swift.1")),
-        .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.1.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.1")),
         .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.2")),
         .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.0")),
