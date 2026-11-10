@@ -44,6 +44,18 @@ final class EmulationServerLibraryTests: XCTestCase {
     XCTAssertEqual(url.absoluteString, "https://media.local:8443/ui/?settings=devices#pair=012345")
   }
 
+  func testPairingUsesPublishedV1Responses() async throws {
+    let transport = FixtureTransport()
+    let server = try EmulationServer(address: "https://media.local:8443")
+    let library = EmulationServerLibrary(server: server, token: nil, transport: transport)
+    let challenge = try await library.startPairing()
+    XCTAssertEqual(challenge.pin, "012345")
+    let pending = try await library.redeemPairing(challenge)
+    XCTAssertNil(pending)
+    let token = try await library.redeemPairing(challenge)
+    XCTAssertEqual(token, "fixture-device-token")
+  }
+
   func testBonjourAdvertUsesResolvedHostPortAndTLS() throws {
     let id = UUID()
     let txt = ["id": id.uuidString, "v": "1", "tls": "1", "pair": "0", "name": "Living Room"]
@@ -69,11 +81,18 @@ final class EmulationServerLibraryTests: XCTestCase {
 
 private actor FixtureTransport: ContinuityTransport {
   private(set) var requests: [ContinuityRequest] = []
+  private var redemptionAttempts = 0
 
   func request(_ request: ContinuityRequest) async throws -> ContinuityResponse {
     requests.append(request)
     let body: String
     switch request.url.path {
+    case "/api/v1/device-pairing":
+      return ContinuityResponse(status: 201, body: Data(#"{"id":"challenge","pin":"012345","secret":"fixture-secret","expiresInSeconds":300}"#.utf8))
+    case "/api/v1/device-pairing/redeem":
+      redemptionAttempts += 1
+      if redemptionAttempts == 1 { return ContinuityResponse(status: 202) }
+      body = #"{"id":"device","token":"fixture-device-token","scopes":["read"]}"#
     case "/api/v1/capabilities":
       body = #"{"protocol":{"major":1}}"#
     case "/api/v1/browse-libraries":
@@ -81,7 +100,7 @@ private actor FixtureTransport: ContinuityTransport {
     case "/api/v1/browse" where URLComponents(url: request.url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "cursor" }) == true:
       body = """
       {"items":[
-        {"entityType":"source","source":{"id":"wii1","name":"Wii.rvz","title":"Wii title","systemId":"com.provenance.wii","size":1234,"availability":"online"}},
+        {"entityType":"source","source":{"id":"wii1","name":"Wii.rvz","title":"Wii title","systemId":"com.provenance.wii","size":1234,"availability":"local"}},
         {"entityType":"source","source":{"id":"offline","name":"Gone.iso","systemId":"com.provenance.wii","size":1234,"availability":"offline"}}
       ],"nextCursor":null}
       """

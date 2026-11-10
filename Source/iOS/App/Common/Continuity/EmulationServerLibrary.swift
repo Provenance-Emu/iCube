@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import CryptoKit
+import EmulatorContentClient
 import Foundation
 import PVContinuity
 
@@ -139,25 +140,11 @@ actor EmulationServerLibrary {
     _ = try await libraries()
   }
 
-  struct PairingChallenge: Decodable, Sendable {
-    let id: String
-    let pin: String
-    let secret: String
-    let expiresInSeconds: Int
-
-    func verificationURL(on server: EmulationServer) -> URL? {
-      var url = URLComponents(url: server.origin, resolvingAgainstBaseURL: false)
-      url?.path = "/ui/"
-      url?.queryItems = [URLQueryItem(name: "settings", value: "devices")]
-      url?.fragment = "pair=" + pin
-      return url?.url
-    }
-  }
+  typealias PairingChallenge = DevicePairingChallenge
 
   func startPairing() async throws -> PairingChallenge {
-    struct Draft: Encodable { let name: String }
     let route = try request("device-pairing", authorized: false)
-    let response = try await transport.request(.json(url: route.url, payload: Draft(name: "iCube on Apple TV")))
+    let response = try await transport.request(.json(url: route.url, payload: DevicePairingDraft(name: "iCube on Apple TV")))
     guard response.status == 201 else { throw ContinuityError.invalidResponse(status: response.status) }
     let challenge = try response.decoded(PairingChallenge.self)
     guard challenge.pin.utf8.count == 6, challenge.pin.utf8.allSatisfy({ (48 ... 57).contains($0) }),
@@ -168,18 +155,13 @@ actor EmulationServerLibrary {
   }
 
   func redeemPairing(_ challenge: PairingChallenge) async throws -> String? {
-    struct Proof: Encodable { let id: String
-      let secret: String
-    }
-    struct Token: Decodable { let token: String
-      let scopes: [String]
-    }
     let route = try request("device-pairing/redeem", authorized: false)
-    let response = try await transport.request(.json(url: route.url, payload: Proof(id: challenge.id, secret: challenge.secret)))
+    let proof = DevicePairingRedemption(id: challenge.id, secret: challenge.secret)
+    let response = try await transport.request(.json(url: route.url, payload: proof))
     if response.status == 202 { return nil }
     if response.status == 404 { throw ServerError.pairingExpired }
     guard response.status == 200 else { throw ContinuityError.invalidResponse(status: response.status) }
-    let credential = try response.decoded(Token.self)
+    let credential = try response.decoded(DeviceTokenCreated.self)
     guard credential.scopes == ["read"], Self.isValidToken(credential.token) else { throw ServerError.accessDenied }
     return credential.token
   }
@@ -204,7 +186,7 @@ actor EmulationServerLibrary {
                         sizeBytes: 0, hasArtwork: artwork != nil)
           game = .item(item, artworkID: artwork)
         } else if row.entityType == "source", let source = row.source,
-                  source.availability == "online", source.size > 0,
+                  source.availability == "local", source.size > 0,
                   (source.groupFileCount ?? 0) <= 1, source.groupError == nil,
                   let platform = Self.platform(source.systemId), Self.supports(source.name) {
           entry = .init(key: "source:" + source.id, game: .init(displayName: source.title ?? source.name, platform: platform),
@@ -351,5 +333,15 @@ actor EmulationServerLibrary {
       case .pairingExpired: return L("The pairing code expired. Start pairing again.")
       }
     }
+  }
+}
+
+extension DevicePairingChallenge {
+  func verificationURL(on server: EmulationServer) -> URL? {
+    var url = URLComponents(url: server.origin, resolvingAgainstBaseURL: false)
+    url?.path = "/ui/"
+    url?.queryItems = [URLQueryItem(name: "settings", value: "devices")]
+    url?.fragment = "pair=" + pin
+    return url?.url
   }
 }
