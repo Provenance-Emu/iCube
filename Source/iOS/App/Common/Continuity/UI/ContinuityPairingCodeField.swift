@@ -19,59 +19,60 @@ import SwiftUI
 ///   button stays as its own row too; on tvOS a row holding a field and a
 ///   button is one focus target and the button would be unreachable.
 struct ContinuityPairingCodeField: View {
-    @Binding var code: String
-    let onSubmit: (String) -> Void
+  @Environment(\.icube) private var icube
+  @Binding var code: String
+  let onSubmit: (String) -> Void
 
-    static let length = 6
+  static let length = 6
 
-    #if !os(tvOS)
-    @FocusState private var focused: Bool
-    #endif
-    /// The code last sent, so a re-render at six digits does not submit twice.
-    @State private var submitted: String?
+  #if !os(tvOS)
+  @FocusState private var focused: Bool
+  #endif
+  /// The code last sent, so a re-render at six digits does not submit twice.
+  @State private var submitted: String?
 
-    var body: some View {
-        TextField(L("000000"), text: $code)
-            .keyboardType(.numberPad)
-            .textContentType(.oneTimeCode)
-            .autocorrectionDisabled()
-            .font(.title2.monospacedDigit())
-            .multilineTextAlignment(.center)
-            #if !os(tvOS)
-            .focused($focused)
-            #endif
-            .accessibilityLabel(L("Pairing code"))
-            .onChange(of: code) { _, newValue in
-                let digits = Self.sanitized(newValue)
-                if digits != newValue {
-                    code = digits
-                    return
-                }
-                guard Self.isComplete(digits) else {
-                    submitted = nil
-                    return
-                }
-                guard submitted != digits else { return }
-                submitted = digits
-                #if !os(tvOS)
-                focused = false
-                #endif
-                onSubmit(digits)
-            }
-            .onAppear {
-                submitted = nil
-                #if !os(tvOS)
-                focused = true
-                #endif
-            }
-    }
+  var body: some View {
+    TextField(L("000000"), text: $code)
+      .keyboardType(.numberPad)
+      .textContentType(.oneTimeCode)
+      .autocorrectionDisabled()
+      .font(icube.font(.section).monospacedDigit())
+      .multilineTextAlignment(.center)
+      #if !os(tvOS)
+      .focused($focused)
+      #endif
+      .accessibilityLabel(L("Pairing code"))
+      .onChange(of: code) { _, newValue in
+        let digits = Self.sanitized(newValue)
+        if digits != newValue {
+          code = digits
+          return
+        }
+        guard Self.isComplete(digits) else {
+          submitted = nil
+          return
+        }
+        guard submitted != digits else { return }
+        submitted = digits
+        #if !os(tvOS)
+        focused = false
+        #endif
+        onSubmit(digits)
+      }
+      .onAppear {
+        submitted = nil
+        #if !os(tvOS)
+        focused = true
+        #endif
+      }
+  }
 
-    /// Digits only, at most `length` of them.
-    static func sanitized(_ text: String) -> String {
-        String(text.filter { $0.isASCII && $0.isNumber }.prefix(length))
-    }
+  /// Digits only, at most `length` of them.
+  static func sanitized(_ text: String) -> String {
+    String(text.filter { $0.isASCII && $0.isNumber }.prefix(length))
+  }
 
-    static func isComplete(_ code: String) -> Bool {
-        code.count == length && code.allSatisfy { $0.isASCII && $0.isNumber }
-    }
+  static func isComplete(_ code: String) -> Bool {
+    code.count == length && code.allSatisfy { $0.isASCII && $0.isNumber }
+  }
 }

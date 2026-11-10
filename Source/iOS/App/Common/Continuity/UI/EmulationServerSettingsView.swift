@@ -34,6 +34,7 @@ struct EmulationServerSettingsView: View {
 
 /// Same token flow for a saved address and for an address resolved over Bonjour.
 struct EmulationServerConnectionFields: View {
+  @Environment(\.icube) private var icube
   @ObservedObject var model: NearbyLibrariesModel
   var discoveredServer: EmulationServer?
   var initialFocus: FocusState<Bool>.Binding?
@@ -71,7 +72,7 @@ struct EmulationServerConnectionFields: View {
           .accessibilityHidden(true)
         Text(L("Scan with your phone to approve this Apple TV."))
         Text(L("Or open the server’s Settings → Devices and enter this PIN:"))
-        Text(pairing.pin).font(.title.monospacedDigit())
+        Text(pairing.pin).font(icube.font(.title).monospacedDigit())
         Button(L("Cancel"), role: .cancel) { connection?.cancel() }
       } else {
         connectionControls

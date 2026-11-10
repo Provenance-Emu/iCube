@@ -358,6 +358,7 @@ let iCube = Target.target(
         // shared "what may leave the device" table) and on PVWebServer, whose route
         // registry it hangs its HTTP API off.
         .package(product: "PVContinuity"),
+        .package(product: "EmulatorContentClient"),
         .package(product: "PVHelp"),
         // Streaming IPS/BPS/UPS/PPF/xdelta3 patcher behind the disc patching flow.
         .package(product: "PVPatchEngine"),
@@ -759,6 +760,7 @@ let project = Project(
     ),
     packages: [
         // Shared packages are maintained and tested in their own repositories.
+        .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .exact("0.1.7-swift.1")),
         .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.1.0")),
         .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.2")),

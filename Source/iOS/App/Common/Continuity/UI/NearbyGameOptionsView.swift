@@ -81,7 +81,7 @@ struct NearbyGameOptionsView: View {
                       HStack {
                         VStack(alignment: .leading) {
                           Text(state.title)
-                          Text(state.savedAt, style: .date).font(.caption)
+                          Text(state.savedAt, style: .date).icubeText(.detail)
                         }
                         Spacer()
                         if selected.contains(state.id) { Image(systemName: "checkmark") }
@@ -172,8 +172,8 @@ struct NearbyBootOptionsView: View {
             Button { onBoot(state.path) } label: {
               VStack(alignment: .leading) {
                 Text(state.displayName)
-                if let date = state.modifiedAt { Text(date, style: .date).font(.caption) }
-                if !state.isCompatible { Text(L("Incompatible Save State")).font(.caption) }
+                if let date = state.modifiedAt { Text(date, style: .date).icubeText(.detail) }
+                if !state.isCompatible { Text(L("Incompatible Save State")).icubeText(.detail) }
               }
             }
             .disabled(!state.isCompatible)
