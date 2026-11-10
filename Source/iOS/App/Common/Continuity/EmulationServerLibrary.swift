@@ -107,12 +107,12 @@ actor EmulationServerLibrary {
   }
 
   private let server: EmulationServer
-  private let token: String
+  private let token: String?
   private let transport: any ContinuityTransport
   private let ownedSession: URLSession?
   private var games: [String: Game] = [:]
 
-  init(server: EmulationServer, token: String, transport: (any ContinuityTransport)? = nil) {
+  init(server: EmulationServer, token: String?, transport: (any ContinuityTransport)? = nil) {
     self.server = server
     self.token = token
     if let transport {
@@ -137,6 +137,55 @@ actor EmulationServerLibrary {
 
   func checkAccess() async throws {
     _ = try await libraries()
+  }
+
+  struct PairingChallenge: Decodable, Sendable {
+    let id: String
+    let pin: String
+    let secret: String
+    let expiresInSeconds: Int
+
+    func verificationURL(on server: EmulationServer) -> URL? {
+      var url = URLComponents(url: server.origin, resolvingAgainstBaseURL: false)
+      url?.path = "/ui/"
+      url?.queryItems = [URLQueryItem(name: "settings", value: "devices")]
+      url?.fragment = "pair=" + pin
+      return url?.url
+    }
+  }
+
+  func startPairing() async throws -> PairingChallenge {
+    struct Draft: Encodable { let name: String }
+    let route = try request("device-pairing", authorized: false)
+    let response = try await transport.request(.json(url: route.url, payload: Draft(name: "iCube on Apple TV")))
+    guard response.status == 201 else { throw ContinuityError.invalidResponse(status: response.status) }
+    let challenge = try response.decoded(PairingChallenge.self)
+    guard challenge.pin.utf8.count == 6, challenge.pin.utf8.allSatisfy({ (48 ... 57).contains($0) }),
+          !challenge.id.isEmpty, !challenge.secret.isEmpty, (1 ... 300).contains(challenge.expiresInSeconds) else {
+      throw ServerError.unsupported
+    }
+    return challenge
+  }
+
+  func redeemPairing(_ challenge: PairingChallenge) async throws -> String? {
+    struct Proof: Encodable { let id: String
+      let secret: String
+    }
+    struct Token: Decodable { let token: String
+      let scopes: [String]
+    }
+    let route = try request("device-pairing/redeem", authorized: false)
+    let response = try await transport.request(.json(url: route.url, payload: Proof(id: challenge.id, secret: challenge.secret)))
+    if response.status == 202 { return nil }
+    if response.status == 404 { throw ServerError.pairingExpired }
+    guard response.status == 200 else { throw ContinuityError.invalidResponse(status: response.status) }
+    let credential = try response.decoded(Token.self)
+    guard credential.scopes == ["read"], Self.isValidToken(credential.token) else { throw ServerError.accessDenied }
+    return credential.token
+  }
+
+  static func isValidToken(_ token: String) -> Bool {
+    !token.isEmpty && token.utf8.allSatisfy { (33 ... 126).contains($0) }
   }
 
   func catalog() async throws -> [ContinuityLibraryEntry] {
@@ -265,7 +314,8 @@ actor EmulationServerLibrary {
       parts?.percentEncodedQuery = encoded.replacingOccurrences(of: "+", with: "%2B")
     }
     guard let url = parts?.url else { throw URLError(.badURL) }
-    return authorized ? .authorized(url: url, token: token) : .init(url: url)
+    if authorized, let token { return .authorized(url: url, token: token) }
+    return .init(url: url)
   }
 
   private func contentRoute(_ collection: String, id: String) throws -> String {
@@ -291,13 +341,14 @@ actor EmulationServerLibrary {
   }
 
   enum ServerError: LocalizedError {
-    case unsupported, invalidContent, accessDenied
+    case unsupported, invalidContent, accessDenied, pairingExpired
 
     var errorDescription: String? {
       switch self {
       case .unsupported: return L("This Emulation Server version is unsupported.")
       case .invalidContent: return L("The server did not provide a valid single-file game.")
       case .accessDenied: return L("The server denied access. Check your access token and library permissions.")
+      case .pairingExpired: return L("The pairing code expired. Start pairing again.")
       }
     }
   }

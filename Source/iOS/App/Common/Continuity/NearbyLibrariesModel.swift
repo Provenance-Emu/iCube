@@ -58,9 +58,13 @@ final class NearbyLibrariesModel: ObservableObject {
         return (try? JSONDecoder().decode([EmulationServer].self, from: data)) ?? []
     }()
 
-    func addServer(_ server: EmulationServer, token: String) throws {
-        guard KeychainService.setPassword(token, for: server.id) else {
-            throw CocoaError(.fileWriteNoPermission)
+    func addServer(_ server: EmulationServer, token: String?) throws {
+        if let token {
+            guard KeychainService.setPassword(token, for: server.id) else {
+                throw CocoaError(.fileWriteNoPermission)
+            }
+        } else {
+            KeychainService.deletePassword(for: server.id)
         }
         if !servers.contains(server) { servers.append(server) }
         saveServers()

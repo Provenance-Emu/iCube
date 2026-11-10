@@ -5727,3 +5727,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The server did not provide a valid single-file game." = "サーバーから有効な単一ファイルのゲームを取得できませんでした。";
 "This Emulation Server version is unsupported." = "このバージョンの Emulation Server には対応していません。";
 "Connect to browse" = "接続して閲覧";
+"Enter the server address. An access token is needed only if the server requires sign-in." = "サーバーのアドレスを入力してください。サインインが必要な場合のみアクセストークンを入力してください。";
+"Or open the server’s Settings → Devices and enter this PIN:" = "またはサーバーの「設定」→「デバイス」を開き、この PIN を入力してください：";
+"Pair Apple TV" = "Apple TV をペアリング";
+"Pairing is unavailable. Use a read access token to connect." = "ペアリングできません。読み取りアクセストークンを使用して接続してください。";
+"Scan with your phone to approve this Apple TV." = "スマートフォンでスキャンして、この Apple TV を承認してください。";
+"The pairing code expired. Start pairing again." = "ペアリングコードの有効期限が切れました。ペアリングをやり直してください。";
+"This server requires sign-in." = "このサーバーにはサインインが必要です。";

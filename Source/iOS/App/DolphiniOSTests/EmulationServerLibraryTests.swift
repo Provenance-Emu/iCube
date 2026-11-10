@@ -27,6 +27,23 @@ final class EmulationServerLibraryTests: XCTestCase {
     XCTAssertTrue(requests.last?.url.absoluteString.contains("cursor=opaque%2B") == true)
   }
 
+  func testTokenlessCatalogSendsNoAuthorizationHeader() async throws {
+    let transport = FixtureTransport()
+    let server = try EmulationServer(address: "media.local")
+    let library = EmulationServerLibrary(server: server, token: nil, transport: transport)
+    let entries = try await library.catalog()
+    XCTAssertEqual(entries.count, 2)
+    let requests = await transport.requests
+    XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
+  }
+
+  func testPairingLinkContainsOnlyPublicPIN() throws {
+    let server = try EmulationServer(address: "https://media.local:8443")
+    let challenge = EmulationServerLibrary.PairingChallenge(id: "challenge", pin: "012345", secret: "device-private-secret", expiresInSeconds: 300)
+    let url = try XCTUnwrap(challenge.verificationURL(on: server))
+    XCTAssertEqual(url.absoluteString, "https://media.local:8443/ui/?settings=devices#pair=012345")
+  }
+
   func testBonjourAdvertUsesResolvedHostPortAndTLS() throws {
     let id = UUID()
     let txt = ["id": id.uuidString, "v": "1", "tls": "1", "pair": "0", "name": "Living Room"]

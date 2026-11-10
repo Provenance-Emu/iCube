@@ -64,10 +64,12 @@ struct NearbyPeerLibraryView: View {
         VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
             if showsHeader { header }
             Group {
-                if let server = peer.server, peer.needsServerConnection {
+                if let server = peer.server, needsServerAccess {
                     card {
                         Text(L("Connect to browse")).font(.headline)
-                        EmulationServerConnectionFields(model: .shared, discoveredServer: server, initialFocus: initialFocus)
+                        EmulationServerConnectionFields(model: .shared, discoveredServer: server, initialFocus: initialFocus) {
+                            if peer.serverConnected { Task { await load() } }
+                        }
                     }
                 } else if let transferError {
                     card {
@@ -91,7 +93,7 @@ struct NearbyPeerLibraryView: View {
                 }
             }
             .id(Self.statusID)
-            if hasCatalog, !peer.needsServerConnection { grid }
+            if hasCatalog, !needsServerAccess { grid }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: peer.needsServerConnection) {
@@ -307,6 +309,10 @@ struct NearbyPeerLibraryView: View {
     }
 
     // MARK: - Actions
+
+    private var needsServerAccess: Bool {
+        peer.needsServerConnection || controller.serverNeedsAuthorization
+    }
 
     private var isCopying: Bool {
         if copyingSaves { return true }
