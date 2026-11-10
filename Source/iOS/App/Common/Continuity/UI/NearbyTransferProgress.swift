@@ -4,6 +4,7 @@ import Foundation
 import SwiftUI
 
 struct NearbyTransferProgress: View {
+  @Environment(\.icube) private var icube
   let bytes: Int64
   let total: Int64
   var body: some View {
@@ -12,7 +13,7 @@ struct NearbyTransferProgress: View {
       Text(NearbyTransferFormat.label(bytes: total, total: total))
         .hidden()
         .overlay(alignment: .leading) { Text(NearbyTransferFormat.label(bytes: bytes, total: total)) }
-        .font(.footnote.monospacedDigit())
+        .font(icube.font(.detail).monospacedDigit())
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(NearbyTransferFormat.label(bytes: bytes, total: total))
