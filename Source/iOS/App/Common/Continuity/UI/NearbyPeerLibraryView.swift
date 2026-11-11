@@ -59,7 +59,23 @@ struct NearbyPeerLibraryView: View {
   /// The catalog stays on screen while a copy runs and after it lands.
   @State private var entries: [ContinuityLibraryEntry] = []
   @State private var hasCatalog = false
-  @State private var loadedPeerID: String?
+  private struct CatalogRequest: Equatable {
+    let peerID: String
+    let needsConnection: Bool
+    let search: String
+  }
+
+  @State private var search = ""
+  @State private var loadedRequest: CatalogRequest?
+
+  private var catalogRequest: CatalogRequest {
+    let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+    return CatalogRequest(
+      peerID: peer.id,
+      needsConnection: peer.needsServerConnection,
+      search: peer.server == nil ? "" : String(query.unicodeScalars.prefix(256))
+    )
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
@@ -94,16 +110,37 @@ struct NearbyPeerLibraryView: View {
         }
       }
       .id(Self.statusID)
-      if hasCatalog, !needsServerAccess { grid }
+      if peer.server != nil, !needsServerAccess {
+        TextField(L("Search games"), text: $search)
+          .textFieldStyle(.roundedBorder)
+          .disabled(isCopying)
+      }
+      if hasCatalog, !needsServerAccess, loadedRequest == catalogRequest {
+        grid.disabled(controller.isLoadingMoreServerGames || controller.phase == .loading)
+        if controller.hasMoreServerGames, canLoadMore {
+          if controller.isLoadingMoreServerGames {
+            ProgressView()
+          } else {
+            actionButton(L("Load More"), systemImage: "chevron.down") {
+              Task { await controller.loadMoreServerGames() }
+            }
+          }
+        }
+      }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .task(id: peer.needsServerConnection) {
-      if peer.needsServerConnection {
-        loadedPeerID = nil
+    .task(id: catalogRequest) {
+      let request = catalogRequest
+      if request.needsConnection {
+        loadedRequest = nil
         return
       }
-      guard loadedPeerID != peer.id else { return }
-      loadedPeerID = peer.id
+      guard loadedRequest != request else { return }
+      if loadedRequest?.peerID == request.peerID {
+        do { try await Task.sleep(for: .milliseconds(250)) }
+        catch { return }
+      }
+      guard !Task.isCancelled, request == catalogRequest else { return }
       await load()
     }
     .onChange(of: controller.phase) { _, phase in
@@ -170,7 +207,7 @@ struct NearbyPeerLibraryView: View {
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
         Text(peer.name).font(icube.font(.nav))
-        Text(hasCatalog ? Self.gameCount(entries.count) : L("Nearby Library"))
+        Text(hasCatalog && loadedRequest == catalogRequest ? Self.gameCount(entries.count) : L("Nearby Library"))
           .icubeText(.detail)
           .foregroundStyle(.secondary)
       }
@@ -191,15 +228,25 @@ struct NearbyPeerLibraryView: View {
       pairingCard
 
     case .browsing(let list):
-      if list.isEmpty {
-        Text(String(format: L("%@ isn't sharing any games right now."), peer.name))
-          .foregroundStyle(.secondary)
+      if list.isEmpty, loadedRequest == catalogRequest {
+        if peer.server == nil {
+          Text(String(format: L("%@ isn't sharing any games right now."), peer.name))
+            .foregroundStyle(.secondary)
+        } else {
+          Text(catalogRequest.search.isEmpty
+            ? L("No GameCube or Wii games are available. Check the server’s library permissions and system labels.")
+            : L("No games match your search."))
+            .foregroundStyle(.secondary)
+        }
       }
 
     case .copying(let entry, let progress):
       card {
         Text(String(format: L("Copying %@"), entry.game.displayName)).font(icube.font(.nav))
-        if let progress {
+        if let progress, progress.bytesTransferred == progress.totalBytes,
+           progress.currentFile.relativePath.lowercased().hasSuffix(".7z") {
+          ProgressView(L("Extracting archive…"))
+        } else if let progress {
           NearbyTransferProgress(bytes: progress.bytesTransferred, total: progress.totalBytes)
         } else {
           Text(peer.server == nil ? String(format: L("Asking %@…"), peer.name) : L("Preparing download…")).foregroundStyle(.secondary)
@@ -335,6 +382,13 @@ struct NearbyPeerLibraryView: View {
     return false
   }
 
+  private var canLoadMore: Bool {
+    switch controller.phase {
+    case .browsing, .copied: return !copyingSaves
+    default: return false
+    }
+  }
+
   /// The status area holds a focusable control, which then gets first focus
   /// instead of the first cover.
   private var hasStatusControl: Bool {
@@ -346,7 +400,14 @@ struct NearbyPeerLibraryView: View {
 
   private func load() async {
     codeRejected = false
-    await controller.load(peer: peer)
+    let request = catalogRequest
+    if loadedRequest != request {
+      entries = []
+      hasCatalog = false
+    }
+    loadedRequest = request
+    await controller.load(peer: peer, search: request.search)
+    if Task.isCancelled, loadedRequest == request { loadedRequest = nil }
   }
 
   /// The controller drops back to `.awaitingPairing` on a wrong code without

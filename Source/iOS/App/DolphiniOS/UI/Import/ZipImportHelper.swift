@@ -686,7 +686,7 @@ final class ZipImportHelper: NSObject {
 
   // MARK: - Import extracted files
 
-  private static func supportedFiles(in tempDir: URL) -> [URL] {
+  static func supportedFiles(in tempDir: URL) -> [URL] {
     var supportedFiles: [URL] = []
     guard let enumerator = FileManager.default.enumerator(at: tempDir,
                                                           includingPropertiesForKeys: [.isRegularFileKey],

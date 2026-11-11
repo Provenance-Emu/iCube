@@ -170,14 +170,50 @@ actor EmulationServerLibrary {
     !token.isEmpty && token.utf8.allSatisfy { (33 ... 126).contains($0) }
   }
 
-  func catalog() async throws -> [ContinuityLibraryEntry] {
-    let libraries = try await libraries()
+  struct CatalogCursor: Sendable {
+    fileprivate var libraries: ArraySlice<String>
+    fileprivate var cursor: String?
+    fileprivate var seenCursors = Set<String>()
+    fileprivate let search: String
+  }
+
+  struct CatalogPage: Sendable {
+    let entries: [ContinuityLibraryEntry]
+    let next: CatalogCursor?
+  }
+
+  func catalog(search: String = "") async throws -> CatalogPage {
+    let libraries = try await libraries().map(\.id)
+    try Task.checkCancellation()
+    games.removeAll()
+    return try await catalogPage(after: CatalogCursor(
+      libraries: libraries[...],
+      search: search.trimmingCharacters(in: .whitespacesAndNewlines)
+    ))
+  }
+
+  func catalogPage(after cursor: CatalogCursor) async throws -> CatalogPage {
+    var remaining = cursor
     var entries: [ContinuityLibraryEntry] = []
-    var nextGames: [String: Game] = [:]
-    for library in libraries {
-      let query = [URLQueryItem(name: "libraryId", value: library.id), URLQueryItem(name: "category", value: "games")]
-      let rows: [Row] = try await pages("browse", query: query)
-      for row in rows {
+    while let library = remaining.libraries.first, entries.isEmpty {
+      try Task.checkCancellation()
+      var query = [
+        URLQueryItem(name: "libraryId", value: library),
+        URLQueryItem(name: "category", value: "games"),
+        URLQueryItem(name: "systemIds", value: "com.provenance.gamecube,com.provenance.wii"),
+      ]
+      if !remaining.search.isEmpty { query.append(URLQueryItem(name: "search", value: remaining.search)) }
+      if let cursor = remaining.cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+      let page: Page<Row> = try await read("browse", query: query)
+      try Task.checkCancellation()
+      remaining.cursor = page.nextCursor
+      if let cursor = remaining.cursor {
+        guard remaining.seenCursors.insert(cursor).inserted else { throw ServerError.invalidContent }
+      } else {
+        remaining.libraries.removeFirst()
+        remaining.seenCursors.removeAll()
+      }
+      for row in page.items {
         let entry: ContinuityLibraryEntry
         let game: Game
         if row.entityType == "item", let item = row.item, let platform = Self.platform(item.systemIdentifier) {
@@ -195,11 +231,11 @@ actor EmulationServerLibrary {
         } else {
           continue
         }
-        if nextGames.updateValue(game, forKey: entry.key) == nil { entries.append(entry) }
+        games[entry.key] = game
+        entries.append(entry)
       }
     }
-    games = nextGames
-    return entries.sorted { $0.game.displayName.localizedStandardCompare($1.game.displayName) == .orderedAscending }
+    return CatalogPage(entries: entries, next: remaining.libraries.isEmpty ? nil : remaining)
   }
 
   func artwork(for entry: ContinuityLibraryEntry) async -> Data? {
@@ -209,7 +245,7 @@ actor EmulationServerLibrary {
     return response.body
   }
 
-  func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> URL {
+  func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
     guard let game = games[entry.key] else { throw ServerError.invalidContent }
     let route: String
     let name: String
@@ -237,14 +273,14 @@ actor EmulationServerLibrary {
     guard size > 0, Self.supports(name) else { throw ServerError.invalidContent }
 
     let ext = (name as NSString).pathExtension.lowercased()
-    let destination = try server.folder(for: entry).appendingPathComponent("Game." + ext)
+    let destination = try server.folder(for: entry)
     let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let temporary = staging.appendingPathComponent(destination.lastPathComponent)
+    let temporary = staging.appendingPathComponent("Game." + ext)
     let fm = FileManager.default
     try fm.createDirectory(at: staging, withIntermediateDirectories: true)
     defer { try? fm.removeItem(at: staging) }
 
-    let descriptor = FileDescriptor(kind: .gameFile, relativePath: destination.lastPathComponent, sha256: digest ?? "", size: size)
+    let descriptor = FileDescriptor(kind: .gameFile, relativePath: temporary.lastPathComponent, sha256: digest ?? "", size: size)
     let received = try await transport.download(request(route), to: temporary, resumeOffset: 0) { bytes, _ in
       progress(.init(currentFile: descriptor, completedFiles: 0, totalFiles: 1, bytesTransferred: bytes, totalBytes: size))
     }
@@ -253,16 +289,60 @@ actor EmulationServerLibrary {
     if let digest, try ContinuityHash.sha256Hex(ofFileAt: temporary) != digest {
       throw ServerError.invalidContent
     }
-    let valid = await MainActor.run { DiscImageBridge.gameItem(forPath: temporary.path) != nil }
+    let unpacked = staging.appendingPathComponent("unpacked", isDirectory: true)
+    let candidates: [URL]
+    let sourceFolder: URL
+    if ext == "7z" {
+      try ZipImportHelper.extractArchive(at: temporary, to: unpacked)
+      try Task.checkCancellation()
+      candidates = ZipImportHelper.supportedFiles(in: unpacked).sorted { $0.path < $1.path }
+      sourceFolder = unpacked
+    } else {
+      candidates = [temporary]
+      sourceFolder = staging
+    }
+    guard !candidates.isEmpty else { throw ServerError.invalidContent }
+    let valid = await MainActor.run {
+      candidates.allSatisfy { DiscImageBridge.gameItem(forPath: $0.path) != nil }
+    }
     guard valid else { throw ServerError.invalidContent }
     try Task.checkCancellation()
+
+    let ready = staging.appendingPathComponent("ready", isDirectory: true)
+    try fm.createDirectory(at: ready, withIntermediateDirectories: true)
+    let prefix = sourceFolder.resolvingSymlinksInPath().path + "/"
+    var paths: [String] = []
+    for candidate in candidates {
+      let values = try candidate.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+      let resolved = candidate.resolvingSymlinksInPath()
+      guard values.isRegularFile == true, values.isSymbolicLink != true,
+            resolved.path.hasPrefix(prefix) else { throw ServerError.invalidContent }
+      let path = String(resolved.path.dropFirst(prefix.count))
+      let staged = ready.appendingPathComponent(path)
+      try fm.createDirectory(at: staged.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try fm.moveItem(at: candidate, to: staged)
+      paths.append(path)
+    }
     guard let relative = ContinuityPaths.relativePath(forAbsolutePath: destination.path) else {
       throw ServerError.invalidContent
     }
     let final = try ContinuityPaths.validatedURL(forRelativePath: relative)
-    try fm.createDirectory(at: final.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try fm.moveItem(at: temporary, to: final)
-    return final
+    let urls = try paths.map { try ContinuityPaths.validatedURL(forRelativePath: relative + "/" + $0) }
+    if fm.fileExists(atPath: final.path) {
+      for (path, url) in zip(paths, urls) {
+        try Task.checkCancellation()
+        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+        guard values.isRegularFile == true, values.isSymbolicLink != true,
+              try ContinuityHash.sha256Hex(ofFileAt: url) == ContinuityHash.sha256Hex(ofFileAt: ready.appendingPathComponent(path)) else {
+          throw CocoaError(.fileWriteFileExists)
+        }
+      }
+    } else {
+      try Task.checkCancellation()
+      try fm.createDirectory(at: final.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try fm.moveItem(at: ready, to: final)
+    }
+    return urls
   }
 
   private func pages<Item: Decodable>(_ route: String, query: [URLQueryItem] = []) async throws -> [Item] {
@@ -319,7 +399,7 @@ actor EmulationServerLibrary {
   }
 
   private static func supports(_ name: String) -> Bool {
-    ["iso", "gcm", "rvz", "wia", "wbfs", "gcz", "ciso", "wad"].contains((name as NSString).pathExtension.lowercased())
+    ["iso", "gcm", "rvz", "wia", "wbfs", "gcz", "ciso", "wad", "7z"].contains((name as NSString).pathExtension.lowercased())
   }
 
   enum ServerError: LocalizedError {
@@ -328,7 +408,7 @@ actor EmulationServerLibrary {
     var errorDescription: String? {
       switch self {
       case .unsupported: return L("This Emulation Server version is unsupported.")
-      case .invalidContent: return L("The server did not provide a valid single-file game.")
+      case .invalidContent: return L("The server did not provide valid game files.")
       case .accessDenied: return L("The server denied access. Check your access token and library permissions.")
       case .pairingExpired: return L("The pairing code expired. Start pairing again.")
       }
