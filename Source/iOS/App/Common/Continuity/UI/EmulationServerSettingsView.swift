@@ -1,6 +1,7 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import EmulatorContentClient
 import PVContinuity
 import SwiftUI
 
@@ -14,8 +15,8 @@ struct EmulationServerSettingsView: View {
         if !model.servers.isEmpty {
           Section(L("Connected Servers")) {
             ForEach(model.servers) { server in
-              Button(role: .destructive) { model.removeServer(server) } label: {
-                Label(String(format: L("Remove %@"), server.name), systemImage: "minus.circle")
+              NavigationLink(server.name) {
+                EmulationServerBackupSettingsView(server: server, model: model)
               }
             }
           }
@@ -23,11 +24,151 @@ struct EmulationServerSettingsView: View {
         Section {
           EmulationServerConnectionFields(model: model, onConnect: { dismiss() })
         } footer: {
-          Text(L("Enter the server address. An access token is needed only if the server requires sign-in."))
+          Text(L("Enter a hostname such as studio.local. Local HTTP uses port 8473 unless you enter a different port."))
         }
         Section { Button(L("Done")) { dismiss() } }
       }
       .navigationTitle(L("Emulation Server"))
+    }
+  }
+}
+
+private struct EmulationServerBackupSettingsView: View {
+  let server: EmulationServer
+  @ObservedObject var model: NearbyLibrariesModel
+  @ObservedObject private var backups = EmulationServerBackups.shared
+  @Environment(\.dismiss) private var dismiss
+  @State private var itemID = ""
+  @State private var token = ""
+  @State private var allowsHTTP = false
+  @State private var errorMessage: String?
+  @State private var libraries: [Library] = []
+  @State private var libraryID = ""
+  @State private var items: [Item] = []
+  @State private var cursor: String?
+  @State private var busy = false
+  @State private var createKey = UUID().uuidString
+
+  private var enabled: Bool { backups.targets[server.id] != nil }
+  private var credential: String {
+    let entered = token.trimmingCharacters(in: .whitespacesAndNewlines)
+    return entered.isEmpty ? KeychainService.getPassword(for: server.id + "/backup") ?? "" : entered
+  }
+
+  private var transportAllowed: Bool { server.origin.scheme == "https" || allowsHTTP }
+
+  var body: some View {
+    Form {
+      Section {
+        if let status = backups.status[server.id] { Text(status) }
+        SecureField(L("Write access token"), text: $token)
+          .autocorrectionDisabled()
+          .disabled(busy)
+          #if !os(tvOS)
+          .textInputAutocapitalization(.never)
+          #endif
+        if server.origin.scheme == "http" {
+          Toggle(L("Allow backups over local HTTP"), isOn: $allowsHTTP)
+            .disabled(busy)
+          Text(L("HTTP sends your token and saves without encryption. Enable it only on a trusted network."))
+            .foregroundStyle(.secondary)
+        }
+        Button(L("Choose Backup Library")) {
+          perform {
+            libraries = try await EmulationServerBackupSetup.libraries(server: server, token: credential).items
+            items = []
+            cursor = nil
+            libraryID = ""
+          }
+        }
+        .disabled(busy || credential.isEmpty || !transportAllowed)
+        if !libraries.isEmpty {
+          Picker(L("Library"), selection: $libraryID) {
+            Text(L("Choose a library")).tag("")
+            ForEach(libraries, id: \.id) { library in Text(library.name).tag(library.id) }
+          }
+          .disabled(busy)
+          .onChange(of: libraryID) { _, value in
+            guard !value.isEmpty else { return }
+            itemID = ""
+            items = []
+            cursor = nil
+            loadItems()
+          }
+        }
+        if !items.isEmpty {
+          Picker(L("Backup Destination"), selection: $itemID) {
+            Text(L("Choose a destination")).tag("")
+            ForEach(items, id: \.id) { item in Text(item.title).tag(item.id) }
+          }
+          .disabled(busy)
+        }
+        if cursor != nil { Button(L("Load More")) { loadItems() }.disabled(busy) }
+        if libraries.first(where: { $0.id == libraryID })?.canCreateItems == true {
+          Button(L("Create iCube Backups Destination")) {
+            perform {
+              let item = try await EmulationServerBackupSetup.createItem(server: server, token: credential,
+                                                                         libraryID: libraryID, key: createKey)
+              items.removeAll { $0.id == item.id }
+              items.append(item)
+              itemID = item.id
+              createKey = UUID().uuidString
+            }
+          }
+          .disabled(busy || !transportAllowed)
+        }
+        Button(enabled ? L("Update backup destination") : L("Enable automatic backups")) {
+          do {
+            try backups.save(.init(server: server, itemID: itemID, allowsHTTP: allowsHTTP), token: credential)
+            token = ""
+            errorMessage = nil
+          } catch {
+            errorMessage = error.localizedDescription
+          }
+        }
+        .disabled(busy || !EmulationServerBackupTarget.isValidItemID(itemID) || credential.isEmpty || !transportAllowed)
+        if enabled {
+          Button(L("Back Up All Servers Now")) { backups.requestBackup() }
+          Button(L("Disable Backups"), role: .destructive) { backups.remove(server) }
+        }
+        if let errorMessage { Text(errorMessage).foregroundStyle(.secondary) }
+      } header: {
+        Text(L("Automatic Save Backups"))
+      } footer: {
+        Text(L("Choose a private library on this server. iCube uploads save files and states when the app becomes active or emulation stops."))
+      }
+      Section {
+        Button(L("Remove Server"), role: .destructive) {
+          model.removeServer(server)
+          dismiss()
+        }
+      }
+    }
+    .navigationTitle(server.name)
+    .onAppear {
+      itemID = backups.targets[server.id]?.itemID ?? ""
+      allowsHTTP = backups.targets[server.id]?.allowsHTTP ?? false
+    }
+  }
+
+  private func loadItems() {
+    perform {
+      let page = try await EmulationServerBackupSetup.items(server: server, token: credential,
+                                                            libraryID: libraryID, cursor: cursor)
+      let known = Set(items.map(\.id))
+      items.append(contentsOf: page.items.filter { !known.contains($0.id) })
+      cursor = page.nextCursor
+    }
+  }
+
+  private func perform(_ work: @escaping @MainActor () async throws -> Void) {
+    guard !busy, transportAllowed else { return }
+    busy = true
+    errorMessage = nil
+    Task {
+      defer { busy = false }
+      do { try await work() }
+      catch { errorMessage = L("Could not load the backup destination. Check the token and server connection.") }
     }
   }
 }
@@ -90,7 +231,7 @@ struct EmulationServerConnectionFields: View {
     if let discoveredServer {
       Text(discoveredServer.origin.absoluteString).foregroundStyle(.secondary)
     } else {
-      TextField(L("Server Address"), text: $address)
+      TextField(L("Server Address"), text: $address, prompt: Text("studio.local"))
         .textContentType(.URL)
         .autocorrectionDisabled()
         .disabled(connection != nil)
@@ -138,7 +279,7 @@ struct EmulationServerConnectionFields: View {
       do {
         let server = try discoveredServer ?? EmulationServer(address: address)
         let entered = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        let credential = entered.isEmpty ? nil : entered
+        let credential = entered.isEmpty ? KeychainService.getPassword(for: server.id) : entered
         if let credential, !EmulationServerLibrary.isValidToken(credential) {
           throw EmulationServerLibrary.ServerError.accessDenied
         }
@@ -147,6 +288,10 @@ struct EmulationServerConnectionFields: View {
         guard !Task.isCancelled else { return }
         requiresCredential = true
         errorMessage = L("This server requires sign-in.")
+      } catch let error as URLError where error.code == .appTransportSecurityRequiresSecureConnection {
+        if !Task.isCancelled {
+          errorMessage = L("Use HTTPS, a local IP address, or a .local hostname for this server.")
+        }
       } catch {
         if !Task.isCancelled { errorMessage = error.localizedDescription }
       }

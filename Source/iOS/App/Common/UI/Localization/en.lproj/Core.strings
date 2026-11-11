@@ -5794,3 +5794,29 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Extracting archive…" = "Extracting archive…";
 
 "The server did not provide valid game files." = "The server did not provide valid game files.";
+
+/* Emulation Server backups */
+"Allow backups over local HTTP" = "Allow backups over local HTTP";
+"Automatic Save Backups" = "Automatic Save Backups";
+"Back Up All Servers Now" = "Back Up All Servers Now";
+"Backing up…" = "Backing up…";
+"Backup Destination" = "Backup Destination";
+"Backup complete." = "Backup complete.";
+"Backup will resume when emulation stops." = "Backup will resume when emulation stops.";
+"Choose Backup Library" = "Choose Backup Library";
+"Choose a destination" = "Choose a destination";
+"Choose a library" = "Choose a library";
+"Choose a private library on this server. iCube uploads save files and states when the app becomes active or emulation stops." = "Choose a private library on this server. iCube uploads save files and states when the app becomes active or emulation stops.";
+"Could not load the backup destination. Check the token and server connection." = "Could not load the backup destination. Check the token and server connection.";
+"Create iCube Backups Destination" = "Create iCube Backups Destination";
+"Disable Backups" = "Disable Backups";
+"Enable automatic backups" = "Enable automatic backups";
+"Enter a hostname such as studio.local. Local HTTP uses port 8473 unless you enter a different port." = "Enter a hostname such as studio.local. Local HTTP uses port 8473 unless you enter a different port.";
+"Enter a write access token to back up to this server." = "Enter a write access token to back up to this server.";
+"HTTP sends your token and saves without encryption. Enable it only on a trusted network." = "HTTP sends your token and saves without encryption. Enable it only on a trusted network.";
+"Remove Server" = "Remove Server";
+"Server backup failed (HTTP %d)." = "Server backup failed (HTTP %d).";
+"Server backup failed. It will retry automatically." = "Server backup failed. It will retry automatically.";
+"Update backup destination" = "Update backup destination";
+"Use HTTPS, a local IP address, or a .local hostname for this server." = "Use HTTPS, a local IP address, or a .local hostname for this server.";
+"Write access token" = "Write access token";

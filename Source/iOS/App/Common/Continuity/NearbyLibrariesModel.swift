@@ -71,13 +71,14 @@ final class NearbyLibrariesModel: ObservableObject {
         refresh(peerID: server.id)
     }
 
-    func removeServer(_ server: EmulationServer) {
-        KeychainService.deletePassword(for: server.id)
-        servers.removeAll { $0.id == server.id }
-        saveServers()
-    }
+  func removeServer(_ server: EmulationServer) {
+    EmulationServerBackups.shared.remove(server)
+    KeychainService.deletePassword(for: server.id)
+    servers.removeAll { $0.id == server.id }
+    saveServers()
+  }
 
-    private func saveServers() {
+  private func saveServers() {
         UserDefaults.standard.set(try? JSONEncoder().encode(servers), forKey: "icube.emulationServers")
         rebuild(discovered: manager.discoveredPeers, trusted: manager.trustedPeers)
     }
