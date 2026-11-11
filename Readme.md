@@ -4,6 +4,13 @@ DolphiniOS is a port of the Dolphin Emulator to iOS and iPadOS. For installation
 
 This is the repository for the new DolphiniOS codebase.
 
+## Self-hosted game libraries
+
+iCube development builds can browse and import your own GameCube and Wii games
+from an [Emulation Server (ECS)](https://github.com/Provenance-Emu/emulator-content-server).
+Direct support for self-hosted [RomM](https://github.com/rommapp/romm) libraries
+is in development.
+
 ## JIT on iOS 26 (Trusted Execution Monitor)
 
 iCube runs the JIT recompiler again on iOS 26. TXM will not execute a freshly written
