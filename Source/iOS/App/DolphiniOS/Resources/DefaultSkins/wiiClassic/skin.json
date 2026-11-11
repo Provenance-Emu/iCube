@@ -1,0 +1,3859 @@
+{
+  "formatVersion": "2.0",
+  "identifier": "com.icube.default.wiiClassic",
+  "name": "iCube wiiClassic",
+  "author": "iCube",
+  "gameTypes": [
+    "wii"
+  ],
+  "requires": [
+    "layout.anchors",
+    "shapes.parametric",
+    "shapes.path",
+    "paint.gradients",
+    "effects.shadow",
+    "text",
+    "tokens",
+    "states",
+    "controls.dpad",
+    "controls.thumbstick",
+    "controls.touchSurface"
+  ],
+  "reference": {
+    "shortSide": 390,
+    "minScale": 1,
+    "maxScale": 1.35
+  },
+  "bake": {
+    "traits": [
+      "iphone.standard",
+      "iphone.edgeToEdge",
+      "ipad.standard"
+    ]
+  },
+  "tokens": {
+    "top": "#FFFFFF",
+    "bottom": "#DBDBDB",
+    "glow": "#529EFF",
+    "label": "#000000"
+  },
+  "root": {
+    "type": "group",
+    "id": "canvas",
+    "children": [
+      {
+        "type": "group",
+        "id": "edges",
+        "layout": {
+          "inset": {
+            "left": {
+              "sum": [
+                {
+                  "max": [
+                    {
+                      "safe": "left"
+                    },
+                    8
+                  ]
+                },
+                8
+              ]
+            },
+            "right": {
+              "sum": [
+                {
+                  "max": [
+                    {
+                      "safe": "right"
+                    },
+                    8
+                  ]
+                },
+                8
+              ]
+            },
+            "bottom": {
+              "sum": [
+                {
+                  "max": [
+                    {
+                      "safe": "bottom"
+                    },
+                    8
+                  ]
+                },
+                6
+              ]
+            },
+            "top": 0
+          }
+        }
+      },
+      {
+        "type": "group",
+        "id": "centerColumn",
+        "layout": {
+          "inset": {
+            "left": {
+              "safe": "left"
+            },
+            "right": {
+              "safe": "right"
+            },
+            "top": 0,
+            "bottom": {
+              "sum": [
+                {
+                  "max": [
+                    {
+                      "safe": "bottom"
+                    },
+                    8
+                  ]
+                },
+                6
+              ]
+            }
+          }
+        }
+      },
+      {
+        "type": "group",
+        "id": "classicLeftStick",
+        "layout": {
+          "size": {
+            "width": 124,
+            "height": 124
+          },
+          "anchor": {
+            "to": "#edges",
+            "x": "leading",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "classic.leftStick",
+            "kind": "thumbstick",
+            "input": "leftThumbstick",
+            "travel": {
+              "frac": 0.3333333333333333
+            },
+            "children": [
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "ellipse"
+                },
+                "fills": [
+                  {
+                    "type": "radial",
+                    "center": [
+                      0.5,
+                      0.5
+                    ],
+                    "radius": 0.5645161290322581,
+                    "stops": [
+                      [
+                        "#000000",
+                        0.35,
+                        0.02857142857142857
+                      ],
+                      [
+                        "$glow",
+                        0.28,
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "strokes": [],
+                "role": "base"
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "polygon",
+                  "sides": 8,
+                  "rotation": -22.5
+                },
+                "fills": [],
+                "strokes": [
+                  {
+                    "color": "$glow",
+                    "opacity": 0.6,
+                    "width": 2
+                  }
+                ],
+                "layout": {
+                  "inset": 6
+                },
+                "role": "base"
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "ellipse"
+                },
+                "fills": [],
+                "strokes": [
+                  {
+                    "color": "$glow",
+                    "opacity": 0.9,
+                    "width": 3
+                  }
+                ],
+                "id": "classic.leftStick.ring",
+                "opacity": 0,
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.9,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "ellipse"
+                },
+                "fills": [
+                  {
+                    "type": "radial",
+                    "center": [
+                      0.38,
+                      0.3
+                    ],
+                    "radius": 0.8064516129032258,
+                    "stops": [
+                      [
+                        "$top",
+                        0.025
+                      ],
+                      [
+                        "$bottom",
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "strokes": [
+                  {
+                    "color": "#000000",
+                    "opacity": 0.25,
+                    "width": 1.5
+                  }
+                ],
+                "role": "knob",
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.4
+                    },
+                    "height": {
+                      "frac": 0.4
+                    }
+                  },
+                  "anchor": {
+                    "x": "center",
+                    "y": "center",
+                    "to": "parent"
+                  }
+                },
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.5,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "patch": [
+                  {
+                    "target": "#classic.leftStick.ring",
+                    "opacity": 1
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 1.0
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          }
+        ],
+        "when": [
+          {
+            "orientation": "landscape",
+            "layout": {
+              "offset": {
+                "x": 70,
+                "y": 0
+              }
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "classicRightStick",
+        "layout": {
+          "size": {
+            "width": 124,
+            "height": 124
+          },
+          "anchor": {
+            "to": "#edges",
+            "x": "trailing",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "classic.rightStick",
+            "kind": "thumbstick",
+            "input": "rightThumbstick",
+            "travel": {
+              "frac": 0.3333333333333333
+            },
+            "children": [
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "ellipse"
+                },
+                "fills": [
+                  {
+                    "type": "radial",
+                    "center": [
+                      0.5,
+                      0.5
+                    ],
+                    "radius": 0.5645161290322581,
+                    "stops": [
+                      [
+                        "#000000",
+                        0.35,
+                        0.02857142857142857
+                      ],
+                      [
+                        "$glow",
+                        0.28,
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "strokes": [],
+                "role": "base"
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "polygon",
+                  "sides": 8,
+                  "rotation": -22.5
+                },
+                "fills": [],
+                "strokes": [
+                  {
+                    "color": "$glow",
+                    "opacity": 0.6,
+                    "width": 2
+                  }
+                ],
+                "layout": {
+                  "inset": 6
+                },
+                "role": "base"
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "ellipse"
+                },
+                "fills": [],
+                "strokes": [
+                  {
+                    "color": "$glow",
+                    "opacity": 0.9,
+                    "width": 3
+                  }
+                ],
+                "id": "classic.rightStick.ring",
+                "opacity": 0,
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.9,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "ellipse"
+                },
+                "fills": [
+                  {
+                    "type": "radial",
+                    "center": [
+                      0.38,
+                      0.3
+                    ],
+                    "radius": 0.8064516129032258,
+                    "stops": [
+                      [
+                        "$top",
+                        0.025
+                      ],
+                      [
+                        "$bottom",
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "strokes": [
+                  {
+                    "color": "#000000",
+                    "opacity": 0.25,
+                    "width": 1.5
+                  }
+                ],
+                "role": "knob",
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.4
+                    },
+                    "height": {
+                      "frac": 0.4
+                    }
+                  },
+                  "anchor": {
+                    "x": "center",
+                    "y": "center",
+                    "to": "parent"
+                  }
+                },
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.5,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "patch": [
+                  {
+                    "target": "#classic.rightStick.ring",
+                    "opacity": 1
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 1.0
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          }
+        ],
+        "when": [
+          {
+            "orientation": "landscape",
+            "layout": {
+              "offset": {
+                "x": -70,
+                "y": 0
+              }
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "classicDpad",
+        "layout": {
+          "size": {
+            "width": 104,
+            "height": 104
+          },
+          "anchor": {
+            "to": "#edges",
+            "x": "leading",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 0,
+            "y": -132
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "classic.dpad",
+            "kind": "dpad",
+            "input": {
+              "up": "up",
+              "down": "down",
+              "left": "left",
+              "right": "right"
+            },
+            "effects": [
+              {
+                "type": "shadow",
+                "color": "#000000",
+                "opacity": 0.4,
+                "radius": 3,
+                "offset": [
+                  0,
+                  2
+                ]
+              }
+            ],
+            "states": {
+              "pressed.up": {
+                "patch": [
+                  {
+                    "target": "#classic.dpad.up.rest",
+                    "opacity": 0
+                  },
+                  {
+                    "target": "#classic.dpad.up.lit",
+                    "opacity": 1
+                  }
+                ]
+              },
+              "pressed.down": {
+                "patch": [
+                  {
+                    "target": "#classic.dpad.down.rest",
+                    "opacity": 0
+                  },
+                  {
+                    "target": "#classic.dpad.down.lit",
+                    "opacity": 1
+                  }
+                ]
+              },
+              "pressed.left": {
+                "patch": [
+                  {
+                    "target": "#classic.dpad.left.rest",
+                    "opacity": 0
+                  },
+                  {
+                    "target": "#classic.dpad.left.lit",
+                    "opacity": 1
+                  }
+                ]
+              },
+              "pressed.right": {
+                "patch": [
+                  {
+                    "target": "#classic.dpad.right.rest",
+                    "opacity": 0
+                  },
+                  {
+                    "target": "#classic.dpad.right.lit",
+                    "opacity": 1
+                  }
+                ]
+              }
+            },
+            "children": [
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "ellipse"
+                },
+                "fills": [
+                  {
+                    "type": "radial",
+                    "center": [
+                      0.4,
+                      0.34
+                    ],
+                    "radius": 0.703125,
+                    "stops": [
+                      [
+                        "$top",
+                        0.9,
+                        0.02735042735042735
+                      ],
+                      [
+                        "$bottom",
+                        0.95,
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "strokes": [
+                  {
+                    "color": "$glow",
+                    "opacity": 0.55,
+                    "width": 2,
+                    "align": "inner"
+                  }
+                ]
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "cross",
+                  "armRatio": 0.34,
+                  "cornerRadius": 6
+                },
+                "fills": [
+                  {
+                    "type": "linear",
+                    "start": [
+                      0.5,
+                      0
+                    ],
+                    "end": [
+                      0.5,
+                      1
+                    ],
+                    "stops": [
+                      [
+                        "$bottom",
+                        0
+                      ],
+                      [
+                        "$top",
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "strokes": [],
+                "layout": {
+                  "inset": {
+                    "frac": 0.140625
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M.5 0 L1 1 L0 1 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "#FFFFFF",
+                    "opacity": 0.85
+                  }
+                ],
+                "strokes": [],
+                "id": "classic.dpad.up.rest",
+                "opacity": 1,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      1
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.15625
+                    },
+                    "height": {
+                      "frac": 0.15625
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0
+                    },
+                    "y": {
+                      "frac": -0.265625
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M.5 0 L1 1 L0 1 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "$glow",
+                    "opacity": 1
+                  }
+                ],
+                "strokes": [],
+                "id": "classic.dpad.up.lit",
+                "opacity": 0,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1.1,
+                    "offset": [
+                      0.0,
+                      1.1
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.171875
+                    },
+                    "height": {
+                      "frac": 0.171875
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0
+                    },
+                    "y": {
+                      "frac": -0.265625
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M.5 1 L0 0 L1 0 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "#FFFFFF",
+                    "opacity": 0.85
+                  }
+                ],
+                "strokes": [],
+                "id": "classic.dpad.down.rest",
+                "opacity": 1,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      -1
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.15625
+                    },
+                    "height": {
+                      "frac": 0.15625
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0
+                    },
+                    "y": {
+                      "frac": 0.265625
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M.5 1 L0 0 L1 0 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "$glow",
+                    "opacity": 1
+                  }
+                ],
+                "strokes": [],
+                "id": "classic.dpad.down.lit",
+                "opacity": 0,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1.1,
+                    "offset": [
+                      0.0,
+                      -1.1
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.171875
+                    },
+                    "height": {
+                      "frac": 0.171875
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0
+                    },
+                    "y": {
+                      "frac": 0.265625
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M0 .5 L1 0 L1 1 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "#FFFFFF",
+                    "opacity": 0.85
+                  }
+                ],
+                "strokes": [],
+                "id": "classic.dpad.left.rest",
+                "opacity": 1,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1,
+                    "offset": [
+                      1,
+                      0
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.15625
+                    },
+                    "height": {
+                      "frac": 0.15625
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": -0.265625
+                    },
+                    "y": {
+                      "frac": 0
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M0 .5 L1 0 L1 1 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "$glow",
+                    "opacity": 1
+                  }
+                ],
+                "strokes": [],
+                "id": "classic.dpad.left.lit",
+                "opacity": 0,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1.1,
+                    "offset": [
+                      1.1,
+                      0.0
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.171875
+                    },
+                    "height": {
+                      "frac": 0.171875
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": -0.265625
+                    },
+                    "y": {
+                      "frac": 0
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M1 .5 L0 1 L0 0 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "#FFFFFF",
+                    "opacity": 0.85
+                  }
+                ],
+                "strokes": [],
+                "id": "classic.dpad.right.rest",
+                "opacity": 1,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1,
+                    "offset": [
+                      -1,
+                      0
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.15625
+                    },
+                    "height": {
+                      "frac": 0.15625
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0.265625
+                    },
+                    "y": {
+                      "frac": 0
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M1 .5 L0 1 L0 0 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "$glow",
+                    "opacity": 1
+                  }
+                ],
+                "strokes": [],
+                "id": "classic.dpad.right.lit",
+                "opacity": 0,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1.1,
+                    "offset": [
+                      -1.1,
+                      0.0
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.171875
+                    },
+                    "height": {
+                      "frac": 0.171875
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0.265625
+                    },
+                    "y": {
+                      "frac": 0
+                    }
+                  }
+                }
+              }
+            ],
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 1.0
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "classicFaceButtons",
+        "layout": {
+          "size": {
+            "width": 152,
+            "height": 152
+          },
+          "anchor": {
+            "to": "#edges",
+            "x": "trailing",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 0,
+            "y": -132
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "classic.x",
+            "kind": "button",
+            "input": "x",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.x.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "X",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.x.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "X",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.x.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.34210526315789475
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.3157894736842105
+                },
+                {
+                  "frac": 0.3157894736842105
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "classic.y",
+            "kind": "button",
+            "input": "y",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.y.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "Y",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.y.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "Y",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.y.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.34210526315789475
+                },
+                {
+                  "frac": 0.3157894736842105
+                },
+                {
+                  "frac": 0.3157894736842105
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "classic.a",
+            "kind": "button",
+            "input": "a",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.a.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "A",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.a.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "A",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.a.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.6842105263157895
+                },
+                {
+                  "frac": 0.34210526315789475
+                },
+                {
+                  "frac": 0.3157894736842105
+                },
+                {
+                  "frac": 0.3157894736842105
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "classic.b",
+            "kind": "button",
+            "input": "b",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.b.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "B",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.b.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "B",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.b.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.34210526315789475
+                },
+                {
+                  "frac": 0.6842105263157895
+                },
+                {
+                  "frac": 0.3157894736842105
+                },
+                {
+                  "frac": 0.3157894736842105
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "classicLeftShoulder",
+        "layout": {
+          "size": {
+            "width": 134,
+            "height": 44
+          },
+          "anchor": {
+            "to": "#edges",
+            "x": "leading",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 0,
+            "y": -244
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "classic.l",
+            "kind": "trigger",
+            "input": "l",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.l.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "path",
+                      "box": [
+                        0,
+                        0,
+                        1,
+                        1
+                      ],
+                      "d": "M0 0 L1 0 L.86 1 L.14 1 Z"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "L",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.l.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "path",
+                      "box": [
+                        0,
+                        0,
+                        1,
+                        1
+                      ],
+                      "d": "M0 0 L1 0 L.86 1 L.14 1 Z"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "L",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.l.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.47761194029850745
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "classic.zl",
+            "kind": "button",
+            "input": "zl",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.zl.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "path",
+                      "box": [
+                        0,
+                        0,
+                        1,
+                        1
+                      ],
+                      "d": "M0 0 L1 0 L.86 1 L.14 1 Z"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "ZL",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.zl.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "path",
+                      "box": [
+                        0,
+                        0,
+                        1,
+                        1
+                      ],
+                      "d": "M0 0 L1 0 L.86 1 L.14 1 Z"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "ZL",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.zl.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.5223880597014925
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.47761194029850745
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "classicRightShoulder",
+        "layout": {
+          "size": {
+            "width": 134,
+            "height": 44
+          },
+          "anchor": {
+            "to": "#edges",
+            "x": "trailing",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 0,
+            "y": -292
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "classic.zr",
+            "kind": "button",
+            "input": "zr",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.zr.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "path",
+                      "box": [
+                        0,
+                        0,
+                        1,
+                        1
+                      ],
+                      "d": "M0 0 L1 0 L.86 1 L.14 1 Z"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "ZR",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.zr.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "path",
+                      "box": [
+                        0,
+                        0,
+                        1,
+                        1
+                      ],
+                      "d": "M0 0 L1 0 L.86 1 L.14 1 Z"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "ZR",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.zr.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.47761194029850745
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "classic.r",
+            "kind": "trigger",
+            "input": "r",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.r.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "path",
+                      "box": [
+                        0,
+                        0,
+                        1,
+                        1
+                      ],
+                      "d": "M0 0 L1 0 L.86 1 L.14 1 Z"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "R",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.r.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "path",
+                      "box": [
+                        0,
+                        0,
+                        1,
+                        1
+                      ],
+                      "d": "M0 0 L1 0 L.86 1 L.14 1 Z"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "R",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.r.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.5223880597014925
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.47761194029850745
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "classicMinusPlusHome",
+        "layout": {
+          "size": {
+            "width": 148,
+            "height": 44
+          },
+          "anchor": {
+            "to": "#centerColumn",
+            "x": "center",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 0,
+            "y": -344
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "classic.minus",
+            "kind": "button",
+            "input": "minus",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.minus.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "−",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.minus.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "−",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.minus.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.2972972972972973
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "classic.home",
+            "kind": "button",
+            "input": "home",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.home.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "⌂",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.home.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "⌂",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.home.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.35135135135135137
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.2972972972972973
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "classic.plus",
+            "kind": "button",
+            "input": "plus",
+            "children": [
+              {
+                "type": "group",
+                "id": "classic.plus.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "+",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "classic.plus.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "+",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#classic.plus.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.7027027027027027
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.2972972972972973
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          }
+        ],
+        "when": [
+          {
+            "orientation": "landscape",
+            "layout": {
+              "offset": {
+                "x": 0,
+                "y": 0
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

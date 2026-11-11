@@ -67,6 +67,7 @@ struct TouchOverlayPreviewScreen: View {
   let device: TouchOverlayPreviewDevice
   let orientation: TouchOverlayOrientation
   var skin: InstalledSkin?
+  var overlayOverride: AnyView?
 
   /// GameCube / Wii output is 4:3 by default.
   private static let gameAspect: CGFloat = 4.0 / 3.0
@@ -87,7 +88,9 @@ struct TouchOverlayPreviewScreen: View {
 
   @ViewBuilder
   private func overlay(insets: UIEdgeInsets) -> some View {
-    if let skin {
+    if let overlayOverride {
+      overlayOverride
+    } else if let skin {
       SkinOverlayView(skin: skin, padKind: padKind, deviceId: 0, previewDevice: device.skinDevice, onAction: { _ in })
       if let layout = skinLayout() {
         ForEach(layout.items.indices, id: \.self) { index in
@@ -98,7 +101,8 @@ struct TouchOverlayPreviewScreen: View {
       }
     } else {
       TouchOverlayView(padKind: padKind, deviceId: 0, irMode: TCWiiTouchIRMode.gyro.rawValue,
-                       store: TouchOverlayLayoutStore(fileURL: nil), previewSafeArea: insets)
+                       store: TouchOverlayLayoutStore(fileURL: nil), previewSafeArea: insets,
+                       previewIsPad: device.isPad)
     }
   }
 

@@ -4,6 +4,7 @@
 #if os(iOS)
 import SwiftUI
 import UIKit
+@testable import iCube
 
 /// The four content views a `TouchOverlayGroupLayout` can render as (dispatched by
 /// `TouchOverlayView`), each writing ONLY through `TCManagerInterface` (design §6.1) with the
@@ -245,13 +246,6 @@ struct TouchOverlayStickView: View {
       TCManagerInterface.setAxisValueFor(write.id, controller: deviceId, value: write.value)
     }
   }
-}
-
-/// Where a stick's knob sits. Observable per property: only a view that reads `offset` in its body
-/// (the knob) is invalidated when it changes.
-@Observable
-final class TouchOverlayKnobPosition {
-  var offset: CGSize = .zero
 }
 
 /// The stick's static base, re-rendered only when a drag starts or ends.

@@ -34,8 +34,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
   /// Follow mode ignores this (see `TouchOverlayIRGeometry.follow`'s doc comment).
   let dragGain: CGFloat
   /// When true, `excludedFrames` are not part of this surface at all for hit testing: a touch inside one reaches whatever
-  /// is below (a skin's buttons, which this surface is laid over). The Swift-drawn overlay leaves it false because its
-  /// IR surface already sits below every other group.
+  /// is below (the controls in an imported skin or bundled Format 2 pad).
   var passesThroughExcludedFrames: Bool = false
 
   func makeUIView(context: Context) -> IRSurfaceView { IRSurfaceView() }

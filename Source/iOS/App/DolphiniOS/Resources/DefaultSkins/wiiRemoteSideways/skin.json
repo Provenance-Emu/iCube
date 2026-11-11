@@ -1,0 +1,2361 @@
+{
+  "formatVersion": "2.0",
+  "identifier": "com.icube.default.wiiRemoteSideways",
+  "name": "iCube wiiRemoteSideways",
+  "author": "iCube",
+  "gameTypes": [
+    "wii"
+  ],
+  "requires": [
+    "layout.anchors",
+    "shapes.parametric",
+    "shapes.path",
+    "paint.gradients",
+    "effects.shadow",
+    "text",
+    "tokens",
+    "states",
+    "controls.dpad",
+    "controls.thumbstick",
+    "controls.touchSurface"
+  ],
+  "reference": {
+    "shortSide": 390,
+    "minScale": 1,
+    "maxScale": 1
+  },
+  "bake": {
+    "traits": [
+      "iphone.standard",
+      "iphone.edgeToEdge",
+      "ipad.standard"
+    ]
+  },
+  "tokens": {
+    "top": "#FFFFFF",
+    "bottom": "#DBDBDB",
+    "glow": "#529EFF",
+    "label": "#000000"
+  },
+  "root": {
+    "type": "group",
+    "id": "canvas",
+    "children": [
+      {
+        "type": "group",
+        "id": "wiiDpad",
+        "layout": {
+          "size": {
+            "width": 128,
+            "height": 128
+          },
+          "anchor": {
+            "to": "safeArea",
+            "x": "leading",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "wii.dpad",
+            "kind": "dpad",
+            "input": {
+              "up": "up",
+              "down": "down",
+              "left": "left",
+              "right": "right"
+            },
+            "effects": [
+              {
+                "type": "shadow",
+                "color": "#000000",
+                "opacity": 0.4,
+                "radius": 3,
+                "offset": [
+                  0,
+                  2
+                ]
+              }
+            ],
+            "states": {
+              "pressed.up": {
+                "patch": [
+                  {
+                    "target": "#wii.dpad.up.rest",
+                    "opacity": 0
+                  },
+                  {
+                    "target": "#wii.dpad.up.lit",
+                    "opacity": 1
+                  }
+                ]
+              },
+              "pressed.down": {
+                "patch": [
+                  {
+                    "target": "#wii.dpad.down.rest",
+                    "opacity": 0
+                  },
+                  {
+                    "target": "#wii.dpad.down.lit",
+                    "opacity": 1
+                  }
+                ]
+              },
+              "pressed.left": {
+                "patch": [
+                  {
+                    "target": "#wii.dpad.left.rest",
+                    "opacity": 0
+                  },
+                  {
+                    "target": "#wii.dpad.left.lit",
+                    "opacity": 1
+                  }
+                ]
+              },
+              "pressed.right": {
+                "patch": [
+                  {
+                    "target": "#wii.dpad.right.rest",
+                    "opacity": 0
+                  },
+                  {
+                    "target": "#wii.dpad.right.lit",
+                    "opacity": 1
+                  }
+                ]
+              }
+            },
+            "children": [
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "ellipse"
+                },
+                "fills": [
+                  {
+                    "type": "radial",
+                    "center": [
+                      0.4,
+                      0.34
+                    ],
+                    "radius": 0.703125,
+                    "stops": [
+                      [
+                        "$top",
+                        0.9,
+                        0.022222222222222223
+                      ],
+                      [
+                        "$bottom",
+                        0.95,
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "strokes": [
+                  {
+                    "color": "$glow",
+                    "opacity": 0.55,
+                    "width": 2,
+                    "align": "inner"
+                  }
+                ]
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "cross",
+                  "armRatio": 0.34,
+                  "cornerRadius": 6
+                },
+                "fills": [
+                  {
+                    "type": "linear",
+                    "start": [
+                      0.5,
+                      0
+                    ],
+                    "end": [
+                      0.5,
+                      1
+                    ],
+                    "stops": [
+                      [
+                        "$bottom",
+                        0
+                      ],
+                      [
+                        "$top",
+                        1
+                      ]
+                    ]
+                  }
+                ],
+                "strokes": [],
+                "layout": {
+                  "inset": {
+                    "frac": 0.140625
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M.5 0 L1 1 L0 1 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "#FFFFFF",
+                    "opacity": 0.85
+                  }
+                ],
+                "strokes": [],
+                "id": "wii.dpad.up.rest",
+                "opacity": 1,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      1
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.15625
+                    },
+                    "height": {
+                      "frac": 0.15625
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0
+                    },
+                    "y": {
+                      "frac": -0.265625
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M.5 0 L1 1 L0 1 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "$glow",
+                    "opacity": 1
+                  }
+                ],
+                "strokes": [],
+                "id": "wii.dpad.up.lit",
+                "opacity": 0,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1.1,
+                    "offset": [
+                      0.0,
+                      1.1
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.171875
+                    },
+                    "height": {
+                      "frac": 0.171875
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0
+                    },
+                    "y": {
+                      "frac": -0.265625
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M.5 1 L0 0 L1 0 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "#FFFFFF",
+                    "opacity": 0.85
+                  }
+                ],
+                "strokes": [],
+                "id": "wii.dpad.down.rest",
+                "opacity": 1,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      -1
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.15625
+                    },
+                    "height": {
+                      "frac": 0.15625
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0
+                    },
+                    "y": {
+                      "frac": 0.265625
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M.5 1 L0 0 L1 0 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "$glow",
+                    "opacity": 1
+                  }
+                ],
+                "strokes": [],
+                "id": "wii.dpad.down.lit",
+                "opacity": 0,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1.1,
+                    "offset": [
+                      0.0,
+                      -1.1
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.171875
+                    },
+                    "height": {
+                      "frac": 0.171875
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0
+                    },
+                    "y": {
+                      "frac": 0.265625
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M0 .5 L1 0 L1 1 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "#FFFFFF",
+                    "opacity": 0.85
+                  }
+                ],
+                "strokes": [],
+                "id": "wii.dpad.left.rest",
+                "opacity": 1,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1,
+                    "offset": [
+                      1,
+                      0
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.15625
+                    },
+                    "height": {
+                      "frac": 0.15625
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": -0.265625
+                    },
+                    "y": {
+                      "frac": 0
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M0 .5 L1 0 L1 1 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "$glow",
+                    "opacity": 1
+                  }
+                ],
+                "strokes": [],
+                "id": "wii.dpad.left.lit",
+                "opacity": 0,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1.1,
+                    "offset": [
+                      1.1,
+                      0.0
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.171875
+                    },
+                    "height": {
+                      "frac": 0.171875
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": -0.265625
+                    },
+                    "y": {
+                      "frac": 0
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M1 .5 L0 1 L0 0 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "#FFFFFF",
+                    "opacity": 0.85
+                  }
+                ],
+                "strokes": [],
+                "id": "wii.dpad.right.rest",
+                "opacity": 1,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1,
+                    "offset": [
+                      -1,
+                      0
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.15625
+                    },
+                    "height": {
+                      "frac": 0.15625
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0.265625
+                    },
+                    "y": {
+                      "frac": 0
+                    }
+                  }
+                }
+              },
+              {
+                "type": "shape",
+                "shape": {
+                  "kind": "path",
+                  "d": "M1 .5 L0 1 L0 0 Z",
+                  "box": [
+                    0,
+                    0,
+                    1,
+                    1
+                  ]
+                },
+                "fills": [
+                  {
+                    "type": "solid",
+                    "color": "$glow",
+                    "opacity": 1
+                  }
+                ],
+                "strokes": [],
+                "id": "wii.dpad.right.lit",
+                "opacity": 0,
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.3,
+                    "radius": 1.1,
+                    "offset": [
+                      -1.1,
+                      0.0
+                    ]
+                  }
+                ],
+                "layout": {
+                  "size": {
+                    "width": {
+                      "frac": 0.171875
+                    },
+                    "height": {
+                      "frac": 0.171875
+                    }
+                  },
+                  "anchor": {
+                    "to": "parent",
+                    "x": "center",
+                    "y": "center"
+                  },
+                  "offset": {
+                    "x": {
+                      "frac": 0.265625
+                    },
+                    "y": {
+                      "frac": 0
+                    }
+                  }
+                }
+              }
+            ],
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 1.0
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "sidewaysB",
+        "layout": {
+          "size": {
+            "width": 77,
+            "height": 77
+          },
+          "anchor": {
+            "to": "safeArea",
+            "x": "leading",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 25.5,
+            "y": -168
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "wii.b",
+            "kind": "button",
+            "input": "b",
+            "children": [
+              {
+                "type": "group",
+                "id": "wii.b.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "B",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "wii.b.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "B",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#wii.b.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 1.0
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "sidewaysFaceCluster",
+        "layout": {
+          "size": {
+            "width": 126,
+            "height": 157
+          },
+          "anchor": {
+            "to": "safeArea",
+            "x": "trailing",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": -20,
+            "y": -40
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "wii.minus",
+            "kind": "button",
+            "input": "minus",
+            "children": [
+              {
+                "type": "group",
+                "id": "wii.minus.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "−",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "wii.minus.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "−",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#wii.minus.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.7261904761904762
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.20634920634920634
+                },
+                {
+                  "frac": 0.16560509554140126
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "wii.a",
+            "kind": "button",
+            "input": "a",
+            "children": [
+              {
+                "type": "group",
+                "id": "wii.a.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "A",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "wii.a.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "A",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#wii.a.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.6587301587301587
+                },
+                {
+                  "frac": 0.3248407643312102
+                },
+                {
+                  "frac": 0.3412698412698413
+                },
+                {
+                  "frac": 0.27388535031847133
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "wii.plus",
+            "kind": "button",
+            "input": "plus",
+            "children": [
+              {
+                "type": "group",
+                "id": "wii.plus.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "+",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "wii.plus.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "+",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#wii.plus.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.06746031746031746
+                },
+                {
+                  "frac": 0.37898089171974525
+                },
+                {
+                  "frac": 0.20634920634920634
+                },
+                {
+                  "frac": 0.16560509554140126
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "wii.one",
+            "kind": "button",
+            "input": "one",
+            "children": [
+              {
+                "type": "group",
+                "id": "wii.one.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "1",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "wii.one.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "1",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#wii.one.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.7261146496815286
+                },
+                {
+                  "frac": 0.3412698412698413
+                },
+                {
+                  "frac": 0.27388535031847133
+                }
+              ]
+            }
+          },
+          {
+            "type": "control",
+            "id": "wii.two",
+            "kind": "button",
+            "input": "two",
+            "children": [
+              {
+                "type": "group",
+                "id": "wii.two.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "2",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "wii.two.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "ellipse"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "2",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#wii.two.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.6587301587301587
+                },
+                {
+                  "frac": 0.7261146496815286
+                },
+                {
+                  "frac": 0.3412698412698413
+                },
+                {
+                  "frac": 0.27388535031847133
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "type": "group",
+        "id": "sidewaysHome",
+        "layout": {
+          "size": {
+            "width": 32,
+            "height": 32
+          },
+          "anchor": {
+            "to": "safeArea",
+            "x": "center",
+            "y": "bottom"
+          },
+          "offset": {
+            "x": 0,
+            "y": 0
+          }
+        },
+        "children": [
+          {
+            "type": "control",
+            "id": "wii.home",
+            "kind": "button",
+            "input": "home",
+            "children": [
+              {
+                "type": "group",
+                "id": "wii.home.rest",
+                "role": "base",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 3,
+                    "offset": [
+                      0,
+                      2
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.35,
+                    "radius": 4,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$top",
+                            0
+                          ],
+                          [
+                            "$bottom",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF57",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.6,
+                        "width": 1
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "⌂",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              },
+              {
+                "type": "group",
+                "id": "wii.home.pressed",
+                "role": "highlight",
+                "effects": [
+                  {
+                    "type": "shadow",
+                    "color": "#000000",
+                    "opacity": 0.35,
+                    "radius": 1,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  },
+                  {
+                    "type": "shadow",
+                    "color": "$glow",
+                    "opacity": 0.85,
+                    "radius": 8,
+                    "offset": [
+                      0,
+                      0
+                    ]
+                  }
+                ],
+                "children": [
+                  {
+                    "type": "shape",
+                    "shape": {
+                      "kind": "capsule"
+                    },
+                    "fills": [
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          1
+                        ],
+                        "stops": [
+                          [
+                            "$bottom",
+                            0
+                          ],
+                          [
+                            "$top",
+                            1
+                          ]
+                        ]
+                      },
+                      {
+                        "type": "linear",
+                        "start": [
+                          0.5,
+                          0
+                        ],
+                        "end": [
+                          0.5,
+                          0.5
+                        ],
+                        "stops": [
+                          [
+                            "#FFFFFF1A",
+                            0
+                          ],
+                          [
+                            "#FFFFFF00",
+                            1
+                          ]
+                        ]
+                      }
+                    ],
+                    "strokes": [
+                      {
+                        "color": "$glow",
+                        "opacity": 0.95,
+                        "width": 2
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "text": "⌂",
+                    "font": {
+                      "size": 11,
+                      "weight": "bold"
+                    },
+                    "color": "$label",
+                    "opacity": 0.55,
+                    "align": "center"
+                  }
+                ]
+              }
+            ],
+            "states": {
+              "pressed": {
+                "scale": 0.92,
+                "patch": [
+                  {
+                    "target": "#wii.home.rest",
+                    "visible": false
+                  }
+                ]
+              }
+            },
+            "layout": {
+              "frame": [
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 0.0
+                },
+                {
+                  "frac": 1.0
+                },
+                {
+                  "frac": 1.0
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

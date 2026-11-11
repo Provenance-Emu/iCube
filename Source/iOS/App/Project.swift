@@ -313,6 +313,7 @@ let iCube = Target.target(
         "Common/Resources/Fonts/OFL.txt",
         // Preserve the original credited skin archive and license notice for offline opt-in.
         .folderReference(path: "Common/Resources/BundledSkins"),
+        .folderReference(path: "DolphiniOS/Resources/DefaultSkins"),
         // These are iOS UIKit xibs/storyboards (touch controller, boot notices, JIT-wait) with an
         // iPhone/iPad-only targeted device family — ibtool rejects them for tvOS ("iOS xibs do not
         // support target device type tv"). tvOS uses the SwiftUI UI, not these, so include them on
@@ -371,12 +372,13 @@ let iCube = Target.target(
         .package(product: "PVLibraryMetadata"),
         .package(product: "PVLibrarySnapshot"),
         .package(product: "Zip"),
-        // Controller skins, shared with Provenance and iFly (Provenance-Emu/SkinKit). iCube links the
-        // non-UI modules only: `SkinKitCore` (info.json model), `SkinCatalogKit` (catalog + store policy) and
-        // `SkinKitManager` (store installer + record). The picker, store and overlay views stay iCube's own.
+        // Shared skin models, catalog, installation and format 2 rendering.
         .package(product: "SkinKitCore", condition: .when([.ios, .catalyst])),
         .package(product: "SkinCatalogKit", condition: .when([.ios, .catalyst])),
         .package(product: "SkinKitManager", condition: .when([.ios, .catalyst])),
+        .package(product: "SkinKitUI", condition: .when([.ios, .catalyst])),
+        .package(product: "SkinKit2Core", condition: .when([.ios, .catalyst])),
+        .package(product: "SkinKit2Render", condition: .when([.ios, .catalyst])),
         // PLzmaSDK, through a local package: see Source/iOS/PLzmaShim/Package.swift.
         .package(product: "PLzmaShim"),
         .package(product: "SWCompression"),
@@ -570,6 +572,8 @@ let iCubeTests = Target.target(
         .package(product: "SkinKitCore"),
         .package(product: "SkinCatalogKit"),
         .package(product: "SkinKitManager"),
+        .package(product: "SkinKit2Core"),
+        .package(product: "SkinKit2Render"),
     ],
     settings: .settings(
         base: [
@@ -776,9 +780,8 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // Keep the exact SkinKit release aligned with Provenance and iFly.
-        // iCube retains its own overlay and consumes the model, catalog and manager modules.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .exact("0.3.0")),
+        // Format 2 runtime and baker, pinned to the shared package revision.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("172d2892afff1cfaf2d4c1b40cc8e7091ea6ef63")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
