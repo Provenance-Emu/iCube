@@ -2,14 +2,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+import SkinKit2Core
 import SwiftUI
 import UIKit
 
-/// The programmatic touch overlay's SwiftUI root (design §3/§4/§8 phase 2, IR wiring + settings
-/// phase 3), behind the `touch_overlay_programmatic` flag. `GeometryReader` + `ZStack` of one
-/// `PositionedTouchGroup` per `TouchOverlayDefaults.layout(for:orientation:canvas:safeArea:)` entry — a port of
-/// iFly's `VirtualControllerOverlay.body`/`consoleLayout` shape, generalized over
-/// `TouchOverlayPadKind` instead of a single console.
+/// Renders the bundled Format 2 pad and hosts the native layout editor and Wii IR surface.
 struct TouchOverlayView: View {
   let padKind: TouchOverlayPadKind
   /// The Touchscreen device id (`ControllerManager.shared.touchscreenControllerId(isWii:)`) —
@@ -25,6 +22,7 @@ struct TouchOverlayView: View {
   static let coordinateSpace = NamedCoordinateSpace.named("TouchOverlayView")
 
   @ObservedObject private var store: TouchOverlayLayoutStore
+  @State private var previewFrames: [String: CGRect] = [:]
   @State private var editMode: TouchOverlayEditMode
   /// Set only by the DEBUG layout gallery: the safe area of the device being simulated. Live
   /// overlays read the real one from the window.
@@ -34,6 +32,8 @@ struct TouchOverlayView: View {
   private let onDone: (() -> Void)?
   /// Drawn at the start of the edit toolbar (the editor's pad picker).
   private let toolbarAccessory: AnyView?
+  /// Used by the snapshot comparator while the original drawing remains a test oracle.
+  private let previewIsPad: Bool?
 
   /// - Parameter initialEditMode: opens straight into an edit mode, for
   ///   `TouchOverlayLayoutEditorView` ("Edit Layout…" / "Edit IR Area…") — it has no live
@@ -45,7 +45,7 @@ struct TouchOverlayView: View {
   /// - Parameter store: the gallery passes an empty in-memory store so it always shows defaults.
   init(padKind: TouchOverlayPadKind, deviceId: Int, irMode: Int, initialEditMode: TouchOverlayEditMode = .none,
        store: TouchOverlayLayoutStore = .shared, previewSafeArea: UIEdgeInsets? = nil,
-       onDone: (() -> Void)? = nil, toolbarAccessory: AnyView? = nil) {
+       onDone: (() -> Void)? = nil, toolbarAccessory: AnyView? = nil, previewIsPad: Bool? = nil) {
     self.padKind = padKind
     self.deviceId = deviceId
     self.irMode = irMode
@@ -54,86 +54,63 @@ struct TouchOverlayView: View {
     self.previewSafeArea = previewSafeArea
     self.onDone = onDone
     self.toolbarAccessory = toolbarAccessory
+    self.previewIsPad = previewIsPad
   }
 
   var body: some View {
     GeometryReader { geo in
-      // The host lays this view out inside the safe area; the overlay itself draws edge to edge
-      // (the offset below), so lay out on the whole screen and keep controls out of the inset edges.
       let geometry = TouchOverlayCanvas(hostSize: geo.size, hostInsets: UIEdgeInsets(geo.safeAreaInsets),
                                         previewSafeArea: previewSafeArea)
-      let canvas = geometry.size
-      let safeArea = geometry.safeArea
-      let bounds = geometry.bounds
-      let orientation = geometry.orientation
-      let layouts = TouchOverlayDefaults.shown(
-        TouchOverlayDefaults.layout(for: padKind, orientation: orientation, canvas: canvas, safeArea: safeArea),
-        gameCubeMicrophone: DOLConfigBridge.mainSlotBMicrophone())
-      let opacity = TouchOverlayInput.resolvedOpacity(isEditing: editMode != .none, configuredOpacity: DOLConfigBridge.mainTouchPadOpacity())
-      let variant = TouchOverlayArt.variant(for: padKind)
-      // `revision` isn't read directly, but touching it here ties this body's re-evaluation to
-      // every store mutation (position AND size-scale writes), matching phase 1's store contract.
-      // NOTE: must stay a `let` declaration, not a bare `_ = ...` assignment — inside a
-      // `@ViewBuilder` closure a bare assignment statement is itself treated as a View-producing
-      // expression (type `()`, which doesn't conform to `View`) and fails to build.
-      // swiftlint:disable:next redundant_discardable_let
-      let _ = store.revision
+      if let source = try? DefaultSkin2Pad.document(for: padKind) {
+        let flags: Set<String> = DOLConfigBridge.mainSlotBMicrophone() ? ["microphone"] : []
+        let environment = DefaultSkin2Pad.environment(canvas: geometry.size, safeArea: geometry.safeArea, flags: flags, isPad: previewIsPad)
+        let opacity = TouchOverlayInput.resolvedOpacity(isEditing: editMode != .none,
+                                                        configuredOpacity: DOLConfigBridge.mainTouchPadOpacity())
+        let document = DefaultSkin2Pad.documentForCanvas(source, for: padKind, environment: environment)
+        let resolution = Skin2Resolver.resolve(document, in: environment)
+        let layouts = DefaultSkin2Pad.groups(in: resolution)
+        let _ = store.revision
+        let edits = store.format2Edits(padKind: padKind, orientation: geometry.orientation,
+                                      resolution: resolution, bounds: geometry.bounds, previews: previewFrames)
+        let renderingDocument = DefaultSkin2Pad.documentForRendering(document, unit: resolution.unit,
+                                                                     edits: edits, opacity: opacity)
 
-      // The Wii IR surface (§2.1/§6.5) must paint FIRST (bottom of the ZStack): it's now a real,
-      // resizable/movable box like any other group (task item 1), typically covering most of the
-      // pad, so touches on a button/D-pad/stick drawn AFTER it need to be delivered to THOSE
-      // controls first — the exclusion rule (§6.5) this ordering provides for free. Partition by
-      // CONTROL KIND, not placement anchor: `.fillInset` (the IR pad's anchor) is a perfectly
-      // normal resizable anchor now, so anchor alone no longer identifies "paint first" groups.
-      let backgroundLayouts = layouts.filter(Self.isIRSurfaceLayout)
-      let positionedLayouts = layouts.filter { !Self.isIRSurfaceLayout($0) }
-      // Every OTHER group's resolved box (overlay coordinate space) — precomputed once so the IR
-      // pad's exclusion rule can check "did this touch start inside another group" without each
-      // group needing to recompute its siblings' boxes itself.
-      let otherBoxes: [CGRect] = positionedLayouts.map {
-        store.resolvedBox(for: $0, padKind: padKind, orientation: orientation, in: bounds)
-      }
-
-      ZStack {
-        // Long-press-to-edit lives on a background layer BELOW every control surface, not on the
-        // whole ZStack: attaching it to the container would let UIKit's ancestor gesture
-        // recognizer cancel an in-progress touch on a button/D-pad/stick underneath it (its
-        // default `cancelsTouchesInView` would force-release whatever was held), turning an
-        // ordinary half-second button hold into an accidental edit-mode entry. A touch that lands
-        // on a group's own surface is consumed there and never reaches this layer; only a touch on
-        // genuinely empty overlay space does. On the Wii Remote pad this is reachable in the strip
-        // outside the IR pad's default margin (`TouchOverlayDefaults.irPadMargin`) even though the
-        // IR pad itself is now hit-testable — the Controllers hub's "Edit Layout…" entry is the
-        // primary way in when the IR pad covers the whole screen after a resize.
-        // The game screen owns layout editing: it closes its bar and edits on this same canvas
-        // above everything, so ask it instead of editing in place underneath its top strip.
-        Color.clear
-          .contentShape(Rectangle())
-          .onLongPressGesture(minimumDuration: 0.5) {
+        let foreground = layouts.filter { !Self.isIRSurfaceLayout($0) }
+        let exclusions = foreground.map {
+          store.resolvedBox(for: $0, padKind: padKind, orientation: geometry.orientation, in: geometry.bounds)
+        }
+        ZStack {
+          Color.clear.contentShape(Rectangle()).onLongPressGesture(minimumDuration: 0.5) {
             guard editMode == .none else { return }
             NotificationCenter.default.post(name: .DOLEditTouchLayout, object: nil)
           }
-
-        if editMode != .none {
-          safeAreaGuide(bounds: bounds, safeArea: safeArea)
+          DefaultSkin2Canvas(document: renderingDocument, environment: environment, edits: edits,
+                             padKind: padKind, deviceId: deviceId, inputEnabled: !editMode.inputSuppressed)
+            .id("\(padKind.rawValue).\(deviceId)")
+          // Keep the IR mode/gain/recenter tracker, using the document's migrated surface rectangle.
+          ForEach(layouts.filter(Self.isIRSurfaceLayout), id: \.group) { layout in
+            groupView(layout: layout, bounds: geometry.bounds, orientation: geometry.orientation, opacity: opacity,
+                      excludedFrames: exclusions)
+          }
+          if editMode != .none {
+            safeAreaGuide(bounds: geometry.bounds, safeArea: geometry.safeArea)
+            ForEach(foreground, id: \.group) { layout in
+              groupView(layout: layout, bounds: geometry.bounds, orientation: geometry.orientation, opacity: opacity,
+                        excludedFrames: [])
+            }
+            editToolbar(safeArea: geometry.safeArea)
+          }
         }
-        ForEach(backgroundLayouts, id: \.group) { layout in
-          groupView(layout: layout, bounds: bounds, orientation: orientation, opacity: opacity,
-                    variant: variant, excludedFrames: otherBoxes)
+        .coordinateSpace(Self.coordinateSpace)
+        .onChange(of: padKind) { _, _ in previewFrames.removeAll() }
+        .onChange(of: editMode.inputSuppressed) { _, suppressed in
+          if !suppressed { previewFrames.removeAll() }
         }
-        ForEach(positionedLayouts, id: \.group) { layout in
-          groupView(layout: layout, bounds: bounds, orientation: orientation, opacity: opacity,
-                    variant: variant, excludedFrames: [])
-        }
-        if editMode != .none {
-          editToolbar(safeArea: safeArea)
-        }
+        .frame(width: geometry.size.width, height: geometry.size.height)
+        .offset(x: -geometry.hostOrigin.x, y: -geometry.hostOrigin.y)
+      } else {
+        ContentUnavailableView("Controls unavailable", systemImage: "gamecontroller")
       }
-      .coordinateSpace(Self.coordinateSpace)
-      // Pin the full-size canvas to the screen's corner explicitly rather than relying on how
-      // `.ignoresSafeArea()` positions an explicitly sized frame.
-      .frame(width: canvas.width, height: canvas.height)
-      .offset(x: -geometry.hostOrigin.x, y: -geometry.hostOrigin.y)
     }
   }
 
@@ -145,77 +122,56 @@ struct TouchOverlayView: View {
 
   @ViewBuilder
   private func groupView(layout: TouchOverlayGroupLayout, bounds: CGRect, orientation: TouchOverlayOrientation,
-                         opacity: Double, variant: TouchOverlayArt.Variant, excludedFrames: [CGRect]) -> some View {
-    if layout.placement.anchor == .fill {
-      // No group uses this anchor today (the Wii IR pad moved to `.fillInset`, §2.4/task item 1),
-      // but it stays available: a whole-overlay, non-hit-testable, non-editable layer.
-      content(for: layout, scale: 1.0, inputSuppressed: false, variant: variant, box: bounds, excludedFrames: [])
-        .opacity(opacity)
-        .frame(width: bounds.width, height: bounds.height)
-        .position(x: bounds.midX, y: bounds.midY)
-        .allowsHitTesting(false)
-    } else {
-      // Input is suppressed for EVERY group in EITHER edit mode, not just the group(s)
-      // `showsChrome` makes editable (task item 1, design §9's mutual exclusion) — see
-      // `PositionedTouchGroup`'s doc comment for why this used to be a single flag and why that
-      // was wrong for `.irArea` mode specifically.
-      let inputSuppressed = editMode.inputSuppressed
-      let showsChrome = editMode.showsChrome(for: layout.group)
-      let isIRPad = layout.group == .wiiIRPad
-      let scale = store.sizeScale(for: layout.group, padKind: padKind, orientation: orientation)
-      let box = store.resolvedBox(for: layout, padKind: padKind, orientation: orientation, in: bounds)
-      PositionedTouchGroup(
-        group: layout.group, box: box, bounds: bounds, inputSuppressed: inputSuppressed, showsChrome: showsChrome,
-        onCommit: { resolved in
-          store.setCenter(resolved, in: bounds, for: layout.group, padKind: padKind, orientation: orientation)
-        },
-        // `.layout` mode resizes every group (including `wiiIRPad`) UNIFORMLY, exactly as before
-        // task item 1 — that's the "drag the corner handle" experience already shipped and
-        // persisted, unaffected by the new independent-axis editor below.
-        resize: editMode == .layout ? (scale: scale, onCommit: { newScale in
-          store.setSizeScale(newScale, for: layout.group, padKind: padKind, orientation: orientation, in: bounds)
-        }) : nil,
-        // `.irArea` mode is ONLY ever entered for the Wii Remote pad kind's `wiiIRPad` group
-        // (Edit IR Area… opens the editor with `padKind: .wiiRemote`), so this is the sole
-        // group that ever gets `resizeAxes` — task item 1's independent width/height editor.
-        resizeAxes: (editMode == .irArea && isIRPad) ? (scale: store.sizeScaleXY(for: layout.group, padKind: padKind, orientation: orientation), onCommit: { newScaleXY in
-          store.setIRSizeScale(newScaleXY, for: layout.group, padKind: padKind, orientation: orientation,
-                               bounds: bounds, baseSize: layout.placement.resolvedSize(in: bounds))
-        }) : nil,
-        content: {
-          content(for: layout, scale: scale, inputSuppressed: inputSuppressed, variant: variant, box: box, excludedFrames: excludedFrames)
-            .opacity(opacity)
-        }
-      )
-    }
+                         opacity: Double, excludedFrames: [CGRect]) -> some View {
+    let inputSuppressed = editMode.inputSuppressed
+    let showsChrome = editMode.showsChrome(for: layout.group)
+    let isIRPad = layout.group == .wiiIRPad
+    let scale = store.sizeScale(for: layout.group, padKind: padKind, orientation: orientation)
+    let box = store.resolvedBox(for: layout, padKind: padKind, orientation: orientation, in: bounds)
+    PositionedTouchGroup(
+      group: layout.group, box: box, bounds: bounds, inputSuppressed: inputSuppressed, showsChrome: showsChrome,
+      onCommit: { resolved in
+        store.setCenter(resolved, in: bounds, for: layout.group, padKind: padKind, orientation: orientation)
+      },
+      // `.layout` mode resizes every group (including `wiiIRPad`) UNIFORMLY, exactly as before
+      // task item 1 — that's the "drag the corner handle" experience already shipped and
+      // persisted, unaffected by the new independent-axis editor below.
+      resize: editMode == .layout ? (scale: scale, onCommit: { newScale in
+        store.setSizeScale(newScale, for: layout.group, padKind: padKind, orientation: orientation, in: bounds)
+      }) : nil,
+      // `.irArea` mode is ONLY ever entered for the Wii Remote pad kind's `wiiIRPad` group
+      // (Edit IR Area… opens the editor with `padKind: .wiiRemote`), so this is the sole
+      // group that ever gets `resizeAxes` — task item 1's independent width/height editor.
+      resizeAxes: (editMode == .irArea && isIRPad) ? (scale: store.sizeScaleXY(for: layout.group, padKind: padKind, orientation: orientation), onCommit: { newScaleXY in
+        store.setIRSizeScale(newScaleXY, for: layout.group, padKind: padKind, orientation: orientation,
+                             bounds: bounds, baseSize: layout.placement.resolvedSize(in: bounds))
+      }) : nil,
+      onPreview: { previewFrames[layout.group.rawValue] = $0 },
+      content: {
+        content(for: layout, inputSuppressed: inputSuppressed, box: box, excludedFrames: excludedFrames)
+          .opacity(opacity)
+      }
+    )
   }
 
   @ViewBuilder
-  private func content(for layout: TouchOverlayGroupLayout, scale: CGFloat, inputSuppressed: Bool,
-                       variant: TouchOverlayArt.Variant, box: CGRect, excludedFrames: [CGRect]) -> some View {
-    let groupSize = CGSize(width: layout.size.width * scale, height: layout.size.height * scale)
-    if layout.controls.count == 1, case .dpad(let baseId) = layout.controls[0].kind {
-      TouchOverlayDPadView(baseId: baseId, deviceId: deviceId, variant: variant, groupSize: groupSize, isEditing: inputSuppressed)
-    } else if layout.controls.count == 1, case .stick(let baseId) = layout.controls[0].kind {
-      TouchOverlayStickView(baseId: baseId, deviceId: deviceId, variant: variant, groupSize: groupSize, isEditing: inputSuppressed)
-    } else if layout.controls.count == 1, case .irSurface = layout.controls[0].kind {
-      // The exclusion boxes are in OVERLAY coordinates; the IR surface reports touches in its OWN
-      // local space (origin at `box`'s top-left), so translate them into that space here.
+  private func content(for layout: TouchOverlayGroupLayout, inputSuppressed: Bool,
+                       box: CGRect, excludedFrames: [CGRect]) -> some View {
+    if layout.group == .wiiIRPad {
       let localExcluded = excludedFrames.map { $0.offsetBy(dx: -box.minX, dy: -box.minY) }
       ZStack {
-        // Render as a translucent region whenever ANY edit mode is active (task item 1) — during
-        // normal play the surface is fully invisible but still live (its OWN `mode` gate, not
-        // `inputSuppressed`, decides whether it processes touches).
         if inputSuppressed {
-          TouchOverlayArt.irPad(variant: variant)
+          RoundedRectangle(cornerRadius: 20, style: .continuous)
+            .fill(Color.white.opacity(0.06))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+              .stroke(Color(red: 0.32, green: 0.62, blue: 1).opacity(0.35), lineWidth: 1.5))
         }
         TouchOverlayIRPadView(mode: TCWiiTouchIRMode(rawValue: irMode) ?? .gyro, deviceId: deviceId,
                               excludedFrames: localExcluded, isEditing: inputSuppressed,
                               dragGain: TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
       }
     } else {
-      TouchOverlayButtonClusterView(controls: layout.controls, deviceId: deviceId, variant: variant,
-                                    groupSize: groupSize, scale: scale, isEditing: inputSuppressed)
+      Color.clear
     }
   }
 

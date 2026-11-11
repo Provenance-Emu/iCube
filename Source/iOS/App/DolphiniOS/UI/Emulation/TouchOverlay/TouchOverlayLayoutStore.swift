@@ -5,6 +5,7 @@
 import Combine
 import CoreGraphics
 import Foundation
+import SkinKit2Core
 
 /// Where a group the user moved sits: on each axis, the canvas edge (or centre line) nearest to
 /// it and the distance in points from there to the group's centre. Points from an edge, like the
@@ -219,6 +220,105 @@ final class TouchOverlayLayoutStore: ObservableObject {
 
   func hasCustomLayout(padKind: TouchOverlayPadKind, orientation: TouchOverlayOrientation) -> Bool {
     !(layouts[Self.key(padKind, orientation)] ?? [:]).isEmpty
+  }
+
+  /// Convert this pad's saved layout to SkinKit2 runtime edits. Positions are computed against
+  /// the current resolution each time, so legacy fractions remain fractions across devices and
+  /// anchored positions retain their existing edge/centre behavior without being captured once.
+  /// Unknown IDs are retained in the result; consumers that do not recognize them can ignore them.
+  func format2Edits(padKind: TouchOverlayPadKind, orientation: TouchOverlayOrientation,
+                    resolution: Skin2Resolution, bounds: CGRect,
+                    previews: [String: CGRect] = [:]) -> [String: Skin2Edit] {
+    let entries = layouts[Self.key(padKind, orientation)] ?? [:]
+    var edits: [String: Skin2Edit] = [:]
+    for id in Set(entries.keys).union(previews.keys) {
+      let entry = entries[id] ?? Entry()
+      var scaleX = entry.scale.first.map { CGFloat($0) } ?? 1
+      var scaleY = entry.scale.count >= 2 ? CGFloat(entry.scale[1]) : scaleX
+      var hasScale = !entry.scale.isEmpty
+      guard let resolved = resolution.node(id: id), resolution.unit.isFinite, resolution.unit > 0 else {
+        edits[id] = Self.format2Edit(offset: nil, scaleX: entry.scale.first,
+                                    scaleY: entry.scale.count >= 2 ? entry.scale[1] : entry.scale.first)
+        continue
+      }
+
+      // A group node often spans the whole canvas while its controls are positioned inside it.
+      // Scaling that wrapper changes how the children lay out instead of scaling their frames.
+      // Derive the legacy group footprint from its descendant controls and edit those controls
+      // directly. If the group ID is itself a control, its own resolved frame is the footprint.
+      let controls: [Skin2ResolvedNode]
+      if resolved.node.type == .control {
+        controls = [resolved]
+      } else {
+        controls = Self.descendantControls(of: resolved)
+      }
+      guard let footprint = controls.map(\.exactFrame).reduce(nil, { (result: CGRect?, frame) in
+        let rect = CGRect(x: CGFloat(frame.x), y: CGFloat(frame.y),
+                          width: CGFloat(frame.width), height: CGFloat(frame.height))
+        return result.map { $0.union(rect) } ?? rect
+      }) else {
+        edits[id] = Self.format2Edit(offset: nil, scaleX: entry.scale.first,
+                                    scaleY: entry.scale.count >= 2 ? entry.scale[1] : entry.scale.first)
+        continue
+      }
+
+      // Match resolvedBox's order: scale the legacy footprint first, then clamp its centre.
+      let defaultCenter = CGPoint(x: footprint.midX, y: footprint.midY)
+      var requestedCenter = entry.center(in: bounds) ?? defaultCenter
+      let preview = previews[id]
+      if let preview, footprint.width > 0, footprint.height > 0 {
+        scaleX = preview.width / footprint.width
+        scaleY = preview.height / footprint.height
+        hasScale = true
+        requestedCenter = CGPoint(x: preview.midX, y: preview.midY)
+      }
+      let center = preview == nil ? TouchOverlayLayoutEngine.clampCenter(
+        requestedCenter,
+        size: CGSize(width: footprint.width * scaleX, height: footprint.height * scaleY),
+        bounds: bounds) : requestedCenter
+      let isWrapperGroup = resolved.node.type != .control
+      let groupOffset = Skin2Edit.Offset(x: (Double(center.x - defaultCenter.x)) / resolution.unit,
+                                         y: (Double(center.y - defaultCenter.y)) / resolution.unit)
+      if isWrapperGroup {
+        // Translating the wrapper moves even currently hidden children. Keep the scale on visible
+        // controls below, where it transforms their own frames before their artwork is resolved.
+        let offset = entry.center(in: bounds) != nil || center != defaultCenter ? groupOffset : nil
+        edits[id] = Skin2Edit(offset: offset)
+      }
+      for control in controls {
+        let original = CGPoint(x: CGFloat(control.exactFrame.midX), y: CGFloat(control.exactFrame.midY))
+        let offset: Skin2Edit.Offset?
+        if hasScale || entry.center(in: bounds) != nil {
+          let deltaX = isWrapperGroup
+            ? (original.x - defaultCenter.x) * (scaleX - 1)
+            : center.x - original.x
+          let deltaY = isWrapperGroup
+            ? (original.y - defaultCenter.y) * (scaleY - 1)
+            : center.y - original.y
+          offset = Skin2Edit.Offset(x: Double(deltaX) / resolution.unit,
+                                    y: Double(deltaY) / resolution.unit)
+        } else {
+          offset = nil
+        }
+        edits[control.node.id ?? id] = Self.format2Edit(
+          offset: offset,
+          scaleX: hasScale ? Double(scaleX) : nil,
+          scaleY: hasScale ? Double(scaleY) : nil)
+      }
+    }
+    return edits
+  }
+
+  private static func descendantControls(of node: Skin2ResolvedNode) -> [Skin2ResolvedNode] {
+    node.children.flatMap { child in
+      child.node.type == .control ? [child] : descendantControls(of: child)
+    }
+  }
+
+  private static func format2Edit(offset: Skin2Edit.Offset?, scaleX: Double?, scaleY: Double?) -> Skin2Edit {
+    Skin2Edit(offset: offset, scale: scaleX == scaleY ? scaleX : nil,
+              scaleX: scaleX == scaleY ? nil : scaleX,
+              scaleY: scaleX == scaleY ? nil : scaleY)
   }
 
   /// The box a group occupies in `bounds`: the stored centre when the user moved it, otherwise

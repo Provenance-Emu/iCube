@@ -28,7 +28,13 @@ final class TouchOverlaySnapshotTests: XCTestCase {
     for kind in TouchOverlayPadKind.allCases {
       for device in TouchOverlayPreviewDevice.all {
         for orientation in TouchOverlayOrientation.allCases {
-          let image = render(TouchOverlayPreviewScreen(padKind: kind, device: device, orientation: orientation),
+          let legacy = ProcessInfo.processInfo.environment["TOUCH_OVERLAY_RENDER_LEGACY"] == "1"
+          let reference = legacy ? AnyView(LegacyTouchOverlayView(
+            padKind: kind, deviceId: 0, irMode: TCWiiTouchIRMode.gyro.rawValue,
+            store: TouchOverlayLayoutStore(fileURL: nil), previewSafeArea: device.insets(orientation)
+          )) : nil
+          let image = render(TouchOverlayPreviewScreen(padKind: kind, device: device, orientation: orientation,
+                                                       overlayOverride: reference),
                              size: device.size(orientation), scene: scene)
           let name = "\(kind.rawValue)-\(orientation.rawValue)-\(device.name.replacingOccurrences(of: " ", with: "_").replacingOccurrences(of: "\"", with: "in")).png"
           try XCTUnwrap(image.pngData()).write(to: outputDir.appendingPathComponent(name))

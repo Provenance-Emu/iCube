@@ -4,6 +4,7 @@
 #if os(iOS)
 import CoreGraphics
 import Foundation
+import Observation
 
 // Phase 1 of the programmatic touch overlay (docs/superpowers/specs/
 // 2026-09-24-programmatic-touch-overlay-design.md): the layout MODEL only. Nothing here draws or
@@ -140,4 +141,22 @@ enum TouchOverlayEditMode: Equatable, Sendable, CaseIterable {
     }
   }
 }
+enum TouchOverlayButtonID {
+  static let gcA = 0, gcB = 1, gcStart = 2, gcX = 3, gcY = 4, gcZ = 5
+  static let gcDpadUp = 6, gcMainStick = 10, gcCStick = 15, gcTriggerL = 20, gcTriggerR = 21, gcMic = 22
+  static let wiiA = 100, wiiB = 101, wiiMinus = 102, wiiPlus = 103, wiiHome = 104, wiiOne = 105, wiiTwo = 106
+  static let wiiDpadUp = 107
+  static let nunchukC = 200, nunchukZ = 201, nunchukStick = 202
+  static let classicA = 300, classicB = 301, classicX = 302, classicY = 303, classicMinus = 304
+  static let classicPlus = 305, classicHome = 306, classicZL = 307, classicZR = 308
+  static let classicDpadUp = 309, classicLeftStick = 313, classicRightStick = 318
+  static let classicTriggerL = 323, classicTriggerR = 324
+}
+
+/// Keeps stick knob changes local to the view that reads the offset.
+@Observable
+final class TouchOverlayKnobPosition {
+  var offset: CGSize = .zero
+}
+
 #endif

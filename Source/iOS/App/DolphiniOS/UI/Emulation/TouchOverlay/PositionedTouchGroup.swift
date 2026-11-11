@@ -41,7 +41,10 @@ struct PositionedTouchGroup<Content: View>: View {
   /// `resizeAxesHandle`.
   let resizeAxes: (scale: CGSize, onCommit: (CGSize) -> Void)?
   let content: Content
+  let onPreview: ((CGRect?) -> Void)?
 
+  private enum PreviewGesture: Hashable { case move, resize, axes }
+  @State private var activeGestures: Set<PreviewGesture> = []
   @State private var dragOffset: CGSize = .zero
   /// Live scale multiplier while a `resize` drag is in progress (1.0 = no change yet).
   @State private var liveScaleFactor: CGFloat = 1.0
@@ -52,7 +55,7 @@ struct PositionedTouchGroup<Content: View>: View {
   init(group: TouchOverlayGroup, box: CGRect, bounds: CGRect, inputSuppressed: Bool, showsChrome: Bool,
        onCommit: @escaping (CGPoint) -> Void, resize: (scale: CGFloat, onCommit: (CGFloat) -> Void)? = nil,
        resizeAxes: (scale: CGSize, onCommit: (CGSize) -> Void)? = nil,
-       @ViewBuilder content: () -> Content) {
+       onPreview: ((CGRect?) -> Void)? = nil, @ViewBuilder content: () -> Content) {
     self.group = group
     self.box = box
     self.bounds = bounds
@@ -62,6 +65,7 @@ struct PositionedTouchGroup<Content: View>: View {
     self.resize = resize
     self.resizeAxes = resizeAxes
     self.content = content()
+    self.onPreview = onPreview
   }
 
   var body: some View {
@@ -76,6 +80,16 @@ struct PositionedTouchGroup<Content: View>: View {
     .frame(width: box.width, height: box.height)
     .scaleEffect(x: liveScaleFactor * liveScaleFactorX, y: liveScaleFactor * liveScaleFactorY)
     .position(live)
+    .onChange(of: livePreview) { _, frame in onPreview?(frame) }
+    .onDisappear { onPreview?(nil) }
+  }
+
+  private var livePreview: CGRect? {
+    guard !activeGestures.isEmpty else { return nil }
+    let width = box.width * liveScaleFactor * liveScaleFactorX
+    let height = box.height * liveScaleFactor * liveScaleFactorY
+    return CGRect(x: box.midX + dragOffset.width - width / 2,
+                  y: box.midY + dragOffset.height - height / 2, width: width, height: height)
   }
 
   private var editChrome: some View {
@@ -105,12 +119,14 @@ struct PositionedTouchGroup<Content: View>: View {
   private var moveGesture: some Gesture {
     DragGesture(minimumDistance: 0, coordinateSpace: TouchOverlayView.coordinateSpace)
       .onChanged { value in
+        activeGestures.insert(.move)
         // Clamped like the commit, so the group stops at the edge while the finger is still down
         // instead of following it off-screen and snapping back on release.
         let resolved = resolvedCenter(value.translation)
         dragOffset = CGSize(width: resolved.x - box.midX, height: resolved.y - box.midY)
       }
       .onEnded { value in
+        activeGestures.remove(.move)
         onCommit(resolvedCenter(value.translation))
         dragOffset = .zero
       }
@@ -136,11 +152,13 @@ struct PositionedTouchGroup<Content: View>: View {
       .gesture(
         DragGesture(minimumDistance: 0, coordinateSpace: TouchOverlayView.coordinateSpace)
           .onChanged { value in
+            activeGestures.insert(.resize)
             let base = max(box.width, box.height, 1)
             let delta = (value.translation.width + value.translation.height) / base
             liveScaleFactor = max(0.4, 1 + delta)
           }
           .onEnded { value in
+            activeGestures.remove(.resize)
             let base = max(box.width, box.height, 1)
             let delta = (value.translation.width + value.translation.height) / base
             resize.onCommit(resize.scale * max(0.4, 1 + delta))
@@ -166,10 +184,12 @@ struct PositionedTouchGroup<Content: View>: View {
       .gesture(
         DragGesture(minimumDistance: 0, coordinateSpace: TouchOverlayView.coordinateSpace)
           .onChanged { value in
+            activeGestures.insert(.axes)
             liveScaleFactorX = max(0.3, 1 + value.translation.width / max(box.width, 1))
             liveScaleFactorY = max(0.3, 1 + value.translation.height / max(box.height, 1))
           }
           .onEnded { value in
+            activeGestures.remove(.axes)
             let sx = max(0.3, 1 + value.translation.width / max(box.width, 1))
             let sy = max(0.3, 1 + value.translation.height / max(box.height, 1))
             resize.onCommit(CGSize(width: resize.scale.width * sx, height: resize.scale.height * sy))

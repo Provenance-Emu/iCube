@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+@testable import iCube
 import SwiftUI
 import UIKit
 
@@ -245,13 +246,6 @@ struct TouchOverlayStickView: View {
       TCManagerInterface.setAxisValueFor(write.id, controller: deviceId, value: write.value)
     }
   }
-}
-
-/// Where a stick's knob sits. Observable per property: only a view that reads `offset` in its body
-/// (the knob) is invalidated when it changes.
-@Observable
-final class TouchOverlayKnobPosition {
-  var offset: CGSize = .zero
 }
 
 /// The stick's static base, re-rendered only when a drag starts or ends.

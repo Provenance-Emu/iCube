@@ -16,6 +16,7 @@ enum SkinInputName {
   static let select = "select"
   static let z = "z"
   static let c = "c"
+  static let mic = "mic"
   static let l = "l"
   static let r = "r"
   static let l1 = "l1"
@@ -51,10 +52,10 @@ enum SkinAction: Equatable {
 }
 
 /// Pure mapping from skin input names to the touch overlay's control kinds. The raw
-/// `TCButtonType` ids come from `TouchOverlayDefaults.ButtonID`, so they match the xib pads and
+/// `TCButtonType` ids come from `TouchOverlayButtonID`, so they match the xib pads and
 /// the Touchscreen.ini profiles.
 enum SkinInputMap {
-  private typealias ID = TouchOverlayDefaults.ButtonID
+  private typealias ID = TouchOverlayButtonID
 
   private static let gameCubeControls: [String: TouchOverlayControlKind] = [
     SkinInputName.a: .button(id: ID.gcA),
@@ -62,6 +63,7 @@ enum SkinInputMap {
     SkinInputName.x: .button(id: ID.gcX),
     SkinInputName.y: .button(id: ID.gcY),
     SkinInputName.start: .button(id: ID.gcStart),
+    SkinInputName.mic: .button(id: ID.gcMic),
     SkinInputName.z: .button(id: ID.gcZ),
     SkinInputName.r1: .button(id: ID.gcZ),
     SkinInputName.l: .axisButton(id: ID.gcTriggerL),

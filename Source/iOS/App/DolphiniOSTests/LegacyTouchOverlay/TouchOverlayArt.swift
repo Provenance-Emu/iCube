@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
+@testable import iCube
 import SwiftUI
 
 /// Procedural gradient+shadow art for the two palettes (design §5). No image assets: every shape
