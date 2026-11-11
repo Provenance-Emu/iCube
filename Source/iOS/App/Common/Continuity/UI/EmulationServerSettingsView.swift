@@ -1,6 +1,7 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import EmulatorContentClient
 import PVContinuity
 import SwiftUI
 
@@ -41,19 +42,25 @@ private struct EmulationServerBackupSettingsView: View {
   @State private var token = ""
   @State private var allowsHTTP = false
   @State private var errorMessage: String?
+  @State private var libraries: [Library] = []
+  @State private var libraryID = ""
+  @State private var items: [Item] = []
+  @State private var cursor: String?
+  @State private var busy = false
+  @State private var createKey = UUID().uuidString
 
   private var enabled: Bool { backups.targets[server.id] != nil }
-  private var trimmedItemID: String { itemID.trimmingCharacters(in: .whitespacesAndNewlines) }
+  private var credential: String {
+    let entered = token.trimmingCharacters(in: .whitespacesAndNewlines)
+    return entered.isEmpty ? KeychainService.getPassword(for: server.id + "/backup") ?? "" : entered
+  }
+
+  private var transportAllowed: Bool { server.origin.scheme == "https" || allowsHTTP }
 
   var body: some View {
     Form {
       Section {
         if let status = backups.status[server.id] { Text(status) }
-        TextField(L("Backup item ID"), text: $itemID)
-          .autocorrectionDisabled()
-          #if !os(tvOS)
-          .textInputAutocapitalization(.never)
-          #endif
         SecureField(L("Write access token"), text: $token)
           .autocorrectionDisabled()
           #if !os(tvOS)
@@ -64,18 +71,60 @@ private struct EmulationServerBackupSettingsView: View {
           Text(L("HTTP sends your token and saves without encryption. Enable it only on a trusted network."))
             .foregroundStyle(.secondary)
         }
+        Button(L("Choose Backup Library")) {
+          perform {
+            libraries = try await EmulationServerBackupSetup.libraries(server: server, token: credential).items
+            items = []
+            cursor = nil
+            libraryID = ""
+          }
+        }
+        .disabled(busy || credential.isEmpty || !transportAllowed)
+        if !libraries.isEmpty {
+          Picker(L("Library"), selection: $libraryID) {
+            Text(L("Choose a library")).tag("")
+            ForEach(libraries, id: \.id) { library in Text(library.name).tag(library.id) }
+          }
+          .disabled(busy)
+          .onChange(of: libraryID) { _, value in
+            guard !value.isEmpty else { return }
+            itemID = ""
+            items = []
+            cursor = nil
+            loadItems()
+          }
+        }
+        if !items.isEmpty {
+          Picker(L("Backup Destination"), selection: $itemID) {
+            Text(L("Choose a destination")).tag("")
+            ForEach(items, id: \.id) { item in Text(item.title).tag(item.id) }
+          }
+          .disabled(busy)
+        }
+        if cursor != nil { Button(L("Load More")) { loadItems() }.disabled(busy) }
+        if libraries.first(where: { $0.id == libraryID })?.canCreateItems == true {
+          Button(L("Create iCube Backups Destination")) {
+            perform {
+              let item = try await EmulationServerBackupSetup.createItem(server: server, token: credential,
+                                                                         libraryID: libraryID, key: createKey)
+              items.removeAll { $0.id == item.id }
+              items.append(item)
+              itemID = item.id
+              createKey = UUID().uuidString
+            }
+          }
+          .disabled(busy || !transportAllowed)
+        }
         Button(enabled ? L("Update backup destination") : L("Enable automatic backups")) {
           do {
-            try backups.save(.init(server: server, itemID: trimmedItemID, allowsHTTP: allowsHTTP),
-                             token: token.trimmingCharacters(in: .whitespacesAndNewlines))
+            try backups.save(.init(server: server, itemID: itemID, allowsHTTP: allowsHTTP), token: credential)
             token = ""
             errorMessage = nil
           } catch {
             errorMessage = error.localizedDescription
           }
         }
-        .disabled(!EmulationServerBackupTarget.isValidItemID(trimmedItemID) || token.isEmpty ||
-          (server.origin.scheme == "http" && !allowsHTTP))
+        .disabled(busy || !EmulationServerBackupTarget.isValidItemID(itemID) || credential.isEmpty || !transportAllowed)
         if enabled {
           Button(L("Back Up All Servers Now")) { backups.requestBackup() }
           Button(L("Disable Backups"), role: .destructive) { backups.remove(server) }
@@ -84,7 +133,7 @@ private struct EmulationServerBackupSettingsView: View {
       } header: {
         Text(L("Automatic Save Backups"))
       } footer: {
-        Text(L("Choose an item in a private library on this server. iCube uploads save files and states when the app becomes active or emulation stops."))
+        Text(L("Choose a private library on this server. iCube uploads save files and states when the app becomes active or emulation stops."))
       }
       Section {
         Button(L("Remove Server"), role: .destructive) {
@@ -97,6 +146,27 @@ private struct EmulationServerBackupSettingsView: View {
     .onAppear {
       itemID = backups.targets[server.id]?.itemID ?? ""
       allowsHTTP = backups.targets[server.id]?.allowsHTTP ?? false
+    }
+  }
+
+  private func loadItems() {
+    perform {
+      let page = try await EmulationServerBackupSetup.items(server: server, token: credential,
+                                                            libraryID: libraryID, cursor: cursor)
+      let known = Set(items.map(\.id))
+      items.append(contentsOf: page.items.filter { !known.contains($0.id) })
+      cursor = page.nextCursor
+    }
+  }
+
+  private func perform(_ work: @escaping @MainActor () async throws -> Void) {
+    guard !busy, transportAllowed else { return }
+    busy = true
+    errorMessage = nil
+    Task {
+      defer { busy = false }
+      do { try await work() }
+      catch { errorMessage = L("Could not load the backup destination. Check the token and server connection.") }
     }
   }
 }

@@ -111,13 +111,6 @@ final class EmulationServerBackups: ObservableObject {
 actor EmulationServerBackupWorker {
   enum Failure: Error { case coreBusy, invalidItem, fileChanged }
 
-  private final class DirectRequests: NSObject, URLSessionTaskDelegate, Sendable {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
-      completionHandler(nil)
-    }
-  }
-
   private var scanners: [URL: UserDataScanner] = [:]
 
   func backup(root: URL, device: String, target: EmulationServerBackupTarget, token: String) async throws {
@@ -132,7 +125,7 @@ actor EmulationServerBackupWorker {
     configuration.urlCache = nil
     configuration.timeoutIntervalForRequest = 20
     configuration.timeoutIntervalForResource = 60
-    let session = URLSession(configuration: configuration, delegate: DirectRequests(), delegateQueue: nil)
+    let session = URLSession(configuration: configuration, delegate: BackupDirectRequests(), delegateQueue: nil)
     defer { session.invalidateAndCancel() }
 
     let origin = target.server.origin
@@ -216,6 +209,56 @@ actor EmulationServerBackupWorker {
         guard try await client.receivedOffset(uploadId: uploadID) == Int64(end) else { throw error }
       }
     }
+  }
+}
+
+private final class BackupDirectRequests: NSObject, URLSessionTaskDelegate, Sendable {
+  func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                  newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+    completionHandler(nil)
+  }
+}
+
+enum EmulationServerBackupSetup {
+  static func libraries(server: EmulationServer, token: String) async throws -> LibraryList {
+    try await send(server: server, token: token, path: "browse-libraries")
+  }
+
+  static func items(server: EmulationServer, token: String, libraryID: String, cursor: String? = nil) async throws -> ItemList {
+    var query = [URLQueryItem(name: "libraryId", value: libraryID), URLQueryItem(name: "limit", value: "100")]
+    if let cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+    return try await send(server: server, token: token, path: "items", query: query)
+  }
+
+  static func createItem(server: EmulationServer, token: String, libraryID: String, key: String) async throws -> Item {
+    let draft = ItemDraft(libraryId: libraryID, systemIdentifier: "com.provenance.gamecube", title: "iCube Backups")
+    return try await send(server: server, token: token, path: "items", body: JSONEncoder().encode(draft), key: key)
+  }
+
+  private static func send<T: Decodable>(server: EmulationServer, token: String, path: String,
+                                         query: [URLQueryItem] = [], body: Data? = nil, key: String? = nil) async throws -> T {
+    var parts = URLComponents(url: server.origin.appendingPathComponent("api/v1/" + path), resolvingAgainstBaseURL: false)
+    parts?.queryItems = query.isEmpty ? nil : query
+    guard let url = parts?.url else { throw URLError(.badURL) }
+    var request = URLRequest(url: url)
+    request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    if let body {
+      request.httpMethod = "POST"
+      request.httpBody = body
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      request.setValue(key, forHTTPHeaderField: "Idempotency-Key")
+    }
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+    configuration.urlCache = nil
+    configuration.timeoutIntervalForRequest = 20
+    let session = URLSession(configuration: configuration, delegate: BackupDirectRequests(), delegateQueue: nil)
+    defer { session.invalidateAndCancel() }
+    let (data, response) = try await BackupTransport(session: session).data(for: request)
+    guard (200 ... 299).contains(response.statusCode) else {
+      throw SyncFailure(status: response.statusCode, message: "Backup destination unavailable")
+    }
+    return try JSONDecoder().decode(T.self, from: data)
   }
 }
 
