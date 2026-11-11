@@ -94,6 +94,26 @@ actor EmulationServerLibrary {
     let files: [File]
   }
 
+  private struct SourceGroup: Decodable {
+    struct File: Decodable {
+      let id: String
+      let relativePath: String
+      let size: Int64
+      let availability: String
+    }
+
+    let sourceId: String
+    let files: [File]
+    let error: String?
+  }
+
+  private struct Download {
+    let route: String
+    let path: String
+    let size: Int64
+    let digest: String?
+  }
+
   private enum Game {
     case item(Row.Item, artworkID: String?)
     case source(Row.Source)
@@ -223,10 +243,10 @@ actor EmulationServerLibrary {
           game = .item(item, artworkID: artwork)
         } else if row.entityType == "source", let source = row.source,
                   source.availability == "local", source.size > 0,
-                  (source.groupFileCount ?? 0) <= 1, source.groupError == nil,
-                  let platform = Self.platform(source.systemId), Self.supports(source.name) {
+                  source.groupError == nil, let platform = Self.platform(source.systemId),
+                  Self.supportsSource(source) {
           entry = .init(key: "source:" + source.id, game: .init(displayName: source.title ?? source.name, platform: platform),
-                        sizeBytes: source.size, hasArtwork: false)
+                        sizeBytes: (source.groupFileCount ?? 0) > 1 ? 0 : source.size, hasArtwork: false)
           game = .source(source)
         } else {
           continue
@@ -245,84 +265,109 @@ actor EmulationServerLibrary {
     return response.body
   }
 
-  func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
-    guard let game = games[entry.key] else { throw ServerError.invalidContent }
-    let route: String
-    let name: String
-    let size: Int64
-    let digest: String?
+  private func downloads(for game: Game) async throws -> [Download] {
     switch game {
     case .item(let item, _):
       let manifest: Manifest = try await read("items/" + Self.safeID(item.id) + "/manifest")
       let roms = manifest.files.filter { $0.kind == "rom" }
-      guard manifest.version == 1, manifest.itemId == item.id, roms.count == 1, let file = roms.first,
-            file.sha256.count == 64, file.sha256.utf8.allSatisfy({ (48 ... 57).contains($0) || (97 ... 102).contains($0) }),
+      guard manifest.version == 1, manifest.itemId == item.id,
             !manifest.files.contains(where: { $0.required && $0.kind != "rom" }) else {
         throw ServerError.invalidContent
       }
-      route = try contentRoute("files", id: file.id)
-      name = (file.relativePath as NSString).lastPathComponent
-      size = file.size
-      digest = file.sha256
+      return try roms.compactMap { file in
+        guard Self.safeRelativePath(file.relativePath) else { throw ServerError.invalidContent }
+        // Dolphin imports the disc images themselves and reads their disc numbers from the headers.
+        if Self.isPlaylist(file.relativePath) { return nil }
+        guard file.sha256.count == 64,
+              file.sha256.utf8.allSatisfy({ (48 ... 57).contains($0) || (97 ... 102).contains($0) }) else {
+          throw ServerError.invalidContent
+        }
+        return Download(route: try contentRoute("files", id: file.id), path: file.relativePath,
+                        size: file.size, digest: file.sha256)
+      }
     case .source(let source):
-      route = try contentRoute("sources", id: source.id)
-      name = source.name
-      size = source.size
-      digest = nil
+      guard (source.groupFileCount ?? 0) > 1 else {
+        return [Download(route: try contentRoute("sources", id: source.id), path: source.name,
+                         size: source.size, digest: nil)]
+      }
+      let group: SourceGroup = try await read("sources/" + Self.safeID(source.id) + "/group")
+      guard group.sourceId == source.id, group.error == nil, group.files.count == source.groupFileCount,
+            let primary = group.files.first, primary.id == source.id, Self.isPlaylist(primary.relativePath),
+            group.files.allSatisfy({ $0.availability == "local" && Self.safeRelativePath($0.relativePath) }) else {
+        throw ServerError.invalidContent
+      }
+      return try group.files.filter { !Self.isPlaylist($0.relativePath) }.map { file in
+        Download(route: try contentRoute("sources", id: file.id), path: file.relativePath,
+                 size: file.size, digest: nil)
+      }
     }
-    guard size > 0, Self.supports(name) else { throw ServerError.invalidContent }
+  }
 
-    let ext = (name as NSString).pathExtension.lowercased()
-    let destination = try server.folder(for: entry)
-    let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let temporary = staging.appendingPathComponent("Game." + ext)
-    let fm = FileManager.default
-    try fm.createDirectory(at: staging, withIntermediateDirectories: true)
-    defer { try? fm.removeItem(at: staging) }
-
-    let descriptor = FileDescriptor(kind: .gameFile, relativePath: temporary.lastPathComponent, sha256: digest ?? "", size: size)
-    let received = try await transport.download(request(route), to: temporary, resumeOffset: 0) { bytes, _ in
-      progress(.init(currentFile: descriptor, completedFiles: 0, totalFiles: 1, bytesTransferred: bytes, totalBytes: size))
-    }
-    try Task.checkCancellation()
-    guard received == size else { throw ServerError.invalidContent }
-    if let digest, try ContinuityHash.sha256Hex(ofFileAt: temporary) != digest {
+  func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
+    guard let game = games[entry.key] else { throw ServerError.invalidContent }
+    let downloads = try await downloads(for: game)
+    let count = downloads.count
+    let folded = Set(downloads.map { $0.path.precomposedStringWithCanonicalMapping.lowercased() })
+    guard (1 ... 512).contains(count), folded.count == count, Set(downloads.map(\.route)).count == count,
+          downloads.allSatisfy({ $0.size > 0 && Self.safeRelativePath($0.path) && Self.supports($0.path) }) else {
       throw ServerError.invalidContent
     }
-    let unpacked = staging.appendingPathComponent("unpacked", isDirectory: true)
-    let candidates: [URL]
-    let sourceFolder: URL
-    if ext == "7z" {
-      try ZipImportHelper.extractArchive(at: temporary, to: unpacked)
-      try Task.checkCancellation()
-      candidates = ZipImportHelper.supportedFiles(in: unpacked).sorted { $0.path < $1.path }
-      sourceFolder = unpacked
-    } else {
-      candidates = [temporary]
-      sourceFolder = staging
+    let totalBytes = try downloads.reduce(Int64(0)) { bytes, file in
+      let (total, overflow) = bytes.addingReportingOverflow(file.size)
+      guard !overflow else { throw ServerError.invalidContent }
+      return total
     }
-    guard !candidates.isEmpty else { throw ServerError.invalidContent }
-    let valid = await MainActor.run {
-      candidates.allSatisfy { DiscImageBridge.gameItem(forPath: $0.path) != nil }
+    let destination = try server.folder(for: entry)
+    let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let ready = staging.appendingPathComponent("ready", isDirectory: true)
+    let fm = FileManager.default
+    try fm.createDirectory(at: ready, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: staging) }
+    var paths: [String] = []
+    var completedBytes: Int64 = 0
+    for (index, file) in downloads.enumerated() {
+      try Task.checkCancellation()
+      let ext = (file.path as NSString).pathExtension.lowercased()
+      let work = staging.appendingPathComponent(String(index), isDirectory: true)
+      try fm.createDirectory(at: work, withIntermediateDirectories: true)
+      let temporary = work.appendingPathComponent("Game." + ext)
+      let descriptor = FileDescriptor(kind: .gameFile, relativePath: file.path, sha256: file.digest ?? "", size: file.size)
+      let bytesBeforeFile = completedBytes
+      let received = try await transport.download(request(file.route), to: temporary, resumeOffset: 0) { bytes, _ in
+        progress(.init(currentFile: descriptor, completedFiles: index, totalFiles: count,
+                       bytesTransferred: bytesBeforeFile + min(max(bytes, 0), file.size), totalBytes: totalBytes))
+      }
+      try Task.checkCancellation()
+      guard received == file.size else { throw ServerError.invalidContent }
+      if let digest = file.digest, try ContinuityHash.sha256Hex(ofFileAt: temporary) != digest {
+        throw ServerError.invalidContent
+      }
+      completedBytes += received
+      if ext == "7z" {
+        let unpacked = work.appendingPathComponent("unpacked", isDirectory: true)
+        try ZipImportHelper.extractArchive(at: temporary, to: unpacked)
+        let candidates = ZipImportHelper.supportedFiles(in: unpacked).sorted { $0.path < $1.path }
+        let prefix = unpacked.resolvingSymlinksInPath().path + "/"
+        guard !candidates.isEmpty else { throw ServerError.invalidContent }
+        for candidate in candidates {
+          let resolved = candidate.resolvingSymlinksInPath().path
+          guard resolved.hasPrefix(prefix) else { throw ServerError.invalidContent }
+          let member = String(resolved.dropFirst(prefix.count))
+          let path = count == 1 ? member : file.path + "/" + member
+          try stageDisc(candidate, as: path, in: ready)
+          paths.append(path)
+        }
+      } else {
+        let path = count == 1 ? temporary.lastPathComponent : file.path
+        try stageDisc(temporary, as: path, in: ready)
+        paths.append(path)
+      }
+    }
+    let valid = await MainActor.run { [paths] in
+      paths.allSatisfy { DiscImageBridge.gameItem(forPath: ready.appendingPathComponent($0).path) != nil }
     }
     guard valid else { throw ServerError.invalidContent }
     try Task.checkCancellation()
-
-    let ready = staging.appendingPathComponent("ready", isDirectory: true)
-    try fm.createDirectory(at: ready, withIntermediateDirectories: true)
-    let prefix = sourceFolder.resolvingSymlinksInPath().path + "/"
-    var paths: [String] = []
-    for candidate in candidates {
-      let values = try candidate.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-      let resolved = candidate.resolvingSymlinksInPath()
-      guard values.isRegularFile == true, values.isSymbolicLink != true,
-            resolved.path.hasPrefix(prefix) else { throw ServerError.invalidContent }
-      let path = String(resolved.path.dropFirst(prefix.count))
-      let staged = ready.appendingPathComponent(path)
-      try fm.createDirectory(at: staged.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try fm.moveItem(at: candidate, to: staged)
-      paths.append(path)
-    }
     guard let relative = ContinuityPaths.relativePath(forAbsolutePath: destination.path) else {
       throw ServerError.invalidContent
     }
@@ -343,6 +388,16 @@ actor EmulationServerLibrary {
       try fm.moveItem(at: ready, to: final)
     }
     return urls
+  }
+
+  private func stageDisc(_ source: URL, as path: String, in folder: URL) throws {
+    let fm = FileManager.default
+    let values = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+    let destination = folder.appendingPathComponent(path)
+    guard Self.safeRelativePath(path), values.isRegularFile == true, values.isSymbolicLink != true,
+          !fm.fileExists(atPath: destination.path) else { throw ServerError.invalidContent }
+    try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try fm.moveItem(at: source, to: destination)
   }
 
   private func pages<Item: Decodable>(_ route: String, query: [URLQueryItem] = []) async throws -> [Item] {
@@ -400,6 +455,20 @@ actor EmulationServerLibrary {
 
   private static func supports(_ name: String) -> Bool {
     ["iso", "gcm", "rvz", "wia", "wbfs", "gcz", "ciso", "wad", "7z"].contains((name as NSString).pathExtension.lowercased())
+  }
+
+  private static func supportsSource(_ source: Row.Source) -> Bool {
+    (source.groupFileCount ?? 0) > 1 ? isPlaylist(source.name) : supports(source.name)
+  }
+
+  private static func isPlaylist(_ path: String) -> Bool {
+    (path as NSString).pathExtension.lowercased() == "m3u"
+  }
+
+  private static func safeRelativePath(_ path: String) -> Bool {
+    !path.isEmpty && !path.contains("\\") && !path.contains(":") && !path.contains("\0") &&
+      path.split(separator: "/", omittingEmptySubsequences: false)
+      .allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
   }
 
   enum ServerError: LocalizedError {

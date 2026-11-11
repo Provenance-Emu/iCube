@@ -1,6 +1,7 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import CryptoKit
 import Foundation
 import PVContinuity
 import XCTest
@@ -119,6 +120,41 @@ final class EmulationServerLibraryTests: XCTestCase {
     XCTAssertEqual(try Data(contentsOf: files[0]), bytes)
     let repeated = try await library.copy(entry) { _ in }
     XCTAssertEqual(repeated, files)
+  }
+
+  func testServerImportsBothDiscsFromManifestAndScannedPlaylist() async throws {
+    for playlist in [false, true] {
+      let server = try EmulationServer(address: "http://discs-\(UUID().uuidString).invalid")
+      let transport = DiscSetTransport(playlist: playlist)
+      let library = EmulationServerLibrary(server: server, token: nil, transport: transport)
+      let page = try await library.catalog()
+      let entry = try XCTUnwrap(page.entries.first)
+      let folder = try server.folder(for: entry)
+      defer { try? FileManager.default.removeItem(at: folder) }
+      let urls = try await library.copy(entry) { _ in }
+      XCTAssertEqual(urls.map(\.path), [
+        folder.appendingPathComponent("discs/Disc 1.iso").path,
+        folder.appendingPathComponent("discs/Disc 2.iso").path,
+      ])
+      XCTAssertEqual(try urls.map { try Data(contentsOf: $0)[6] }, [0, 1])
+      let requests = await transport.downloadedIDs
+      XCTAssertEqual(requests, ["disc1", "disc2"])
+    }
+  }
+
+  func testFailedSecondDiscNeverPublishesFirstDisc() async throws {
+    let server = try EmulationServer(address: "http://partial-\(UUID().uuidString).invalid")
+    let transport = DiscSetTransport(playlist: false, corruptSecondDisc: true)
+    let library = EmulationServerLibrary(server: server, token: nil, transport: transport)
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
+    let folder = try server.folder(for: entry)
+    do {
+      _ = try await library.copy(entry) { _ in }
+      XCTFail("A failed digest must prevent publication of the entire set")
+    } catch EmulationServerLibrary.ServerError.invalidContent {
+      XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
   }
 
   func testCancelledArchiveDownloadDoesNotPublishGames() async throws {
@@ -277,5 +313,82 @@ private actor ArchiveTransport: ContinuityTransport {
     if cancelDownload { withUnsafeCurrentTask { $0?.cancel() } }
     progress?(Int64(bytes.count), Int64(bytes.count))
     return Int64(bytes.count)
+  }
+}
+
+private actor DiscSetTransport: ContinuityTransport {
+  let playlist: Bool
+  let corruptSecondDisc: Bool
+  private(set) var downloadedIDs: [String] = []
+
+  init(playlist: Bool, corruptSecondDisc: Bool = false) {
+    self.playlist = playlist
+    self.corruptSecondDisc = corruptSecondDisc
+  }
+
+  func request(_ request: ContinuityRequest) async throws -> ContinuityResponse {
+    let body: String
+    switch request.url.path {
+    case "/api/v1/capabilities":
+      body = #"{"protocol":{"major":1}}"#
+    case "/api/v1/browse-libraries":
+      body = #"{"items":[{"id":"lib1"}],"nextCursor":null}"#
+    case "/api/v1/browse" where playlist:
+      body = """
+      {"items":[{"entityType":"source","source":{"id":"set","name":"Game.m3u","systemId":"com.provenance.gamecube",
+      "size":32,"availability":"local","groupFileCount":3}}],"nextCursor":null}
+      """
+    case "/api/v1/browse":
+      body = """
+      {"items":[{"entityType":"item","item":{"id":"set","title":"Game","systemIdentifier":"com.provenance.gamecube"}}],
+      "nextCursor":null}
+      """
+    case "/api/v1/sources/set/group":
+      body = """
+      {"sourceId":"set","error":null,"files":[
+      {"id":"set","relativePath":"Game.m3u","size":32,"availability":"local"},
+      {"id":"disc1","relativePath":"discs/Disc 1.iso","size":32768,"availability":"local"},
+      {"id":"disc2","relativePath":"discs/Disc 2.iso","size":32768,"availability":"local"}]}
+      """
+    case "/api/v1/items/set/manifest":
+      let files = (1 ... 2).map { disc in
+        let hash = SHA256.hash(data: Self.disc(disc)).map { String(format: "%02x", $0) }.joined()
+        return """
+        {"id":"disc\(disc)","kind":"rom","relativePath":"discs/Disc \(disc).iso","size":32768,
+        "sha256":"\(hash)","required":true}
+        """
+      }
+      body = """
+      {"itemId":"set","version":1,"files":[\(files.joined(separator: ","))]}
+      """
+    default:
+      throw URLError(.unsupportedURL)
+    }
+    return ContinuityResponse(status: 200, body: Data(body.utf8))
+  }
+
+  func download(_ request: ContinuityRequest, to destination: URL, resumeOffset: Int64,
+                progress: (@Sendable (Int64, Int64?) -> Void)?) async throws -> Int64 {
+    let collection = playlist ? "sources" : "files"
+    let disc: Int
+    switch request.url.path {
+    case "/api/v1/\(collection)/disc1/content": disc = 1
+    case "/api/v1/\(collection)/disc2/content": disc = 2
+    default: throw URLError(.unsupportedURL)
+    }
+    downloadedIDs.append("disc\(disc)")
+    var bytes = Self.disc(disc)
+    if corruptSecondDisc, disc == 2 { bytes[0] = 0 }
+    try bytes.write(to: destination)
+    progress?(Int64(bytes.count), Int64(bytes.count))
+    return Int64(bytes.count)
+  }
+
+  private static func disc(_ number: Int) -> Data {
+    var bytes = Data(repeating: 0, count: 0x8000)
+    bytes.replaceSubrange(0 ..< 6, with: Data("TEST01".utf8))
+    bytes[6] = UInt8(number - 1)
+    bytes.replaceSubrange(0x1C ..< 0x20, with: [0xC2, 0x33, 0x9F, 0x3D])
+    return bytes
   }
 }
