@@ -5740,3 +5740,29 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Extracting archive…" = "アーカイブを展開中…";
 
 "The server did not provide valid game files." = "サーバーから有効なゲームファイルが提供されませんでした。";
+
+/* Emulation Server backups */
+"Allow backups over local HTTP" = "ローカル HTTP でのバックアップを許可";
+"Automatic Save Backups" = "セーブデータの自動バックアップ";
+"Back Up All Servers Now" = "すべてのサーバーに今すぐバックアップ";
+"Backing up…" = "バックアップ中…";
+"Backup Destination" = "バックアップ先";
+"Backup complete." = "バックアップが完了しました。";
+"Backup will resume when emulation stops." = "エミュレーションの終了後にバックアップを再開します。";
+"Choose Backup Library" = "バックアップ用ライブラリを選択";
+"Choose a destination" = "バックアップ先を選択";
+"Choose a library" = "ライブラリを選択";
+"Choose a private library on this server. iCube uploads save files and states when the app becomes active or emulation stops." = "このサーバー上の非公開ライブラリを選択してください。アプリがアクティブになったときやエミュレーションが終了したときに、セーブデータとステートをアップロードします。";
+"Could not load the backup destination. Check the token and server connection." = "バックアップ先を読み込めませんでした。トークンとサーバーへの接続を確認してください。";
+"Create iCube Backups Destination" = "iCube のバックアップ先を作成";
+"Disable Backups" = "バックアップを無効にする";
+"Enable automatic backups" = "自動バックアップを有効にする";
+"Enter a hostname such as studio.local. Local HTTP uses port 8473 unless you enter a different port." = "studio.local などのホスト名を入力してください。別のポートを指定しない場合、ローカル HTTP はポート 8473 を使います。";
+"Enter a write access token to back up to this server." = "このサーバーにバックアップするには、書き込み用のアクセストークンを入力してください。";
+"HTTP sends your token and saves without encryption. Enable it only on a trusted network." = "HTTP ではトークンとセーブデータが暗号化されずに送信されます。信頼できるネットワークでのみ有効にしてください。";
+"Remove Server" = "サーバーを削除";
+"Server backup failed (HTTP %d)." = "サーバーへのバックアップに失敗しました（HTTP %d）。";
+"Server backup failed. It will retry automatically." = "サーバーへのバックアップに失敗しました。自動的に再試行します。";
+"Update backup destination" = "バックアップ先を更新";
+"Use HTTPS, a local IP address, or a .local hostname for this server." = "このサーバーには HTTPS、ローカル IP アドレス、または .local ホスト名を使ってください。";
+"Write access token" = "書き込み用アクセストークン";
