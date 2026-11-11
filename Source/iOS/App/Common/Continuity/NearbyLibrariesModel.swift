@@ -72,6 +72,7 @@ final class NearbyLibrariesModel: ObservableObject {
     }
 
     func removeServer(_ server: EmulationServer) {
+        EmulationServerBackups.shared.remove(server)
         KeychainService.deletePassword(for: server.id)
         servers.removeAll { $0.id == server.id }
         saveServers()

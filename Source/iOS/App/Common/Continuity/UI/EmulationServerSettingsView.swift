@@ -14,8 +14,8 @@ struct EmulationServerSettingsView: View {
         if !model.servers.isEmpty {
           Section(L("Connected Servers")) {
             ForEach(model.servers) { server in
-              Button(role: .destructive) { model.removeServer(server) } label: {
-                Label(String(format: L("Remove %@"), server.name), systemImage: "minus.circle")
+              NavigationLink(server.name) {
+                EmulationServerBackupSettingsView(server: server, model: model)
               }
             }
           }
@@ -23,11 +23,80 @@ struct EmulationServerSettingsView: View {
         Section {
           EmulationServerConnectionFields(model: model, onConnect: { dismiss() })
         } footer: {
-          Text(L("Enter the server address. An access token is needed only if the server requires sign-in."))
+          Text(L("Enter a hostname such as studio.local. Local HTTP uses port 8473 unless you enter a different port."))
         }
         Section { Button(L("Done")) { dismiss() } }
       }
       .navigationTitle(L("Emulation Server"))
+    }
+  }
+}
+
+private struct EmulationServerBackupSettingsView: View {
+  let server: EmulationServer
+  @ObservedObject var model: NearbyLibrariesModel
+  @ObservedObject private var backups = EmulationServerBackups.shared
+  @Environment(\.dismiss) private var dismiss
+  @State private var itemID = ""
+  @State private var token = ""
+  @State private var allowsHTTP = false
+  @State private var errorMessage: String?
+
+  private var enabled: Bool { backups.targets[server.id] != nil }
+  private var trimmedItemID: String { itemID.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+  var body: some View {
+    Form {
+      Section {
+        if let status = backups.status[server.id] { Text(status) }
+        TextField(L("Backup item ID"), text: $itemID)
+          .autocorrectionDisabled()
+          #if !os(tvOS)
+          .textInputAutocapitalization(.never)
+          #endif
+        SecureField(L("Write access token"), text: $token)
+          .autocorrectionDisabled()
+          #if !os(tvOS)
+          .textInputAutocapitalization(.never)
+          #endif
+        if server.origin.scheme == "http" {
+          Toggle(L("Allow backups over local HTTP"), isOn: $allowsHTTP)
+          Text(L("HTTP sends your token and saves without encryption. Enable it only on a trusted network."))
+            .foregroundStyle(.secondary)
+        }
+        Button(enabled ? L("Update backup destination") : L("Enable automatic backups")) {
+          do {
+            try backups.save(.init(server: server, itemID: trimmedItemID, allowsHTTP: allowsHTTP),
+                             token: token.trimmingCharacters(in: .whitespacesAndNewlines))
+            token = ""
+            errorMessage = nil
+          } catch {
+            errorMessage = error.localizedDescription
+          }
+        }
+        .disabled(!EmulationServerBackupTarget.isValidItemID(trimmedItemID) || token.isEmpty ||
+          (server.origin.scheme == "http" && !allowsHTTP))
+        if enabled {
+          Button(L("Back Up All Servers Now")) { backups.requestBackup() }
+          Button(L("Disable Backups"), role: .destructive) { backups.remove(server) }
+        }
+        if let errorMessage { Text(errorMessage).foregroundStyle(.secondary) }
+      } header: {
+        Text(L("Automatic Save Backups"))
+      } footer: {
+        Text(L("Choose an item in a private library on this server. iCube uploads save files and states when the app becomes active or emulation stops."))
+      }
+      Section {
+        Button(L("Remove Server"), role: .destructive) {
+          model.removeServer(server)
+          dismiss()
+        }
+      }
+    }
+    .navigationTitle(server.name)
+    .onAppear {
+      itemID = backups.targets[server.id]?.itemID ?? ""
+      allowsHTTP = backups.targets[server.id]?.allowsHTTP ?? false
     }
   }
 }
@@ -90,7 +159,7 @@ struct EmulationServerConnectionFields: View {
     if let discoveredServer {
       Text(discoveredServer.origin.absoluteString).foregroundStyle(.secondary)
     } else {
-      TextField(L("Server Address"), text: $address)
+      TextField(L("Server Address"), text: $address, prompt: Text("studio.local"))
         .textContentType(.URL)
         .autocorrectionDisabled()
         .disabled(connection != nil)
@@ -138,7 +207,7 @@ struct EmulationServerConnectionFields: View {
       do {
         let server = try discoveredServer ?? EmulationServer(address: address)
         let entered = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        let credential = entered.isEmpty ? nil : entered
+        let credential = entered.isEmpty ? KeychainService.getPassword(for: server.id) : entered
         if let credential, !EmulationServerLibrary.isValidToken(credential) {
           throw EmulationServerLibrary.ServerError.accessDenied
         }
@@ -147,6 +216,10 @@ struct EmulationServerConnectionFields: View {
         guard !Task.isCancelled else { return }
         requiresCredential = true
         errorMessage = L("This server requires sign-in.")
+      } catch let error as URLError where error.code == .appTransportSecurityRequiresSecureConnection {
+        if !Task.isCancelled {
+          errorMessage = L("Use HTTPS, a local IP address, or a .local hostname for this server.")
+        }
       } catch {
         if !Task.isCancelled { errorMessage = error.localizedDescription }
       }
