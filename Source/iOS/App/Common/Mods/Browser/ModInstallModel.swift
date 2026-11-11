@@ -35,6 +35,7 @@ final class ModInstallModel: ObservableObject {
 
   private let handler: any ModInstallHandling
   private let downloader: ModDownloadManager
+  let workDirectory: URL
   private var downloadTask: Task<Void, Never>?
   private var keepsExtractedFiles = false
 
@@ -44,6 +45,7 @@ final class ModInstallModel: ObservableObject {
     self.ownedGame = ownedGame
     self.handler = handler
     self.downloader = downloader
+    self.workDirectory = ModDownloadManager.makeWorkDirectory(forFileID: file.id)
   }
 
   /// Why this file cannot be installed here, or nil when it can.
@@ -52,13 +54,6 @@ final class ModInstallModel: ObservableObject {
     if ext == "rar" { return L("This is a RAR archive, which iCube cannot open.") }
     if file.downloadURL == nil { return L("GameBanana lists no download link for this file.") }
     return nil
-  }
-
-  var isBusy: Bool {
-    switch phase {
-    case .downloading, .verifying, .extracting: return true
-    case .idle, .ready, .failed: return false
-    }
   }
 
   // MARK: - Download
@@ -77,7 +72,10 @@ final class ModInstallModel: ObservableObject {
   }
 
   func start() {
-    guard !isBusy else { return }
+    switch phase {
+    case .idle, .failed: break
+    case .downloading, .verifying, .extracting, .ready: return
+    }
     phase = .downloading(0)
     log = []
     downloadTask = Task { [weak self] in await self?.run() }
@@ -88,26 +86,32 @@ final class ModInstallModel: ObservableObject {
   }
 
   private func run() async {
+    defer { downloadTask = nil }
     do {
-      let archive = try await downloader.download(file) { [weak self] fraction in
+      try Task.checkCancellation()
+      let archive = try await downloader.download(file, into: workDirectory) { [weak self] fraction in
         Task { @MainActor in
           guard let self, case .downloading = self.phase else { return }
           self.phase = .downloading(fraction)
         }
       }
+      try Task.checkCancellation()
       phase = .verifying
       let expected = file.md5
       try await Task.detached(priority: .userInitiated) {
         try ModDownloadPolicy.verifyChecksum(of: archive, expected: expected)
       }.value
+      try Task.checkCancellation()
       phase = .extracting
       let gameID = ownedGame?.gameID
       let classification = try await Task.detached(priority: .userInitiated) {
         let root = try Self.unpack(archive, in: archive.deletingLastPathComponent())
         return ModPackageClassifier.classify(extractedRoot: root, gameID: gameID)
       }.value
+      try Task.checkCancellation()
       phase = .ready(classification)
     } catch is CancellationError {
+      removeWorkFolder()
       phase = .idle
     } catch {
       removeWorkFolder()
@@ -219,11 +223,12 @@ final class ModInstallModel: ObservableObject {
   /// Deletes the download and its unpacked files, unless another flow is still reading them.
   func cleanUp() {
     downloadTask?.cancel()
-    if !keepsExtractedFiles && !isInstalling { removeWorkFolder() }
+    // The running task owns its files until download, verification or extraction has stopped.
+    if downloadTask == nil, !keepsExtractedFiles, !isInstalling { removeWorkFolder() }
   }
 
   private func removeWorkFolder() {
-    try? FileManager.default.removeItem(at: ModDownloadManager.workDirectory(forFileID: file.id))
+    try? FileManager.default.removeItem(at: workDirectory)
   }
 
   nonisolated static func formatted(_ bytes: Int64) -> String {
