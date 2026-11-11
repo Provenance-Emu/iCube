@@ -25,6 +25,31 @@ final class ModInstallModelTests: XCTestCase {
     XCTAssertNil(ModInstallModel.blockedReason(for: try file(name: "pack.7z")))
   }
 
+  @MainActor
+  func testCleaningUpReopenedFilePreservesPatchAlreadyHandedOff() throws {
+    let file = try file(name: "patch.xdelta")
+    let handler = LiveModInstallHandler(presentPatches: { _, _ in })
+    let original = ModInstallModel(file: file, ownedGame: nil, handler: handler)
+    let reopened = ModInstallModel(file: file, ownedGame: nil, handler: handler)
+    let fm = FileManager.default
+    defer {
+      try? fm.removeItem(at: original.workDirectory)
+      try? fm.removeItem(at: reopened.workDirectory)
+    }
+    try fm.createDirectory(at: original.workDirectory, withIntermediateDirectories: true)
+    try fm.createDirectory(at: reopened.workDirectory, withIntermediateDirectories: true)
+    let patch = original.workDirectory.appendingPathComponent(file.fileName)
+    let bytes = Data([0xD6, 0xC3, 0xC4, 0x00])
+    try bytes.write(to: patch)
+    original.presentDiscPatch([patch], suggestedGameID: nil)
+    original.cleanUp()
+
+    reopened.cleanUp()
+
+    XCTAssertFalse(fm.fileExists(atPath: reopened.workDirectory.path))
+    XCTAssertEqual(try Data(contentsOf: patch), bytes)
+  }
+
   func testRegionWarningOnlyForTheSameTitleInAnotherRegion() {
     XCTAssertNotNil(ModInstallModel.regionWarning(packID: "GALE01", ownedID: "GALP01"))
     XCTAssertNil(ModInstallModel.regionWarning(packID: "GALE01", ownedID: "GALE01"))

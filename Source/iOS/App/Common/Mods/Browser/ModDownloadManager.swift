@@ -3,7 +3,7 @@
 
 import Foundation
 
-/// Downloads mod archives into `<User>/Cache/ModDownloads/<file id>/`.
+/// Downloads mod archives into `<User>/Cache/ModDownloads/<file id>-<session>/`.
 ///
 /// A foreground session: the app has no background-session plumbing, and these downloads are
 /// something the user watches. A cancelled download keeps its resume data, so asking for the same
@@ -52,20 +52,19 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
       .appendingPathComponent("ModDownloads", isDirectory: true)
   }
 
-  /// The folder one file's download and extraction live in.
-  static func workDirectory(forFileID id: Int) -> URL {
-    downloadsDirectory.appendingPathComponent(String(id), isDirectory: true)
+  /// A private staging folder for one install session, even when the same file is reopened.
+  static func makeWorkDirectory(forFileID id: Int) -> URL {
+    downloadsDirectory.appendingPathComponent("\(id)-\(UUID().uuidString)", isDirectory: true)
   }
 
   /// Downloads `file`, reporting 0...1, and returns the saved archive's URL. Cancelling the
   /// calling task cancels the transfer and keeps its resume data. The checksum is not checked here.
-  func download(_ file: GameBananaFile, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
+  func download(_ file: GameBananaFile, into directory: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
     guard let source = file.downloadURL else { throw ModDownloadError.noDownloadURL }
     let name = file.fileName
     guard !name.isEmpty, name == (name as NSString).lastPathComponent, !name.hasPrefix(".") else {
       throw ModDownloadError.unsafeFileName(name)
     }
-    let directory = Self.workDirectory(forFileID: file.id)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let destination = directory.appendingPathComponent(name)
     try? FileManager.default.removeItem(at: destination)
