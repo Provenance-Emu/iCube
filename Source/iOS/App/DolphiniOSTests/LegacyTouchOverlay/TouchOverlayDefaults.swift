@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
-@testable import iCube
 import CoreGraphics
 import Foundation
 import UIKit
+@testable import iCube
 
 /// The DEFAULT (un-customised) layout of every pad kind for a given screen.
 ///

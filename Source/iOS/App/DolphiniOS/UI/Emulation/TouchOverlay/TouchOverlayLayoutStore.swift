@@ -179,7 +179,7 @@ final class TouchOverlayLayoutStore: ObservableObject {
   /// Clamp range for a per-group size scale (§2.4 extension, phase 2). 1.0 is the xib-derived
   /// default footprint; the range keeps a resize from either disappearing (too small to hit) or
   /// swallowing the rest of the pad (too large).
-  static let scaleRange: ClosedRange<Double> = 0.5...2.0
+  static let scaleRange: ClosedRange<Double> = 0.5 ... 2.0
 
   // MARK: Reads
 
@@ -238,7 +238,7 @@ final class TouchOverlayLayoutStore: ObservableObject {
       var hasScale = !entry.scale.isEmpty
       guard let resolved = resolution.node(id: id), resolution.unit.isFinite, resolution.unit > 0 else {
         edits[id] = Self.format2Edit(offset: nil, scaleX: entry.scale.first,
-                                    scaleY: entry.scale.count >= 2 ? entry.scale[1] : entry.scale.first)
+                                     scaleY: entry.scale.count >= 2 ? entry.scale[1] : entry.scale.first)
         continue
       }
 
@@ -258,7 +258,7 @@ final class TouchOverlayLayoutStore: ObservableObject {
         return result.map { $0.union(rect) } ?? rect
       }) else {
         edits[id] = Self.format2Edit(offset: nil, scaleX: entry.scale.first,
-                                    scaleY: entry.scale.count >= 2 ? entry.scale[1] : entry.scale.first)
+                                     scaleY: entry.scale.count >= 2 ? entry.scale[1] : entry.scale.first)
         continue
       }
 
@@ -277,8 +277,8 @@ final class TouchOverlayLayoutStore: ObservableObject {
         size: CGSize(width: footprint.width * scaleX, height: footprint.height * scaleY),
         bounds: bounds) : requestedCenter
       let isWrapperGroup = resolved.node.type != .control
-      let groupOffset = Skin2Edit.Offset(x: (Double(center.x - defaultCenter.x)) / resolution.unit,
-                                         y: (Double(center.y - defaultCenter.y)) / resolution.unit)
+      let groupOffset = Skin2Edit.Offset(x: Double(center.x - defaultCenter.x) / resolution.unit,
+                                         y: Double(center.y - defaultCenter.y) / resolution.unit)
       if isWrapperGroup {
         // Translating the wrapper moves even currently hidden children. Keep the scale on visible
         // controls below, where it transforms their own frames before their artwork is resolved.

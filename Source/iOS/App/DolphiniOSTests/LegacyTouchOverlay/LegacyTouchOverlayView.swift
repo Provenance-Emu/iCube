@@ -3,8 +3,8 @@
 
 #if os(iOS)
 import SwiftUI
-@testable import iCube
 import UIKit
+@testable import iCube
 
 /// The programmatic touch overlay's SwiftUI root (design §3/§4/§8 phase 2, IR wiring + settings
 /// phase 3), behind the `touch_overlay_programmatic` flag. `GeometryReader` + `ZStack` of one
@@ -139,7 +139,9 @@ struct LegacyTouchOverlayView: View {
   }
 
   private static func isIRSurfaceLayout(_ layout: TouchOverlayGroupLayout) -> Bool {
-    layout.controls.contains { if case .irSurface = $0.kind { return true }; return false }
+    layout.controls.contains { if case .irSurface = $0.kind { return true }
+      return false
+    }
   }
 
   // MARK: Per-group dispatch

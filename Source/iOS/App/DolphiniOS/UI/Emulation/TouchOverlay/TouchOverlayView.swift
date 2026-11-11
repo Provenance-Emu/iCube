@@ -71,7 +71,7 @@ struct TouchOverlayView: View {
         let layouts = DefaultSkin2Pad.groups(in: resolution)
         let _ = store.revision
         let edits = store.format2Edits(padKind: padKind, orientation: geometry.orientation,
-                                      resolution: resolution, bounds: geometry.bounds, previews: previewFrames)
+                                       resolution: resolution, bounds: geometry.bounds, previews: previewFrames)
         let renderingDocument = DefaultSkin2Pad.documentForRendering(document, unit: resolution.unit,
                                                                      edits: edits, opacity: opacity)
 
@@ -115,7 +115,9 @@ struct TouchOverlayView: View {
   }
 
   private static func isIRSurfaceLayout(_ layout: TouchOverlayGroupLayout) -> Bool {
-    layout.controls.contains { if case .irSurface = $0.kind { return true }; return false }
+    layout.controls.contains { if case .irSurface = $0.kind { return true }
+      return false
+    }
   }
 
   // MARK: Per-group dispatch
@@ -168,6 +170,7 @@ struct TouchOverlayView: View {
         }
         TouchOverlayIRPadView(mode: TCWiiTouchIRMode(rawValue: irMode) ?? .gyro, deviceId: deviceId,
                               excludedFrames: localExcluded, isEditing: inputSuppressed,
+                              passesThroughExcludedFrames: true,
                               dragGain: TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
       }
     } else {

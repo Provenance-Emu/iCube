@@ -6,13 +6,24 @@ import XCTest
 
 @MainActor
 final class DefaultSkin2InputTests: XCTestCase {
+  func testOverlaidIRSurfacePassesTouchesThroughToControlsInEveryMode() {
+    let surface = TouchOverlayIRPadView.IRSurfaceView(frame: CGRect(x: 0, y: 0, width: 200, height: 200))
+    surface.passesThroughExcludedFrames = true
+    surface.excludedFrames = [CGRect(x: 20, y: 30, width: 40, height: 50)]
+    for mode in [TCWiiTouchIRMode.gyro, .drag, .follow] {
+      surface.mode = mode
+      XCTAssertFalse(surface.point(inside: CGPoint(x: 40, y: 50), with: nil))
+      XCTAssertTrue(surface.point(inside: CGPoint(x: 120, y: 120), with: nil))
+    }
+  }
+
   func testButtonsAndDpadRetainEachPadsInputTable() {
     let expectedA: [TouchOverlayPadKind: Int] = [.gameCube: 0, .wiiRemote: 100, .wiiRemoteSideways: 100, .wiiClassic: 300]
     let expectedUp: [TouchOverlayPadKind: Int] = [.gameCube: 6, .wiiRemote: 107, .wiiRemoteSideways: 107, .wiiClassic: 309]
     for kind in TouchOverlayPadKind.allCases {
       var writes: [(Int, Bool)] = []
       let input = DefaultSkin2Input(padKind: kind, deviceId: 999, writeButton: { writes.append(($0, $1)) },
-                                   writeAxis: { _, _ in XCTFail("Unexpected axis write") })
+                                    writeAxis: { _, _ in XCTFail("Unexpected axis write") })
       input.press("a")
       input.release("a")
       XCTAssertEqual(writes.map(\.0), [expectedA[kind]!, expectedA[kind]!])
@@ -30,7 +41,7 @@ final class DefaultSkin2InputTests: XCTestCase {
       var writes: [(Int, Float)] = []
       var haptics: [TouchHapticEvent] = []
       let input = DefaultSkin2Input(padKind: kind, deviceId: 999, writeButton: { _, _ in XCTFail("Digital trigger") },
-                                   writeAxis: { writes.append(($0, $1)) }, playHaptic: { haptics.append($0) })
+                                    writeAxis: { writes.append(($0, $1)) }, playHaptic: { haptics.append($0) })
       let document = try Skin2Document.load(data: Data("""
       { "formatVersion": "2.0", "requires": [], "identifier": "test", "name": "Test",
         "gameTypes": ["com.provenance.gamecube"],
@@ -60,7 +71,7 @@ final class DefaultSkin2InputTests: XCTestCase {
   func testStickHapticsRetainTouchDownAndRimHysteresis() throws {
     var haptics: [TouchHapticEvent] = []
     let input = DefaultSkin2Input(padKind: .gameCube, deviceId: 999, writeButton: { _, _ in },
-                                 writeAxis: { _, _ in }, playHaptic: { haptics.append($0) })
+                                  writeAxis: { _, _ in }, playHaptic: { haptics.append($0) })
     let document = try Skin2Document.load(data: Data("""
     { "formatVersion": "2.0", "requires": ["controls.thumbstick"], "identifier": "test", "name": "Test",
       "gameTypes": ["ngc"], "reference": { "shortSide": 390, "minScale": 1, "maxScale": 1 },
@@ -94,7 +105,7 @@ final class DefaultSkin2InputTests: XCTestCase {
   func testMicrophoneRetainsSlotBButtonMapping() {
     var writes: [(Int, Bool)] = []
     let input = DefaultSkin2Input(padKind: .gameCube, deviceId: 999,
-                                 writeButton: { writes.append(($0, $1)) }, writeAxis: { _, _ in })
+                                  writeButton: { writes.append(($0, $1)) }, writeAxis: { _, _ in })
     input.press("mic")
     input.release("mic")
     XCTAssertEqual(writes.map(\.0), [22, 22])
@@ -112,7 +123,7 @@ final class DefaultSkin2InputTests: XCTestCase {
       for (name, base) in mappings[kind]! {
         var writes: [(Int, Float)] = []
         let input = DefaultSkin2Input(padKind: kind, deviceId: 999, writeButton: { _, _ in },
-                                     writeAxis: { writes.append(($0, $1)) })
+                                      writeAxis: { writes.append(($0, $1)) })
         input.stick(name, x: -0.5, y: 0.75)
         let expected = TouchOverlayInput.stickWrites(x: -0.5, y: 0.75, baseId: base)
         XCTAssertEqual(writes.map(\.0), expected.map(\.id))

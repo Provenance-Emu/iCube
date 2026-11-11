@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
-@testable import iCube
 import SwiftUI
+@testable import iCube
 
 /// Procedural gradient+shadow art for the two palettes (design §5). No image assets: every shape
 /// is drawn with SwiftUI `Shape`/`Path` + gradients + `.shadow`, patterned on iFly's
@@ -259,7 +259,7 @@ struct OctagonShape: Shape {
     let center = CGPoint(x: rect.midX, y: rect.midY)
     let radius = min(rect.width, rect.height) / 2
     var path = Path()
-    for i in 0..<sides {
+    for i in 0 ..< sides {
       let angle = (CGFloat(i) / CGFloat(sides)) * 2 * .pi - .pi / 8
       let point = CGPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle))
       if i == 0 { path.move(to: point) } else { path.addLine(to: point) }

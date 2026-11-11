@@ -20,7 +20,7 @@ final class DefaultSkin2DocumentTests: XCTestCase {
           let resolution = Skin2Resolver.resolve(prepared, in: environment)
           let groups = Dictionary(uniqueKeysWithValues: DefaultSkin2Pad.groups(in: resolution).map { ($0.group, $0) })
           let legacy = TouchOverlayDefaults.layout(for: kind, orientation: orientation, canvas: size,
-                                                  safeArea: device.insets(orientation))
+                                                   safeArea: device.insets(orientation))
           XCTAssertEqual(Set(groups.keys), Set(legacy.map(\.group)), "\(kind) \(device.name) \(orientation)")
           let store = TouchOverlayLayoutStore(fileURL: nil)
           for group in legacy {
@@ -49,7 +49,7 @@ final class DefaultSkin2DocumentTests: XCTestCase {
           let prepared = DefaultSkin2Pad.documentForCanvas(document, for: kind, environment: environment)
           let base = Skin2Resolver.resolve(prepared, in: environment)
           let legacy = TouchOverlayDefaults.layout(for: kind, orientation: orientation, canvas: size,
-                                                  safeArea: device.insets(orientation))
+                                                   safeArea: device.insets(orientation))
           let store = TouchOverlayLayoutStore(fileURL: nil)
           for group in legacy {
             store.setCenter(CGPoint(x: bounds.width * 0.4, y: bounds.height * 0.6), in: bounds,
@@ -96,7 +96,7 @@ final class DefaultSkin2DocumentTests: XCTestCase {
         }
       }
       let files = try FileManager.default.contentsOfDirectory(at: directory.appendingPathComponent("bake"),
-                                                               includingPropertiesForKeys: nil)
+                                                              includingPropertiesForKeys: nil)
       let pdfs = files.filter { $0.pathExtension == "pdf" }
       XCTAssertGreaterThanOrEqual(pdfs.count, 6)
       for file in pdfs {

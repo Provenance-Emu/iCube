@@ -30,16 +30,16 @@ enum DefaultSkin2Pad {
   static func environment(canvas: CGSize, safeArea: UIEdgeInsets, flags: Set<String>, isPad: Bool? = nil) -> Skin2Environment {
     let pad = isPad ?? (UIDevice.current.userInterfaceIdiom == .pad)
     return Skin2Environment(size: Skin2Size(width: canvas.width, height: canvas.height),
-                     safeArea: Skin2Insets(top: safeArea.top, left: safeArea.left,
-                                           bottom: safeArea.bottom, right: safeArea.right),
-                     device: pad ? .ipad : .iphone,
-                     displayType: pad || safeArea == .zero ? .standard : .edgeToEdge, flags: flags)
+                            safeArea: Skin2Insets(top: safeArea.top, left: safeArea.left,
+                                                  bottom: safeArea.bottom, right: safeArea.right),
+                            device: pad ? .ipad : .iphone,
+                            displayType: pad || safeArea == .zero ? .standard : .edgeToEdge, flags: flags)
   }
 
   /// The bundled pads retain iCube's usable-width policy, including the Duo status column.
   /// Classic bake canvases use the source reference; a live host also accounts for its safe area.
   static func documentForCanvas(_ source: Skin2Document, for kind: TouchOverlayPadKind,
-                            environment: Skin2Environment) -> Skin2Document {
+                                environment: Skin2Environment) -> Skin2Document {
     var document = source
     let unit: Double
     if kind == .wiiRemoteSideways {
@@ -128,7 +128,7 @@ enum DefaultSkin2Pad {
   }
 
   private static func preparePaint(_ original: Skin2Paint, kind: Skin2ControlKind?,
-                                    unit: Double, opacity: Double, controlScale: Double) -> Skin2Paint {
+                                   unit: Double, opacity: Double, controlScale: Double) -> Skin2Paint {
     var paint = original
     paint.opacity = (paint.opacity ?? 1) * opacity
     if paint.type == .radial {
@@ -164,12 +164,12 @@ enum DefaultSkin2Pad {
       switch node.id {
       case "edges":
         node.layout?.inset = Skin2EdgeLengths(top: .pt(0),
-          left: .pt((max(safe.left, 8) + 8) / unit),
-          bottom: .pt((max(safe.bottom, 8) + 6) / unit),
-          right: .pt((max(safe.right, 8) + 8) / unit))
+                                              left: .pt((max(safe.left, 8) + 8) / unit),
+                                              bottom: .pt((max(safe.bottom, 8) + 6) / unit),
+                                              right: .pt((max(safe.right, 8) + 8) / unit))
       case "centerColumn":
         node.layout?.inset = Skin2EdgeLengths(top: .pt(0), left: .pt(safe.left / unit),
-          bottom: .pt((max(safe.bottom, 8) + 6) / unit), right: .pt(safe.right / unit))
+                                              bottom: .pt((max(safe.bottom, 8) + 6) / unit), right: .pt(safe.right / unit))
       case "wiiIRPad":
         node.layout?.inset = Skin2EdgeLengths(uniform: .pt(24 / unit))
       case "gcLeftShoulder", "gcRightShoulder":
@@ -192,7 +192,7 @@ enum DefaultSkin2Pad {
       guard let frame = footprint(of: node) else { return nil }
       let size = CGSize(width: frame.width, height: frame.height)
       let placement = TouchOverlayPlacement(.bottomLeading,
-        inset: CGPoint(x: frame.midX, y: resolution.environment.size.height - frame.midY), size: size)
+                                            inset: CGPoint(x: frame.midX, y: resolution.environment.size.height - frame.midY), size: size)
       let controls: [TouchOverlayControl] = group == .wiiIRPad
         ? [TouchOverlayControl(id: "wii.ir", kind: .irSurface, frame: .zero)] : []
       return TouchOverlayGroupLayout(group: group, placement: placement, controls: controls)

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
-@testable import iCube
 import SwiftUI
 import UIKit
+@testable import iCube
 
 /// The four content views a `TouchOverlayGroupLayout` can render as (dispatched by
 /// `TouchOverlayView`), each writing ONLY through `TCManagerInterface` (design §6.1) with the

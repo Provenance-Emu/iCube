@@ -120,13 +120,14 @@ final class TouchOverlayFormat2MigrationTests: XCTestCase {
     XCTAssertEqual(a.scale, 1.5)
     XCTAssertEqual(b.scale, 1.5)
   }
+
   @MainActor
   func testLivePreviewTransformsControlsWithoutSavingOrPrematureClamping() throws {
     let store = TouchOverlayLayoutStore(fileURL: nil)
     let base = try groupedResolution()
     let previews = ["gcFaceButtons": CGRect(x: 350, y: 360, width: 240, height: 60)]
     let edits = store.format2Edits(padKind: .gameCube, orientation: .portrait,
-                                  resolution: base, bounds: bounds, previews: previews)
+                                   resolution: base, bounds: bounds, previews: previews)
     let document = try groupedDocument()
     let rendered = Skin2Resolver.resolve(document, in: base.environment, edits: edits)
     XCTAssertEqual(rendered.node(id: "gc.a")?.exactFrame,
@@ -137,6 +138,5 @@ final class TouchOverlayFormat2MigrationTests: XCTestCase {
     XCTAssertTrue(store.format2Edits(padKind: .gameCube, orientation: .portrait,
                                      resolution: base, bounds: bounds).isEmpty)
   }
-
 }
 #endif

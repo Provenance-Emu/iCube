@@ -141,6 +141,7 @@ enum TouchOverlayEditMode: Equatable, Sendable, CaseIterable {
     }
   }
 }
+
 enum TouchOverlayButtonID {
   static let gcA = 0, gcB = 1, gcStart = 2, gcX = 3, gcY = 4, gcZ = 5
   static let gcDpadUp = 6, gcMainStick = 10, gcCStick = 15, gcTriggerL = 20, gcTriggerR = 21, gcMic = 22
