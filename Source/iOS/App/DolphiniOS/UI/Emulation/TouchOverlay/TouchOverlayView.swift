@@ -170,8 +170,8 @@ struct TouchOverlayView: View {
         }
         TouchOverlayIRPadView(mode: TCWiiTouchIRMode(rawValue: irMode) ?? .gyro, deviceId: deviceId,
                               excludedFrames: localExcluded, isEditing: inputSuppressed,
-                              passesThroughExcludedFrames: true,
-                              dragGain: TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()))
+                              dragGain: TouchOverlayIRGeometry.clampDragGain(MotionSettings.irPointerGain()),
+                              passesThroughExcludedFrames: true)
       }
     } else {
       Color.clear
