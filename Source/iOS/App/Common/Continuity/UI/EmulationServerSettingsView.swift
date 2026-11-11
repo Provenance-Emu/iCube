@@ -63,11 +63,13 @@ private struct EmulationServerBackupSettingsView: View {
         if let status = backups.status[server.id] { Text(status) }
         SecureField(L("Write access token"), text: $token)
           .autocorrectionDisabled()
+          .disabled(busy)
           #if !os(tvOS)
           .textInputAutocapitalization(.never)
           #endif
         if server.origin.scheme == "http" {
           Toggle(L("Allow backups over local HTTP"), isOn: $allowsHTTP)
+            .disabled(busy)
           Text(L("HTTP sends your token and saves without encryption. Enable it only on a trusted network."))
             .foregroundStyle(.secondary)
         }

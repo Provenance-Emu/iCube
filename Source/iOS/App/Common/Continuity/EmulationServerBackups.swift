@@ -25,7 +25,6 @@ struct EmulationServerBackupTarget: Codable, Equatable {
 final class EmulationServerBackups: ObservableObject {
   static let shared = EmulationServerBackups()
   private static let targetsKey = "icube.emulationServerBackups"
-  private static let deviceKey = "icube.emulationServerBackupDevice"
 
   @Published private(set) var targets: [String: EmulationServerBackupTarget]
   @Published private(set) var status: [String: String] = [:]
@@ -69,8 +68,7 @@ final class EmulationServerBackups: ObservableObject {
       return
     }
     guard let root = DolphinPaths.userDirectoryURL() else { return }
-    let device = UserDefaults.standard.string(forKey: Self.deviceKey) ?? UUID().uuidString.lowercased()
-    UserDefaults.standard.set(device, forKey: Self.deviceKey)
+    let device = SyncDeviceIdentity.deviceIdentifier()
     let destinations = targets.values.sorted { $0.server.id < $1.server.id }
     task = Task {
       defer {
@@ -115,7 +113,8 @@ actor EmulationServerBackupWorker {
 
   func backup(root: URL, device: String, target: EmulationServerBackupTarget, token: String) async throws {
     guard target.server.origin.scheme == "https" || target.allowsHTTP,
-          EmulationServerBackupTarget.isValidItemID(target.itemID) else { throw Failure.invalidItem }
+          EmulationServerBackupTarget.isValidItemID(target.itemID),
+          EmulationServerBackupTarget.isValidItemID(device) else { throw Failure.invalidItem }
     let scanner = scanners[root] ?? UserDataScanner(rootDirectory: root)
     scanners[root] = scanner
     let files = try await scan(scanner)

@@ -32,19 +32,19 @@ final class CloudSyncLifecycleService: NSObject, UIApplicationDelegate {
         return true
     }
 
-    /// Pull remote changes down when we come back to the foreground.
-    func applicationDidBecomeActive(_ application: UIApplication) {
-        send(.trigger(.appForegrounded))
-        EmulationServerBackups.shared.requestBackup()
-    }
+  /// Pull remote changes down when we come back to the foreground.
+  func applicationDidBecomeActive(_ application: UIApplication) {
+    send(.trigger(.appForegrounded))
+    EmulationServerBackups.shared.requestBackup()
+  }
 
-    /// Push local changes up on the way out. Best-effort: no background task
-    /// assertion is taken, so a long upload may not finish. The next foreground
-    /// trigger catches whatever did not.
-    func applicationDidEnterBackground(_ application: UIApplication) {
-        send(.trigger(.appBackgrounded))
-        EmulationServerBackups.shared.requestBackup()
-    }
+  /// Push local changes up on the way out. Best-effort: no background task
+  /// assertion is taken, so a long upload may not finish. The next foreground
+  /// trigger catches whatever did not.
+  func applicationDidEnterBackground(_ application: UIApplication) {
+    send(.trigger(.appBackgrounded))
+    EmulationServerBackups.shared.requestBackup()
+  }
 
     private func installObserversIfNeeded() {
         guard observers.isEmpty else { return }
@@ -107,14 +107,14 @@ final class ICubeCloudSyncBootGate: NSObject {
     }
 
     @objc static func finishCoreDrain(_ generation: UInt64) {
-        guard SyncLocalIOGate.shared.finishCoreDrain(generation: generation) else { return }
-        Task { @MainActor in
-            await CloudSyncCoordinator.shared.handleCoreDidDrain(generation: generation)
-            guard SyncLocalIOGate.shared.isCurrentDrain(generation) else { return }
-            EmulationServerBackups.shared.requestBackup()
-            ContinuityManager.shared.libraryMirror.environmentChanged()
-            LibraryMetadataService.resumeContentIdentityWarming()
-        }
+    guard SyncLocalIOGate.shared.finishCoreDrain(generation: generation) else { return }
+    Task { @MainActor in
+      await CloudSyncCoordinator.shared.handleCoreDidDrain(generation: generation)
+      guard SyncLocalIOGate.shared.isCurrentDrain(generation) else { return }
+      EmulationServerBackups.shared.requestBackup()
+      ContinuityManager.shared.libraryMirror.environmentChanged()
+      LibraryMetadataService.resumeContentIdentityWarming()
     }
+  }
 
 }
