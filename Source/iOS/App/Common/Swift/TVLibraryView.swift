@@ -561,6 +561,7 @@ struct TVLibraryView: View {
   /// A nearby library opened in a sheet (iOS cards; the empty library on iOS).
   @State private var nearbySheet: NearbySheetRoute?
   @State private var showEmulationServers = false
+  @State private var showRomM = false
   @State private var pendingNearbyPlay: (TVGameItem, URL?)?
 #if !os(tvOS)
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -640,6 +641,16 @@ struct TVLibraryView: View {
         SaveStateFilmstripView(gameID: route.id)
       }
       .sheet(isPresented: $showEmulationServers) { EmulationServerSettingsView(model: nearby) }
+      .sheet(isPresented: $showRomM) {
+        NavigationStack {
+          RomMLibraryView()
+            .toolbar {
+              ToolbarItem(placement: .confirmationAction) {
+                Button(L("Done")) { showRomM = false }
+              }
+            }
+        }
+      }
       .sheet(item: $nearbySheet, onDismiss: {
         if let pendingNearbyPlay {
           self.pendingNearbyPlay = nil
@@ -1803,6 +1814,7 @@ struct TVLibraryView: View {
       }
       tvEmptyStateRow(L("Upload via Wi-Fi…"), systemImage: "wifi") { showWebImportSheet = true }
       tvEmptyStateRow(L("Emulation Server"), systemImage: "server.rack") { showEmulationServers = true }
+      tvEmptyStateRow("RomM", systemImage: "server.rack") { showRomM = true }
       tvEmptyStateRow(L("Manage Sources"), systemImage: "externaldrive.badge.plus") { showSources = true }
       tvEmptyStateRow(L("Rescan"), systemImage: "arrow.clockwise") { model.rescan() }
         .disabled(model.isRescanning)
@@ -2224,6 +2236,9 @@ struct TVLibraryView: View {
 #endif
       Button(action: { libraryMenuAction { showEmulationServers = true } }) {
         Label(L("Emulation Server"), systemImage: "server.rack")
+      }
+      Button(action: { libraryMenuAction { showRomM = true } }) {
+        Label("RomM", systemImage: "server.rack")
       }
       Button(action: { libraryMenuAction { showSources = true } }) {
         Label(L("Manage Sources"), systemImage: "externaldrive.badge.plus")

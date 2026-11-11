@@ -360,6 +360,7 @@ let iCube = Target.target(
         // registry it hangs its HTTP API off.
         .package(product: "PVContinuity"),
         .package(product: "EmulatorContentClient"),
+        .package(product: "RomMClient"),
         .package(product: "PVHelp"),
         // Streaming IPS/BPS/UPS/PPF/xdelta3 patcher behind the disc patching flow.
         .package(product: "PVPatchEngine"),
@@ -765,6 +766,7 @@ let project = Project(
     packages: [
         // Shared packages are maintained and tested in their own repositories.
         .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("6bc2e00bedbcd5640aad0b262131080400c9d6b8")),
+        .local(path: "Externals/RomMClient"),
         .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.1")),
         .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.2")),
