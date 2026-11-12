@@ -47,6 +47,19 @@ IMUGyroscope::IMUGyroscope(std::string name_, std::string ui_name_)
               // i18n: Refers to the "Calibration" setting of gyroscope input.
               _trans("Time period of stable input to trigger calibration. (zero to disable)")},
              3, 0, 30);
+
+  AddSetting(&m_invert_pitch_setting,
+             {_trans("Invert Pitch"), nullptr,
+              _trans("Reverses tilting the controller's nose up and down.")},
+             false);
+  AddSetting(&m_invert_roll_setting,
+             {_trans("Invert Roll"), nullptr,
+              _trans("Reverses twisting the controller left and right.")},
+             false);
+  AddSetting(&m_invert_yaw_setting,
+             {_trans("Invert Yaw"), nullptr,
+              _trans("Reverses turning the controller left and right.")},
+             false);
 }
 
 void IMUGyroscope::RestartCalibration()
@@ -115,9 +128,16 @@ void IMUGyroscope::UpdateCalibration(const StateData& state)
 
 auto IMUGyroscope::GetRawState() const -> StateData
 {
-  return StateData(controls[1]->GetState() - controls[0]->GetState(),
-                   controls[2]->GetState() - controls[3]->GetState(),
-                   controls[4]->GetState() - controls[5]->GetState());
+  StateData state(controls[1]->GetState() - controls[0]->GetState(),
+                  controls[2]->GetState() - controls[3]->GetState(),
+                  controls[4]->GetState() - controls[5]->GetState());
+  if (m_invert_pitch_setting.GetValue())
+    state.x = -state.x;
+  if (m_invert_roll_setting.GetValue())
+    state.y = -state.y;
+  if (m_invert_yaw_setting.GetValue())
+    state.z = -state.z;
+  return state;
 }
 
 bool IMUGyroscope::AreInputsBound() const

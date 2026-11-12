@@ -241,22 +241,33 @@ MFiController::MFiController(GCController* controller)
       motion.sensorsActive = true;
     }
     
+    // GCMotion's frame, for a pad lying flat and face up: x to the right, y forward (out of the
+    // top edge), z up out of the face. The multiplier is the sign each input reads its axis with.
+    //
+    // GCAcceleration is the direction gravity pulls: a pad at rest face up reads (0, 0, -1)
+    // (GCMotion.h). A Wii Remote reports the opposite, the force holding it up, so every half
+    // reads the reverse of its direction: a resting pad is +1 g on "Accel Up". These signs were
+    // all the other way round until 2026-11, when a pad lying flat told the game its remote was
+    // upside down: the gyro pointer settled rolled 180 degrees (drawn upside down, both axes
+    // reversed) and swings needed the pad held backwards.
     AddInput(new AccelerometerAxis(motion, X, 1.0, "Accel Left", m_gate));
     AddInput(new AccelerometerAxis(motion, X, -1.0, "Accel Right", m_gate));
     AddInput(new AccelerometerAxis(motion, Y, -1.0, "Accel Forward", m_gate));
     AddInput(new AccelerometerAxis(motion, Y, 1.0, "Accel Back", m_gate));
-    AddInput(new AccelerometerAxis(motion, Z, 1.0, "Accel Up", m_gate));
-    AddInput(new AccelerometerAxis(motion, Z, -1.0, "Accel Down", m_gate));
-    
+    AddInput(new AccelerometerAxis(motion, Z, -1.0, "Accel Up", m_gate));
+    AddInput(new AccelerometerAxis(motion, Z, 1.0, "Accel Down", m_gate));
+
     m_supports_accelerometer = true;
     m_supports_gyroscope = motion.hasRotationRate;
 
     if (m_supports_gyroscope)
     {
-      AddInput(new GyroscopeAxis(motion, X, -1.0, "Gyro Pitch Up", m_gate));
-      AddInput(new GyroscopeAxis(motion, X, 1.0, "Gyro Pitch Down", m_gate));
-      AddInput(new GyroscopeAxis(motion, Y, 1.0, "Gyro Roll Left", m_gate));
-      AddInput(new GyroscopeAxis(motion, Y, -1.0, "Gyro Roll Right", m_gate));
+      // GCRotationRate follows the right-hand rule about the same axes: +x lifts the nose, +y
+      // drops the right side, +z turns left.
+      AddInput(new GyroscopeAxis(motion, X, 1.0, "Gyro Pitch Up", m_gate));
+      AddInput(new GyroscopeAxis(motion, X, -1.0, "Gyro Pitch Down", m_gate));
+      AddInput(new GyroscopeAxis(motion, Y, -1.0, "Gyro Roll Left", m_gate));
+      AddInput(new GyroscopeAxis(motion, Y, 1.0, "Gyro Roll Right", m_gate));
       AddInput(new GyroscopeAxis(motion, Z, 1.0, "Gyro Yaw Left", m_gate));
       AddInput(new GyroscopeAxis(motion, Z, -1.0, "Gyro Yaw Right", m_gate));
     }
@@ -546,18 +557,9 @@ ControlState MFiController::Axis::GetState() const
 MFiController::AccelerometerAxis::AccelerometerAxis(GCMotion* motion, MotionPlane plane,
                                                     const double multiplier, const std::string name,
                                          std::shared_ptr<ControllerInputGate> gate)
-    : m_gate(std::move(gate)), m_motion(motion), m_plane(plane), m_name(name)
+    : m_gate(std::move(gate)), m_motion(motion), m_plane(plane), m_multiplier(multiplier),
+      m_name(name)
 {
-  if (plane == X || plane == Y)
-  {
-    m_multiplier = -1.0;
-  }
-  else  // Z
-  {
-    m_multiplier = 1.0;
-  }
-
-  m_multiplier *= multiplier;
 }
 
 std::string MFiController::AccelerometerAxis::GetName() const
@@ -574,7 +576,8 @@ ControlState MFiController::AccelerometerAxis::GetState() const
   // with gravity included (the DSU client and the touch overlay feed it that way); GCMotion
   // reports g. The old code multiplied userAcceleration by gravity component-wise on pads that
   // separate them (a near-zero, directionless vector at rest), and returned g on the others, so
-  // the emulated Wii Remote never saw a plausible gravity vector from a PlayStation pad.
+  // the emulated Wii Remote never saw a plausible gravity vector from a PlayStation pad. Which
+  // way each half reads its axis is the multiplier (see the AddInput calls).
   const GCAcceleration total = [m_motion acceleration];
   const double scale = m_multiplier * MathUtil::GRAVITY_ACCELERATION;
 
@@ -593,18 +596,9 @@ ControlState MFiController::AccelerometerAxis::GetState() const
 MFiController::GyroscopeAxis::GyroscopeAxis(GCMotion* motion, MotionPlane plane,
                                          const double multiplier, const std::string name,
                                          std::shared_ptr<ControllerInputGate> gate)
-    : m_gate(std::move(gate)), m_motion(motion), m_plane(plane), m_name(name)
+    : m_gate(std::move(gate)), m_motion(motion), m_plane(plane), m_multiplier(multiplier),
+      m_name(name)
 {
-  if (plane == X || plane == Y)
-  {
-    m_multiplier = -1.0;
-  }
-  else  // Z
-  {
-    m_multiplier = 1.0;
-  }
-
-  m_multiplier *= multiplier;
 }
 
 std::string MFiController::GyroscopeAxis::GetName() const

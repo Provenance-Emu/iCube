@@ -216,7 +216,7 @@ private:
                             Common::Vec3 vec) const;
   Common::Vec3 GetTotalAcceleration() const;
   Common::Vec3 GetTotalAngularVelocity() const;
-  Common::Matrix44 GetTotalTransformation(bool using_gyro_pointer) const;
+  Common::Matrix44 GetTotalTransformation() const;
 
   void HandleReportRumble(const WiimoteCommon::OutputReportRumble&);
   void HandleReportLeds(const WiimoteCommon::OutputReportLeds&);

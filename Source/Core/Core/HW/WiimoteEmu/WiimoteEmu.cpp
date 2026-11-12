@@ -510,7 +510,7 @@ void Wiimote::BuildDesiredWiimoteState(DesiredWiimoteState* target_state,
     const bool using_gyro_pointer =
         m_imu_ir->enabled.GetValue() && m_imu_gyroscope->AreInputsBound();
     target_state->camera_points = CameraLogic::GetCameraPoints(
-        GetTotalTransformation(using_gyro_pointer),
+        GetTotalTransformation(),
         Common::Vec2(m_fov_x_setting.GetValue(), m_fov_y_setting.GetValue()) / 360 *
             float(MathUtil::TAU),
         using_gyro_pointer && m_imu_ir->GetInvertX(), using_gyro_pointer && m_imu_ir->GetInvertY());
@@ -964,18 +964,11 @@ Common::Vec3 Wiimote::GetTotalAngularVelocity() const
   return OverrideVec3(m_imu_gyroscope, GetAngularVelocity(ang_vel));
 }
 
-Common::Matrix44 Wiimote::GetTotalTransformation(bool using_gyro_pointer) const
+Common::Matrix44 Wiimote::GetTotalTransformation() const
 {
-  auto rotation = m_imu_cursor_state.rotation *
-                  Common::Quaternion::RotateX(m_imu_cursor_state.recentered_pitch);
-  if (using_gyro_pointer && GetDefaultDevice().source == "MFi")
-  {
-    // Reverse the MFi pointer's pitch and yaw in the recentered frame. Keep roll and
-    // the raw gyro readings used by MotionPlus and the drift filter.
-    rotation.data.x = -rotation.data.x;
-    rotation.data.z = -rotation.data.z;
-  }
-  return GetTransformation(Common::Matrix33::FromQuaternion(rotation));
+  return GetTransformation(Common::Matrix33::FromQuaternion(
+      m_imu_cursor_state.rotation *
+      Common::Quaternion::RotateX(m_imu_cursor_state.recentered_pitch)));
 }
 
 }  // namespace WiimoteEmu

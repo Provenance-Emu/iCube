@@ -40,6 +40,10 @@ private:
 
   SettingValue<double> m_deadzone_setting;
   SettingValue<double> m_calibration_period_setting;
+  // iCube: a per-axis escape hatch for a pad whose sensor turns an axis the other way round.
+  SettingValue<bool> m_invert_pitch_setting;
+  SettingValue<bool> m_invert_roll_setting;
+  SettingValue<bool> m_invert_yaw_setting;
 
   StateData m_calibration = {};
   MathUtil::RunningMean<StateData> m_running_calibration;
