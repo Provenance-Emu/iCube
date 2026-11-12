@@ -6,7 +6,7 @@ import io
 import os
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location("distribute", Path(__file__).with_name("distribute.py"))
 subject = importlib.util.module_from_spec(spec)
@@ -72,6 +72,62 @@ class DistributionTests(unittest.TestCase):
 
     def test_successful_assignment_and_submission(self):
         self.run_distribution()
+
+
+class GroupAssignmentTests(unittest.TestCase):
+    def setUp(self):
+        self.client = Mock()
+        self.group = {"id": "group-id", "attributes": {"name": "Testers"}}
+        self.observed = {"id": "build-id", "_groups": set()}
+        find_build = patch.object(subject, "find_build", return_value=self.observed)
+        sleep = patch.object(subject.time, "sleep")
+        self.find_build = find_build.start()
+        self.sleep = sleep.start()
+        self.addCleanup(find_build.stop)
+        self.addCleanup(sleep.stop)
+
+    def assign_group(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            subject.assign_group(self.client, self.group, "app-id", "42", "TV_OS", "build-id")
+
+    def test_missing_build_retries_assignment(self):
+        missing_build = subject.ApiError(
+            404, "There is no resource of type 'builds' with id 'build-id'")
+        self.client.call.side_effect = [missing_build, {}]
+
+        self.assign_group()
+
+        self.assertEqual(self.client.call.call_count, 2)
+        self.sleep.assert_called_once_with(15)
+
+    def test_persisted_assignment_after_server_error_needs_no_second_post(self):
+        self.observed["_groups"].add("Testers")
+        self.client.call.side_effect = subject.ApiError(500, "UNEXPECTED_ERROR")
+
+        self.assign_group()
+
+        self.client.call.assert_called_once()
+        self.sleep.assert_not_called()
+
+    def test_persistent_server_error_exhausts_retries(self):
+        self.client.call.side_effect = subject.ApiError(500, "UNEXPECTED_ERROR")
+
+        with self.assertRaises(subject.ApiError):
+            self.assign_group()
+
+        self.assertEqual(self.client.call.call_count, 5)
+        self.assertEqual(self.sleep.call_count, 4)
+
+    def test_unrelated_not_found_error_is_not_retried(self):
+        self.client.call.side_effect = subject.ApiError(
+            404, "There is no resource of type 'betaGroups' with id 'group-id'")
+
+        with self.assertRaises(subject.ApiError):
+            self.assign_group()
+
+        self.client.call.assert_called_once()
+        self.find_build.assert_not_called()
+        self.sleep.assert_not_called()
 
 
 if __name__ == "__main__":
