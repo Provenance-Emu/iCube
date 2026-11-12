@@ -1264,7 +1264,7 @@ enum PauseMenuModelBuilder {
     }
     return MenuItem(
       id: "controllers", title: L("Controllers"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers),
-      badge: state.onScreenController.title,
+      badge: state.onScreenController.shortTitle,
       description: L("Players, devices and what each one plays as. Long-press to switch the on-screen controller."),
       longPress: .options(
         title: L("On-Screen Controller"), options: options.map { ($0.title, AnyHashable($0)) },

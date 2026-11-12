@@ -351,7 +351,7 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     var menu = bindings()
     menu.onScreenController = Binding(get: { AnyHashable(pause.onScreenController) }, set: { picked = $0 })
     let item = PauseMenuModelBuilder.make(state: pause, bindings: menu, actions: actions()).item(id: "controllers")
-    XCTAssertEqual(item?.badge, "Wii Remote + Nunchuk")
+    XCTAssertEqual(item?.badge, "Nunchuk", "the short name: a tile's badge has no room for the full one")
     guard case .action? = item?.role else { return XCTFail("a tap still opens the hub") }
     guard case .options(let title, let options, let selection)? = item?.effectiveLongPress else { return XCTFail("long press") }
     XCTAssertEqual(title, "On-Screen Controller")

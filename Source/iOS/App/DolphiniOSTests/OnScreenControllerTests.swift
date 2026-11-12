@@ -27,6 +27,9 @@ final class OnScreenControllerTests: XCTestCase {
       [.auto, .fixed(.wiiRemote), .fixed(.wiiNunchuk), .fixed(.wiiClassic), .fixed(.wiiSideways), .fixed(.gameCube)])
     XCTAssertEqual(OnScreenController.auto.title, "Auto")
     XCTAssertEqual(OnScreenController.fixed(.wiiClassic).title, "Wii Remote + Classic Controller")
+    XCTAssertEqual(
+      OnScreenController.options(for: .wiiAndGameCube).map(\.shortTitle),
+      ["Auto", "Wii Remote", "Nunchuk", "Classic", "Sideways", "GameCube"])
   }
 
   func test_current_followsTheDrawnPad_andWiiRemote1() {

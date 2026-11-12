@@ -19,6 +19,18 @@ enum OnScreenController: Hashable {
     }
   }
 
+  /// For a badge, where the full name ("Wii Remote + Classic Controller") does not fit.
+  var shortTitle: String {
+    switch self {
+    case .auto: return L("Auto")
+    case .fixed(.gameCube): return L("GameCube")
+    case .fixed(.wiiRemote): return L("Wii Remote")
+    case .fixed(.wiiNunchuk): return L("Nunchuk")
+    case .fixed(.wiiClassic): return L("Classic")
+    case .fixed(.wiiSideways): return L("Sideways")
+    }
+  }
+
   /// Auto first, then every controller the listed ports can be (`PlaysAs.options`).
   static func options(for system: ControllerSetupSystem) -> [OnScreenController] {
     [.auto] + PlaysAs.options(for: system).map(OnScreenController.fixed)
