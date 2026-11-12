@@ -6,7 +6,7 @@
 #
 #   cd Source/iOS/App && make testflight
 #
-.PHONY: help xcframework generate dev open lint format test gate-release testflight testflight-tvos \
+.PHONY: help xcframework generate dev open lint format test ui test-ui gate-release testflight testflight-tvos \
 	testflight-all release-dry clean mcp-install mcp-test mcp-smoke webserver-bench
 
 # Repo root — BuildiOSXCFramework.py and ExportOptions/ live there, not here.
@@ -31,6 +31,8 @@ help:
 	@echo "  make xcframework  — build PVlibDolphin.xcframework (iOS + tvOS, device + sim)"
 	@echo "  make generate     — tuist generate (needs the xcframework first)"
 	@echo "  make test         — run iCubeTests on an iOS simulator (SIM=\"iPhone 17 Pro\")"
+	@echo "  make ui           — build the app for a simulator without rebuilding the Dolphin core"
+	@echo "  make test-ui      — run iCubeTests without rebuilding the core (ONLY=\"ClassA ClassB\")"
 	@echo "  make gate-release — compile Release (Non-Jailbroken) for iOS and tvOS (what CI archives)"
 	@echo "  make dev          — generate + open the workspace"
 	@echo "  make lint         — SwiftLint"
@@ -101,6 +103,23 @@ test:
 	  -derivedDataPath build-Xcode-ios \
 	  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" \
 	  $(TEST_ARGS)
+
+# The fast loop for UI work: the "iCube (UI)" scheme (Project.swift) links the prebuilt core slice
+# instead of rebuilding it, and warns when Source/Core is newer than that slice. Same configuration
+# and derived data as `make test`, so the two share one incremental build.
+# `make fast` (Tools/dev-loop) is the stricter loop: it pins an accepted core and refuses a stale one;
+# this one needs no setup and is also a scheme in Xcode.
+# ONLY names test classes: `make test-ui ONLY="ControllerHubModelBuilderTests PlaysAsTests"`.
+UI_BUILD = -workspace iCube.xcworkspace -scheme "iCube (UI)" \
+	  -configuration "Debug (Non-Jailbroken)" -destination "$(DEST)" \
+	  -derivedDataPath build-Xcode-ios \
+	  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=""
+ONLY ?=
+ui:
+	xcodebuild build $(UI_BUILD)
+
+test-ui:
+	xcodebuild test $(UI_BUILD) $(foreach class,$(ONLY),-only-testing:iCubeTests/$(class)) $(TEST_ARGS)
 
 # CI and TestFlight archive the Release configuration; the Debug gates and `make test` never
 # compile it, so #if DEBUG mistakes only surface here. Run before pushing UI/Swift changes.
