@@ -28,6 +28,31 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
   DOLWiimoteExtensionKindClassic = 2,
 } NS_SWIFT_NAME(WiimoteExtensionKind);
 
+/// What a profile key's value is (`DOLProfileKey.kind`).
+typedef NS_ENUM(NSInteger, DOLProfileKeyKind) {
+  /// `Device = MFi/0/…`.
+  DOLProfileKeyKindDevice = 0,
+  /// A control's binding: an expression.
+  DOLProfileKeyKindControl,
+  /// A number (or an expression that yields one).
+  DOLProfileKeyKindNumber,
+  /// `True` / `False` (or an expression).
+  DOLProfileKeyKindToggle,
+  /// One of `choices` (the Wii Remote's `Extension`).
+  DOLProfileKeyKindChoice,
+  /// An output's binding (`Rumble/Motor`): an expression over the device's outputs, not its inputs.
+  DOLProfileKeyKindOutput,
+} NS_SWIFT_NAME(ProfileKeyKind);
+
+/// One key a port's controller reads from a profile's `[Profile]` section.
+NS_SWIFT_NAME(ProfileKeyInfo)
+@interface DOLProfileKey : NSObject
+@property (nonatomic, readonly, copy) NSString* name;
+@property (nonatomic, readonly) DOLProfileKeyKind kind;
+/// The names a choice accepts; empty for the other kinds.
+@property (nonatomic, readonly, copy) NSArray<NSString*>* choices;
+@end
+
 @interface TVControllerMappingBridge : NSObject
 
 + (NSString*)qualifiedNameForController:(GCController*)controller NS_SWIFT_NAME(qualifiedName(for:));
@@ -164,6 +189,27 @@ typedef NS_ENUM(NSInteger, DOLWiimoteExtensionKind) {
             forGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(deleteProfile(_:forGCPort:));
 + (BOOL)deleteProfile:(NSString*)name
            forWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(deleteProfile(_:forWiimote:));
+
+/// Profile text (the profile text editor). The slot's LIVE mapping as the text of a profile file:
+/// a `[Profile]` header and the `Key = Value` lines `saveProfile:` would write. Empty when the
+/// slot has no controller.
++ (NSString*)profileTextForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(profileText(forGCPort:));
++ (NSString*)profileTextForWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(profileText(forWiimote:));
+/// Every key the slot's controller reads, in the controller's own order: `Device`, then per group
+/// its settings, its controls and each control's `/Range`, and for a Wii Remote `Extension` and
+/// every extension's groups. A key missing from a profile takes its default; a key not in this
+/// list is ignored by the core.
++ (NSArray<DOLProfileKey*>*)profileKeysForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(profileKeys(forGCPort:));
++ (NSArray<DOLProfileKey*>*)profileKeysForWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(profileKeys(forWiimote:));
+/// Loads `text` (a profile file's content) into the slot's live mapping and saves it, exactly as
+/// `loadProfile:` does with a file. With `restore`, the slot keeps its device whatever the text's
+/// `Device =` line names. NO when the slot has no controller or the text could not be read.
++ (BOOL)applyProfileText:(NSString*)text
+               forGCPort:(NSInteger)portOneBased
+           restoreDevice:(BOOL)restore NS_SWIFT_NAME(applyProfileText(_:forGCPort:restoreDevice:));
++ (BOOL)applyProfileText:(NSString*)text
+              forWiimote:(NSInteger)indexOneBased
+           restoreDevice:(BOOL)restore NS_SWIFT_NAME(applyProfileText(_:forWiimote:restoreDevice:));
 
 /// Mapping stash: the mapping a controller had on a slot, kept while the slot goes to another
 /// device (the Touchscreen when a pad disconnects, another pad, No Device), so the controller gets

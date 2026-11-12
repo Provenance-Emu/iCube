@@ -339,4 +339,32 @@ final class PauseMenuModelBuilderTests: XCTestCase {
                    Set(model.sections.flatMap(\.items).map(\.id)).subtracting(PauseMenuModelBuilder.audioPaneIDs))
     XCTAssertEqual(PauseMenuModelBuilder.audioPaneIDs, ["mute"])
   }
+
+  // MARK: Controllers tile
+
+  /// iOS, a Wii title: the tile names the on-screen controller and a long press picks another.
+  func test_controllersTile_showsTheOnScreenController_andPicksAnotherOnLongPress() {
+    var picked: AnyHashable?
+    var pause = state()
+    pause.onScreenController = .fixed(.wiiNunchuk)
+    pause.onScreenControllerOptions = OnScreenController.options(for: .wiiAndGameCube)
+    var menu = bindings()
+    menu.onScreenController = Binding(get: { AnyHashable(pause.onScreenController) }, set: { picked = $0 })
+    let item = PauseMenuModelBuilder.make(state: pause, bindings: menu, actions: actions()).item(id: "controllers")
+    XCTAssertEqual(item?.badge, "Wii Remote + Nunchuk")
+    guard case .action? = item?.role else { return XCTFail("a tap still opens the hub") }
+    guard case .options(let title, let options, let selection)? = item?.effectiveLongPress else { return XCTFail("long press") }
+    XCTAssertEqual(title, "On-Screen Controller")
+    XCTAssertEqual(options.first?.0, "Auto")
+    XCTAssertEqual(options.last?.0, "GameCube Controller")
+    selection.wrappedValue = AnyHashable(OnScreenController.fixed(.gameCube))
+    XCTAssertEqual(picked, AnyHashable(OnScreenController.fixed(.gameCube)))
+  }
+
+  /// tvOS and GameCube titles have nothing to choose: a plain tile, as before.
+  func test_controllersTile_withNothingToChoose_hasNoBadgeOrLongPress() {
+    let item = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions()).item(id: "controllers")
+    XCTAssertNil(item?.badge)
+    XCTAssertNil(item?.effectiveLongPress)
+  }
 }

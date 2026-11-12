@@ -647,4 +647,91 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     XCTAssertEqual(section?.items.first?.title, PlayerScreenHelp.rawBindings)
     XCTAssertEqual(section?.items.first?.isEnabled, false)
   }
+
+  // MARK: Motion Axes
+
+  /// The six per-axis switches of the Wii Remote's gyroscope (group 11) and accelerometer (group 10).
+  private func motionAxes(reversed: Set<String> = []) -> [AdvancedGroupState] {
+    func group(_ id: Int, _ title: String, _ names: [String], extra: [NumericSettingState] = []) -> AdvancedGroupState {
+      let toggles = names.enumerated().map { index, name in
+        NumericSettingState(
+          owner: .wiimote, groupId: id, index: extra.count + index, name: name, suffix: "",
+          isToggle: true, isInteger: false, value: reversed.contains(name) ? 1 : 0, minimum: 0, maximum: 1,
+          defaultValue: 0, isExpression: false, coreName: name)
+      }
+      return AdvancedGroupState(owner: .wiimote, groupId: id, title: title, settings: extra + toggles)
+    }
+    let deadZone = NumericSettingState(
+      owner: .wiimote, groupId: AdvancedSettingGroups.gyroscopeGroup, index: 0, name: "Dead Zone", suffix: "°/s",
+      isToggle: false, isInteger: false, value: 2, minimum: 0, maximum: 180, defaultValue: 2, isExpression: false, coreName: "Dead Zone")
+    return [
+      group(AdvancedSettingGroups.gyroscopeGroup, "Gyroscope", ["Invert Pitch", "Invert Roll", "Invert Yaw"], extra: [deadZone]),
+      group(AdvancedSettingGroups.accelerometerGroup, "Accelerometer", ["Flip Left and Right", "Flip Forward and Back", "Flip Up and Down"]),
+    ]
+  }
+
+  /// A motion pad's port: one closed row in Pointer & Motion, whose badge says whether anything is reversed.
+  func test_motionAxes_aClosedRowOnAGyroPadsPort_countsWhatIsReversed() {
+    var screen = state(.wiiRemote, device: Self.dualSense, pads: [pad(Self.dualSense, "DualSense", gyro: true)])
+    screen.advanced = motionAxes()
+    let recorder = Recorder()
+    var model = make(screen, recorder)
+    XCTAssertEqual(ids(model, section: "pointer"), ["pointer-motion", "motion-axes"])
+    XCTAssertEqual(model.item(id: "motion-axes")?.badge, "Standard")
+    guard case .action(let toggle)? = model.item(id: "motion-axes")?.role else { return XCTFail("action") }
+    toggle()
+    screen.advanced = motionAxes(reversed: ["Invert Roll", "Flip Up and Down"])
+    model = make(screen)
+    XCTAssertEqual(model.item(id: "motion-axes")?.badge, "2 reversed")
+  }
+
+  func test_motionAxes_open_listsTheSixSwitches_andWritesEachThroughItsSetting() {
+    var screen = state(.wiiRemote, device: Self.dualSense, pads: [pad(Self.dualSense, "DualSense", gyro: true)])
+    screen.advanced = motionAxes()
+    screen.showsMotionAxes = true
+    let recorder = Recorder()
+    let model = make(screen, recorder, platform: .tvos)
+    let gyro = AdvancedSettingGroups.gyroscopeGroup, accel = AdvancedSettingGroups.accelerometerGroup
+    XCTAssertEqual(ids(model, section: "pointer"), [
+      "pointer-motion", "motion-axes",
+      "setting-wiimote-\(gyro)-1", "setting-wiimote-\(gyro)-2", "setting-wiimote-\(gyro)-3",
+      "setting-wiimote-\(accel)-0", "setting-wiimote-\(accel)-1", "setting-wiimote-\(accel)-2",
+    ])
+    guard case .toggle(let roll)? = model.item(id: "setting-wiimote-\(gyro)-2")?.role else { return XCTFail("toggle") }
+    XCTAssertEqual(model.item(id: "setting-wiimote-\(gyro)-2")?.title, "Invert Roll")
+    roll.wrappedValue = true
+    XCTAssertEqual(recorder.calls, ["setting:setting-wiimote-\(gyro)-2=1.0"])
+  }
+
+  /// The switches are listed once: on a pad's port Advanced keeps only what is left of each group.
+  func test_motionAxes_areNotRepeatedUnderAdvanced_onAPadsPort() {
+    var screen = state(.wiiRemote, device: Self.dualSense, pads: [pad(Self.dualSense, "DualSense", gyro: true)])
+    screen.advanced = motionAxes()
+    screen.showsAdvanced = true
+    let model = make(screen)
+    let gyro = AdvancedSettingGroups.gyroscopeGroup, accel = AdvancedSettingGroups.accelerometerGroup
+    XCTAssertEqual(ids(model, section: "advanced-wiimote-\(gyro)"), ["setting-wiimote-\(gyro)-0"], "Dead Zone stays")
+    XCTAssertNil(model.sections.first { $0.id == "advanced-wiimote-\(accel)" }, "a group with nothing left is not listed")
+  }
+
+  /// The touchscreen's port has no Motion Axes row (the phone's own motion has Advanced Motion), so
+  /// the switches stay reachable under Advanced.
+  func test_motionAxes_stayUnderAdvanced_onATouchscreenPort() {
+    var screen = state(.wiiRemote, device: Self.touch)
+    screen.advanced = motionAxes()
+    screen.showsAdvanced = true
+    let model = make(screen)
+    XCTAssertNil(model.item(id: "motion-axes"))
+    XCTAssertEqual(ids(model, section: "advanced-wiimote-\(AdvancedSettingGroups.accelerometerGroup)").count, 3)
+  }
+
+  // MARK: Edit as Text
+
+  /// The mapping as an `.ini` is a Profile row on iOS; tvOS has no keyboard or Files for it.
+  func test_profile_editAsText_isARowOnIOSOnly() {
+    let model = make(boundGameCube)
+    XCTAssertEqual(ids(model, section: "profile").last, "profile-text")
+    guard case .destination? = model.item(id: "profile-text")?.role else { return XCTFail("must push") }
+    XCTAssertNil(make(boundGameCube, platform: .tvos).item(id: "profile-text"))
+  }
 }

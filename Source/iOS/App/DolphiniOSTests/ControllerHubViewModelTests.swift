@@ -352,7 +352,7 @@ final class ControllerHubViewModelTests: XCTestCase {
     let scheduler = FakeScheduler()
     let model = makeModel(reader: reader, writer: FakeWriter(reader: reader), scheduler: scheduler)
     model.choosePlaysAs(model.state.players[0], .gameCube)
-    model.chooseOverlayMode(.gamecube)
+    model.chooseOnScreenController(.auto)
     scheduler.fire()
     XCTAssertEqual(model.state.focusRequest, "gc-1-plays-as")
   }
@@ -379,8 +379,8 @@ final class ControllerHubViewModelTests: XCTestCase {
     XCTAssertNil(model.state.focusRequest, "chooseDevice")
     model.setPlaysAs(model.state.players.first { $0.id == "gc-1" }!, .wiiRemote)
     XCTAssertNotNil(model.state.focusRequest)
-    model.chooseOverlayMode(.gamecube)
-    XCTAssertNil(model.state.focusRequest, "chooseOverlayMode")
+    model.chooseOnScreenController(.auto)
+    XCTAssertNil(model.state.focusRequest, "chooseOnScreenController")
   }
 
   @MainActor
@@ -407,16 +407,74 @@ final class ControllerHubViewModelTests: XCTestCase {
   }
 
   @MainActor
-  func test_setPlaysAs_intoAnOccupiedPort_isRefusedBeforeAnyWrite() {
+  func test_setPlaysAs_intoAPortHeldByAnotherDevice_tradesPlaces() {
     let reader = FakeReader()
     reader.wii[1] = Self.xbox
     reader.gameCube[1] = "MFi/1/DualSense Wireless Controller"
     let writer = FakeWriter(reader: reader)
     let model = makeModel(reader: reader, writer: writer)
     let seen = toasts { model.setPlaysAs(model.state.players[0], .gameCube) }
-    XCTAssertEqual(writer.log, [], "moving would overwrite Player 1's device")
-    XCTAssertEqual(seen, ["Player 1 is in use. Change that player's device first."])
-    XCTAssertEqual(model.state.players.first { $0.id == "gc-1" }?.deviceQualifier, "MFi/1/DualSense Wireless Controller")
+    XCTAssertEqual(writer.log, ["assign \(Self.xbox) gc-1", "assign MFi/1/DualSense Wireless Controller wii-1"], "nobody is unbound")
+    XCTAssertEqual(seen, ["Traded places with Player 1"])
+    XCTAssertEqual(model.state.players.first { $0.id == "gc-1" }?.deviceQualifier, Self.xbox)
+    XCTAssertEqual(model.state.players.first { $0.id == "wii-1" }?.deviceQualifier, "MFi/1/DualSense Wireless Controller")
+  }
+
+  /// The report: the touchscreen was both GameCube Player 1 and Wii Remote 1, and moving it to the
+  /// GameCube port was refused because that port was "in use", by the same touchscreen.
+  @MainActor
+  func test_setPlaysAs_intoAPortThatAlreadyHoldsTheSameDevice_justLeavesTheSource() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.touch
+    reader.gameCube[1] = "iOS/0/Touchscreen"
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    let seen = toasts { model.setPlaysAs(model.state.players[0], .gameCube) }
+    XCTAssertEqual(writer.log, ["assign \(Self.touch) gc-1", "clear wii-1", "layout gamecube"])
+    XCTAssertEqual(seen, [])
+    XCTAssertEqual(model.state.players.first { $0.id == "wii-1" }?.deviceQualifier, "")
+  }
+
+  // MARK: On-screen controller
+
+  @MainActor
+  func test_setOnScreenController_gameCube_bindsTheTouchscreenToPlayer1_thenDrawsThatPad() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.touch
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    model.setOnScreenController(.fixed(.gameCube))
+    XCTAssertEqual(writer.log, ["setDevice touchscreen gc-1", "layout gamecube"])
+    XCTAssertEqual(model.state.players.first { $0.id == "wii-1" }?.deviceQualifier, Self.touch, "Wii Remote 1 is left alone")
+  }
+
+  @MainActor
+  func test_setOnScreenController_wiiClassic_setsTheExtension_andSkipsABindingThatExists() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.touch
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    model.setOnScreenController(.fixed(.wiiClassic))
+    XCTAssertEqual(writer.log, ["ext 1 2", "side 1 false", "layout wii"])
+  }
+
+  @MainActor
+  func test_setOnScreenController_takesPlayer1FromAPad() {
+    let reader = FakeReader()
+    reader.wii[1] = Self.xbox
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    model.setOnScreenController(.fixed(.wiiNunchuk))
+    XCTAssertEqual(writer.log, ["setDevice touchscreen wii-1", "ext 1 1", "side 1 false", "layout wii"])
+  }
+
+  @MainActor
+  func test_setOnScreenController_auto_onlyStoresTheMode() {
+    let reader = FakeReader()
+    let writer = FakeWriter(reader: reader)
+    let model = makeModel(reader: reader, writer: writer)
+    model.setOnScreenController(.auto)
+    XCTAssertEqual(writer.log, ["layout auto"])
   }
 
   @MainActor
@@ -664,17 +722,17 @@ final class ControllerHubViewModelTests: XCTestCase {
     XCTAssertEqual(writer.log, [])
   }
 
-  /// The Layout GameCube-to-Auto trap: Wii must never be written on the way.
+  /// Tap-cycling the on-screen controller: nothing it passes through is ever written.
   @MainActor
-  func test_layoutCycledThroughWii_writesOnlyTheFinalMode() {
+  func test_onScreenControllerCycledThroughOthers_writesOnlyTheFinalChoice() {
     let reader = FakeReader()   // committed mode: .wii
     let writer = FakeWriter(reader: reader)
     let scheduler = FakeScheduler()
     let model = makeModel(system: .wii, reader: reader, writer: writer, scheduler: scheduler)
-    model.chooseOverlayMode(.auto)
-    model.chooseOverlayMode(.gamecube)
-    model.chooseOverlayMode(.auto)
-    XCTAssertEqual(model.state.pending.overlayMode, .auto)
+    model.chooseOnScreenController(.auto)
+    model.chooseOnScreenController(.fixed(.wiiClassic))
+    model.chooseOnScreenController(.auto)
+    XCTAssertEqual(model.state.pending.onScreenController, .auto)
     scheduler.fire()
     XCTAssertEqual(writer.log, ["layout auto"])
   }
@@ -866,9 +924,9 @@ final class ControllerHubViewModelTests: XCTestCase {
     XCTAssertEqual(memory.entry(for: "wii-1", qualifier: "")?.name, "Mine", "the emptied slot keeps its mapping's name, as No Device does")
   }
 
-  /// The occupied check reads fresh state: a caller's `PlayerState` can predate a bind.
+  /// The destination is read fresh: a caller's `PlayerState` can predate a bind.
   @MainActor
-  func test_setPlaysAs_staleCallerCopy_stillRefusesAnOccupiedDestination() {
+  func test_setPlaysAs_staleCallerCopy_stillSeesTheDestinationsDevice() {
     let reader = FakeReader()
     reader.wii[1] = Self.xbox
     let writer = FakeWriter(reader: reader)
@@ -876,8 +934,8 @@ final class ControllerHubViewModelTests: XCTestCase {
     let stale = model.state.players[0]
     reader.gameCube[1] = Self.dualSense
     let posted = toasts { model.setPlaysAs(stale, .gameCube) }
-    XCTAssertEqual(posted, ["Player 1 is in use. Change that player's device first."])
-    XCTAssertEqual(writer.log, [])
+    XCTAssertEqual(posted, ["Traded places with Player 1"])
+    XCTAssertEqual(writer.log, ["assign \(Self.xbox) gc-1", "assign \(Self.dualSense) wii-1"])
   }
 
   func test_rumbleDestination_defaultsToController_andReadsTheStoredValue() throws {

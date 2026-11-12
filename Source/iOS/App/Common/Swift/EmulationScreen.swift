@@ -1631,6 +1631,11 @@ struct EmulationScreen: View {
         userOverrideTouchControls = false
         controllerManager.choosePlayer1(qualifier, isWii: isWiiSystem)
       },
+      readOnScreenControllers: {
+        let current = OnScreenControllerLive.current()
+        return OnScreenControllerLive.options().map { TopBarOnScreenControllerOption(controller: $0, isSelected: $0 == current) }
+      },
+      onChooseOnScreenController: { OnScreenControllerLive.apply($0) },
       onQuickSave: quickSaveFromTopBar,
       onQuickLoad: { quickLoadFromTopBar() })
       .disabled(quitRequestInFlight || quickStateActionInFlight)

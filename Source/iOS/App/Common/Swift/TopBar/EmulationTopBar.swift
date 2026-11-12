@@ -14,6 +14,14 @@ struct TopBarDeviceOption: Identifiable, Equatable {
   var id: String { qualifier ?? "touchscreen" }
 }
 
+/// One choice of the Controller menu's "On-Screen Controller" section.
+struct TopBarOnScreenControllerOption: Identifiable, Equatable {
+  let controller: OnScreenController
+  let isSelected: Bool
+
+  var id: String { controller.title }
+}
+
 /// Side effects are injected so the DEBUG audit renders the actual toolbar without touching a core.
 @MainActor
 struct TopBarRuntimeActions {
@@ -79,6 +87,10 @@ struct EmulationTopBar: View {
   var readPlayer1Devices: () -> [TopBarDeviceOption] = { [] }
   /// nil puts the on-screen controls on Player 1.
   var onChoosePlayer1: (String?) -> Void = { _ in }
+  /// The on-screen controller choices (Auto, GameCube, the Wii Remote variants), the current one
+  /// selected; empty when there is nothing to choose (a GameCube title).
+  var readOnScreenControllers: () -> [TopBarOnScreenControllerOption] = { [] }
+  var onChooseOnScreenController: (OnScreenController) -> Void = { _ in }
 
   /// The parent supplies the reviewed history policy; nil retains classic behavior for older callers.
   var onQuickSave: (() -> Void)? = nil
@@ -243,6 +255,18 @@ struct EmulationTopBar: View {
       sectionHeader(L("Controller"))
       PopoverRow(title: L("On-Screen Controls"), systemImage: "gamecontroller", isChecked: onScreenControlsVisible) {
         close { onToggleOnScreenControls() }
+      }
+      // One tap makes the on-screen controls that controller (Player 1 of its kind, that pad drawn):
+      // a Wii game that wants a GameCube pad, or a Classic Controller, without opening Settings.
+      let onScreenControllers = readOnScreenControllers()
+      if onScreenControllers.count > 1 {
+        Divider()
+        sectionHeader(L("On-Screen Controller"))
+        ForEach(onScreenControllers) { option in
+          PopoverRow(title: option.controller.title, systemImage: "rectangle.3.group", isChecked: option.isSelected) {
+            close { onChooseOnScreenController(option.controller) }
+          }
+        }
       }
       let player1Devices = readPlayer1Devices()
       if player1Devices.count > 1 {

@@ -118,6 +118,8 @@ struct PlayerScreenState: Equatable {
   var isSensorBarOnTop = false
   /// Wii Remote 1's pointer source and its choices; nil on every other port.
   var pointerSource: PointerSourceModel?
+  /// "Motion Axes" is open in Pointer & Motion: the six per-axis flips. UI state, kept across reloads.
+  var showsMotionAxes = false
 
   static func empty(_ player: PlayerState) -> PlayerScreenState {
     PlayerScreenState(
@@ -185,4 +187,8 @@ struct PlayerScreenActions {
   var stickFeelDestination: () -> AnyView
   /// Wii Remote 1's Pointer Source: nil is Automatic.
   var setPointerSourceOverride: (PointerSource.Kind?) -> Void = { _ in }
+  /// Opens or closes Pointer & Motion's "Motion Axes".
+  var toggleMotionAxes: () -> Void = {}
+  /// Pushes the profile text editor (iOS): the port's mapping as an `.ini`, to edit, import or export.
+  var profileTextDestination: () -> AnyView = { AnyView(EmptyView()) }
 }

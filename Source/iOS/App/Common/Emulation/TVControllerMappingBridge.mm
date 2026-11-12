@@ -29,6 +29,19 @@
 
 NSString* const TVControllerDevicesChangedNotification = @"TVControllerDevicesChangedNotification";
 
+@implementation DOLProfileKey
+- (instancetype)initWithName:(NSString*)name kind:(DOLProfileKeyKind)kind choices:(NSArray<NSString*>*)choices
+{
+  if ((self = [super init]))
+  {
+    _name = [name copy];
+    _kind = kind;
+    _choices = [choices copy];
+  }
+  return self;
+}
+@end
+
 @implementation TVControllerMappingBridge
 
 // 2512: RegisterDevicesChangedCallback returns a Common::EventHook; dropping it unregisters.
@@ -725,6 +738,28 @@ static const ControllerEmu::EmulatedController* WiimoteAt(NSInteger indexOneBase
   return ProfilesForController(WiimoteAt(indexOneBased), false);
 }
 
+// What loading a profile does to a slot once its file is read; `loadProfile:` and the profile text
+// editor (`applyProfileText:`) share it.
+static void ApplyProfileToPad(ControllerEmu::EmulatedController* pad, Common::IniFile& ini, bool restore)
+{
+  const auto selectedDev = pad->GetDefaultDevice();
+  pad->LoadConfig(ini.GetOrCreateSection("Profile"));
+  if (restore) pad->SetDefaultDevice(selectedDev);
+  pad->UpdateReferences(g_controller_interface);
+  Pad::GetConfig()->SaveConfig();
+}
+
+static void ApplyProfileToWiimote(int idx, ControllerEmu::EmulatedController* wm, Common::IniFile& ini, bool restore)
+{
+  const auto selectedDev = wm->GetDefaultDevice();
+  LoadProfileKeepingExtension(wm, ini.GetOrCreateSection("Profile"));
+  if (restore) wm->SetDefaultDevice(selectedDev);
+  wm->UpdateReferences(g_controller_interface);
+  DisableCoreIMUPointerIfTouchscreen(idx);
+  RepairTouchscreenIRPointer(idx);
+  Wiimote::GetConfig()->SaveConfig();
+}
+
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore
 {
   auto* cfg = Pad::GetConfig();
@@ -743,11 +778,7 @@ static const ControllerEmu::EmulatedController* WiimoteAt(NSInteger indexOneBase
   else return NO;
   Common::IniFile ini;
   if (!ini.Load(loadPath)) return NO;
-  const auto selectedDev = pad->GetDefaultDevice();
-  pad->LoadConfig(ini.GetOrCreateSection("Profile"));
-  if (restore) pad->SetDefaultDevice(selectedDev);
-  pad->UpdateReferences(g_controller_interface);
-  Pad::GetConfig()->SaveConfig();
+  ApplyProfileToPad(pad, ini, restore);
   return YES;
 }
 
@@ -769,13 +800,7 @@ static const ControllerEmu::EmulatedController* WiimoteAt(NSInteger indexOneBase
   else return NO;
   Common::IniFile ini;
   if (!ini.Load(loadPath)) return NO;
-  const auto selectedDev = wm->GetDefaultDevice();
-  LoadProfileKeepingExtension(wm, ini.GetOrCreateSection("Profile"));
-  if (restore) wm->SetDefaultDevice(selectedDev);
-  wm->UpdateReferences(g_controller_interface);
-  DisableCoreIMUPointerIfTouchscreen(idx);
-  RepairTouchscreenIRPointer(idx);
-  Wiimote::GetConfig()->SaveConfig();
+  ApplyProfileToWiimote(idx, wm, ini, restore);
   return YES;
 }
 
@@ -808,6 +833,136 @@ static BOOL SaveControllerProfile(ControllerEmu::EmulatedController* controller,
   auto* cfg = Wiimote::GetConfig();
   if (!cfg) return NO;
   return SaveControllerProfile(cfg->GetController((int)indexOneBased - 1), name);
+}
+
+// MARK: Profile text
+
+// `Common::IniFile` reads and writes files only, so the text takes a round trip through a scratch
+// file. Nothing else names it, and it is removed before returning.
+static std::string ProfileScratchPath()
+{
+  NSString* name = [NSString stringWithFormat:@"icube-profile-%@.ini", NSUUID.UUID.UUIDString];
+  return std::string([[NSTemporaryDirectory() stringByAppendingPathComponent:name] UTF8String]);
+}
+
+static NSString* ProfileText(ControllerEmu::EmulatedController* controller)
+{
+  if (!controller) return @"";
+  Common::IniFile ini;
+  controller->SaveConfig(ini.GetOrCreateSection("Profile"));
+  const std::string path = ProfileScratchPath();
+  NSString* text = @"";
+  if (ini.Save(path))
+  {
+    NSString* file = [NSString stringWithUTF8String:path.c_str()];
+    text = [NSString stringWithContentsOfFile:file encoding:NSUTF8StringEncoding error:nil] ?: @"";
+    [NSFileManager.defaultManager removeItemAtPath:file error:nil];
+  }
+  return text;
+}
+
+static bool LoadProfileText(NSString* text, Common::IniFile* ini)
+{
+  const std::string path = ProfileScratchPath();
+  NSString* file = [NSString stringWithUTF8String:path.c_str()];
+  if (![text writeToFile:file atomically:YES encoding:NSUTF8StringEncoding error:nil]) return false;
+  const bool loaded = ini->Load(path);
+  [NSFileManager.defaultManager removeItemAtPath:file error:nil];
+  return loaded;
+}
+
+static void AppendProfileKey(NSMutableArray<DOLProfileKey*>* keys, const std::string& name, DOLProfileKeyKind kind,
+                             NSArray<NSString*>* choices = @[])
+{
+  [keys addObject:[[DOLProfileKey alloc] initWithName:[NSString stringWithUTF8String:name.c_str()]
+                                                 kind:kind
+                                              choices:choices]];
+}
+
+static DOLProfileKeyKind KindOf(const ControllerEmu::NumericSettingBase& setting)
+{
+  return setting.GetType() == ControllerEmu::SettingType::Bool ? DOLProfileKeyKindToggle : DOLProfileKeyKindNumber;
+}
+
+// The keys `ControlGroup::SaveConfig` / `Attachments::SaveConfig` write, in their order.
+static void AppendGroupKeys(NSMutableArray<DOLProfileKey*>* keys, ControllerEmu::ControlGroup* group, const std::string& base)
+{
+  const std::string prefix = base + group->name + "/";
+  if (group->HasEnabledSetting())
+    AppendProfileKey(keys, prefix + group->enabled_setting->GetININame(), DOLProfileKeyKindToggle);
+  for (const auto& setting : group->numeric_settings)
+    AppendProfileKey(keys, prefix + setting->GetININame(), KindOf(*setting));
+  for (const auto& control : group->controls)
+  {
+    AppendProfileKey(keys, prefix + control->name,
+                     control->control_ref->IsInput() ? DOLProfileKeyKindControl : DOLProfileKeyKindOutput);
+    AppendProfileKey(keys, prefix + control->name + "/Range", DOLProfileKeyKindNumber);
+  }
+  if (group->type != ControllerEmu::GroupType::Attachments) return;
+  auto* attachments = static_cast<ControllerEmu::Attachments*>(group);
+  NSMutableArray<NSString*>* names = [NSMutableArray array];
+  for (const auto& attachment : attachments->GetAttachmentList())
+    [names addObject:[NSString stringWithUTF8String:attachment->GetName().c_str()]];
+  AppendProfileKey(keys, base + group->name, DOLProfileKeyKindChoice, names);
+  for (const auto& attachment : attachments->GetAttachmentList())
+    for (const auto& inner : attachment->groups)
+      AppendGroupKeys(keys, inner.get(), base + attachment->GetName() + "/");
+}
+
+static NSArray<DOLProfileKey*>* ProfileKeys(ControllerEmu::EmulatedController* controller)
+{
+  NSMutableArray<DOLProfileKey*>* keys = [NSMutableArray array];
+  if (!controller) return keys;
+  const auto lock = ControllerEmu::EmulatedController::GetStateLock();
+  AppendProfileKey(keys, "Device", DOLProfileKeyKindDevice);
+  for (const auto& group : controller->groups)
+    AppendGroupKeys(keys, group.get(), "");
+  return keys;
+}
+
++ (NSString*)profileTextForGCPort:(NSInteger)portOneBased
+{
+  auto* cfg = Pad::GetConfig();
+  return ProfileText(cfg ? cfg->GetController((int)portOneBased - 1) : nullptr);
+}
+
++ (NSString*)profileTextForWiimote:(NSInteger)indexOneBased
+{
+  auto* cfg = Wiimote::GetConfig();
+  return ProfileText(cfg ? cfg->GetController((int)indexOneBased - 1) : nullptr);
+}
+
++ (NSArray<DOLProfileKey*>*)profileKeysForGCPort:(NSInteger)portOneBased
+{
+  auto* cfg = Pad::GetConfig();
+  return ProfileKeys(cfg ? cfg->GetController((int)portOneBased - 1) : nullptr);
+}
+
++ (NSArray<DOLProfileKey*>*)profileKeysForWiimote:(NSInteger)indexOneBased
+{
+  auto* cfg = Wiimote::GetConfig();
+  return ProfileKeys(cfg ? cfg->GetController((int)indexOneBased - 1) : nullptr);
+}
+
++ (BOOL)applyProfileText:(NSString*)text forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore
+{
+  auto* cfg = Pad::GetConfig();
+  auto* pad = cfg ? cfg->GetController((int)portOneBased - 1) : nullptr;
+  Common::IniFile ini;
+  if (!pad || !LoadProfileText(text, &ini)) return NO;
+  ApplyProfileToPad(pad, ini, restore);
+  return YES;
+}
+
++ (BOOL)applyProfileText:(NSString*)text forWiimote:(NSInteger)indexOneBased restoreDevice:(BOOL)restore
+{
+  auto* cfg = Wiimote::GetConfig();
+  const int idx = (int)indexOneBased - 1;
+  auto* wm = cfg ? cfg->GetController(idx) : nullptr;
+  Common::IniFile ini;
+  if (!wm || !LoadProfileText(text, &ini)) return NO;
+  ApplyProfileToWiimote(idx, wm, ini, restore);
+  return YES;
 }
 
 // The profile names in the controller type's user directory: the ones a delete can remove.

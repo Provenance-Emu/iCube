@@ -59,9 +59,9 @@ final class PlayerAdvancedSettingsTests: XCTestCase {
     func keys(_ attachment: Int) -> [String] {
       AdvancedSettingGroups.entries(for: .wii, attachment: attachment).map { "\($0.owner)-\($0.groupId)" }
     }
-    XCTAssertEqual(keys(0), ["wiimote-3", "wiimote-12"])
-    XCTAssertEqual(keys(1), ["wiimote-3", "wiimote-12", "nunchuk-1"])
-    XCTAssertEqual(keys(2), ["wiimote-3", "wiimote-12", "classic-3", "classic-4", "classic-1"])
+    XCTAssertEqual(keys(0), ["wiimote-3", "wiimote-12", "wiimote-11", "wiimote-10"])
+    XCTAssertEqual(keys(1), ["wiimote-3", "wiimote-12", "wiimote-11", "wiimote-10", "nunchuk-1"])
+    XCTAssertEqual(keys(2), ["wiimote-3", "wiimote-12", "wiimote-11", "wiimote-10", "classic-3", "classic-4", "classic-1"])
   }
 
   /// The explanation is optional in the memberwise init (most call sites predate it) and empty by

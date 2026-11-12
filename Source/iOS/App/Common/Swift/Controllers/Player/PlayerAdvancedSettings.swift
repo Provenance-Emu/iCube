@@ -93,6 +93,23 @@ enum AdvancedSettingGroups {
   /// `WiimoteEmu::WiimoteGroup::IMUPoint` (WiimoteEmu.h:48-64). Its `Enabled` setting is the pad
   /// port's "Aim with Controller Motion"; the Physical Controller profile turns it on.
   static let imuPointGroup = 12
+  /// `WiimoteEmu::WiimoteGroup::IMUAccelerometer`: the motion sensor's three "Flip …" switches.
+  static let accelerometerGroup = 10
+  /// `WiimoteEmu::WiimoteGroup::IMUGyroscope`: dead zone, calibration and three "Invert …" switches.
+  static let gyroscopeGroup = 11
+  /// The per-axis switches of the two motion groups, by the core's untranslated names
+  /// (IMUGyroscope.cpp, IMUAccelerometer.cpp). Pointer & Motion's "Motion Axes" lists them; Advanced
+  /// lists what is left of each group.
+  static let motionAxisNames: Set<String> = [
+    "Invert Pitch", "Invert Roll", "Invert Yaw",
+    "Flip Left and Right", "Flip Forward and Back", "Flip Up and Down",
+  ]
+
+  /// One of the six motion-axis switches.
+  static func isMotionAxis(_ setting: NumericSettingState) -> Bool {
+    setting.owner == .wiimote && (setting.groupId == gyroscopeGroup || setting.groupId == accelerometerGroup)
+      && setting.isToggle && motionAxisNames.contains(setting.coreName)
+  }
   /// `WiimoteEmu::WiimoteGroup::IR`, the Wii Remote's pointer (`ControllerEmu::Cursor`).
   static let pointerGroup = 3
   /// `Cursor`'s height setting. `Dynamics.cpp` applies it negatively when SYSCONF's sensor bar is
@@ -111,6 +128,8 @@ enum AdvancedSettingGroups {
       var entries = [
         Entry(owner: .wiimote, groupId: pointerGroup, title: L("Pointer")),
         Entry(owner: .wiimote, groupId: imuPointGroup, title: L("Aim with Controller Motion")),
+        Entry(owner: .wiimote, groupId: gyroscopeGroup, title: L("Gyroscope")),
+        Entry(owner: .wiimote, groupId: accelerometerGroup, title: L("Accelerometer")),
       ]
       switch attachment {
       case 1:

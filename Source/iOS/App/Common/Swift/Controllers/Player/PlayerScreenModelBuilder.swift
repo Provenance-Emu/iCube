@@ -18,7 +18,7 @@ import SwiftUI
 /// Rows that open something push (`.destination`); nothing here presents.
 enum PlayerScreenModelBuilder {
   static func make(state: PlayerScreenState, actions: PlayerScreenActions, platform: PlatformKind) -> MenuModel {
-    var sections = [deviceSection(state: state, actions: actions), profileSection(state: state, actions: actions)]
+    var sections = [deviceSection(state: state, actions: actions), profileSection(state: state, actions: actions, platform: platform)]
     sections += buttonSections(state: state, actions: actions)
     if showsPointerAndMotion(state: state, platform: platform) {
       sections.append(pointerSection(state: state, actions: actions, platform: platform))
@@ -113,8 +113,20 @@ enum PlayerScreenModelBuilder {
 
   // MARK: Profile
 
-  private static func profileSection(state: PlayerScreenState, actions: PlayerScreenActions) -> MenuSection {
-    MenuSection(id: "profile", header: L("Profile"), items: [
+  private static func profileSection(state: PlayerScreenState, actions: PlayerScreenActions, platform: PlatformKind) -> MenuSection {
+    var items = profileItems(state: state, actions: actions)
+    // The mapping as an `.ini`, for players who edit, paste or share profiles as text. iOS only: it
+    // needs a keyboard and Files.
+    if platform == .ios {
+      items.append(MenuItem(
+        id: "profile-text", title: L("Edit as Text…"), subtitle: PlayerScreenHelp.editAsText, icon: "curlybraces",
+        role: .destination(actions.profileTextDestination())))
+    }
+    return MenuSection(id: "profile", header: L("Profile"), items: items)
+  }
+
+  private static func profileItems(state: PlayerScreenState, actions: PlayerScreenActions) -> [MenuItem] {
+    [
       MenuItem(
         id: "profile-load", title: L("Load Profile…"), subtitle: PlayerScreenHelp.loadProfile, icon: "tray.and.arrow.down",
         role: .destination(actions.profileListDestination()), badge: profileDisplayName(state)),
@@ -128,7 +140,7 @@ enum PlayerScreenModelBuilder {
       MenuItem(
         id: "profile-clear-all", title: L("Clear All Buttons"), subtitle: PlayerScreenHelp.clearAll, icon: "xmark.circle",
         role: .destructive(actions.clearAll), isEnabled: state.canCapture),
-    ])
+    ]
   }
 
   // MARK: Buttons
@@ -242,13 +254,14 @@ enum PlayerScreenModelBuilder {
       if state.motionPointerEnabled {
         items += padPointerAxes(state: state, actions: actions)
       }
-      return items
+      return items + motionAxisItems(state: state, actions: actions)
     }
     var items = [ControllerHubModelBuilder.pointerSourceRow(id: "pointer-source", source: source, setOverride: actions.setPointerSourceOverride)]
     switch source.source {
     case .padGyro where state.boundPad?.hasGyro == true:
       items.append(motionToggle(nil))
       items += padPointerAxes(state: state, actions: actions)
+      items += motionAxisItems(state: state, actions: actions)
     case .remoteGyro:
       // The remote's motion is integrated by the app (`RemotePointerBinding`): the same sensitivity and
       // invert keys as the phone-gyro pointer, and a recenter, since a relative pointer drifts.
@@ -284,6 +297,29 @@ enum PlayerScreenModelBuilder {
       && (setting.coreName == "Invert X" || setting.coreName == "Invert Y")
   }
 
+  static let motionAxesRowID = "motion-axes"
+
+  /// "Motion Axes" on a port whose pad has motion sensors: a row that opens the six per-axis
+  /// switches (gyroscope: pitch, roll, yaw; accelerometer: sideways, lengthwise, vertical). They
+  /// reverse what the game's Wii Remote feels, pointer and swings alike, for a pad whose sensor
+  /// reads an axis the other way round. The badge counts the ones that are on, so a flipped axis is
+  /// visible while the list is closed.
+  private static func motionAxisItems(state: PlayerScreenState, actions: PlayerScreenActions) -> [MenuItem] {
+    guard state.boundPad?.hasGyro == true else { return [] }
+    let axes = state.advanced.flatMap(\.settings).filter(AdvancedSettingGroups.isMotionAxis)
+    guard !axes.isEmpty else { return [] }
+    let flipped = axes.filter { $0.value != 0 }.count
+    var items = [MenuItem(
+      id: motionAxesRowID, title: L("Motion Axes"),
+      subtitle: L("If swings, tilts or twists go the wrong way, reverse that axis here."),
+      icon: state.showsMotionAxes ? "chevron.up" : "chevron.down", role: .action(actions.toggleMotionAxes),
+      badge: flipped == 0 ? L("Standard") : String(format: L("%d reversed"), flipped))]
+    if state.showsMotionAxes {
+      items += axes.map { settingItem($0, sensorBarOnTop: state.isSensorBarOnTop, actions: actions) }
+    }
+    return items
+  }
+
   /// The mode's sensitivity row (drag gain or gyro multiplier): a stepped multiplier, one compact
   /// row on tvOS.
   private static func sensitivityItem(
@@ -309,7 +345,10 @@ enum PlayerScreenModelBuilder {
     ])]
     guard state.showsAdvanced else { return sections }
     for group in state.advanced {
-      let settings = group.settings.filter { !isPadPointerAxis($0) }
+      // The pointer's two axes and the six motion axes have their own rows in Pointer & Motion on a
+      // pad's port; a port without that section (the touchscreen's) keeps the motion axes here.
+      let ownsMotionAxes = state.boundPad?.hasGyro == true
+      let settings = group.settings.filter { !isPadPointerAxis($0) && !(ownsMotionAxes && AdvancedSettingGroups.isMotionAxis($0)) }
       guard !settings.isEmpty else { continue }
       var items = settings.map { settingItem($0, sensorBarOnTop: state.isSensorBarOnTop, actions: actions) }
       if let offset = settings.first(where: isVerticalOffset), !offset.isExpression, offset.value != offset.defaultValue {

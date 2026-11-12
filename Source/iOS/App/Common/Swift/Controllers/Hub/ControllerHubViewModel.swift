@@ -302,8 +302,8 @@ final class ControllerHubViewModel {
       setOverlayVisible: { [weak self] visible in
         self?.chooseOnScreenControls { ControllerManager.shared.overlayVisible = visible }
       },
-      setOverlayMode: { [weak self] mode in
-        self?.chooseOverlayMode(mode)
+      setOnScreenController: { [weak self] choice in
+        self?.chooseOnScreenController(choice)
       },
       setOverlayOpacity: { [weak self] opacity in
         DOLConfigBridge.setMainTouchPadOpacity(opacity)
@@ -371,7 +371,11 @@ final class ControllerHubViewModel {
       connectPhone: { [weak self] pid in
         self?.writer.connectPhone(pid: pid)
         self?.reload()
-      })
+      },
+      touchControlsDestination: { [system] in
+        AnyView(ControllerHubView(system: system, page: .touchControls))
+      },
+      stickFeelDestination: { AnyView(AnalogStickSettingsView()) })
   }
 
   private static func skinsDestination(for system: ControllerSetupSystem) -> AnyView {
@@ -425,9 +429,10 @@ final class ControllerHubViewModel {
     state.focusRequest = nil
   }
 
-  func chooseOverlayMode(_ mode: ControllerManager.OverlayMode) {
+  func chooseOnScreenController(_ choice: OnScreenController) {
     state.focusRequest = nil
-    state.pending.overlayMode = mode == state.overlayMode ? nil : mode
+    let current = OnScreenController.current(overlayMode: state.overlayMode, players: state.players)
+    state.pending.onScreenController = choice == current ? nil : choice
     settle()
   }
 
@@ -446,7 +451,7 @@ final class ControllerHubViewModel {
   }
 
   /// Devices first, then Plays as (looked up again by id, so it sees the device just written), then
-  /// Layout.
+  /// the on-screen controller.
   private func commitPending() {
     cancelSettle?()
     cancelSettle = nil
@@ -458,7 +463,7 @@ final class ControllerHubViewModel {
     for (id, target) in pending.playsAs.sorted(by: { $0.key < $1.key }) {
       if let player = state.players.first(where: { $0.id == id }) { setPlaysAs(player, target) }
     }
-    if let mode = pending.overlayMode { setOverlayMode(mode) }
+    if let choice = pending.onScreenController { setOnScreenController(choice) }
   }
 
   // MARK: Committing writes
@@ -474,6 +479,32 @@ final class ControllerHubViewModel {
   /// Announces the choice BEFORE applying it (see `chooseOnScreenControls`).
   func setOverlayMode(_ mode: ControllerManager.OverlayMode) {
     chooseOnScreenControls { writer.setOverlayMode(mode) }
+  }
+
+  /// Runs `OnScreenControllerPlan.steps` in order against the live state: the touchscreen becomes
+  /// Player 1 of the chosen kind, a Wii Remote gets its extension and sideways flag, then that pad is
+  /// drawn. Whatever held that port gives it up, as it does to the top bar's Player 1 picker.
+  func setOnScreenController(_ choice: OnScreenController) {
+    reload()
+    for step in OnScreenControllerPlan.steps(for: choice, players: state.players) {
+      switch step {
+      case .bindTouchscreen(let slot):
+        let note = PlayerDeviceChangeNote.begin(slot: slot, reader: reader, io: io, memory: memory)
+        writer.setDevice(.touchscreen, slot: slot)
+        note.finish(choice: .touchscreen)
+      case .setExtension(let wiimote, let value):
+        let changed = value != reader.wiiExtension(forWiimote: wiimote)
+        writer.setExtension(value, wiimote: wiimote)
+        if changed { markEdited(wiimote: wiimote) }
+      case .setSideways(let wiimote, let enabled):
+        let changed = enabled != reader.isSideways(forWiimote: wiimote)
+        writer.setSideways(enabled, wiimote: wiimote)
+        if changed { markEdited(wiimote: wiimote) }
+      case .setOverlayMode(let mode):
+        setOverlayMode(mode)
+      }
+    }
+    reload()
   }
 
   /// Runs `PlaysAsTransition.plan` in order. On a failing step the view model stops, re-reads state
@@ -498,23 +529,30 @@ final class ControllerHubViewModel {
       case .clearSlot(let slot):
         writer.clear(slot: slot)
       case .moveDevice(let qualifier, let from, let to):
-        // Moving into a port that has a device would overwrite it: refuse before writing anything.
-        if let destination = state.players.first(where: { $0.kind == to.kind && $0.port == to.port }), destination.isBound {
-          EmulationToast.post(String(format: L("%@ is in use. Change that player's device first."), destination.title))
-          reload()
-          return
-        }
+        // The destination may already hold a device. The same one (the touchscreen is commonly both
+        // GameCube Player 1 and Wii Remote 1) is no conflict: the move just leaves the source.
+        // Another device trades places, taking the port this player leaves. Refusing here ("in use,
+        // change that player's device first") made switching the on-screen controls between
+        // GameCube and Wii a three-step chore.
+        let moving = PlayerDeviceChoice(qualifier: qualifier)
+        let displaced = state.players.first { $0.kind == to.kind && $0.port == to.port && $0.isBound }
+          .map(\.deviceQualifier).flatMap { PlayerDeviceChoice(qualifier: $0) == moving ? nil : $0 }
         let toNote = PlayerDeviceChangeNote.begin(slot: to, reader: reader, io: io, memory: memory)
         guard writer.assign(qualifier: qualifier, slot: to) else {
           EmulationToast.post(L("Couldn't move the controller"))
           reload()
           return
         }
-        toNote.finish(choice: PlayerDeviceChoice(qualifier: qualifier))
+        toNote.finish(choice: moving)
         let fromNote = PlayerDeviceChangeNote.begin(slot: from, reader: reader, io: io, memory: memory)
-        writer.clear(slot: from)
-        fromNote.finish(choice: .noDevice)
-        movedTouchscreen = movedTouchscreen || PlayerDeviceChoice(qualifier: qualifier) == .touchscreen
+        if let displaced, writer.assign(qualifier: displaced, slot: from) {
+          fromNote.finish(choice: PlayerDeviceChoice(qualifier: displaced))
+          EmulationToast.post(String(format: L("Traded places with %@"), PlayerSlot(kind: to.kind, port: to.port).title))
+        } else {
+          writer.clear(slot: from)
+          fromNote.finish(choice: .noDevice)
+        }
+        movedTouchscreen = movedTouchscreen || moving == .touchscreen
       }
     }
     // The overlay is drawn for the slot the touchscreen is bound to; Auto follows the game's system

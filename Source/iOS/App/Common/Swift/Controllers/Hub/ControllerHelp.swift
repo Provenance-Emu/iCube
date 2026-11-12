@@ -67,6 +67,7 @@ enum PlayerScreenHelp {
   static var saveProfile: String { L("Keeps this player's buttons as a profile to load later, on any port.") }
   static var resetProfile: String { L("Loads the built-in profile for the bound controller.") }
   static var clearAll: String { L("Unbinds every control, to capture each one from scratch.") }
+  static var editAsText: String { L("This player's mapping as a Dolphin .ini: edit, import or export it, with problems flagged per line.") }
   static var rawBindings: String {
     L("Each control's Dolphin expression. Select one to edit it, combine inputs, or bind an output such as Rumble.")
   }

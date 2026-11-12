@@ -12,6 +12,7 @@ import SwiftUI
 @MainActor
 struct ControllerHubView: View {
   private let onBack: (() -> Void)?
+  private let page: ControllerHubPage
 
   @State private var viewModel: ControllerHubViewModel
   #if os(tvOS)
@@ -24,8 +25,10 @@ struct ControllerHubView: View {
   ///   - onBack: B (iOS) / Menu (tvOS) at the hub's root. nil pops or dismisses the hub. A host
   ///     that shows the hub as a pane rather than a push or sheet (the tvOS pause menu) must pass it.
   ///     `MenuScreen` handles tvOS Menu itself, so a nil handler would otherwise swallow it.
-  init(system: ControllerSetupSystem, onBack: (() -> Void)? = nil) {
+  ///   - page: The root, or Touch Controls (pushed from the root, which supplies no `onBack`).
+  init(system: ControllerSetupSystem, page: ControllerHubPage = .root, onBack: (() -> Void)? = nil) {
     self.onBack = onBack
+    self.page = page
     _viewModel = State(initialValue: ControllerHubViewModel(system: system))
   }
 
@@ -40,7 +43,7 @@ struct ControllerHubView: View {
         viewModel.flushPending()
         (onBack ?? { dismiss() })()
       },
-      tvHeader: SettingsLeafScreen.header(title: L("Controllers"), parentTitle: parentTitle),
+      tvHeader: SettingsLeafScreen.header(title: page.title, parentTitle: parentTitle),
       tvInset: .xxl
     )
     // The menu has the request once this render is out; carrying it until then (not dropping it on
@@ -50,7 +53,7 @@ struct ControllerHubView: View {
       DispatchQueue.main.async { viewModel.consumeFocusRequest() }
     }
     #if os(iOS)
-    .navigationTitle(L("Controllers"))
+    .navigationTitle(page.title)
     #endif
     // A pushed player screen covers this one: stop on disappear, reload on the way back.
     .onAppear { viewModel.start() }
@@ -71,8 +74,9 @@ struct ControllerHubView: View {
   }
 
   private var menuModel: MenuModel {
-    var model = ControllerHubModelBuilder.make(state: viewModel.state, actions: viewModel.actions, platform: .current)
+    var model = ControllerHubModelBuilder.make(state: viewModel.state, actions: viewModel.actions, platform: .current, page: page)
     #if os(tvOS)
+    guard page == .root else { return model }
     let remote = MenuSection(id: "siri-remote", header: L("Siri Remote"), items: [
       MenuItem(id: "siri-remote-menu-action", title: L("Siri Remote Menu Button"), icon: "appletvremote.gen2",
         role: .picker(options: SiriRemoteMenuAction.allCases.map { (L($0.title), AnyHashable($0)) },

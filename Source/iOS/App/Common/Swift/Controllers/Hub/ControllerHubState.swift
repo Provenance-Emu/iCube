@@ -99,9 +99,23 @@ enum RumbleDestination: Int, CaseIterable {
 struct PendingHubChanges: Equatable {
   var devices: [String: PlayerDeviceChoice] = [:]
   var playsAs: [String: PlaysAs] = [:]
-  var overlayMode: ControllerManager.OverlayMode?
+  var onScreenController: OnScreenController?
 
-  var isEmpty: Bool { devices.isEmpty && playsAs.isEmpty && overlayMode == nil }
+  var isEmpty: Bool { devices.isEmpty && playsAs.isEmpty && onScreenController == nil }
+}
+
+/// The hub is two pages built from one state: the root, and Touch Controls (how the on-screen
+/// controls look and are laid out), pushed from the root's On-Screen Controls section.
+enum ControllerHubPage: Equatable {
+  case root
+  case touchControls
+
+  var title: String {
+    switch self {
+    case .root: return L("Controllers")
+    case .touchControls: return L("Touch Controls")
+    }
+  }
 }
 
 struct PlayerSlot: Equatable {
@@ -214,7 +228,8 @@ struct ControllerHubActions {
   var playerDestination: (PlayerState) -> AnyView
   var toggleShowAllPorts: () -> Void
   var setOverlayVisible: (Bool) -> Void
-  var setOverlayMode: (ControllerManager.OverlayMode) -> Void
+  /// The on-screen controller for a row; settles before it is written (ruling H4).
+  var setOnScreenController: (OnScreenController) -> Void
   /// 0…1.
   var setOverlayOpacity: (Float) -> Void
   /// Edit Layout…: edits on the game's own canvas while a game runs, else opens the full-screen editor.
@@ -242,4 +257,8 @@ struct ControllerHubActions {
   var setPointerSourceOverride: (PointerSource.Kind?) -> Void = { _ in }
   /// The Phones section's Connect row (the pid): the TV-side confirmation.
   var connectPhone: (String) -> Void = { _ in }
+  /// Pushes the Touch Controls page (`ControllerHubPage.touchControls`).
+  var touchControlsDestination: () -> AnyView = { AnyView(EmptyView()) }
+  /// Pushes On-Screen Stick Feel, from the Touch Controls page.
+  var stickFeelDestination: () -> AnyView = { AnyView(EmptyView()) }
 }

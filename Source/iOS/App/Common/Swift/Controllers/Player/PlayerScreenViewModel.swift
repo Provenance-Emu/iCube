@@ -271,7 +271,8 @@ final class PlayerScreenViewModel {
       isPinned: player.isPinned,
       isSensorBarOnTop: io.isSensorBarOnTop(),
       pointerSource: slot == PlayerSlot(kind: .wiiRemote, port: 1)
-        ? reader.pointerSource(wiimote1Qualifier: player.deviceQualifier, pads: pads) : nil)
+        ? reader.pointerSource(wiimote1Qualifier: player.deviceQualifier, pads: pads) : nil,
+      showsMotionAxes: state.showsMotionAxes)
   }
 
   /// The same reads, in the same shape, as `ControllerHubViewModel.reload()` makes for this port.
@@ -371,7 +372,23 @@ final class PlayerScreenViewModel {
       },
       advancedMotionDestination: { AnyView(EnhancedMotionControlsView()) },
       stickFeelDestination: { AnyView(AnalogStickSettingsView()) },
-      setPointerSourceOverride: { [weak self] kind in self?.write { $0.setPointerSourceOverride(kind) } })
+      setPointerSourceOverride: { [weak self] kind in self?.write { $0.setPointerSourceOverride(kind) } },
+      toggleMotionAxes: { [weak self] in self?.state.showsMotionAxes.toggle() },
+      profileTextDestination: { [weak self, slot] in Self.profileTextDestination(slot: slot) { self?.profileTextApplied() } })
+  }
+
+  private static func profileTextDestination(slot: PlayerSlot, onApplied: @escaping () -> Void) -> AnyView {
+    #if os(iOS)
+    AnyView(ProfileTextEditorView(slot: slot, onApplied: onApplied))
+    #else
+    AnyView(EmptyView())
+    #endif
+  }
+
+  /// The profile text editor wrote the port's mapping: it is no longer the remembered profile as saved.
+  private func profileTextApplied() {
+    memory.markEdited(slot.playerID, qualifier: state.player.deviceQualifier)
+    reload()
   }
 
   /// A setting that is not part of the port's mapping (pointer, motion): write, then re-read.

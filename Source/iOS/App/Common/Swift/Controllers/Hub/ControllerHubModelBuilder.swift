@@ -3,66 +3,118 @@
 
 import SwiftUI
 
-/// Builds the Controllers hub (controller hub spec, "Controllers hub"):
-/// - Players: a row group per port (title, Device, Plays as, Pointer), unbound ports under "Show All Ports".
-/// - Touch Controls (iOS).
-/// - Connected Devices.
+/// Builds the Controllers hub (controller hub spec, "Controllers hub"), as two pages.
+///
+/// Root, in the order a player reaches for things:
+/// - On-Screen Controls (iOS): which controller they are, whether they show, and a push to Touch Controls.
+/// - One section per player: Device, Plays as, Pointer, then the push to its buttons and profiles.
+///   Unbound ports appear under "Show All Ports".
+/// - Controllers: the connected pads, and everything that is about physical pads (lights, rumble,
+///   who takes Player 1, background input).
 /// - Phones (while any phone advertises itself as a controller).
-/// - Setup.
+/// - Motion: the DSU motion source.
 /// - Help.
+///
+/// Touch Controls (iOS): opacity, editable controls, the layout and IR area editors, skins, stick
+/// feel and the layout reset. Appearance only; nothing there changes who plays what.
 ///
 /// Pure: state and actions in, `MenuModel` out, no bridge calls, mirroring `PauseMenuModelBuilder`
 /// and `CheatsMenuModelBuilder`. Rows that open something PUSH (`.destination`), except Edit
 /// Layout… and Edit IR Area…, actions: their editors must cover the whole screen (see
 /// `ControllerHubViewModel`).
 enum ControllerHubModelBuilder {
-  static func make(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuModel {
-    var sections = [playersSection(state: state, actions: actions, platform: platform)]
-    if platform == .ios {
-      sections.append(touchControlsSection(state: state, actions: actions))
+  static func make(
+    state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind, page: ControllerHubPage = .root
+  ) -> MenuModel {
+    if page == .touchControls {
+      let sections = platform == .ios ? [touchControlsSection(state: state, actions: actions)] : []
+      return MenuModel(sections: sections, focusRequest: state.focusRequest)
     }
+    var sections: [MenuSection] = []
+    if platform == .ios {
+      sections.append(onScreenSection(state: state, actions: actions))
+    }
+    sections += playerSections(state: state, actions: actions, platform: platform)
     sections.append(devicesSection(state: state, actions: actions, platform: platform))
     if !state.phones.isEmpty { sections.append(phonesSection(state: state, actions: actions)) }
-    sections.append(setupSection(state: state, actions: actions, platform: platform))
+    sections.append(motionSection(state: state, actions: actions))
     sections.append(helpSection(platform: platform))
     return MenuModel(sections: sections, focusRequest: state.focusRequest)
   }
 
-  // MARK: Players: a group per port (spec 7.1, deviation: rows, not pills)
+  // MARK: On-Screen Controls (iOS)
 
-  private static func playersSection(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuSection {
+  static let onScreenControllerRowID = "touch-controller"
+
+  /// The one-step switch, the show toggle (in a game) and the push to Touch Controls.
+  private static func onScreenSection(state: ControllerHubState, actions: ControllerHubActions) -> MenuSection {
+    var items: [MenuItem] = []
+    // A GameCube title has one controller to be: nothing to choose.
+    let options = OnScreenController.options(for: state.system)
+    if state.system != .gamecube {
+      let current = state.pending.onScreenController
+        ?? OnScreenController.current(overlayMode: state.overlayMode, players: state.players)
+      items.append(MenuItem(
+        id: onScreenControllerRowID, title: L("Controller"), icon: "rectangle.3.group",
+        role: .cycle(options: options.map { ($0.title, AnyHashable($0)) }, selection: Binding(
+          get: { AnyHashable(current) },
+          set: { if let choice = $0.base as? OnScreenController { actions.setOnScreenController(choice) } })),
+        description: L("What the on-screen controls are. One choice makes them Player 1 of that kind. Auto follows the game.")))
+    }
+    // Visibility is re-derived at every game start, so it only means something in a game.
+    if state.isGameRunning {
+      items.append(MenuItem(
+        id: "touch-visible", title: L("Show Touch Controls"), icon: "hand.tap",
+        role: .toggle(Binding(get: { state.overlayVisible }, set: { actions.setOverlayVisible($0) })),
+        description: L("Draw the on-screen controller over the game.")))
+    }
+    items.append(MenuItem(
+      id: "touch-settings", title: L("Layout, Skins & Opacity…"), icon: "paintpalette",
+      role: .destination(actions.touchControlsDestination()),
+      description: L("How the on-screen controls look and where they sit.")))
+    return MenuSection(id: "on-screen", header: L("On-Screen Controls"), items: items)
+  }
+
+  // MARK: Players: a section per port (spec 7.1, deviation: rows, not pills)
+
+  static func playerSectionID(_ player: PlayerState) -> String { "player-" + player.id }
+
+  /// A section per shown port, headed by the port's name: Device, then (bound ports) Plays as and
+  /// the pointer rows, then the push to the port's own screen. The last section holds Show All Ports.
+  private static func playerSections(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> [MenuSection] {
     let bound = state.players.filter(\.isBound)
     let shown = state.showAllPorts ? state.players : bound
-    var items: [MenuItem] = []
+    var sections: [MenuSection] = []
     for player in shown {
       let playsAs = state.pending.playsAs[player.id] ?? PlaysAs.current(of: player)
-      items.append(MenuItem(
-        id: player.id, title: player.title, icon: player.kind == .gameCube ? "gamecontroller" : "wand.and.rays",
-        role: .destination(actions.playerDestination(player)),
-        badge: player.isBound ? playsAs.title : nil,
-        description: L("Remap buttons, profiles, motion and advanced settings.")))
-      items.append(deviceRow(for: player, state: state, actions: actions, platform: platform))
-      // An unbound port has nothing to play as and no pointer: title and Device only.
-      guard player.isBound else { continue }
-      let options = PlaysAs.options(for: state.system)
-      if options.count > 1 {
-        items.append(MenuItem(
-          id: "\(player.id)-plays-as", title: L("Plays as"), icon: "person.crop.rectangle",
-          role: .cycle(options: options.map { ($0.title, AnyHashable($0)) }, selection: Binding(
-            get: { AnyHashable(playsAs) },
-            set: { if let value = $0.base as? PlaysAs { actions.setPlaysAs(player, value) } })),
-          description: L("The controller the game sees. Wii Remote choices move this player to a Wii Remote slot; GameCube Controller moves it to a GameCube port.")))
+      var items = [deviceRow(for: player, state: state, actions: actions, platform: platform)]
+      // An unbound port has nothing to play as and no pointer.
+      if player.isBound {
+        let options = PlaysAs.options(for: state.system)
+        if options.count > 1 {
+          items.append(MenuItem(
+            id: "\(player.id)-plays-as", title: L("Plays as"), icon: "person.crop.rectangle",
+            role: .cycle(options: options.map { ($0.title, AnyHashable($0)) }, selection: Binding(
+              get: { AnyHashable(playsAs) },
+              set: { if let value = $0.base as? PlaysAs { actions.setPlaysAs(player, value) } })),
+            description: L("The controller the game sees. Switching between Wii and GameCube moves this player; a player already there trades places.")))
+        }
+        items += pointerRows(for: player, state: state, actions: actions, platform: platform)
       }
-      items += pointerRows(for: player, state: state, actions: actions, platform: platform)
+      items.append(MenuItem(
+        id: player.id, title: L("Buttons, Profiles & Motion…"), icon: player.kind == .gameCube ? "gamecontroller" : "wand.and.rays",
+        role: .destination(actions.playerDestination(player)),
+        description: L("Remap buttons, profiles, motion and advanced settings.")))
+      sections.append(MenuSection(id: playerSectionID(player), header: player.title, items: items))
     }
     let hiddenCount = state.players.count - bound.count
     if hiddenCount > 0 {
-      items.append(MenuItem(
+      sections.append(MenuSection(id: "ports", items: [MenuItem(
         id: "show-all-ports", title: state.showAllPorts ? L("Hide Unused Ports") : L("Show All Ports"),
         icon: state.showAllPorts ? "chevron.up" : "chevron.down",
-        role: .action(actions.toggleShowAllPorts), badge: state.showAllPorts ? nil : String(hiddenCount)))
+        role: .action(actions.toggleShowAllPorts), badge: state.showAllPorts ? nil : String(hiddenCount))]))
     }
-    return MenuSection(id: "players", header: L("Players"), items: items)
+    return sections
   }
 
   /// The player screen's Device list (`PlayerScreenModelBuilder.deviceOptions`), as a cycle.
@@ -144,30 +196,10 @@ enum ControllerHubModelBuilder {
     return PlayerScreenState.isMissing(qualifier, pads: pads) ? String(format: L("%@ (Disconnected)"), name) : name
   }
 
-  // MARK: Touch Controls (iOS; was On-Screen Controls)
+  // MARK: Touch Controls page (iOS)
 
   private static func touchControlsSection(state: ControllerHubState, actions: ControllerHubActions) -> MenuSection {
     var items: [MenuItem] = []
-    // Visibility and layout are re-derived at every game start, so they only mean something in a
-    // game. Layout also has a side effect (choosing Wii binds Wii Remote 1 to the touchscreen), which
-    // should only fire from a running game, not from Settings.
-    if state.isGameRunning {
-      items.append(MenuItem(
-        id: "touch-visible", title: L("Show Touch Controls"), icon: "hand.tap",
-        role: .toggle(Binding(get: { state.overlayVisible }, set: { actions.setOverlayVisible($0) })),
-        description: L("Draw the on-screen controller over the game.")))
-      let layouts: [(String, AnyHashable)] = [
-        (L("Auto"), AnyHashable(ControllerManager.OverlayMode.auto)),
-        (L("GameCube"), AnyHashable(ControllerManager.OverlayMode.gamecube)),
-        (L("Wii Remote"), AnyHashable(ControllerManager.OverlayMode.wii)),
-      ]
-      items.append(MenuItem(
-        id: "touch-layout", title: L("Layout"), icon: "rectangle.3.group",
-        role: .cycle(options: layouts, selection: Binding(
-          get: { AnyHashable(state.pending.overlayMode ?? state.overlayMode) },
-          set: { if let mode = $0.base as? ControllerManager.OverlayMode { actions.setOverlayMode(mode) } })),
-        description: L("Which on-screen controller is drawn. Auto follows the running game's system and the attached controllers, not any player's Plays as.")))
-    }
     items.append(MenuItem(
       id: "touch-opacity", title: L("Opacity"), icon: "circle.lefthalf.filled",
       role: .cycle(options: ControllerHubState.opacityChoices.map { ("\($0)%", AnyHashable($0)) }, selection: Binding(
@@ -191,18 +223,26 @@ enum ControllerHubModelBuilder {
       id: "touch-skins", title: L("Skins…"), icon: "paintpalette", role: .destination(actions.skinsDestination()),
       description: L("Artwork for the on-screen controller.")))
     items.append(MenuItem(
+      id: "touch-stick-feel", title: L("On-Screen Stick Feel…"), icon: "l.joystick", role: .destination(actions.stickFeelDestination()),
+      description: L("Gain, dead zone and smoothing of the on-screen sticks and triggers.")))
+    items.append(MenuItem(
       id: "touch-reset-layouts", title: L("Reset All Layouts"), icon: "arrow.counterclockwise", role: .destructive(actions.resetOverlayLayouts),
       description: L("Put every on-screen layout back to its default.")))
-    return MenuSection(id: "touch-controls", header: L("Touch Controls"), items: items)
+    return MenuSection(id: "touch-controls", items: items)
   }
 
-  // MARK: Setup
+  // MARK: Motion
 
-  private static func setupSection(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuSection {
-    var items = [MenuItem(
-      id: "background-input", title: L("Background Input"), icon: "rectangle.on.rectangle",
-      role: .toggle(Binding(get: { state.backgroundInput }, set: { actions.setBackgroundInput($0) })),
-      description: L("Keep reading controllers while another app is in front."))]
+  private static func motionSection(state: ControllerHubState, actions: ControllerHubActions) -> MenuSection {
+    MenuSection(id: "motion", header: L("Motion"), items: [MenuItem(
+      id: "dsu", title: L("Motion Source (DSU)"), subtitle: dsuSummary(state), icon: "dot.radiowaves.left.and.right",
+      role: .destination(actions.dsuDestination()),
+      description: L("Use a phone or a DSU server as a motion controller."))])
+  }
+
+  /// What is about physical pads as a group, under the pad list.
+  private static func padOptionRows(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> [MenuItem] {
+    var items: [MenuItem] = []
     if platform == .ios {
       items.append(MenuItem(
         id: "takes-player-1", title: L("Controllers Take Player 1"), icon: "1.circle",
@@ -219,13 +259,13 @@ enum ControllerHubModelBuilder {
         description: L("A short pulse on the chosen output.")))
     }
     items.append(MenuItem(
-      id: "dsu", title: L("Motion Source (DSU)"), subtitle: dsuSummary(state), icon: "dot.radiowaves.left.and.right",
-      role: .destination(actions.dsuDestination()),
-      description: L("Use a phone or a DSU server as a motion controller.")))
-    return MenuSection(id: "setup", header: L("Setup"), items: items)
+      id: "background-input", title: L("Background Input"), icon: "rectangle.on.rectangle",
+      role: .toggle(Binding(get: { state.backgroundInput }, set: { actions.setBackgroundInput($0) })),
+      description: L("Keep reading controllers while another app is in front.")))
+    return items
   }
 
-  // MARK: Connected Devices
+  // MARK: Controllers (physical pads)
 
   private static func devicesSection(state: ControllerHubState, actions: ControllerHubActions, platform: PlatformKind) -> MenuSection {
     var items = state.pads.filter { !$0.isMenuRemote }.map { pad in
@@ -248,7 +288,8 @@ enum ControllerHubModelBuilder {
         id: "lights", title: L("Controller Lights"), icon: "lightbulb", role: .destination(actions.lightsDestination()),
         description: L("The colour of each controller's light bar.")))
     }
-    return MenuSection(id: "devices", header: L("Connected Devices"), items: items)
+    items += padOptionRows(state: state, actions: actions, platform: platform)
+    return MenuSection(id: "devices", header: L("Controllers"), items: items)
   }
 
   // MARK: Phones

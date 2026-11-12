@@ -78,7 +78,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
     ])
     XCTAssertEqual(
       model.state.advanced.map { "\($0.owner)-\($0.groupId)" },
-      ["wiimote-3", "wiimote-12", "classic-3", "classic-4", "classic-1"])
+      ["wiimote-3", "wiimote-12", "wiimote-11", "wiimote-10", "classic-3", "classic-4", "classic-1"])
     XCTAssertTrue(model.state.motionPointerEnabled)
   }
 

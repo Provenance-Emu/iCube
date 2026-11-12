@@ -116,6 +116,10 @@ internal struct PauseMenuView: View {
   @State private var jitAcquired: Bool = false
   /// The CPU Engine tile's value: the engine the next launch uses (`CpuEngine` raw value).
   @State private var nextEngine: Int = CpuEngine.cachedInterpreter.rawValue
+  /// iOS, a Wii title: what the on-screen controls are, and what they can be. The Controllers tile
+  /// shows the first as its badge and offers the second on a long press.
+  @State private var onScreenController = OnScreenController.auto
+  @State private var onScreenControllerOptions: [OnScreenController] = []
   /// Mirror of `PerfHUDToggle.isOn` behind the Performance HUD tile.
   @StateObject private var performanceControls = PerformanceControlsController.live()
   @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -403,6 +407,7 @@ internal struct PauseMenuView: View {
         percent: ConfigGeneralState.storedFastForward(UserDefaults.standard.object(forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent) as? Int))
       refreshActiveCheatCount()
       refreshShaderState()
+      refreshOnScreenController()
       refreshLiveSettings()
       if startsInPerformance && !initialPerformancePaneConsumed {
         initialPerformancePaneConsumed = true
@@ -526,7 +531,7 @@ internal struct PauseMenuView: View {
         .pauseClaim("settings")
         .claimsController()
     }
-    .sheet(isPresented: $showControllersSheet) {
+    .sheet(isPresented: $showControllersSheet, onDismiss: refreshOnScreenController) {
       NavigationStack {
         ControllerHubView(system: .forRunningGame, onBack: { showControllersSheet = false })
           .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(L("Close")) { showControllersSheet = false } } }
@@ -876,7 +881,23 @@ internal struct PauseMenuView: View {
           DOLConfigBridge.setMainCpuCore(raw)
           nextEngine = raw
           EmulationToast.post(String(format: L("%@ from the next launch"), CpuEngine.from(raw: raw).shortName))
-        }), quickSaveMode: $quickSaveMode)
+        }), quickSaveMode: $quickSaveMode,
+      onScreenController: Binding(
+        get: { AnyHashable(onScreenController) },
+        set: { value in
+          guard let choice = value.base as? OnScreenController else { return }
+          OnScreenControllerLive.apply(choice)
+          refreshOnScreenController()
+          EmulationToast.post(String(format: L("On-screen controller: %@"), choice.title))
+        }))
+  }
+
+  /// Re-read after anything that can change it: the menu opening, the hub's sheet closing, a pick.
+  private func refreshOnScreenController() {
+    #if os(iOS)
+    onScreenControllerOptions = OnScreenControllerLive.options()
+    onScreenController = OnScreenControllerLive.current()
+    #endif
   }
 
   private func refreshShaderState() {
@@ -896,7 +917,8 @@ internal struct PauseMenuView: View {
       audioVolume: audioVolume,
       engineShortName: engineShortName,
       jitAcquired: jitAcquired,
-      nextEngine: nextEngine, quickSaveMode: quickSaveMode, isModded: ModdedBoot.isCurrentBootModded)
+      nextEngine: nextEngine, quickSaveMode: quickSaveMode, isModded: ModdedBoot.isCurrentBootModded,
+      onScreenController: onScreenController, onScreenControllerOptions: onScreenControllerOptions)
     let quick = quickSaveActions
     let actions = PauseMenuActions(
       resume: { PauseArbiter.shared.userResume(); onClose() },
@@ -1074,6 +1096,10 @@ struct PauseMenuState {
   var nextEngine: Int = CpuEngine.cachedInterpreter.rawValue
   var quickSaveMode: QuickSaveMode = .history
   var isModded = false
+  /// What the on-screen controls are, and every controller they can be (empty: nothing to choose,
+  /// as on tvOS and in a GameCube title). The Controllers tile's badge and long-press list.
+  var onScreenController = OnScreenController.auto
+  var onScreenControllerOptions: [OnScreenController] = []
 }
 
 /// Live bindings for the in-place tiles. Writing one applies immediately; the host rebuilds the model.
@@ -1093,6 +1119,8 @@ struct PauseMenuBindings {
   /// The CPU engine for the next launch (`CpuEngine` raw value); the CPU Engine tile cycles it.
   var cpuEngine: Binding<AnyHashable> = .constant(AnyHashable(CpuEngine.cachedInterpreter.rawValue))
   var quickSaveMode: Binding<QuickSaveMode> = .constant(.history)
+  /// The on-screen controller (`OnScreenController`); the Controllers tile's long-press picks it.
+  var onScreenController: Binding<AnyHashable> = .constant(AnyHashable(OnScreenController.auto))
 }
 
 struct PauseMenuActions {
@@ -1225,6 +1253,24 @@ enum PauseMenuModelBuilder {
   static func audioBadge(volume: Int, isMuted: Bool) -> String { isMuted ? L("Muted") : "\(volume) %" }
 
   /// With nothing to cycle (only "None"), the tile just opens the full picker.
+  /// Controllers opens the hub. Where the on-screen controls can be more than one controller (iOS, a
+  /// Wii title) the badge names the one they are and a long press picks another, so a Wii game that
+  /// wants a GameCube pad or a Classic Controller is one gesture from the pause menu.
+  private static func controllersItem(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions) -> MenuItem {
+    let options = state.onScreenControllerOptions
+    guard options.count > 1 else {
+      return MenuItem(id: "controllers", title: L("Controllers"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers),
+                      description: L("Players, devices and what each one plays as."))
+    }
+    return MenuItem(
+      id: "controllers", title: L("Controllers"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers),
+      badge: state.onScreenController.title,
+      description: L("Players, devices and what each one plays as. Long-press to switch the on-screen controller."),
+      longPress: .options(
+        title: L("On-Screen Controller"), options: options.map { ($0.title, AnyHashable($0)) },
+        selection: bindings.onScreenController))
+  }
+
   private static func shadersItem(state: PauseMenuState, bindings: PauseMenuBindings, actions: PauseMenuActions) -> MenuItem {
     if state.shaderOptions.count <= 1 {
       return MenuItem(id: "shaders", title: L("Shaders"), icon: "wand.and.stars", tint: .orange, role: .action(actions.openShaders),
@@ -1287,8 +1333,7 @@ enum PauseMenuModelBuilder {
                badge: state.activeCheatCount > 0 ? "\(state.activeCheatCount)" : nil,
                description: L("Enable Gecko and Action Replay codes for this game.")),
       shadersItem(state: state, bindings: bindings, actions: actions),
-      MenuItem(id: "controllers", title: L("Controllers"), icon: "gamecontroller", tint: .green, role: .action(actions.openControllers),
-               description: L("Players, devices and what each one plays as.")),
+      controllersItem(state: state, bindings: bindings, actions: actions),
       MenuItem(id: "continuity", title: L("Continue Elsewhere"), icon: "arrow.triangle.branch", tint: .teal, role: .action(actions.openContinuity),
                description: L("Hand this game to a nearby device.")),
     ]
