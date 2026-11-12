@@ -89,6 +89,7 @@ def make_token() -> str:
 
 
 NETWORK_ATTEMPTS = 6  # ~5 minutes of backoff before a network error ends the run
+GROUP_ASSIGNMENT_RETRY_DELAYS = (15, 30, 60, 120)
 
 
 class Client:
@@ -109,8 +110,8 @@ class Client:
         data = json.dumps(body).encode() if body is not None else None
         # A DNS blip or a 5xx used to end a release that had waited an hour for
         # processing. GETs retry on any network error, 429 or 5xx; writes retry
-        # only when the request never reached Apple (DNS / refused connection),
-        # so a group assignment or review submission is never sent twice.
+        # only when the request never reached Apple (DNS / refused connection).
+        # Group assignment can also retry after checking persisted state.
         for attempt in range(1, NETWORK_ATTEMPTS + 1):
             req = urllib.request.Request(url, data=data, method=method,
                                          headers=self._headers())
@@ -219,6 +220,33 @@ def choose_groups(groups: list[dict], wanted: str) -> list[dict]:
             and g["attributes"]["publicLinkEnabled"]]
 
 
+def assign_group(client: Client, group: dict, app_id: str, build_number: str,
+                 platform: str, build_id: str) -> None:
+    name = group["attributes"]["name"]
+    missing_build = f"There is no resource of type 'builds' with id '{build_id}'"
+    for delay in (*GROUP_ASSIGNMENT_RETRY_DELAYS, None):
+        try:
+            client.call("POST", f"/v1/betaGroups/{group['id']}/relationships/builds",
+                        {"data": [{"type": "builds", "id": build_id}]})
+            print(f"added to {name!r}")
+            return
+        except ApiError as exc:
+            # A VALID build can take longer to reach the group endpoint, and
+            # a server error can occur after the assignment has persisted.
+            retryable = 500 <= exc.status < 600 or (
+                exc.status == 404 and missing_build in exc.detail)
+            if not retryable and exc.status != 409:
+                raise
+            observed = find_build(client, app_id, build_number, platform)
+            if observed and observed["id"] == build_id and name in observed["_groups"]:
+                print(f"already in {name!r}")
+                return
+            if not retryable or delay is None:
+                raise
+            print(f"assigning {name!r}: HTTP {exc.status}; retrying in {delay}s", flush=True)
+            time.sleep(delay)
+
+
 def main() -> None:
     bundle_id = env("BUNDLE_ID")
     build_number = env("BUILD_NUMBER")
@@ -267,18 +295,7 @@ def main() -> None:
         print("set What to Test")
 
     for group in plan:
-        name = group["attributes"]["name"]
-        try:
-            client.call("POST", f"/v1/betaGroups/{group['id']}/relationships/builds",
-                        {"data": [{"type": "builds", "id": build_id}]})
-            print(f"added to {name!r}")
-        except ApiError as exc:
-            observed = (find_build(client, app_id, build_number, platform)
-                        if exc.status == 409 else None)
-            if observed and name in observed["_groups"]:
-                print(f"already in {name!r}")
-            else:
-                raise
+        assign_group(client, group, app_id, build_number, platform, build_id)
 
     if submit and build["_review"] is None:
         try:
