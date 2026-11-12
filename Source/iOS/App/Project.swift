@@ -783,7 +783,7 @@ let project = Project(
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         // Format 2 runtime and baker, pinned to the shared package revision.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("172d2892afff1cfaf2d4c1b40cc8e7091ea6ef63")),
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("2640f86dfa47b5ab097ab0d3fcc6e6580e38775c")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),

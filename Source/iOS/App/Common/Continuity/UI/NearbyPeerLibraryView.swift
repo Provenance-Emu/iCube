@@ -112,7 +112,9 @@ struct NearbyPeerLibraryView: View {
       .id(Self.statusID)
       if peer.server != nil, !needsServerAccess {
         TextField(L("Search games"), text: $search)
+          #if os(iOS)
           .textFieldStyle(.roundedBorder)
+          #endif
           .disabled(isCopying)
       }
       if hasCatalog, !needsServerAccess, loadedRequest == catalogRequest {
