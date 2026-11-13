@@ -207,6 +207,8 @@ struct MenuScreen: View {
   /// `loadCheats()` completes post-appear). `.onReceive` re-registers its
   /// action closure on every render, so `tick()` always sees the current one.
   private static let navTick = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
+  /// L2 / R2 on a pad (iOS): the host's previous / next tab, when it has tabs (`menuTabSwitch`).
+  @Environment(\.menuTabSwitch) private var tabSwitch
   #else
   @FocusState private var tvFocusedID: String?
   #if os(tvOS)
@@ -215,8 +217,6 @@ struct MenuScreen: View {
   @State private var tvShelfID: String?
   @Environment(\.settingsPaneHoldsLeft) private var paneHoldsLeft
   #endif
-  /// L2 / R2 on a pad (iOS): the host's previous / next tab, when it has tabs (`menuTabSwitch`).
-  @Environment(\.menuTabSwitch) private var tabSwitch
   #endif
 
   var body: some View {
