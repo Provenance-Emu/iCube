@@ -50,6 +50,7 @@ private struct EmulationServerBackupSettingsView: View {
   @State private var createKey = UUID().uuidString
 
   private var enabled: Bool { backups.targets[server.id] != nil }
+  private var conflicts: [String] { backups.conflicts[server.id] ?? [] }
   private var credential: String {
     let entered = token.trimmingCharacters(in: .whitespacesAndNewlines)
     return entered.isEmpty ? KeychainService.getPassword(for: server.id + "/backup") ?? "" : entered
@@ -136,6 +137,34 @@ private struct EmulationServerBackupSettingsView: View {
         Text(L("Automatic Save Backups"))
       } footer: {
         Text(L("Choose a private library on this server. iCube uploads save files and states when the app becomes active or emulation stops."))
+      }
+      if enabled {
+        Section {
+          Toggle(L("Sync Saves Across Devices"), isOn: Binding(
+            get: { backups.targets[server.id]?.syncsSaves ?? false },
+            set: { backups.setSyncsSaves($0, for: server) }
+          ))
+        } footer: {
+          Text(L("Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted."))
+        }
+        if !conflicts.isEmpty {
+          // One control per row: a row holding two buttons is a single focus target on Apple TV.
+          Section {
+            ForEach(conflicts, id: \.self) { path in
+              Text(path).foregroundStyle(.secondary)
+              Button(L("Keep This Device’s")) { backups.resolve([path], on: server, .keepLocal) }
+              Button(L("Use the Server’s")) { backups.resolve([path], on: server, .useServer) }
+            }
+            if conflicts.count > 1 {
+              Button(L("Keep All From This Device")) { backups.resolve(conflicts, on: server, .keepLocal) }
+              Button(L("Use All From the Server")) { backups.resolve(conflicts, on: server, .useServer) }
+            }
+          } header: {
+            Text(L("Saves That Differ"))
+          } footer: {
+            Text(L("These changed on this device and on the server. The one you do not keep is not lost: the server keeps its copy, and this device’s goes to Recently Deleted."))
+          }
+        }
       }
       Section {
         Button(L("Remove Server"), role: .destructive) {

@@ -12,6 +12,26 @@ struct EmulationServerBackupTarget: Codable, Equatable {
   let server: EmulationServer
   let itemID: String
   let allowsHTTP: Bool
+  /// Also bring other devices' saves here (`EmulationServerSaveSyncWorker`), not only send this device's.
+  var syncsSaves = false
+
+  init(server: EmulationServer, itemID: String, allowsHTTP: Bool, syncsSaves: Bool = false) {
+    self.server = server
+    self.itemID = itemID
+    self.allowsHTTP = allowsHTTP
+    self.syncsSaves = syncsSaves
+  }
+
+  private enum CodingKeys: String, CodingKey { case server, itemID, allowsHTTP, syncsSaves }
+
+  /// Destinations saved before save sync existed have no `syncsSaves`.
+  init(from decoder: any Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    server = try values.decode(EmulationServer.self, forKey: .server)
+    itemID = try values.decode(String.self, forKey: .itemID)
+    allowsHTTP = try values.decode(Bool.self, forKey: .allowsHTTP)
+    syncsSaves = try values.decodeIfPresent(Bool.self, forKey: .syncsSaves) ?? false
+  }
 
   static func isValidItemID(_ value: String) -> Bool {
     let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
@@ -28,7 +48,17 @@ final class EmulationServerBackups: ObservableObject {
 
   @Published private(set) var targets: [String: EmulationServerBackupTarget]
   @Published private(set) var status: [String: String] = [:]
+  /// Saves that changed on this device and on the server, by server: the user picks which to keep.
+  @Published private(set) var conflicts: [String: [String]] = [:]
   private let worker = EmulationServerBackupWorker()
+  private let syncWorker: EmulationServerSaveSyncWorker = {
+    let support = CloudSyncCoordinator.supportDirectory()
+    // The same trash the iCloud sync uses, so a replaced save shows in Recently Deleted.
+    return EmulationServerSaveSyncWorker(indexDirectory: support.appendingPathComponent("EmulationServer", isDirectory: true),
+                                         trash: SyncTrash(rootURL: support.appendingPathComponent("Trash", isDirectory: true)))
+  }()
+  /// The user's choices for conflicts, applied by the next pass.
+  private var resolutions: [String: [String: EmulationServerSaveSyncWorker.Resolution]] = [:]
   private var task: Task<Void, Never>?
   private var rerun = false
 
@@ -45,14 +75,37 @@ final class EmulationServerBackups: ObservableObject {
     guard KeychainService.setPassword(token, for: target.credentialKey) else {
       throw CocoaError(.fileWriteNoPermission)
     }
-    targets[target.server.id] = target
+    var saved = target
+    // Choosing another destination on the same server keeps the choice to sync.
+    saved.syncsSaves = target.syncsSaves || targets[target.server.id]?.syncsSaves == true
+    targets[target.server.id] = saved
     configurationChanged()
+  }
+
+  func setSyncsSaves(_ enabled: Bool, for server: EmulationServer) {
+    guard var target = targets[server.id], target.syncsSaves != enabled else { return }
+    target.syncsSaves = enabled
+    targets[server.id] = target
+    if !enabled {
+      conflicts.removeValue(forKey: server.id)
+      resolutions.removeValue(forKey: server.id)
+    }
+    configurationChanged()
+  }
+
+  /// Settles conflicts the way the user chose; the next pass carries it out.
+  func resolve(_ paths: [String], on server: EmulationServer, _ resolution: EmulationServerSaveSyncWorker.Resolution) {
+    for path in paths { resolutions[server.id, default: [:]][path] = resolution }
+    task?.cancel()
+    requestBackup()
   }
 
   func remove(_ server: EmulationServer) {
     guard let target = targets.removeValue(forKey: server.id) else { return }
     KeychainService.deletePassword(for: target.credentialKey)
     status.removeValue(forKey: server.id)
+    conflicts.removeValue(forKey: server.id)
+    resolutions.removeValue(forKey: server.id)
     configurationChanged()
   }
 
@@ -88,10 +141,19 @@ final class EmulationServerBackups: ObservableObject {
         status[id] = L("Backing up…")
         do {
           try await worker.backup(root: root, device: device, target: target, token: token)
-          if !Task.isCancelled { status[id] = L("Backup complete.") }
+          guard !Task.isCancelled else { return }
+          guard target.syncsSaves else {
+            status[id] = L("Backup complete.")
+            continue
+          }
+          status[id] = L("Syncing saves…")
+          let outcome = try await syncSaves(root: root, target: target, token: token)
+          guard !Task.isCancelled else { return }
+          conflicts[id] = outcome.conflicts
+          status[id] = Self.describe(outcome)
         } catch is CancellationError {
           return
-        } catch EmulationServerBackupWorker.Failure.coreBusy {
+        } catch EmulationServerBackupWorker.Failure.coreBusy, EmulationServerSaveSyncWorker.Failure.coreBusy {
           status[id] = L("Backup will resume when emulation stops.")
           return
         } catch let failure as SyncFailure {
@@ -106,8 +168,47 @@ final class EmulationServerBackups: ObservableObject {
   }
 }
 
+extension EmulationServerBackups {
+  fileprivate func syncSaves(root: URL, target: EmulationServerBackupTarget, token: String) async throws -> EmulationServerSaveSyncWorker.Outcome {
+    let id = target.server.id
+    let choices = resolutions[id] ?? [:]
+    let session = URLSession(configuration: EmulationServerBackupWorker.sessionConfiguration(),
+                             delegate: BackupDirectRequests(), delegateQueue: nil)
+    defer { session.invalidateAndCancel() }
+    let outcome = try await syncWorker.sync(root: root, target: target, token: token,
+                                            transport: BackupTransport(session: session), resolving: choices)
+    // A choice is spent once its pass ran; one that could not be carried out shows as a conflict again.
+    for path in choices.keys { resolutions[id]?.removeValue(forKey: path) }
+    return outcome
+  }
+
+  static func describe(_ outcome: EmulationServerSaveSyncWorker.Outcome) -> String {
+    if !outcome.conflicts.isEmpty {
+      return outcome.conflicts.count == 1
+        ? L("1 save differs on this device and the server. Choose which to keep.")
+        : String(format: L("%d saves differ on this device and the server. Choose which to keep."), outcome.conflicts.count)
+    }
+    if outcome.downloaded == 0, outcome.uploaded == 0 { return L("Saves are in step.") }
+    return String(format: L("Saves are in step. Sent %1$d, received %2$d."), outcome.uploaded, outcome.downloaded)
+  }
+}
+
 actor EmulationServerBackupWorker {
   enum Failure: Error { case coreBusy, invalidItem, fileChanged }
+
+  /// The console's own settings file is the one save-typed file that must not travel between devices.
+  static func isExcluded(_ relativePath: String) -> Bool {
+    relativePath.lowercased() == "wii/shared2/sys/sysconf"
+  }
+
+  static func sessionConfiguration() -> URLSessionConfiguration {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+    configuration.urlCache = nil
+    configuration.timeoutIntervalForRequest = 20
+    configuration.timeoutIntervalForResource = 60
+    return configuration
+  }
 
   private var scanners: [URL: UserDataScanner] = [:]
 
@@ -119,12 +220,7 @@ actor EmulationServerBackupWorker {
     scanners[root] = scanner
     let files = try await scan(scanner)
     try Task.checkCancellation()
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-    configuration.urlCache = nil
-    configuration.timeoutIntervalForRequest = 20
-    configuration.timeoutIntervalForResource = 60
-    let session = URLSession(configuration: configuration, delegate: BackupDirectRequests(), delegateQueue: nil)
+    let session = URLSession(configuration: Self.sessionConfiguration(), delegate: BackupDirectRequests(), delegateQueue: nil)
     defer { session.invalidateAndCancel() }
 
     let origin = target.server.origin
@@ -172,7 +268,7 @@ actor EmulationServerBackupWorker {
     guard gate.beginLocalIO() else { throw Failure.coreBusy }
     defer { gate.endLocalIO() }
     return await scanner.scanLocalFiles().filter {
-      Self.assetKind($0.fileType) != nil && $0.relativePath.lowercased() != "wii/shared2/sys/sysconf"
+      Self.assetKind($0.fileType) != nil && !Self.isExcluded($0.relativePath)
     }
   }
 
@@ -211,7 +307,7 @@ actor EmulationServerBackupWorker {
   }
 }
 
-private final class BackupDirectRequests: NSObject, URLSessionTaskDelegate, Sendable {
+final class BackupDirectRequests: NSObject, URLSessionTaskDelegate, Sendable {
   func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                   newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
     completionHandler(nil)
@@ -261,7 +357,7 @@ enum EmulationServerBackupSetup {
   }
 }
 
-private struct BackupTransport: ContentTransport {
+struct BackupTransport: ContentTransport {
   let session: URLSession
 
   func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {

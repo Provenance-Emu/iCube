@@ -420,7 +420,7 @@ final class CloudSyncCoordinator: ObservableObject {
     /// Where the index and the trash live. Not under `User/`, so neither is
     /// visible in Files nor ever a candidate for the classifier. tvOS can only
     /// write Caches; a purge there costs one additive run, not correctness.
-    private static func supportDirectory() -> URL {
+    static func supportDirectory() -> URL {
         #if os(tvOS)
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         #else

@@ -5875,3 +5875,18 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Pair This Device" = "このデバイスをペアリング";
 "On the server, open Settings → Devices and enter this PIN:" = "サーバーの「設定」→「デバイス」を開き、この PIN を入力してください：";
 "iCube on %@" = "%@ の iCube";
+
+/* Emulation Server save sync */
+"Syncing saves…" = "セーブを同期中…";
+"Saves are in step." = "セーブは同期されています。";
+"Saves are in step. Sent %1$d, received %2$d." = "セーブは同期されています。送信 %1$d 件、受信 %2$d 件。";
+"1 save differs on this device and the server. Choose which to keep." = "1 件のセーブがこのデバイスとサーバーで異なります。どちらを残すか選んでください。";
+"%d saves differ on this device and the server. Choose which to keep." = "%d 件のセーブがこのデバイスとサーバーで異なります。どちらを残すか選んでください。";
+"Sync Saves Across Devices" = "デバイス間でセーブを同期";
+"Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted." = "このバックアップ先を使う別のデバイスで変更されたセーブとステートセーブがここにコピーされ、このデバイスのものも送信されます。ここで置き換えられたセーブは 30 日間「Recently Deleted」に残ります。両方で変更されたセーブは確認なしに置き換えられず、何も削除されません。";
+"Keep This Device’s" = "このデバイスのものを残す";
+"Use the Server’s" = "サーバーのものを使う";
+"Keep All From This Device" = "すべてこのデバイスのものを残す";
+"Use All From the Server" = "すべてサーバーのものを使う";
+"Saves That Differ" = "内容が異なるセーブ";
+"These changed on this device and on the server. The one you do not keep is not lost: the server keeps its copy, and this device’s goes to Recently Deleted." = "これらはこのデバイスとサーバーの両方で変更されました。残さなかった方も失われません。サーバーはそのコピーを保持し、このデバイスのものは「Recently Deleted」に移動します。";
