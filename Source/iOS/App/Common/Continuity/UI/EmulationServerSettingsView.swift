@@ -186,14 +186,15 @@ struct EmulationServerConnectionFields: View {
   @State private var connection: Task<Void, Never>?
   @State private var requiresCredential = false
   @State private var triedLocalAccess = false
-  #if os(tvOS)
   @State private var pairing: PairingDisplay?
 
   private struct PairingDisplay {
     let pin: String
     let link: URL
   }
-  #endif
+
+  /// The longest device name sent with a pairing request.
+  private static let deviceNameLimit = 60
 
   var body: some View {
     Group {
@@ -204,8 +205,8 @@ struct EmulationServerConnectionFields: View {
           triedLocalAccess = true
           connect()
         }
-      #if os(tvOS)
       if let pairing {
+        #if os(tvOS)
         QRCodeImage(string: pairing.link.absoluteString)
           .frame(width: 240, height: 240)
           .padding(16)
@@ -213,14 +214,17 @@ struct EmulationServerConnectionFields: View {
           .accessibilityHidden(true)
         Text(L("Scan with your phone to approve this Apple TV."))
         Text(L("Or open the server’s Settings → Devices and enter this PIN:"))
+        #else
+        Text(L("On the server, open Settings → Devices and enter this PIN:"))
+        #endif
         Text(pairing.pin).font(icube.font(.title).monospacedDigit())
+        #if !os(tvOS)
+        Link(L("Approve on the Server"), destination: pairing.link)
+        #endif
         Button(L("Cancel"), role: .cancel) { connection?.cancel() }
       } else {
         connectionControls
       }
-      #else
-      connectionControls
-      #endif
       if connection != nil { ProgressView() }
       if let errorMessage { Text(errorMessage).foregroundStyle(.secondary) }
     }
@@ -244,12 +248,15 @@ struct EmulationServerConnectionFields: View {
 
   @ViewBuilder
   private var connectionControls: some View {
-    #if os(tvOS)
     if requiresCredential {
+      #if os(tvOS)
       Button(L("Pair Apple TV")) { pair() }
         .disabled(connection != nil)
+      #else
+      Button(L("Pair This Device")) { pair() }
+        .disabled(connection != nil)
+      #endif
     }
-    #endif
     if discoveredServer == nil || requiresCredential {
       if let initialFocus {
         tokenField.focused(initialFocus)
@@ -305,7 +312,6 @@ struct EmulationServerConnectionFields: View {
     onConnect()
   }
 
-  #if os(tvOS)
   private func pair() {
     guard connection == nil else { return }
     errorMessage = nil
@@ -317,7 +323,8 @@ struct EmulationServerConnectionFields: View {
       do {
         let server = try discoveredServer ?? EmulationServer(address: address)
         let library = EmulationServerLibrary(server: server, token: nil)
-        let challenge = try await library.startPairing()
+        let name = String(format: L("iCube on %@"), ICubeDeviceName.current())
+        let challenge = try await library.startPairing(deviceName: String(name.prefix(Self.deviceNameLimit)))
         guard let link = challenge.verificationURL(on: server) else { throw URLError(.badURL) }
         pairing = .init(pin: challenge.pin, link: link)
         let clock = ContinuousClock()
@@ -337,5 +344,4 @@ struct EmulationServerConnectionFields: View {
       }
     }
   }
-  #endif
 }

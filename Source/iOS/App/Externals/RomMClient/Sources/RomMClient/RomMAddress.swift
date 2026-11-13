@@ -32,6 +32,30 @@ public struct RomMAddress: Hashable, Sendable {
         baseURL = base
     }
 
+    /// A cover path from a game row. RomM stores it relative to its resources folder, with a cache-busting
+    /// query; a path that starts with a slash is already relative to the instance.
+    func asset(_ path: String) throws -> URL {
+        let pieces = path.split(separator: "?", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        let location = pieces[0].hasPrefix("/") ? String(pieces[0].dropFirst()) : "assets/romm/resources/" + pieces[0]
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        let encoded = try location.split(separator: "/", omittingEmptySubsequences: false).map { part in
+            guard RomMPath.isComponent(String(part)),
+                  let encoded = part.addingPercentEncoding(withAllowedCharacters: allowed)
+            else { throw RomMError.invalidContent }
+            return encoded
+        }
+        guard var parts = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw RomMError.invalidAddress
+        }
+        parts.percentEncodedPath += "/" + encoded.joined(separator: "/")
+        if pieces.count > 1, !pieces[1].isEmpty {
+            parts.percentEncodedQuery = pieces[1].addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)?
+                .replacingOccurrences(of: "+", with: "%2B")
+        }
+        guard let url = parts.url else { throw RomMError.invalidAddress }
+        return url
+    }
+
     func endpoint(_ components: [String], query: [URLQueryItem]) throws -> URL {
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
         guard var parts = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {

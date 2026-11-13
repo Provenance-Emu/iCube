@@ -564,6 +564,9 @@ struct TVLibraryView: View {
   @State private var showRomM = false
   @State private var pendingNearbyPlay: (TVGameItem, URL?)?
 #if !os(tvOS)
+  /// Another library chosen in the bottom filter bar (a nearby device or a server, by
+  /// `NearbyLibrariesModel.Peer.id`); the grid shows its games in place. Nil is this device's library.
+  @State private var librarySourceID: String?
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   /// The dashboard's route to pairing and handoff when no device is sharing a library.
@@ -643,7 +646,10 @@ struct TVLibraryView: View {
       .sheet(isPresented: $showEmulationServers) { EmulationServerSettingsView(model: nearby) }
       .sheet(isPresented: $showRomM) {
         NavigationStack {
-          RomMLibraryView()
+          RomMServersView(model: nearby) { server in
+            showRomM = false
+            showLibrarySource(server.id)
+          }
             .toolbar {
               ToolbarItem(placement: .confirmationAction) {
                 Button(L("Done")) { showRomM = false }
@@ -689,12 +695,23 @@ struct TVLibraryView: View {
     Set(model.games.map(\.gameID).filter { !$0.isEmpty })
   }
 
-  /// The tvOS column shows a nearby library; it does so even with no local games.
+  /// Another library fills the content area (the tvOS column, the iOS grid); it does so even with no local games.
   private var showsNearbyColumn: Bool {
 #if os(tvOS)
     tvNearbyPeerID != nil
 #else
-    false
+    librarySourceID != nil
+#endif
+  }
+
+  /// Shows another library's games in place: a server that was just connected, or a pill in the filter bar.
+  private func showLibrarySource(_ id: String) {
+#if os(tvOS)
+    tvLibraryDestination = .nearby(id)
+    tvNearbyFocusPending = true
+    focusNearbyColumn()
+#else
+    librarySourceID = id
 #endif
   }
 
@@ -748,6 +765,12 @@ struct TVLibraryView: View {
       .onChangeCompat(of: model.games.count) { _, _ in
         if !showPlatformFilterBar { platformFilter = .all }
       }
+#if !os(tvOS)
+      .onChange(of: nearby.peers.map(\.id)) { _, ids in
+        // The device or server left: back to this library rather than an empty grid.
+        if let id = librarySourceID, !ids.contains(id) { librarySourceID = nil }
+      }
+#endif
       .onChangeCompat(of: showPatchedSeparately) { _, show in
         model.setShowPatchedSeparately(show)
       }
@@ -1534,8 +1557,49 @@ struct TVLibraryView: View {
     launchGame(item)
   }
 
+  /// The other libraries the filter bar lists, in the model's order.
+  private var librarySourcePills: [LibrarySourcePill] {
+    nearby.peers.map { peer in
+      var pill = LibrarySourcePill(id: peer.id, name: peer.name, glyph: NearbyLibrariesModel.glyph(for: peer.deviceType))
+      switch nearby.status(for: peer) {
+      case .games(let count): pill.count = count
+      case .notPaired, .notConnected: pill.needsSetup = true
+      case .loading, .unavailable: break
+      }
+      return pill
+    }
+  }
+
+  /// Another library's games where this device's grid would be, with pairing or sign-in inline when it needs it.
+  private func librarySourceView_iOS(_ id: String) -> some View {
+    ScrollViewReader { scroller in
+      ScrollView {
+        Group {
+          if let peer = nearby.peer(withID: id) {
+            NearbyPeerLibraryView(peer: peer, ownedGameIDs: ownedGameIDs, searchText: searchText,
+              onShowStatus: { withAnimation { scroller.scrollTo(NearbyPeerLibraryView.statusID, anchor: .top) } },
+              onPlay: { playNearbyGame($0, state: $1) })
+              .id(peer.id)
+          }
+        }
+        .padding(.horizontal, Constants.gridHorizontalPadding)
+        .padding(.top, Constants.gridVerticalSpacing)
+        .padding(.bottom, libraryBottomInsetPadding)
+      }
+    }
+  }
+
   @ViewBuilder
   private func libraryView_iOS(_ displayGames: [TVGameItem]) -> some View {
+    if let librarySourceID {
+      librarySourceView_iOS(librarySourceID)
+    } else {
+      localLibraryView_iOS(displayGames)
+    }
+  }
+
+  @ViewBuilder
+  private func localLibraryView_iOS(_ displayGames: [TVGameItem]) -> some View {
     GeometryReader { proxy in
       let paddingH = Constants.gridHorizontalPadding
       let spacingH = Constants.gridHorizontalSpacing
@@ -2330,15 +2394,18 @@ struct TVLibraryView: View {
       // Combined search + platform-filter bar. Shown whenever the library has
       // games — not gated on `showPlatformFilterBar` — because search moved
       // here from the old top nav-bar `.searchable` field and needs to stay
-      // reachable even in a single-platform library.
-      if !model.games.isEmpty {
+      // reachable even in a single-platform library. Another library to switch
+      // to shows it too, so an empty device can still reach a server's games.
+      if showsLibraryFilterBar {
         LibrarySearchFilterBar(
           selection: $platformFilter,
           searchText: $searchText,
           isExpanded: $isSearchExpanded,
           searchFieldFocus: $searchFieldFocused,
           games: model.games,
-          overrides: platformOverrides
+          overrides: platformOverrides,
+          sources: librarySourcePills,
+          sourceSelection: $librarySourceID
         )
       }
 #else
@@ -2347,7 +2414,18 @@ struct TVLibraryView: View {
     }
   }
 
+#if !os(tvOS)
+  private var showsLibraryFilterBar: Bool {
+    !model.games.isEmpty || !nearby.peers.isEmpty
+  }
+#endif
+
   private var libraryNavigationSubtitle: String {
+#if !os(tvOS)
+    if let id = librarySourceID, let peer = nearby.peer(withID: id) {
+      return "\(peer.name) · \(nearby.subtitle(for: peer))"
+    }
+#endif
     let count = filteredGames(from: model.games).count
     if showPlatformFilterBar, platformFilter != .all {
       return "\(platformFilter.displayName) · \(count) \(L("games"))"
@@ -2362,9 +2440,9 @@ struct TVLibraryView: View {
   private var libraryBottomInsetPadding: CGFloat {
     var pad: CGFloat = 0
 #if os(iOS) || targetEnvironment(macCatalyst)
-    // The combined search+filter bar is shown whenever there are games (see
+    // The combined search+filter bar is shown whenever there are games or another library (see
     // `libraryBottomChrome`), not just when the platform pills apply.
-    if !model.games.isEmpty { pad += 56 }
+    if showsLibraryFilterBar { pad += 56 }
 #else
     // Platform pills and the selection bar sit under the scroller.
 #endif
@@ -3544,6 +3622,8 @@ struct TVLibraryView: View {
   /// so this never fires behind a presented sheet.
   private func stepPlatformFilter(_ delta: Int) {
     guard showPlatformFilterBar else { return }
+    // The shoulders page through this device's games, so they leave another library first.
+    librarySourceID = nil
     let overrides = platformOverrides
     let available = LibraryPlatformMapper.availableCategories(in: model.games, overrides: overrides)
     let visible = [LibraryPlatformCategory.all] + LibraryPlatformCategory.filterCases.filter { available.contains($0) }

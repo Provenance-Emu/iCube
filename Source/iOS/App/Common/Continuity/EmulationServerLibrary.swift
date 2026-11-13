@@ -43,8 +43,15 @@ struct EmulationServer: Codable, Equatable, Identifiable, Sendable {
 /// Read-only client for the server's published /api/v1 browse and content routes.
 actor EmulationServerLibrary {
   private struct Page<Item: Decodable>: Decodable {
+    struct SystemCount: Decodable {
+      let systemId: String
+      let count: Int
+    }
+
     let items: [Item]
     let nextCursor: String?
+    /// Game counts for the whole scope, on every browse page.
+    let systemCounts: [SystemCount]?
   }
 
   private struct Capabilities: Decodable {
@@ -70,6 +77,8 @@ actor EmulationServerLibrary {
       let availability: String
       let groupFileCount: Int?
       let groupError: String?
+      let artworkAvailable: Bool?
+      let artworkPath: String?
     }
 
     struct Asset: Decodable { let id: String }
@@ -115,9 +124,15 @@ actor EmulationServerLibrary {
   }
 
   private enum Game {
-    case item(Row.Item, artworkID: String?)
+    case item(Row.Item)
     case source(Row.Source)
   }
+
+  /// The most rows the server returns in one browse page.
+  private static let pageSize = 100
+  /// The server stores covers up to this size.
+  private static let maximumCoverBytes = 8_000_000
+  private static let systemIDs = ["com.provenance.gamecube", "com.provenance.wii"]
 
   /// Never send a configured server's bearer token to a redirected URL.
   private final class NoRedirects: NSObject, URLSessionTaskDelegate, Sendable {
@@ -131,11 +146,20 @@ actor EmulationServerLibrary {
   private let token: String?
   private let transport: any ContinuityTransport
   private let ownedSession: URLSession?
+  private let covers: RemoteCoverCache
   private var games: [String: Game] = [:]
+  /// Server-relative cover path for each entry that has one.
+  private var coverPaths: [String: String] = [:]
+  /// Covers already checked against the server by this catalog.
+  private var checkedCovers = Set<String>()
+  /// Where `continueCatalog` resumes.
+  private var pendingCursor: CatalogCursor?
 
-  init(server: EmulationServer, token: String?, transport: (any ContinuityTransport)? = nil) {
+  init(server: EmulationServer, token: String?, transport: (any ContinuityTransport)? = nil,
+       covers: RemoteCoverCache = .shared) {
     self.server = server
     self.token = token
+    self.covers = covers
     if let transport {
       self.transport = transport
       ownedSession = nil
@@ -162,9 +186,9 @@ actor EmulationServerLibrary {
 
   typealias PairingChallenge = DevicePairingChallenge
 
-  func startPairing() async throws -> PairingChallenge {
+  func startPairing(deviceName: String = "iCube") async throws -> PairingChallenge {
     let route = try request("device-pairing", authorized: false)
-    let response = try await transport.request(.json(url: route.url, payload: DevicePairingDraft(name: "iCube on Apple TV")))
+    let response = try await transport.request(.json(url: route.url, payload: DevicePairingDraft(name: deviceName)))
     guard response.status == 201 else { throw ContinuityError.invalidResponse(status: response.status) }
     let challenge = try response.decoded(PairingChallenge.self)
     guard challenge.pin.utf8.count == 6, challenge.pin.utf8.allSatisfy({ (48 ... 57).contains($0) }),
@@ -195,17 +219,46 @@ actor EmulationServerLibrary {
     fileprivate var cursor: String?
     fileprivate var seenCursors = Set<String>()
     fileprivate let search: String
+    /// GameCube and Wii games counted in the libraries read so far.
+    fileprivate var counted = 0
   }
 
   struct CatalogPage: Sendable {
     let entries: [ContinuityLibraryEntry]
     let next: CatalogCursor?
+    /// The server's count for this search, once every library has reported.
+    let total: Int?
+  }
+
+  /// One row from each library is enough: every browse page carries the scope's counts.
+  func gameCount() async throws -> Int {
+    var total = 0
+    for library in try await libraries() {
+      try Task.checkCancellation()
+      let page: Page<Row> = try await read("browse", query: Self.browseQuery(library: library.id, limit: 1))
+      total += Self.playableCount(page.systemCounts)
+    }
+    return total
+  }
+
+  private static func browseQuery(library: String, limit: Int) -> [URLQueryItem] {
+    [
+      URLQueryItem(name: "libraryId", value: library),
+      URLQueryItem(name: "category", value: "games"),
+      URLQueryItem(name: "systemIds", value: systemIDs.joined(separator: ",")),
+      URLQueryItem(name: "limit", value: String(limit)),
+    ]
+  }
+
+  private static func playableCount(_ counts: [Page<Row>.SystemCount]?) -> Int {
+    (counts ?? []).filter { systemIDs.contains($0.systemId) }.reduce(0) { $0 + max(0, $1.count) }
   }
 
   func catalog(search: String = "") async throws -> CatalogPage {
     let libraries = try await libraries().map(\.id)
     try Task.checkCancellation()
     games.removeAll()
+    coverPaths.removeAll()
     return try await catalogPage(after: CatalogCursor(
       libraries: libraries[...],
       search: search.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -217,15 +270,12 @@ actor EmulationServerLibrary {
     var entries: [ContinuityLibraryEntry] = []
     while let library = remaining.libraries.first, entries.isEmpty {
       try Task.checkCancellation()
-      var query = [
-        URLQueryItem(name: "libraryId", value: library),
-        URLQueryItem(name: "category", value: "games"),
-        URLQueryItem(name: "systemIds", value: "com.provenance.gamecube,com.provenance.wii"),
-      ]
+      var query = Self.browseQuery(library: library, limit: Self.pageSize)
       if !remaining.search.isEmpty { query.append(URLQueryItem(name: "search", value: remaining.search)) }
       if let cursor = remaining.cursor { query.append(URLQueryItem(name: "cursor", value: cursor)) }
       let page: Page<Row> = try await read("browse", query: query)
       try Task.checkCancellation()
+      if remaining.cursor == nil { remaining.counted += Self.playableCount(page.systemCounts) }
       remaining.cursor = page.nextCursor
       if let cursor = remaining.cursor {
         guard remaining.seenCursors.insert(cursor).inserted else { throw ServerError.invalidContent }
@@ -237,16 +287,19 @@ actor EmulationServerLibrary {
         let entry: ContinuityLibraryEntry
         let game: Game
         if row.entityType == "item", let item = row.item, let platform = Self.platform(item.systemIdentifier) {
-          let artwork = row.previewAsset?.id
+          let cover = row.previewAsset.flatMap { try? "/api/v1/" + contentRoute("files", id: $0.id) }
           entry = .init(key: "item:" + item.id, game: .init(displayName: item.title, platform: platform),
-                        sizeBytes: 0, hasArtwork: artwork != nil)
-          game = .item(item, artworkID: artwork)
+                        sizeBytes: 0, hasArtwork: cover != nil)
+          coverPaths[entry.key] = cover
+          game = .item(item)
         } else if row.entityType == "source", let source = row.source,
                   source.availability == "local", source.size > 0,
                   source.groupError == nil, let platform = Self.platform(source.systemId),
                   Self.supportsSource(source) {
+          let cover = source.artworkAvailable == true ? source.artworkPath.flatMap(Self.coverPath) : nil
           entry = .init(key: "source:" + source.id, game: .init(displayName: source.title ?? source.name, platform: platform),
-                        sizeBytes: (source.groupFileCount ?? 0) > 1 ? 0 : source.size, hasArtwork: false)
+                        sizeBytes: (source.groupFileCount ?? 0) > 1 ? 0 : source.size, hasArtwork: cover != nil)
+          coverPaths[entry.key] = cover
           game = .source(source)
         } else {
           continue
@@ -255,19 +308,30 @@ actor EmulationServerLibrary {
         entries.append(entry)
       }
     }
-    return CatalogPage(entries: entries, next: remaining.libraries.isEmpty ? nil : remaining)
+    // A library whose first page has not been read has not been counted yet.
+    let uncounted = remaining.libraries.count - (remaining.cursor == nil ? 0 : 1)
+    return CatalogPage(entries: entries, next: remaining.libraries.isEmpty ? nil : remaining,
+                       total: uncounted == 0 ? remaining.counted : nil)
   }
 
+  /// The downscaled cover: from disk when the server says it is unchanged or cannot be reached.
   func artwork(for entry: ContinuityLibraryEntry) async -> Data? {
-    guard case .item(_, let id?) = games[entry.key],
-          let response = try? await transport.request(request(try contentRoute("files", id: id))),
-          response.status == 200, response.body.count <= 5_000_000 else { return nil }
-    return response.body
+    guard let path = coverPaths[entry.key], var request = try? request(path: path) else { return nil }
+    let key = server.id + "\n" + path
+    let cached = await covers.cover(for: key)
+    if let cached, checkedCovers.contains(key) { return cached.data }
+    if let etag = cached?.etag { request.headers["If-None-Match"] = etag }
+    guard let response = try? await transport.request(request) else { return cached?.data }
+    checkedCovers.insert(key)
+    if response.status == 304, let cached { return cached.data }
+    guard response.status == 200, !response.body.isEmpty, response.body.count <= Self.maximumCoverBytes else { return nil }
+    let etag = response.headers.first { $0.key.caseInsensitiveCompare("ETag") == .orderedSame }?.value
+    return await covers.store(response.body, etag: etag, for: key)
   }
 
   private func downloads(for game: Game) async throws -> [Download] {
     switch game {
-    case .item(let item, _):
+    case .item(let item):
       let manifest: Manifest = try await read("items/" + Self.safeID(item.id) + "/manifest")
       let roms = manifest.files.filter { $0.kind == "rom" }
       guard manifest.version == 1, manifest.itemId == item.id,
@@ -387,7 +451,74 @@ actor EmulationServerLibrary {
       try fm.createDirectory(at: final.deletingLastPathComponent(), withIntermediateDirectories: true)
       try fm.moveItem(at: ready, to: final)
     }
+    // Also on a repeat copy, so a game brought in by an older build learns where it came from.
+    RemoteGameOrigin(server: server.origin, key: entry.key).write(in: final)
     return urls
+  }
+
+  // MARK: - Writing details back
+
+  private struct Revision: Decodable { let revision: Int }
+
+  /// Saves a title, and a cover when one is given, for a game this server listed. The server decides whether
+  /// this token may: a read-only token gets `accessDenied`.
+  func saveDetails(forKey key: String, title: String?, cover: Data?) async throws {
+    do {
+      try await writeDetails(forKey: key, title: title, cover: cover)
+    } catch ServerError.editConflict {
+      // Someone else edited the game in between: read its revision again and try once more.
+      try await writeDetails(forKey: key, title: title, cover: cover)
+    }
+  }
+
+  private func writeDetails(forKey key: String, title: String?, cover: Data?) async throws {
+    if key.hasPrefix(Self.sourceKeyPrefix) {
+      let route = try "sources/" + Self.safeID(String(key.dropFirst(Self.sourceKeyPrefix.count)))
+      var revision = (try await read(route + "/matches/selections") as Revision).revision
+      if let title {
+        revision = try await write(route + "/details", revision: revision, type: "application/json",
+                                   body: JSONEncoder().encode(["title": title]))
+      }
+      if let cover, let type = Self.imageType(cover) {
+        _ = try await write(route + "/details/cover", revision: revision, type: type, body: cover)
+      }
+    } else if key.hasPrefix(Self.itemKeyPrefix) {
+      // An uploaded game's title is its item's; its cover is an uploaded file, which this does not replace.
+      guard let title else { return }
+      let route = try "items/" + Self.safeID(String(key.dropFirst(Self.itemKeyPrefix.count)))
+      let revision = (try await read(route) as Revision).revision
+      _ = try await write(route, method: "PATCH", revision: revision, type: "application/json",
+                          body: JSONEncoder().encode(["title": title]))
+    } else {
+      throw ServerError.invalidContent
+    }
+  }
+
+  /// Sends an edit against the revision it was read at and returns the new revision.
+  private func write(_ route: String, method: String = "PUT", revision: Int, type: String, body: Data) async throws -> Int {
+    var request = try request(route)
+    request.method = method
+    request.headers["If-Match"] = "\"rev-\(revision)\""
+    request.headers["Content-Type"] = type
+    request.body = body
+    let response = try await transport.request(request)
+    switch response.status {
+    case 200: return (try? response.decoded(Revision.self).revision) ?? revision + 1
+    case 401, 403: throw ServerError.accessDenied
+    case 404, 405: throw ServerError.editUnavailable
+    case 409, 412: throw ServerError.editConflict
+    default: throw ContinuityError.invalidResponse(status: response.status)
+    }
+  }
+
+  private static let sourceKeyPrefix = "source:"
+  private static let itemKeyPrefix = "item:"
+
+  /// The content type of a PNG or JPEG, the two formats a cover is sent as.
+  static func imageType(_ data: Data) -> String? {
+    if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return "image/png" }
+    if data.starts(with: [0xFF, 0xD8, 0xFF]) { return "image/jpeg" }
+    return nil
   }
 
   private func stageDisc(_ source: URL, as path: String, in folder: URL) throws {
@@ -423,8 +554,12 @@ actor EmulationServerLibrary {
   }
 
   private func request(_ route: String, query: [URLQueryItem] = [], authorized: Bool = true) throws -> ContinuityRequest {
+    try request(path: "/api/v1/" + route, query: query, authorized: authorized)
+  }
+
+  private func request(path: String, query: [URLQueryItem] = [], authorized: Bool = true) throws -> ContinuityRequest {
     var parts = URLComponents(url: server.origin, resolvingAgainstBaseURL: false)
-    parts?.path = "/api/v1/" + route
+    parts?.path = path
     parts?.queryItems = query.isEmpty ? nil : query
     // The server's query parser treats a literal '+' as a space.
     if let encoded = parts?.percentEncodedQuery {
@@ -443,6 +578,14 @@ actor EmulationServerLibrary {
     let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
     guard !id.isEmpty, id.unicodeScalars.allSatisfy(allowed.contains) else { throw ServerError.invalidContent }
     return id
+  }
+
+  /// A cover path from a browse row, kept only when it stays inside this server's API.
+  private static func coverPath(_ path: String) -> String? {
+    let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./")
+    guard path.hasPrefix("/api/v1/"), path.unicodeScalars.allSatisfy(allowed.contains),
+          safeRelativePath(String(path.dropFirst())) else { return nil }
+    return path
   }
 
   private static func platform(_ value: String?) -> String? {
@@ -472,7 +615,7 @@ actor EmulationServerLibrary {
   }
 
   enum ServerError: LocalizedError {
-    case unsupported, invalidContent, accessDenied, pairingExpired
+    case unsupported, invalidContent, accessDenied, pairingExpired, editUnavailable, editConflict
 
     var errorDescription: String? {
       switch self {
@@ -480,8 +623,32 @@ actor EmulationServerLibrary {
       case .invalidContent: return L("The server did not provide valid game files.")
       case .accessDenied: return L("The server denied access. Check your access token and library permissions.")
       case .pairingExpired: return L("The pairing code expired. Start pairing again.")
+      case .editUnavailable: return L("The server cannot save edits to this game. It may need an update.")
+      case .editConflict: return L("The game changed on the server at the same time. Try again.")
       }
     }
+  }
+}
+
+extension EmulationServerLibrary: RemoteGameCatalog {
+  func openCatalog(search: String) async throws -> RemoteCatalogPage {
+    pendingCursor = nil
+    return remember(try await catalog(search: search))
+  }
+
+  func continueCatalog() async throws -> RemoteCatalogPage {
+    guard let cursor = pendingCursor else { return RemoteCatalogPage(entries: [], hasMore: false, total: nil) }
+    return remember(try await catalogPage(after: cursor))
+  }
+
+  private func remember(_ page: CatalogPage) -> RemoteCatalogPage {
+    pendingCursor = page.next
+    return RemoteCatalogPage(entries: page.entries, hasMore: page.next != nil, total: page.total)
+  }
+
+  nonisolated func isAccessDenied(_ error: any Error) -> Bool {
+    if case ServerError.accessDenied = error { return true }
+    return false
   }
 }
 

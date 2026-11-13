@@ -24,6 +24,9 @@ struct NearbyPeerLibraryView: View {
   /// tvOS: the first control takes this focus, so the rail can hand focus
   /// into the column.
   var initialFocus: FocusState<Bool>.Binding?
+  /// The library's own search field drives this view, which then shows none of its own: a server searches
+  /// its whole catalog, a device's catalog is filtered here.
+  var searchText: String?
   var onShowStatus: () -> Void = {}
   var onPlay: (TVGameItem, URL?) -> Void = { _, _ in }
   static let statusID = "nearby-transfer-status"
@@ -69,12 +72,31 @@ struct NearbyPeerLibraryView: View {
   @State private var loadedRequest: CatalogRequest?
 
   private var catalogRequest: CatalogRequest {
-    let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-    return CatalogRequest(
+    CatalogRequest(
       peerID: peer.id,
       needsConnection: peer.needsServerConnection,
-      search: peer.server == nil ? "" : String(query.unicodeScalars.prefix(256))
+      search: peer.isServer ? String(query.unicodeScalars.prefix(Self.maximumSearchLength)) : ""
     )
+  }
+
+  private var query: String {
+    (searchText ?? search).trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  /// A device sends its whole catalog, so its search happens here.
+  private var visibleEntries: [ContinuityLibraryEntry] {
+    guard !peer.isServer, !query.isEmpty else { return entries }
+    return entries.filter { $0.game.displayName.localizedCaseInsensitiveContains(query) }
+  }
+
+  /// The server's count when it gives one; otherwise the rows on screen.
+  private var gameTotal: Int {
+    peer.isServer ? controller.serverGameTotal ?? entries.count : entries.count
+  }
+
+  private struct PageRequest: Equatable {
+    let loaded: Int
+    let ready: Bool
   }
 
   var body: some View {
@@ -86,6 +108,13 @@ struct NearbyPeerLibraryView: View {
             Text(L("Connect to browse")).font(icube.font(.nav))
             EmulationServerConnectionFields(model: .shared, discoveredServer: server, initialFocus: initialFocus) {
               if peer.serverConnected { Task { await load() } }
+            }
+          }
+        } else if let romm = peer.romm, needsServerAccess {
+          card {
+            Text(L("Connect to browse")).font(icube.font(.nav))
+            RomMConnectionFields(model: .shared, server: romm, initialFocus: initialFocus) { _ in
+              Task { await load() }
             }
           }
         } else if let transferError {
@@ -110,7 +139,7 @@ struct NearbyPeerLibraryView: View {
         }
       }
       .id(Self.statusID)
-      if peer.server != nil, !needsServerAccess {
+      if peer.isServer, searchText == nil, !needsServerAccess {
         TextField(L("Search games"), text: $search)
           #if os(iOS)
           .textFieldStyle(.roundedBorder)
@@ -118,16 +147,7 @@ struct NearbyPeerLibraryView: View {
           .disabled(isCopying)
       }
       if hasCatalog, !needsServerAccess, loadedRequest == catalogRequest {
-        grid.disabled(controller.isLoadingMoreServerGames || controller.phase == .loading)
-        if controller.hasMoreServerGames, canLoadMore {
-          if controller.isLoadingMoreServerGames {
-            ProgressView()
-          } else {
-            actionButton(L("Load More"), systemImage: "chevron.down") {
-              Task { await controller.loadMoreServerGames() }
-            }
-          }
-        }
+        grid.disabled(controller.phase == .loading)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -149,7 +169,7 @@ struct NearbyPeerLibraryView: View {
       if case .browsing(let list) = phase {
         entries = list
         hasCatalog = true
-        NearbyLibrariesModel.shared.noteCatalog(peerID: peer.id, count: list.count)
+        NearbyLibrariesModel.shared.noteCatalog(peerID: peer.id, count: gameTotal)
       }
     }
     .onChange(of: isCopying) { _, copying in
@@ -209,7 +229,8 @@ struct NearbyPeerLibraryView: View {
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
         Text(peer.name).font(icube.font(.nav))
-        Text(hasCatalog && loadedRequest == catalogRequest ? Self.gameCount(entries.count) : L("Nearby Library"))
+        Text(hasCatalog && loadedRequest == catalogRequest ? Self.gameCount(gameTotal)
+          : (peer.isServer ? L("Server Library") : L("Nearby Library")))
           .icubeText(.detail)
           .foregroundStyle(.secondary)
       }
@@ -231,7 +252,7 @@ struct NearbyPeerLibraryView: View {
 
     case .browsing(let list):
       if list.isEmpty, loadedRequest == catalogRequest {
-        if peer.server == nil {
+        if !peer.isServer {
           Text(String(format: L("%@ isn't sharing any games right now."), peer.name))
             .foregroundStyle(.secondary)
         } else {
@@ -251,7 +272,7 @@ struct NearbyPeerLibraryView: View {
         } else if let progress {
           NearbyTransferProgress(bytes: progress.bytesTransferred, total: progress.totalBytes)
         } else {
-          Text(peer.server == nil ? String(format: L("Asking %@…"), peer.name) : L("Preparing download…")).foregroundStyle(.secondary)
+          Text(peer.isServer ? L("Preparing download…") : String(format: L("Asking %@…"), peer.name)).foregroundStyle(.secondary)
         }
         actionButton(L("Cancel"), systemImage: "xmark", role: .destructive) { cancelCopy() }
           .modifier(FirstFocus(binding: initialFocus))
@@ -306,7 +327,7 @@ struct NearbyPeerLibraryView: View {
       alignment: .leading,
       spacing: Metrics.gridSpacing
     ) {
-      ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+      ForEach(Array(visibleEntries.enumerated()), id: \.element.id) { index, entry in
         Button { sheet = .options(entry) } label: {
           NearbyGameTile(
             entry: entry,
@@ -323,6 +344,15 @@ struct NearbyPeerLibraryView: View {
         .disabled(isCopying)
         .modifier(FirstFocus(binding: index == 0 && !hasStatusControl ? initialFocus : nil))
         .task { await controller.loadArtwork(for: entry) }
+      }
+      // The grid is lazy, so this cell exists only near the end of what is loaded: reaching it reads the next
+      // page, and it stays in place (reading on) while the pages so far do not fill the screen.
+      if controller.hasMoreServerGames {
+        ProgressView()
+          .frame(maxWidth: .infinity, minHeight: Metrics.tileWidth)
+          .task(id: PageRequest(loaded: entries.count, ready: canLoadMore)) {
+            if canLoadMore { await controller.loadMoreServerGames() }
+          }
       }
     }
   }
@@ -438,7 +468,7 @@ struct NearbyPeerLibraryView: View {
   /// Match disc and revision, not just GameID (multi-disc and patched games share IDs).
   private func localGame(for entry: ContinuityLibraryEntry) -> TVGameItem? {
     if let game = downloaded[entry.key], Self.existsLocally(game.filePath) { return game }
-    if let server = peer.server, let folder = try? server.folder(for: entry) {
+    if let folder = peer.folder(for: entry) {
       return TVLibraryBridge.currentGames().first { item in
         guard Self.existsLocally(item.filePath) else { return false }
         let url = item.filePath.hasPrefix("/") ? URL(fileURLWithPath: item.filePath) : URL(string: item.filePath)
@@ -503,6 +533,9 @@ struct NearbyPeerLibraryView: View {
   static func gameCount(_ count: Int) -> String {
     count == 1 ? L("1 game") : String(format: L("%d games"), count)
   }
+
+  /// The longest search the server accepts.
+  private static let maximumSearchLength = 256
 
   private enum Metrics {
     #if os(tvOS)

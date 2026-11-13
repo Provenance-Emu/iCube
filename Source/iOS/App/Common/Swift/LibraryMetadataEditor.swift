@@ -269,6 +269,13 @@ struct LibraryMetadataEditor: View {
           try LibraryMetadataService.store().commit(draft, baseline: baseline, for: identity)
         }.value
         LibraryMetadataService.didChange()
+        // A game copied from an Emulation Server takes the edit back to it; a game from anywhere else does nothing.
+        let newTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        EmulationServerMetadataSync.push(
+          gamePath: item.filePath,
+          title: newTitle.isEmpty || newTitle == baseline.title ? nil : newTitle,
+          cover: cover == baseline.coverData ? nil : cover
+        )
         dismiss()
       } catch {
         self.error = error.localizedDescription

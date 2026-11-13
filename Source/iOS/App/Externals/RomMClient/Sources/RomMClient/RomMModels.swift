@@ -89,8 +89,15 @@ public struct RomMGame: Decodable, Identifiable, Hashable, Sendable {
     public let hasFileOnDisk: Bool?
     public let missingFromFs: Bool?
     public let isPhysical: Bool?
+    /// Server paths of the saved cover. Absent when the game has no artwork.
+    public let pathCoverSmall: String?
+    public let pathCoverLarge: String?
 
     public var title: String { name.flatMap { $0.isEmpty ? nil : $0 } ?? fsName }
+    /// The grid-sized cover when there is one, else the full-size cover.
+    public var coverPath: String? {
+        [pathCoverSmall, pathCoverLarge].compactMap { $0 }.first { !$0.isEmpty }
+    }
     public var isDownloadable: Bool {
         hasFileOnDisk ?? (missingFromFs != true && isPhysical != true && fsSizeBytes > 0)
     }

@@ -5912,3 +5912,20 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Waiting for the motion sensors…" = "Waiting for the motion sensors…";
 "Lying flat with its buttons up, a controller must read Flat, face up. If it reads something else, flip the matching switch under Motion Axes on that player's screen (Pointer & Motion). These readings are taken before those switches." = "Lying flat with its buttons up, a controller must read Flat, face up. If it reads something else, flip the matching switch under Motion Axes on that player's screen (Pointer & Motion). These readings are taken before those switches.";
 "The touchscreen plays as a Wii Remote pointing out of the back of the device. Held upright with the screen facing you it reads Flat, face up; lying on a table it reads Pointing at the floor. In a game, Recenter makes your grip level, and the touch pointer modes keep the remote level." = "The touchscreen plays as a Wii Remote pointing out of the back of the device. Held upright with the screen facing you it reads Flat, face up; lying on a table it reads Pointing at the floor. In a game, Recenter makes your grip level, and the touch pointer modes keep the remote level.";
+
+/* Server libraries: RomM, pairing, writing edits back */
+"%@, not connected" = "%@, not connected";
+"Server Library" = "Server Library";
+"Add a RomM Server" = "Add a RomM Server";
+"Enter the address you open RomM at. GameCube and Wii games from it appear in your library's sources." = "Enter the address you open RomM at. GameCube and Wii games from it appear in your library's sources.";
+"Use username and password" = "Use username and password";
+"Client API token (optional)" = "Client API token (optional)";
+"Allow credentials over HTTP" = "Allow credentials over HTTP";
+"The server cannot save edits to this game. It may need an update." = "The server cannot save edits to this game. It may need an update.";
+"The game changed on the server at the same time. Try again." = "The game changed on the server at the same time. Try again.";
+"Saved to %@ too." = "Saved to %@ too.";
+"Saved on this device. %1$@ did not take the change: %2$@" = "Saved on this device. %1$@ did not take the change: %2$@";
+"Approve on the Server" = "Approve on the Server";
+"Pair This Device" = "Pair This Device";
+"On the server, open Settings → Devices and enter this PIN:" = "On the server, open Settings → Devices and enter this PIN:";
+"iCube on %@" = "iCube on %@";

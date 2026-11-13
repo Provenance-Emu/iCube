@@ -10,7 +10,8 @@ public struct RomMClient: Sendable {
         try self.init(address: address, credential: credential, allowHTTP: allowHTTP, transport: RomMURLSession())
     }
 
-    init(address: RomMAddress, credential: RomMCredential, allowHTTP: Bool = false, transport: any RomMTransport) throws {
+    /// Sends requests through the app's own transport, for example in its tests.
+    public init(address: RomMAddress, credential: RomMCredential, allowHTTP: Bool = false, transport: any RomMTransport) throws {
         let authorization = try credential.authorization()
         guard authorization == nil || address.isHTTPS || allowHTTP else { throw RomMError.insecureConnection }
         self.address = address
@@ -37,6 +38,23 @@ public struct RomMClient: Sendable {
               page.items.allSatisfy({ $0.platformId == platformID })
         else { throw RomMError.invalidResponse }
         return page
+    }
+
+    /// The game's cover image, or nil when it has none or the server no longer serves it.
+    /// A cover is decoration: only a rejected credential is an error.
+    public func cover(for game: RomMGame, maximumBytes: Int = 8_000_000) async throws -> Data? {
+        guard let path = game.coverPath else { return nil }
+        var request = URLRequest(url: try address.asset(path))
+        request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        let (data, response) = try await transport.data(for: request)
+        do {
+            try Self.validate(response)
+        } catch RomMError.accessDenied {
+            throw RomMError.accessDenied
+        } catch {
+            return nil
+        }
+        return data.isEmpty || data.count > maximumBytes ? nil : data
     }
 
     /// Stages every game file, keeping paths relative to its RomM game directory.
@@ -155,7 +173,8 @@ private struct Detail: Decodable {
     }
 }
 
-protocol RomMTransport: Sendable {
+/// How the client reaches a RomM instance. `download` returns a temporary file the client moves or removes.
+public protocol RomMTransport: Sendable {
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
     func download(for request: URLRequest) async throws -> (URL, URLResponse)
 }

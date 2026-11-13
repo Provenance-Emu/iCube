@@ -4,9 +4,18 @@
 import Combine
 import Foundation
 import PVContinuity
+import RomMClient
 
-/// The nearby libraries the main library shows: other iCube devices on this
-/// network that share their library, with a game count for the paired ones.
+/// The other libraries the main library shows: iCube devices on this network
+/// that share their library, Emulation Servers (found over Bonjour or saved),
+/// and saved RomM servers, each with a game count once it can be read.
+///
+/// ## Servers
+///
+/// An Emulation Server advertises `_pvcontent._tcp`; one that is not connected
+/// yet is listed as "Connect to browse". A saved server stays listed when it is
+/// not on the network, so its library is one tap away again when it returns.
+/// RomM has no Bonjour advert, so a RomM server is listed once it is added.
 ///
 /// ## Discovery
 ///
@@ -34,10 +43,29 @@ final class NearbyLibrariesModel: ObservableObject {
         let deviceType: String?
         let advertisement: ContinuityAdvertisement?
         var server: EmulationServer? = nil
+        var romm: RomMServer? = nil
         let isPaired: Bool
         var serverConnected = false
         var canLoadCatalog: Bool { isPaired || serverConnected }
-        var needsServerConnection: Bool { server != nil && !serverConnected }
+        /// An Emulation Server or RomM server, as opposed to another device.
+        var isServer: Bool { server != nil || romm != nil }
+        var needsServerConnection: Bool { isServer && !serverConnected }
+
+        /// The server's catalog with its saved login, or nil for a device.
+        func remoteCatalog() -> (any RemoteGameCatalog)? {
+            if let server {
+                return EmulationServerLibrary(server: server, token: KeychainService.getPassword(for: server.id))
+            }
+            if let romm { return try? RomMLibrary(server: romm, login: RomMLoginStore.login(for: romm)) }
+            return nil
+        }
+
+        /// Where a game copied from this server lives, or nil for a device.
+        func folder(for entry: ContinuityLibraryEntry) -> URL? {
+            if let server { return try? server.folder(for: entry) }
+            if let romm { return try? romm.folder(for: entry) }
+            return nil
+        }
     }
 
     enum Status: Equatable {
@@ -80,6 +108,42 @@ final class NearbyLibrariesModel: ObservableObject {
 
   private func saveServers() {
         UserDefaults.standard.set(try? JSONEncoder().encode(servers), forKey: "icube.emulationServers")
+        rebuild(discovered: manager.discoveredPeers, trusted: manager.trustedPeers)
+    }
+
+    private static let rommServersKey = "icube.rommServers"
+    /// The single server the old RomM screen remembered.
+    private static let legacyRomMServerKey = "RomM.lastServer"
+
+    @Published private(set) var rommServers: [RomMServer] = {
+        let defaults = UserDefaults.standard
+        if let data = defaults.data(forKey: NearbyLibrariesModel.rommServersKey),
+           let saved = try? JSONDecoder().decode([RomMServer].self, from: data) {
+            return saved
+        }
+        guard let address = defaults.string(forKey: NearbyLibrariesModel.legacyRomMServerKey).flatMap({ try? RomMAddress($0) }),
+              RomMLoginStore.read(address) != nil else { return [] }
+        let migrated = [RomMServer(address: address)]
+        defaults.set(try? JSONEncoder().encode(migrated), forKey: NearbyLibrariesModel.rommServersKey)
+        return migrated
+    }()
+
+    /// Saves a RomM server and the login that just worked.
+    func addRomMServer(_ server: RomMServer, login: RomMSavedLogin) throws {
+        try RomMLoginStore.write(login.storedValue(), server: server.address())
+        if !rommServers.contains(server) { rommServers.append(server) }
+        saveRomMServers()
+        refresh(peerID: server.id)
+    }
+
+    func removeRomMServer(_ server: RomMServer) {
+        KeychainService.deletePassword(for: server.id)
+        rommServers.removeAll { $0.id == server.id }
+        saveRomMServers()
+    }
+
+    private func saveRomMServers() {
+        UserDefaults.standard.set(try? JSONEncoder().encode(rommServers), forKey: Self.rommServersKey)
         rebuild(discovered: manager.discoveredPeers, trusted: manager.trustedPeers)
     }
 
@@ -171,6 +235,7 @@ final class NearbyLibrariesModel: ObservableObject {
         case "pd": return "ipad"
         case "mc": return "desktopcomputer"
         case "server": return "server.rack"
+        case "romm": return "externaldrive.connected.to.line.below"
         default: return "iphone"
         }
     }
@@ -221,6 +286,10 @@ final class NearbyLibrariesModel: ObservableObject {
             next.append(Peer(id: server.id, name: server.name, deviceType: "server", advertisement: nil,
                              server: server, isPaired: false, serverConnected: true))
         }
+        for server in rommServers where seen.insert(server.id).inserted {
+            next.append(Peer(id: server.id, name: server.name, deviceType: "romm", advertisement: nil,
+                             romm: server, isPaired: false, serverConnected: true))
+        }
         next.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         // A device that re-advertised (relaunched, turned sharing back on) may answer now: retry a failed count.
         let previous = Dictionary(uniqueKeysWithValues: peers.map { ($0.id, $0) })
@@ -244,15 +313,22 @@ final class NearbyLibrariesModel: ObservableObject {
             statuses[peer.id] = .loading
             let id = peer.id
             fetches[id] = Task { [weak self, manager] in
-                let browser = ContinuityLibraryBrowseController(identity: manager.identity)
-                await browser.load(peer: peer, allowsPairing: false)
+                let status: Status
+                if let catalog = peer.remoteCatalog() {
+                    // A server counts its own games; reading pages for that would probe every file on them.
+                    status = (try? await catalog.gameCount()).map(Status.games) ?? .unavailable
+                } else {
+                    let browser = ContinuityLibraryBrowseController(identity: manager.identity)
+                    await browser.load(peer: peer, allowsPairing: false)
+                    if case .browsing(let entries) = browser.phase {
+                        status = .games(entries.count)
+                    } else {
+                        status = .unavailable
+                    }
+                }
                 guard let self, !Task.isCancelled else { return }
                 self.fetches[id] = nil
-                if case .browsing(let entries) = browser.phase {
-                    self.statuses[id] = .games(entries.count)
-                } else {
-                    self.statuses[id] = .unavailable
-                }
+                self.statuses[id] = status
             }
         }
     }

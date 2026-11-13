@@ -274,6 +274,28 @@ struct LibraryPlatformFilterBar: View {
   }
 }
 
+// MARK: - Other libraries in the filter bar
+
+/// A library that is not this device's: a nearby device sharing its games, an Emulation Server, or a RomM
+/// server. The filter bar lists them after the platforms, and choosing one shows its games in the grid.
+struct LibrarySourcePill: Identifiable, Equatable {
+  let id: String
+  let name: String
+  /// SF Symbol for the kind of device or server.
+  let glyph: String
+  /// Games it holds, once that is known.
+  var count: Int?
+  /// Not paired or connected yet: choosing it starts that.
+  var needsSetup = false
+
+  /// What VoiceOver reads for the pill.
+  var accessibilityLabel: String {
+    if needsSetup { return String(format: L("%@, not connected"), name) }
+    guard let count else { return name }
+    return "\(name), \(count) \(L("games"))"
+  }
+}
+
 // MARK: - Combined search + platform filter bar (iOS)
 
 #if os(iOS) || targetEnvironment(macCatalyst)
@@ -296,6 +318,11 @@ struct LibraryPlatformFilterBar: View {
 /// change platform without leaving search) and a full-width text field.
 /// Collapsed and expanded states share the same row height so the library
 /// grid's bottom inset never jumps between them.
+///
+/// Other libraries (`sources`: nearby devices, Emulation Servers, RomM) follow
+/// the platform pills, after iFly's nearby pills. Choosing one sets
+/// `sourceSelection` and the library shows that library's games in place;
+/// choosing a platform clears it.
 struct LibrarySearchFilterBar: View {
   @Binding var selection: LibraryPlatformCategory
   @Binding var searchText: String
@@ -303,21 +330,48 @@ struct LibrarySearchFilterBar: View {
   var searchFieldFocus: FocusState<Bool>.Binding
   let games: [TVGameItem]
   let overrides: [String: LibraryPlatformCategory]
+  var sources: [LibrarySourcePill] = []
+  /// The id of the source the grid shows, or nil for this device's library.
+  var sourceSelection: Binding<String?> = .constant(nil)
   var onSelectionChange: (() -> Void)?
 
   private static let rowMinHeight: CGFloat = 30
   private static let barCornerRadius: CGFloat = 22
   private static let searchButtonDimension: CGFloat = 46
+  /// A long device or server name truncates here instead of pushing the other pills away.
+  private static let sourceNameMaxWidth: CGFloat = 140
+  private static let sourceDividerHeight: CGFloat = 16
 
+  /// More than one platform is present, so the platform pills are a real choice.
+  private var hasPlatformChoice: Bool {
+    LibraryPlatformMapper.availableCategories(in: games, overrides: overrides).count > 1
+  }
+
+  /// With a single platform and other libraries to switch to, "All" alone stands for this device's library.
   private var visibleCategories: [LibraryPlatformCategory] {
+    guard hasPlatformChoice else { return [.all] }
     let available = LibraryPlatformMapper.availableCategories(in: games, overrides: overrides)
     return [.all] + LibraryPlatformCategory.filterCases.filter { available.contains($0) }
   }
 
-  /// Matches `LibraryPlatformFilterBar`'s gating: pills only matter once more
-  /// than one platform is actually present in the library.
+  /// Pills matter once there is something to switch between: platforms, or another library.
   private var showsPillScroll: Bool {
-    LibraryPlatformMapper.availableCategories(in: games, overrides: overrides).count > 1
+    hasPlatformChoice || !sources.isEmpty
+  }
+
+  private var selectedSource: LibrarySourcePill? {
+    sources.first { $0.id == sourceSelection.wrappedValue }
+  }
+
+  private func select(_ category: LibraryPlatformCategory) {
+    sourceSelection.wrappedValue = nil
+    selection = category
+    onSelectionChange?()
+  }
+
+  private func select(_ source: LibrarySourcePill) {
+    sourceSelection.wrappedValue = source.id
+    onSelectionChange?()
   }
 
   var body: some View {
@@ -373,21 +427,76 @@ struct LibrarySearchFilterBar: View {
         HStack(spacing: 4) {
           ForEach(visibleCategories) { cat in
             let count = LibraryPlatformMapper.count(in: games, for: cat, overrides: overrides)
-            libraryPlatformFilterPill(category: cat, count: count, isSelected: selection == cat) {
-              selection = cat
+            libraryPlatformFilterPill(category: cat, count: count, isSelected: selectedSource == nil && selection == cat) {
+              select(cat)
               UIImpactFeedbackGenerator(style: .light).impactOccurred()
-              onSelectionChange?()
             }
             .id(cat)
+          }
+          if !sources.isEmpty {
+            Divider().frame(height: Self.sourceDividerHeight)
+            ForEach(sources) { source in
+              sourcePill(source)
+                .id(source.id)
+            }
           }
         }
       }
       .onChange(of: selection) { _, newValue in
+        guard selectedSource == nil else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
           proxy.scrollTo(newValue, anchor: .center)
         }
       }
+      .onChange(of: sourceSelection.wrappedValue) { _, id in
+        guard let id else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+          proxy.scrollTo(id, anchor: .center)
+        }
+      }
     }
+  }
+
+  /// One other library: its kind, its name, and its game count, or a link mark while it is not connected.
+  private func sourcePill(_ source: LibrarySourcePill) -> some View {
+    let isSelected = sourceSelection.wrappedValue == source.id
+    return Button {
+      withAnimation(.easeInOut(duration: 0.2)) { select(source) }
+      UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    } label: {
+      HStack(spacing: 4) {
+        Image(systemName: source.glyph)
+          .font(.caption2)
+        Text(source.name)
+          .font(.caption.weight(isSelected ? .semibold : .regular))
+          .lineLimit(1)
+          .frame(maxWidth: Self.sourceNameMaxWidth)
+          .fixedSize(horizontal: true, vertical: false)
+        if source.needsSetup {
+          Image(systemName: "link")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        } else if let count = source.count, count > 0 {
+          Text("\(count)")
+            .font(.caption2.weight(.medium))
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+        }
+      }
+      .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+      .padding(.horizontal, 10)
+      .padding(.vertical, 6)
+      .background {
+        if isSelected {
+          Capsule(style: .continuous)
+            .fill(Color.accentColor.opacity(0.18))
+        }
+      }
+      .contentShape(Capsule(style: .continuous))
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(source.accessibilityLabel)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 
   /// Expanded-state chip showing the active platform filter; tap to pick another
@@ -396,21 +505,33 @@ struct LibrarySearchFilterBar: View {
     Menu {
       ForEach(visibleCategories) { cat in
         Button {
-          withAnimation(.easeInOut(duration: 0.2)) { selection = cat }
-          onSelectionChange?()
+          withAnimation(.easeInOut(duration: 0.2)) { select(cat) }
         } label: {
-          if selection == cat {
+          if selectedSource == nil, selection == cat {
             Label(cat.displayName, systemImage: "checkmark")
           } else {
             Text(cat.displayName)
           }
         }
       }
+      if !sources.isEmpty {
+        Section {
+          ForEach(sources) { source in
+            Button {
+              withAnimation(.easeInOut(duration: 0.2)) { select(source) }
+            } label: {
+              Label(source.name, systemImage: selectedSource == source ? "checkmark" : source.glyph)
+            }
+          }
+        }
+      }
     } label: {
       HStack(spacing: 4) {
-        Text(selection.displayName)
+        Text(selectedSource?.name ?? selection.displayName)
           .font(.subheadline.weight(.semibold))
           .lineLimit(1)
+          .frame(maxWidth: Self.sourceNameMaxWidth)
+          .fixedSize(horizontal: true, vertical: false)
         Image(systemName: "chevron.down")
           .font(.caption2.weight(.semibold))
       }
@@ -421,7 +542,7 @@ struct LibrarySearchFilterBar: View {
     }
     .buttonStyle(.plain)
     .fixedSize()
-    .accessibilityLabel("\(L("Platform filter")): \(selection.displayName)")
+    .accessibilityLabel("\(L("Platform filter")): \(selectedSource?.name ?? selection.displayName)")
   }
 
   /// Expanded-state full-width text field with leading magnifier and a clear (x).
