@@ -821,8 +821,10 @@ let project = Project(
     ),
     packages: [
         // Shared packages are maintained and tested in their own repositories.
-        .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("6bc2e00bedbcd5640aad0b262131080400c9d6b8")),
-        .local(path: "Externals/RomMClient"),
+        // One package, two products: EmulatorContentClient and RomMClient (clients/swift and
+        // clients/romm-swift there). The RomM client used to be a vendored snapshot under
+        // Externals/RomMClient, kept only until the server repo published it as a product.
+        .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("817cc049d46632cff669e34ec9c3cc41fe0a0fc5")),
         .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.1")),
         .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.2")),
