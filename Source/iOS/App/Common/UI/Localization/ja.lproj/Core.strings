@@ -5883,7 +5883,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "1 save differs on this device and the server. Choose which to keep." = "1 件のセーブがこのデバイスとサーバーで異なります。どちらを残すか選んでください。";
 "%d saves differ on this device and the server. Choose which to keep." = "%d 件のセーブがこのデバイスとサーバーで異なります。どちらを残すか選んでください。";
 "Sync Saves Across Devices" = "デバイス間でセーブを同期";
-"Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted." = "このバックアップ先を使う別のデバイスで変更されたセーブとステートセーブがここにコピーされ、このデバイスのものも送信されます。ここで置き換えられたセーブは 30 日間「Recently Deleted」に残ります。両方で変更されたセーブは確認なしに置き換えられず、何も削除されません。";
+"Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted. Wii saves are backed up but not synced yet." = "このバックアップ先を使う別のデバイスで変更されたセーブとステートセーブがここにコピーされ、このデバイスのものも送信されます。ここで置き換えられたセーブは 30 日間「Recently Deleted」に残ります。両方で変更されたセーブは確認なしに置き換えられず、何も削除されません。Wii のセーブはバックアップされますが、まだ同期されません。";
 "Keep This Device’s" = "このデバイスのものを残す";
 "Use the Server’s" = "サーバーのものを使う";
 "Keep All From This Device" = "すべてこのデバイスのものを残す";

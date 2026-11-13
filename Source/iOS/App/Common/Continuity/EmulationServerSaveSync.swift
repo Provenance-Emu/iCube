@@ -18,11 +18,25 @@ actor EmulationServerSaveSyncWorker {
     case keepLocal, useServer
   }
 
+  /// A save that differs on both sides, as the two files were when it was found.
+  struct Conflict: Equatable, Hashable, Sendable {
+    /// Relative to the user folder.
+    let path: String
+    let local: String?
+    let remote: String?
+  }
+
+  /// The user's answer to one conflict. It applies only while both files are still the ones they were shown.
+  struct Choice: Equatable, Sendable {
+    let conflict: Conflict
+    let resolution: Resolution
+  }
+
   struct Outcome: Equatable, Sendable {
     var uploaded = 0
     var downloaded = 0
-    /// Saves that differ on both sides and wait for the user, by path relative to the user folder.
-    var conflicts: [String] = []
+    /// Saves that differ on both sides and wait for the user.
+    var conflicts: [Conflict] = []
   }
 
   enum Failure: Error { case coreBusy, invalidTarget, damagedDownload }
@@ -53,9 +67,9 @@ actor EmulationServerSaveSyncWorker {
     self.gate = gate
   }
 
-  /// One pass over every save. `resolving` carries the user's choice for files that were in conflict.
+  /// One pass over every save. `resolving` carries the user's answers to conflicts, by path.
   func sync(root: URL, target: EmulationServerBackupTarget, token: String, transport: any ContentTransport,
-            resolving: [String: Resolution] = [:]) async throws -> Outcome {
+            resolving: [String: Choice] = [:]) async throws -> Outcome {
     guard target.server.origin.scheme == "https" || target.allowsHTTP,
           EmulationServerBackupTarget.isValidItemID(target.itemID) else { throw Failure.invalidTarget }
     let scanner = scanners[root] ?? UserDataScanner(rootDirectory: root)
@@ -87,12 +101,10 @@ actor EmulationServerSaveSyncWorker {
     for path in steps.keys.sorted() {
       try Task.checkCancellation()
       var step = steps[path]
-      if step == .conflict {
-        switch resolving[path] {
-        case .keepLocal: step = .upload
-        case .useServer: step = .download
-        case nil: break
-        }
+      let found = Conflict(path: path, local: local[path]?.checksum, remote: planned[path])
+      // An answer given for other files than these two is not an answer to this conflict.
+      if step == .conflict, let choice = resolving[path], choice.conflict == found {
+        step = choice.resolution == .keepLocal ? .upload : .download
       }
       let remote = live[path]
       // Changed on the server since the plan: leave it for the next pass, which sees both sides afresh.
@@ -121,10 +133,11 @@ actor EmulationServerSaveSyncWorker {
         if sent {
           index.checksums[path] = file.checksum
           outcome.uploaded += 1
-        } else {
+        } else if live[path]?.sha256 != planned[path] {
           // Another device changed this save first, so the server kept theirs live and parked this copy.
-          outcome.conflicts.append(path)
+          outcome.conflicts.append(Conflict(path: path, local: file.checksum, remote: live[path]?.sha256))
         }
+        // Otherwise unrelated uploads kept getting in first; the next pass sends it.
       case .download:
         guard let remote, Self.isSave(path) else { continue }
         let (bytes, answer) = try await transport.data(for: client.contentRequest(assetId: remote.id, localBytes: 0, etag: nil))
@@ -136,7 +149,7 @@ actor EmulationServerSaveSyncWorker {
           outcome.downloaded += 1
         }
       case .conflict:
-        outcome.conflicts.append(path)
+        outcome.conflicts.append(found)
       case nil:
         break
       }
@@ -155,8 +168,11 @@ actor EmulationServerSaveSyncWorker {
   }
 
   /// Only paths this app itself would send are ever written: a server cannot place a file anywhere else.
-  private static func isSave(_ path: String) -> Bool {
-    guard let type = SyncClassifier.classify(relativePath: path) else { return false }
+  ///
+  /// Wii saves are left out. One Wii save is several files that only make sense together, and this decides
+  /// file by file, so a conflict or an interrupted pass could leave a mixed set. They are still backed up.
+  static func isSave(_ path: String) -> Bool {
+    guard let type = SyncClassifier.classify(relativePath: path), type != .wiiSave else { return false }
     return EmulationServerBackupWorker.assetKind(type) != nil && !EmulationServerBackupWorker.isExcluded(path)
   }
 
@@ -180,15 +196,27 @@ actor EmulationServerSaveSyncWorker {
     return bytes
   }
 
-  /// Puts the server's file in place. The file here must still be the one the plan saw (or still be absent);
-  /// it goes to Recently Deleted first. Returns false when it changed meanwhile and nothing was written.
+  /// Puts the server's file in place. The file here must still be the one the plan saw (or still be absent).
+  /// A copy of it goes to Recently Deleted first, and the file itself stays where it is until the new one is
+  /// written over it in one step, so a failed write leaves the save untouched. Returns false when the file
+  /// changed meanwhile and nothing was written.
   private func replace(_ path: String, with bytes: Data, expecting checksum: String?, scanner: UserDataScanner) async throws -> Bool {
     guard gate.beginLocalIO() else { throw Failure.coreBusy }
     defer { gate.endLocalIO() }
     let current = await scanner.fileExists(relativePath: path)
       ? (try? await scanner.readFile(relativePath: path)).map(Self.sha256) ?? "" : nil
     guard current == checksum else { return false }
-    if current != nil { _ = try await scanner.moveToTrash(relativePath: path, trash: trash) }
+    if current != nil {
+      let manager = FileManager.default
+      let copy = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+      try manager.copyItem(at: await scanner.absoluteURL(for: path), to: copy)
+      do {
+        _ = try await trash.move(fileAt: copy, relativePath: path)
+      } catch {
+        try? manager.removeItem(at: copy)
+        throw error
+      }
+    }
     try await scanner.writeFile(relativePath: path, data: bytes, modificationDate: nil)
     return true
   }

@@ -50,7 +50,7 @@ private struct EmulationServerBackupSettingsView: View {
   @State private var createKey = UUID().uuidString
 
   private var enabled: Bool { backups.targets[server.id] != nil }
-  private var conflicts: [String] { backups.conflicts[server.id] ?? [] }
+  private var conflicts: [EmulationServerSaveSyncWorker.Conflict] { backups.conflicts[server.id] ?? [] }
   private var credential: String {
     let entered = token.trimmingCharacters(in: .whitespacesAndNewlines)
     return entered.isEmpty ? KeychainService.getPassword(for: server.id + "/backup") ?? "" : entered
@@ -145,15 +145,15 @@ private struct EmulationServerBackupSettingsView: View {
             set: { backups.setSyncsSaves($0, for: server) }
           ))
         } footer: {
-          Text(L("Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted."))
+          Text(L("Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted. Wii saves are backed up but not synced yet."))
         }
         if !conflicts.isEmpty {
           // One control per row: a row holding two buttons is a single focus target on Apple TV.
           Section {
-            ForEach(conflicts, id: \.self) { path in
-              Text(path).foregroundStyle(.secondary)
-              Button(L("Keep This Device’s")) { backups.resolve([path], on: server, .keepLocal) }
-              Button(L("Use the Server’s")) { backups.resolve([path], on: server, .useServer) }
+            ForEach(conflicts, id: \.self) { conflict in
+              Text(conflict.path).foregroundStyle(.secondary)
+              Button(L("Keep This Device’s")) { backups.resolve([conflict], on: server, .keepLocal) }
+              Button(L("Use the Server’s")) { backups.resolve([conflict], on: server, .useServer) }
             }
             if conflicts.count > 1 {
               Button(L("Keep All From This Device")) { backups.resolve(conflicts, on: server, .keepLocal) }

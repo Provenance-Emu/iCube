@@ -5937,7 +5937,7 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "1 save differs on this device and the server. Choose which to keep." = "1 save differs on this device and the server. Choose which to keep.";
 "%d saves differ on this device and the server. Choose which to keep." = "%d saves differ on this device and the server. Choose which to keep.";
 "Sync Saves Across Devices" = "Sync Saves Across Devices";
-"Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted." = "Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted.";
+"Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted. Wii saves are backed up but not synced yet." = "Saves and save states changed on another device that uses this destination are copied here, and yours are sent to it. A save replaced here stays in Recently Deleted for 30 days. A save that changed on both is never replaced without asking, and nothing is deleted. Wii saves are backed up but not synced yet.";
 "Keep This Device’s" = "Keep This Device’s";
 "Use the Server’s" = "Use the Server’s";
 "Keep All From This Device" = "Keep All From This Device";

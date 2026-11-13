@@ -49,7 +49,7 @@ final class EmulationServerBackups: ObservableObject {
   @Published private(set) var targets: [String: EmulationServerBackupTarget]
   @Published private(set) var status: [String: String] = [:]
   /// Saves that changed on this device and on the server, by server: the user picks which to keep.
-  @Published private(set) var conflicts: [String: [String]] = [:]
+  @Published private(set) var conflicts: [String: [EmulationServerSaveSyncWorker.Conflict]] = [:]
   private let worker = EmulationServerBackupWorker()
   private let syncWorker: EmulationServerSaveSyncWorker = {
     let support = CloudSyncCoordinator.supportDirectory()
@@ -57,8 +57,8 @@ final class EmulationServerBackups: ObservableObject {
     return EmulationServerSaveSyncWorker(indexDirectory: support.appendingPathComponent("EmulationServer", isDirectory: true),
                                          trash: SyncTrash(rootURL: support.appendingPathComponent("Trash", isDirectory: true)))
   }()
-  /// The user's choices for conflicts, applied by the next pass.
-  private var resolutions: [String: [String: EmulationServerSaveSyncWorker.Resolution]] = [:]
+  /// The user's answers to conflicts, by server and path, applied by the next pass.
+  private var resolutions: [String: [String: EmulationServerSaveSyncWorker.Choice]] = [:]
   private var task: Task<Void, Never>?
   private var rerun = false
 
@@ -93,9 +93,12 @@ final class EmulationServerBackups: ObservableObject {
     configurationChanged()
   }
 
-  /// Settles conflicts the way the user chose; the next pass carries it out.
-  func resolve(_ paths: [String], on server: EmulationServer, _ resolution: EmulationServerSaveSyncWorker.Resolution) {
-    for path in paths { resolutions[server.id, default: [:]][path] = resolution }
+  /// Settles conflicts the way the user chose; the next pass carries it out, for the files they were shown.
+  func resolve(_ chosen: [EmulationServerSaveSyncWorker.Conflict], on server: EmulationServer,
+               _ resolution: EmulationServerSaveSyncWorker.Resolution) {
+    for conflict in chosen {
+      resolutions[server.id, default: [:]][conflict.path] = .init(conflict: conflict, resolution: resolution)
+    }
     task?.cancel()
     requestBackup()
   }
@@ -177,8 +180,8 @@ extension EmulationServerBackups {
     defer { session.invalidateAndCancel() }
     let outcome = try await syncWorker.sync(root: root, target: target, token: token,
                                             transport: BackupTransport(session: session), resolving: choices)
-    // A choice is spent once its pass ran; one that could not be carried out shows as a conflict again.
-    for path in choices.keys { resolutions[id]?.removeValue(forKey: path) }
+    // An answer is spent once its pass ran; one the user changed while it ran is kept for the next pass.
+    for (path, choice) in choices where resolutions[id]?[path] == choice { resolutions[id]?.removeValue(forKey: path) }
     return outcome
   }
 

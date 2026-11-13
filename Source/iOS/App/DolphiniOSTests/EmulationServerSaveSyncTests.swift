@@ -106,14 +106,15 @@ final class EmulationServerSaveSyncTests: XCTestCase {
     try tv.write("tv progress", to: Self.card)
     _ = try await phone.sync()
     var outcome = try await tv.sync()
-    XCTAssertEqual(outcome, .init(uploaded: 0, downloaded: 0, conflicts: [Self.card]))
+    XCTAssertEqual(outcome.conflicts.map(\.path), [Self.card])
+    XCTAssertEqual([outcome.uploaded, outcome.downloaded], [0, 0])
     XCTAssertEqual(tv.read(Self.card), "tv progress", "Nothing is replaced until the user chooses")
     let untouched = await server.contents(at: "iCube/shared/" + Self.card)
     XCTAssertEqual(untouched.live, "phone progress")
     outcome = try await tv.sync()
-    XCTAssertEqual(outcome.conflicts, [Self.card], "It stays a conflict on every pass")
+    XCTAssertEqual(outcome.conflicts.map(\.path), [Self.card], "It stays a conflict on every pass")
 
-    outcome = try await tv.sync(resolving: [Self.card: .keepLocal])
+    outcome = try await tv.sync(resolving: Device.answer(outcome.conflicts, .keepLocal))
     XCTAssertEqual(outcome, .init(uploaded: 1, downloaded: 0, conflicts: []))
     let chosen = await server.contents(at: "iCube/shared/" + Self.card)
     XCTAssertEqual(chosen.live, "tv progress")
@@ -126,7 +127,8 @@ final class EmulationServerSaveSyncTests: XCTestCase {
     try phone.write("phone again", to: Self.card)
     try tv.write("tv again", to: Self.card)
     _ = try await phone.sync()
-    outcome = try await tv.sync(resolving: [Self.card: .useServer])
+    outcome = try await tv.sync()
+    outcome = try await tv.sync(resolving: Device.answer(outcome.conflicts, .useServer))
     XCTAssertEqual(outcome, .init(uploaded: 0, downloaded: 1, conflicts: []))
     XCTAssertEqual(tv.read(Self.card), "phone again")
     let trashed = await tv.trashedContents()
@@ -141,10 +143,11 @@ final class EmulationServerSaveSyncTests: XCTestCase {
     try phone.write("same state", to: Self.state)
     _ = try await phone.sync()
     let outcome = try await tv.sync()
-    XCTAssertEqual(outcome, .init(uploaded: 0, downloaded: 0, conflicts: [Self.card]))
+    XCTAssertEqual(outcome.conflicts.map(\.path), [Self.card])
+    XCTAssertEqual([outcome.uploaded, outcome.downloaded], [0, 0])
     XCTAssertEqual(tv.read(Self.card), "tv card")
     let after = try await tv.sync()
-    XCTAssertEqual(after.conflicts, [Self.card])
+    XCTAssertEqual(after.conflicts, outcome.conflicts)
   }
 
   func testNothingIsEverDeletedOnEitherSide() async throws {
@@ -201,12 +204,13 @@ final class EmulationServerSaveSyncTests: XCTestCase {
     let saves: FakeSaveServer = server
     await server.onNextUpload { await saves.replaceLive("tv progress", at: "iCube/shared/" + Self.card) }
     var outcome = try await phone.sync()
-    XCTAssertEqual(outcome, .init(uploaded: 0, downloaded: 0, conflicts: [Self.card]))
+    XCTAssertEqual(outcome.conflicts.map(\.path), [Self.card])
+    XCTAssertEqual([outcome.uploaded, outcome.downloaded], [0, 0])
     XCTAssertEqual(phone.read(Self.card), "phone progress")
     let raced = await server.contents(at: "iCube/shared/" + Self.card)
     XCTAssertEqual(raced.live, "tv progress", "The server parked the late copy instead of replacing the other device's save")
     outcome = try await phone.sync()
-    XCTAssertEqual(outcome.conflicts, [Self.card], "and it is still a conflict afterwards")
+    XCTAssertEqual(outcome.conflicts.map(\.path), [Self.card], "and it is still a conflict afterwards")
   }
 
   func testAnUnrelatedUploadInBetweenIsNotAConflict() async throws {
@@ -225,6 +229,67 @@ final class EmulationServerSaveSyncTests: XCTestCase {
     XCTAssertEqual(kept.live, "v2")
     let again = try await phone.sync()
     XCTAssertEqual(again, .init())
+  }
+
+  func testAnAnswerAppliesOnlyToTheFilesTheUserWasShown() async throws {
+    let phone = device("phone"), tv = device("tv")
+    try phone.write("v1", to: Self.card)
+    _ = try await phone.sync()
+    _ = try await tv.sync()
+    try phone.write("phone progress", to: Self.card)
+    try tv.write("tv progress", to: Self.card)
+    _ = try await phone.sync()
+    let shown = try await tv.sync().conflicts
+    XCTAssertEqual(shown.map(\.path), [Self.card])
+
+    // The game saves again on the TV before the answer is carried out: "use the server's" was not about this file.
+    try tv.write("tv progress, later", to: Self.card)
+    var outcome = try await tv.sync(resolving: Device.answer(shown, .useServer))
+    XCTAssertEqual(tv.read(Self.card), "tv progress, later")
+    XCTAssertEqual(outcome.downloaded, 0)
+    XCTAssertEqual(outcome.conflicts.map(\.path), [Self.card], "It is asked again, about the files as they are now")
+    XCTAssertNotEqual(outcome.conflicts, shown)
+
+    // The same for the other side: the phone saves again before "keep this device's" is carried out.
+    let asked = outcome.conflicts
+    try phone.write("phone progress, later", to: Self.card)
+    _ = try await phone.sync()
+    outcome = try await tv.sync(resolving: Device.answer(asked, .keepLocal))
+    XCTAssertEqual(outcome.uploaded, 0)
+    let live = await server.contents(at: "iCube/shared/" + Self.card).live
+    XCTAssertEqual(live, "phone progress, later")
+
+    outcome = try await tv.sync(resolving: Device.answer(outcome.conflicts, .keepLocal))
+    XCTAssertEqual(outcome, .init(uploaded: 1, downloaded: 0, conflicts: []))
+  }
+
+  func testUnrelatedUploadsThatKeepGettingInFirstAreNotAConflict() async throws {
+    let phone = device("phone")
+    try phone.write("v1", to: Self.card)
+    _ = try await phone.sync()
+    try phone.write("v2", to: Self.card)
+    let saves: FakeSaveServer = server
+    await server.onEveryUpload { await saves.replaceLive(UUID().uuidString, at: "iCube/other-device/" + Self.state) }
+    var outcome = try await phone.sync()
+    XCTAssertEqual(outcome, .init(), "Not sent yet, and not something to ask the user about")
+    await server.onEveryUpload(nil)
+    outcome = try await phone.sync()
+    XCTAssertEqual(outcome, .init(uploaded: 1, downloaded: 0, conflicts: []))
+  }
+
+  func testWiiSavesAreNotSyncedFileByFile() async throws {
+    let wii = "Wii/title/00010000/52535045/data/save.bin"
+    XCTAssertFalse(EmulationServerSaveSyncWorker.isSave(wii))
+    XCTAssertTrue(EmulationServerSaveSyncWorker.isSave(Self.card))
+    XCTAssertTrue(EmulationServerSaveSyncWorker.isSave(Self.state))
+    let phone = device("phone"), tv = device("tv")
+    try phone.write("wii save", to: wii)
+    try phone.write("card", to: Self.card)
+    var outcome = try await phone.sync()
+    XCTAssertEqual(outcome, .init(uploaded: 1, downloaded: 0, conflicts: []))
+    await server.plant("someone's wii save", at: "iCube/shared/" + wii, kind: "battery_save")
+    outcome = try await tv.sync()
+    XCTAssertEqual(tv.allFiles(), [Self.card])
   }
 
   func testADamagedDownloadChangesNothing() async throws {
@@ -289,7 +354,12 @@ private struct Device {
     self.server = server
   }
 
-  func sync(resolving: [String: EmulationServerSaveSyncWorker.Resolution] = [:]) async throws -> EmulationServerSaveSyncWorker.Outcome {
+  static func answer(_ conflicts: [EmulationServerSaveSyncWorker.Conflict],
+                     _ resolution: EmulationServerSaveSyncWorker.Resolution) -> [String: EmulationServerSaveSyncWorker.Choice] {
+    Dictionary(conflicts.map { ($0.path, .init(conflict: $0, resolution: resolution)) }, uniquingKeysWith: { first, _ in first })
+  }
+
+  func sync(resolving: [String: EmulationServerSaveSyncWorker.Choice] = [:]) async throws -> EmulationServerSaveSyncWorker.Outcome {
     let target = EmulationServerBackupTarget(server: try EmulationServer(address: "https://saves.example"),
                                              itemID: FakeSaveServer.itemID, allowsHTTP: false, syncsSaves: true)
     return try await worker.sync(root: root, target: target, token: "writer", transport: server, resolving: resolving)
@@ -340,11 +410,13 @@ private actor FakeSaveServer: ContentTransport {
   private var files: [Stored] = []
   private var uploads: [String: Data] = [:]
   private var interleave: (@Sendable () async -> Void)?
+  private var interleaveAlways: (@Sendable () async -> Void)?
   private var corrupt = false
   private(set) var uploadCount = 0
   private(set) var requestCount = 0
 
   func onNextUpload(_ work: @escaping @Sendable () async -> Void) { interleave = work }
+  func onEveryUpload(_ work: (@Sendable () async -> Void)?) { interleaveAlways = work }
   func corruptDownloads() { corrupt = true }
   func removeEverything() { files.removeAll() }
 
@@ -427,6 +499,7 @@ private actor FakeSaveServer: ContentTransport {
         interleave = nil
         await work()
       }
+      await interleaveAlways?()
       return try answer(201, ["id": id, "received": 0, "state": "open"])
     case ("PUT", "uploads", 5):
       uploads[parts[3], default: Data()].append(request.httpBody ?? Data())
