@@ -466,15 +466,15 @@ struct LibrarySearchFilterBar: View {
     } label: {
       HStack(spacing: 4) {
         Image(systemName: source.glyph)
-          .font(.caption2)
+          .font(.caption2)  // design-lint: allow same type as the platform chips beside it (in the baseline)
         Text(source.name)
-          .font(.caption.weight(isSelected ? .semibold : .regular))
+          .font(.caption.weight(isSelected ? .semibold : .regular))  // design-lint: allow same type as the platform chips beside it (in the baseline)
           .lineLimit(1)
           .frame(maxWidth: Self.sourceNameMaxWidth)
           .fixedSize(horizontal: true, vertical: false)
         if source.needsSetup {
           Image(systemName: "link")
-            .font(.caption2)
+            .font(.caption2)  // design-lint: allow same type as the platform chips beside it (in the baseline)
             .foregroundStyle(.secondary)
         } else if let count = source.count, count > 0 {
           Text("\(count)")
@@ -709,7 +709,7 @@ struct LibrarySelectionActionBar: View {
 
   private func actionLabel(_ title: String, systemImage: String) -> some View {
     Label(title, systemImage: systemImage)
-      .font(.caption2.weight(.medium))
+      .font(.caption2.weight(.medium))  // design-lint: allow same type as the platform chips beside it (in the baseline)
       .labelStyle(.titleAndIcon)
       .padding(.horizontal, 8)
       .padding(.vertical, 6)

@@ -122,7 +122,7 @@ struct ProfileTextEditorView: View {
             Image(systemName: showsProblems ? "chevron.down" : "chevron.up").foregroundStyle(.secondary)
           }
         }
-        .font(.footnote)
+        .icubeText(.detail)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .contentShape(Rectangle())
@@ -139,8 +139,8 @@ struct ProfileTextEditorView: View {
               Image(systemName: diagnostic.severity == .error ? "xmark.octagon.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(diagnostic.severity == .error ? .red : .orange)
               VStack(alignment: .leading, spacing: 2) {
-                Text(diagnostic.message).font(.footnote)
-                Text(String(format: L("Line %d"), diagnostic.line)).font(.caption2).foregroundStyle(.secondary)
+                Text(diagnostic.message).icubeText(.detail)
+                Text(String(format: L("Line %d"), diagnostic.line)).icubeText(.detail).foregroundStyle(.secondary)
               }
             }
           }
