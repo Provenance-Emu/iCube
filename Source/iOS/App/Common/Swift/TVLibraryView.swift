@@ -3354,6 +3354,13 @@ struct TVLibraryView: View {
         if prevEGPHandlers[cid] == nil { prevEGPHandlers[cid] = egp.valueChangedHandler }
         egp.valueChangedHandler = { (gamepad: GCExtendedGamepad, element: GCControllerElement) in
           guard ControllerFocusCoordinator.isActiveScope(scope) else { return }
+          // Start / Menu opens Settings: the toolbar's gear is a touch target, so a pad had no way in.
+          // Before the empty-library guard, because Settings is where an empty library gets its games.
+          // One event per press: the handler also runs on release, when `isPressed` is false.
+          if element == gamepad.buttonMenu, gamepad.buttonMenu.isPressed {
+            DispatchQueue.main.async { openLibrarySettings() }
+            return
+          }
           guard !model.games.isEmpty else { return }
           let index: Int = {
             if let current = focusedFilePath, let idx = model.games.firstIndex(where: { $0.filePath == current }) { return idx }
