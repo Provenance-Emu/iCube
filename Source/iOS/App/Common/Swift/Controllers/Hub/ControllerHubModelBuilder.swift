@@ -233,11 +233,19 @@ enum ControllerHubModelBuilder {
 
   // MARK: Motion
 
+  static let motionTestRowID = "motion-test"
+
   private static func motionSection(state: ControllerHubState, actions: ControllerHubActions) -> MenuSection {
-    MenuSection(id: "motion", header: L("Motion"), items: [MenuItem(
-      id: "dsu", title: L("Motion Source (DSU)"), subtitle: dsuSummary(state), icon: "dot.radiowaves.left.and.right",
-      role: .destination(actions.dsuDestination()),
-      description: L("Use a phone or a DSU server as a motion controller."))])
+    MenuSection(id: "motion", header: L("Motion"), items: [
+      MenuItem(
+        id: "dsu", title: L("Motion Source (DSU)"), subtitle: dsuSummary(state), icon: "dot.radiowaves.left.and.right",
+        role: .destination(actions.dsuDestination()),
+        description: L("Use a phone or a DSU server as a motion controller.")),
+      MenuItem(
+        id: motionTestRowID, title: L("Motion Test…"), icon: "gyroscope",
+        role: .destination(actions.motionTestDestination()),
+        description: L("Live motion-sensor readings, and what a Wii Remote reads from them.")),
+    ])
   }
 
   /// What is about physical pads as a group, under the pad list.

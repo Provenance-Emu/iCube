@@ -261,4 +261,6 @@ struct ControllerHubActions {
   var touchControlsDestination: () -> AnyView = { AnyView(EmptyView()) }
   /// Pushes On-Screen Stick Feel, from the Touch Controls page.
   var stickFeelDestination: () -> AnyView = { AnyView(EmptyView()) }
+  /// Pushes Motion Test (live motion-sensor readings), from the Motion section.
+  var motionTestDestination: () -> AnyView = { AnyView(EmptyView()) }
 }

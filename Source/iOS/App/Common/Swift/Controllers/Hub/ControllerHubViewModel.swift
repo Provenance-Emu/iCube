@@ -375,7 +375,8 @@ final class ControllerHubViewModel {
       touchControlsDestination: { [system] in
         AnyView(ControllerHubView(system: system, page: .touchControls))
       },
-      stickFeelDestination: { AnyView(AnalogStickSettingsView()) })
+      stickFeelDestination: { AnyView(AnalogStickSettingsView()) },
+      motionTestDestination: { AnyView(MotionTestView()) })
   }
 
   private static func skinsDestination(for system: ControllerSetupSystem) -> AnyView {

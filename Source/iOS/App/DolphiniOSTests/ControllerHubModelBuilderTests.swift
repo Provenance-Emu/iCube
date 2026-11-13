@@ -439,13 +439,27 @@ final class ControllerHubModelBuilderTests: XCTestCase {
 
   // MARK: Setup and lights
 
-  /// What is about physical pads sits under the pad list; the DSU source is its own Motion section.
+  /// What is about physical pads sits under the pad list; the DSU source and the sensor test are
+  /// their own Motion section.
   func test_padOptions_followThePadList_iOS_and_tvOS() {
     XCTAssertEqual(ids(make(state(system: .gamecube)), section: "devices"), ["no-pads", "takes-player-1", "rumble", "rumble-test", "background-input"])
     XCTAssertEqual(ids(make(state(system: .gamecube), platform: .tvos), section: "devices"), ["no-pads", "background-input"])
     XCTAssertEqual(make(state(system: .gamecube)).sections.first { $0.id == "devices" }?.header, "Controllers")
     for platform in [PlatformKind.ios, .tvos] {
-      XCTAssertEqual(ids(make(state(system: .gamecube), platform: platform), section: "motion"), ["dsu"])
+      XCTAssertEqual(
+        ids(make(state(system: .gamecube), platform: platform), section: "motion"), ["dsu", ControllerHubModelBuilder.motionTestRowID])
+    }
+  }
+
+  /// Motion Test pushes its own screen on both platforms, whatever the hub lists.
+  func test_motionTest_pushes() {
+    for platform in [PlatformKind.ios, .tvos] {
+      for system in [ControllerSetupSystem.gamecube, .wii, .both, .wiiAndGameCube] {
+        let row = make(state(system: system), platform: platform).item(id: ControllerHubModelBuilder.motionTestRowID)
+        XCTAssertEqual(row?.title, "Motion Test…")
+        XCTAssertEqual(row?.isEnabled, true)
+        guard case .destination? = row?.role else { return XCTFail("Motion Test must push") }
+      }
     }
   }
 
