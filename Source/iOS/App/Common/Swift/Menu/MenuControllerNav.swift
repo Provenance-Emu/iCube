@@ -42,6 +42,10 @@ struct MenuControllerNav: Equatable {
     var leftShoulder = false
     /// R1 — jumps to the first focusable item of the next `MenuSection`.
     var rightShoulder = false
+    /// L2 — the previous tab of whatever hosts this screen (the Settings sidebar on iPad).
+    var leftTrigger = false
+    /// R2 — the next tab.
+    var rightTrigger = false
     /// D-pad left/right: change the focused picker's value. One step per press; a hold also emits `.adjustRepeat`, which only a stepper row acts on.
     var left = false
     var right = false
@@ -54,6 +58,9 @@ struct MenuControllerNav: Equatable {
     case back
     /// -1 = previous section, +1 = next section.
     case jumpSection(Int)
+    /// -1 = previous tab, +1 = next tab. The shoulders stay inside the page (sections); the
+    /// triggers leave it for its neighbour, so a pad reaches every page without a touch.
+    case switchTab(Int)
     /// -1 = previous option, +1 = next option, on the focused picker row.
     case adjust(Int)
     /// Left/right still held after `Config.initialRepeatDelay`: one per `Config.repeatInterval`.
@@ -74,6 +81,8 @@ struct MenuControllerNav: Equatable {
   private var bLatched = false
   private var leftShoulderLatched = false
   private var rightShoulderLatched = false
+  private var leftTriggerLatched = false
+  private var rightTriggerLatched = false
   private var leftLatched = false
   private var rightLatched = false
   /// Set by `resync`: the current hold produces no repeats until released.
@@ -149,6 +158,24 @@ struct MenuControllerNav: Equatable {
       rightShoulderLatched = false
     }
 
+    if input.leftTrigger {
+      if !leftTriggerLatched {
+        leftTriggerLatched = true
+        events.append(.switchTab(-1))
+      }
+    } else {
+      leftTriggerLatched = false
+    }
+
+    if input.rightTrigger {
+      if !rightTriggerLatched {
+        rightTriggerLatched = true
+        events.append(.switchTab(1))
+      }
+    } else {
+      rightTriggerLatched = false
+    }
+
     if input.left {
       if !leftLatched {
         leftLatched = true
@@ -209,6 +236,8 @@ struct MenuControllerNav: Equatable {
     bLatched = input.b
     leftShoulderLatched = input.leftShoulder
     rightShoulderLatched = input.rightShoulder
+    leftTriggerLatched = input.leftTrigger
+    rightTriggerLatched = input.rightTrigger
     leftLatched = input.left
     rightLatched = input.right
     heldAdjust = Self.adjustDirection(input)

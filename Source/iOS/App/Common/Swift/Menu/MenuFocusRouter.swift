@@ -106,6 +106,7 @@ struct MenuFocusRouter {
     var longActivated: String?
     var didGoBack = false
     var adjust: (id: String, step: Int)?
+    var tabSwitch = 0
 
     for (padID, input) in padInputs {
       let isNewPad = navByPad[padID] == nil
@@ -128,9 +129,11 @@ struct MenuFocusRouter {
       if longActivated == nil { longActivated = padResult.longActivatedID }
       if adjust == nil { adjust = padResult.adjust }
       if padResult.didGoBack { didGoBack = true }
+      if tabSwitch == 0 { tabSwitch = padResult.tabSwitch }
     }
     if let activated, adjust?.id == activated, !MenuFocusRouter.isStepper(activated, in: model) { adjust = nil }
-    return MenuFocusUpdate(focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust)
+    return MenuFocusUpdate(
+      focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust, tabSwitch: tabSwitch)
   }
 
   /// Adopt the current physical input without emitting anything. `MenuScreen`
@@ -171,6 +174,7 @@ struct MenuFocusRouter {
     var longActivated: String?
     var didGoBack = false
     var adjust: (id: String, step: Int)?
+    var tabSwitch = 0
     for event in events {
       switch event {
       case .move(let step):
@@ -190,6 +194,8 @@ struct MenuFocusRouter {
         if let current { longActivated = current }
       case .back:
         didGoBack = true
+      case .switchTab(let step):
+        tabSwitch = step
       case .adjust(let step):
         if columns > 1, !stepsPickersInGrid || !MenuFocusRouter.isPicker(current, in: model) {
           current = MenuFocusRouter.gridMove(current, rowStep: 0, columnStep: step, columns: columns,
@@ -211,7 +217,8 @@ struct MenuFocusRouter {
     // write twice from the same stale value.
     // A stepper is the exception: A does nothing on it, so its adjust is not a second write.
     if let activated, adjust?.id == activated, !MenuFocusRouter.isStepper(activated, in: model) { adjust = nil }
-    return MenuFocusUpdate(focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust)
+    return MenuFocusUpdate(
+      focusedID: current, activatedID: activated, longActivatedID: longActivated, didGoBack: didGoBack, adjust: adjust, tabSwitch: tabSwitch)
   }
 
   /// Move within the flat focusable order, clamped — no wraparound (matches
@@ -324,11 +331,13 @@ struct MenuFocusUpdate {
   var didGoBack = false
   /// Set when a left/right edge fired on a currently-focused item.
   var adjust: (id: String, step: Int)?
+  /// -1 / +1 when a trigger asked for the previous / next tab this tick; 0 otherwise.
+  var tabSwitch = 0
 }
 
 extension MenuFocusUpdate: Equatable {
   static func == (lhs: MenuFocusUpdate, rhs: MenuFocusUpdate) -> Bool {
-    lhs.focusedID == rhs.focusedID && lhs.activatedID == rhs.activatedID && lhs.longActivatedID == rhs.longActivatedID && lhs.didGoBack == rhs.didGoBack
+    lhs.focusedID == rhs.focusedID && lhs.activatedID == rhs.activatedID && lhs.longActivatedID == rhs.longActivatedID && lhs.didGoBack == rhs.didGoBack && lhs.tabSwitch == rhs.tabSwitch
       && lhs.adjust?.id == rhs.adjust?.id && lhs.adjust?.step == rhs.adjust?.step
   }
 }

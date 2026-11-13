@@ -215,6 +215,8 @@ struct MenuScreen: View {
   @State private var tvShelfID: String?
   @Environment(\.settingsPaneHoldsLeft) private var paneHoldsLeft
   #endif
+  /// L2 / R2 on a pad (iOS): the host's previous / next tab, when it has tabs (`menuTabSwitch`).
+  @Environment(\.menuTabSwitch) private var tabSwitch
   #endif
 
   var body: some View {
@@ -856,6 +858,8 @@ struct MenuScreen: View {
       b: pad.buttonB.isPressed,
       leftShoulder: pad.leftShoulder.isPressed,
       rightShoulder: pad.rightShoulder.isPressed,
+      leftTrigger: pad.leftTrigger.isPressed,
+      rightTrigger: pad.rightTrigger.isPressed,
       left: pad.dpad.left.isPressed,
       right: pad.dpad.right.isPressed
     )
@@ -915,6 +919,9 @@ struct MenuScreen: View {
     }
     if result.didGoBack {
       onBack?()
+    }
+    if result.tabSwitch != 0 {
+      tabSwitch?(result.tabSwitch)
     }
   }
   #endif

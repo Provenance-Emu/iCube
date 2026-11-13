@@ -46,6 +46,42 @@ final class MenuFocusRouterTests: XCTestCase {
     XCTAssertEqual(result.focusedID, "e", "clamped at the last item, never wraps to the first")
   }
 
+  // MARK: Tab switch (triggers)
+
+  /// L2 / R2 ask the host for its previous / next tab and leave focus alone: the shoulders stay
+  /// inside the page, the triggers leave it.
+  func test_triggers_askForTheNeighbouringTab_oncePerPress_withoutMovingFocus() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = twoSectionModel()
+    var result = router.update(.init(rightTrigger: true), at: 0, model: model, focusedID: "b", isActive: true)
+    XCTAssertEqual(result.tabSwitch, 1)
+    XCTAssertEqual(result.focusedID, "b")
+    result = router.update(.init(rightTrigger: true), at: 0.5, model: model, focusedID: "b", isActive: true)
+    XCTAssertEqual(result.tabSwitch, 0, "a held trigger is one tab, not a run through them")
+    result = router.update(.init(), at: 0.6, model: model, focusedID: "b", isActive: true)
+    result = router.update(.init(leftTrigger: true), at: 0.7, model: model, focusedID: "b", isActive: true)
+    XCTAssertEqual(result.tabSwitch, -1)
+  }
+
+  /// A trigger held while another surface owned the controller is not a press when this one gets it back.
+  func test_triggers_heldWhileInactive_doNotFireOnReactivation() {
+    var router = MenuFocusRouter(config: cfg)
+    let model = twoSectionModel()
+    _ = router.update(.init(rightTrigger: true), at: 0, model: model, focusedID: "a", isActive: false)
+    let result = router.update(.init(rightTrigger: true), at: 0.1, model: model, focusedID: "a", isActive: true)
+    XCTAssertEqual(result.tabSwitch, 0)
+  }
+
+  func test_tabStep_wrapsBothWays_andStartsAtAnEndWhenNothingIsSelected() {
+    let ids = ["video", "audio", "controllers"]
+    XCTAssertEqual(MenuTabStep.target(from: "video", by: 1, in: ids), "audio")
+    XCTAssertEqual(MenuTabStep.target(from: "controllers", by: 1, in: ids), "video")
+    XCTAssertEqual(MenuTabStep.target(from: "video", by: -1, in: ids), "controllers")
+    XCTAssertEqual(MenuTabStep.target(from: nil, by: 1, in: ids), "video")
+    XCTAssertEqual(MenuTabStep.target(from: "gone", by: -1, in: ids), "controllers")
+    XCTAssertNil(MenuTabStep.target(from: nil, by: 1, in: []))
+  }
+
   // MARK: Section jump
 
   func test_jumpSection_movesToFirstItemOfNextSection() {

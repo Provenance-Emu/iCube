@@ -123,7 +123,13 @@ struct SettingsSidebarShell: View {
       .environment(\.settingsPaneHoldsLeft, { paneHoldsLeft = $0 })
       .focusSection()
       #else
-      .environment(\.settingsPaneBack, { sidebarFocus = selectedID })
+      // A pad has no focus in the touch sidebar: B at a page's root closes Settings where it can be
+      // closed, and L2 / R2 step through the sidebar's pages (`MenuTabStep`), so a controller reaches
+      // every page and gets back out without a touch.
+      .environment(\.settingsPaneBack, { if let onClose { onClose() } else { sidebarFocus = selectedID } })
+      .environment(\.menuTabSwitch, { step in
+        selectedID = MenuTabStep.target(from: selectedID, by: step, in: entries.map(\.id))
+      })
       #endif
     }
     .defaultFocus($sidebarFocus, selectedID ?? sections.first?.entries.first?.id)
@@ -256,6 +262,17 @@ struct SettingsSidebarShell: View {
   #if !os(tvOS)
   /// iPad touch sidebar. Unchanged from the stock row treatment.
   private var padSidebarList: some View {
+    ScrollViewReader { proxy in
+      padSidebarRows
+        // A trigger can select a page that is scrolled out of sight.
+        .onChange(of: selectedID) { _, id in
+          guard let id else { return }
+          withAnimation { proxy.scrollTo(id, anchor: .center) }
+        }
+    }
+  }
+
+  private var padSidebarRows: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Layout.rowStackSpacing) {
         ForEach(sections) { section in
@@ -282,6 +299,7 @@ struct SettingsSidebarShell: View {
             }
             .buttonStyle(FocusButtonStyle())
             .focused($sidebarFocus, equals: entry.id)
+            .id(entry.id)
             .accessibilityIdentifier("settings.category.\(entry.id)")
           }
         }
