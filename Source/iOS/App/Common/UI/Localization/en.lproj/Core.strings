@@ -5790,12 +5790,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "This server requires sign-in." = "This server requires sign-in.";
 "No GameCube or Wii games are available. Check the server’s library permissions and system labels." = "No GameCube or Wii games are available. Check the server’s library permissions and system labels.";
 "Load More" = "Load More";
-
 "Extracting archive…" = "Extracting archive…";
-
 "The server did not provide valid game files." = "The server did not provide valid game files.";
-
-/* Emulation Server backups */
 "Allow backups over local HTTP" = "Allow backups over local HTTP";
 "Automatic Save Backups" = "Automatic Save Backups";
 "Back Up All Servers Now" = "Back Up All Servers Now";
@@ -5820,8 +5816,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Update backup destination" = "Update backup destination";
 "Use HTTPS, a local IP address, or a .local hostname for this server." = "Use HTTPS, a local IP address, or a .local hostname for this server.";
 "Write access token" = "Write access token";
-
-/* Controllers: on-screen controller, motion axes, profile text editor */
 "%d reversed" = "%d reversed";
 "Buttons, Profiles & Motion…" = "Buttons, Profiles & Motion…";
 "How the on-screen controls look and where they sit." = "How the on-screen controls look and where they sit.";
@@ -5870,8 +5864,21 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "True or False is missing." = "True or False is missing.";
 "Unknown key. Did you mean %@?" = "Unknown key. Did you mean %@?";
 "Unknown key. It is ignored." = "Unknown key. It is ignored.";
-
-/* Controllers: Motion Test */
+"%@, not connected" = "%@, not connected";
+"Server Library" = "Server Library";
+"Add a RomM Server" = "Add a RomM Server";
+"Enter the address you open RomM at. GameCube and Wii games from it appear in your library's sources." = "Enter the address you open RomM at. GameCube and Wii games from it appear in your library's sources.";
+"Use username and password" = "Use username and password";
+"Client API token (optional)" = "Client API token (optional)";
+"Allow credentials over HTTP" = "Allow credentials over HTTP";
+"The server cannot save edits to this game. It may need an update." = "The server cannot save edits to this game. It may need an update.";
+"The game changed on the server at the same time. Try again." = "The game changed on the server at the same time. Try again.";
+"Saved to %@ too." = "Saved to %@ too.";
+"Saved on this device. %1$@ did not take the change: %2$@" = "Saved on this device. %1$@ did not take the change: %2$@";
+"Approve on the Server" = "Approve on the Server";
+"Pair This Device" = "Pair This Device";
+"On the server, open Settings → Devices and enter this PIN:" = "On the server, open Settings → Devices and enter this PIN:";
+"iCube on %@" = "iCube on %@";
 "Motion Test" = "Motion Test";
 "Motion Test…" = "Motion Test…";
 "Live motion-sensor readings, and what a Wii Remote reads from them." = "Live motion-sensor readings, and what a Wii Remote reads from them.";
@@ -5912,25 +5919,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Waiting for the motion sensors…" = "Waiting for the motion sensors…";
 "Lying flat with its buttons up, a controller must read Flat, face up. If it reads something else, flip the matching switch under Motion Axes on that player's screen (Pointer & Motion). These readings are taken before those switches." = "Lying flat with its buttons up, a controller must read Flat, face up. If it reads something else, flip the matching switch under Motion Axes on that player's screen (Pointer & Motion). These readings are taken before those switches.";
 "The touchscreen plays as a Wii Remote pointing out of the back of the device. Held upright with the screen facing you it reads Flat, face up; lying on a table it reads Pointing at the floor. In a game, Recenter makes your grip level, and the touch pointer modes keep the remote level." = "The touchscreen plays as a Wii Remote pointing out of the back of the device. Held upright with the screen facing you it reads Flat, face up; lying on a table it reads Pointing at the floor. In a game, Recenter makes your grip level, and the touch pointer modes keep the remote level.";
-
-/* Server libraries: RomM, pairing, writing edits back */
-"%@, not connected" = "%@, not connected";
-"Server Library" = "Server Library";
-"Add a RomM Server" = "Add a RomM Server";
-"Enter the address you open RomM at. GameCube and Wii games from it appear in your library's sources." = "Enter the address you open RomM at. GameCube and Wii games from it appear in your library's sources.";
-"Use username and password" = "Use username and password";
-"Client API token (optional)" = "Client API token (optional)";
-"Allow credentials over HTTP" = "Allow credentials over HTTP";
-"The server cannot save edits to this game. It may need an update." = "The server cannot save edits to this game. It may need an update.";
-"The game changed on the server at the same time. Try again." = "The game changed on the server at the same time. Try again.";
-"Saved to %@ too." = "Saved to %@ too.";
-"Saved on this device. %1$@ did not take the change: %2$@" = "Saved on this device. %1$@ did not take the change: %2$@";
-"Approve on the Server" = "Approve on the Server";
-"Pair This Device" = "Pair This Device";
-"On the server, open Settings → Devices and enter this PIN:" = "On the server, open Settings → Devices and enter this PIN:";
-"iCube on %@" = "iCube on %@";
-
-/* Emulation Server save sync */
 "Syncing saves…" = "Syncing saves…";
 "Saves are in step." = "Saves are in step.";
 "Saves are in step. Sent %1$d, received %2$d." = "Saves are in step. Sent %1$d, received %2$d.";

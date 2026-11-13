@@ -5736,12 +5736,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "This server requires sign-in." = "このサーバーにはサインインが必要です。";
 "No GameCube or Wii games are available. Check the server’s library permissions and system labels." = "利用できるゲームキューブまたは Wii のゲームがありません。サーバーのライブラリのアクセス権と機種の分類を確認してください。";
 "Load More" = "さらに読み込む";
-
 "Extracting archive…" = "アーカイブを展開中…";
-
 "The server did not provide valid game files." = "サーバーから有効なゲームファイルが提供されませんでした。";
-
-/* Emulation Server backups */
 "Allow backups over local HTTP" = "ローカル HTTP でのバックアップを許可";
 "Automatic Save Backups" = "セーブデータの自動バックアップ";
 "Back Up All Servers Now" = "すべてのサーバーに今すぐバックアップ";
@@ -5766,8 +5762,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Update backup destination" = "バックアップ先を更新";
 "Use HTTPS, a local IP address, or a .local hostname for this server." = "このサーバーには HTTPS、ローカル IP アドレス、または .local ホスト名を使ってください。";
 "Write access token" = "書き込み用アクセストークン";
-
-/* Controllers: on-screen controller, motion axes, profile text editor */
 "%d reversed" = "%d 軸を反転中";
 "Buttons, Profiles & Motion…" = "ボタン、プロファイル、モーション…";
 "How the on-screen controls look and where they sit." = "画面上のコントローラーの見た目と配置。";
@@ -5816,8 +5810,21 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "True or False is missing." = "True または False がありません。";
 "Unknown key. Did you mean %@?" = "不明なキーです。%@ ではありませんか？";
 "Unknown key. It is ignored." = "不明なキーです。無視されます。";
-
-/* Controllers: Motion Test */
+"%@, not connected" = "%@、未接続";
+"Server Library" = "サーバーのライブラリ";
+"Add a RomM Server" = "RomM サーバーを追加";
+"Enter the address you open RomM at. GameCube and Wii games from it appear in your library's sources." = "RomM を開くアドレスを入力してください。そのサーバーのゲームキューブと Wii のゲームがライブラリのソースに表示されます。";
+"Use username and password" = "ユーザー名とパスワードを使用";
+"Client API token (optional)" = "クライアント API トークン（任意）";
+"Allow credentials over HTTP" = "HTTP での認証情報の送信を許可";
+"The server cannot save edits to this game. It may need an update." = "サーバーはこのゲームの編集を保存できません。サーバーのアップデートが必要な可能性があります。";
+"The game changed on the server at the same time. Try again." = "同時にサーバー上でゲームが変更されました。もう一度お試しください。";
+"Saved to %@ too." = "%@ にも保存しました。";
+"Saved on this device. %1$@ did not take the change: %2$@" = "このデバイスに保存しました。%1$@ は変更を受け付けませんでした：%2$@";
+"Approve on the Server" = "サーバーで承認";
+"Pair This Device" = "このデバイスをペアリング";
+"On the server, open Settings → Devices and enter this PIN:" = "サーバーの「設定」→「デバイス」を開き、この PIN を入力してください：";
+"iCube on %@" = "%@ の iCube";
 "Motion Test" = "モーションテスト";
 "Motion Test…" = "モーションテスト…";
 "Live motion-sensor readings, and what a Wii Remote reads from them." = "モーションセンサーの現在の値と、Wiiリモコンがそこから読み取る値を表示します。";
@@ -5858,25 +5865,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Waiting for the motion sensors…" = "モーションセンサーを待っています…";
 "Lying flat with its buttons up, a controller must read Flat, face up. If it reads something else, flip the matching switch under Motion Axes on that player's screen (Pointer & Motion). These readings are taken before those switches." = "ボタン面を上にして平らに置いたコントローラーは「水平（表が上）」と表示されるはずです。別の表示になる場合は、そのプレイヤーの画面（Pointer & Motion）の「モーションの軸」で該当するスイッチを切り替えてください。ここの値はそれらのスイッチを適用する前のものです。";
 "The touchscreen plays as a Wii Remote pointing out of the back of the device. Held upright with the screen facing you it reads Flat, face up; lying on a table it reads Pointing at the floor. In a game, Recenter makes your grip level, and the touch pointer modes keep the remote level." = "タッチスクリーンは、デバイスの背面から前方を指すWiiリモコンとして扱われます。画面を自分に向けて立てて持つと「水平（表が上）」、机に置くと「床を向いている」と表示されます。ゲーム中は、再センタリングでそのときの持ち方が水平になり、タッチのポインターモードではリモコンは水平のままです。";
-
-/* Server libraries: RomM, pairing, writing edits back */
-"%@, not connected" = "%@、未接続";
-"Server Library" = "サーバーのライブラリ";
-"Add a RomM Server" = "RomM サーバーを追加";
-"Enter the address you open RomM at. GameCube and Wii games from it appear in your library's sources." = "RomM を開くアドレスを入力してください。そのサーバーのゲームキューブと Wii のゲームがライブラリのソースに表示されます。";
-"Use username and password" = "ユーザー名とパスワードを使用";
-"Client API token (optional)" = "クライアント API トークン（任意）";
-"Allow credentials over HTTP" = "HTTP での認証情報の送信を許可";
-"The server cannot save edits to this game. It may need an update." = "サーバーはこのゲームの編集を保存できません。サーバーのアップデートが必要な可能性があります。";
-"The game changed on the server at the same time. Try again." = "同時にサーバー上でゲームが変更されました。もう一度お試しください。";
-"Saved to %@ too." = "%@ にも保存しました。";
-"Saved on this device. %1$@ did not take the change: %2$@" = "このデバイスに保存しました。%1$@ は変更を受け付けませんでした：%2$@";
-"Approve on the Server" = "サーバーで承認";
-"Pair This Device" = "このデバイスをペアリング";
-"On the server, open Settings → Devices and enter this PIN:" = "サーバーの「設定」→「デバイス」を開き、この PIN を入力してください：";
-"iCube on %@" = "%@ の iCube";
-
-/* Emulation Server save sync */
 "Syncing saves…" = "セーブを同期中…";
 "Saves are in step." = "セーブは同期されています。";
 "Saves are in step. Sent %1$d, received %2$d." = "セーブは同期されています。送信 %1$d 件、受信 %2$d 件。";
