@@ -215,12 +215,8 @@ struct EmulationServerConnectionFields: View {
   @State private var connection: Task<Void, Never>?
   @State private var requiresCredential = false
   @State private var triedLocalAccess = false
-  @State private var pairing: PairingDisplay?
-
-  private struct PairingDisplay {
-    let pin: String
-    let link: URL
-  }
+  @State private var pairing: EmulationServer?
+  @State private var allowPairingHTTP = false
 
   /// The longest device name sent with a pairing request.
   private static let deviceNameLimit = 60
@@ -234,28 +230,20 @@ struct EmulationServerConnectionFields: View {
           triedLocalAccess = true
           connect()
         }
-      if let pairing {
-        #if os(tvOS)
-        QRCodeImage(string: pairing.link.absoluteString)
-          .frame(width: 240, height: 240)
-          .padding(16)
-          .background(.white)
-          .accessibilityHidden(true)
-        Text(L("Scan with your phone to approve this Apple TV."))
-        Text(L("Or open the server’s Settings → Devices and enter this PIN:"))
-        #else
-        Text(L("On the server, open Settings → Devices and enter this PIN:"))
-        #endif
-        Text(pairing.pin).font(icube.font(.title).monospacedDigit())
-        #if !os(tvOS)
-        Link(L("Approve on the Server"), destination: pairing.link)
-        #endif
-        Button(L("Cancel"), role: .cancel) { connection?.cancel() }
-      } else {
-        connectionControls
-      }
+      connectionControls
       if connection != nil { ProgressView() }
       if let errorMessage { Text(errorMessage).foregroundStyle(.secondary) }
+    }
+    .onChange(of: address) { allowPairingHTTP = false }
+    .sheet(item: $pairing) { server in
+      if let client = try? DevicePairingClient(origin: server.origin, allowHTTP: allowPairingHTTP) {
+        let name = String(format: L("iCube on %@"), ICubeDeviceName.current())
+        DevicePairingView(client: client, name: String(name.prefix(Self.deviceNameLimit)), legacyApprovalURL: { pin in
+          DevicePairingClient.legacyApprovalURL(origin: server.origin, pin: pin)
+        }) { issued in
+          try await finish(server, token: issued)
+        }
+      }
     }
   }
 
@@ -277,14 +265,12 @@ struct EmulationServerConnectionFields: View {
 
   @ViewBuilder
   private var connectionControls: some View {
-    if requiresCredential {
-      #if os(tvOS)
-      Button(L("Pair Apple TV")) { pair() }
+    if let server = try? (discoveredServer ?? EmulationServer(address: address)) {
+      if server.origin.scheme == "http" {
+        Toggle(L("Allow pairing over local HTTP"), isOn: $allowPairingHTTP)
+      }
+      Button(L("Request Access")) { pair() }
         .disabled(connection != nil)
-      #else
-      Button(L("Pair This Device")) { pair() }
-        .disabled(connection != nil)
-      #endif
     }
     if discoveredServer == nil || requiresCredential {
       if let initialFocus {
@@ -344,33 +330,15 @@ struct EmulationServerConnectionFields: View {
   private func pair() {
     guard connection == nil else { return }
     errorMessage = nil
-    connection = Task {
-      defer {
-        pairing = nil
-        connection = nil
+    do {
+      let server = try discoveredServer ?? EmulationServer(address: address)
+      guard server.origin.scheme == "https" || allowPairingHTTP else {
+        errorMessage = L("Enable pairing over HTTP only on a trusted network.")
+        return
       }
-      do {
-        let server = try discoveredServer ?? EmulationServer(address: address)
-        let library = EmulationServerLibrary(server: server, token: nil)
-        let name = String(format: L("iCube on %@"), ICubeDeviceName.current())
-        let challenge = try await library.startPairing(deviceName: String(name.prefix(Self.deviceNameLimit)))
-        guard let link = challenge.verificationURL(on: server) else { throw URLError(.badURL) }
-        pairing = .init(pin: challenge.pin, link: link)
-        let clock = ContinuousClock()
-        let expires = clock.now.advanced(by: .seconds(challenge.expiresInSeconds))
-        while clock.now < expires {
-          try await Task.sleep(for: .seconds(3))
-          if let issuedToken = try await library.redeemPairing(challenge) {
-            try await finish(server, token: issuedToken)
-            return
-          }
-        }
-        throw EmulationServerLibrary.ServerError.pairingExpired
-      } catch ContinuityError.invalidResponse(let status) where status == 404 {
-        if !Task.isCancelled { errorMessage = L("Pairing is unavailable. Use a read access token to connect.") }
-      } catch {
-        if !Task.isCancelled { errorMessage = error.localizedDescription }
-      }
+      pairing = server
+    } catch {
+      errorMessage = error.localizedDescription
     }
   }
 }

@@ -130,6 +130,8 @@
 			<string>DirectionalGamepad</string>
 		</dict>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>iCube uses the camera to scan Emulation Server pairing codes.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- Continuity pulls talk plain HTTP to .local / raw-IP peers on the LAN.

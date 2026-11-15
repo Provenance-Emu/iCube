@@ -184,32 +184,6 @@ actor EmulationServerLibrary {
     _ = try await libraries()
   }
 
-  typealias PairingChallenge = DevicePairingChallenge
-
-  func startPairing(deviceName: String = "iCube") async throws -> PairingChallenge {
-    let route = try request("device-pairing", authorized: false)
-    let response = try await transport.request(.json(url: route.url, payload: DevicePairingDraft(name: deviceName)))
-    guard response.status == 201 else { throw ContinuityError.invalidResponse(status: response.status) }
-    let challenge = try response.decoded(PairingChallenge.self)
-    guard challenge.pin.utf8.count == 6, challenge.pin.utf8.allSatisfy({ (48 ... 57).contains($0) }),
-          !challenge.id.isEmpty, !challenge.secret.isEmpty, (1 ... 300).contains(challenge.expiresInSeconds) else {
-      throw ServerError.unsupported
-    }
-    return challenge
-  }
-
-  func redeemPairing(_ challenge: PairingChallenge) async throws -> String? {
-    let route = try request("device-pairing/redeem", authorized: false)
-    let proof = DevicePairingRedemption(id: challenge.id, secret: challenge.secret)
-    let response = try await transport.request(.json(url: route.url, payload: proof))
-    if response.status == 202 { return nil }
-    if response.status == 404 { throw ServerError.pairingExpired }
-    guard response.status == 200 else { throw ContinuityError.invalidResponse(status: response.status) }
-    let credential = try response.decoded(DeviceTokenCreated.self)
-    guard credential.scopes == ["read"], Self.isValidToken(credential.token) else { throw ServerError.accessDenied }
-    return credential.token
-  }
-
   static func isValidToken(_ token: String) -> Bool {
     !token.isEmpty && token.utf8.allSatisfy { (33 ... 126).contains($0) }
   }
@@ -615,14 +589,13 @@ actor EmulationServerLibrary {
   }
 
   enum ServerError: LocalizedError {
-    case unsupported, invalidContent, accessDenied, pairingExpired, editUnavailable, editConflict
+    case unsupported, invalidContent, accessDenied, editUnavailable, editConflict
 
     var errorDescription: String? {
       switch self {
       case .unsupported: return L("This Emulation Server version is unsupported.")
       case .invalidContent: return L("The server did not provide valid game files.")
       case .accessDenied: return L("The server denied access. Check your access token and library permissions.")
-      case .pairingExpired: return L("The pairing code expired. Start pairing again.")
       case .editUnavailable: return L("The server cannot save edits to this game. It may need an update.")
       case .editConflict: return L("The game changed on the server at the same time. Try again.")
       }
@@ -649,15 +622,5 @@ extension EmulationServerLibrary: RemoteGameCatalog {
   nonisolated func isAccessDenied(_ error: any Error) -> Bool {
     if case ServerError.accessDenied = error { return true }
     return false
-  }
-}
-
-extension DevicePairingChallenge {
-  func verificationURL(on server: EmulationServer) -> URL? {
-    var url = URLComponents(url: server.origin, resolvingAgainstBaseURL: false)
-    url?.path = "/ui/"
-    url?.queryItems = [URLQueryItem(name: "settings", value: "devices")]
-    url?.fragment = "pair=" + pin
-    return url?.url
   }
 }
