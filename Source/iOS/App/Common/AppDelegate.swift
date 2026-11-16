@@ -63,6 +63,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     ServiceManager.shared.open(url: url, options: options)
   }
 
+  // Silent CloudKit pushes for iCloud sync (CloudSyncPushService). CloudKit keeps its own device token.
+  func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {}
+
+  func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+    CloudSyncPushService.shared.didFailToRegister(error)
+  }
+
+  func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                   fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+    CloudSyncPushService.shared.receive(userInfo, completion: completionHandler)
+  }
+
   func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
     // For tvOS, override any storyboard-based scene configuration and provide a programmatic scene.
     // This prevents crashes due to missing storyboards and enables a SwiftUI-based root.

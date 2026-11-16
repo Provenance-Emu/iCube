@@ -593,6 +593,10 @@ final class CloudSyncCoordinator: ObservableObject {
         if changedAccount {
             addEvent(.info, message: "Different iCloud account than last time; starting fresh")
         }
+        // CloudKit answered for this account, so its change pushes can be subscribed to.
+        if provider is CloudKitSyncProvider {
+            CloudSyncPushSubscriber.shared.ensureSubscribed(accountIdentity: identity)
+        }
 
         let now = Date()
         // Housekeeping first, both best-effort.
@@ -674,6 +678,7 @@ final class CloudSyncCoordinator: ObservableObject {
                     await index.markDeleted(path: metadata.relativePath, at: tombstone.deletedAt)
                     guard canContinueTransfer(generation: generation) else { return }
                     metadataCache.removeValue(forKey: metadata.relativePath)
+                    remoteChangeCounters.appliedFromRemote += 1
                     addEvent(.info, file: metadata.relativePath,
                              message: "Removed because it was deleted on another device. Recoverable in Recently Deleted for 30 days")
                 } catch {
@@ -815,6 +820,7 @@ final class CloudSyncCoordinator: ObservableObject {
             working.lastError = nil
             metadataCache[working.relativePath] = working
             await index.record(path: working.relativePath, checksum: working.checksum, lastModified: working.lastModified)
+            remoteChangeCounters.appliedFromRemote += 1
             addEvent(.download, file: metadata.relativePath, message: "Downloaded from iCloud")
             notifyIfDocument(metadata.fileType, relativePath: metadata.relativePath)
             return true
@@ -826,6 +832,7 @@ final class CloudSyncCoordinator: ObservableObject {
             working.lastError = error.localizedDescription
             working.syncAttempts += 1
             metadataCache[working.relativePath] = working
+            remoteChangeCounters.failures += 1
             addEvent(.error, file: metadata.relativePath,
                      message: "Download failed: \(error.localizedDescription)")
             return false
@@ -872,7 +879,10 @@ final class CloudSyncCoordinator: ObservableObject {
             }
             let merged = committed.data
             let localChanged = committed.changed
-            if localChanged { notifyIfDocument(local.fileType, relativePath: path) }
+            if localChanged {
+                remoteChangeCounters.appliedFromRemote += 1
+                notifyIfDocument(local.fileType, relativePath: path)
+            }
 
             let now = Date()
             var result = local
@@ -900,6 +910,7 @@ final class CloudSyncCoordinator: ObservableObject {
             working.lastError = error.localizedDescription
             working.syncAttempts += 1
             metadataCache[path] = working
+            remoteChangeCounters.failures += 1
             addEvent(.error, file: path, message: "Merge failed: \(error.localizedDescription)")
         }
     }
@@ -1117,6 +1128,30 @@ final class CloudSyncCoordinator: ObservableObject {
         unavailableReason = await provider?.unavailableReason()
     }
 
+    // MARK: - Remote change pushes
+
+    /// Counted for the life of the process so a CloudKit push can say what its run did.
+    private(set) var remoteChangeCounters = CloudSyncRemoteChangeCounters()
+
+    /// What `CloudSyncPushService` needs to decide whether a push may start a run.
+    var pushState: CloudSyncPushState {
+        CloudSyncPushState(isSyncEnabled: isEnabled,
+                           isInstallAvailable: Self.installUnavailableReason() == nil,
+                           isEmulating: isEmulating || localIOGate.isEmulating)
+    }
+
+    /// The existing download-and-apply path, run for a CloudKit push. Waits through
+    /// the follow-up run the lifecycle policy queues when a run was already going. A
+    /// game starting meanwhile makes the run stand down; its work stays deferred until
+    /// the core drains, and remote data never reaches files the game has open.
+    func syncForRemoteChange() async {
+        addEvent(.info, message: "iCloud reported a change from another device")
+        await handle(.trigger(.fileChanged))
+        while let task = syncTask, !Task.isCancelled {
+            await task.value
+        }
+    }
+
     // MARK: - Policy persistence
 
     private static func loadPolicy() -> SyncPolicy {
@@ -1168,6 +1203,7 @@ final class CloudSyncCoordinator: ObservableObject {
 
     private func record(_ error: Error, during activity: String) async {
         lastError = error.localizedDescription
+        remoteChangeCounters.failures += 1
         if let providerError = error as? SyncProviderError,
            case .unavailable(let reason) = providerError {
             unavailableReason = reason
