@@ -15,8 +15,7 @@ import UIKit
 @objc(DOLImportKeepAlive)
 public final class ImportKeepAlive: NSObject {
   private let session: ContinuedImportSession?
-  private let legacyLock = NSLock()
-  private var legacyTask: UIBackgroundTaskIdentifier = .invalid
+  private let legacy: LegacyBackgroundTask
 
   /// True when the work should use the progress-reporting, cancellable copier.
   var tracksProgress: Bool { session != nil }
@@ -25,8 +24,9 @@ public final class ImportKeepAlive: NSObject {
   @objc public var isCancelled: Bool { session?.isCancellationRequested ?? false }
 
   /// Internal so tests can build one around a session with a fake host.
-  init(session: ContinuedImportSession?) {
+  init(session: ContinuedImportSession?, legacy: LegacyBackgroundTask = LegacyBackgroundTask()) {
     self.session = session
+    self.legacy = legacy
     super.init()
   }
 
@@ -41,7 +41,11 @@ public final class ImportKeepAlive: NSObject {
       totalBytes: total,
       userInitiated: userInitiated)
 
-    var keepAlive: ImportKeepAlive?
+    // Started before the system task can exist, and ended by a holder the launch handler captures
+    // directly: the handler may run on another thread before this function returns.
+    let legacy = LegacyBackgroundTask()
+    if holdsLegacyTask { legacy.begin() }
+
     var session: ContinuedImportSession?
     #if os(iOS) && !targetEnvironment(macCatalyst)
     if mechanism == .continuedProcessing, #available(iOS 26.0, *) {
@@ -52,14 +56,10 @@ public final class ImportKeepAlive: NSObject {
         subtitle: { finished, count in
           count == 1 ? names[0] : String(format: L("%d of %d files"), min(finished + 1, count), count)
         },
-        onTaskStarted: { keepAlive?.endLegacyTask() })
+        onTaskStarted: { legacy.end() })
     }
     #endif
-    let result = ImportKeepAlive(session: session)
-    keepAlive = result
-    if holdsLegacyTask {
-      result.legacyTask = ImportStaging.beginBackgroundTask()
-    }
+    let result = ImportKeepAlive(session: session, legacy: legacy)
     return result
   }
 
@@ -84,24 +84,13 @@ public final class ImportKeepAlive: NSObject {
 
   func end(_ outcome: ImportTerminationOutcome) {
     session?.workEnded(outcome)
-    endLegacyTask()
+    legacy.end()
   }
 
   /// Objective-C: ok → completed; not ok → stopped if the system asked us to, else failed.
   @objc(endWithSuccess:)
   public func end(success: Bool) {
     end(success ? .completed : (isCancelled ? .stopped : .failed))
-  }
-
-  /// The UIKit task has no expiration handler, so iOS kills the app if it is still open when
-  /// background time runs out. Once the continued task is running it must not outlive it.
-  fileprivate func endLegacyTask() {
-    legacyLock.lock()
-    let task = legacyTask
-    legacyTask = .invalid
-    legacyLock.unlock()
-    guard task != .invalid else { return }
-    DispatchQueue.main.async { ImportStaging.endBackgroundTask(task) }
   }
 
   // MARK: - Platform
@@ -127,5 +116,29 @@ public final class ImportKeepAlive: NSObject {
                           osMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
                           appIsActive: appIsActive)
     #endif
+  }
+}
+
+/// The UIKit background task of an import. It has no expiration handler, so iOS kills the app if it
+/// is still open when background time runs out: once the continued task is running it must not
+/// outlive it. Thread-safe; `end` is idempotent.
+final class LegacyBackgroundTask {
+  private let lock = NSLock()
+  private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+  func begin() {
+    let task = ImportStaging.beginBackgroundTask()
+    lock.lock()
+    identifier = task
+    lock.unlock()
+  }
+
+  func end() {
+    lock.lock()
+    let task = identifier
+    identifier = .invalid
+    lock.unlock()
+    guard task != .invalid else { return }
+    DispatchQueue.main.async { ImportStaging.endBackgroundTask(task) }
   }
 }

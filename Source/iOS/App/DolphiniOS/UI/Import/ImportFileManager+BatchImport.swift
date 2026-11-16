@@ -22,6 +22,10 @@ public final class ImportStaging: NSObject {
   /// `.importing` paths being written by this process right now.
   private static let liveStagedPaths = LivePathSet()
 
+  /// Marks a path as being written, as a copy in flight does. Tests use this to cover the sweep guard.
+  static func markLiveForTesting(_ path: String) { liveStagedPaths.insert(path) }
+  static func unmarkLiveForTesting(_ path: String) { liveStagedPaths.remove(path) }
+
   private final class LivePathSet {
     private let lock = NSLock()
     private var paths = Set<String>()

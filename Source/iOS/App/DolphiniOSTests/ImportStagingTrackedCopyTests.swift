@@ -95,10 +95,35 @@ final class ImportStagingTrackedCopyTests: XCTestCase {
     XCTAssertEqual(session.fractionCompleted, 1, accuracy: 0.0001)
   }
 
-  func testStaleSweepRemovesLeftoversButNotACopyInFlight() throws {
+  func testStaleSweepRemovesLeftoversButSkipsACopyInFlight() throws {
     let leftover = root.appendingPathComponent("old.iso" + ImportStaging.stagingSuffix).path
+    let inFlight = root.appendingPathComponent("running.iso" + ImportStaging.stagingSuffix).path
     FileManager.default.createFile(atPath: leftover, contents: Data([1]))
+    FileManager.default.createFile(atPath: inFlight, contents: Data([1]))
+    ImportStaging.markLiveForTesting(inFlight)
+    defer { ImportStaging.unmarkLiveForTesting(inFlight) }
+
     XCTAssertEqual(ImportStaging.removeStaleStagedImports(inFolder: root.path), 1)
     XCTAssertFalse(FileManager.default.fileExists(atPath: leftover))
+    XCTAssertTrue(FileManager.default.fileExists(atPath: inFlight))
+
+    ImportStaging.unmarkLiveForTesting(inFlight)
+    XCTAssertEqual(ImportStaging.removeStaleStagedImports(inFolder: root.path), 1, "swept once the copy is over")
+  }
+
+  /// The one test that reaches the real scheduler: the plist wildcard and the per-batch UUID
+  /// identifier must be accepted by `register`, or the feature silently never runs. (The Simulator
+  /// refuses the submission itself, which is the fallback path; that is fine here.)
+  func testSchedulerAcceptsTheBatchIdentifier() throws {
+    #if os(iOS) && !targetEnvironment(macCatalyst)
+    guard #available(iOS 26.0, *) else { throw XCTSkip("Continued processing needs iOS 26") }
+    let session = ContinuedImportScheduler.start(items: [("big.iso", 1 << 30)], title: "t",
+                                                 subtitle: { _, _ in "s" }, onTaskStarted: {})
+    XCTAssertNotNil(session, "register(forTaskWithIdentifier:) rejected \(ContinuedImportScheduler.identifierPrefix)<UUID>")
+    // Nothing started the task, and a finished batch withdraws whatever was submitted.
+    session?.workEnded(.completed)
+    #else
+    throw XCTSkip("iOS only")
+    #endif
   }
 }
