@@ -51,6 +51,12 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
           self?.handleOpenedURL(context.url)
         }
       }
+      // Cold launch from an https://icube-emu.com universal link, delayed like the URL above.
+      if let activity = connectionOptions.userActivities.first(where: { UniversalLinkRouter.customSchemeURL(for: $0) != nil }) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+          _ = self?.handleWebLink(activity)
+        }
+      }
       #if !os(tvOS)
       // Handle cold-boot quick actions after UI is ready
       if let shortcut = connectionOptions.shortcutItem {
@@ -138,7 +144,15 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     DOLConfigBridge.flushSettingsToDisk()
   }
 
+  /// Routes a universal link onto the custom-scheme path. False for any other activity or an unknown link.
+  private func handleWebLink(_ activity: NSUserActivity) -> Bool {
+    guard let url = UniversalLinkRouter.customSchemeURL(for: activity) else { return false }
+    handleOpenedURL(url)
+    return true
+  }
+
   func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    if handleWebLink(userActivity) { return }
     #if !os(tvOS)
     if userActivity.activityType == CSSearchableItemActionType,
        let identifier = userActivity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
