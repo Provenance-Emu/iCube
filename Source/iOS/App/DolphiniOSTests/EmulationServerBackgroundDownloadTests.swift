@@ -274,3 +274,88 @@ private actor TwoDiscTransport: ContinuityTransport {
     return bytes
   }
 }
+
+/// One copy per game, however many callers ask for it while it waits for the transfer permit.
+@MainActor
+final class RemoteGameDownloadsTests: XCTestCase {
+  func testCallersQueuedForThePermitShareOneCopy() async throws {
+    let server = try EmulationServer(address: "http://single-\(UUID().uuidString).invalid")
+    let browsed = EmulationServerLibrary(server: server, token: "t", transport: TwoDiscTransport(), fetcher: RecordingFetcher())
+    let page = try await browsed.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
+    let catalog = HeldCatalog()
+    let downloads = RemoteGameDownloads.shared
+
+    // Another transfer holds the permit, the way a launch's two resume passes find it.
+    let permitHeld = Latch()
+    let permitFree = Latch()
+    let other = Task { @MainActor in
+      try await ContinuityTransferGate.shared.withPermit {
+        await permitHeld.open()
+        await permitFree.wait()
+      }
+    }
+    await permitHeld.wait()
+
+    let first = Task { @MainActor in try await downloads.copy(entry, from: catalog) { _ in } }
+    var spins = 0
+    while !downloads.isCopying(entry, sourceID: catalog.downloadSourceID), spins < 1000 {
+      await Task.yield()
+      spins += 1
+    }
+    XCTAssertTrue(downloads.isCopying(entry, sourceID: catalog.downloadSourceID),
+                  "A copy counts as running while it waits for the permit")
+    let second = Task { @MainActor in try await downloads.copy(entry, from: catalog) { _ in } }
+    for _ in 0 ..< 20 { await Task.yield() }
+
+    await permitFree.open()
+    await catalog.started.wait()
+    await catalog.finish.open()
+    let firstURLs = try await first.value
+    let secondURLs = try await second.value
+    try await other.value
+
+    let copies = await catalog.copies
+    XCTAssertEqual(copies, 1)
+    XCTAssertEqual(firstURLs, secondURLs)
+    XCTAssertFalse(downloads.isCopying(entry, sourceID: catalog.downloadSourceID))
+  }
+}
+
+private actor Latch {
+  private var isOpen = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func wait() async {
+    guard !isOpen else { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func open() {
+    isOpen = true
+    waiters.forEach { $0.resume() }
+    waiters = []
+  }
+}
+
+/// A catalog whose copy runs until the test lets it finish, and counts how often it was asked.
+private actor HeldCatalog: RemoteGameCatalog {
+  let started = Latch()
+  let finish = Latch()
+  private(set) var copies = 0
+
+  func openCatalog(search: String) async throws -> RemoteCatalogPage { throw URLError(.unsupportedURL) }
+  func continueCatalog() async throws -> RemoteCatalogPage { throw URLError(.unsupportedURL) }
+  func gameCount() async throws -> Int { 0 }
+  func artwork(for entry: ContinuityLibraryEntry) async -> Data? { nil }
+
+  func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
+    copies += 1
+    await started.open()
+    await finish.wait()
+    return [FileManager.default.temporaryDirectory.appendingPathComponent("held-\(copies).iso")]
+  }
+
+  nonisolated func isAccessDenied(_ error: any Error) -> Bool { false }
+  nonisolated var downloadSourceID: String { "held-catalog" }
+}

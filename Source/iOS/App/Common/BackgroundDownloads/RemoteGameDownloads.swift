@@ -35,7 +35,8 @@ final class RemoteGameDownloads: ObservableObject {
   }
 
   /// Copies a game, or joins the copy of it already running. Takes the transfer permit, so it never
-  /// runs beside another library or nearby transfer.
+  /// runs beside another library or nearby transfer. Cancelling the caller that started the copy
+  /// cancels it; a caller that joined only stops waiting when the copy ends.
   func copy(_ entry: ContinuityLibraryEntry, from catalog: any RemoteGameCatalog,
             progress: @escaping @MainActor (PullProgress) -> Void) async throws -> [URL] {
     let key = Self.key(sourceID: catalog.downloadSourceID, entry: entry)
@@ -43,25 +44,25 @@ final class RemoteGameDownloads: ObservableObject {
     listeners[key, default: [:]][token] = progress
     defer { listeners[key]?[token] = nil }
     if let task = running[key] { return try await task.value }
-    return try await ContinuityTransferGate.shared.withPermit {
-      // Another caller may have started this game while this one waited for the permit.
-      if let task = self.running[key] { return try await task.value }
-      let task = Task { @MainActor () throws -> [URL] in
-        try await catalog.copy(entry) { update in
-          Task { @MainActor in RemoteGameDownloads.shared.report(update, for: key) }
-        }
-      }
-      self.running[key] = task
-      self.active[key] = Active(entry: entry, sourceID: catalog.downloadSourceID, progress: nil)
+    // Registered before anything awaits, so a caller arriving while this one still waits for the
+    // permit joins it rather than queueing a second copy behind it.
+    let task = Task { @MainActor () throws -> [URL] in
       defer {
         self.running[key] = nil
         self.active[key] = nil
       }
-      return try await withTaskCancellationHandler {
-        try await task.value
-      } onCancel: {
-        task.cancel()
+      return try await ContinuityTransferGate.shared.withPermit {
+        try await catalog.copy(entry) { update in
+          Task { @MainActor in RemoteGameDownloads.shared.report(update, for: key) }
+        }
       }
+    }
+    running[key] = task
+    active[key] = Active(entry: entry, sourceID: catalog.downloadSourceID, progress: nil)
+    return try await withTaskCancellationHandler {
+      try await task.value
+    } onCancel: {
+      task.cancel()
     }
   }
 
