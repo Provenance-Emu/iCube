@@ -7,7 +7,7 @@ import Foundation
 /// the scene delegate consumes it on `sceneDidBecomeActive` and launches through
 /// `GameLaunchRequest`, same as a `dolphinios://play?id=` open.
 enum PendingGameLaunchStore {
-    private static let key = "pending_intent_game_id_v1"
+    private static let key = PendingGameLaunchKey.defaultsKey
     /// Matches the cold-launch URL-context delay in `MainDisplaySceneDelegate.willConnectTo` —
     /// gives the library view time to mount its `DOLLaunchGameByGameID` observer.
     private static let launchDelay: TimeInterval = 0.6

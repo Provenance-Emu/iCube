@@ -9,5 +9,8 @@ struct Live_ActivityBundle: WidgetBundle {
   var body: some Widget {
     Live_ActivityLiveActivity()
     RecentGamesWidget()
+    if #available(iOS 18.0, *) {
+      ResumeLastGameControl()
+    }
   }
 }
