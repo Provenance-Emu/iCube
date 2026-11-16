@@ -5932,3 +5932,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Use All From the Server" = "Use All From the Server";
 "Saves That Differ" = "Saves That Differ";
 "These changed on this device and on the server. The one you do not keep is not lost: the server keeps its copy, and this device’s goes to Recently Deleted." = "These changed on this device and on the server. The one you do not keep is not lost: the server keeps its copy, and this device’s goes to Recently Deleted.";
+"AirPlay" = "AirPlay";

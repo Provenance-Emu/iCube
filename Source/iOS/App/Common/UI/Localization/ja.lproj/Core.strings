@@ -5878,3 +5878,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Use All From the Server" = "すべてサーバーのものを使う";
 "Saves That Differ" = "内容が異なるセーブ";
 "These changed on this device and on the server. The one you do not keep is not lost: the server keeps its copy, and this device’s goes to Recently Deleted." = "これらはこのデバイスとサーバーの両方で変更されました。残さなかった方も失われません。サーバーはそのコピーを保持し、このデバイスのものは「Recently Deleted」に移動します。";
+"AirPlay" = "AirPlay";

@@ -636,7 +636,7 @@ internal struct PauseMenuView: View {
           if hero.columnWidth > 0 {
             HStack(alignment: .top, spacing: hero.gap) {
               VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
-                closeButton
+                headerButtons(closeFirst: true)
                 // On an iPad the hero sits level with the centred cells.
                 if !compactHeight { Spacer(minLength: 0) }
                 PauseHeroView(game: game, layout: compactHeight ? .textOnly : .column(artWidth: Touch.heroArtWidth),
@@ -651,7 +651,7 @@ internal struct PauseMenuView: View {
               HStack(alignment: .top, spacing: ICubeDesign.Spacing.s.rawValue) {
                 PauseHeroView(game: game, layout: .banner, engineChip: engineChipText, jitAcquired: jitAcquired)
                 Spacer(minLength: 0)
-                closeButton
+                headerButtons(closeFirst: false)
               }
               tiles(columns: columns, compact: compactHeight)
             }
@@ -697,6 +697,25 @@ internal struct PauseMenuView: View {
     static let margin: CGFloat = 16
     static let topMargin: CGFloat = 8
     static let heroArtWidth: CGFloat = 180
+  }
+
+  /// Close, plus the AirPlay route picker on iPhone and iPad. `closeFirst` puts Close on the outer edge of
+  /// whichever corner the header is in (leading in the hero column, trailing in the banner).
+  @ViewBuilder
+  private func headerButtons(closeFirst: Bool) -> some View {
+    #if os(iOS)
+    HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+      if closeFirst {
+        closeButton
+        AirPlayRouteButton()
+      } else {
+        AirPlayRouteButton()
+        closeButton
+      }
+    }
+    #else
+    closeButton
+    #endif
   }
 
   private var closeButton: some View {
