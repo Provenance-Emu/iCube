@@ -4,6 +4,7 @@
 import CryptoKit
 import Foundation
 import PVContinuity
+import RomMClient
 import XCTest
 
 @testable import iCube
@@ -125,6 +126,51 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
     XCTAssertEqual(updates.map(\.bytesTransferred), [0, 0x4000, 0x8000, 0xC000, 0x10000])
     XCTAssertEqual(updates.map(\.completedFiles), [0, 0, 1, 1, 1])
     XCTAssertTrue(updates.allSatisfy { $0.totalBytes == 0x10000 && $0.totalFiles == 2 })
+  }
+}
+
+/// RomM's client hands each file request to its transport; inside a job it goes to the downloader.
+final class RomMBackgroundTransportTests: XCTestCase {
+  private let job = BackgroundDownloadJob(kind: .romm, sourceID: "romm:https://romm.example", gameKey: "romm:7", title: "Game")
+
+  private var request: URLRequest {
+    var request = URLRequest(url: URL(string: "https://romm.example/api/roms/7/content/disc2.iso?file_ids=3")!)
+    request.setValue("Bearer romm-token", forHTTPHeaderField: "Authorization")
+    return request
+  }
+
+  func testFileDownloadsInsideAJobGoToTheDownloader() async throws {
+    let fetcher = RecordingFetcher()
+    let transport = RomMBackgroundTransport(downloader: fetcher)
+    let request = request
+    let (file, response) = try await RomMBackgroundTransport.$job.withValue(job) {
+      try await transport.download(for: request)
+    }
+    XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+    XCTAssertEqual(try Data(contentsOf: file), TwoDiscTransport.disc(2))
+    let calls = await fetcher.calls
+    XCTAssertEqual(calls.map(\.job), [job])
+    XCTAssertEqual(calls.first?.files.first?.headers["Authorization"], "Bearer romm-token")
+    XCTAssertEqual(calls.first?.files.first?.url, request.url)
+  }
+
+  func testDownloaderFailuresBecomeRomMErrors() async throws {
+    let cases: [(BackgroundDownloadFailure, (any Error) -> Bool)] = [
+      (.accessDenied, { ($0 as? RomMError) == .accessDenied }),
+      (.unavailable, { ($0 as? RomMError) == .unavailable }),
+      (.cancelled, { $0 is CancellationError }),
+      (.network, { ($0 as? BackgroundDownloadError)?.failure == .network }),
+    ]
+    for (failure, matches) in cases {
+      let transport = RomMBackgroundTransport(downloader: RecordingFetcher(failure: failure))
+      let request = request
+      do {
+        _ = try await RomMBackgroundTransport.$job.withValue(job) { try await transport.download(for: request) }
+        XCTFail("Expected \(failure)")
+      } catch {
+        XCTAssertTrue(matches(error), "\(failure) became \(error)")
+      }
+    }
   }
 }
 

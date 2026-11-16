@@ -43,6 +43,8 @@ final class BackgroundGameDownloader: NSObject, GameFileFetching, @unchecked Sen
   private var isReconciled = false
   private var reconcileWaiters: [CheckedContinuation<Void, Never>] = []
   private var eventsCompletion: (() -> Void)?
+  /// The system finished delivering events before the app delegate asked for them.
+  private var eventsDelivered = false
   /// Keeps the app running while a job moves its finished files into the library.
   private var finishing: [String: UIBackgroundTaskIdentifier] = [:]
 
@@ -101,8 +103,13 @@ final class BackgroundGameDownloader: NSObject, GameFileFetching, @unchecked Sen
   @discardableResult
   func handleEvents(forSession identifier: String, completion: @escaping () -> Void) -> Bool {
     guard identifier == self.identifier else { return false }
-    lock.withLock { eventsCompletion = completion }
+    let delivered = lock.withLock {
+      defer { eventsDelivered = false }
+      if !eventsDelivered { eventsCompletion = completion }
+      return eventsDelivered
+    }
     activate()
+    if delivered { DispatchQueue.main.async { completion() } }
     return true
   }
 
@@ -232,7 +239,7 @@ final class BackgroundGameDownloader: NSObject, GameFileFetching, @unchecked Sen
     let running = lock.withLock { ids.compactMap { id in tasks[id].map { (id, $0) } } }
     for (id, task) in running {
       task.cancel(byProducingResumeData: { [journal] data in
-        if let data { journal.setResumeData(data, id: id) }
+        if let data, journal.record(id: id) != nil { journal.setResumeData(data, id: id) }
       })
     }
   }
@@ -317,7 +324,9 @@ extension BackgroundGameDownloader: URLSessionDownloadDelegate {
     let result: Result<URL, any Error>
     if let error {
       let failure = BackgroundDownloadPolicy.judgeError(error)
-      if failure.keepsResumeData {
+      if journal.record(id: id) == nil {
+        // Released while it was stopping: nothing is kept for it.
+      } else if failure.keepsResumeData {
         if let data = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data {
           journal.setResumeData(data, id: id)
         }
@@ -351,6 +360,9 @@ extension BackgroundGameDownloader: URLSessionDownloadDelegate {
   func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
     let completion = lock.withLock { () -> (() -> Void)? in
       defer { eventsCompletion = nil }
+      // The session is made at launch, so the system can finish delivering before the app
+      // delegate hands over its completion handler; `handleEvents` then calls it at once.
+      eventsDelivered = eventsCompletion == nil
       return eventsCompletion
     }
     DispatchQueue.main.async { completion?() }
