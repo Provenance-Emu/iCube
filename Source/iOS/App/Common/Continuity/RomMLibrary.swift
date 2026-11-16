@@ -44,23 +44,28 @@ actor RomMLibrary: RemoteGameCatalog {
   private let server: RomMServer
   private let client: RomMClient
   private let covers: RemoteCoverCache
+  private let fetcher: any GameFileFetching
   private var games: [String: RomMGame] = [:]
   private var platforms: ArraySlice<RomMPlatform> = []
   private var offset = 0
   private var search = ""
   private var counted = 0
 
-  init(server: RomMServer, login: RomMSavedLogin?, covers: RemoteCoverCache = .shared) throws {
+  init(server: RomMServer, login: RomMSavedLogin?, covers: RemoteCoverCache = .shared,
+       fetcher: any GameFileFetching = BackgroundGameDownloader.shared) throws {
     self.server = server
     self.covers = covers
+    self.fetcher = fetcher
     client = try RomMClient(address: server.address(), credential: login?.credential ?? .none,
-                            allowHTTP: login?.allowHTTP ?? false)
+                            allowHTTP: login?.allowHTTP ?? false, transport: RomMBackgroundTransport(downloader: fetcher))
   }
 
-  init(server: RomMServer, client: RomMClient, covers: RemoteCoverCache = .shared) {
+  init(server: RomMServer, client: RomMClient, covers: RemoteCoverCache = .shared,
+       fetcher: any GameFileFetching = BackgroundGameDownloader.shared) {
     self.server = server
     self.client = client
     self.covers = covers
+    self.fetcher = fetcher
   }
 
   func openCatalog(search: String) async throws -> RemoteCatalogPage {
@@ -116,8 +121,22 @@ actor RomMLibrary: RemoteGameCatalog {
 
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
     guard let game = games[entry.key] else { throw RomMError.unavailable }
-    return try await RomMGameImport.copy(game, from: client, server: server)
+    let job = BackgroundDownloadJob(kind: .romm, sourceID: server.id, gameKey: entry.key, title: entry.game.displayName)
+    do {
+      let urls = try await RomMBackgroundTransport.$job.withValue(job) { [client, server] in
+        try await RomMGameImport.copy(game, from: client, server: server)
+      }
+      await fetcher.release(job)
+      return urls
+    } catch {
+      // A cancel or a lost connection keeps the files that arrived, and any resume data, for the next try.
+      let failure = (error as? BackgroundDownloadError)?.failure
+      if !(error is CancellationError), failure?.isTerminal ?? true { await fetcher.release(job) }
+      throw error
+    }
   }
+
+  nonisolated var downloadSourceID: String { server.id }
 
   nonisolated func isAccessDenied(_ error: any Error) -> Bool {
     (error as? RomMError) == .accessDenied

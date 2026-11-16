@@ -26,6 +26,8 @@ protocol RemoteGameCatalog: Actor {
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL]
   /// The server refused the saved login, so the user has to connect again.
   nonisolated func isAccessDenied(_ error: any Error) -> Bool
+  /// The server's id in the background download journal.
+  nonisolated var downloadSourceID: String { get }
 }
 
 /// Covers from servers, downscaled and kept on disk so a grid redraws without the network. Each cover keeps

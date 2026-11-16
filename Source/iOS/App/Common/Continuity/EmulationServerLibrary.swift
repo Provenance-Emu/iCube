@@ -116,11 +116,20 @@ actor EmulationServerLibrary {
     let error: String?
   }
 
-  private struct Download {
+  /// One file of a game, as the server lists it. Kept in the download journal, so a game can be
+  /// finished after a relaunch without browsing the server again.
+  struct Download: Codable, Equatable, Sendable {
     let route: String
     let path: String
     let size: Int64
     let digest: String?
+  }
+
+  /// What finishing one game needs: the server, the entry and its files.
+  struct DownloadPlan: Codable, Sendable {
+    let server: EmulationServer
+    let entry: ContinuityLibraryEntry
+    let downloads: [Download]
   }
 
   private enum Game {
@@ -146,6 +155,8 @@ actor EmulationServerLibrary {
   private let token: String?
   private let transport: any ContinuityTransport
   private let ownedSession: URLSession?
+  /// Game files: the shared background downloader, or the transport when one is given.
+  private let fetcher: any GameFileFetching
   private let covers: RemoteCoverCache
   private var games: [String: Game] = [:]
   /// Server-relative cover path for each entry that has one.
@@ -156,14 +167,16 @@ actor EmulationServerLibrary {
   private var pendingCursor: CatalogCursor?
 
   init(server: EmulationServer, token: String?, transport: (any ContinuityTransport)? = nil,
-       covers: RemoteCoverCache = .shared) {
+       fetcher: (any GameFileFetching)? = nil, covers: RemoteCoverCache = .shared) {
     self.server = server
     self.token = token
     self.covers = covers
     if let transport {
       self.transport = transport
+      self.fetcher = fetcher ?? TransportGameFileFetcher(transport: transport)
       ownedSession = nil
     } else {
+      self.fetcher = fetcher ?? BackgroundGameDownloader.shared
       let config = URLSessionConfiguration.ephemeral
       config.timeoutIntervalForRequest = 30
       let session = URLSession(configuration: config, delegate: NoRedirects(), delegateQueue: nil)
@@ -367,9 +380,27 @@ actor EmulationServerLibrary {
     }
   }
 
+  func downloadJob(for entry: ContinuityLibraryEntry) -> BackgroundDownloadJob {
+    BackgroundDownloadJob(kind: .emulationServer, sourceID: server.id, gameKey: entry.key, title: entry.game.displayName)
+  }
+
+  /// The game's files: from the catalog when it was browsed, else from the plan a download that is
+  /// still in the journal was started with.
+  private func plannedDownloads(for entry: ContinuityLibraryEntry, job: BackgroundDownloadJob) async throws -> [Download] {
+    if let game = games[entry.key] { return try await downloads(for: game) }
+    if let saved = await fetcher.savedPlan(for: job),
+       let plan = try? JSONDecoder().decode(DownloadPlan.self, from: saved),
+       plan.server == server, plan.entry.key == entry.key {
+      return plan.downloads
+    }
+    throw ServerError.invalidContent
+  }
+
+  /// Every file is asked for before any is waited on, so all of them keep going while iCube is
+  /// suspended. Finishing (checks, unpacking, the move into the library) starts once all are in.
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
-    guard let game = games[entry.key] else { throw ServerError.invalidContent }
-    let downloads = try await downloads(for: game)
+    let job = downloadJob(for: entry)
+    let downloads = try await plannedDownloads(for: entry, job: job)
     let count = downloads.count
     let folded = Set(downloads.map { $0.path.precomposedStringWithCanonicalMapping.lowercased() })
     guard (1 ... 512).contains(count), folded.count == count, Set(downloads.map(\.route)).count == count,
@@ -381,6 +412,51 @@ actor EmulationServerLibrary {
       guard !overflow else { throw ServerError.invalidContent }
       return total
     }
+    let requests = try downloads.map { file in
+      let route = try request(file.route)
+      return GameFileRequest(url: route.url, headers: route.headers, expectedSize: file.size)
+    }
+    let plan = try? JSONEncoder().encode(DownloadPlan(server: server, entry: entry, downloads: downloads))
+    let fetched: [URL]
+    do {
+      fetched = try await fetcher.fetch(requests, for: job, plan: plan) { received in
+        progress(Self.pullProgress(received: received, downloads: downloads, totalBytes: totalBytes))
+      }
+    } catch {
+      let failure = (error as? BackgroundDownloadError)?.failure
+      // A lost connection or a cancel keeps the journal's resume data for the next attempt.
+      if failure?.isTerminal ?? true { await fetcher.release(job) }
+      if error is CancellationError || failure == .cancelled { throw CancellationError() }
+      if failure == .accessDenied { throw ServerError.accessDenied }
+      throw error
+    }
+    do {
+      let urls = try await finish(entry, downloads: downloads, fetched: fetched)
+      await fetcher.release(job)
+      return urls
+    } catch {
+      await fetcher.release(job)
+      throw error
+    }
+  }
+
+  private static func pullProgress(received: Int64, downloads: [Download], totalBytes: Int64) -> PullProgress {
+    var remaining = max(0, received)
+    var index = 0
+    while index < downloads.count - 1, remaining >= downloads[index].size {
+      remaining -= downloads[index].size
+      index += 1
+    }
+    let file = downloads[index]
+    let descriptor = FileDescriptor(kind: .gameFile, relativePath: file.path, sha256: file.digest ?? "", size: file.size)
+    return PullProgress(currentFile: descriptor, completedFiles: index, totalFiles: downloads.count,
+                        bytesTransferred: min(max(0, received), totalBytes), totalBytes: totalBytes)
+  }
+
+  /// Checks and unpacks the fetched files and moves the game into its folder. Needs no network.
+  private func finish(_ entry: ContinuityLibraryEntry, downloads: [Download], fetched: [URL]) async throws -> [URL] {
+    let count = downloads.count
+    guard fetched.count == count else { throw ServerError.invalidContent }
     let destination = try server.folder(for: entry)
     let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let ready = staging.appendingPathComponent("ready", isDirectory: true)
@@ -388,25 +464,18 @@ actor EmulationServerLibrary {
     try fm.createDirectory(at: ready, withIntermediateDirectories: true)
     defer { try? fm.removeItem(at: staging) }
     var paths: [String] = []
-    var completedBytes: Int64 = 0
     for (index, file) in downloads.enumerated() {
       try Task.checkCancellation()
       let ext = (file.path as NSString).pathExtension.lowercased()
       let work = staging.appendingPathComponent(String(index), isDirectory: true)
       try fm.createDirectory(at: work, withIntermediateDirectories: true)
       let temporary = work.appendingPathComponent("Game." + ext)
-      let descriptor = FileDescriptor(kind: .gameFile, relativePath: file.path, sha256: file.digest ?? "", size: file.size)
-      let bytesBeforeFile = completedBytes
-      let received = try await transport.download(request(file.route), to: temporary, resumeOffset: 0) { bytes, _ in
-        progress(.init(currentFile: descriptor, completedFiles: index, totalFiles: count,
-                       bytesTransferred: bytesBeforeFile + min(max(bytes, 0), file.size), totalBytes: totalBytes))
-      }
-      try Task.checkCancellation()
+      try fm.moveItem(at: fetched[index], to: temporary)
+      let received = try temporary.resourceValues(forKeys: [.fileSizeKey]).fileSize.map(Int64.init)
       guard received == file.size else { throw ServerError.invalidContent }
       if let digest = file.digest, try ContinuityHash.sha256Hex(ofFileAt: temporary) != digest {
         throw ServerError.invalidContent
       }
-      completedBytes += received
       if ext == "7z" {
         let unpacked = work.appendingPathComponent("unpacked", isDirectory: true)
         try ZipImportHelper.extractArchive(at: temporary, to: unpacked)
@@ -649,6 +718,15 @@ extension EmulationServerLibrary: RemoteGameCatalog {
   nonisolated func isAccessDenied(_ error: any Error) -> Bool {
     if case ServerError.accessDenied = error { return true }
     return false
+  }
+
+  nonisolated var downloadSourceID: String { server.id }
+}
+
+extension EmulationServerLibrary {
+  /// The server and entry a journal job was started with, if the job is an Emulation Server game.
+  static func savedPlan(_ data: Data?) -> DownloadPlan? {
+    data.flatMap { try? JSONDecoder().decode(DownloadPlan.self, from: $0) }
   }
 }
 

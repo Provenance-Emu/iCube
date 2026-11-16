@@ -38,6 +38,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     SharedPlusEntitlement.shared.start()
 
     let started = ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
+    // Reconnects remote-library game downloads that ran while iCube was suspended or ended.
+    BackgroundGameDownloader.shared.activate()
+    RemoteGameDownloads.shared.start()
     #if os(iOS)
     // Seed local bundled skins after the user folder exists, without delaying launch or changing picks.
     Task { @MainActor in
@@ -83,5 +86,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
   func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
     //
+  }
+
+  /// A remote-library game download finished while iCube was suspended or not running.
+  func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                   completionHandler: @escaping () -> Void) {
+    if !BackgroundGameDownloader.shared.handleEvents(forSession: identifier, completion: completionHandler) {
+      completionHandler()
+    }
   }
 }
