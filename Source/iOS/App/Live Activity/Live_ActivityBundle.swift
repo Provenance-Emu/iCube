@@ -7,8 +7,6 @@ import WidgetKit
 @main
 struct Live_ActivityBundle: WidgetBundle {
   var body: some Widget {
-    Live_Activity()
-    Live_ActivityControl()
     Live_ActivityLiveActivity()
     RecentGamesWidget()
   }

@@ -1,16 +1,13 @@
 import ProjectDescription
 
-// The Live Activity appex is described as a faithful target (GameActivity.swift EXCLUDED,
-// mirroring the original pbxproj membershipException) and gets its own scheme, BUT it is
-// NOT embedded into / depended on by the app — the original pbxproj had no iCube->appex
-// PBXTargetDependency or embed phase either (plan risk #9). Keeping the embed OFF means the
-// `iCube (AppStore)` app scheme builds without touching the appex, so the app gate stays green.
-//
-// Known latent issue (pre-existing, surfaced not fixed): the appex's Live_ActivityLiveActivity.swift
-// references GameActivityAttributes, defined ONLY in GameActivity.swift — which the original
-// EXCLUDES from the appex. So the appex is not standalone-buildable as configured upstream.
-// Set APP_EMBEDS_APPEX = true only after deciding how the appex should resolve GameActivityAttributes.
-let APP_EMBEDS_APPEX = false
+// The Live Activity / widget appex (Live Activity, RecentGamesWidget, Resume Last Game control)
+// is embedded into the iOS app only (not tvOS, not Catalyst: ActivityKit is compiled out there).
+// It used to be OFF because the original pbxproj never embedded it and the appex could not build
+// standalone (GameActivityAttributes lives in GameActivity.swift, which the original excluded);
+// that file is now a source of the appex, its bundle id follows the per-configuration
+// `<app id>.Live-Activity` pattern like the other extensions, and signing is Automatic like theirs
+// (`-allowProvisioningUpdates` registers the App ID and App Group on first archive).
+let APP_EMBEDS_APPEX = true
 
 // MARK: - Project-level base settings
 //
@@ -416,8 +413,7 @@ let iCube = Target.target(
         // WidgetKit for `EcosystemSurfaceRefresher`'s `WidgetCenter.reloadTimelines(ofKind:)` call
         // after every snapshot write. iOS/Catalyst only — RecentGamesWidget doesn't exist on tvOS.
         .sdk(name: "WidgetKit", type: .framework, condition: .when([.ios, .catalyst])),
-        // appex embed intentionally OFF (faithful to original; see APP_EMBEDS_APPEX note above).
-    ] + (APP_EMBEDS_APPEX ? [.target(name: "LiveActivityExtension")] : [])
+    ] + (APP_EMBEDS_APPEX ? [.target(name: "LiveActivityExtension", condition: .when([.ios]))] : [])
       + [.target(name: "iCubeTopShelf", condition: .when([.tvos]))]
       + [.target(name: "iCubeThumbnail", condition: .when([.ios, .catalyst]))]
       + [.target(name: "iCubeQuickLookPreview", condition: .when([.ios, .catalyst]))],
@@ -497,30 +493,35 @@ let iCube = Target.target(
 
 // MARK: - Live Activity appex
 
+// Signed with the shared extension entitlements (sandbox + App Group), like the other extensions.
 let liveActivity = Target.target(
     name: "LiveActivityExtension",
-    destinations: [.iPhone, .iPad, .macCatalyst],
+    destinations: [.iPhone, .iPad],
     product: .appExtension,
-    bundleId: "com.joemattiello.iCube.Live-Activity",
-    deploymentTargets: .multiplatform(iOS: "18.2"),
+    bundleId: "com.joemattiello.iCube.Live-Activity", // placeholder; real per-config ids in extensionConfigs
+    // 17.0 like the app: it starts the Live Activity on iOS 17. The Resume Last Game control is
+    // `@available(iOS 18.0, *)` and is added to the bundle behind `if #available`.
+    deploymentTargets: .multiplatform(iOS: "17.0"),
     infoPlist: .file(path: "Live Activity/Info.plist"),
     sources: [
         .glob("Live Activity/**/*.swift"),
         .glob("Shared/Snapshot/**/*.swift"),
-        // WS-A (RecentGamesWidget) resolves the TODO below: GameActivityAttributes, referenced by
-        // Live_ActivityLiveActivity.swift, is defined only in GameActivity.swift. That file only
-        // needs Foundation + ActivityKit (no bridging header, no app-only types), so it compiles
-        // standalone into the appex same as it does into the app — added here rather than
-        // duplicated. NOTE: the original pbxproj EXCLUDED it (membershipException); this is a
-        // deliberate deviation, still gated by `APP_EMBEDS_APPEX = false` above so it doesn't
-        // change what the app scheme builds.
+        // GameActivityAttributes, referenced by Live_ActivityLiveActivity.swift, is defined only in
+        // GameActivity.swift. That file only needs Foundation + ActivityKit (no bridging header, no
+        // app-only types), so it compiles standalone into the appex same as it does into the app.
+        // NOTE: the original pbxproj EXCLUDED it (membershipException); this is a deliberate deviation.
         .glob("Common/Swift/Activity/GameActivity.swift"),
+        // The Resume Last Game control's intent must exist in both the app and the extension.
+        // It needs only AppIntents + PVLibrarySnapshot + Shared/Snapshot (pending-launch key and
+        // the pure `ResumeLastGame` decision), none of the app's bridging-header code.
+        .glob("Common/AppIntents/ResumeLastGameIntent.swift"),
     ],
-    resources: ["Live Activity/LiveActivityAssets.xcassets"],
-    entitlements: .file(path: "Live ActivityExtension.entitlements"),
+    resources: ["Live Activity/LiveActivityAssets.xcassets", "Live Activity/PrivacyInfo.xcprivacy"],
+    entitlements: .file(path: "Project/Entitlements/Extension.entitlements"),
     dependencies: [
         .sdk(name: "SwiftUI", type: .framework),
         .sdk(name: "WidgetKit", type: .framework),
+        .sdk(name: "AppIntents", type: .framework),
         // RecentGamesWidget reads the App Group snapshot directly.
         .package(product: "PVLibrarySnapshot"),
     ],
@@ -531,23 +532,27 @@ let liveActivity = Target.target(
             "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
             "TARGETED_DEVICE_FAMILY": "1,2",
             "SWIFT_VERSION": "5.0",
+            "CODE_SIGN_STYLE": "Automatic",
             "DEVELOPMENT_TEAM": "S32Z3HMYVQ",
             "ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME": "WidgetBackground",
             "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
             "INFOPLIST_FILE": "Live Activity/Info.plist",
+            // Same literals as the app and the other extensions; the release pipeline overrides
+            // CURRENT_PROJECT_VERSION for the whole workspace, so they stay in step.
+            "MARKETING_VERSION": "1.0.0",
+            "CURRENT_PROJECT_VERSION": "13",
+            "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks"],
             // The appex must NOT inherit the app's ObjC bridging header (it pulls in
             // AudioSessionManager.h and the whole Dolphin core header tree). GameActivity.swift
             // only needs Foundation + ActivityKit.
             "SWIFT_OBJC_BRIDGING_HEADER": "",
+            "SWIFT_OBJC_INTEROP_MODE": "objc",
             // Same fix as `extensionTarget()` below, same reason: without this, Tuist doesn't
-            // merge in CFBundleIdentifier/CFBundleExecutable, which was latent (the appex isn't
-            // embedded, so nothing validated it) until RecentGamesWidget made
-            // `appintentsmetadataprocessor` write a non-empty Metadata.appintents — the
-            // AppIntentsSSUTraining phase that then runs fails with "Unable to parse Info.plist"
-            // against the under-filled plist. Confirmed empirically 2026-09-24.
+            // merge in CFBundleIdentifier/CFBundleExecutable, so ValidateEmbeddedBinary fails and
+            // the AppIntentsSSUTraining phase can't parse the Info.plist.
             "GENERATE_INFOPLIST_FILE": "YES",
         ],
-        configurations: secondaryConfigs
+        configurations: extensionConfigs(suffix: "Live-Activity")
     )
 )
 
