@@ -12,10 +12,22 @@ enum UserStopRequest {
     guard let savedPath = save() else { failed(); return }
     quit(savedPath)
   }
+
+  /// Save & Quit writes where a quick save would. In history mode that is a new history state:
+  /// writing the selected numbered slot there replaced `{GameID}.s01` for people who had never
+  /// chosen a slot. `mode` is the effective mode (`QuickSaveActions.effectiveMode`: a modded boot
+  /// has no history and is always `.slots`). A failed save never falls back to the other kind.
+  static func quitSavePath(mode: QuickSaveMode, history: () -> String?, slot: () -> String?) -> String? {
+    switch mode {
+    case .history: return history()
+    case .slots: return slot()
+    }
+  }
 }
 
 enum UserQuitSaveFailure: Equatable, Sendable {
-  case numberedSlot
+  /// The state Save & Quit writes first (a history state or the numbered slot) was not saved.
+  case savingState
   case finalizing(savedStatePath: String?)
 }
 

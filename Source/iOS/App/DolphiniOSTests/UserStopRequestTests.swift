@@ -17,6 +17,33 @@ final class UserStopRequestTests: XCTestCase {
     XCTAssertEqual(calls, ["quit:/GALE01.s01"])
   }
 
+  func test_saveAndQuitInHistoryMode_writesAHistoryStateAndLeavesTheNumberedSlotAlone() {
+    var calls: [String] = []
+    let path = UserStopRequest.quitSavePath(mode: .history,
+                                            history: { calls.append("history"); return "/GALE01.quick-A.s01" },
+                                            slot: { calls.append("slot"); return "/GALE01.s01" })
+    XCTAssertEqual(path, "/GALE01.quick-A.s01")
+    XCTAssertEqual(calls, ["history"])
+  }
+
+  func test_saveAndQuitInSlotsMode_writesTheSelectedSlot() {
+    var calls: [String] = []
+    let path = UserStopRequest.quitSavePath(mode: .slots,
+                                            history: { calls.append("history"); return "/GALE01.quick-A.s01" },
+                                            slot: { calls.append("slot"); return "/GALE01.s01" })
+    XCTAssertEqual(path, "/GALE01.s01")
+    XCTAssertEqual(calls, ["slot"])
+  }
+
+  func test_aFailedHistorySaveDoesNotFallBackToOverwritingTheSlot() {
+    var calls: [String] = []
+    let path = UserStopRequest.quitSavePath(mode: .history,
+                                            history: { calls.append("history"); return nil },
+                                            slot: { calls.append("slot"); return "/GALE01.s01" })
+    XCTAssertNil(path)
+    XCTAssertEqual(calls, ["history"])
+  }
+
   func test_saveFailureRecovery_defaultsToCancel_andDiscardIsExplicit() {
     var calls: [String] = []
     let model = UserQuitFailureModelBuilder.make(cancel: { calls.append("cancel") }, retry: { calls.append("retry") },

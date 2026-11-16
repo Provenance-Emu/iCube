@@ -36,6 +36,7 @@
 #include "Common/Config/Config.h"
 
 #import "PGOFlush.h"
+#import "TVEmulationBridge.h"
 
 #include <chrono>
 #include <cstdlib>
@@ -297,6 +298,29 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // never runs willTerminate/atexit, so background is the reliable place to persist counters.
   // No-op on a non-instrumented (shipping) core.
   ICubePGOFlush();
+
+  // "Resume Where I Left Off" used to save only at a clean Quit, so a game the system ended in the
+  // background (memory pressure, swipe-away, low battery) resumed from the last Quit or not at all.
+  // Save here, where the process is still guaranteed time. Off the main thread: the save takes the
+  // CPU lock, and main must stay free to answer a core alert. The background task keeps the
+  // process alive until the file is committed; if it expires first, the write is cut short and the
+  // previous state file stays in place (states are written to a temporary file and renamed).
+  if (!Core::IsRunning(Core::System::GetInstance()))
+    return;
+  __block UIBackgroundTaskIdentifier task = UIBackgroundTaskInvalid;
+  void (^endTask)(void) = ^{
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (task == UIBackgroundTaskInvalid)
+        return;
+      [application endBackgroundTask:task];
+      task = UIBackgroundTaskInvalid;
+    });
+  };
+  task = [application beginBackgroundTaskWithName:@"Save resume state" expirationHandler:endTask];
+  dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+    [TVEmulationBridge saveResumeStateKeepingGameRunning];
+    endTask();
+  });
 }
 
 - (void)applicationWillTerminate:(UIApplication*)application {

@@ -1182,7 +1182,7 @@ struct EmulationScreen: View {
     }
     .alert("Exit Game?", isPresented: $showExitConfirm) {
       Button("Save & Quit") {
-        runTopBarQuit(.numberedSlot)
+        runTopBarQuit(.savingState)
       }
       Button("Quit", role: .destructive) {
         quitFromTopBar()
@@ -1744,8 +1744,8 @@ struct EmulationScreen: View {
     Task { @MainActor in
       let outcome: UserQuitAttemptResult
       switch operation {
-      case .numberedSlot:
-        outcome = await SaveStateService.saveAndStopForUserAsync(slot, expectedGameID: expected, expectedSessionIdentifier: session)
+      case .savingState:
+        outcome = await SaveStateService.saveAndStopForUserAsync(slot, mode: quickSaveMode, expectedGameID: expected, expectedSessionIdentifier: session)
       case .finalizing(let path):
         outcome = await SaveStateService.stopForUserAsync(savedStatePath: path, expectedGameID: expected, expectedSessionIdentifier: session)
           ? .stopped : .failed(operation)
