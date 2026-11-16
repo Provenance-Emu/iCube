@@ -308,19 +308,16 @@ final class ContinuityLibraryBrowseController: ObservableObject {
     let id = operationID
     phase = .copying(entry: entry, progress: nil)
     do {
-      try await ContinuityTransferGate.shared.withPermit {
-        let urls = try await library.copy(entry) { [weak self] progress in
-          Task { @MainActor in
-            guard let self, self.operationID == id, case .copying = self.phase else { return }
-            self.phase = .copying(entry: entry, progress: progress)
-          }
-        }
-        try Task.checkCancellation()
-        TVLibraryBridge.updateLibrary(withRemotePaths: urls.map(\.path), fetchMetadata: true)
-        guard !Task.isCancelled else { return }
-        copiedFileURLs = urls
-        phase = .copied(entry)
+      // Joins the copy a relaunch is already finishing, rather than asking for the files again.
+      let urls = try await RemoteGameDownloads.shared.copy(entry, from: library) { [weak self] progress in
+        guard let self, self.operationID == id, case .copying = self.phase else { return }
+        self.phase = .copying(entry: entry, progress: progress)
       }
+      try Task.checkCancellation()
+      TVLibraryBridge.updateLibrary(withRemotePaths: urls.map(\.path), fetchMetadata: true)
+      guard !Task.isCancelled else { return }
+      copiedFileURLs = urls
+      phase = .copied(entry)
     } catch {
       guard !Task.isCancelled else { return }
       phase = .failed(error.localizedDescription)
