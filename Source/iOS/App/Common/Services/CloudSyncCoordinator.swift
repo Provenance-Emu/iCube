@@ -69,7 +69,15 @@ final class CloudSyncCoordinator: ObservableObject {
     nonisolated static let fileTypeKey = "fileType"
     nonisolated static let relativePathKey = "relativePath"
 
-    /// These whole files contain account credentials or device-local network endpoints.
+    /// Whole files that never leave the device, lowercased: account credentials, device-local
+    /// network endpoints, and `Logger.ini`, which every device rewrites at launch from its own
+    /// debug preference (two devices kept producing competing versions).
+    private static let deviceLocalConfigPaths: Set<String> = [
+        "config/retroachievements.ini",
+        "config/dsuclient.ini",
+        "config/logger.ini",
+    ]
+
     /// Keep the pinned package classifier unchanged; apply this app privacy boundary in both directions.
     static func isEligibleForCloudSync(relativePath: String) -> Bool {
         var components: [String] = []
@@ -79,7 +87,7 @@ final class CloudSyncCoordinator: ObservableObject {
             components.append(String(component).lowercased())
         }
         let path = components.joined(separator: "/")
-        return path != "config/retroachievements.ini" && path != "config/dsuclient.ini"
+        return !deviceLocalConfigPaths.contains(path)
     }
 
     private static func isEligibleMetadata(_ metadata: SyncableFileMetadata) -> Bool {

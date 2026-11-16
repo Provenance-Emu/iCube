@@ -357,17 +357,16 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                         cumulative.append(item)
                         addedInThisDir += 1
                         discoveredFiles += 1
-                        // Yield individual additions for faster UI updates
-                        itemsCont?.yield(cumulative)
-                        // Update progress as we discover files (best-effort)
-                        if totalNodesEstimated > 0 {
-                            let progress = min(1.0, Double(discoveredFiles) / Double(max(1, totalNodesEstimated)))
-                            scanningProgressCont?.yield(progress)
-                        }
                         if !isOnline { break }
                     }
                 }
                 processedDirs += 1
+                // One update per directory, not per file: every yield hands the consumer the whole
+                // list to diff on the main actor, so a yield per file made a large folder quadratic
+                // and hung the app (ICUBE-MK).
+                if totalNodesEstimated > 0 {
+                    scanningProgressCont?.yield(min(1.0, Double(discoveredFiles) / Double(totalNodesEstimated)))
+                }
                 // Yield progressively after each directory or after a reasonable batch
                 if addedInThisDir > 0 || processedDirs % 5 == 0 {
                     itemsCont?.yield(cumulative)
