@@ -1,0 +1,16 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["S32Z3HMYVQ.com.joemattiello.iCube"],
+        "components": [
+          {
+            "/": "/play",
+            "?": { "id": "?*" },
+            "comment": "Tap-to-play game links (NFC tags, shared links): https://icube-emu.com/play?id=<game id>. Only this path is claimed; every other icube-emu.com page keeps opening in Safari."
+          }
+        ]
+      }
+    ]
+  }
+}
