@@ -48,6 +48,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       }
     }
     #endif
+    // No game is running at launch, so a Live Activity still on screen belongs to a run that was
+    // killed before it could end it.
+    #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+    GameActivityManager.end()
+    #endif
     return started
   }
 
