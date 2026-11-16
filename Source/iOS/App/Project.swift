@@ -168,7 +168,7 @@ let preScripts: [TargetScript] = [
           appletvsimulator)  platform="SIMULATOR_TVOS"; slice="PVlibDolphin-tvos-sim" ;;
           macosx)
             if [[ "${SUPPORTS_MACCATALYST:-}" == "YES" || "${EFFECTIVE_PLATFORM_NAME:-}" == "-maccatalyst" ]]; then
-              platform="MAC_CATALYST"
+              platform="MAC_CATALYST"; slice="PVlibDolphin-maccatalyst"
             else
               echo "Error: macOS (non-Catalyst) is not supported by this script."; exit 1
             fi ;;

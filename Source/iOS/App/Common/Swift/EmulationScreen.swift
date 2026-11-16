@@ -60,7 +60,11 @@ private final class EmuContainerViewController: UIViewController {
     }
 
     let vc = EmuEventVC()
+    // On Mac Catalyst EmuEventVC is a plain UIViewController: GCEventViewController, which owns
+    // this property, is unavailable there.
+    #if !targetEnvironment(macCatalyst)
     vc.controllerUserInteractionEnabled = false
+    #endif
     addChild(vc)
     vc.view.frame = view.bounds
     vc.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
