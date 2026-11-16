@@ -21,7 +21,8 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
   func testEveryFileIsAskedForAtOnceWithItsCredentialAndPlan() async throws {
     let fetcher = RecordingFetcher()
     let (library, server) = try makeLibrary(fetcher: fetcher)
-    let entry = try XCTUnwrap(try await library.catalog().entries.first)
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
     let folder = try server.folder(for: entry)
     defer { try? FileManager.default.removeItem(at: folder) }
 
@@ -47,12 +48,14 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
   func testRelaunchFinishesFromTheSavedPlanWithoutBrowsing() async throws {
     let first = RecordingFetcher()
     let (browsed, server) = try makeLibrary(fetcher: first)
-    let entry = try XCTUnwrap(try await browsed.catalog().entries.first)
+    let page = try await browsed.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
     let folder = try server.folder(for: entry)
     defer { try? FileManager.default.removeItem(at: folder) }
     _ = try await browsed.copy(entry) { _ in }
     try FileManager.default.removeItem(at: folder)
-    let saved = try XCTUnwrap(await first.calls.first?.plan)
+    let firstCalls = await first.calls
+    let saved = try XCTUnwrap(firstCalls.first?.plan)
 
     // A new launch: the catalog was never read, only the journal's plan is there.
     let relaunched = RecordingFetcher(savedPlan: saved)
@@ -69,7 +72,8 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
   func testAPlanForAnotherServerIsNotUsed() async throws {
     let first = RecordingFetcher()
     let (browsed, server) = try makeLibrary(fetcher: first)
-    let entry = try XCTUnwrap(try await browsed.catalog().entries.first)
+    let page = try await browsed.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
     defer { if let folder = try? server.folder(for: entry) { try? FileManager.default.removeItem(at: folder) } }
     _ = try await browsed.copy(entry) { _ in }
     let saved = await first.calls.first?.plan
@@ -86,7 +90,8 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
   func testRevokedTokenIsAccessDeniedAndDropsTheJob() async throws {
     let fetcher = RecordingFetcher(failure: .accessDenied)
     let (library, server) = try makeLibrary(fetcher: fetcher)
-    let entry = try XCTUnwrap(try await library.catalog().entries.first)
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
     do {
       _ = try await library.copy(entry) { _ in }
       XCTFail("Expected access denied")
@@ -103,7 +108,8 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
     for failure in [BackgroundDownloadFailure.network, .cancelled] {
       let fetcher = RecordingFetcher(failure: failure)
       let (library, _) = try makeLibrary(fetcher: fetcher)
-      let entry = try XCTUnwrap(try await library.catalog().entries.first)
+      let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
       do {
         _ = try await library.copy(entry) { _ in }
         XCTFail("Expected \(failure)")
@@ -118,7 +124,8 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
   func testProgressCoversTheWholeGame() async throws {
     let fetcher = RecordingFetcher(progressSteps: [0, 0x4000, 0x8000, 0xC000, 0x10000])
     let (library, server) = try makeLibrary(fetcher: fetcher)
-    let entry = try XCTUnwrap(try await library.catalog().entries.first)
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
     defer { if let folder = try? server.folder(for: entry) { try? FileManager.default.removeItem(at: folder) } }
     let seen = ProgressLog()
     _ = try await library.copy(entry) { seen.append($0) }
