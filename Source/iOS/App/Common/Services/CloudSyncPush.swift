@@ -53,21 +53,29 @@ struct CloudSyncPushSubscription: Equatable {
 
     /// Whether the subscription has to be saved for this account. Without an account
     /// there is no private database to subscribe to, so the answer is no.
-    func needsSave(marker: CloudSyncPushSubscriptionMarker?, accountIdentity: String?, now: Date) -> Bool {
+    ///
+    /// `installation` names the installed build (see `CloudSyncPushSubscriber`). A Debug
+    /// build from Xcode talks to CloudKit's Development environment and a TestFlight or
+    /// App Store build to Production, under the same bundle ID and the same defaults, so
+    /// a marker written by one says nothing about the other.
+    func needsSave(marker: CloudSyncPushSubscriptionMarker?, accountIdentity: String?,
+                   installation: String, now: Date) -> Bool {
         guard let accountIdentity, !accountIdentity.isEmpty else { return false }
         guard let marker else { return true }
         guard marker.containerIdentifier == containerIdentifier,
               marker.subscriptionID == subscriptionID,
               marker.version == version,
-              marker.accountIdentity == accountIdentity else { return true }
+              marker.accountIdentity == accountIdentity,
+              marker.installation == installation else { return true }
         // A clock set backwards makes the marker look like it came from the future; save again.
         let age = now.timeIntervalSince(marker.savedAt)
         return age < 0 || age >= Self.revalidationInterval
     }
 
-    func marker(accountIdentity: String, savedAt: Date) -> CloudSyncPushSubscriptionMarker {
+    func marker(accountIdentity: String, installation: String, savedAt: Date) -> CloudSyncPushSubscriptionMarker {
         CloudSyncPushSubscriptionMarker(containerIdentifier: containerIdentifier, subscriptionID: subscriptionID,
-                                        version: version, accountIdentity: accountIdentity, savedAt: savedAt)
+                                        version: version, accountIdentity: accountIdentity,
+                                        installation: installation, savedAt: savedAt)
     }
 }
 
@@ -79,6 +87,7 @@ struct CloudSyncPushSubscriptionMarker: Codable, Equatable {
     var subscriptionID: String
     var version: Int
     var accountIdentity: String
+    var installation: String
     var savedAt: Date
 }
 

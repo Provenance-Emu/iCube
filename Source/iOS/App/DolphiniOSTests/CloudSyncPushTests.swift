@@ -70,51 +70,59 @@ final class CloudSyncPushPolicyTests: XCTestCase {
 final class CloudSyncPushSubscriptionTests: XCTestCase {
   private let subscription = CloudSyncPushSubscription.iCube
   private let now = Date(timeIntervalSince1970: 1_800_000_000)
+  private let build = "1234"
 
   func testFirstLaunchWithAccountSaves() {
-    XCTAssertTrue(subscription.needsSave(marker: nil, accountIdentity: "_abc", now: now))
+    XCTAssertTrue(subscription.needsSave(marker: nil, accountIdentity: "_abc", installation: build, now: now))
   }
 
   func testNoAccountNeverSaves() {
-    XCTAssertFalse(subscription.needsSave(marker: nil, accountIdentity: nil, now: now))
-    XCTAssertFalse(subscription.needsSave(marker: nil, accountIdentity: "", now: now))
+    XCTAssertFalse(subscription.needsSave(marker: nil, accountIdentity: nil, installation: build, now: now))
+    XCTAssertFalse(subscription.needsSave(marker: nil, accountIdentity: "", installation: build, now: now))
   }
 
   func testRecentMarkerForSameAccountSkipsSave() {
-    let marker = subscription.marker(accountIdentity: "_abc", savedAt: now.addingTimeInterval(-3600))
-    XCTAssertFalse(subscription.needsSave(marker: marker, accountIdentity: "_abc", now: now))
+    let marker = subscription.marker(accountIdentity: "_abc", installation: build, savedAt: now.addingTimeInterval(-3600))
+    XCTAssertFalse(subscription.needsSave(marker: marker, accountIdentity: "_abc", installation: build, now: now))
   }
 
   func testAccountChangeSavesAgain() {
-    let marker = subscription.marker(accountIdentity: "_abc", savedAt: now)
-    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_def", now: now))
+    let marker = subscription.marker(accountIdentity: "_abc", installation: build, savedAt: now)
+    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_def", installation: build, now: now))
   }
 
   func testOldMarkerIsRevalidated() {
-    let marker = subscription.marker(accountIdentity: "_abc",
+    let marker = subscription.marker(accountIdentity: "_abc", installation: build,
                                      savedAt: now.addingTimeInterval(-CloudSyncPushSubscription.revalidationInterval))
-    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", now: now))
+    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", installation: build, now: now))
   }
 
   func testMarkerFromTheFutureIsRevalidated() {
-    let marker = subscription.marker(accountIdentity: "_abc", savedAt: now.addingTimeInterval(60))
-    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", now: now))
+    let marker = subscription.marker(accountIdentity: "_abc", installation: build, savedAt: now.addingTimeInterval(60))
+    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", installation: build, now: now))
   }
 
   func testChangedShapeSavesAgain() {
-    var marker = subscription.marker(accountIdentity: "_abc", savedAt: now)
+    var marker = subscription.marker(accountIdentity: "_abc", installation: build, savedAt: now)
     marker.version = subscription.version - 1
-    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", now: now))
-    marker = subscription.marker(accountIdentity: "_abc", savedAt: now)
+    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", installation: build, now: now))
+    marker = subscription.marker(accountIdentity: "_abc", installation: build, savedAt: now)
     marker.subscriptionID = "old-id"
-    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", now: now))
-    marker = subscription.marker(accountIdentity: "_abc", savedAt: now)
+    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", installation: build, now: now))
+    marker = subscription.marker(accountIdentity: "_abc", installation: build, savedAt: now)
     marker.containerIdentifier = "iCloud.other"
-    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", now: now))
+    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", installation: build, now: now))
+  }
+
+  func testOtherInstallationSavesAgain() {
+    // A Debug build (Development environment) followed by TestFlight (Production) on one device.
+    let marker = subscription.marker(accountIdentity: "_abc", installation: "1234-debug", savedAt: now)
+    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", installation: "1234", now: now))
+    XCTAssertTrue(subscription.needsSave(marker: marker, accountIdentity: "_abc", installation: "1235-debug", now: now))
   }
 
   func testMarkerRoundTrips() throws {
-    let marker = subscription.marker(accountIdentity: "_abc", savedAt: now)
+    let marker = subscription.marker(accountIdentity: "_abc", installation: build, savedAt: now)
     let decoded = try JSONDecoder().decode(CloudSyncPushSubscriptionMarker.self, from: JSONEncoder().encode(marker))
     XCTAssertEqual(decoded, marker)
   }

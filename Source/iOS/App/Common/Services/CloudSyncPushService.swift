@@ -134,11 +134,24 @@ final class CloudSyncPushSubscriber {
     private static let markerKey = "icube.cloudSync.pushSubscription"
     private var isSaving = false
 
+    /// The installed build and whether it is a Debug one, which is what decides the
+    /// CloudKit environment (Development or Production) the subscription lives in.
+    /// Any update saves the subscription once more, which is cheap.
+    private static let installation: String = {
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
+        #if DEBUG
+        return build + "-debug"
+        #else
+        return build
+        #endif
+    }()
+
     /// Called from a sync run once CloudKit is known to work and the account is bound.
     func ensureSubscribed(accountIdentity: String?) {
         let subscription = CloudSyncPushSubscription.iCube
         guard !isSaving, let accountIdentity,
-              subscription.needsSave(marker: Self.loadMarker(), accountIdentity: accountIdentity, now: Date()) else { return }
+              subscription.needsSave(marker: Self.loadMarker(), accountIdentity: accountIdentity,
+                                     installation: Self.installation, now: Date()) else { return }
         #if canImport(CloudKit)
         guard let container = CloudKitAvailability.makeContainer(for: ICubeCloudSync.configuration) else { return }
         isSaving = true
@@ -151,7 +164,7 @@ final class CloudSyncPushSubscriber {
             ckSubscription.notificationInfo = info
             do {
                 _ = try await container.privateCloudDatabase.save(ckSubscription)
-                Self.store(subscription.marker(accountIdentity: accountIdentity, savedAt: Date()))
+                Self.store(subscription.marker(accountIdentity: accountIdentity, installation: Self.installation, savedAt: Date()))
             } catch {
                 // Not marked, so the next sync run tries again.
                 NSLog("iCloud sync: could not save the change subscription: %@", error.localizedDescription)
