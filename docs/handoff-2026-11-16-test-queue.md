@@ -5,11 +5,11 @@ Tick items off here as they are checked; add the build number you tested.
 
 Where the code is:
 
-- **Everything below is on local `develop`** (`e1f9247856`, 22 commits ahead of `origin/develop`, not pushed):
-  the five feature branches plus `fix/release-triage-and-catalyst`. The same tree is checked out at
-  `~/Workspace/Provenance/_worktrees/icube-integration` (branch `integration/background-features`).
-- **Not committed:** the Emulation Server package pin in `Project.swift` (must be `8387f9b` or later for the Mac
-  build), and the rebuilt core slices under `build/xcframework`, including the new Catalyst slice.
+- **Sections 1 to 6 and 8 are on `develop`, pushed 2026-11-16** (`c929cbbc6a`): the five feature branches plus
+  `fix/release-triage-and-catalyst`.
+- **The Mac desktop work in section 7 is on the local branch `feature/catalyst-desktop`**, checked out at
+  `~/Workspace/Provenance/_worktrees/icube-integration`. Not pushed.
+- **Not committed:** the rebuilt iOS and tvOS core slices in the main checkout.
 
 ## 1. Background downloads for remote libraries
 
@@ -117,22 +117,57 @@ Branch `claude/airplay-universal-links-0dbc1f`.
 
 ## 7. Mac Catalyst
 
-Compiles in Debug and App Store configurations. The Debug build launches to the Welcome screen and nothing
-further has been tried.
+`develop` as pushed compiles for the Mac with no patched packages (Debug, 2026-11-16). The App Store
+configuration compiled on 2026-11-15.
+
+Menu bar and windows (branch `feature/catalyst-desktop`). Checked on the Debug build on 2026-11-16: the
+menu-bar icon appears; closing the window leaves the same process running with no window; opening the app
+again brings a window back in that process; File has Import Game… and no New Window; iCube > Settings…
+opens Settings. Nothing below that needs a click on the menu-bar icon, a game, a second device or the Dock
+was checked.
+
+Use `make run-mac` for a local build. It is sandboxed and signed ad hoc, so its library is in
+`~/Library/Containers/com.joemattiello.iCube-debug`, and it has no iCloud, app group or shared keychain.
+
+- [ ] A game-controller icon appears in the menu bar while iCube runs. Its menu has Open iCube, a line saying
+      whether the library is shared, Share Library on Local Network, Keep Running When the Window Is Closed,
+      and Quit iCube.
+- [ ] Close the window with the red button and with Command-W: iCube stays in the menu bar and the Dock.
+      Open iCube, or a click on the Dock icon, brings the window back with the library intact.
+- [ ] With sharing on and the window closed, browse this Mac's library from an iPhone or Apple TV and download
+      a game. Leave the Mac alone for an hour and try again (App Nap is held off while sharing is on).
+- [ ] Untick Keep Running When the Window Is Closed, then close the window: iCube quits, as it used to.
+- [ ] Close the window while a game is running: iCube quits (a game cannot run without its window), and the
+      resume state is there on the next launch.
+- [ ] Command-N does nothing and File has no New Window: there is only ever one library window.
+- [ ] File > Import Game… (Command-O) and iCube > Settings… (Command-,) open those screens, also when the
+      window was closed. Both are greyed out during a game.
+- [ ] Drag game files from Finder onto the library window: they import (this was already in the code).
+- [ ] Drop a game on the Dock icon, and use Open With > iCube in Finder: the game imports. Several files at
+      once import as one batch.
+- [ ] iPhone and iPad: "Open in iCube" from Files and AirDrop of a game now import it too. Before this they
+      did nothing.
+- [ ] Quit from the menu bar, from the Dock and with Command-Q: all quit at once.
+
+Everything else:
 
 - [ ] Import a game and boot it. Video, sound, keyboard, a controller.
 - [ ] Add an Emulation Server by PIN (the QR scanner is compiled out on the Mac).
 - [ ] RomM and WebDAV sources.
 - [ ] Save state, quit, resume.
 - [ ] A signed build: iCloud, the shared keychain group and the app group all work.
-- [ ] `make testflight-mac` archive and upload.
+- [ ] `make testflight-mac` archive and upload. App Store Connect has a macOS 1.0.0 version to receive it.
+- [ ] TestFlight workflow, run by hand with platform `mac`: builds the Catalyst core, archives and uploads.
+      Never run; `all` and the nightly are still iOS and tvOS only.
 - [ ] Rebuild an iOS and a tvOS core slice with the changed `BuildiOSXCFramework.py`; the framework layout code
       was refactored for the Mac and the other platforms were not rebuilt afterwards.
 
 ## 8. Remote libraries in the library filter bar (already on develop)
 
-- [ ] iPhone and iPad: nearby devices, discovered Emulation Servers, saved Emulation Servers and saved RomM
-      servers appear as sources, and picking one shows its games in the grid.
+- [x] Simulator, 2026-11-16, against the live Emulation Server on the Studio: the server appears as a filter
+      pill and a Nearby Libraries card with no pairing step, and picking it shows its 22 games with cover art.
+- [ ] iPhone and iPad, on a device: nearby devices, discovered Emulation Servers, saved Emulation Servers and
+      saved RomM servers appear as sources, and picking one shows its games in the grid.
 - [ ] Apple TV: servers are reachable from the library menu only. Confirm that path works end to end.
 
 ## Owner steps (not tests)
@@ -140,10 +175,13 @@ further has been tried.
 - Enable **Associated Domains** on the App ID `com.joemattiello.iCube`, and host
   `docs/app-store/apple-app-site-association` at `https://icube-emu.com/.well-known/apple-app-site-association`
   (details in `docs/app-store/apple-app-site-association.md` on the integration branch).
-- Add the macOS platform to the App Store Connect record.
-- Emulation Server repo: the Catalyst client fix is commit `8387f9b` on the unmerged branch
-  `claude/catalyst-scanner-gate`. iCube's pin now points at it (uncommitted line in `Project.swift`). Merge that
-  branch to `main`, or carry the commit along, before the next pin bump; otherwise the Mac build breaks again.
+- Done 2026-11-16: App Store Connect has a macOS 1.0.0 version on the iCube record (Prepare for Submission).
+  Its screenshots, description and review details are still empty.
+- Emulation Server repo: iCube's current pin (`817cc049`) predates the QR scanner view, so the Mac builds
+  today. The next pin bump brings that view in, and it does not compile for the Mac until its five
+  `#if os(iOS)` lines in `DevicePairingView.swift` become `#if os(iOS) && !targetEnvironment(macCatalyst)`.
+  Commit `8387f9b` on the unmerged branch `claude/catalyst-scanner-gate` does that for the pairing branch; it
+  does not apply cleanly to `main`.
 - Decide whether the wider iCloud sync filter (controller profiles, device-bound keys) goes in before 1.0.
 
 ## Simulator results for the merged branch
@@ -155,4 +193,15 @@ Run on `develop` at `e1f9247856`, 2026-11-16:
 - tvOS simulator build: succeeds.
 - The merged build installs and launches in the iOS simulator (Welcome screen), with the Live Activity
   extension embedded.
-- Not yet run: browsing and downloading from the live Emulation Server in the simulator.
+
+Live Emulation Server in the simulator, same build, 2026-11-16:
+
+- The server is offered as a library source and lists its 22 games (section 8).
+- Wii Play (93 MB) downloaded with a progress banner and landed in `Documents/Software/EmulationServer/`.
+- 4x4 Evo 2 (1.08 GB) kept downloading with the app in the background, 36 MB to 882 MB over about two and a
+  half minutes, and finished and unpacked after returning to the app. It did not restart.
+- Not covered there: a download after the app was ended rather than backgrounded, the server that needs
+  pairing, RomM and WebDAV. Section 1 still needs a device.
+- Booting the downloaded game in the simulator stopped at repeated Metal "Failed to compile pipeline …
+  reading from a rendertarget is not supported" alerts. Not checked on a device; the simulator's Metal is the
+  likely cause.
