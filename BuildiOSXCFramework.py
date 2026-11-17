@@ -139,6 +139,16 @@ class DolphinBuilder:
         os.environ["CC"] = self.cc
         os.environ["CXX"] = self.cxx
 
+        # Xcode's /usr/bin/python3 shim (how the app's build phase and most people start this
+        # script) exports CPATH=/usr/local/include and LIBRARY_PATH=/usr/local/lib. clang searches
+        # CPATH ahead of -isystem directories, and CMake marks several Externals as -isystem, so a
+        # library installed under /usr/local replaces the vendored copy: a 2024 Vulkan SDK's
+        # glslang headers there broke every local slice build with "static assertion failed ...
+        # 5 == 6" in glslang_c_interface.cpp. The core builds only from this tree and the SDK.
+        for inherited in ("CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "OBJC_INCLUDE_PATH",
+                          "OBJCPLUS_INCLUDE_PATH", "LIBRARY_PATH"):
+            os.environ.pop(inherited, None)
+
         # Check for required tools
         self._check_required_tools()
 
@@ -527,6 +537,15 @@ class DolphinBuilder:
             # Use macOS SDK for Catalyst
             macos_sdk = subprocess.check_output(["xcrun", "--sdk", "macosx", "--show-sdk-path"]).decode().strip()
             cmake_cmd.append(f"-DCMAKE_OSX_SYSROOT={macos_sdk}")
+            # ios-cmake adds the macabi target triple and the iOSSupport search paths to
+            # CMAKE_C_FLAGS and CMAKE_CXX_FLAGS only. The core's .m/.mm files compile as OBJC and
+            # OBJCXX, which were left targeting plain macOS, where AVAudioSession and UIKit are
+            # unavailable ("'AVAudioSession' is unavailable: not available on macOS").
+            macabi_flags = (f"--target=arm64-apple-ios{deployment_target}-macabi "
+                            f"-isystem {macos_sdk}/System/iOSSupport/usr/include "
+                            f"-iframework {macos_sdk}/System/iOSSupport/System/Library/Frameworks")
+            cmake_cmd.append(f"-DCMAKE_OBJC_FLAGS={macabi_flags}")
+            cmake_cmd.append(f"-DCMAKE_OBJCXX_FLAGS={macabi_flags}")
 
         # Ensure Externals (submodules) are present before configuring CMake
         self._ensure_externals_present()
@@ -730,27 +749,39 @@ class DolphinBuilder:
         elif framework_path.exists():
             shutil.rmtree(framework_path)
 
-        # Create framework directory structure
-        framework_path.mkdir(parents=True)
-
         # Get the actual filename without path
         dylib_filename = os.path.basename(dylib_path)
         platform_suffix = CONFIG['platforms'][platform]['suffix']
+        binary_name = f"{framework_name}{platform_suffix}"
+
+        # iOS and tvOS frameworks are flat. macOS, and so Mac Catalyst, requires the versioned
+        # layout: Xcode refuses to embed a flat one ("contains Info.plist, expected
+        # Versions/Current/Resources/Info.plist").
+        versioned = platform == "MAC_CATALYST"
+        content_path = framework_path / "Versions" / "A" if versioned else framework_path
+        resources_path = content_path / "Resources" if versioned else framework_path
+        resources_path.mkdir(parents=True)
+        install_name = (f"@rpath/{binary_name}.framework/Versions/A/{binary_name}" if versioned
+                        else f"@rpath/{binary_name}.framework/{binary_name}")
 
         # Copy dylib to framework and rename it to match framework name
-        binary_name = f"{framework_name}{platform_suffix}"
-        shutil.copy(dylib_path, framework_path / binary_name)
+        shutil.copy(dylib_path, content_path / binary_name)
 
         # Make sure the binary is executable
-        os.chmod(framework_path / binary_name, 0o755)
+        os.chmod(content_path / binary_name, 0o755)
 
         # Fix the install name to match the framework structure
         subprocess.check_call([
             "install_name_tool",
             "-id",
-            f"@rpath/{framework_name}{platform_suffix}.framework/{binary_name}",
-            str(framework_path / binary_name)
+            install_name,
+            str(content_path / binary_name)
         ])
+
+        if versioned:
+            os.symlink("A", framework_path / "Versions" / "Current")
+            os.symlink(f"Versions/Current/{binary_name}", framework_path / binary_name)
+            os.symlink("Versions/Current/Resources", framework_path / "Resources")
 
         # Create Info.plist
         info_plist = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -779,7 +810,7 @@ class DolphinBuilder:
 </plist>
 """
 
-        with open(framework_path / "Info.plist", "w") as f:
+        with open(resources_path / "Info.plist", "w") as f:
             f.write(info_plist)
 
         self._log(f"Framework created at {framework_path}", "success")

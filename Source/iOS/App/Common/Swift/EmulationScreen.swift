@@ -60,7 +60,11 @@ private final class EmuContainerViewController: UIViewController {
     }
 
     let vc = EmuEventVC()
+    // On Mac Catalyst EmuEventVC is a plain UIViewController: GCEventViewController, which owns
+    // this property, is unavailable there.
+    #if !targetEnvironment(macCatalyst)
     vc.controllerUserInteractionEnabled = false
+    #endif
     addChild(vc)
     vc.view.frame = view.bounds
     vc.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -1182,7 +1186,7 @@ struct EmulationScreen: View {
     }
     .alert("Exit Game?", isPresented: $showExitConfirm) {
       Button("Save & Quit") {
-        runTopBarQuit(.numberedSlot)
+        runTopBarQuit(.savingState)
       }
       Button("Quit", role: .destructive) {
         quitFromTopBar()
@@ -1744,8 +1748,8 @@ struct EmulationScreen: View {
     Task { @MainActor in
       let outcome: UserQuitAttemptResult
       switch operation {
-      case .numberedSlot:
-        outcome = await SaveStateService.saveAndStopForUserAsync(slot, expectedGameID: expected, expectedSessionIdentifier: session)
+      case .savingState:
+        outcome = await SaveStateService.saveAndStopForUserAsync(slot, mode: quickSaveMode, expectedGameID: expected, expectedSessionIdentifier: session)
       case .finalizing(let path):
         outcome = await SaveStateService.stopForUserAsync(savedStatePath: path, expectedGameID: expected, expectedSessionIdentifier: session)
           ? .stopped : .failed(operation)

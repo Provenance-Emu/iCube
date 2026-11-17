@@ -1035,9 +1035,9 @@ internal struct PauseMenuView: View {
     runQuit(.finalizing(savedStatePath: nil), expectedGameID: TVEmulationBridge.currentGameID())
   }
 
-  /// Saves to the quick slot, then quits.
+  /// Saves where a quick save would (a history state, or the selected slot in slots mode), then quits.
   private func saveAndQuit() {
-    runQuit(.numberedSlot, expectedGameID: TVEmulationBridge.currentGameID())
+    runQuit(.savingState, expectedGameID: TVEmulationBridge.currentGameID())
   }
 
   private func retryQuit(_ operation: UserQuitSaveFailure) {
@@ -1055,8 +1055,8 @@ internal struct PauseMenuView: View {
     Task { @MainActor in
       let outcome: UserQuitAttemptResult
       switch operation {
-      case .numberedSlot:
-        outcome = await SaveStateService.saveAndStopForUserAsync(slot, expectedGameID: expectedGameID, expectedSessionIdentifier: session)
+      case .savingState:
+        outcome = await SaveStateService.saveAndStopForUserAsync(slot, mode: quickSaveMode, expectedGameID: expectedGameID, expectedSessionIdentifier: session)
       case .finalizing(let savedPath):
         outcome = await SaveStateService.stopForUserAsync(savedStatePath: savedPath, expectedGameID: expectedGameID, expectedSessionIdentifier: session)
           ? .stopped : .failed(operation)

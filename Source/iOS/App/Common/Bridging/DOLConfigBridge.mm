@@ -16,6 +16,7 @@
 // the (TriState)mode cast in the VISkipMode setter (setVISkipMode:).
 #include <algorithm>
 #include <atomic>
+#include <vector>
 #include "AudioCommon/AudioCommon.h"
 #include "Common/IOFile.h"
 #include "Common/Logging/Log.h"
@@ -1194,32 +1195,25 @@ static bool HasCurrentRunLayer()
 // disturbing identity/custom data (remote-source logins, servers, imported
 // library, RetroAchievements credentials, controller device assignments).
 //
-// Mechanism: the UI writes every gameplay/perf value via SetBaseOrCurrent. When
-// no game is running (the state when "Reset" is tapped from root Settings) that
-// writes to the Base layer. Deleting a key from a layer makes Config::Get fall
-// through to the compiled Info<> default (see Layer.h Get<>()). So we delete
-// each RESET key from every layer it could live in. PRESERVE keys are simply
-// absent from this list, so they are untouched.
+// Mechanism: the UI writes every gameplay/perf value via SetBaseOrCurrent. With
+// no game running that writes to the Base layer. Deleting a key from a layer
+// makes Config::Get fall through to the compiled Info<> default (see Layer.h
+// Get<>()). PRESERVE keys are simply absent from this list, so they are untouched.
 //
-// We intentionally do NOT RemoveLayer(GlobalGame/LocalGame) here: those layers
-// can hold per-game controller overrides (PRESERVE). Key-scoped deletion is the
-// conservative choice.
+// Reset is also reachable from the pause menu, with a game booted. The game's own
+// layers are never touched: a key deleted from LocalGame is written out of
+// GameSettings/<id>.ini by Config::Save(), and that file syncs, so one tap removed
+// the game's saved overrides on every device. GlobalGame holds the shipped per-game
+// fixes. CurrentRun is left alone while a game runs because it holds what the boot
+// decided for this session (a jitless boot parks its CPU engine fallback there).
 + (void)resetGameplayConfigKeys {
-  // Delete a key from every layer it could live in, so Config::Get falls through
-  // to the compiled Info<> default.
-  //
   // IMPORTANT: Config::DeleteKey(layer, info) dereferences GetLayer(layer) without
-  // a null check (Config.h:134). When no game is running the CurrentRun/LocalGame/
-  // GlobalGame layers are typically absent, so we must guard with GetLayer() first
-  // — exactly as the existing resetPageToDefaults does. Base always exists.
-  static const Config::LayerType kLayers[] = {
-    Config::LayerType::CurrentRun,
-    Config::LayerType::LocalGame,
-    Config::LayerType::GlobalGame,
-    Config::LayerType::Base,
-  };
-  auto del = [](const auto& info) {
-    for (Config::LayerType lt : kLayers) {
+  // a null check (Config.h:134), so guard with GetLayer() first. Base always exists.
+  std::vector<Config::LayerType> layers{Config::LayerType::Base};
+  if (Core::GetState(Core::System::GetInstance()) == Core::State::Uninitialized)
+    layers.push_back(Config::LayerType::CurrentRun);
+  auto del = [&layers](const auto& info) {
+    for (Config::LayerType lt : layers) {
       if (Config::GetLayer(lt)) {
         Config::DeleteKey(lt, info);
       }
@@ -1253,7 +1247,7 @@ static bool HasCurrentRunLayer()
   // Every Cached Interpreter knob (optimizations, their Validate twins, the IR engine's, tape and
   // profiler knobs). A hand-kept list here missed the ones added after it (dynamic linking, micro
   // pairs, ...), so Reset left them pinned.
-  for (Config::LayerType lt : kLayers)
+  for (Config::LayerType lt : layers)
     DeleteCirKeys(lt);
   del(Config::MAIN_OVERCLOCK_ENABLE);
   del(Config::MAIN_OVERCLOCK);
@@ -1273,7 +1267,7 @@ static bool HasCurrentRunLayer()
   del(Config::MAIN_EMULATE_SKYLANDER_PORTAL); // peripheral emulation (default off)
   // Slot B also holds memory cards and other custom attachments. Reset the microphone
   // peripheral only; preserve non-microphone assignments in every layer and their fallback.
-  for (Config::LayerType lt : kLayers)
+  for (Config::LayerType lt : layers)
   {
     const auto layer = Config::GetLayer(lt);
     if (layer && layer->Get(Config::MAIN_SLOT_B) == ExpansionInterface::EXIDeviceType::Microphone)
@@ -1662,17 +1656,27 @@ static NSString* BaseLayerKeyName(const Config::Location& location)
   u8 slot = system.GetSkylanderPortal().LoadSkylander(std::make_unique<IOS::HLE::USB::SkylanderFigure>(std::move(sky_file)));
   return slot == 0xFF ? -1 : (slot + 1);
 }
+// A slot that never held a figure has a null `figure`, which RemoveSkylander dereferenced
+// (ICUBE-MP). The core guards it now; checking here as well covers a prebuilt core slice that
+// predates that guard.
+static bool RemoveLoadedSkylander(IOS::HLE::USB::SkylanderPortal& portal, NSInteger index)
+{
+  if (index < 0 || index >= MAX_SKYLANDERS)
+    return false;
+  const auto* skylander = portal.GetSkylander((u8)index);
+  return skylander && skylander->figure && portal.RemoveSkylander((u8)index);
+}
+
 + (BOOL)skylanderRemoveAtSlot:(NSInteger)slot
 {
-  if (slot <= 0) return NO;
   auto& system = Core::System::GetInstance();
-  return system.GetSkylanderPortal().RemoveSkylander((u8)(slot - 1)) ? YES : NO;
+  return RemoveLoadedSkylander(system.GetSkylanderPortal(), slot - 1) ? YES : NO;
 }
 + (void)skylanderClearAll
 {
   auto& system = Core::System::GetInstance();
-  for (int i = 0; i < 16; i++)
-    system.GetSkylanderPortal().RemoveSkylander((u8)i);
+  for (NSInteger i = 0; i < MAX_SKYLANDERS; i++)
+    RemoveLoadedSkylander(system.GetSkylanderPortal(), i);
 }
 
 // MARK: - DSU Client (Cemuhook DualShock UDP) bridging
