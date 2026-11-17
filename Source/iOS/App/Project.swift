@@ -268,6 +268,22 @@ let uploadDsymScript: TargetScript = .post(
     basedOnDependencyAnalysis: false
 )
 
+// Mac only. UIKit quits a Mac Catalyst app that supports a single scene when its window closes.
+// Allowing more than one scene is what lets it stay in the menu bar and keep sharing the library
+// (MacDesktopController still keeps it to one window). The built Info.plist is edited rather than
+// the checked-in one so iOS and tvOS ship exactly the plist they shipped before.
+let macOutliveWindowScript: TargetScript = .post(
+    script: """
+    if [[ "${IS_MACCATALYST:-NO}" != "YES" ]]; then
+      exit 0
+    fi
+    /usr/libexec/PlistBuddy -c "Set :UIApplicationSceneManifest:UIApplicationSupportsMultipleScenes true" "${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"
+    """,
+    name: "Mac: let the app outlive its window",
+    inputPaths: ["$(TARGET_BUILD_DIR)/$(INFOPLIST_PATH)"],
+    basedOnDependencyAnalysis: false
+)
+
 // MARK: - iCube app target
 
 let iCube = Target.target(
@@ -352,7 +368,7 @@ let iCube = Target.target(
         .folderReference(path: "Common/Resources/WikiContent"),
     ],
     entitlements: nil, // per-config via CODE_SIGN_ENTITLEMENTS in appConfigs
-    scripts: preScripts + [uploadDsymScript],
+    scripts: preScripts + [uploadDsymScript, macOutliveWindowScript],
     dependencies: [
         .xcframework(path: "../../../build/xcframework/PVlibDolphin.xcframework"),
         // MoltenVK (Vulkan-on-Metal ICD) is iOS-only: the prebuilt xcframework has only

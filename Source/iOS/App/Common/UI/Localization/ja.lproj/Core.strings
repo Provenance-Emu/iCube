@@ -5883,6 +5883,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Import stopped. %d files were not imported." = "Import stopped. %d files were not imported.";
 "Import stopped. 1 file was not imported." = "Import stopped. 1 file was not imported.";
 "Importing games" = "Importing games";
+"Keep Running When the Window Is Closed" = "Keep Running When the Window Is Closed";
+"Library sharing is off" = "Library sharing is off";
+"Open iCube" = "Open iCube";
+"Quit iCube" = "Quit iCube";
+"Settings…" = "Settings…";
+"Share Library on Local Network" = "Share Library on Local Network";
+"Sharing your library on the local network" = "Sharing your library on the local network";
 "The connection to the server was lost. Try again to continue the download." = "The connection to the server was lost. Try again to continue the download.";
 "The download did not finish. Try again." = "The download did not finish. Try again.";
 "The server could not send this game." = "The server could not send this game.";

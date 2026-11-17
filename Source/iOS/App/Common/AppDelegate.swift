@@ -56,8 +56,44 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
     GameActivityManager.end()
     #endif
+    #if targetEnvironment(macCatalyst)
+    // After the services: the menu-bar item reads the library-sharing state they set up.
+    MacDesktopController.shared.start()
+    #endif
     return started
   }
+
+  #if targetEnvironment(macCatalyst)
+  override func buildMenu(with builder: UIMenuBuilder) {
+    super.buildMenu(with: builder)
+    guard builder.system == .main else { return }
+    // One library window. Allowing more than one scene is only what lets the app outlive it.
+    builder.remove(menu: .newScene)
+    let importGame = UIKeyCommand(title: L("Import Game…"), action: #selector(importGameFromMenu(_:)),
+                                  input: "o", modifierFlags: .command)
+    builder.insertChild(UIMenu(title: "", options: .displayInline, children: [importGame]), atStartOfMenu: .file)
+    let settings = UIKeyCommand(title: L("Settings…"), action: #selector(showSettingsFromMenu(_:)),
+                                input: ",", modifierFlags: .command)
+    builder.remove(menu: .preferences)
+    builder.insertSibling(UIMenu(title: "", options: .displayInline, children: [settings]), afterMenu: .about)
+  }
+
+  @objc private func importGameFromMenu(_ sender: Any?) {
+    MacDesktopController.shared.showLibrary(thenPost: "DOLShowImportGame")
+  }
+
+  @objc private func showSettingsFromMenu(_ sender: Any?) {
+    MacDesktopController.shared.showLibrary(thenPost: "DOLShowSettings")
+  }
+
+  /// The library's Import and Settings screens are not reachable from inside a game.
+  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+    if action == #selector(importGameFromMenu(_:)) || action == #selector(showSettingsFromMenu(_:)) {
+      return !TVEmulationBridge.isRunning()
+    }
+    return super.canPerformAction(action, withSender: sender)
+  }
+  #endif
 
   func applicationWillTerminate(_ application: UIApplication) {
     ServiceManager.shared.applicationWillTerminate()

@@ -13,6 +13,14 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
   #endif
 
   func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+    #if targetEnvironment(macCatalyst)
+    // The Mac build allows more than one scene only so it can outlive its window (see
+    // MacDesktopController). A second library window is closed again before it shows anything.
+    if let current = MainSceneCoordinator.shared().mainScene, current !== scene {
+      UIApplication.shared.requestSceneSessionDestruction(session, options: nil, errorHandler: nil)
+      return
+    }
+    #endif
     MainSceneCoordinator.shared().mainScene = scene as? UIWindowScene
     // iCube: bring the perf test-bench server up at scene connect (not only at the first game boot)
     // so a Mac-side script can drive POST /api/debug/boot on a freshly launched app. Self-gated on
@@ -46,9 +54,10 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
 
       // Cold launch from a URL (Top Shelf tile, dolphinios:// link). Give the library
       // view time to mount its DOLLaunchGameByGameID observer, same delay as shortcuts.
-      if let context = connectionOptions.urlContexts.first {
+      let openedURLs = connectionOptions.urlContexts.map(\.url)
+      if !openedURLs.isEmpty {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
-          self?.handleOpenedURL(context.url)
+          self?.handleOpenedURLs(openedURLs)
         }
       }
       // Cold launch from an https://icube-emu.com universal link, delayed like the URL above.
@@ -73,13 +82,29 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
   }
 
   func sceneDidDisconnect(_ scene: UIScene) {
-    MainSceneCoordinator.shared().mainScene = nil
+    // Only the scene that is the main one: a refused second window disconnects too.
+    if MainSceneCoordinator.shared().mainScene === scene {
+      MainSceneCoordinator.shared().mainScene = nil
+    }
   }
 
   func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-    for context in URLContexts {
-      handleOpenedURL(context.url)
+    handleOpenedURLs(URLContexts.map(\.url))
+  }
+
+  /// Game files the system asked the app to open (Open With, AirDrop, a drop on the Mac Dock icon)
+  /// are imported together as one batch; everything else goes through `handleOpenedURL`.
+  private func handleOpenedURLs(_ urls: [URL]) {
+    #if os(iOS)
+    let games = OpenedFileRouter.importableFiles(in: urls.filter { !SkinLibrary.isSkinArchive($0) })
+    if !games.isEmpty {
+      ImportFileManager.shared().importFiles(at: games as [NSURL])
     }
+    let others = urls.filter { !games.contains($0) }
+    #else
+    let others = urls
+    #endif
+    others.forEach(handleOpenedURL)
   }
 
   /// One entry point for URLs opened warm (`openURLContexts`) and cold (`willConnectTo`).
