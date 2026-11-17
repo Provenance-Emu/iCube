@@ -5915,3 +5915,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "When Provenance asks for a game, iCube asks you first, then sends it the same way." = "When Provenance asks for a game, iCube asks you first, then sends it the same way.";
 "“%@” from %@ is already in your library." = "“%@” from %@ is already in your library.";
 "“%@” is waiting for %@. Open %@ to finish the import." = "“%@” is waiting for %@. Open %@ to finish the import.";
+"Add GameCube and Wii games to get started." = "Add GameCube and Wii games to get started.";
+"Browse and download from your Emulation Server." = "Browse and download from your Emulation Server.";
+"Connect a Remote Library" = "Connect a Remote Library";
+"Connect to your RomM library." = "Connect to your RomM library.";
+"Scan Server QR" = "Scan Server QR";

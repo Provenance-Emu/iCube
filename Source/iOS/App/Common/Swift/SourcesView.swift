@@ -1,19 +1,24 @@
+import Network
 import PVWebServer
 import SwiftUI
 
-/// The remote sources the library browses (WebDAV servers), in the iCube design language: the room, card rows with
-/// an icon badge and an online chip, and an Add card that is the primary action when there are none yet (the
-/// welcome's "Add Remote Source" lands here on an empty list).
+/// Remote library setup and the list of configured WebDAV sources.
 ///
 /// iOS keeps a `List` so a row still swipes to delete. tvOS draws the leaf header and the cards in a ScrollView,
 /// presented full screen from the library; Menu closes it, and a long press on a source offers Delete.
 struct SourcesView: View {
   @ObservedObject private var store = RemoteSourcesStore.shared
-  @State private var showAddWebDAV = false
+  @ObservedObject private var nearby = NearbyLibrariesModel.shared
+  @State private var addSource: SourceKind?
   @State private var editingSource: WebDAVSource?
 
+  private enum SourceKind: String, Identifiable {
+    case emulationServer, romm, webDAV
+    var id: Self { self }
+  }
+
   #if os(tvOS)
-  private enum Focus: Hashable { case source(String), add }
+  private enum Focus: Hashable { case source(String), add(SourceKind) }
   @FocusState private var focus: Focus?
   private static let contentWidth: CGFloat = 1100
   #else
@@ -24,8 +29,22 @@ struct SourcesView: View {
 
   var body: some View {
     content
-      .sheet(isPresented: $showAddWebDAV) {
-        AddWebDAVSourceView(store: store)
+      .sheet(item: $addSource) { kind in
+        switch kind {
+        case .emulationServer:
+          EmulationServerSettingsView(model: nearby)
+        case .romm:
+          NavigationStack {
+            RomMServersView(model: nearby) { _ in addSource = nil }
+              .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                  Button(L("Done")) { addSource = nil }
+                }
+              }
+          }
+        case .webDAV:
+          AddWebDAVSourceView(store: store)
+        }
       }
       .sheet(item: $editingSource) { source in
         EditWebDAVSourceView(store: store, source: source)
@@ -53,8 +72,9 @@ struct SourcesView: View {
                 }
             }
           }
-          addCard
-            .focused($focus, equals: .add)
+          emulationServerCard.focused($focus, equals: .add(.emulationServer))
+          rommCard.focused($focus, equals: .add(.romm))
+          webDAVCard.focused($focus, equals: .add(.webDAV))
         }
         .focusSection()
         .frame(maxWidth: Self.contentWidth)
@@ -64,7 +84,7 @@ struct SourcesView: View {
       // The focused card's lift and glow draw past the scroll view's edge.
       .scrollClipDisabled()
     }
-    .defaultFocus($focus, sources.first.map { .source($0.id) } ?? .add)
+    .defaultFocus($focus, sources.first.map { .source($0.id) } ?? .add(.emulationServer))
   }
   #else
   private var content: some View {
@@ -84,7 +104,9 @@ struct SourcesView: View {
               for id in offsets.map({ sources[$0].id }) { store.remove(id: id) }
             }
           }
-          addCard
+          emulationServerCard
+          rommCard
+          webDAVCard
         }
         .frame(maxWidth: Self.contentWidth, alignment: .leading)
         .frame(maxWidth: .infinity)
@@ -100,8 +122,14 @@ struct SourcesView: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
-          Button { showAddWebDAV = true } label: { Image(systemName: "plus") }
-            .accessibilityLabel(L("Add WebDAV Source"))
+          Menu {
+            Button(L("Emulation Server")) { addSource = .emulationServer }
+            Button("RomM") { addSource = .romm }
+            Button(L("Add WebDAV Source")) { addSource = .webDAV }
+          } label: {
+            Image(systemName: "plus")
+          }
+          .accessibilityLabel(L("Add Remote Source"))
         }
       }
     }
@@ -109,10 +137,22 @@ struct SourcesView: View {
   }
   #endif
 
-  private var addCard: some View {
+  private var emulationServerCard: some View {
+    SourcesActionCard(title: L("Emulation Server"),
+                      detail: L("Browse and download from your Emulation Server."),
+                      systemImage: "server.rack", isPrimary: sources.isEmpty) { addSource = .emulationServer }
+  }
+
+  private var rommCard: some View {
+    SourcesActionCard(title: "RomM",
+                      detail: L("Connect to your RomM library."),
+                      systemImage: "server.rack", isPrimary: false) { addSource = .romm }
+  }
+
+  private var webDAVCard: some View {
     SourcesActionCard(title: L("Add WebDAV Source"),
                       detail: L("Connect to a server on your network, such as a NAS or another iCube."),
-                      systemImage: "plus", isPrimary: sources.isEmpty) { showAddWebDAV = true }
+                      systemImage: "externaldrive.connected.to.line.below", isPrimary: false) { addSource = .webDAV }
   }
 }
 
@@ -266,15 +306,10 @@ private struct SourcesEmptyState: View {
   var body: some View {
     VStack(spacing: ICubeDesign.Spacing.s.rawValue) {
       SourcesBadge.view(systemImage: "externaldrive.connected.to.line.below")
-      Text(L("No Remote Sources"))
+      Text(L("Connect a Remote Library"))
         .icubeText(.section)
         .foregroundStyle(ICubeDesign.color(.textPrimary))
         .multilineTextAlignment(.center)
-      Text(L("Add a WebDAV server on your network to browse and play the games stored on it."))
-        .icubeText(.body)
-        .foregroundStyle(ICubeDesign.color(.textSecondary))
-        .multilineTextAlignment(.center)
-        .fixedSize(horizontal: false, vertical: true)
     }
     .frame(maxWidth: .infinity)
   }
@@ -495,8 +530,10 @@ private final class BonjourResolveDelegate: NSObject, NetServiceDelegate {
     let port = sender.port
     var txt: [String: String] = [:]
     if let data = sender.txtRecordData() {
-      let dict = NetService.dictionary(fromTXTRecord: data)
-      for (k, v) in dict { if let s = String(data: v, encoding: .utf8) { txt[k] = s } }
+      let record = NWTXTRecord(data)
+      for key in ["path", "u", "p"] {
+        txt[key] = record[key]
+      }
     }
     onResolved(host, port, txt)
   }
