@@ -12,7 +12,9 @@
 #   ./Scripts/release.sh [options]
 #
 #   --channel testflight   Archive + upload to App Store Connect (default, only channel)
-#   --platform ios|tvos|all  Which platform(s) to ship (default: ios)
+#   --platform ios|tvos|mac|all  Which platform(s) to ship (default: ios)
+#                          mac is the Mac Catalyst build of the same app. `all` ships it too,
+#                          once its core slice has been built (BuildiOSXCFramework.py -p MAC_CATALYST).
 #   --build N              Override the build number (default: epoch seconds)
 #   --dry-run              Print the commands without executing them
 #   -h, --help
@@ -87,11 +89,23 @@ case "$CHANNEL" in
     *) err "Unknown channel: $CHANNEL (only 'testflight' is implemented)" ;;
 esac
 case "$PLATFORM" in
-    ios|tvos|all) ;;
-    *) err "Unknown platform: $PLATFORM (ios|tvos|all)" ;;
+    ios|tvos|mac|all) ;;
+    *) err "Unknown platform: $PLATFORM (ios|tvos|mac|all)" ;;
 esac
 
 should_platform() { [[ "$PLATFORM" == "all" || "$PLATFORM" == "$1" ]]; }
+
+# Mac Catalyst needs its own core slice, which nothing builds by default (a cold build is about as
+# long as the iOS one). `--platform mac` insists on it; `all` ships the Mac only when the slice is
+# there, so iOS and tvOS releases keep working on a machine that never built it.
+MAC_CORE_SLICE="$REPO_ROOT/build/xcframework/PVlibDolphin-maccatalyst.framework"
+should_mac() {
+    [[ "$PLATFORM" == "mac" ]] && return 0
+    [[ "$PLATFORM" == "all" ]] || return 1
+    [[ -d "$MAC_CORE_SLICE" ]] && return 0
+    warn "Skipping the Mac: no Catalyst core slice. Build it with:  python3 BuildiOSXCFramework.py -p MAC_CATALYST"
+    return 1
+}
 
 VERSION="$(sed -n 's/.*"MARKETING_VERSION": "\([^"]*\)".*/\1/p' "$APP_DIR/Project.swift" | head -1)"
 VERSION="${VERSION:-unknown}"
@@ -198,11 +212,13 @@ resolve_asc_key() {
 # ── Archive + upload ──────────────────────────────────────────────────────────
 
 archive_and_upload() {
-    local platform="$1" destination archive export_path
+    local platform="$1" destination archive export_path binary="iCube.app/iCube"
 
     case "$platform" in
         ios)  destination="generic/platform=iOS" ;;
         tvos) destination="generic/platform=tvOS" ;;
+        mac)  destination="generic/platform=macOS,variant=Mac Catalyst"
+              binary="iCube.app/Contents/MacOS/iCube" ;;
     esac
     archive="$ARCHIVES_DIR/iCube-${platform}.xcarchive"
     export_path="$EXPORT_DIR/${platform}"
@@ -232,7 +248,7 @@ archive_and_upload() {
     # download profiles. Omitting it here is what broke Provenance's export step
     # (fixed there in 27c3aba0a4).
     run python3 "$APP_DIR/Project/Scripts/check_swiftui_compatibility.py" \
-        "$archive/Products/Applications/iCube.app/iCube"
+        "$archive/Products/Applications/$binary"
 
     log "Uploading $platform to App Store Connect…"
     run xcodebuild -exportArchive \
@@ -249,6 +265,8 @@ archive_and_upload() {
 # reached the maximum number of certificates".
 should_platform ios  && archive_and_upload ios
 should_platform tvos && archive_and_upload tvos
+# Last, so a Mac failure never holds back the iOS and tvOS uploads.
+should_mac && archive_and_upload mac
 
 if $DRY_RUN; then
     log "Dry run complete — nothing was built or uploaded."

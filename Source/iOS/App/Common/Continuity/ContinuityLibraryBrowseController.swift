@@ -310,27 +310,29 @@ final class ContinuityLibraryBrowseController: ObservableObject {
     let id = operationID
     phase = .copying(entry: entry, progress: nil)
     do {
-      try await ContinuityTransferGate.shared.withPermit {
-        let report: @Sendable (PullProgress) -> Void = { [weak self] progress in
-          Task { @MainActor in
-            guard let self, self.operationID == id, case .copying = self.phase else { return }
-            self.phase = .copying(entry: entry, progress: progress)
+      let report: @MainActor @Sendable (PullProgress) -> Void = { [weak self] progress in
+        guard let self, self.operationID == id, case .copying = self.phase else { return }
+        self.phase = .copying(entry: entry, progress: progress)
+      }
+      let urls: [URL]
+      if let temporaryFolder {
+        guard let server = library as? EmulationServerLibrary else { throw ContinuityError.cancelled }
+        urls = try await ContinuityTransferGate.shared.withPermit {
+          try await server.copyTemporarily(entry, into: temporaryFolder) { progress in
+            Task { @MainActor in report(progress) }
           }
         }
-        let urls: [URL]
-        if let temporaryFolder, let server = library as? EmulationServerLibrary {
-          urls = try await server.copyTemporarily(entry, into: temporaryFolder, progress: report)
-        } else {
-          urls = try await library.copy(entry, progress: report)
-        }
-        try Task.checkCancellation()
-        if temporaryFolder == nil {
-          TVLibraryBridge.updateLibrary(withRemotePaths: urls.map(\.path), fetchMetadata: true)
-        }
-        guard !Task.isCancelled else { return }
-        copiedFileURLs = urls
-        phase = .copied(entry)
+      } else {
+        // Join a permanent copy that a relaunch is already finishing.
+        urls = try await RemoteGameDownloads.shared.copy(entry, from: library, progress: report)
       }
+      try Task.checkCancellation()
+      if temporaryFolder == nil {
+        TVLibraryBridge.updateLibrary(withRemotePaths: urls.map(\.path), fetchMetadata: true)
+      }
+      guard !Task.isCancelled else { return }
+      copiedFileURLs = urls
+      phase = .copied(entry)
     } catch {
       guard !Task.isCancelled else { return }
       phase = .failed(error.localizedDescription)

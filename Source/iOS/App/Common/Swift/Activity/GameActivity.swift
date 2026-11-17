@@ -22,10 +22,30 @@ public struct GameActivityAttributes: ActivityAttributes {
   public init(gameId: String) { self.gameId = gameId }
 }
 
+extension GameActivityAttributes.ContentState {
+  /// The state after a tick or pause change: the game's title and subtitle are kept (they are only
+  /// known at `start`), so the lock screen keeps showing the game's name instead of falling back to
+  /// the generic "Playing".
+  func updating(isPaused: Bool, elapsedSeconds: Int) -> Self {
+    Self(title: title, subtitle: subtitle, isPaused: isPaused, elapsedSeconds: elapsedSeconds)
+  }
+}
+
 enum GameActivityManager {
   /// Start a Live Activity for a game. Supply plain values to avoid cross-target dependencies.
+  /// Activities left over from another game (or from a run that was killed before it could end
+  /// them) are ended first; a second `start` for the game already shown is a no-op.
   static func start(gameId: String, title: String, subtitle: String?, isPaused: Bool) {
     guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+    var alreadyShowing = false
+    for activity in Activity<GameActivityAttributes>.activities {
+      if activity.attributes.gameId == gameId, !alreadyShowing {
+        alreadyShowing = true
+      } else {
+        Task { await activity.end(nil, dismissalPolicy: .immediate) }
+      }
+    }
+    guard !alreadyShowing else { return }
     let attributes = GameActivityAttributes(gameId: gameId)
     let state = GameActivityAttributes.ContentState(
       title: title,
@@ -38,15 +58,9 @@ enum GameActivityManager {
   }
 
   static func update(isPaused: Bool, elapsedSeconds: Int) {
-    let state = GameActivityAttributes.ContentState(
-      title: "",
-      subtitle: nil,
-      isPaused: isPaused,
-      elapsedSeconds: elapsedSeconds
-    )
-    let content = ActivityContent(state: state, staleDate: nil)
     for activity in Activity<GameActivityAttributes>.activities {
-      Task { await activity.update(content) }
+      let state = activity.content.state.updating(isPaused: isPaused, elapsedSeconds: elapsedSeconds)
+      Task { await activity.update(ActivityContent(state: state, staleDate: nil)) }
     }
   }
 

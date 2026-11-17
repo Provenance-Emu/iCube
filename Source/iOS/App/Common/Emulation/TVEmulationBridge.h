@@ -103,6 +103,19 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 // (a patched game shares the vanilla game's id, so it never resumes).
 + (nullable NSString*)autoStateFilePath;
 + (BOOL)saveStateToPath:(NSString*)path wait:(BOOL)wait;
+/// Writes the running game's resume state and leaves the game as it was (running or paused).
+/// For the moment the app goes to the background: the system may end the process there without
+/// another callback, and a state saved only at Quit lost everything since the last Quit.
+/// YES only when the state file was committed; NO when "Resume Where I Left Off" is off, no game
+/// is running, the boot is modded, this boot's resume has not been applied yet (see below), or
+/// the write failed (the previous state is kept).
+/// Takes the CPU lock and waits for the disk, so never call it on the main thread.
++ (BOOL)saveResumeStateKeepingGameRunning;
+/// Call once per boot, after the boot's resume decision was made and any state load it needs was
+/// requested. Until the core has worked through those requests, saveResumeStateKeepingGameRunning
+/// refuses: a save taken between boot and the resume load would replace the state about to be
+/// loaded with a freshly booted game.
++ (void)markResumeSettledAfterRequestedLoads;
 + (void)loadStateFromPath:(NSString*)path;
 /// YES means requested, not completed. The queued job rechecks identity before loading.
 + (BOOL)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(loadState(fromPath:expectedGameID:expectedSessionIdentifier:));

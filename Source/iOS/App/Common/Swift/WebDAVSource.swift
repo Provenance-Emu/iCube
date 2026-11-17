@@ -42,7 +42,6 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
     // Pre-caching support
     private var activeCacheTasks: [String: Task<Void, Error>] = [:]
-    private var activeDownloadTasks: [String: URLSessionDownloadTask] = [:]
     private let cacheDirectory: URL
     private let cacheMetadataFile: URL
 
@@ -200,8 +199,6 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         loopTask = nil
 
         // Cancel any active downloads
-        for (_, t) in activeDownloadTasks { t.cancel() }
-        activeDownloadTasks.removeAll()
         for (_, task) in activeCacheTasks { task.cancel() }
         activeCacheTasks.removeAll()
 
@@ -357,17 +354,16 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
                         cumulative.append(item)
                         addedInThisDir += 1
                         discoveredFiles += 1
-                        // Yield individual additions for faster UI updates
-                        itemsCont?.yield(cumulative)
-                        // Update progress as we discover files (best-effort)
-                        if totalNodesEstimated > 0 {
-                            let progress = min(1.0, Double(discoveredFiles) / Double(max(1, totalNodesEstimated)))
-                            scanningProgressCont?.yield(progress)
-                        }
                         if !isOnline { break }
                     }
                 }
                 processedDirs += 1
+                // One update per directory, not per file: every yield hands the consumer the whole
+                // list to diff on the main actor, so a yield per file made a large folder quadratic
+                // and hung the app (ICUBE-MK).
+                if totalNodesEstimated > 0 {
+                    scanningProgressCont?.yield(min(1.0, Double(discoveredFiles) / Double(totalNodesEstimated)))
+                }
                 // Yield progressively after each directory or after a reasonable batch
                 if addedInThisDir > 0 || processedDirs % 5 == 0 {
                     itemsCont?.yield(cumulative)
@@ -709,7 +705,6 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
 
         // Cancel any existing cache task and underlying download for this item
         if let existingTask = activeCacheTasks[key] { existingTask.cancel() }
-        if let dl = activeDownloadTasks[key] { dl.cancel() }
 
         let task = Task<Void, Error> { [weak self] in
             guard let self else { return }
@@ -743,7 +738,6 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         let key = item.url.absoluteString
 
         if let existingTask = activeCacheTasks[key] { existingTask.cancel() }
-        if let dl = activeDownloadTasks[key] { dl.cancel() }
 
         let task = Task<Void, Error> { [weak self] in
             guard let self else { return }
@@ -761,7 +755,8 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         }
     }
 
-    /// Download a file to cache
+    /// Download a file to cache on the shared background downloader, so it keeps going while iCube
+    /// is suspended. A file that finished while iCube was away is handed over at once.
     private func downloadFile(item: RemoteLibraryItem, progressCallback: @escaping (Double) -> Void) async throws {
         let fileName = item.url.lastPathComponent
         let localURL = cacheDirectory.appendingPathComponent(fileName)
@@ -774,91 +769,78 @@ final class WebDAVSource: RemoteLibrarySource, Identifiable {
         await waitWhileEmulationActive()
         if Task.isCancelled { return }
 
-        // Create URL request
-        var request = URLRequest(url: item.url)
+        // The header is fixed for the transfer's life: a password changed meanwhile ends it as access denied.
+        var headers: [String: String] = [:]
         if let username = username, let password = password {
-            let credentials = "\(username):\(password)"
-            let credentialsData = credentials.data(using: .utf8)!
-            let base64Credentials = credentialsData.base64EncodedString()
-            request.setValue("Basic \(base64Credentials)", forHTTPHeaderField: "Authorization")
+            headers["Authorization"] = "Basic " + Data("\(username):\(password)".utf8).base64EncodedString()
+        }
+        let job = BackgroundDownloadJob(kind: .webdav, sourceID: id, gameKey: item.url.absoluteString, title: item.displayName)
+        let downloader = BackgroundGameDownloader.shared
+        let expected = item.sizeBytes
+        let report = UncheckedProgress(callback: progressCallback)
+        let fetched: URL
+        do {
+            let files = try await downloader.fetch(
+                [GameFileRequest(url: item.url, headers: headers, expectedSize: expected)], for: job, plan: nil
+            ) { bytes in
+                guard let expected, expected > 0 else { return }
+                report.callback(min(1, Double(bytes) / Double(expected)))
+            }
+            guard let file = files.first else { throw BackgroundDownloadError(failure: .incomplete) }
+            fetched = file
+        } catch {
+            // A cancel or a lost connection keeps the resume data for the next try.
+            if (error as? BackgroundDownloadError)?.failure.isTerminal ?? true { await downloader.release(job) }
+            throw error
         }
 
-        // Create a continuation to bridge the delegate callbacks with async/await
-        return try await withCheckedThrowingContinuation { continuation in
-            let delegate = DownloadProgressDelegate(
-                progressCallback: progressCallback,
-                completion: { [weak self] result in
-                    guard let self else { return }
-                    switch result {
-                    case .success(let tempURL):
-                        do {
-                            // Move to final location (replace if exists)
-                            if FileManager.default.fileExists(atPath: localURL.path) {
-                                try FileManager.default.removeItem(at: localURL)
-                            }
-                            try FileManager.default.moveItem(at: tempURL, to: localURL)
+        do {
+            let fm = FileManager.default
+            try fm.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+            if fm.fileExists(atPath: localURL.path) {
+                try fm.removeItem(at: localURL)
+            }
+            try ImportStaging.stagedMove(fromPath: fetched.path, toPath: localURL.path)
 
-                            // Determine actual file size on disk
-                            let attrs = try FileManager.default.attributesOfItem(atPath: localURL.path)
-                            let actualSize = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+            // Determine actual file size on disk
+            let attrs = try fm.attributesOfItem(atPath: localURL.path)
+            let actualSize = (attrs[.size] as? NSNumber)?.int64Value ?? 0
 
-                            // Update cache metadata with actual size
-                            var metadata = self.loadCacheMetadata()
-                            let cachedInfo = CacheMetadata.CachedFileInfo(
-                                originalURL: item.url.absoluteString,
-                                localPath: fileName,
-                                fileSize: actualSize,
-                                cachedDate: Date(),
-                                etag: item.etag,
-                                lastModified: item.lastModified
-                            )
-                            // Save under full URL key
-                            metadata.cachedFiles[item.url.absoluteString] = cachedInfo
-                            // Also save under a synthetic key with just filename to allow host changes
-                            if let synthetic = URL(string: fileName) {
-                                metadata.cachedFiles[synthetic.absoluteString] = cachedInfo
-                            }
-                            self.saveCacheMetadata(metadata)
-
-                            // Final progress callback
-                            progressCallback(1.0)
-
-                            #if canImport(os)
-                            Self.logger.info("Successfully cached \(item.displayName)")
-                            #endif
-
-                            // Cleanup tracking
-                            self.activeDownloadTasks.removeValue(forKey: item.url.absoluteString)
-
-                            continuation.resume()
-                        } catch {
-                            self.activeDownloadTasks.removeValue(forKey: item.url.absoluteString)
-                            continuation.resume(throwing: error)
-                        }
-                    case .failure(let error):
-                        self.activeDownloadTasks.removeValue(forKey: item.url.absoluteString)
-                        continuation.resume(throwing: error)
-                    }
-                }
+            // Update cache metadata with actual size
+            var metadata = loadCacheMetadata()
+            let cachedInfo = CacheMetadata.CachedFileInfo(
+                originalURL: item.url.absoluteString,
+                localPath: fileName,
+                fileSize: actualSize,
+                cachedDate: Date(),
+                etag: item.etag,
+                lastModified: item.lastModified
             )
-
-            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-            let task = session.downloadTask(with: request)
-            delegate.task = task
-            self.activeDownloadTasks[item.url.absoluteString] = task
-            task.resume()
+            // Save under full URL key
+            metadata.cachedFiles[item.url.absoluteString] = cachedInfo
+            // Also save under a synthetic key with just filename to allow host changes
+            if let synthetic = URL(string: fileName) {
+                metadata.cachedFiles[synthetic.absoluteString] = cachedInfo
+            }
+            saveCacheMetadata(metadata)
+        } catch {
+            await downloader.release(job)
+            throw error
         }
+        await downloader.release(job)
+
+        // Final progress callback
+        progressCallback(1.0)
+
+        #if canImport(os)
+        Self.logger.info("Successfully cached \(item.displayName)")
+        #endif
     }
 
     /// Cancel pre-caching for an item
     func cancelPreCache(_ item: RemoteLibraryItem) async {
         let key = item.url.absoluteString
-        // Cancel underlying URLSession task if present
-        if let dl = activeDownloadTasks[key] {
-            dl.cancel()
-            activeDownloadTasks.removeValue(forKey: key)
-        }
-        // Cancel the async task wrapper if present
+        // Cancelling the task stops its transfer and keeps the resume data
         if let t = activeCacheTasks[key] {
             t.cancel()
             activeCacheTasks.removeValue(forKey: key)
@@ -1030,45 +1012,9 @@ extension WebDAVSource {
     }
 }
 
-// MARK: - Download Progress Delegate
-
-/// URLSession delegate to track download progress
-private class DownloadProgressDelegate: NSObject, URLSessionDownloadDelegate {
-    private let progressCallback: (Double) -> Void
-    private let completion: (Result<URL, Error>) -> Void
-    weak var task: URLSessionDownloadTask?
-
-    init(progressCallback: @escaping (Double) -> Void, completion: @escaping (Result<URL, Error>) -> Void) {
-        self.progressCallback = progressCallback
-        self.completion = completion
-        super.init()
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        #if canImport(os)
-        print("DownloadProgressDelegate: Download completed to: \(location)")
-        #endif
-        completion(.success(location))
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        guard totalBytesExpectedToWrite > 0 else {
-            #if canImport(os)
-            print("DownloadProgressDelegate: No expected bytes, skipping progress update")
-            #endif
-            return
-        }
-        let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
-        progressCallback(progress)
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let error = error {
-            #if canImport(os)
-            print("DownloadProgressDelegate: Download failed with error: \(error)")
-            #endif
-            completion(.failure(error))
-        }
-        // Note: Success case is handled in didFinishDownloadingTo
-    }
+/// A progress callback handed to the downloader's `@Sendable` progress closure. The callers'
+/// callbacks only hop to the main actor or record a value, so calling one from the downloader's
+/// queue is safe.
+private struct UncheckedProgress: @unchecked Sendable {
+    let callback: (Double) -> Void
 }

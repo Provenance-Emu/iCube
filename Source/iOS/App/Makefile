@@ -7,7 +7,7 @@
 #   cd Source/iOS/App && make testflight
 #
 .PHONY: help xcframework generate dev open lint format test ui test-ui gate-release testflight testflight-tvos \
-	testflight-all release-dry clean mcp-install mcp-test mcp-smoke webserver-bench
+	testflight-mac testflight-all release-dry clean mcp-install mcp-test mcp-smoke webserver-bench
 
 # Repo root — BuildiOSXCFramework.py and ExportOptions/ live there, not here.
 ROOT := $(shell git rev-parse --show-toplevel)
@@ -39,7 +39,8 @@ help:
 	@echo "  make format       — SwiftFormat (check only, no writes)"
 	@echo "  make testflight   — archive + auto-bump build number + upload iOS to TestFlight"
 	@echo "  make testflight-tvos — same, tvOS"
-	@echo "  make testflight-all  — both, one after the other (never in parallel)"
+	@echo "  make testflight-mac  — same, Mac Catalyst (needs: python3 BuildiOSXCFramework.py -p MAC_CATALYST)"
+	@echo "  make testflight-all  — iOS, tvOS, then the Mac if its core slice is built (never in parallel)"
 	@echo "  make release-dry  — print the release commands without executing them"
 	@echo "  make clean        — remove generated project + archives"
 	@echo "  make mcp-install  — uv sync the Tools/mcp debug MCP project"
@@ -134,6 +135,9 @@ testflight:
 
 testflight-tvos:
 	$(RELEASE_RUNNER) ./Scripts/release.sh --channel testflight --platform tvos
+
+testflight-mac:
+	$(RELEASE_RUNNER) ./Scripts/release.sh --channel testflight --platform mac
 
 testflight-all:
 	$(RELEASE_RUNNER) ./Scripts/release.sh --channel testflight --platform all

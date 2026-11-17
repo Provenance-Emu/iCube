@@ -457,7 +457,7 @@ final class CloudSyncSafetyTests: XCTestCase {
     XCTAssertEqual(CloudSyncCoordinator.planningIndex(snapshot, purgeableStorage: false), snapshot)
   }
 
-  private let privateConfigPaths = ["Config/RetroAchievements.ini", "Config/DSUClient.ini"]
+  private let privateConfigPaths = ["Config/RetroAchievements.ini", "Config/DSUClient.ini", "Config/Logger.ini"]
 
   func testPrivateConfigsNeverUploadButOrdinaryConfigsStillSync() async throws {
     for path in privateConfigPaths + ["Config/Dolphin.ini", "Config/GFX.ini"] {

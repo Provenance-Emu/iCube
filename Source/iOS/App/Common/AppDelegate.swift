@@ -38,6 +38,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     SharedPlusEntitlement.shared.start()
 
     let started = ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
+    // Reconnects remote-library game downloads that ran while iCube was suspended or ended.
+    BackgroundGameDownloader.shared.activate()
+    RemoteGameDownloads.shared.start()
     #if os(iOS)
     // Seed local bundled skins after the user folder exists, without delaying launch or changing picks.
     Task { @MainActor in
@@ -47,6 +50,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         NSLog("Bundled controller skin could not be installed: %@", error.localizedDescription)
       }
     }
+    #endif
+    // No game is running at launch, so a Live Activity still on screen belongs to a run that was
+    // killed before it could end it.
+    #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+    GameActivityManager.end()
     #endif
     return started
   }
@@ -61,6 +69,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
   func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
     ServiceManager.shared.open(url: url, options: options)
+  }
+
+  // Silent CloudKit pushes for iCloud sync (CloudSyncPushService). CloudKit keeps its own device token.
+  func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {}
+
+  func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+    CloudSyncPushService.shared.didFailToRegister(error)
+  }
+
+  func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                   fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+    CloudSyncPushService.shared.receive(userInfo, completion: completionHandler)
   }
 
   func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
@@ -83,5 +103,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
   func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
     //
+  }
+
+  /// A remote-library game download finished while iCube was suspended or not running.
+  func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                   completionHandler: @escaping () -> Void) {
+    if !BackgroundGameDownloader.shared.handleEvents(forSession: identifier, completion: completionHandler) {
+      completionHandler()
+    }
   }
 }

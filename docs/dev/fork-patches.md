@@ -230,6 +230,7 @@ across a CPUCore-6 (CIR) session; overclock slider still behaves correctly
 |---|---|---|---|
 | `UICommon/GameFile.cpp` | +4/-0 | `art.gametdb.com` http→https for cover-art fetch. | Take upstream then re-apply (trivial). |
 | `UICommon/UICommon.cpp` | +2/-2 | Don't create a macOS power assertion on iOS. | Take upstream then re-apply (trivial). |
+| `Core/IOS/USB/Emulated/Skylanders/Skylander.cpp` | +3/-1 | `RemoveSkylander` checks for a null `figure` before closing it; our "Clear All" removes every slot, loaded or not (ICUBE-MP). | Take upstream then re-apply; upstreamable as is. |
 
 Owner test: game-library cover art loads over HTTPS; no power-assertion
 crash/log-spam on iOS launch.
