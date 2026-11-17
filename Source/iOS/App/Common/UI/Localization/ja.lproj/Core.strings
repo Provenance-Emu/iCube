@@ -5879,3 +5879,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Saves That Differ" = "内容が異なるセーブ";
 "These changed on this device and on the server. The one you do not keep is not lost: the server keeps its copy, and this device’s goes to Recently Deleted." = "これらはこのデバイスとサーバーの両方で変更されました。残さなかった方も失われません。サーバーはそのコピーを保持し、このデバイスのものは「Recently Deleted」に移動します。";
 "AirPlay" = "AirPlay";
+"%d of %d files" = "%d of %d files";
+"Import stopped. %d files were not imported." = "Import stopped. %d files were not imported.";
+"Import stopped. 1 file was not imported." = "Import stopped. 1 file was not imported.";
+"Importing games" = "Importing games";
+"The connection to the server was lost. Try again to continue the download." = "The connection to the server was lost. Try again to continue the download.";
+"The download did not finish. Try again." = "The download did not finish. Try again.";
+"The server could not send this game." = "The server could not send this game.";
+"The server no longer has this game." = "The server no longer has this game.";
+"The server sent the download somewhere else, so it was stopped." = "The server sent the download somewhere else, so it was stopped.";
+"There is not enough space to keep this game." = "There is not enough space to keep this game.";
