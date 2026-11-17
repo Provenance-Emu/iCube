@@ -64,14 +64,15 @@ jobs:
 
       - uses: actions/checkout@v4
         # No submodules: lint doesn't need the Externals/ C++ tree.
+        with:
+          fetch-depth: 2
 
       - name: List the pull request's changed files
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          base="${{ github.event.pull_request.base.sha }}"
-          git fetch --no-tags --depth=1 origin "$base"
-          # HEAD is the PR's merge commit, so base..HEAD is exactly the PR's diff.
+          # The event's base SHA can lag behind the base used to create HEAD.
+          base=$(git rev-parse HEAD^1)
           git diff --name-only --diff-filter=ACMR "$base" HEAD > "$RUNNER_TEMP/changed_files.txt"
           echo "LINT_CHANGED_FILES=$RUNNER_TEMP/changed_files.txt" >> "$GITHUB_ENV"
           echo "LINT_BASE_SHA=$base" >> "$GITHUB_ENV"
@@ -168,14 +169,15 @@ jobs:
     continue-on-error: ${{ github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: List the pull request's changed files
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          base="${{ github.event.pull_request.base.sha }}"
-          git fetch --no-tags --depth=1 origin "$base"
-          # HEAD is the PR's merge commit, so base..HEAD is exactly the PR's diff.
+          # The event's base SHA can lag behind the base used to create HEAD.
+          base=$(git rev-parse HEAD^1)
           git diff --name-only --diff-filter=ACMR "$base" HEAD > "$RUNNER_TEMP/changed_files.txt"
           echo "LINT_CHANGED_FILES=$RUNNER_TEMP/changed_files.txt" >> "$GITHUB_ENV"
           echo "LINT_BASE_SHA=$base" >> "$GITHUB_ENV"
