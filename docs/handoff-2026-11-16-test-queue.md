@@ -5,11 +5,11 @@ Tick items off here as they are checked; add the build number you tested.
 
 Where the code is:
 
-- **Merged features:** branch `integration/background-features` (worktree
-  `~/Workspace/Provenance/_worktrees/icube-integration`), which is `develop` plus the five feature branches.
-  Not pushed.
-- **Fixes from the release session:** uncommitted in the main checkout, on `codex/request-first-pairing`.
-- **Mac Catalyst:** uncommitted in the main checkout, same place.
+- **Everything below is on local `develop`** (`e1f9247856`, 22 commits ahead of `origin/develop`, not pushed):
+  the five feature branches plus `fix/release-triage-and-catalyst`. The same tree is checked out at
+  `~/Workspace/Provenance/_worktrees/icube-integration` (branch `integration/background-features`).
+- **Not committed:** the Emulation Server package pin in `Project.swift` (must be `8387f9b` or later for the Mac
+  build), and the rebuilt core slices under `build/xcframework`, including the new Catalyst slice.
 
 ## 1. Background downloads for remote libraries
 
@@ -99,7 +99,7 @@ Branch `claude/airplay-universal-links-0dbc1f`.
       into Notes and tap it, with the app closed and with it open. Long-press shows "Open in iCube".
 - [ ] A link with an unknown path or a bad id opens Safari or does nothing; it never crashes the app.
 
-## 6. Fixes from the release session (uncommitted, main checkout)
+## 6. Fixes from the release session
 
 - [ ] Skylanders: open the portal and press Clear All with empty slots, in a game and from the library. No crash.
       Needs a rebuilt core slice for the core half of the fix; the app half works without it.
@@ -115,7 +115,7 @@ Branch `claude/airplay-universal-links-0dbc1f`.
 - [ ] Save & Quit in History mode: a new history entry appears and quick slot 1 is untouched.
 - [ ] Save & Quit in Slots mode: the chosen slot is written, as before.
 
-## 7. Mac Catalyst (uncommitted, main checkout)
+## 7. Mac Catalyst
 
 Compiles in Debug and App Store configurations. The Debug build launches to the Welcome screen and nothing
 further has been tried.
@@ -148,8 +148,11 @@ further has been tried.
 
 ## Simulator results for the merged branch
 
-Filled in after the run on `integration/background-features`:
+Run on `develop` at `e1f9247856`, 2026-11-16:
 
 - Design-token check: passes.
-- Full iOS simulator test suite: pending.
-- tvOS simulator build: pending.
+- Full iOS simulator test suite: 2,835 tests, 2,828 passed, 7 skipped, 0 failed.
+- tvOS simulator build: succeeds.
+- The merged build installs and launches in the iOS simulator (Welcome screen), with the Live Activity
+  extension embedded.
+- Not yet run: browsing and downloading from the live Emulation Server in the simulator.
