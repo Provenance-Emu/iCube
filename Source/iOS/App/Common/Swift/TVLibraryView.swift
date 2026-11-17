@@ -2714,7 +2714,10 @@ struct TVLibraryView: View {
       Button(L("Cancel")) { cancelReplacement() }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
       .onChange(of: model.showReplaceAlert) { _, shown in
-        if !shown, model.pendingSelection != nil { cancelReplacement() }
+        guard !shown else { return }
+        afterDialogButtons {
+          if !model.showReplaceAlert, model.pendingSelection != nil { cancelReplacement() }
+        }
       }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
       #if os(tvOS)
@@ -2864,7 +2867,10 @@ struct TVLibraryView: View {
         Button(L("Cancel"), role: .cancel) { cancelLowStorageLaunch() }
       } message: { Text(storageAlertMessage) }
       .onChange(of: showLowStorageWarning) { _, shown in
-        if !shown, itemPendingLaunch != nil { cancelLowStorageLaunch() }
+        guard !shown else { return }
+        afterDialogButtons {
+          if !showLowStorageWarning, itemPendingLaunch != nil { cancelLowStorageLaunch() }
+        }
       }
       .sheet(item: $showCacheInfoFor) { item in
         CacheInfoView(item: item, showSubtitles: showSubtitles)
@@ -3258,6 +3264,17 @@ struct TVLibraryView: View {
 
   private func postSnackbar(_ text: String) {
     NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": text])
+  }
+
+  /// How long "the dialog closed and nobody chose" waits before it cleans up.
+  private static let dialogButtonGrace: TimeInterval = 1
+
+  /// SwiftUI does not promise that a dialog button's action runs before the dialog reports itself
+  /// closed. Without this wait, the cleanup for a dismissed dialog could cancel the pending game,
+  /// and delete a temporary one, just before "Continue Anyway" or "Replace Game" launched it.
+  /// A button that proceeds clears the pending game, so the cleanup then finds nothing to do.
+  private func afterDialogButtons(_ cleanup: @escaping () -> Void) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.dialogButtonGrace, execute: cleanup)
   }
 
   private func cancelReplacement() {
