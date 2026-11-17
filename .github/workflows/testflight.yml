@@ -15,7 +15,9 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, ios, tvos]
+        # `mac` is the Mac Catalyst build. It is opt-in: `all` and the nightly stay iOS + tvOS,
+        # because a cold Catalyst core build adds about 40 minutes.
+        options: [all, ios, tvos, mac]
       force:
         description: 'Upload even if develop has not moved since the last nightly'
         required: false
@@ -45,6 +47,7 @@ jobs:
           case "${{ inputs.platform || 'all' }}" in
             ios)  M='["ios"]' ;;
             tvos) M='["tvos"]' ;;
+            mac)  M='["mac"]' ;;
             *)    M='["ios","tvos"]' ;;
           esac
           echo "matrix=$M" >> "$GITHUB_OUTPUT"
@@ -132,7 +135,7 @@ jobs:
         platform: ${{ fromJSON(needs.plan.outputs.matrix) }}
     timeout-minutes: 300
     env:
-      DEST: ${{ matrix.platform == 'tvos' && 'generic/platform=tvOS' || 'generic/platform=iOS' }}
+      DEST: ${{ matrix.platform == 'tvos' && 'generic/platform=tvOS' || matrix.platform == 'mac' && 'generic/platform=macOS,variant=Mac Catalyst' || 'generic/platform=iOS' }}
       DOL_ARCHIVE_PLATFORM: ${{ matrix.platform }}
       # This job rebuilds its device slice before generation; other slices remain scaffold only.
       DOL_SKIP_CORE_BUILD: '1'
@@ -188,6 +191,7 @@ jobs:
           case "$DOL_ARCHIVE_PLATFORM" in
             ios) CORE_PLATFORM=OS64 ;;
             tvos) CORE_PLATFORM=TVOS ;;
+            mac) CORE_PLATFORM=MAC_CATALYST ;;
             *) echo "::error::unsupported archive platform: $DOL_ARCHIVE_PLATFORM"; exit 1 ;;
           esac
           python3 BuildiOSXCFramework.py --platforms "$CORE_PLATFORM"
@@ -338,8 +342,11 @@ jobs:
           # freshly built core/dSYM UUID. Do not compare raw archive bytes with the alias.
           python3 Tools/release-audit/check_device_core.py \
             --platform "$DOL_ARCHIVE_PLATFORM" --archive "$ARCHIVE"
+          # A Mac app keeps its executable under Contents/MacOS.
+          APP_BINARY=iCube.app/iCube
+          if [ "$DOL_ARCHIVE_PLATFORM" = mac ]; then APP_BINARY=iCube.app/Contents/MacOS/iCube; fi
           python3 Source/iOS/App/Project/Scripts/check_swiftui_compatibility.py \
-            "$ARCHIVE/Products/Applications/iCube.app/iCube"
+            "$ARCHIVE/Products/Applications/$APP_BINARY"
 
           # -allowProvisioningUpdates is required on export too, not just archive:
           # the API key authenticates but does not authorise xcodebuild to create
@@ -417,7 +424,7 @@ jobs:
           api-key-content: ${{ secrets.ASC_API_KEY_CONTENT }}
           bundle-id: com.joemattiello.iCube
           build-number: ${{ steps.archive.outputs.build }}
-          platform: ${{ matrix.platform == 'tvos' && 'TV_OS' || 'IOS' }}
+          platform: ${{ matrix.platform == 'tvos' && 'TV_OS' || matrix.platform == 'mac' && 'MAC_OS' || 'IOS' }}
           whats-new: ${{ needs.plan.outputs.notes }}
 
       # xcbeautify-style filtering hides Run Script output, so the raw log is the
@@ -450,7 +457,8 @@ jobs:
   tag:
     name: Move the nightly marker
     needs: [plan, testflight]
-    if: needs.plan.outputs.should_build == 'true' && needs.testflight.result == 'success'
+    # A Mac-only run ships nothing for iOS or tvOS, so it must not mark this commit as shipped.
+    if: needs.plan.outputs.should_build == 'true' && needs.testflight.result == 'success' && inputs.platform != 'mac'
     # The `nightly` tag is moved after a successful upload; that needs write access.
     permissions:
       contents: write
