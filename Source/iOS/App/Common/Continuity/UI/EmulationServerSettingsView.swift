@@ -217,7 +217,8 @@ struct EmulationServerConnectionFields: View {
   @State private var triedLocalAccess = false
   @State private var pairing: EmulationServer?
   @State private var allowPairingHTTP = false
-  #if os(iOS)
+  // The server client leaves its QR scanner out of Mac Catalyst builds, where VisionKit has none.
+  #if os(iOS) && !targetEnvironment(macCatalyst)
   @State private var showingInvitationScanner = false
   #endif
 
@@ -248,7 +249,7 @@ struct EmulationServerConnectionFields: View {
         }
       }
     }
-    #if os(iOS)
+    #if os(iOS) && !targetEnvironment(macCatalyst)
     .sheet(isPresented: $showingInvitationScanner) {
       let name = String(format: L("iCube on %@"), ICubeDeviceName.current())
       DevicePairingInvitationView(deviceName: String(name.prefix(Self.deviceNameLimit))) { origin, token in
@@ -276,7 +277,7 @@ struct EmulationServerConnectionFields: View {
 
   @ViewBuilder
   private var connectionControls: some View {
-    #if os(iOS)
+    #if os(iOS) && !targetEnvironment(macCatalyst)
     if discoveredServer == nil {
       Button(L("Scan Server QR"), systemImage: "qrcode.viewfinder") { showingInvitationScanner = true }
         .disabled(connection != nil)

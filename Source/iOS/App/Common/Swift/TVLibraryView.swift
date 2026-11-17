@@ -1888,7 +1888,7 @@ struct TVLibraryView: View {
 
   @ViewBuilder private var compactEmptyLibraryButtons: some View {
     Button(L("Import Game"), systemImage: "square.and.arrow.down") { showImportSoftwarePicker = true }
-      .buttonStyle(.borderedProminent)
+      .buttonStyle(.borderedProminent) // design-lint: allow the system's primary button; ICubeDesign has no primary button style yet
     Button(L("Add Remote Source"), systemImage: "externaldrive.badge.plus") { showSources = true }
       .buttonStyle(.bordered)
   }
