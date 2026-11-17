@@ -38,6 +38,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     SharedPlusEntitlement.shared.start()
 
     let started = ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
+    TemporaryServerGame.removeAbandoned()
     // Reconnects remote-library game downloads that ran while iCube was suspended or ended.
     BackgroundGameDownloader.shared.activate()
     RemoteGameDownloads.shared.start()

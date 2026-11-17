@@ -9,6 +9,28 @@ import XCTest
 @testable import iCube
 
 final class EmulationServerLibraryTests: XCTestCase {
+  func testAbandonedTemporaryGamesAreRemovedWithoutTouchingOtherFiles() throws {
+    let manager = FileManager.default
+    let root = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try manager.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? manager.removeItem(at: root) }
+
+    let session = root.appendingPathComponent(TemporaryServerGame.makeFolder().lastPathComponent, isDirectory: true)
+    let unrelated = root.appendingPathComponent("iCube-Server-unrelated", isDirectory: true)
+    for folder in [session, unrelated] {
+      try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+      try Data([0]).write(to: folder.appendingPathComponent("Game.rvz"))
+    }
+    let link = root.appendingPathComponent(TemporaryServerGame.makeFolder().lastPathComponent)
+    try manager.createSymbolicLink(at: link, withDestinationURL: unrelated)
+
+    TemporaryServerGame.removeAbandoned(in: root)
+
+    XCTAssertFalse(manager.fileExists(atPath: session.path))
+    XCTAssertTrue(manager.fileExists(atPath: unrelated.appendingPathComponent("Game.rvz").path))
+    XCTAssertTrue(try link.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true)
+  }
+
   func testCatalogFollowsCursorAndFiltersToDolphinSystems() async throws {
     let transport = FixtureTransport()
     let server = try EmulationServer(address: "Example.local")

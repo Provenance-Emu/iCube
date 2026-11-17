@@ -292,15 +292,15 @@ final class ContinuityLibraryBrowseController: ObservableObject {
 
     // MARK: - Copying
 
-    func copy(_ entry: ContinuityLibraryEntry, temporaryFolder: URL? = nil) async {
-        await runOperation {
-            if let serverLibrary = self.serverLibrary {
-                await self.copyServerEntry(entry, from: serverLibrary, temporaryFolder: temporaryFolder)
-            } else {
-                await self.copyEntry(entry)
-            }
-        }
+  func copy(_ entry: ContinuityLibraryEntry, temporaryFolder: URL? = nil) async {
+    await runOperation {
+      if let serverLibrary = self.serverLibrary {
+        await self.copyServerEntry(entry, from: serverLibrary, temporaryFolder: temporaryFolder)
+      } else {
+        await self.copyEntry(entry)
+      }
     }
+  }
 
   private func copyServerEntry(
     _ entry: ContinuityLibraryEntry, from library: any RemoteGameCatalog, temporaryFolder: URL?

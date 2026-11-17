@@ -738,8 +738,24 @@ enum TemporaryServerGame {
     let file = URL(fileURLWithPath: path).resolvingSymlinksInPath()
     guard file.path.hasPrefix(root.path + "/"),
           let folder = file.path.dropFirst(root.path.count + 1).split(separator: "/").first,
-          folder.hasPrefix(prefix), UUID(uuidString: String(folder.dropFirst(prefix.count))) != nil
+          isSessionFolder(String(folder))
     else { return }
     try? FileManager.default.removeItem(at: root.appendingPathComponent(String(folder), isDirectory: true))
+  }
+
+  /// Run before any transfers start. No temporary game is active across app launches.
+  static func removeAbandoned(in root: URL = FileManager.default.temporaryDirectory) {
+    let manager = FileManager.default
+    let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
+    guard let folders = try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: Array(keys)) else { return }
+    for folder in folders where isSessionFolder(folder.lastPathComponent) {
+      guard let values = try? folder.resourceValues(forKeys: keys),
+            values.isDirectory == true, values.isSymbolicLink != true else { continue }
+      try? manager.removeItem(at: folder)
+    }
+  }
+
+  private static func isSessionFolder(_ name: String) -> Bool {
+    name.hasPrefix(prefix) && UUID(uuidString: String(name.dropFirst(prefix.count))) != nil
   }
 }
