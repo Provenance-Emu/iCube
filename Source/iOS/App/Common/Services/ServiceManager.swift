@@ -25,6 +25,7 @@ class ServiceManager {
     PlayStatsRecorderService(),
     JitAcquisitionService(),
     URLRouterService(),
+    EcosystemHandoffService(),
     AudioSessionCategoryService(),
 //    UpdateCheckService()
   ]
@@ -44,6 +45,7 @@ class ServiceManager {
     PlayStatsRecorderService(),
     JitAcquisitionService(),
     URLRouterService(),
+    EcosystemHandoffService(),
     SpotlightIndexService(),
     AudioSessionCategoryService(),
 //    UpdateCheckService()
