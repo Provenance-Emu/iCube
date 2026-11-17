@@ -758,13 +758,14 @@ struct GameGridItem: View {
           Label(L("Favorite"), systemImage: "star")
         }
       }
+      // Ecosystem: Apple TV has no share sheet, so this row appears only when the installed
+      // Provenance takes the game straight through the shared drop box, and only for a game whose
+      // file is on this Apple TV. See `EcosystemSendButton`.
+      if !isRemoteGame { EcosystemSendButton(gameID: item.gameID) }
       Button(role: .destructive) { requestDelete(item) } label: { Label(L("Delete"), systemImage: "trash") }
     }
     .zIndex(isFocused ? 1 : 0)
     #else
-    // Note: no ecosystem "Send to Provenance" row on this (tvOS) menu —
-    // opening a foreign URL scheme has no tvOS equivalent. See the iOS
-    // context menu below.
     Button(action: { handlePrimaryAction() }) {
       VStack(alignment: .leading, spacing: 12) {
         ZStack(alignment: .topTrailing) {
@@ -999,8 +1000,8 @@ struct GameGridItem: View {
           Label(L("Favorite"), systemImage: "star")
         }
       }
-      // Ecosystem — hand this game's disc image to Provenance through the
-      // system share sheet. iOS-only: see `EcosystemSendButton`.
+      // Ecosystem: hand this game's disc image to Provenance, through the shared drop box
+      // or, for an older Provenance, the system share sheet. See `EcosystemSendButton`.
       EcosystemSendButton(gameID: item.gameID)
       // Tap-to-play tag: writes dolphinios://play?id=<game id> to an NDEF tag (iPhone only).
       if GameTagCenter.isAvailable, !item.gameID.isEmpty {

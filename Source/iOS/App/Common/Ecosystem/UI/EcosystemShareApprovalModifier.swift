@@ -5,15 +5,17 @@ import SwiftUI
 
 /// The ecosystem share UI: the confirm prompt for `dolphinios://requestGame`
 /// (a peer app, e.g. Provenance, asked for one of this library's games), the
-/// share sheet that hands the file over, and the error alert.
+/// share sheet that hands the file over to a peer without a drop box, the
+/// error alert and the notice alert.
 ///
 /// The prompt is an alert rather than a sheet, matching
 /// `ContinuityPairingPromptModifier`: it has to interrupt, and it has exactly
-/// two answers. The hand-over is the system share sheet, so the user picks
-/// the receiving app ("Copy to Provenance") and iOS copies the file even
-/// after iCube is suspended. tvOS has no share sheet; the routes that reach
-/// `exportItems` are iOS-only (`EcosystemSendButton`, `UIApplication.open`
-/// callbacks), so the sheet is simply not attached there.
+/// two answers. A hand-over to a peer that receives direct hand-offs shows
+/// nothing here (`EcosystemShareCenter` stages the file and opens the peer).
+/// Otherwise it is the system share sheet, where the user picks the receiving
+/// app ("Copy to Provenance") and iOS copies the file even after iCube is
+/// suspended. tvOS has no share sheet, so it is not attached there:
+/// `EcosystemShareCenter` never sets `exportItems` on tvOS.
 struct EcosystemShareApprovalModifier: ViewModifier {
   @ObservedObject var center: EcosystemShareCenter
 
@@ -49,6 +51,19 @@ struct EcosystemShareApprovalModifier: ViewModifier {
     } message: {
       Text(center.shareError ?? "")
     }
+    // A staged hand-off the peer still has to pick up, or an incoming one
+    // iCube could not import.
+    .alert(
+      center.notice?.title ?? "",
+      isPresented: Binding(
+        get: { center.notice != nil },
+        set: { if !$0 { center.notice = nil } }
+      )
+    ) {
+      Button(L("OK"), role: .cancel) { center.notice = nil }
+    } message: {
+      Text(center.notice?.message ?? "")
+    }
     .modifier(ExportSheetModifier(center: center))
   }
 
@@ -82,8 +97,9 @@ private struct ExportSheetModifier: ViewModifier {
 }
 
 extension View {
-  /// Attaches the ecosystem share prompt, share sheet and error alert.
-  /// Attach once, at the app root (see `TVRootView`) — a `requestGame` ask
+  /// Attaches the ecosystem share prompt, share sheet and alerts.
+  /// Attach once, at the app root (`TVRootView`, the root on iOS and tvOS
+  /// alike) — a `requestGame` ask
   /// arrives UNSOLICITED, the same reasoning `.continuityLibraryPullPrompt()`
   /// documents there: a modifier scoped to one screen would miss it whenever
   /// the owner is elsewhere in the app.

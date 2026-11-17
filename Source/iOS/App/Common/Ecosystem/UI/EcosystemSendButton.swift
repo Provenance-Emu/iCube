@@ -3,22 +3,22 @@
 
 import SwiftUI
 
-/// "Send to Provenance" — hand this game's disc image to Provenance through
-/// the system share sheet (`EcosystemShareCenter.send`), where it appears as
-/// "Copy to Provenance" because Provenance declares the GameCube and Wii disc
-/// types.
+/// "Send to Provenance": hand this game's disc image to Provenance
+/// (`EcosystemShareCenter.send`). It goes straight into Provenance's drop-box
+/// inbox when the installed Provenance receives hand-offs, and through the
+/// system share sheet ("Copy to Provenance") when it is an older build.
 ///
-/// Offered only when Provenance is installed (`EcosystemBridge.peerInstalled`
-/// probes its URL scheme) and the game has an id. iOS-only: tvOS has no share
-/// sheet, and the call site (`GameGridItem`'s iOS context menu) never reaches
-/// this on tvOS.
+/// Offered when the game has an id and `EcosystemShareCenter.canSend` says the
+/// send can work: on iPhone, iPad and Mac whenever Provenance is installed, on
+/// Apple TV (no share sheet) only when the direct route is available.
 struct EcosystemSendButton: View {
   let gameID: String
+  @ObservedObject private var center = EcosystemShareCenter.shared
 
   var body: some View {
-    if !gameID.isEmpty, EcosystemBridge.peerInstalled(scheme: EcosystemSchemes.provenanceScheme) {
+    if !gameID.isEmpty, center.canSend(toScheme: EcosystemSchemes.provenanceScheme) {
       Button {
-        EcosystemShareCenter.shared.send(gameID: gameID)
+        center.send(gameID: gameID)
       } label: {
         Label(L("Send to Provenance"), systemImage: "arrow.up.forward.app")
       }

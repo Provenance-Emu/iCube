@@ -9,6 +9,7 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
     // dolphinios://play?id=GALE01                       (Top Shelf / external launch)
     // dolphinios://dsu/add?ip=192.168.1.23&port=26760&desc=My%20iPhone
     // dolphinios://dsu/controller                       (iOS: use this iPhone as a Wii Remote for Apple TV)
+    // dolphinios://gameInfo | open | requestGame | handoff   (sibling apps, see EcosystemBridge)
     // Also accept legacy: dsu://192.168.1.23:26760
     if handlePlayLink(url) { return true }
 #if os(iOS)
@@ -20,8 +21,9 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
   }
 
   /// Cross-app (LudiHub-style) requests from a peer app like Provenance:
-  /// answer a library query, launch by game id, or confirm-and-share a game's
-  /// files. Parsing is synchronous so this can claim the URL immediately;
+  /// answer a library query, launch by game id, confirm-and-share a game's
+  /// files, or import a game the peer left in the shared drop box
+  /// (`dolphinios://handoff`). Parsing is synchronous so this can claim the URL immediately;
   /// the actual handling (which may touch UIApplication or present UI) runs
   /// on the main actor in a detached Task.
   private func handleEcosystemLink(_ url: URL) -> Bool {

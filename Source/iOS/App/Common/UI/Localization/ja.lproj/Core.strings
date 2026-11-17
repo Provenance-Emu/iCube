@@ -5905,3 +5905,13 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Play with a temporary copy or keep the game in your library." = "一時コピーでプレイするか、ゲームをライブラリに保存できます。";
 "Request Access" = "アクセスをリクエスト";
 "The downloaded game couldn't be opened." = "ダウンロードしたゲームを開けませんでした。";
+"%@ sent “%@”, but none of its files are a format iCube can import." = "%@ sent “%@”, but none of its files are a format iCube can import.";
+"A game Provenance sends to iCube is added to the library the next time iCube opens." = "A game Provenance sends to iCube is added to the library the next time iCube opens.";
+"Couldn’t Import" = "Couldn’t Import";
+"Couldn’t hand “%@” to %@. Update %@ on this Apple TV, or send the game from iPhone or iPad." = "Couldn’t hand “%@” to %@. Update %@ on this Apple TV, or send the game from iPhone or iPad.";
+"Imported “%@” from %@." = "Imported “%@” from %@.";
+"Long-press a game and choose Send to Provenance. The game goes straight into Provenance and takes no extra space. An older Provenance gets a copy through the share sheet instead." = "Long-press a game and choose Send to Provenance. The game goes straight into Provenance and takes no extra space. An older Provenance gets a copy through the share sheet instead.";
+"Open %@" = "Open %@";
+"When Provenance asks for a game, iCube asks you first, then sends it the same way." = "When Provenance asks for a game, iCube asks you first, then sends it the same way.";
+"“%@” from %@ is already in your library." = "“%@” from %@ is already in your library.";
+"“%@” is waiting for %@. Open %@ to finish the import." = "“%@” is waiting for %@. Open %@ to finish the import.";

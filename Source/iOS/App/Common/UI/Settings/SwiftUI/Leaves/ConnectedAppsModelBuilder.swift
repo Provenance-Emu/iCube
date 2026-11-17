@@ -28,8 +28,9 @@ enum ConnectedAppsModelBuilder {
                   footer: L("Provenance is the hub: its Settings › Connected Apps lists iCube's games and can launch or import them."),
                   items: rows),
       MenuSection(id: "sharing", header: L("Sharing games"), items: [
-        SettingsRow.caption("send", L("Long-press a game and choose Send to Provenance. The share sheet hands Provenance a copy of the disc image; it imports on its next scan.")),
-        SettingsRow.caption("receive", L("When Provenance asks for a game, iCube asks you first, then offers the file the same way.")),
+        SettingsRow.caption("send", L("Long-press a game and choose Send to Provenance. The game goes straight into Provenance and takes no extra space. An older Provenance gets a copy through the share sheet instead.")),
+        SettingsRow.caption("receive", L("When Provenance asks for a game, iCube asks you first, then sends it the same way.")),
+        SettingsRow.caption("incoming", L("A game Provenance sends to iCube is added to the library the next time iCube opens.")),
       ]),
     ] + tagSection(scanTag: scanTag))
   }
