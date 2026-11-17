@@ -6,9 +6,9 @@ import PVLibrarySnapshot
 
 /// One incoming `dolphinios://requestGame` ask, awaiting the user's decision.
 struct EcosystemShareRequest: Identifiable {
-    let id = UUID()
-    let game: LibrarySnapshotGame
-    let callbackScheme: String
+  let id = UUID()
+  let game: LibrarySnapshotGame
+  let callbackScheme: String
 }
 
 /// Hands a game's disc image to a sibling app on this device.
@@ -31,69 +31,69 @@ struct EcosystemShareRequest: Identifiable {
 /// even between Joe's own apps — the requesting URL is attacker-forgeable.
 @MainActor
 final class EcosystemShareCenter: ObservableObject {
-    static let shared = EcosystemShareCenter()
+  static let shared = EcosystemShareCenter()
 
-    @Published var request: EcosystemShareRequest?
-    /// The files the share sheet is offering, or nil when no sheet is up.
-    @Published var exportItems: [URL]?
-    /// Non-nil when a share couldn't start (the game's file is gone).
-    /// Surfaced as an alert by `EcosystemShareApprovalModifier` so a "Send to
-    /// Provenance" tap always produces visible feedback instead of silently
-    /// doing nothing.
-    @Published var shareError: String?
+  @Published var request: EcosystemShareRequest?
+  /// The files the share sheet is offering, or nil when no sheet is up.
+  @Published var exportItems: [URL]?
+  /// Non-nil when a share couldn't start (the game's file is gone).
+  /// Surfaced as an alert by `EcosystemShareApprovalModifier` so a "Send to
+  /// Provenance" tap always produces visible feedback instead of silently
+  /// doing nothing.
+  @Published var shareError: String?
 
-    private init() {}
+  private init() {}
 
-    /// Entry point from `EcosystemBridge.perform`.
-    func handleRequest(gameID: String, callbackScheme: String) {
-        guard let game = EcosystemBridge.game(forID: gameID) else { return }
-        // One ask at a time; a second requester is dropped (it can retry).
-        guard request == nil else { return }
-        request = EcosystemShareRequest(game: game, callbackScheme: callbackScheme)
+  /// Entry point from `EcosystemBridge.perform`.
+  func handleRequest(gameID: String, callbackScheme: String) {
+    guard let game = EcosystemBridge.game(forID: gameID) else { return }
+    // One ask at a time; a second requester is dropped (it can retry).
+    guard request == nil else { return }
+    request = EcosystemShareRequest(game: game, callbackScheme: callbackScheme)
+  }
+
+  func deny() {
+    request = nil
+  }
+
+  /// Friendly peer name for user-facing messages ("provenance" → "Provenance").
+  static func peerName(_ scheme: String) -> String {
+    scheme.lowercased() == EcosystemSchemes.provenanceScheme ? "Provenance" : "\(scheme)://"
+  }
+
+  func approve() {
+    guard let request else { return }
+    self.request = nil
+    offer(game: request.game)
+  }
+
+  /// User-initiated push ("Send to Provenance" in the game context menu). No
+  /// confirm prompt: the user's tap IS the consent.
+  func send(gameID: String) {
+    guard let game = EcosystemBridge.game(forID: gameID) else {
+      shareError = "That game isn\u{2019}t in the library snapshot yet. Try again in a moment."
+      return
     }
+    offer(game: game)
+  }
 
-    func deny() {
-        request = nil
-    }
+  func finishExport() {
+    exportItems = nil
+  }
 
-    /// Friendly peer name for user-facing messages ("provenance" → "Provenance").
-    static func peerName(_ scheme: String) -> String {
-        scheme.lowercased() == EcosystemSchemes.provenanceScheme ? "Provenance" : "\(scheme)://"
+  private func offer(game: LibrarySnapshotGame) {
+    guard let items = Self.exportItems(forFilePath: game.filePath) else {
+      shareError = "The file for \u{201C}\(game.title)\u{201D} is missing. Rescan the library and try again."
+      return
     }
+    exportItems = items
+  }
 
-    func approve() {
-        guard let request else { return }
-        self.request = nil
-        offer(game: request.game)
-    }
-
-    /// User-initiated push ("Send to Provenance" in the game context menu). No
-    /// confirm prompt: the user's tap IS the consent.
-    func send(gameID: String) {
-        guard let game = EcosystemBridge.game(forID: gameID) else {
-            shareError = "That game isn\u{2019}t in the library snapshot yet. Try again in a moment."
-            return
-        }
-        offer(game: game)
-    }
-
-    func finishExport() {
-        exportItems = nil
-    }
-
-    private func offer(game: LibrarySnapshotGame) {
-        guard let items = Self.exportItems(forFilePath: game.filePath) else {
-            shareError = "The file for \u{201C}\(game.title)\u{201D} is missing. Rescan the library and try again."
-            return
-        }
-        exportItems = items
-    }
-
-    /// What the share sheet offers for a game: its disc image, or nil when the
-    /// file is not on disk. A game is one file on iCube (every supported disc
-    /// format is single-file), so there is nothing else to bundle.
-    nonisolated static func exportItems(forFilePath path: String) -> [URL]? {
-        guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else { return nil }
-        return [URL(fileURLWithPath: path)]
-    }
+  /// What the share sheet offers for a game: its disc image, or nil when the
+  /// file is not on disk. A game is one file on iCube (every supported disc
+  /// format is single-file), so there is nothing else to bundle.
+  nonisolated static func exportItems(forFilePath path: String) -> [URL]? {
+    guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else { return nil }
+    return [URL(fileURLWithPath: path)]
+  }
 }

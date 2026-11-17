@@ -13,15 +13,15 @@ import SwiftUI
 /// sheet, and the call site (`GameGridItem`'s iOS context menu) never reaches
 /// this on tvOS.
 struct EcosystemSendButton: View {
-    let gameID: String
+  let gameID: String
 
-    var body: some View {
-        if !gameID.isEmpty, EcosystemBridge.peerInstalled(scheme: EcosystemSchemes.provenanceScheme) {
-            Button {
-                EcosystemShareCenter.shared.send(gameID: gameID)
-            } label: {
-                Label(L("Send to Provenance"), systemImage: "arrow.up.forward.app")
-            }
-        }
+  var body: some View {
+    if !gameID.isEmpty, EcosystemBridge.peerInstalled(scheme: EcosystemSchemes.provenanceScheme) {
+      Button {
+        EcosystemShareCenter.shared.send(gameID: gameID)
+      } label: {
+        Label(L("Send to Provenance"), systemImage: "arrow.up.forward.app")
+      }
     }
+  }
 }
