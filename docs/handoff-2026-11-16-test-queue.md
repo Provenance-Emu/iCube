@@ -159,8 +159,10 @@ Everything else:
 - [x] Signed App Store archive for the Mac, 2026-11-16 (no upload): succeeds with automatic signing, embeds the
       core and both Quick Look extensions, has an app icon, and passes the release audit. The archive rebuilds
       the Catalyst core itself, so it never ships the committed slice.
-- [ ] `make testflight-mac` export and upload. App Store Connect has a macOS 1.0.0 version to receive it. The
-      export step (installer signing, App Store validation of the Mac bundle) has never run.
+- [x] Mac export and upload, 2026-11-16: `release.sh --platform mac` archived, exported and uploaded build
+      1.0.0 (1794887695) with no manual steps, and App Store Connect finished processing it as valid.
+- [ ] Install that build from TestFlight on a Mac: iCloud, the shared keychain group and the app group work,
+      and the menu-bar checks above pass on a properly signed build. It is not in any tester group yet.
 - [ ] TestFlight workflow, run by hand with platform `mac`: builds the Catalyst core, archives and uploads.
       Never run; `all` and the nightly are still iOS and tvOS only.
 - [ ] Rebuild an iOS and a tvOS core slice with the changed `BuildiOSXCFramework.py`; the framework layout code
