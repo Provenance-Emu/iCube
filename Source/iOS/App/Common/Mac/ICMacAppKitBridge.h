@@ -17,14 +17,17 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy, readonly, nullable) void (^handler)(void);
 
 + (instancetype)separatorEntry NS_SWIFT_NAME(separator());
-+ (instancetype)entryWithTitle:(NSString*)title checked:(BOOL)checked handler:(nullable void (^)(void))handler
++ (instancetype)entryWithTitle:(NSString*)title
+                       checked:(BOOL)checked
+                       handler:(nullable void (^)(void))handler
     NS_SWIFT_NAME(init(title:checked:handler:));
 @end
 
 /// The few things the Mac build needs from AppKit that UIKit has no equivalent for: an item in the
 /// menu bar, and activating or quitting the app. Main thread only.
 @interface ICMacAppKitBridge : NSObject
-/// False when AppKit's status bar could not be reached; the app then behaves as it does without one.
+/// False when AppKit's status bar could not be reached; the app then behaves as it does without
+/// one.
 + (BOOL)installStatusItemWithSymbolName:(NSString*)symbolName toolTip:(NSString*)toolTip;
 + (void)setStatusMenuEntries:(NSArray<ICMacMenuEntry*>*)entries;
 + (void)activateApp;

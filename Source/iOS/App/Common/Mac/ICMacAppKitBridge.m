@@ -11,13 +11,16 @@
 // declared by hand and the classes are looked up by name. Everything named is public AppKit API.
 
 @protocol ICNSImage <NSObject>
-+ (nullable id<ICNSImage>)imageWithSystemSymbolName:(NSString*)name accessibilityDescription:(nullable NSString*)description;
++ (nullable id<ICNSImage>)imageWithSystemSymbolName:(NSString*)name
+                           accessibilityDescription:(nullable NSString*)description;
 - (void)setTemplate:(BOOL)isTemplate;
 @end
 
 @protocol ICNSMenuItem <NSObject>
 + (id<ICNSMenuItem>)separatorItem;
-- (instancetype)initWithTitle:(NSString*)title action:(nullable SEL)action keyEquivalent:(NSString*)key;
+- (instancetype)initWithTitle:(NSString*)title
+                       action:(nullable SEL)action
+                keyEquivalent:(NSString*)key;
 - (void)setTarget:(nullable id)target;
 - (void)setEnabled:(BOOL)enabled;
 - (void)setState:(NSInteger)state;
@@ -62,9 +65,13 @@ static const NSInteger ICControlStateOff = 0;
 
 @implementation ICMacMenuEntry
 
-- (instancetype)initWithTitle:(NSString*)title checked:(BOOL)checked separator:(BOOL)separator
-                      handler:(nullable void (^)(void))handler {
-  if ((self = [super init])) {
+- (instancetype)initWithTitle:(NSString*)title
+                      checked:(BOOL)checked
+                    separator:(BOOL)separator
+                      handler:(nullable void (^)(void))handler
+{
+  if ((self = [super init]))
+  {
     _title = [title copy];
     _checked = checked;
     _separator = separator;
@@ -73,11 +80,15 @@ static const NSInteger ICControlStateOff = 0;
   return self;
 }
 
-+ (instancetype)separatorEntry {
++ (instancetype)separatorEntry
+{
   return [[self alloc] initWithTitle:@"" checked:NO separator:YES handler:nil];
 }
 
-+ (instancetype)entryWithTitle:(NSString*)title checked:(BOOL)checked handler:(nullable void (^)(void))handler {
++ (instancetype)entryWithTitle:(NSString*)title
+                       checked:(BOOL)checked
+                       handler:(nullable void (^)(void))handler
+{
   return [[self alloc] initWithTitle:title checked:checked separator:NO handler:handler];
 }
 
@@ -91,7 +102,8 @@ static const NSInteger ICControlStateOff = 0;
 
 @implementation ICMacAppKitBridge
 
-+ (ICMacAppKitBridge*)shared {
++ (ICMacAppKitBridge*)shared
+{
   static ICMacAppKitBridge* shared;
   static dispatch_once_t once;
   dispatch_once(&once, ^{
@@ -101,28 +113,37 @@ static const NSInteger ICControlStateOff = 0;
   return shared;
 }
 
-+ (BOOL)installStatusItemWithSymbolName:(NSString*)symbolName toolTip:(NSString*)toolTip {
++ (BOOL)installStatusItemWithSymbolName:(NSString*)symbolName toolTip:(NSString*)toolTip
+{
   ICMacAppKitBridge* bridge = [self shared];
-  if (bridge.statusItem != nil) {
+  if (bridge.statusItem != nil)
+  {
     return YES;
   }
   Class<ICNSStatusBar> statusBar = NSClassFromString(@"NSStatusBar");
   Class menuClass = NSClassFromString(@"NSMenu");
-  if (statusBar == Nil || menuClass == Nil) {
+  if (statusBar == Nil || menuClass == Nil)
+  {
     return NO;
   }
-  id<ICNSStatusItem> item = [[statusBar systemStatusBar] statusItemWithLength:ICVariableStatusItemLength];
-  if (item == nil) {
+  id<ICNSStatusItem> item =
+      [[statusBar systemStatusBar] statusItemWithLength:ICVariableStatusItemLength];
+  if (item == nil)
+  {
     return NO;
   }
   id<ICNSStatusBarButton> button = [item button];
   Class<ICNSImage> imageClass = NSClassFromString(@"NSImage");
-  id<ICNSImage> image = [imageClass imageWithSystemSymbolName:symbolName accessibilityDescription:toolTip];
-  if (image != nil) {
+  id<ICNSImage> image = [imageClass imageWithSystemSymbolName:symbolName
+                                     accessibilityDescription:toolTip];
+  if (image != nil)
+  {
     // A template image follows the menu bar's light, dark and highlighted colours.
     [image setTemplate:YES];
     [button setImage:image];
-  } else {
+  }
+  else
+  {
     [button setTitle:toolTip];
   }
   [button setToolTip:toolTip];
@@ -137,25 +158,31 @@ static const NSInteger ICControlStateOff = 0;
   return YES;
 }
 
-+ (void)setStatusMenuEntries:(NSArray<ICMacMenuEntry*>*)entries {
++ (void)setStatusMenuEntries:(NSArray<ICMacMenuEntry*>*)entries
+{
   ICMacAppKitBridge* bridge = [self shared];
   bridge.entries = entries;
   [bridge rebuildMenu];
 }
 
-- (void)rebuildMenu {
-  if (self.menu == nil) {
+- (void)rebuildMenu
+{
+  if (self.menu == nil)
+  {
     return;
   }
   Class<ICNSMenuItem> itemClass = NSClassFromString(@"NSMenuItem");
   [self.menu removeAllItems];
   [self.entries enumerateObjectsUsingBlock:^(ICMacMenuEntry* entry, NSUInteger index, BOOL* stop) {
-    if (entry.isSeparator) {
+    if (entry.isSeparator)
+    {
       [self.menu addItem:[itemClass separatorItem]];
       return;
     }
     SEL action = entry.handler != nil ? @selector(menuItemChosen:) : NULL;
-    id<ICNSMenuItem> item = [(id<ICNSMenuItem>)[(Class)itemClass alloc] initWithTitle:entry.title action:action keyEquivalent:@""];
+    id<ICNSMenuItem> item = [(id<ICNSMenuItem>)[(Class)itemClass alloc] initWithTitle:entry.title
+                                                                               action:action
+                                                                        keyEquivalent:@""];
     [item setTarget:entry.handler != nil ? self : nil];
     [item setEnabled:entry.handler != nil];
     [item setState:entry.checked ? ICControlStateOn : ICControlStateOff];
@@ -164,23 +191,28 @@ static const NSInteger ICControlStateOff = 0;
   }];
 }
 
-- (void)menuItemChosen:(id<ICNSMenuItem>)sender {
+- (void)menuItemChosen:(id<ICNSMenuItem>)sender
+{
   NSInteger index = [sender tag];
-  if (index < 0 || index >= (NSInteger)self.entries.count) {
+  if (index < 0 || index >= (NSInteger)self.entries.count)
+  {
     return;
   }
   void (^handler)(void) = self.entries[(NSUInteger)index].handler;
-  if (handler != nil) {
+  if (handler != nil)
+  {
     handler();
   }
 }
 
-+ (void)activateApp {
++ (void)activateApp
+{
   Class<ICNSApplication> application = NSClassFromString(@"NSApplication");
   [[application sharedApplication] activateIgnoringOtherApps:YES];
 }
 
-+ (void)terminateApp {
++ (void)terminateApp
+{
   Class<ICNSApplication> application = NSClassFromString(@"NSApplication");
   [[application sharedApplication] terminate:nil];
 }
