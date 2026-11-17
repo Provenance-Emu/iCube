@@ -315,24 +315,80 @@ final class EcosystemHandoffTests: XCTestCase {
     // The library never sees the importer's staging name.
     XCTAssertEqual(names(in: library), ["Melee.iso"])
     XCTAssertEqual(names(in: inbox("dolphinios")), [])
-    XCTAssertNil(EcosystemHandoffImporter.refusalMessage(for: try XCTUnwrap(received.first)))
+    XCTAssertNil(EcosystemHandoffImporter.problemMessage(for: try XCTUnwrap(received.first)))
     // A second look finds nothing.
     XCTAssertEqual(EcosystemHandoffImporter.receive(root: root, into: library), [])
   }
 
-  func test_receiveLeavesAFileThatIsAlreadyInTheLibrary() throws {
-    let iso = try seed("Melee.iso", "new")
-    try seed("Melee.iso", in: library, "old")
+  func test_receiveLeavesTheSameFileThatIsAlreadyInTheLibrary() throws {
+    let iso = try seed("Melee.iso", "disc")
+    try seed("Melee.iso", in: library, "disc")
     try stage([iso], to: "dolphinios", from: "provenance")
 
     let received = try XCTUnwrap(EcosystemHandoffImporter.receive(root: root, into: library).first)
 
-    XCTAssertEqual(try String(contentsOf: library.appendingPathComponent("Melee.iso"), encoding: .utf8), "old")
+    XCTAssertEqual(names(in: library), ["Melee.iso"])
     XCTAssertEqual(received.placement.placed, [])
     XCTAssertEqual(received.placement.alreadyPresent.count, 1)
     XCTAssertEqual(received.placement.primaries.map(\.lastPathComponent), ["Melee.iso"])
-    XCTAssertNil(EcosystemHandoffImporter.refusalMessage(for: received))
+    XCTAssertNil(EcosystemHandoffImporter.problemMessage(for: received))
     XCTAssertEqual(names(in: inbox("dolphinios")), [])
+  }
+
+  func test_receiveKeepsADifferentGameThatHasTheSameFileName() throws {
+    // Same length as the library's file: every full GameCube image is the same size.
+    let sameSize = try seed("One/game.iso", "new")
+    let otherSize = try seed("Two/game.iso", "longer")
+    try seed("game.iso", in: library, "old")
+    try stage([sameSize], to: "dolphinios", from: "provenance", id: "A", now: Date().addingTimeInterval(-60))
+    try stage([otherSize], to: "dolphinios", from: "provenance", id: "B")
+
+    let received = EcosystemHandoffImporter.receive(root: root, into: library)
+
+    XCTAssertEqual(received.map { $0.placement.placed.map(\.lastPathComponent) }, [["game (2).iso"], ["game (3).iso"]])
+    XCTAssertEqual(received.map { $0.placement.primaries.map(\.lastPathComponent) }, [["game (2).iso"], ["game (3).iso"]])
+    XCTAssertEqual(try String(contentsOf: library.appendingPathComponent("game.iso"), encoding: .utf8), "old")
+    XCTAssertEqual(try String(contentsOf: library.appendingPathComponent("game (2).iso"), encoding: .utf8), "new")
+    XCTAssertEqual(try String(contentsOf: library.appendingPathComponent("game (3).iso"), encoding: .utf8), "longer")
+    XCTAssertEqual(names(in: inbox("dolphinios")), [])
+  }
+
+  func test_aFailedMoveKeepsTheHandoffForAnotherTry() throws {
+    struct DiskFull: Error {}
+    let disc1 = try seed("disc1.iso", "one")
+    let disc2 = try seed("disc2.iso", "two")
+    try stage([disc1, disc2], to: "dolphinios", from: "provenance")
+    let pending = try XCTUnwrap(EcosystemHandoffInbox.pending(root: root).first)
+    let extensions = ImportableFileTypes.softwareExtensions
+
+    // The second file cannot be written this time.
+    let first = EcosystemHandoffInbox.place(pending, into: library, allowedExtensions: extensions) { source, destination in
+      if source.lastPathComponent == "disc2.iso" { throw DiskFull() }
+      try EcosystemHandoffInbox.stagedMove(source, destination)
+    }
+
+    XCTAssertEqual(first.placed.map(\.lastPathComponent), ["disc1.iso"])
+    XCTAssertEqual(first.failed, ["disc2.iso"])
+    XCTAssertEqual(first.rejected, [])
+    XCTAssertEqual(names(in: library), ["disc1.iso"])
+    // The hand-off and the file that did not make it are still there.
+    XCTAssertTrue(exists(pending.directory.appendingPathComponent("files/disc2.iso")))
+    XCTAssertEqual(EcosystemHandoffInbox.pending(root: root).map(\.manifest.id), ["H1"])
+    let message = try XCTUnwrap(
+      EcosystemHandoffImporter.problemMessage(for: .init(manifest: pending.manifest, placement: first))
+    )
+    XCTAssertTrue(message.contains("try again"), message)
+    XCTAssertFalse(message.contains("format"), message)
+
+    // The next pass finishes the job and does not import the first file twice.
+    let second = try XCTUnwrap(EcosystemHandoffImporter.receive(root: root, into: library).first)
+
+    XCTAssertEqual(second.placement.placed.map(\.lastPathComponent), ["disc2.iso"])
+    XCTAssertEqual(second.placement.alreadyPresent.map(\.lastPathComponent), ["disc1.iso"])
+    XCTAssertEqual(second.placement.failed, [])
+    XCTAssertEqual(names(in: library), ["disc1.iso", "disc2.iso"])
+    XCTAssertEqual(names(in: inbox("dolphinios")), [])
+    XCTAssertNil(EcosystemHandoffImporter.problemMessage(for: second))
   }
 
   func test_receiveRefusesUnsafePathsAndTypesItDoesNotImport() throws {
@@ -375,16 +431,16 @@ final class EcosystemHandoffTests: XCTestCase {
     XCTAssertEqual(received.placement.rejected, ["link.iso"])
     XCTAssertEqual(names(in: library), [])
     XCTAssertTrue(exists(outside))
-    XCTAssertNotNil(EcosystemHandoffImporter.refusalMessage(for: received))
+    XCTAssertNotNil(EcosystemHandoffImporter.problemMessage(for: received))
   }
 
-  func test_refusalMessageNamesTheSenderAndTheGame() throws {
+  func test_unsupportedFormatMessageNamesTheSenderAndTheGame() throws {
     let txt = try seed("notes.txt")
     try stage([txt], to: "dolphinios", from: "provenance")
 
     let received = try XCTUnwrap(EcosystemHandoffImporter.receive(root: root, into: library).first)
 
-    let message = try XCTUnwrap(EcosystemHandoffImporter.refusalMessage(for: received))
+    let message = try XCTUnwrap(EcosystemHandoffImporter.problemMessage(for: received))
     XCTAssertTrue(message.contains("Provenance"), message)
     XCTAssertTrue(message.contains("Game"), message)
     XCTAssertEqual(names(in: inbox("dolphinios")), [])

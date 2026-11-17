@@ -5920,3 +5920,4 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Connect a Remote Library" = "Connect a Remote Library";
 "Connect to your RomM library." = "Connect to your RomM library.";
 "Scan Server QR" = "Scan Server QR";
+"Couldn’t import “%@” from %@. iCube will try again the next time it opens." = "Couldn’t import “%@” from %@. iCube will try again the next time it opens.";

@@ -483,5 +483,13 @@
 			</array>
 		</dict>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<!-- Sibling emulator apps (see Common/Ecosystem/EcosystemSchemes.swift).
+		     canOpenURL answers only for schemes listed here; "Send to Provenance"
+		     on Apple TV is offered only when Provenance is installed. -->
+		<string>provenance</string>
+		<string>ifly</string>
+	</array>
 </dict>
 </plist>

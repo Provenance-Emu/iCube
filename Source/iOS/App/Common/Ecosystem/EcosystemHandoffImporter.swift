@@ -92,23 +92,34 @@ enum EcosystemHandoffImporter {
     }
   }
 
-  /// What the user is told about one hand-off, or nil when a quiet snackbar
-  /// is enough. Pure, for tests.
-  nonisolated static func refusalMessage(for received: Received) -> String? {
+  /// What went wrong with one hand-off, or nil when its game is in the
+  /// library. Pure, for tests.
+  nonisolated static func problemMessage(for received: Received) -> String? {
+    let peer = EcosystemShareCenter.peerName(received.manifest.from)
+    if !received.placement.failed.isEmpty {
+      // The hand-off is still in the drop box (`EcosystemHandoffInbox.place`).
+      return String(
+        format: L("Couldn\u{2019}t import \u{201C}%@\u{201D} from %@. iCube will try again the next time it opens."),
+        received.manifest.title, peer
+      )
+    }
     guard received.placement.primaries.isEmpty else { return nil }
     return String(
       format: L("%@ sent \u{201C}%@\u{201D}, but none of its files are a format iCube can import."),
-      EcosystemShareCenter.peerName(received.manifest.from), received.manifest.title
+      peer, received.manifest.title
     )
   }
 
+  /// Hand-offs kept for a retry that the user has been told about since
+  /// launch: one that keeps failing is reported once, not on every activation.
+  private static var reportedFailures = Set<String>()
+
   private static func report(_ received: [Received]) {
-    guard let last = received.last else { return }
     var placedAny = false
     for item in received {
-      NSLog("[Ecosystem] hand-off '%@' from %@:// — %d placed, %d already here, %d refused",
+      NSLog("[Ecosystem] hand-off '%@' from %@:// — %d placed, %d already here, %d refused, %d failed",
             item.manifest.title, item.manifest.from, item.placement.placed.count,
-            item.placement.alreadyPresent.count, item.placement.rejected.count)
+            item.placement.alreadyPresent.count, item.placement.rejected.count, item.placement.failed.count)
       for url in item.placement.placed {
         LibraryAddedDateStore.record(path: url.path)
         placedAny = true
@@ -119,14 +130,19 @@ enum EcosystemHandoffImporter {
       NotificationCenter.default.post(name: .DOLImportFileFinished, object: nil)
     }
 
-    if let refusal = refusalMessage(for: last) {
-      EcosystemShareCenter.shared.notice = EcosystemNotice(title: L("Couldn\u{2019}t Import"), message: refusal)
-      return
+    let problems = received.compactMap { item -> String? in
+      guard let message = problemMessage(for: item) else { return nil }
+      if !item.placement.failed.isEmpty, !reportedFailures.insert(item.manifest.id).inserted { return nil }
+      return message
     }
-    let peer = EcosystemShareCenter.peerName(last.manifest.from)
-    let text = last.placement.placed.isEmpty
-      ? String(format: L("\u{201C}%@\u{201D} from %@ is already in your library."), last.manifest.title, peer)
-      : String(format: L("Imported \u{201C}%@\u{201D} from %@."), last.manifest.title, peer)
+    if let problem = problems.last {
+      EcosystemShareCenter.shared.notice = EcosystemNotice(title: L("Couldn\u{2019}t Import"), message: problem)
+    }
+    guard let imported = received.last(where: { problemMessage(for: $0) == nil }) else { return }
+    let peer = EcosystemShareCenter.peerName(imported.manifest.from)
+    let text = imported.placement.placed.isEmpty
+      ? String(format: L("\u{201C}%@\u{201D} from %@ is already in your library."), imported.manifest.title, peer)
+      : String(format: L("Imported \u{201C}%@\u{201D} from %@."), imported.manifest.title, peer)
     NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": text])
   }
 }
