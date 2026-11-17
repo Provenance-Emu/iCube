@@ -5959,3 +5959,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Play with a temporary copy or keep the game in your library." = "Play with a temporary copy or keep the game in your library.";
 "Request Access" = "Request Access";
 "The downloaded game couldn't be opened." = "The downloaded game couldn't be opened.";
+"Add GameCube and Wii games to get started." = "Add GameCube and Wii games to get started.";
+"Browse and download from your Emulation Server." = "Browse and download from your Emulation Server.";
+"Connect a Remote Library" = "Connect a Remote Library";
+"Connect to your RomM library." = "Connect to your RomM library.";
+"Scan Server QR" = "Scan Server QR";
