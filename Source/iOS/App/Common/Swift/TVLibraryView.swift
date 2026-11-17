@@ -567,6 +567,7 @@ struct TVLibraryView: View {
   /// Another library chosen in the bottom filter bar (a nearby device or a server, by
   /// `NearbyLibrariesModel.Peer.id`); the grid shows its games in place. Nil is this device's library.
   @State private var librarySourceID: String?
+  @AppStorage("iCube.library.lastServerTab") private var lastServerTab = ""
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   /// The dashboard's route to pairing and handoff when no device is sharing a library.
@@ -639,6 +640,9 @@ struct TVLibraryView: View {
               .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
           }
         }
+      }
+      .onChange(of: navigateTo?.filePath) { previous, current in
+        if let previous, previous != current { TemporaryServerGame.remove(containing: previous) }
       }
       .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
         SaveStateFilmstripView(gameID: route.id)
@@ -766,9 +770,12 @@ struct TVLibraryView: View {
         if !showPlatformFilterBar { platformFilter = .all }
       }
 #if !os(tvOS)
-      .onChange(of: nearby.peers.map(\.id)) { _, ids in
-        // The device or server left: back to this library rather than an empty grid.
+      .onChange(of: nearby.peers.map(\.id), initial: true) { _, ids in
         if let id = librarySourceID, !ids.contains(id) { librarySourceID = nil }
+        if librarySourceID == nil, ids.contains(lastServerTab) { librarySourceID = lastServerTab }
+      }
+      .onChange(of: librarySourceID) { _, id in
+        lastServerTab = id.flatMap { nearby.peer(withID: $0) }.flatMap { $0.isServer ? $0.id : nil } ?? ""
       }
 #endif
       .onChangeCompat(of: showPatchedSeparately) { _, show in

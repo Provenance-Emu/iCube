@@ -292,31 +292,41 @@ final class ContinuityLibraryBrowseController: ObservableObject {
 
     // MARK: - Copying
 
-    func copy(_ entry: ContinuityLibraryEntry) async {
+    func copy(_ entry: ContinuityLibraryEntry, temporaryFolder: URL? = nil) async {
         await runOperation {
             if let serverLibrary = self.serverLibrary {
-                await self.copyServerEntry(entry, from: serverLibrary)
+                await self.copyServerEntry(entry, from: serverLibrary, temporaryFolder: temporaryFolder)
             } else {
                 await self.copyEntry(entry)
             }
         }
     }
 
-  private func copyServerEntry(_ entry: ContinuityLibraryEntry, from library: any RemoteGameCatalog) async {
+  private func copyServerEntry(
+    _ entry: ContinuityLibraryEntry, from library: any RemoteGameCatalog, temporaryFolder: URL?
+  ) async {
     copiedFileURLs = []
     verifiedDescriptors = []
     let id = operationID
     phase = .copying(entry: entry, progress: nil)
     do {
       try await ContinuityTransferGate.shared.withPermit {
-        let urls = try await library.copy(entry) { [weak self] progress in
+        let report: @Sendable (PullProgress) -> Void = { [weak self] progress in
           Task { @MainActor in
             guard let self, self.operationID == id, case .copying = self.phase else { return }
             self.phase = .copying(entry: entry, progress: progress)
           }
         }
+        let urls: [URL]
+        if let temporaryFolder, let server = library as? EmulationServerLibrary {
+          urls = try await server.copyTemporarily(entry, into: temporaryFolder, progress: report)
+        } else {
+          urls = try await library.copy(entry, progress: report)
+        }
         try Task.checkCancellation()
-        TVLibraryBridge.updateLibrary(withRemotePaths: urls.map(\.path), fetchMetadata: true)
+        if temporaryFolder == nil {
+          TVLibraryBridge.updateLibrary(withRemotePaths: urls.map(\.path), fetchMetadata: true)
+        }
         guard !Task.isCancelled else { return }
         copiedFileURLs = urls
         phase = .copied(entry)

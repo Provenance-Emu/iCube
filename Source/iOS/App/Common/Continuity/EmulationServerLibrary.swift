@@ -342,6 +342,18 @@ actor EmulationServerLibrary {
   }
 
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
+    try await transfer(entry, temporaryFolder: nil, progress: progress)
+  }
+
+  func copyTemporarily(
+    _ entry: ContinuityLibraryEntry, into folder: URL, progress: @escaping @Sendable (PullProgress) -> Void
+  ) async throws -> [URL] {
+    try await transfer(entry, temporaryFolder: folder, progress: progress)
+  }
+
+  private func transfer(
+    _ entry: ContinuityLibraryEntry, temporaryFolder: URL?, progress: @escaping @Sendable (PullProgress) -> Void
+  ) async throws -> [URL] {
     guard let game = games[entry.key] else { throw ServerError.invalidContent }
     let downloads = try await downloads(for: game)
     let count = downloads.count
@@ -406,6 +418,10 @@ actor EmulationServerLibrary {
     }
     guard valid else { throw ServerError.invalidContent }
     try Task.checkCancellation()
+    if let temporaryFolder {
+      try fm.moveItem(at: ready, to: temporaryFolder)
+      return paths.map { temporaryFolder.appendingPathComponent($0) }
+    }
     guard let relative = ContinuityPaths.relativePath(forAbsolutePath: destination.path) else {
       throw ServerError.invalidContent
     }
@@ -622,5 +638,24 @@ extension EmulationServerLibrary: RemoteGameCatalog {
   nonisolated func isAccessDenied(_ error: any Error) -> Bool {
     if case ServerError.accessDenied = error { return true }
     return false
+  }
+}
+
+/// Temporary server games live outside every library scan root.
+enum TemporaryServerGame {
+  private static let prefix = "iCube-Server-"
+
+  static func makeFolder() -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent(prefix + UUID().uuidString, isDirectory: true)
+  }
+
+  static func remove(containing path: String) {
+    let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+    let file = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+    guard file.path.hasPrefix(root.path + "/"),
+          let folder = file.path.dropFirst(root.path.count + 1).split(separator: "/").first,
+          folder.hasPrefix(prefix), UUID(uuidString: String(folder.dropFirst(prefix.count))) != nil
+    else { return }
+    try? FileManager.default.removeItem(at: root.appendingPathComponent(String(folder), isDirectory: true))
   }
 }
