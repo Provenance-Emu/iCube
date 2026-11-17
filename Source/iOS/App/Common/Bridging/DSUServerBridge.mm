@@ -368,8 +368,9 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
     _restrictTo = nil;
     // Load persisted approval state & allowlist
     NSUserDefaults* defs = NSUserDefaults.standardUserDefaults;
-    // Default OFF if not set
-    if ([defs objectForKey:@"dsu_approval_required"] == nil) { [defs setBool:NO forKey:@"dsu_approval_required"]; }
+    // Input can initialize this singleton off-main while SwiftUI is laying out the
+    // touch overlay. A defaults write here synchronously notifies SwiftUI and
+    // deadlocks against the main thread waiting for dispatch_once to finish.
     _approvalRequired = [defs boolForKey:@"dsu_approval_required"];
     _allowed = [NSMutableSet set];
     NSArray* persisted = [defs arrayForKey:@"dsu_allowed_clients"];
@@ -382,8 +383,6 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
           if (s.length > 0) { [_allowed addObject:s]; }
         }
       }
-      // Write back normalized list
-      [defs setObject:[_allowed allObjects] forKey:@"dsu_allowed_clients"];
     }
     _prompted = [NSMutableSet set];
     _sessionAllowed = [NSMutableSet set];

@@ -5950,3 +5950,12 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The server no longer has this game." = "The server no longer has this game.";
 "The server sent the download somewhere else, so it was stopped." = "The server sent the download somewhere else, so it was stopped.";
 "There is not enough space to keep this game." = "There is not enough space to keep this game.";
+"Allow pairing over local HTTP" = "Allow pairing over local HTTP";
+"Download and Run" = "Download and Run";
+"Enable pairing over HTTP only on a trusted network." = "Enable pairing over HTTP only on a trusted network.";
+"Game Options" = "Game Options";
+"Play Game" = "Play Game";
+"Play Temporarily" = "Play Temporarily";
+"Play with a temporary copy or keep the game in your library." = "Play with a temporary copy or keep the game in your library.";
+"Request Access" = "Request Access";
+"The downloaded game couldn't be opened." = "The downloaded game couldn't be opened.";

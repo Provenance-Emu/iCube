@@ -43,6 +43,7 @@ struct NearbyPeerLibraryView: View {
   }
 
   @State private var sheet: Sheet?
+  @State private var downloadSelection: ContinuityLibraryEntry?
   @State private var transferTask: Task<Void, Never>?
   @State private var transferID = UUID()
   @State private var saveProgress: (bytes: Int64, total: Int64)?
@@ -146,6 +147,10 @@ struct NearbyPeerLibraryView: View {
           #endif
           .disabled(isCopying)
       }
+      if peer.isServer, hasCatalog, !needsServerAccess {
+        Button(L("Refresh"), systemImage: "arrow.clockwise") { Task { await load() } }
+          .disabled(isCopying || controller.phase == .loading)
+      }
       if hasCatalog, !needsServerAccess, loadedRequest == catalogRequest {
         grid.disabled(controller.phase == .loading)
       }
@@ -174,6 +179,21 @@ struct NearbyPeerLibraryView: View {
     }
     .onChange(of: isCopying) { _, copying in
       if copying { onShowStatus() }
+    }
+    .alert(
+      downloadSelection?.game.displayName ?? L("Play Game"),
+      isPresented: Binding(get: { downloadSelection != nil }, set: { if !$0 { downloadSelection = nil } }),
+      presenting: downloadSelection
+    ) { entry in
+      if peer.server != nil {
+        Button(L("Play Temporarily")) { playTemporarily(entry) }
+      }
+      Button(L("Download and Run")) {
+        startCopy(entry, options: NearbyCopyOptions(catalog: nil, states: []), runWhenReady: true)
+      }
+      Button(L("Cancel"), role: .cancel) {}
+    } message: { _ in
+      Text(L("Play with a temporary copy or keep the game in your library."))
     }
     .sheet(item: $sheet, onDismiss: {
       if let pendingPlay {
@@ -328,7 +348,7 @@ struct NearbyPeerLibraryView: View {
       spacing: Metrics.gridSpacing
     ) {
       ForEach(Array(visibleEntries.enumerated()), id: \.element.id) { index, entry in
-        Button { sheet = .options(entry) } label: {
+        Button { open(entry) } label: {
           NearbyGameTile(
             entry: entry,
             artwork: controller.artwork[entry.key],
@@ -342,6 +362,9 @@ struct NearbyPeerLibraryView: View {
         .buttonStyle(.plain)
         #endif
         .disabled(isCopying)
+        .contextMenu {
+          Button(L("Game Options")) { sheet = .options(entry) }
+        }
         .modifier(FirstFocus(binding: index == 0 && !hasStatusControl ? initialFocus : nil))
         .task { await controller.loadArtwork(for: entry) }
       }
@@ -354,6 +377,18 @@ struct NearbyPeerLibraryView: View {
             if canLoadMore { await controller.loadMoreServerGames() }
           }
       }
+    }
+  }
+
+  private func open(_ entry: ContinuityLibraryEntry) {
+    if peer.isServer {
+      if let game = localGame(for: entry) {
+        onPlay(game, nil)
+      } else {
+        downloadSelection = entry
+      }
+    } else {
+      sheet = .options(entry)
     }
   }
 
@@ -487,7 +522,28 @@ struct NearbyPeerLibraryView: View {
     return FileManager.default.fileExists(atPath: url.path)
   }
 
-  private func startCopy(_ entry: ContinuityLibraryEntry, options: NearbyCopyOptions) {
+  private func playTemporarily(_ entry: ContinuityLibraryEntry) {
+    transferTask?.cancel()
+    transferError = nil
+    completedEntry = entry
+    let id = UUID()
+    transferID = id
+    let folder = TemporaryServerGame.makeFolder()
+    transferTask = Task {
+      var handedOff = false
+      defer { if !handedOff { try? FileManager.default.removeItem(at: folder) } }
+      await controller.copy(entry, temporaryFolder: folder)
+      guard transferID == id, !Task.isCancelled, case .copied = controller.phase else { return }
+      guard let url = controller.copiedFileURL, let game = DiscImageBridge.gameItem(forPath: url.path) else {
+        transferError = L("The downloaded game couldn't be opened.")
+        return
+      }
+      handedOff = true
+      onPlay(game, nil)
+    }
+  }
+
+  private func startCopy(_ entry: ContinuityLibraryEntry, options: NearbyCopyOptions, runWhenReady: Bool = false) {
     transferTask?.cancel()
     transferError = nil
     completedEntry = entry
@@ -524,7 +580,13 @@ struct NearbyPeerLibraryView: View {
         downloaded[entry.key] = game
       }
       guard !Task.isCancelled else { return }
-      if let game = localGame(for: entry) { sheet = .boot(game) }
+      if let game = localGame(for: entry) {
+        if runWhenReady {
+          onPlay(game, nil)
+        } else {
+          sheet = .boot(game)
+        }
+      }
     }
   }
 

@@ -9,6 +9,28 @@ import XCTest
 @testable import iCube
 
 final class EmulationServerLibraryTests: XCTestCase {
+  func testAbandonedTemporaryGamesAreRemovedWithoutTouchingOtherFiles() throws {
+    let manager = FileManager.default
+    let root = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try manager.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? manager.removeItem(at: root) }
+
+    let session = root.appendingPathComponent(TemporaryServerGame.makeFolder().lastPathComponent, isDirectory: true)
+    let unrelated = root.appendingPathComponent("iCube-Server-unrelated", isDirectory: true)
+    for folder in [session, unrelated] {
+      try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+      try Data([0]).write(to: folder.appendingPathComponent("Game.rvz"))
+    }
+    let link = root.appendingPathComponent(TemporaryServerGame.makeFolder().lastPathComponent)
+    try manager.createSymbolicLink(at: link, withDestinationURL: unrelated)
+
+    TemporaryServerGame.removeAbandoned(in: root)
+
+    XCTAssertFalse(manager.fileExists(atPath: session.path))
+    XCTAssertTrue(manager.fileExists(atPath: unrelated.appendingPathComponent("Game.rvz").path))
+    XCTAssertTrue(try link.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true)
+  }
+
   func testCatalogFollowsCursorAndFiltersToDolphinSystems() async throws {
     let transport = FixtureTransport()
     let server = try EmulationServer(address: "Example.local")
@@ -184,25 +206,6 @@ final class EmulationServerLibraryTests: XCTestCase {
     XCTAssertTrue(requests.allSatisfy { $0.headers["Authorization"] == nil })
   }
 
-  func testPairingLinkContainsOnlyPublicPIN() throws {
-    let server = try EmulationServer(address: "https://media.local:8443")
-    let challenge = EmulationServerLibrary.PairingChallenge(id: "challenge", pin: "012345", secret: "device-private-secret", expiresInSeconds: 300)
-    let url = try XCTUnwrap(challenge.verificationURL(on: server))
-    XCTAssertEqual(url.absoluteString, "https://media.local:8443/ui/?settings=devices#pair=012345")
-  }
-
-  func testPairingUsesPublishedV1Responses() async throws {
-    let transport = FixtureTransport()
-    let server = try EmulationServer(address: "https://media.local:8443")
-    let library = EmulationServerLibrary(server: server, token: nil, transport: transport)
-    let challenge = try await library.startPairing()
-    XCTAssertEqual(challenge.pin, "012345")
-    let pending = try await library.redeemPairing(challenge)
-    XCTAssertNil(pending)
-    let token = try await library.redeemPairing(challenge)
-    XCTAssertEqual(token, "fixture-device-token")
-  }
-
   func testBonjourAdvertUsesResolvedHostPortAndTLS() throws {
     let id = UUID()
     let txt = ["id": id.uuidString, "v": "1", "tls": "1", "pair": "0", "name": "Living Room"]
@@ -228,7 +231,6 @@ final class EmulationServerLibraryTests: XCTestCase {
 
 private actor FixtureTransport: ContinuityTransport {
   private(set) var requests: [ContinuityRequest] = []
-  private var redemptionAttempts = 0
   private let skipFirstGame: Bool
 
   init(skipFirstGame: Bool = false) {
@@ -239,12 +241,6 @@ private actor FixtureTransport: ContinuityTransport {
     requests.append(request)
     let body: String
     switch request.url.path {
-    case "/api/v1/device-pairing":
-      return ContinuityResponse(status: 201, body: Data(#"{"id":"challenge","pin":"012345","secret":"fixture-secret","expiresInSeconds":300}"#.utf8))
-    case "/api/v1/device-pairing/redeem":
-      redemptionAttempts += 1
-      if redemptionAttempts == 1 { return ContinuityResponse(status: 202) }
-      body = #"{"id":"device","token":"fixture-device-token","scopes":["read"]}"#
     case "/api/v1/capabilities":
       body = #"{"protocol":{"major":1}}"#
     case "/api/v1/browse-libraries":

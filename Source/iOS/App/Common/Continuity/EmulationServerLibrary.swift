@@ -197,32 +197,6 @@ actor EmulationServerLibrary {
     _ = try await libraries()
   }
 
-  typealias PairingChallenge = DevicePairingChallenge
-
-  func startPairing(deviceName: String = "iCube") async throws -> PairingChallenge {
-    let route = try request("device-pairing", authorized: false)
-    let response = try await transport.request(.json(url: route.url, payload: DevicePairingDraft(name: deviceName)))
-    guard response.status == 201 else { throw ContinuityError.invalidResponse(status: response.status) }
-    let challenge = try response.decoded(PairingChallenge.self)
-    guard challenge.pin.utf8.count == 6, challenge.pin.utf8.allSatisfy({ (48 ... 57).contains($0) }),
-          !challenge.id.isEmpty, !challenge.secret.isEmpty, (1 ... 300).contains(challenge.expiresInSeconds) else {
-      throw ServerError.unsupported
-    }
-    return challenge
-  }
-
-  func redeemPairing(_ challenge: PairingChallenge) async throws -> String? {
-    let route = try request("device-pairing/redeem", authorized: false)
-    let proof = DevicePairingRedemption(id: challenge.id, secret: challenge.secret)
-    let response = try await transport.request(.json(url: route.url, payload: proof))
-    if response.status == 202 { return nil }
-    if response.status == 404 { throw ServerError.pairingExpired }
-    guard response.status == 200 else { throw ContinuityError.invalidResponse(status: response.status) }
-    let credential = try response.decoded(DeviceTokenCreated.self)
-    guard credential.scopes == ["read"], Self.isValidToken(credential.token) else { throw ServerError.accessDenied }
-    return credential.token
-  }
-
   static func isValidToken(_ token: String) -> Bool {
     !token.isEmpty && token.utf8.allSatisfy { (33 ... 126).contains($0) }
   }
@@ -386,7 +360,9 @@ actor EmulationServerLibrary {
 
   /// The game's files: from the catalog when it was browsed, else from the plan a download that is
   /// still in the journal was started with.
-  private func plannedDownloads(for entry: ContinuityLibraryEntry, job: BackgroundDownloadJob) async throws -> [Download] {
+  private func plannedDownloads(
+    for entry: ContinuityLibraryEntry, job: BackgroundDownloadJob, fetcher: any GameFileFetching
+  ) async throws -> [Download] {
     if let game = games[entry.key] { return try await downloads(for: game) }
     if let saved = await fetcher.savedPlan(for: job),
        let plan = try? JSONDecoder().decode(DownloadPlan.self, from: saved),
@@ -399,8 +375,22 @@ actor EmulationServerLibrary {
   /// Every file is asked for before any is waited on, so all of them keep going while iCube is
   /// suspended. Finishing (checks, unpacking, the move into the library) starts once all are in.
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
+    try await transfer(entry, temporaryFolder: nil, progress: progress)
+  }
+
+  func copyTemporarily(
+    _ entry: ContinuityLibraryEntry, into folder: URL, progress: @escaping @Sendable (PullProgress) -> Void
+  ) async throws -> [URL] {
+    try await transfer(entry, temporaryFolder: folder, progress: progress)
+  }
+
+  private func transfer(
+    _ entry: ContinuityLibraryEntry, temporaryFolder: URL?, progress: @escaping @Sendable (PullProgress) -> Void
+  ) async throws -> [URL] {
+    // Temporary play uses an in-process transfer so it cannot resume as a library import.
+    let transferFetcher: any GameFileFetching = temporaryFolder == nil ? fetcher : TransportGameFileFetcher(transport: transport)
     let job = downloadJob(for: entry)
-    let downloads = try await plannedDownloads(for: entry, job: job)
+    let downloads = try await plannedDownloads(for: entry, job: job, fetcher: transferFetcher)
     let count = downloads.count
     let folded = Set(downloads.map { $0.path.precomposedStringWithCanonicalMapping.lowercased() })
     guard (1 ... 512).contains(count), folded.count == count, Set(downloads.map(\.route)).count == count,
@@ -416,26 +406,26 @@ actor EmulationServerLibrary {
       let route = try request(file.route)
       return GameFileRequest(url: route.url, headers: route.headers, expectedSize: file.size)
     }
-    let plan = try? JSONEncoder().encode(DownloadPlan(server: server, entry: entry, downloads: downloads))
+    let plan = temporaryFolder == nil ? (try? JSONEncoder().encode(DownloadPlan(server: server, entry: entry, downloads: downloads))) : nil
     let fetched: [URL]
     do {
-      fetched = try await fetcher.fetch(requests, for: job, plan: plan) { received in
+      fetched = try await transferFetcher.fetch(requests, for: job, plan: plan) { received in
         progress(Self.pullProgress(received: received, downloads: downloads, totalBytes: totalBytes))
       }
     } catch {
       let failure = (error as? BackgroundDownloadError)?.failure
       // A lost connection or a cancel keeps the journal's resume data for the next attempt.
-      if failure?.isTerminal ?? true { await fetcher.release(job) }
+      if temporaryFolder != nil || (failure?.isTerminal ?? true) { await transferFetcher.release(job) }
       if error is CancellationError || failure == .cancelled { throw CancellationError() }
       if failure == .accessDenied { throw ServerError.accessDenied }
       throw error
     }
     do {
-      let urls = try await finish(entry, downloads: downloads, fetched: fetched)
-      await fetcher.release(job)
+      let urls = try await finish(entry, downloads: downloads, fetched: fetched, temporaryFolder: temporaryFolder)
+      await transferFetcher.release(job)
       return urls
     } catch {
-      await fetcher.release(job)
+      await transferFetcher.release(job)
       throw error
     }
   }
@@ -454,10 +444,11 @@ actor EmulationServerLibrary {
   }
 
   /// Checks and unpacks the fetched files and moves the game into its folder. Needs no network.
-  private func finish(_ entry: ContinuityLibraryEntry, downloads: [Download], fetched: [URL]) async throws -> [URL] {
+  private func finish(
+    _ entry: ContinuityLibraryEntry, downloads: [Download], fetched: [URL], temporaryFolder: URL?
+  ) async throws -> [URL] {
     let count = downloads.count
     guard fetched.count == count else { throw ServerError.invalidContent }
-    let destination = try server.folder(for: entry)
     let staging = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     let ready = staging.appendingPathComponent("ready", isDirectory: true)
     let fm = FileManager.default
@@ -501,6 +492,11 @@ actor EmulationServerLibrary {
     }
     guard valid else { throw ServerError.invalidContent }
     try Task.checkCancellation()
+    if let temporaryFolder {
+      try fm.moveItem(at: ready, to: temporaryFolder)
+      return paths.map { temporaryFolder.appendingPathComponent($0) }
+    }
+    let destination = try server.folder(for: entry)
     guard let relative = ContinuityPaths.relativePath(forAbsolutePath: destination.path) else {
       throw ServerError.invalidContent
     }
@@ -684,14 +680,13 @@ actor EmulationServerLibrary {
   }
 
   enum ServerError: LocalizedError {
-    case unsupported, invalidContent, accessDenied, pairingExpired, editUnavailable, editConflict
+    case unsupported, invalidContent, accessDenied, editUnavailable, editConflict
 
     var errorDescription: String? {
       switch self {
       case .unsupported: return L("This Emulation Server version is unsupported.")
       case .invalidContent: return L("The server did not provide valid game files.")
       case .accessDenied: return L("The server denied access. Check your access token and library permissions.")
-      case .pairingExpired: return L("The pairing code expired. Start pairing again.")
       case .editUnavailable: return L("The server cannot save edits to this game. It may need an update.")
       case .editConflict: return L("The game changed on the server at the same time. Try again.")
       }
@@ -730,12 +725,37 @@ extension EmulationServerLibrary {
   }
 }
 
-extension DevicePairingChallenge {
-  func verificationURL(on server: EmulationServer) -> URL? {
-    var url = URLComponents(url: server.origin, resolvingAgainstBaseURL: false)
-    url?.path = "/ui/"
-    url?.queryItems = [URLQueryItem(name: "settings", value: "devices")]
-    url?.fragment = "pair=" + pin
-    return url?.url
+/// Temporary server games live outside every library scan root.
+enum TemporaryServerGame {
+  private static let prefix = "iCube-Server-"
+
+  static func makeFolder() -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent(prefix + UUID().uuidString, isDirectory: true)
+  }
+
+  static func remove(containing path: String) {
+    let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+    let file = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+    guard file.path.hasPrefix(root.path + "/"),
+          let folder = file.path.dropFirst(root.path.count + 1).split(separator: "/").first,
+          isSessionFolder(String(folder))
+    else { return }
+    try? FileManager.default.removeItem(at: root.appendingPathComponent(String(folder), isDirectory: true))
+  }
+
+  /// Run before any transfers start. No temporary game is active across app launches.
+  static func removeAbandoned(in root: URL = FileManager.default.temporaryDirectory) {
+    let manager = FileManager.default
+    let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
+    guard let folders = try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: Array(keys)) else { return }
+    for folder in folders where isSessionFolder(folder.lastPathComponent) {
+      guard let values = try? folder.resourceValues(forKeys: keys),
+            values.isDirectory == true, values.isSymbolicLink != true else { continue }
+      try? manager.removeItem(at: folder)
+    }
+  }
+
+  private static func isSessionFolder(_ name: String) -> Bool {
+    name.hasPrefix(prefix) && UUID(uuidString: String(name.dropFirst(prefix.count))) != nil
   }
 }

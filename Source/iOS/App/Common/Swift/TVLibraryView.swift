@@ -567,6 +567,7 @@ struct TVLibraryView: View {
   /// Another library chosen in the bottom filter bar (a nearby device or a server, by
   /// `NearbyLibrariesModel.Peer.id`); the grid shows its games in place. Nil is this device's library.
   @State private var librarySourceID: String?
+  @AppStorage("iCube.library.lastServerTab") private var lastServerTab = ""
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @Environment(\.verticalSizeClass) private var verticalSizeClass
   /// The dashboard's route to pairing and handoff when no device is sharing a library.
@@ -639,6 +640,9 @@ struct TVLibraryView: View {
               .onAppear { NSLog("[INPUT] NavigationDestination -> EmulationScreen for game: %@", item.title) }
           }
         }
+      }
+      .onChange(of: navigateTo?.filePath) { previous, current in
+        if let previous, previous != current { TemporaryServerGame.remove(containing: previous) }
       }
       .navigationDestinationItemCompat(item: $navigateToSaveStates) { route in
         SaveStateFilmstripView(gameID: route.id)
@@ -766,9 +770,12 @@ struct TVLibraryView: View {
         if !showPlatformFilterBar { platformFilter = .all }
       }
 #if !os(tvOS)
-      .onChange(of: nearby.peers.map(\.id)) { _, ids in
-        // The device or server left: back to this library rather than an empty grid.
+      .onChange(of: nearby.peers.map(\.id), initial: true) { _, ids in
         if let id = librarySourceID, !ids.contains(id) { librarySourceID = nil }
+        if librarySourceID == nil, ids.contains(lastServerTab) { librarySourceID = lastServerTab }
+      }
+      .onChange(of: librarySourceID) { _, id in
+        lastServerTab = id.flatMap { nearby.peer(withID: $0) }.flatMap { $0.isServer ? $0.id : nil } ?? ""
       }
 #endif
       .onChangeCompat(of: showPatchedSeparately) { _, show in
@@ -2692,27 +2699,26 @@ struct TVLibraryView: View {
 #endif
     .confirmationDialog(L("A game is already running."), isPresented: $model.showReplaceAlert, titleVisibility: .visible) {
       Button(L("Replace Game"), role: .destructive) {
+        guard let item = model.pendingSelection else { return }
+        model.pendingSelection = nil
         TVEmulationBridge.stop()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-          if let item = model.pendingSelection {
-            model.currentGame = item
-            navigateTo = item
-          }
+          model.currentGame = item
+          navigateTo = item
         }
       }
       Button(L("Continue Current Game"), role: .cancel) {
-        // If the pending selection was a "Start Fresh (Skip Resume)" request, its
-        // one-shot flag is already armed and would otherwise sit there and silently
-        // eat the *next*, unrelated launch's auto-resume. No-op when it wasn't armed.
-        SaveStateService.skipResumeOnce = false
-        SaveStateService.pendingBootStatePath = nil
+        cancelReplacement()
         if let current = model.currentGame { navigateTo = current }
       }
-      Button(L("Cancel")) {
-        SaveStateService.skipResumeOnce = false
-        SaveStateService.pendingBootStatePath = nil
-      }
+      Button(L("Cancel")) { cancelReplacement() }
     } message: { Text(L("Do you want to stop the current game and launch the new one?")) }
+      .onChange(of: model.showReplaceAlert) { _, shown in
+        guard !shown else { return }
+        afterDialogButtons {
+          if !model.showReplaceAlert, model.pendingSelection != nil { cancelReplacement() }
+        }
+      }
       .sheet(item: $showPropertiesFor) { TVSoftwarePropertiesView(item: $0).claimsController() }
       #if os(tvOS)
       .fullScreenCover(item: $editLibraryMetadataFor) { LibraryMetadataEditor(item: $0).claimsController() }
@@ -2854,16 +2860,18 @@ struct TVLibraryView: View {
     // Low storage warning - using confirmationDialog instead of alert to avoid conflicts
       .confirmationDialog(L("Low Storage Warning"), isPresented: $showLowStorageWarning, titleVisibility: .visible) {
         Button(L("Continue Anyway")) {
-          if let item = itemPendingLaunch {
-            proceedWithGameLaunch(item)
-          }
+          guard let item = itemPendingLaunch else { return }
+          itemPendingLaunch = nil
+          proceedWithGameLaunch(item)
         }
-        // A save the library was about to boot into must not land on the next, unrelated launch.
-        Button(L("Cancel"), role: .cancel) {
-          SaveStateService.pendingBootStatePath = nil
-          SaveStateService.skipResumeOnce = false
-        }
+        Button(L("Cancel"), role: .cancel) { cancelLowStorageLaunch() }
       } message: { Text(storageAlertMessage) }
+      .onChange(of: showLowStorageWarning) { _, shown in
+        guard !shown else { return }
+        afterDialogButtons {
+          if !showLowStorageWarning, itemPendingLaunch != nil { cancelLowStorageLaunch() }
+        }
+      }
       .sheet(item: $showCacheInfoFor) { item in
         CacheInfoView(item: item, showSubtitles: showSubtitles)
           .claimsController()
@@ -3256,6 +3264,35 @@ struct TVLibraryView: View {
 
   private func postSnackbar(_ text: String) {
     NotificationCenter.default.post(name: NSNotification.Name("DOLShowSnackbar"), object: nil, userInfo: ["text": text])
+  }
+
+  /// How long "the dialog closed and nobody chose" waits before it cleans up.
+  private static let dialogButtonGrace: TimeInterval = 1
+
+  /// SwiftUI does not promise that a dialog button's action runs before the dialog reports itself
+  /// closed. Without this wait, the cleanup for a dismissed dialog could cancel the pending game,
+  /// and delete a temporary one, just before "Continue Anyway" or "Replace Game" launched it.
+  /// A button that proceeds clears the pending game, so the cleanup then finds nothing to do.
+  private func afterDialogButtons(_ cleanup: @escaping () -> Void) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.dialogButtonGrace, execute: cleanup)
+  }
+
+  private func cancelReplacement() {
+    cancelPendingGameLaunch(model.pendingSelection)
+    model.pendingSelection = nil
+  }
+
+  private func cancelLowStorageLaunch() {
+    cancelPendingGameLaunch(itemPendingLaunch)
+    itemPendingLaunch = nil
+  }
+
+  private func cancelPendingGameLaunch(_ item: TVGameItem?) {
+    SaveStateService.pendingBootStatePath = nil
+    SaveStateService.skipResumeOnce = false
+    if let path = item?.filePath, path != navigateTo?.filePath {
+      TemporaryServerGame.remove(containing: path)
+    }
   }
 
   private func launchGame(_ item: TVGameItem) {
