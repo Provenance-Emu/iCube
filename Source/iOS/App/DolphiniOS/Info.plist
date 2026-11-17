@@ -159,6 +159,13 @@
 			</dict>
 		</dict>
 	</dict>
+	<!-- iOS 26 continued processing (BGContinuedProcessingTask): a long game import keeps running after
+	     the user leaves the app. Each import submits `<bundle id>.import.<UUID>`; the identifier must
+	     be prefixed with the bundle id and end in the wildcard. No UIBackgroundModes entry. -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).import.*</string>
+	</array>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_altserver._tcp</string>
@@ -182,6 +189,10 @@
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>com.joemattiello.icube.continuity.play</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

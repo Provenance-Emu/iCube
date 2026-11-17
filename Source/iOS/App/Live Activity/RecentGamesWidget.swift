@@ -13,6 +13,9 @@ struct RecentGamesWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: RecentGamesWidgetKind.identifier, provider: RecentGamesTimelineProvider()) { entry in
             RecentGamesWidgetView(entry: entry)
+                // Required since iOS 17: without it the system replaces the widget with an
+                // "adopt the containerBackground API" placeholder.
+                .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Recent Games")
         .description("Jump back into a recently played game.")

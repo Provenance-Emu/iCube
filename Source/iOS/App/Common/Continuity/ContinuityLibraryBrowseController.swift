@@ -292,35 +292,47 @@ final class ContinuityLibraryBrowseController: ObservableObject {
 
     // MARK: - Copying
 
-    func copy(_ entry: ContinuityLibraryEntry) async {
-        await runOperation {
-            if let serverLibrary = self.serverLibrary {
-                await self.copyServerEntry(entry, from: serverLibrary)
-            } else {
-                await self.copyEntry(entry)
-            }
-        }
+  func copy(_ entry: ContinuityLibraryEntry, temporaryFolder: URL? = nil) async {
+    await runOperation {
+      if let serverLibrary = self.serverLibrary {
+        await self.copyServerEntry(entry, from: serverLibrary, temporaryFolder: temporaryFolder)
+      } else {
+        await self.copyEntry(entry)
+      }
     }
+  }
 
-  private func copyServerEntry(_ entry: ContinuityLibraryEntry, from library: any RemoteGameCatalog) async {
+  private func copyServerEntry(
+    _ entry: ContinuityLibraryEntry, from library: any RemoteGameCatalog, temporaryFolder: URL?
+  ) async {
     copiedFileURLs = []
     verifiedDescriptors = []
     let id = operationID
     phase = .copying(entry: entry, progress: nil)
     do {
-      try await ContinuityTransferGate.shared.withPermit {
-        let urls = try await library.copy(entry) { [weak self] progress in
-          Task { @MainActor in
-            guard let self, self.operationID == id, case .copying = self.phase else { return }
-            self.phase = .copying(entry: entry, progress: progress)
+      let report: @MainActor @Sendable (PullProgress) -> Void = { [weak self] progress in
+        guard let self, self.operationID == id, case .copying = self.phase else { return }
+        self.phase = .copying(entry: entry, progress: progress)
+      }
+      let urls: [URL]
+      if let temporaryFolder {
+        guard let server = library as? EmulationServerLibrary else { throw ContinuityError.cancelled }
+        urls = try await ContinuityTransferGate.shared.withPermit {
+          try await server.copyTemporarily(entry, into: temporaryFolder) { progress in
+            Task { @MainActor in report(progress) }
           }
         }
-        try Task.checkCancellation()
-        TVLibraryBridge.updateLibrary(withRemotePaths: urls.map(\.path), fetchMetadata: true)
-        guard !Task.isCancelled else { return }
-        copiedFileURLs = urls
-        phase = .copied(entry)
+      } else {
+        // Join a permanent copy that a relaunch is already finishing.
+        urls = try await RemoteGameDownloads.shared.copy(entry, from: library, progress: report)
       }
+      try Task.checkCancellation()
+      if temporaryFolder == nil {
+        TVLibraryBridge.updateLibrary(withRemotePaths: urls.map(\.path), fetchMetadata: true)
+      }
+      guard !Task.isCancelled else { return }
+      copiedFileURLs = urls
+      phase = .copied(entry)
     } catch {
       guard !Task.isCancelled else { return }
       phase = .failed(error.localizedDescription)

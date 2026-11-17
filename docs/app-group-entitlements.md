@@ -12,7 +12,7 @@ entitlement", do the portal steps once:
    bundle id (see `appConfigs` in `Source/iOS/App/Project.swift`):
    `com.joemattiello.iCube`, `-debug`, `-debug-jb`, `-jb`, `-ts`,
    `-njb-patreon-beta`, `-patreon-beta-jb`, `-ts-patreon-beta`,
-   and their extension ids (`<app id>.topshelf`, `<app id>.thumbnail`, `<app id>.preview`).
+   and their extension ids (`<app id>.topshelf`, `<app id>.thumbnail`, `<app id>.preview`, `<app id>.Live-Activity`).
 3. Regenerate any manual profiles. Automatic signing does this itself.
 
 ## Trap: wildcard profiles

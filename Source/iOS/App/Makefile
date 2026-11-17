@@ -7,7 +7,7 @@
 #   cd Source/iOS/App && make testflight
 #
 .PHONY: help xcframework generate dev open lint format test ui test-ui gate-release testflight testflight-tvos \
-	testflight-all release-dry clean mcp-install mcp-test mcp-smoke webserver-bench
+	mac run-mac testflight-mac testflight-all release-dry clean mcp-install mcp-test mcp-smoke webserver-bench
 
 # Repo root — BuildiOSXCFramework.py and ExportOptions/ live there, not here.
 ROOT := $(shell git rev-parse --show-toplevel)
@@ -39,7 +39,9 @@ help:
 	@echo "  make format       — SwiftFormat (check only, no writes)"
 	@echo "  make testflight   — archive + auto-bump build number + upload iOS to TestFlight"
 	@echo "  make testflight-tvos — same, tvOS"
-	@echo "  make testflight-all  — both, one after the other (never in parallel)"
+	@echo "  make mac          — Mac Catalyst Debug build, ad-hoc signed (make run-mac also opens it)"
+	@echo "  make testflight-mac  — same, Mac Catalyst (needs: python3 BuildiOSXCFramework.py -p MAC_CATALYST)"
+	@echo "  make testflight-all  — iOS, tvOS, then the Mac if its core slice is built (never in parallel)"
 	@echo "  make release-dry  — print the release commands without executing them"
 	@echo "  make clean        — remove generated project + archives"
 	@echo "  make mcp-install  — uv sync the Tools/mcp debug MCP project"
@@ -121,6 +123,25 @@ ui:
 test-ui:
 	xcodebuild test $(UI_BUILD) $(foreach class,$(ONLY),-only-testing:iCubeTests/$(class)) $(TEST_ARGS)
 
+# Mac Catalyst, Debug. Needs the Catalyst core slice first (from the repo root:
+# python3 BuildiOSXCFramework.py -p MAC_CATALYST). The build is unsigned and then signed ad hoc with
+# Project/Entitlements/MacDev.entitlements: the sandbox and network keys of the App Store build, and
+# none of the keys an ad-hoc signature is refused for (app group, iCloud, shared keychain).
+# The sandbox matters: without it the app keeps its library in your real ~/Documents and macOS
+# blocks launch on a "would like to access your Documents folder" prompt.
+# So this app has no iCloud, app group or shared keychain; a TestFlight build is the test for those.
+MAC_APP = build-Xcode-mac/Build/Products/Debug (Non-Jailbroken)-maccatalyst/iCube.app
+mac:
+	xcodebuild build -workspace iCube.xcworkspace -scheme "iCube (UI)" \
+	  -configuration "Debug (Non-Jailbroken)" -destination "generic/platform=macOS,variant=Mac Catalyst" \
+	  -derivedDataPath build-Xcode-mac CODE_SIGNING_ALLOWED=NO
+	codesign --force --deep --sign - "$(MAC_APP)"
+	codesign --force --sign - --entitlements Project/Entitlements/MacDev.entitlements "$(MAC_APP)"
+	@echo "Built: $(MAC_APP)"
+
+run-mac: mac
+	open -n "$(MAC_APP)"
+
 # CI and TestFlight archive the Release configuration; the Debug gates and `make test` never
 # compile it, so #if DEBUG mistakes only surface here. Run before pushing UI/Swift changes.
 gate-release:
@@ -134,6 +155,9 @@ testflight:
 
 testflight-tvos:
 	$(RELEASE_RUNNER) ./Scripts/release.sh --channel testflight --platform tvos
+
+testflight-mac:
+	$(RELEASE_RUNNER) ./Scripts/release.sh --channel testflight --platform mac
 
 testflight-all:
 	$(RELEASE_RUNNER) ./Scripts/release.sh --channel testflight --platform all

@@ -44,6 +44,7 @@
 #import "DSUPingBridge.h"
 #import "DSUServerBridge.h"
 #import "DiscImageBridge.h"
+#import "ICMacAppKitBridge.h"
 #import "ImportFileManager.h"
 #import "ModNotifications.h"
 #import "NANDImportManager.h"

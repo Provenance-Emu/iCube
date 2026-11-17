@@ -38,6 +38,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     SharedPlusEntitlement.shared.start()
 
     let started = ServiceManager.shared.application(application, didFinishLaunchingWithOptions: launchOptions)
+    TemporaryServerGame.removeAbandoned()
+    // Reconnects remote-library game downloads that ran while iCube was suspended or ended.
+    BackgroundGameDownloader.shared.activate()
+    RemoteGameDownloads.shared.start()
     #if os(iOS)
     // Seed local bundled skins after the user folder exists, without delaying launch or changing picks.
     Task { @MainActor in
@@ -48,8 +52,49 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       }
     }
     #endif
+    // No game is running at launch, so a Live Activity still on screen belongs to a run that was
+    // killed before it could end it.
+    #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+    GameActivityManager.end()
+    #endif
+    #if targetEnvironment(macCatalyst)
+    // After the services: the menu-bar item reads the library-sharing state they set up.
+    MacDesktopController.shared.start()
+    #endif
     return started
   }
+
+  #if targetEnvironment(macCatalyst)
+  override func buildMenu(with builder: UIMenuBuilder) {
+    super.buildMenu(with: builder)
+    guard builder.system == .main else { return }
+    // One library window. Allowing more than one scene is only what lets the app outlive it.
+    builder.remove(menu: .newScene)
+    let importGame = UIKeyCommand(title: L("Import Game…"), action: #selector(importGameFromMenu(_:)),
+                                  input: "o", modifierFlags: .command)
+    builder.insertChild(UIMenu(title: "", options: .displayInline, children: [importGame]), atStartOfMenu: .file)
+    let settings = UIKeyCommand(title: L("Settings…"), action: #selector(showSettingsFromMenu(_:)),
+                                input: ",", modifierFlags: .command)
+    builder.remove(menu: .preferences)
+    builder.insertSibling(UIMenu(title: "", options: .displayInline, children: [settings]), afterMenu: .about)
+  }
+
+  @objc private func importGameFromMenu(_ sender: Any?) {
+    MacDesktopController.shared.showLibrary(thenPost: "DOLShowImportGame")
+  }
+
+  @objc private func showSettingsFromMenu(_ sender: Any?) {
+    MacDesktopController.shared.showLibrary(thenPost: "DOLShowSettings")
+  }
+
+  /// The library's Import and Settings screens are not reachable from inside a game.
+  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+    if action == #selector(importGameFromMenu(_:)) || action == #selector(showSettingsFromMenu(_:)) {
+      return !TVEmulationBridge.isRunning()
+    }
+    return super.canPerformAction(action, withSender: sender)
+  }
+  #endif
 
   func applicationWillTerminate(_ application: UIApplication) {
     ServiceManager.shared.applicationWillTerminate()
@@ -61,6 +106,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
   func application(_ app: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
     ServiceManager.shared.open(url: url, options: options)
+  }
+
+  // Silent CloudKit pushes for iCloud sync (CloudSyncPushService). CloudKit keeps its own device token.
+  func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {}
+
+  func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+    CloudSyncPushService.shared.didFailToRegister(error)
+  }
+
+  func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                   fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+    CloudSyncPushService.shared.receive(userInfo, completion: completionHandler)
   }
 
   func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
@@ -83,5 +140,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
   func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
     //
+  }
+
+  /// A remote-library game download finished while iCube was suspended or not running.
+  func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                   completionHandler: @escaping () -> Void) {
+    if !BackgroundGameDownloader.shared.handleEvents(forSession: identifier, completion: completionHandler) {
+      completionHandler()
+    }
   }
 }

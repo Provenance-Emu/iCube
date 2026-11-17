@@ -86,6 +86,43 @@ class DeviceCoreTests(unittest.TestCase):
                 self.assertEqual(result['uuid'], UUID)
                 self.assertEqual(result['platform'], platform)
 
+    def add_mac_slice(self):
+        name = 'PVlibDolphin-maccatalyst'
+        binary = f'{name}.framework/Versions/A/{name}'
+        self.entries.append(dict(LibraryIdentifier='ios-arm64-maccatalyst', LibraryPath=name + '.framework',
+                                 BinaryPath=binary, SupportedPlatform='ios',
+                                 SupportedPlatformVariant='maccatalyst', SupportedArchitectures=['arm64']))
+        for path in (self.folder / binary, self.xcf / 'ios-arm64-maccatalyst' / binary):
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b'fresh core')
+            self.platforms[path] = 'MACCATALYST'
+        self.write_info()
+        (self.root / 'build-macosx-Release/Source/iOS/Library/libdolphin.dylib.dSYM').mkdir(parents=True)
+        return self.folder / binary
+
+    def test_optional_mac_slice_does_not_disturb_device_platforms(self):
+        self.add_mac_slice()
+        for platform in ('ios', 'tvos'):
+            with self.subTest(platform=platform):
+                self.assertEqual(self.guard.validate(self.root, platform)['platform'], platform)
+
+    def test_mac_platform_validates_its_versioned_slice(self):
+        alias = self.add_mac_slice()
+        result = self.guard.validate(self.root, 'mac')
+        self.assertEqual(result['alias'], str(alias))
+        archive = self.root / 'iCube-mac.xcarchive'
+        embedded = (archive / 'Products/Applications/iCube.app/Contents/Frameworks'
+                    / 'PVlibDolphin-maccatalyst.framework/Versions/A/PVlibDolphin-maccatalyst')
+        embedded.parent.mkdir(parents=True)
+        embedded.write_bytes(b'stripped and signed')
+        self.platforms[embedded] = 'MACCATALYST'
+        self.assertEqual(self.guard.validate(self.root, 'mac', archive=archive)['embedded'], str(embedded))
+        self.platforms[alias] = 'IOS'
+        self.assert_rejected('device platform', platform='mac')
+
+    def test_mac_platform_without_its_slice_is_rejected(self):
+        self.assert_rejected('No Mac Catalyst core slice', platform='mac')
+
     def test_stale_selected_packaged_binary_is_rejected(self):
         target = self.xcf / 'ios-arm64/PVlibDolphin-ios.framework/PVlibDolphin-ios'
         target.write_bytes(b'old core with old APIs')
@@ -187,7 +224,7 @@ class WorkflowDeviceBuildTests(unittest.TestCase):
             return result.returncode, [json.loads(row) for row in calls.read_text().splitlines()] if calls.exists() else []
 
     def test_each_archive_job_builds_only_its_device_then_validates(self):
-        for platform, core in [('ios', 'OS64'), ('tvos', 'TVOS')]:
+        for platform, core in [('ios', 'OS64'), ('tvos', 'TVOS'), ('mac', 'MAC_CATALYST')]:
             status, calls = self.run_build_step(platform)
             self.assertEqual(status, 0)
             self.assertEqual(calls, [['BuildiOSXCFramework.py', '--platforms', core],

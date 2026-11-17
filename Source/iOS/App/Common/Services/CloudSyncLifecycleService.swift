@@ -26,6 +26,8 @@ final class CloudSyncLifecycleService: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         installObserversIfNeeded()
+        // Silent pushes need no permission prompt; a build without `aps-environment` just fails to register.
+        CloudSyncPushService.shared.register(application)
         Task { @MainActor in
             await CloudSyncCoordinator.shared.start()
         }

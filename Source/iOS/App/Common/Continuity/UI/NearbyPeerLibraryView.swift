@@ -147,6 +147,10 @@ struct NearbyPeerLibraryView: View {
           #endif
           .disabled(isCopying)
       }
+      if peer.isServer, hasCatalog, !needsServerAccess {
+        Button(L("Refresh"), systemImage: "arrow.clockwise") { Task { await load() } }
+          .disabled(isCopying || controller.phase == .loading)
+      }
       if hasCatalog, !needsServerAccess, loadedRequest == catalogRequest {
         grid.disabled(controller.phase == .loading)
       }
@@ -177,16 +181,19 @@ struct NearbyPeerLibraryView: View {
       if copying { onShowStatus() }
     }
     .alert(
-      L("Download Game?"),
+      downloadSelection?.game.displayName ?? L("Play Game"),
       isPresented: Binding(get: { downloadSelection != nil }, set: { if !$0 { downloadSelection = nil } }),
       presenting: downloadSelection
     ) { entry in
+      if peer.server != nil {
+        Button(L("Play Temporarily")) { playTemporarily(entry) }
+      }
       Button(L("Download and Run")) {
         startCopy(entry, options: NearbyCopyOptions(catalog: nil, states: []), runWhenReady: true)
       }
       Button(L("Cancel"), role: .cancel) {}
-    } message: { entry in
-      Text(entry.game.displayName)
+    } message: { _ in
+      Text(L("Play with a temporary copy or keep the game in your library."))
     }
     .sheet(item: $sheet, onDismiss: {
       if let pendingPlay {
@@ -513,6 +520,27 @@ struct NearbyPeerLibraryView: View {
     if path.hasPrefix("/") { return FileManager.default.fileExists(atPath: path) }
     guard let url = URL(string: path), url.isFileURL else { return false }
     return FileManager.default.fileExists(atPath: url.path)
+  }
+
+  private func playTemporarily(_ entry: ContinuityLibraryEntry) {
+    transferTask?.cancel()
+    transferError = nil
+    completedEntry = entry
+    let id = UUID()
+    transferID = id
+    let folder = TemporaryServerGame.makeFolder()
+    transferTask = Task {
+      var handedOff = false
+      defer { if !handedOff { try? FileManager.default.removeItem(at: folder) } }
+      await controller.copy(entry, temporaryFolder: folder)
+      guard transferID == id, !Task.isCancelled, case .copied = controller.phase else { return }
+      guard let url = controller.copiedFileURL, let game = DiscImageBridge.gameItem(forPath: url.path) else {
+        transferError = L("The downloaded game couldn't be opened.")
+        return
+      }
+      handedOff = true
+      onPlay(game, nil)
+    }
   }
 
   private func startCopy(_ entry: ContinuityLibraryEntry, options: NearbyCopyOptions, runWhenReady: Bool = false) {

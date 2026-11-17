@@ -89,10 +89,14 @@ NSString* const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotif
   // Security-scoped access must remain active for the duration of extraction. The picked
   // archive is copied into a private temp dir first and is never modified.
   if ([DOLZipImportHelper isArchivePath:sourcePath]) {
+    // No UIKit background task here, as before; on iOS 26 a large archive also gets a
+    // continued-processing task (its progress moves in one step when the extraction ends).
+    DOLImportKeepAlive* archiveKeepAlive = [DOLImportKeepAlive beginWithPaths:@[sourcePath] holdsLegacyTask:NO];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
       DOLZipImportResult* result = [DOLZipImportHelper importPickedArchiveAtURL:url toFolder:softwareFolder];
 
       dispatch_async(dispatch_get_main_queue(), ^{
+        [archiveKeepAlive endWithSuccess:result.succeeded];
         if (result.succeeded) {
           NSMutableArray<NSString*>* snackbarLines = [NSMutableArray array];
           if (result.installedPackMessage != nil) {
@@ -155,14 +159,22 @@ NSString* const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotif
   // watchdog-length hang), through DOLImportStaging (staged + size-verified, so an interrupted
   // copy never leaves a truncated file under the real name), and inside a background task so
   // leaving the app mid-copy does not suspend it half-written.
-  void (^runFileOperation)(NSString*, BOOL (^)(NSError**)) = ^(NSString* verb, BOOL (^operation)(NSError**)) {
-    UIBackgroundTaskIdentifier task = [DOLImportStaging beginBackgroundTask];
+  // On iOS 26 a large import is also a continued-processing task: it keeps running after the
+  // user leaves the app, shows system progress, and stops when the system UI cancels it.
+  void (^runFileOperation)(NSString*, BOOL (^)(DOLImportKeepAlive*, NSError**)) = ^(NSString* verb, BOOL (^operation)(DOLImportKeepAlive*, NSError**)) {
+    DOLImportKeepAlive* keepAlive = [DOLImportKeepAlive beginWithPaths:@[sourcePath] holdsLegacyTask:YES];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
       NSError* error = nil;
-      const BOOL ok = operation(&error);
+      const BOOL ok = operation(keepAlive, &error);
       dispatch_async(dispatch_get_main_queue(), ^{
-        [DOLImportStaging endBackgroundTask:task];
-        if (!ok) {
+        const BOOL stopped = !ok && keepAlive.isCancelled;
+        [keepAlive endWithSuccess:ok];
+        if (stopped) {
+          [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar"
+                                                              object:nil
+                                                            userInfo:@{@"text": DOLCoreLocalizedString(@"Import stopped.")}];
+          finish();
+        } else if (!ok) {
           UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:DOLCoreLocalizedString(@"Error") message:[NSString stringWithFormat:@"The %@ operation failed.\n\n%@", verb, error.localizedDescription] preferredStyle:UIAlertControllerStyleAlert];
           [errorAlert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
             handler:^(UIAlertAction* action) {
@@ -179,15 +191,15 @@ NSString* const DOLImportFileFinishedNotification = @"DOLImportFileFinishedNotif
 
   [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Copy") style:UIAlertActionStyleDefault
     handler:^(UIAlertAction* action) {
-    runFileOperation(@"copy", ^BOOL(NSError** error) {
-      return [DOLImportStaging stagedCopyFromPath:sourcePath toPath:destinationPath error:error];
+    runFileOperation(@"copy", ^BOOL(DOLImportKeepAlive* keepAlive, NSError** error) {
+      return [DOLImportStaging stagedCopyFromPath:sourcePath toPath:destinationPath keepAlive:keepAlive itemIndex:0 error:error];
     });
   }]];
   
   [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Move") style:UIAlertActionStyleDefault
     handler:^(UIAlertAction* action) {
-    runFileOperation(@"move", ^BOOL(NSError** error) {
-      return [DOLImportStaging stagedMoveFromPath:sourcePath toPath:destinationPath error:error];
+    runFileOperation(@"move", ^BOOL(DOLImportKeepAlive* keepAlive, NSError** error) {
+      return [DOLImportStaging stagedMoveFromPath:sourcePath toPath:destinationPath keepAlive:keepAlive itemIndex:0 error:error];
     });
   }]];
   

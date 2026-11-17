@@ -136,16 +136,26 @@ public enum SaveStateService {
     })
   }
 
-  /// Saving the numbered snapshot and copying it to auto/queuing stop are one serialized request.
-  /// A different queued save cannot replace this path between its completion and auto-state reuse.
+  /// Saving the snapshot (a history state, or `slot` in slots mode) and copying it to auto/queuing
+  /// stop are one serialized request. A different queued save cannot replace this path between its
+  /// completion and auto-state reuse.
   @MainActor
-  static func saveAndStopForUserAsync(_ slot: Int, expectedGameID: String, expectedSessionIdentifier: UInt64? = nil) async -> UserQuitAttemptResult {
+  static func saveAndStopForUserAsync(_ slot: Int, mode: QuickSaveMode, expectedGameID: String,
+                                      expectedSessionIdentifier: UInt64? = nil) async -> UserQuitAttemptResult {
     let session = expectedSessionIdentifier ?? TVEmulationBridge.currentSessionIdentifier()
+    let effectiveMode = QuickSaveActions.effectiveMode(mode, modded: ModdedBoot.isCurrentBootModded)
     return await withCheckedContinuation { continuation in
       saveQueue.async {
-        var outcome = UserQuitAttemptResult.failed(.numberedSlot)
+        var outcome = UserQuitAttemptResult.failed(.savingState)
         UserStopRequest.saveAndQuit(save: {
-          performSaveSlot(slot, title: nil, gameTitle: nil, expectedGameID: expectedGameID, expectedSessionIdentifier: session)?.filePath
+          UserStopRequest.quitSavePath(mode: effectiveMode, history: {
+            guard let snapshot = historyStore(gameID: expectedGameID, session: session)?
+              .save(gameID: expectedGameID, sessionIdentifier: session).snapshot else { return nil }
+            captureThumbnail(forStateFile: URL(fileURLWithPath: snapshot.filePath), sessionIdentifier: snapshot.sessionIdentifier)
+            return snapshot.filePath
+          }, slot: {
+            performSaveSlot(slot, title: nil, gameTitle: nil, expectedGameID: expectedGameID, expectedSessionIdentifier: session)?.filePath
+          })
         }, quit: { path in
           outcome = TVEmulationBridge.stopForUser(savedStatePath: path, expectedGameID: expectedGameID, expectedSessionIdentifier: session)
             ? .stopped : .failed(.finalizing(savedStatePath: path))
@@ -326,8 +336,9 @@ public enum SaveStateService {
   /// If resume is enabled and an auto-state exists for the running title (or a
   /// specific save state was requested via `pendingBootStatePath`), load it.
   /// Returns true if a load was issued. Safe to call right after the game boots
-  /// (the save side runs in `TVEmulationBridge.stop`, so every quit path is
-  /// covered). Driven by a single app-lifetime observer (`installDidStartObserver()`)
+  /// (the save side runs when the user quits, in `TVEmulationBridge.stop`, and each time the app
+  /// goes to the background, in `DolphinCoreService`; a crash in the foreground still loses what
+  /// came after the last of those). Driven by a single app-lifetime observer (`installDidStartObserver()`)
   /// rather than per-`EmulationScreen`-instance observers: two observers alive for
   /// the same `DOLEmulationDidStartNotification` — e.g. an outgoing screen's observer
   /// not yet torn down while an incoming one's is already registered — let the first
@@ -338,6 +349,8 @@ public enum SaveStateService {
   /// same step is declined instead of repeated.
   @discardableResult
   public static func resumeOrBootIntoPendingState() -> Bool {
+    // Whatever this boot decides, background saves of the resume state may start once it is applied.
+    defer { TVEmulationBridge.markResumeSettledAfterRequestedLoads() }
     pendingBootStatePath = droppingAutoState(pendingBootStatePath, bootIsModded: ModdedBoot.isCurrentBootModded)
     let requestedPath = pendingBootStatePath
     let requestedExists = requestedPath.map { FileManager.default.fileExists(atPath: $0) } ?? false

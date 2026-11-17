@@ -7,9 +7,10 @@ import WidgetKit
 @main
 struct Live_ActivityBundle: WidgetBundle {
   var body: some Widget {
-    Live_Activity()
-    Live_ActivityControl()
     Live_ActivityLiveActivity()
     RecentGamesWidget()
+    if #available(iOS 18.0, *) {
+      ResumeLastGameControl()
+    }
   }
 }

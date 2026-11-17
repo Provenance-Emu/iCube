@@ -81,10 +81,13 @@ final class NearbyLibrariesModel: ObservableObject {
     @Published private(set) var peers: [Peer] = []
     @Published private(set) var statuses: [String: Status] = [:]
 
-    @Published private(set) var servers: [EmulationServer] = {
+    @Published private(set) var servers: [EmulationServer] = NearbyLibrariesModel.savedServers()
+
+    /// The Emulation Servers the user added, as last saved.
+    nonisolated static func savedServers() -> [EmulationServer] {
         guard let data = UserDefaults.standard.data(forKey: "icube.emulationServers") else { return [] }
         return (try? JSONDecoder().decode([EmulationServer].self, from: data)) ?? []
-    }()
+    }
 
     func addServer(_ server: EmulationServer, token: String?) throws {
         if let token {

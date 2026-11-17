@@ -85,6 +85,9 @@ static void ApplyConfiguredFastForwardSpeed() {
 // SaveAs checks nothing), and the subsystems' DoState assert they are on the CPU thread — DVDThread
 // "Condition: Core::IsCPUThread()", Sentry ICUBE-9Y, reached from the Load State menu while a game
 // boots. Answering "No" to that dialog crashes the app; "Yes" serializes a core that isn't running.
+// Mirrors SaveStateService.resumeDefaultsKey (Swift owns the setting).
+static NSString* const kResumeWhereLeftOffDefaultsKey = @"resume_where_left_off";
+
 static bool StateOperationAllowed(Core::System& system, const char* operation)
 {
   if (Core::IsRunning(system))
@@ -162,7 +165,7 @@ static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
 + (void)stop {
   // Programmatic replacement/debug stops keep their stop-always behavior. User Quit uses the
   // result-bearing entrypoint below so a failed auto-save can be retried or explicitly discarded.
-  if ([[NSUserDefaults standardUserDefaults] boolForKey:@"resume_where_left_off"]) {
+  if ([[NSUserDefaults standardUserDefaults] boolForKey:kResumeWhereLeftOffDefaultsKey]) {
     NSString* autoPath = [self autoStateFilePath];
     if (autoPath.length > 0 && StateOperationAllowed(Core::System::GetInstance(), "auto-state save")) {
       if (![self saveStateToPath:autoPath wait:YES])
@@ -206,7 +209,7 @@ static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
     if (session != CurrentStateSessionIdentifier() ||
         (expectedGameID.length > 0 && ![[self currentGameID] isEqualToString:expectedGameID]))
       return NO;
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:@"resume_where_left_off"] && Core::IsRunning(system)) {
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:kResumeWhereLeftOffDefaultsKey] && Core::IsRunning(system)) {
       autoPath = [self autoStateFilePath];
       if (autoPath.length > 0 && savedStatePath.length == 0)
         completion = State::SaveAsWithResult(system, std::string(autoPath.fileSystemRepresentation));
@@ -499,6 +502,36 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   if (path.length == 0 || !StateOperationAllowed(Core::System::GetInstance(), "path save"))
     return NO;
   return State::SaveAsAndWait(Core::System::GetInstance(), std::string(path.fileSystemRepresentation));
+}
+
+// The state session whose boot-time resume has been applied. 0 matches no session.
+static std::atomic<uint64_t> s_resumeSettledSession{0};
+
++ (void)markResumeSettledAfterRequestedLoads {
+  // Host jobs queued from one thread run in order, so this runs after a load requested just
+  // before it, and State::LoadAs has finished by the time its job returns.
+  Core::QueueHostJob([](Core::System& system) {
+    if (Core::IsRunning(system))
+      s_resumeSettledSession.store(CurrentStateSessionIdentifier());
+  });
+}
+
++ (BOOL)saveResumeStateKeepingGameRunning {
+  auto& system = Core::System::GetInstance();
+  // Checked before the CPU lock too: with no game, backgrounding the library must cost nothing.
+  if (![[NSUserDefaults standardUserDefaults] boolForKey:kResumeWhereLeftOffDefaultsKey] || !Core::IsRunning(system))
+    return NO;
+  std::future<bool> completion;
+  {
+    const Core::CPUThreadGuard guard(system);
+    if (!Core::IsRunning(system) || s_resumeSettledSession.load() != CurrentStateSessionIdentifier())
+      return NO;
+    NSString* autoPath = [self autoStateFilePath];
+    if (autoPath.length == 0)
+      return NO;
+    completion = State::SaveAsWithResult(system, std::string(autoPath.fileSystemRepresentation));
+  } // The snapshot is captured; waiting for the disk never holds the CPU lock.
+  return completion.get();
 }
 
 + (void)loadStateFromPath:(NSString*)path {
