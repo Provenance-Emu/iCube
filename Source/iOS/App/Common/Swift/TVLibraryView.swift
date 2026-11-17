@@ -1818,16 +1818,15 @@ struct TVLibraryView: View {
       SwimmingDolphinsView(count: 3, direction: .leftToRight, maxSize: 120, opacity: 0.22)
       SwimmingDolphinsView(count: 2, direction: .rightToLeft, maxSize: 100, opacity: 0.16)
 
-      // Centered friendly message, plus the routes that actually get a game onto the device.
-      VStack(spacing: 20) {
-        LibraryEmptyHeader(
-          title: L("Library Empty"),
-          message: L("No games found. Add GameCube & Wii ROMs to your library to get started with iCube! 🎮")
-        )
-        emptyLibraryUploadAddress
-        emptyLibraryActions
+      #if !os(tvOS)
+      if horizontalSizeClass == .compact && verticalSizeClass == .regular {
+        compactEmptyLibrary
+      } else {
+        emptyLibraryContent
       }
-      .padding()
+      #else
+      emptyLibraryContent
+      #endif
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear { emptyLibraryWebURL = PVWebServer.shared.urlString ?? "" }
@@ -1838,6 +1837,55 @@ struct TVLibraryView: View {
       emptyLibraryWebURL = PVWebServer.shared.urlString ?? ""
     }
   }
+
+  private var emptyLibraryContent: some View {
+    VStack(spacing: 20) {
+      LibraryEmptyHeader(
+        title: L("Library Empty"),
+        message: L("No games found. Add GameCube & Wii ROMs to your library to get started with iCube! 🎮")
+      )
+      emptyLibraryUploadAddress
+      emptyLibraryActions
+    }
+    .padding()
+  }
+
+  #if !os(tvOS)
+  private var compactEmptyLibrary: some View {
+    VStack(alignment: .leading, spacing: ICubeDesign.Spacing.m.rawValue) {
+      HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+        ICubeAnimatedLogo(height: 48)
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
+          Text(L("Library Empty"))
+            .icubeText(.title)
+            .foregroundStyle(ICubeDesign.titleGradient)
+          Text(L("Add GameCube and Wii games to get started."))
+            .icubeText(.detail)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+        }
+      }
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: ICubeDesign.Spacing.s.rawValue) { compactEmptyLibraryButtons }
+        VStack(alignment: .leading, spacing: ICubeDesign.Spacing.s.rawValue) { compactEmptyLibraryButtons }
+      }
+      emptyLibraryActions
+      if !emptyLibraryWebURL.isEmpty {
+        Button(L("Upload via Wi-Fi…"), systemImage: "wifi") { showWebImportSheet = true }
+          .buttonStyle(.borderless)
+      }
+    }
+    .tint(ICubeDesign.color(.accent))
+    .padding()
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+  }
+
+  @ViewBuilder private var compactEmptyLibraryButtons: some View {
+    Button(L("Import Game"), systemImage: "square.and.arrow.down") { showImportSoftwarePicker = true }
+      .buttonStyle(.borderedProminent)
+    Button(L("Add Remote Source"), systemImage: "externaldrive.badge.plus") { showSources = true }
+      .buttonStyle(.bordered)
+  }
+  #endif
 
   /// The Wi-Fi upload address, shown inline so a first-run user can start copying files
   /// without navigating anywhere. Empty until the server finishes binding; see WS-3.
