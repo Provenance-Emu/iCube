@@ -439,6 +439,9 @@ let iCube = Target.target(
             "EXCLUDED_ARCHS": "x86_64",
             "ONLY_ACTIVE_ARCH": "NO",
             "CODE_SIGN_STYLE": "Automatic",
+            // The Mac default is "Sign to Run Locally", which Xcode refuses for a target whose
+            // entitlements need a provisioning profile (iCloud, app group): the Mac archive failed on it.
+            "CODE_SIGN_IDENTITY[sdk=macosx*]": "Apple Development",
             "ENABLE_HARDENED_RUNTIME": "YES",
             "ENABLE_STRICT_OBJC_MSGSEND": "NO",
             "ENABLE_USER_SCRIPT_SANDBOXING": "NO",
@@ -670,6 +673,9 @@ func extensionTarget(
                 "SWIFT_OBJC_BRIDGING_HEADER": "",
                 "SWIFT_OBJC_INTEROP_MODE": "objc",
                 "CODE_SIGN_STYLE": "Automatic",
+                // The Mac default is "Sign to Run Locally", which Xcode refuses for a target whose
+                // entitlements need a provisioning profile (iCloud, app group): the Mac archive failed on it.
+                "CODE_SIGN_IDENTITY[sdk=macosx*]": "Apple Development",
                 "DEVELOPMENT_TEAM": "S32Z3HMYVQ",
                 "ENABLE_USER_SCRIPT_SANDBOXING": "YES",
                 "TARGETED_DEVICE_FAMILY": .string(deviceFamily),
