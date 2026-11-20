@@ -238,6 +238,30 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     }
   }
 
+  /// The TV switcher is offered only where the emulation screen says a TV could show; it closes the menu, so
+  /// it is a plain action, placed with the other picture tile (Shaders).
+  func test_bezels_onlyWhenATVCouldShow_followsShaders_andRunsItsAction() {
+    let without = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
+    XCTAssertNil(without.item(id: "bezels"))
+
+    var offered = state()
+    offered.showsBezels = true
+    var opened = 0
+    var callbacks = actions()
+    callbacks.openBezels = { opened += 1 }
+    let model = PauseMenuModelBuilder.make(state: offered, bindings: bindings(), actions: callbacks)
+    let ids = model.sections[1].items.map(\.id)
+    XCTAssertEqual(ids.firstIndex(of: "bezels"), ids.firstIndex(of: "shaders").map { $0 + 1 })
+    let item = model.item(id: "bezels")!
+    XCTAssertFalse((item.description ?? "").isEmpty)
+    guard case .action(let run) = item.role else { return XCTFail("action") }
+    run()
+    XCTAssertEqual(opened, 1)
+    // Both regroups of the pause grid keep it; the quick menu, which lists its tiles by id, does not gain it.
+    XCTAssertNotNil(PauseMenuModelBuilder.primaryLayout(model).item(id: "bezels"))
+    XCTAssertNotNil(PauseMenuModelBuilder.touchLayout(model).item(id: "bezels"))
+  }
+
   func test_recenterPointer_onlyWhenFlagged() {
     let without = PauseMenuModelBuilder.make(state: state(), bindings: bindings(), actions: actions())
     XCTAssertNil(without.item(id: "recenter-pointer"))
