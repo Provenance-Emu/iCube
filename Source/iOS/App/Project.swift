@@ -544,8 +544,10 @@ let liveActivity = Target.target(
         .sdk(name: "SwiftUI", type: .framework),
         .sdk(name: "WidgetKit", type: .framework),
         .sdk(name: "AppIntents", type: .framework),
-        // RecentGamesWidget reads the App Group snapshot directly.
+        // The game list widget reads the App Group snapshot directly (ICubeWidgetDataSource).
         .package(product: "PVLibrarySnapshot"),
+        // Draws the game list widget (grid, list, single game) and its edit-screen options.
+        .package(product: "PVWidgets"),
     ],
     settings: .settings(
         base: [
@@ -863,6 +865,8 @@ let project = Project(
         .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.2")),
         .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.0")),
+        // Home screen game list widgets, shared with Provenance and iFly. 0.x: a minor may break.
+        .remote(url: "https://github.com/Provenance-Emu/PVWidgets.git", requirement: .upToNextMinor(from: "0.1.0")),
         // Keep this wrapper local: Xcode rejects PLzmaSDK unsafe build flags
         // across a remote package boundary (see PLzmaShim/Package.swift).
         .local(path: "../PLzmaShim"),
