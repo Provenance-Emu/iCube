@@ -7,27 +7,13 @@
 #include <gtest/gtest.h>
 
 #include "Common/CommonTypes.h"
-#include "Common/MsgHandler.h"
 #include "VideoCommon/CPMemory.h"
 #include "VideoCommon/OpcodeDecoding.h"
 
+// The test runner's alert handler (UnitTestsMain.cpp) fails the running test on any alert, so an
+// assert in the decoder shows up as a failure here without a handler of our own.
 namespace
 {
-int s_alert_count = 0;
-
-// Answers "Yes" so a failing test reports the alert instead of trapping in Crash().
-bool CountingAlertHandler(const char*, const char*, bool, Common::MsgType)
-{
-  ++s_alert_count;
-  return true;
-}
-
-// What Common's default handler does on non-Windows hosts.
-bool RefusingAlertHandler(const char*, const char*, bool, Common::MsgType)
-{
-  return false;
-}
-
 struct XFLoad
 {
   u16 address;
@@ -66,20 +52,9 @@ private:
   CPState m_cpmem;
 };
 
-class OpcodeDecodingTest : public testing::Test
-{
-protected:
-  void SetUp() override
-  {
-    s_alert_count = 0;
-    Common::RegisterMsgAlertHandler(CountingAlertHandler);
-  }
-
-  void TearDown() override { Common::RegisterMsgAlertHandler(RefusingAlertHandler); }
-};
 }  // namespace
 
-TEST_F(OpcodeDecodingTest, XFLoadDecodesAddressAndCount)
+TEST(OpcodeDecodingTest, XFLoadDecodesAddressAndCount)
 {
   // GX_LOAD_XF_REG, count - 1 = 1, address 0x1018, then two values.
   const std::array<u8, 13> stream{0x10, 0x00, 0x01, 0x10, 0x18, 0, 0, 0, 1, 0, 0, 0, 2};
@@ -92,14 +67,13 @@ TEST_F(OpcodeDecodingTest, XFLoadDecodesAddressAndCount)
   EXPECT_EQ(callback.xf_loads[0].address, 0x1018);
   EXPECT_EQ(callback.xf_loads[0].count, 2);
   EXPECT_TRUE(callback.invalid_xf_loads.empty());
-  EXPECT_EQ(s_alert_count, 0);
 }
 
 // A count that does not fit the 4-bit field only comes from a garbage stream (the emulated GPU
 // fell out of step with the CPU, or the game crashed). The words below were taken from ICUBE-BF
 // and ICUBE-2Y reports. That is guest data: it must not raise the "Ignore and continue?" assert,
 // whose "No" answer traps the app. The callback is told instead.
-TEST_F(OpcodeDecodingTest, OversizedXFLoadCountIsReportedNotAsserted)
+TEST(OpcodeDecodingTest, OversizedXFLoadCountIsReportedNotAsserted)
 {
   for (const u32 cmd2 : {0x00616600u, 0x00FFFFFFu, 0x01303F19u, 0x38420004u})
   {
@@ -111,13 +85,11 @@ TEST_F(OpcodeDecodingTest, OversizedXFLoadCountIsReportedNotAsserted)
     stream[3] = u8(cmd2 >> 8);
     stream[4] = u8(cmd2);
     RecordingCallback callback;
-    s_alert_count = 0;
 
     const u32 size = OpcodeDecoder::RunCommand(stream.data(), u32(stream.size()), callback);
 
     // Only the low four bits of the count are decoded, as before.
     const u8 expected_count = u8(((cmd2 >> 16) & 0xf) + 1);
-    EXPECT_EQ(s_alert_count, 0);
     EXPECT_EQ(callback.invalid_xf_loads, std::vector<u32>{cmd2});
     EXPECT_EQ(size, 5u + expected_count * 4u);
     ASSERT_EQ(callback.xf_loads.size(), 1u);
@@ -126,7 +98,7 @@ TEST_F(OpcodeDecodingTest, OversizedXFLoadCountIsReportedNotAsserted)
   }
 }
 
-TEST_F(OpcodeDecodingTest, LargestXFLoadCountIsValid)
+TEST(OpcodeDecodingTest, LargestXFLoadCountIsValid)
 {
   // count - 1 = 15: sixteen values, the most the field can express.
   std::array<u8, 5 + 16 * 4> stream{};
@@ -140,11 +112,10 @@ TEST_F(OpcodeDecodingTest, LargestXFLoadCountIsValid)
   ASSERT_EQ(callback.xf_loads.size(), 1u);
   EXPECT_EQ(callback.xf_loads[0].count, 16);
   EXPECT_TRUE(callback.invalid_xf_loads.empty());
-  EXPECT_EQ(s_alert_count, 0);
 }
 
 // A command whose data has not all arrived is decoded again later, so it is not reported yet.
-TEST_F(OpcodeDecodingTest, TruncatedOversizedXFLoadWaitsForItsData)
+TEST(OpcodeDecodingTest, TruncatedOversizedXFLoadWaitsForItsData)
 {
   // cmd2 = 0x00FF1000: count field 0xFF, sixteen values once masked, but only one is here.
   const std::array<u8, 9> stream{0x10, 0x00, 0xff, 0x10, 0x00, 0, 0, 0, 1};
@@ -155,5 +126,4 @@ TEST_F(OpcodeDecodingTest, TruncatedOversizedXFLoadWaitsForItsData)
   EXPECT_EQ(size, 0u);
   EXPECT_TRUE(callback.xf_loads.empty());
   EXPECT_TRUE(callback.invalid_xf_loads.empty());
-  EXPECT_EQ(s_alert_count, 0);
 }
