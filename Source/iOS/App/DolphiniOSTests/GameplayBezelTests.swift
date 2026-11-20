@@ -65,6 +65,41 @@ final class GameplayBezelTests: XCTestCase {
     XCTAssertFalse(ICubeBezels.offersSwitcher(state(controller: true, external: true)))
   }
 
+  // MARK: - The package inside the app
+
+  /// With nothing chosen, a GameCube game gets a bundled TV, and that TV lays out on a phone in landscape with
+  /// the picture inside the screen. Fails if the package's bundled TVs did not make it into the app.
+  @MainActor
+  func test_nothingChosen_resolvesToABundledTV_thatLaysOutInLandscape() throws {
+    ICubeBezels.configure()
+    let suite = "GameplayBezelTests.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let settings = UserDefaultsBezelSettings(defaults: defaults, prefix: ICubeBezels.settingsKeyPrefix)
+
+    for isWii in [false, true] {
+      let resolved = BezelChoice.resolve(gameID: nil, systemID: ICubeBezels.systemID(isWii: isWii), systemSuitsTV: true,
+                                         preview: nil, settings: settings)
+      XCTAssertTrue(resolved.resolution.isAutomatic)
+      let bezel = try XCTUnwrap(resolved.bezel, "no TV for \(ICubeBezels.systemID(isWii: isWii))")
+      let canvas = GameplayBezelTests.landscape
+      let layout = try XCTUnwrap(TVBezelLayout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: 4, height: 3)))
+      XCTAssertEqual(layout.placement, .behindPicture, "a built-in TV's cabinet goes behind the picture")
+      XCTAssertTrue(CGRect(origin: .zero, size: canvas).contains(layout.pictureFrame))
+      XCTAssertTrue(layout.screenFrame.insetBy(dx: -0.5, dy: -0.5).contains(layout.pictureFrame))
+      XCTAssertEqual(layout.pictureFrame.width / layout.pictureFrame.height, 4.0 / 3.0, accuracy: 0.01)
+      XCTAssertNotNil(TVBezelPlainArtwork.image(for: bezel, maxPixel: canvas.width), "the TV's artwork could not be drawn")
+    }
+    // An explicit Off is no TV.
+    settings.chosenBezel = ExternalDisplayBezelRules.noBezelID
+    XCTAssertNil(BezelChoice.resolve(gameID: nil, systemID: ICubeBezels.gameCubeSystemID, systemSuitsTV: true,
+                                     preview: nil, settings: settings).bezel)
+    // The switcher's preview is read ahead of it.
+    let preview = BezelPreview(choice: ExternalDisplayBezelRules.automaticBezelID, lightsRoom: false)
+    XCTAssertNotNil(BezelChoice.resolve(gameID: nil, systemID: ICubeBezels.gameCubeSystemID, systemSuitsTV: true,
+                                        preview: preview, settings: settings).bezel)
+  }
+
   // MARK: - Keys
 
   func test_systemIDs_areTheSharedIdentifiers() {
