@@ -9,11 +9,11 @@ import SwiftUI
 ///
 /// The grid and list drawing, the size-driven layout and the edit-screen options all live in
 /// the PVWidgets package (github.com/Provenance-Emu/PVWidgets), shared with Provenance and iFly.
-/// The snapshot has no list of games with a save to resume, so there is no Continue list here.
+/// The Continue list (games with a save state) is iCube's own App Group key, `ContinuesList`.
 struct ICubeWidgetDataSource: WidgetDataSource {
     private let telemetry = ExtensionTelemetry(.widget)
 
-    var feeds: [WidgetFeed] { [Self.recentlyPlayed, Self.favorites, Self.recentlyAdded] }
+    var feeds: [WidgetFeed] { [Self.recentlyPlayed, Self.continues, Self.favorites, Self.recentlyAdded] }
 
     func items(for feed: WidgetFeed.ID, limit: Int) -> [WidgetItem] {
         telemetry.measure(.widgetEntry) {
@@ -22,6 +22,10 @@ struct ICubeWidgetDataSource: WidgetDataSource {
             switch feed {
             case .recentlyPlayed:
                 return snapshot.recentlyPlayed.prefix(limit).map { Self.item(for: $0, date: $0.lastPlayed) }
+            case .continues:
+                // No link resumes one save state, so a tap opens the game; the date is the save's.
+                let entries = ContinuesList.load(from: ICubeSnapshot.appGroup.defaults)
+                return ContinuesList.games(for: entries, in: snapshot).prefix(limit).map { Self.item(for: $0.game, date: $0.savedAt) }
             case .favorites:
                 // A favorite may never have been played, so it shows no date.
                 return snapshot.favorites.prefix(limit).map { Self.item(for: $0, date: nil) }
@@ -52,6 +56,13 @@ struct ICubeWidgetDataSource: WidgetDataSource {
         title: String(localized: "Recently Played"),
         symbolName: "clock.arrow.circlepath",
         emptyMessage: String(localized: "Play a game\nto see it here")
+    )
+
+    static let continues = WidgetFeed(
+        id: .continues,
+        title: String(localized: "Continue"),
+        symbolName: "play.circle.fill",
+        emptyMessage: String(localized: "Make a save state\nto see the game here")
     )
 
     static let favorites = WidgetFeed(

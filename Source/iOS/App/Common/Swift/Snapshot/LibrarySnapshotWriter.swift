@@ -38,9 +38,22 @@ enum LibrarySnapshotWriter {
       if hasCover { jobs.append(CoverJob(gameID: gameID, image: item.coverImage)) }
     }
 
+    // The widget's Continue list. iOS only: tvOS has no widget.
+    #if os(tvOS)
+    let stateSavesURL: URL? = nil
+    #else
+    let stateSavesURL = DolphinPaths.stateSavesURL()
+    #endif
+
     Task.detached(priority: .utility) {
       CoverMirror.mirror(jobs)
       let snapshot = LibrarySnapshot.build(from: games)
+      if let stateSavesURL {
+        // Before the snapshot, so the widget reload that follows the save reads both.
+        let continues = ContinuesList.select(saves: SaveStateContinuesScanner.scan(root: stateSavesURL),
+                                             knownGameIDs: Set(snapshot.byGameID.keys))
+        ContinuesList.save(continues, to: ICubeSnapshot.appGroup.defaults)
+      }
       let saved = LibrarySnapshotStore().save(snapshot)
       NSLog("[Snapshot] wrote %d games (%d recent, %d favorites) saved=%d",
             snapshot.byGameID.count, snapshot.recentlyPlayed.count, snapshot.favorites.count, saved ? 1 : 0)
