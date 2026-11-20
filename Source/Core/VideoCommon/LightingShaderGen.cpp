@@ -69,7 +69,12 @@ static void GenerateLightShader(ShaderCode& object, const LightingUidData& uid_d
                  swizzle_components, LIGHT_COL_PARAMS(index, swizzle));
     break;
   default:
-    ASSERT(false);
+    // iCube: the diffuse function is a 2-bit field of a guest register and 3 is undefined. Guest
+    // data is logged, not asserted (ICUBE-B1: "No" to the assert's alert trapped the app). The
+    // light then adds nothing, as in the software renderer.
+    WARN_LOG_FMT(VIDEO, "Light {} uses an undefined diffuse function {}", index,
+                 static_cast<u32>(diffusefunc));
+    break;
   }
 
   object.Write("\n");
