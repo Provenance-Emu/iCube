@@ -103,7 +103,7 @@ final class EmulationServerDiscovery: NSObject, NetServiceBrowserDelegate, NetSe
     guard services.contains(where: { $0 === service }) else { return }
     let key = ObjectIdentifier(service)
     let advertisement = txt.flatMap { data in
-      service.hostName.flatMap { EmulationServerAdvertisement(host: $0, port: service.port, txt: NetService.dictionary(fromTXTRecord: data)) }
+      service.hostName.flatMap { EmulationServerAdvertisement(host: $0, port: service.port, txt: BonjourTXTRecord.dictionary(from: data)) }
     }
     guard resolved[key] != advertisement else { return }
     resolved[key] = advertisement

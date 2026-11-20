@@ -94,7 +94,7 @@ final class DSUDiscoveryBrowser: NSObject, ObservableObject {
   }
 
   nonisolated fileprivate static func advert(of service: NetService) -> DSUAdvert? {
-    service.txtRecordData().flatMap { DSUAdvert.parse(NetService.dictionary(fromTXTRecord: $0)) }
+    service.txtRecordData().flatMap { DSUAdvert.parse(BonjourTXTRecord.dictionary(from: $0)) }
   }
 }
 
@@ -156,7 +156,7 @@ extension DSUDiscoveryBrowser: NetServiceDelegate {
 
   nonisolated func netService(_ sender: NetService, didUpdateTXTRecord data: Data) {
     Task { @MainActor in
-      let advert = DSUAdvert.parse(NetService.dictionary(fromTXTRecord: data))
+      let advert = DSUAdvert.parse(BonjourTXTRecord.dictionary(from: data))
       // An unchanged record (monitoring repeats the current one) does nothing, so it never loops.
       guard let updated = Self.updatingAdvert(advert, ofServiceNamed: Self.rowName(sender), in: servers) else { return }
       Self.log.notice(
