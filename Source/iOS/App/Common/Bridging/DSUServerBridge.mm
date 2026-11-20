@@ -13,6 +13,7 @@
 #import <net/if.h>
 
 // C++ headers (ObjC++)
+#include <atomic>
 // Logging category used by DSU proto
 #include "Common/Logging/Log.h"
 #include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.h"
@@ -63,6 +64,9 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 
   // Rumble callback for clients (controller, motorId, intensity 0..255)
   void (^_rumbleHandler)(NSInteger, NSInteger, NSInteger);
+
+  // A send asked for off the main queue is already on its way there.
+  std::atomic<bool> _sendQueued;
 }
 
 + (instancetype)shared { static DSUServerBridge* s; static dispatch_once_t once; dispatch_once(&once, ^{ s = [DSUServerBridge new]; }); return s; }
@@ -573,6 +577,23 @@ using ProtoFromServer = ciface::DualShockUDPClient::Proto::Message<ciface::DualS
 }
 
 - (void)sendPadData {
+  if (!_running)
+    return;
+  // The client list, the allow lists and `_restrictTo` are only ever touched on the main queue,
+  // where the receive and tick sources run. The pad setters are not: device motion arrives on its
+  // own operation queue, and copying `_clients` there while a packet handler changed it on the
+  // main queue crashed (ICUBE-P1, ICUBE-CZ). So an off-main send hops to the main queue, and a
+  // burst of them (one per motion axis) collapses into one packet carrying the latest pad state.
+  if (![NSThread isMainThread])
+  {
+    if (_sendQueued.exchange(true))
+      return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      self->_sendQueued.store(false);
+      [self sendPadData];
+    });
+    return;
+  }
   // If restricted, send only to last client seen (if any)
   if (_restrictTo && _restrictTo.length > 0) {
     // Send to all recently seen ports for the restricted IP
