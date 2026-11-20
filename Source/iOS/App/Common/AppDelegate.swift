@@ -19,9 +19,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     // Start Sentry as early as possible so it captures crashes during app launch. Configuration
     // lives in SentryTelemetryService (emulation-gated tracing + hang tracking).
     SentryTelemetryService.configure()
+    // Before the launch's real work, so a launch that dies in it is noticed by the next one.
+    LaunchSurvivalReporter.start(application: application)
     #if canImport(MetricKit) && !os(tvOS)
     // The app extensions can't receive MetricKit payloads; their signposts arrive here.
     ExtensionMetricsReporter.start()
+    // Crashes and exits the crash handler cannot see: watchdog and memory kills.
+    MetricKitDiagnosticsReporter.start()
     #endif
 
     // Settings-sync backbone: one global Config-changed hook (debounced auto-save of menu changes so
