@@ -31,6 +31,9 @@ internal struct PauseMenuView: View {
   var startsInPerformance = false
   /// Opens on the Controllers hub (tvOS: the no-controller notice's Controllers button).
   var startsInControllers = false
+  /// Shows the TV switcher over the paused game. Set by the emulation screen only where a TV could show now; the
+  /// screen closes this menu for it, since a cover hides the game the strip previews on. `nil` hides the item.
+  var onOpenBezels: (() -> Void)? = nil
   @State private var initialPerformancePaneConsumed = false
   @State private var initialControllersPaneConsumed = false
   @State private var initialSaveBrowserConsumed = false
@@ -937,7 +940,8 @@ internal struct PauseMenuView: View {
       engineShortName: engineShortName,
       jitAcquired: jitAcquired,
       nextEngine: nextEngine, quickSaveMode: quickSaveMode, isModded: ModdedBoot.isCurrentBootModded,
-      onScreenController: onScreenController, onScreenControllerOptions: onScreenControllerOptions)
+      onScreenController: onScreenController, onScreenControllerOptions: onScreenControllerOptions,
+      showsBezels: onOpenBezels != nil)
     let quick = quickSaveActions
     let actions = PauseMenuActions(
       resume: { PauseArbiter.shared.userResume(); onClose() },
@@ -960,6 +964,7 @@ internal struct PauseMenuView: View {
         #endif
       },
       openShaders: { showShaders = true },
+      openBezels: { onOpenBezels?() },
       openContinuity: { showContinuitySheet = true },
       openSettings: {
         settingsLink = nil
@@ -1119,6 +1124,9 @@ struct PauseMenuState {
   /// as on tvOS and in a GameCube title). The Controllers tile's badge and long-press list.
   var onScreenController = OnScreenController.auto
   var onScreenControllerOptions: [OnScreenController] = []
+  /// A TV the player chose could be drawn around the picture right now (iOS: landscape, no skin, this screen),
+  /// so the menu offers the TV switcher.
+  var showsBezels = false
 }
 
 /// Live bindings for the in-place tiles. Writing one applies immediately; the host rebuilds the model.
@@ -1151,6 +1159,8 @@ struct PauseMenuActions {
   var openCheats: () -> Void
   var openControllers: () -> Void
   var openShaders: () -> Void
+  /// Closes the menu and shows the TV switcher strip over the paused game.
+  var openBezels: () -> Void = {}
   var openContinuity: () -> Void
   var openSettings: () -> Void
   /// Opens Settings on a leaf, scrolled to a row (`PauseMenuModelBuilder.settingsLinks`).
@@ -1361,6 +1371,12 @@ enum PauseMenuModelBuilder {
         MenuItem(id: "metalfx", title: L("MetalFX"), icon: "sparkles", tint: .indigo, role: .toggle(bindings.metalFX),
                  description: L("Sharpens the picture where it is stretched to fill the screen. Costs GPU time; raising Upscaling is often cheaper.")),
         at: upscaling + 1)
+    }
+    if state.showsBezels, let shaders = game.firstIndex(where: { $0.id == "shaders" }) {
+      game.insert(
+        MenuItem(id: "bezels", title: L("Bezels"), icon: "tv", tint: .orange, role: .action(actions.openBezels),
+                 description: L("Try a TV around the picture, over the paused game.")),
+        at: shaders + 1)
     }
     if state.showsRecenterPointer {
       game.append(MenuItem(id: "recenter-pointer", title: L("Recenter Pointer"), icon: "scope", tint: .green, role: .action(actions.recenterPointer),

@@ -405,6 +405,9 @@ let iCube = Target.target(
         .package(product: "SkinKitUI", condition: .when([.ios, .catalyst])),
         .package(product: "SkinKit2Core", condition: .when([.ios, .catalyst])),
         .package(product: "SkinKit2Render", condition: .when([.ios, .catalyst])),
+        // The TV drawn around the game picture and the pause menu's TV switcher (SkinKit docs/bezels.md).
+        .package(product: "SkinKitBezels", condition: .when([.ios, .catalyst])),
+        .package(product: "SkinKitBezelsUI", condition: .when([.ios, .catalyst])),
         // PLzmaSDK, through a local package: see Source/iOS/PLzmaShim/Package.swift.
         .package(product: "PLzmaShim"),
         .package(product: "SWCompression"),
@@ -611,6 +614,9 @@ let iCubeTests = Target.target(
         .package(product: "SkinKitManager"),
         .package(product: "SkinKit2Core"),
         .package(product: "SkinKit2Render"),
+        // GameplayBezelTests builds `GameplayBezelPlacement.Inputs` and `BezelNavigationCommand` values.
+        .package(product: "SkinKitBezels"),
+        .package(product: "SkinKitBezelsUI"),
     ],
     settings: .settings(
         base: [
@@ -867,8 +873,10 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // Format 2 runtime and baker, pinned to the shared package revision.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("ab9dbb008675a03f9820e2b7c9a0f228ca5eae6d")),
+        // Format 2 runtime and baker, and the TV bezels, pinned to the shared package revision. This one is the head
+        // of SkinKit's `bezels/shared-module` branch (Provenance-Emu/SkinKit#152, built on ab9dbb0); move it to the
+        // merge commit or a tag once that lands.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("6cfcebdddf2ea9da8a2c9ab7182af9b16c8cff83")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),

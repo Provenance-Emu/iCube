@@ -12,6 +12,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     #if os(iOS)
     // SkinKit's log hooks, before the first skin or catalog line.
     SkinKitSetup.configure()
+    // Where TV bezels are stored and logged, before the first game resolves one.
+    ICubeBezels.configure()
     #endif
     MotionSettings.registerDefaults()
     DSUSettings.registerDefaults()
