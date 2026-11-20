@@ -660,9 +660,17 @@ ShaderCode GenerateVertexShaderCode(APIType api_type, const ShaderHostConfig& ho
       }
       break;
     case SourceRow::Colors:
-      ASSERT(!texinfo.is_regular_texgen);
-      ASSERT(texinfo.other.texgentype == TexGenType::Color0 ||
-             texinfo.other.texgentype == TexGenType::Color1);
+      // iCube: both the source row and the texgen type come straight from the game's XF
+      // registers, and nothing stops a game pairing this row with a regular or emboss texgen.
+      // That is guest data, so it is logged, not asserted: ASSERT's "Ignore and continue?" trapped
+      // the app when the player answered "No" (ICUBE-PT). A colour texgen takes its value from
+      // the lighting output further down; anything else keeps the default coord, which is what
+      // the ubershader does for this row.
+      if (texinfo.is_regular_texgen || (texinfo.other.texgentype != TexGenType::Color0 &&
+                                        texinfo.other.texgentype != TexGenType::Color1))
+      {
+        WARN_LOG_FMT(VIDEO, "Texgen {} uses the colour source row without a colour texgen", i);
+      }
       break;
     case SourceRow::BinormalT:
       if ((uid_data->components & VB_HAS_TANGENT) != 0)

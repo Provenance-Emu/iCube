@@ -598,6 +598,13 @@ class DolphinBuilder:
                 cmake_cmd.append(f"-DCMAKE_OSX_DEPLOYMENT_TARGET={deployment_target}")
             elif platform == "TVOS":
                 cmake_cmd.append(f"-DCMAKE_TVOS_DEPLOYMENT_TARGET={deployment_target}")
+                # The Apple TV HD (A8) has no ARMv8 CRC32 instructions. The arch flags above turn
+                # them on for the compiler, which defines __ARM_FEATURE_CRC32, and zlib-ng then
+                # skips its runtime CPU check and calls crc32_armv8 unconditionally: SIGILL at
+                # launch, in the first checksum the core computes (ICUBE-9W). Dolphin's own CRC32
+                # hash is chosen at run time and is unaffected; zlib's falls back to its portable
+                # implementation on every Apple TV.
+                cmake_cmd.append("-DWITH_ARMV8=OFF")
             elif platform == "MAC_CATALYST":
                 # Do not set CMAKE_OSX_DEPLOYMENT_TARGET for Catalyst; ios-cmake derives proper -target ...-macabi
                 pass

@@ -4,6 +4,8 @@
 #include "VideoCommon/CommandProcessor.h"
 
 #include <atomic>
+#include <string>
+
 #include <fmt/format.h>
 
 #include "Common/Assert.h"
@@ -118,6 +120,7 @@ void CommandProcessorManager::Init()
   m_fifo.Init();
 
   m_is_fifo_error_seen = false;
+  m_invalid_xf_load_count.store(0, std::memory_order_relaxed);
 
   m_interrupt_set.Clear();
   m_interrupt_waiting.Clear();
@@ -717,6 +720,37 @@ void CommandProcessorManager::HandleUnknownOpcode(u8 cmd_byte, const u8* buffer,
                    "Dolphin will now likely crash or hang.",
                    cmd_byte, fmt::ptr(buffer), preprocess, Common::GetStringT(advice));
   }
+}
+
+// iCube: an XF load whose count does not fit its 4-bit field means the stream is garbage, exactly
+// like an unknown opcode, and a garbage stream usually holds many of them. So the player gets the
+// same single "GFX FIFO" alert an unknown opcode raises (it names opcode 0x10, and its advice and
+// FIFO register dump apply as they are), and the rest only reach the log, thinned out so a stream
+// of garbage cannot flood it.
+void CommandProcessorManager::HandleInvalidXFLoad(u32 cmd2, const u8* buffer, bool preprocess)
+{
+  constexpr u32 ALWAYS_LOGGED = 8;
+  constexpr u8 XF_LOAD_OPCODE = 0x10;
+
+  const u32 count = m_invalid_xf_load_count.fetch_add(1, std::memory_order_relaxed) + 1;
+  if (count > ALWAYS_LOGGED && (count & (count - 1)) != 0)
+    return;
+
+  ERROR_LOG_FMT(VIDEO,
+                "FIFO: XF load with an out-of-range count, cmd2 = {:#010x} @ {}, preprocessing = "
+                "{}, occurrence {}",
+                cmd2, fmt::ptr(buffer), preprocess ? "yes" : "no", count);
+
+  if (count <= ALWAYS_LOGGED)
+  {
+    const std::string crumb = fmt::format(
+        "XF load with an out-of-range count: cmd2 = {:#010x}, preprocess = {}, occurrence {}", cmd2,
+        preprocess, count);
+    Common::RecordBreadcrumb("dolphin.fifo", crumb.c_str());
+  }
+
+  if (!m_is_fifo_error_seen)
+    HandleUnknownOpcode(XF_LOAD_OPCODE, buffer, preprocess);
 }
 
 }  // namespace CommandProcessor

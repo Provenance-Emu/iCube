@@ -15,6 +15,10 @@ import MetalKit
   private var cachedPresetPath: String?
   private var lastDrawableSize: CGSize = .zero
   private var needsReload: Bool = false
+  /// `library`, `cachedPresetPath` and `needsReload` are written by the video thread in
+  /// `renderSource` and read or flagged from the main thread by the pickers. Two threads
+  /// assigning `library` at once released the old container twice (ICUBE-GV, ICUBE-N7).
+  private let stateLock = NSLock()
   /// Why the screen filter could not be set up or loaded, or nil once one draws. The pickers show it.
   /// Written on the main queue only.
   @objc private(set) var lastError: String?
@@ -44,12 +48,12 @@ import MetalKit
 
   @objc private func _shaderSettingsChanged(_ note: Notification) {
     // Flag a reload for the next frame to avoid mutating while GPU encoders are active
-    needsReload = true
+    stateLock.withLock { needsReload = true }
   }
 
   /// Public API for C++/ObjC callers to force a reload at runtime
   @objc func reloadShadersNow() {
-    needsReload = true
+    stateLock.withLock { needsReload = true }
   }
 
   /// Apply a new preset path immediately and flag a reload (accepts bundle-relative or absolute)
@@ -59,13 +63,17 @@ import MetalKit
     } else {
       UserDefaults.standard.removeObject(forKey: "shader_preset_path")
     }
-    library = nil
-    cachedPresetPath = nil
-    filter?.hasShader = false
-    needsReload = true
+    // Only flag it: the video thread owns `library` and clears it in `renderSource` on its next
+    // frame. Clearing it here as well raced that thread's own assignment.
+    stateLock.withLock { needsReload = true }
   }
 
   @objc func configureWithDevice(_ device: MTLDevice) {
+    stateLock.withLock { configureLocked(device) }
+  }
+
+  /// `configureWithDevice` for a caller that already holds `stateLock`.
+  private func configureLocked(_ device: MTLDevice) {
     if self.device?.registryID != device.registryID {
       self.device = device
       do {
@@ -273,15 +281,17 @@ import MetalKit
 
   @objc func renderSource(_ source: MTLTexture, commandBuffer cb: MTLCommandBuffer, drawable: CAMetalDrawable) {
     guard let device else { return }
-    configureWithDevice(device)
-    if needsReload {
-      // Clear cached state so ensurePresetLoaded() will load fresh
-      library = nil
-      cachedPresetPath = nil
-      filter?.hasShader = false
-      needsReload = false
+    stateLock.withLock {
+      configureLocked(device)
+      if needsReload {
+        // Clear cached state so ensurePresetLoaded() will load fresh
+        library = nil
+        cachedPresetPath = nil
+        filter?.hasShader = false
+        needsReload = false
+      }
+      ensurePresetLoaded()
     }
-    ensurePresetLoaded()
     guard let filter else {
       // No filter: blit copy
       if let blit = cb.makeBlitCommandEncoder() {
@@ -405,8 +415,7 @@ import MetalKit
 
   /// Expose compiled parameter metadata for UI
   func currentParameters() -> [Compiled.Parameter] {
-    guard let lib = library else { return [] }
-    return lib.shader.parameters
+    stateLock.withLock { library?.shader.parameters ?? [] }
   }
 
   /// Read the current parameter value by index
@@ -418,7 +427,7 @@ import MetalKit
   /// Update parameter by index and apply immediately
   @objc func setValue(_ value: CGFloat, forParameterIndex index: Int) {
     filter?.setValue(value, forParameterIndex: index)
-    if let path = cachedPresetPath {
+    if let path = stateLock.withLock({ cachedPresetPath }) {
       let key = persistenceKey(for: path, index: index)
       UserDefaults.standard.set(value, forKey: key)
     }

@@ -583,12 +583,11 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
                                                             height:draw_tex.height
                                                          mipmapped:NO];
       desc.storageMode = MTLStorageModePrivate;
-#if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
-      desc.usage =
-          MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead | (MTLTextureUsage)(1 << 3);
-#else
+      // iCube: this also set bit 3, which is not an MTLTextureUsage value. A blit source or
+      // destination needs no usage flag, and Metal aborts in descriptor validation on a
+      // descriptor it rejects (ICUBE-NQ aborts creating this texture; the rule it tripped is not
+      // in the report, so this may or may not be it).
       desc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-#endif
       static id<MTLTexture> s_offscreen = nil;
       if (s_offscreen == nil || s_offscreen.width != draw_tex.width ||
           s_offscreen.height != draw_tex.height || s_offscreen.pixelFormat != draw_tex.pixelFormat)
@@ -664,11 +663,7 @@ void Metal::Gfx::PresentBackbuffer()
                                                                   height:source.height
                                                                mipmapped:NO];
             desc.storageMode = MTLStorageModePrivate;
-#if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 140000
-            desc.usage = MTLTextureUsageShaderRead | (MTLTextureUsage)(1 << 3);
-#else
             desc.usage = MTLTextureUsageShaderRead;
-#endif
             s_post_src = [g_device newTextureWithDescriptor:desc];
             [s_post_src setLabel:@"Dolphin Post Source Blit"];
           }

@@ -202,6 +202,11 @@ public:
   {
     m_cycles += 6 * count;  // Hm, this means that we scan over nop streams pretty slowly...
   }
+  OPCODE_CALLBACK_NOINLINE(void OnInvalidXFLoad(u32 cmd2, const u8* data))
+  {
+    auto& system = Core::System::GetInstance();
+    system.GetCommandProcessor().HandleInvalidXFLoad(cmd2, data, is_preprocess);
+  }
   OPCODE_CALLBACK(void OnUnknown(u8 opcode, const u8* data))
   {
     if (static_cast<Opcode>(opcode) == Opcode::GX_CMD_UNKNOWN_METRICS)
