@@ -1067,10 +1067,10 @@ struct EmulationScreen: View {
       resumeObserver = NotificationCenter.default.addObserver(
         forName: Notification.Name("DOLEmulationDidStartNotification"),
         object: nil, queue: .main) { _ in
-        GameProfiles.shared.applyRuntimeOverrides(for: game)
-        // The core now knows the game's own ID and system.
-        refreshBezelGame()
-      }
+          GameProfiles.shared.applyRuntimeOverrides(for: game)
+          // The core now knows the game's own ID and system.
+          refreshBezelGame()
+        }
     }
   }
 
@@ -1238,87 +1238,91 @@ struct EmulationScreen: View {
 
   private var iosLifecycleCanvas: some View {
     iosPresentedCanvas
-    .onAppear { iosDidAppear() }
-    .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLExternalDisplayDidChangeNotification"))) { _ in
-      refreshOverscanApplicable()
-      renderHostOnExternalDisplay = EmulationCoordinator.shared().isExternalDisplayConnected
-    }
-    // The strip closes itself when a TV can no longer show (portrait, a skin, an external display).
-    .onChange(of: bezelScreenState(canvas: bezelCanvas), initial: true) { _, state in bezels.screenState = state }
-    .onDisappear { iosDidDisappear() }
-    .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-      // Ask the renderer to resize/reconfigure
-      TVEmulationBridge.resizeSurfaceNow()
-      // The gyro pointer reads its axes from the interface orientation and re-centres when it
-      // changes, but the orientation was only refreshed by explicit calls (overlay shown, motion
-      // restarted), so the re-centre fired at random. Read it on the next main-actor turn, once
-      // UIKit has applied the rotation; this also covers the 180-degree landscape flip, which the
-      // overlay host's portrait/landscape layout callback does not see.
-      Task { @MainActor in TCDeviceMotion.shared.statusBarOrientationChanged() }
-    }
+      .onAppear { iosDidAppear() }
+      .onReceive(NotificationCenter.default.publisher(for: Notification.Name("DOLExternalDisplayDidChangeNotification"))) { _ in
+        refreshOverscanApplicable()
+        renderHostOnExternalDisplay = EmulationCoordinator.shared().isExternalDisplayConnected
+      }
+      // The strip closes itself when a TV can no longer show (portrait, a skin, an external display).
+      .onChange(of: bezelScreenState(canvas: bezelCanvas), initial: true) { _, state in bezels.screenState = state }
+      .onDisappear { iosDidDisappear() }
+      .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+        // Ask the renderer to resize/reconfigure
+        TVEmulationBridge.resizeSurfaceNow()
+        // The gyro pointer reads its axes from the interface orientation and re-centres when it
+        // changes, but the orientation was only refreshed by explicit calls (overlay shown, motion
+        // restarted), so the re-centre fired at random. Read it on the next main-actor turn, once
+        // UIKit has applied the rotation; this also covers the 180-degree landscape flip, which the
+        // overlay host's portrait/landscape layout callback does not see.
+        Task { @MainActor in TCDeviceMotion.shared.statusBarOrientationChanged() }
+      }
   }
 
   private var iosInputCanvas: some View {
     iosLifecycleCanvas
-    .onReceive(NotificationCenter.default.publisher(for: SkinLibrary.didChangeNotification)) { _ in
-      // A skin was picked, imported or deleted (possibly the one on screen): rebuild the pads and the game placement.
-      touchPadsRefreshToken = UUID()
-    }
-    .onReceive(NotificationCenter.default.publisher(for: SkinActionNotification.name)) { note in
-      if let action = SkinActionNotification.action(in: note) { handleSkinAction(action) }
-    }
-    .onReceive(controllerManager.controllerConnectedPublisher) { _ in
-      touchPadsRefreshToken = UUID()
-      ControllerStyleManager.shared.refreshDetection()
-    }
-    .onReceive(controllerManager.controllerDisconnectedPublisher) { _ in
-      touchPadsRefreshToken = UUID()
-      ControllerStyleManager.shared.refreshDetection()
-    }
-    .onReceive(controllerManager.fastForwardToggledPublisher) { enabled in
-      fastForwardEnabled = enabled
-    }
-    .onReceive(controllerManager.$overlayMode) { _ in
-      // Choosing Wii binds Wii Remote 1 to the touchscreen in `overlayMode`'s didSet.
-      touchPadsRefreshToken = UUID()
-    }
-    .onChange(of: isWiiSystem) { _, new in
-      controllerManager.setSystem(isWii: new)
-      refreshBezelGame()
-    }
-    .onReceive(controllerManager.$overlayVisible) { v in
-      isTouchControlsActive = v
-      touchPadsRefreshToken = UUID()
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .DOLPointerModeDidChange)) { _ in
-      irModeRaw = PointerModeController.shared.mode.rawValue
-    }
-    // The hub chose on-screen visibility or style: treat it as the top bar's own buttons do, so the
-    // assignmentsChanged observer stops re-deriving visibility. Posted before the change is applied.
-    .onReceive(NotificationCenter.default.publisher(for: .DOLOnScreenControlsChosen)) { _ in
-      userOverrideTouchControls = true
-      touchPadsRefreshToken = UUID()
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .DOLEditTouchLayout)) { _ in beginLayoutEdit() }
-    // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
-    .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
-      isPaused = TVEmulationBridge.isPaused()
-      // Clear a stale disconnect banner if the game resumed via any other path.
-      if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
-        controllerManager.clearDisconnectPause()
+      .onReceive(NotificationCenter.default.publisher(for: SkinLibrary.didChangeNotification)) { _ in
+        // A skin was picked, imported or deleted (possibly the one on screen): rebuild the pads and the game placement.
+        touchPadsRefreshToken = UUID()
       }
-      // The game is drawing again, so the surface can take the picture's own shape.
-      if bezelDrawnAspect != nil, !bezelSwitcherIsUp, !isPaused { bezelDrawnAspect = nil }
-    }
-    .onChange(of: showPauseMenu) { _, visible in
-      if visible {
-        showQuickMenu = false
-        // A controller's Menu button opened the pause menu over the strip: the menu takes the pause and the screen.
-        if bezelSwitcherIsUp {
-          PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
-          dismissBezelStrip()
+      .onReceive(NotificationCenter.default.publisher(for: SkinActionNotification.name)) { note in
+        if let action = SkinActionNotification.action(in: note) { handleSkinAction(action) }
+      }
+      .onReceive(controllerManager.controllerConnectedPublisher) { _ in
+        touchPadsRefreshToken = UUID()
+        ControllerStyleManager.shared.refreshDetection()
+      }
+      .onReceive(controllerManager.controllerDisconnectedPublisher) { _ in
+        touchPadsRefreshToken = UUID()
+        ControllerStyleManager.shared.refreshDetection()
+      }
+      .onReceive(controllerManager.fastForwardToggledPublisher) { enabled in
+        fastForwardEnabled = enabled
+      }
+      .onReceive(controllerManager.$overlayMode) { _ in
+        // Choosing Wii binds Wii Remote 1 to the touchscreen in `overlayMode`'s didSet.
+        touchPadsRefreshToken = UUID()
+      }
+      .onChange(of: isWiiSystem) { _, new in
+        controllerManager.setSystem(isWii: new)
+        refreshBezelGame()
+      }
+      .onReceive(controllerManager.$overlayVisible) { v in
+        isTouchControlsActive = v
+        touchPadsRefreshToken = UUID()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .DOLPointerModeDidChange)) { _ in
+        irModeRaw = PointerModeController.shared.mode.rawValue
+      }
+      // The hub chose on-screen visibility or style: treat it as the top bar's own buttons do, so the
+      // assignmentsChanged observer stops re-deriving visibility. Posted before the change is applied.
+      .onReceive(NotificationCenter.default.publisher(for: .DOLOnScreenControlsChosen)) { _ in
+        userOverrideTouchControls = true
+        touchPadsRefreshToken = UUID()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .DOLEditTouchLayout)) { _ in beginLayoutEdit() }
+      // iOS has no 1s timer (the tvOS branch does); poll paused-state for the HUD pill.
+      .onReceive(Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()) { _ in
+        isPaused = TVEmulationBridge.isPaused()
+        // Clear a stale disconnect banner if the game resumed via any other path.
+        if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
+          controllerManager.clearDisconnectPause()
         }
-      } else { pauseStartsInSaveBrowser = false; pauseStartsInPerformance = false; pauseStartsInControllers = false }
+        // The game is drawing again, so the surface can take the picture's own shape.
+        if bezelDrawnAspect != nil, !bezelSwitcherIsUp, !isPaused { bezelDrawnAspect = nil }
+      }
+      .onChange(of: showPauseMenu) { _, visible in
+        if visible {
+          showQuickMenu = false
+          // A controller's Menu button opened the pause menu over the strip: the menu takes the pause and the screen.
+          if bezelSwitcherIsUp {
+            PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+            dismissBezelStrip()
+          }
+        } else {
+          pauseStartsInSaveBrowser = false
+          pauseStartsInPerformance = false
+          pauseStartsInControllers = false
+        }
       postOverlayVisibility()
       isPaused = TVEmulationBridge.isPaused()
       // The fullScreenCover transition perturbs the GeometryReader size and the Metal
@@ -1343,60 +1347,60 @@ struct EmulationScreen: View {
 
   private var iosScreen: some View {
     iosNavigationCanvas
-    .sheet(isPresented: $showShaderSheet) {
-      NavigationStack {
-        ShaderSettingsView()
-          .navigationTitle(L("Shaders"))
+      .sheet(isPresented: $showShaderSheet) {
+        NavigationStack {
+          ShaderSettingsView()
+            .navigationTitle(L("Shaders"))
+        }
       }
-    }
-    .sheet(isPresented: $showShaderParams) {
-      NavigationStack {
-        ShaderParameterEditor()
-          .navigationTitle(L("Shader Parameters"))
+      .sheet(isPresented: $showShaderParams) {
+        NavigationStack {
+          ShaderParameterEditor()
+            .navigationTitle(L("Shader Parameters"))
+        }
       }
-    }
-    .sheet(isPresented: $showFXSheet) {
-      NavigationStack { AudioEffectsSheet() }
-    }
-    .sheet(isPresented: $showQuickSavePicker, onDismiss: quickSavePickerDismissed) {
-      QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
-                          onDismiss: { showQuickSavePicker = false }, onCommit: { showQuickSavePicker = false })
+      .sheet(isPresented: $showFXSheet) {
+        NavigationStack { AudioEffectsSheet() }
+      }
+      .sheet(isPresented: $showQuickSavePicker, onDismiss: quickSavePickerDismissed) {
+        QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
+                            onDismiss: { showQuickSavePicker = false }, onCommit: { showQuickSavePicker = false })
+          .claimsController()
+      }
+      .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+        showQuickSavePicker = false
+      }
+      .sheet(isPresented: $showBezelLibrary, onDismiss: bezelLibraryDismissed) {
+        GameplayBezelLibrarySheet(game: bezels.gameContext(filePath: game.filePath, title: game.title),
+                                  onDone: { showBezelLibrary = false })
+          .claimsController()
+      }
+      .sheet(isPresented: $showControllerSettings, onDismiss: controllerSettingsDismissed) {
+        NavigationStack {
+          ControllerHubView(system: .forRunningGame, onBack: { showControllerSettings = false })
+            .toolbar {
+              ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { showControllerSettings = false } }
+            }
+        }
         .claimsController()
-    }
-    .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
-      showQuickSavePicker = false
-    }
-    .sheet(isPresented: $showBezelLibrary, onDismiss: bezelLibraryDismissed) {
-      GameplayBezelLibrarySheet(game: bezels.gameContext(filePath: game.filePath, title: game.title),
-                                onDone: { showBezelLibrary = false })
-        .claimsController()
-    }
-    .sheet(isPresented: $showControllerSettings, onDismiss: controllerSettingsDismissed) {
-      NavigationStack {
-        ControllerHubView(system: .forRunningGame, onBack: { showControllerSettings = false })
-          .toolbar {
-            ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { showControllerSettings = false } }
-          }
       }
-      .claimsController()
-    }
-    .alert("Exit Game?", isPresented: $showExitConfirm) {
-      Button("Save & Quit") {
-        runTopBarQuit(.savingState)
+      .alert("Exit Game?", isPresented: $showExitConfirm) {
+        Button("Save & Quit") {
+          runTopBarQuit(.savingState)
+        }
+        Button("Quit", role: .destructive) {
+          quitFromTopBar()
+        }
+        Button("Continue", role: .cancel) {
+          #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
+          GameActivityManager.update(isPaused: false, elapsedSeconds: elapsedSeconds)
+          #endif
+          withAnimation(TopBarStyle.transition) { topBar.hideNow() }
+        }
+      } message: {
+        Text("Do you want to stop the current game and return to the library?")
       }
-      Button("Quit", role: .destructive) {
-        quitFromTopBar()
-      }
-      Button("Continue", role: .cancel) {
-        #if canImport(ActivityKit) && !targetEnvironment(macCatalyst)
-        GameActivityManager.update(isPaused: false, elapsedSeconds: elapsedSeconds)
-        #endif
-        withAnimation(TopBarStyle.transition) { topBar.hideNow() }
-      }
-    } message: {
-      Text("Do you want to stop the current game and return to the library?")
-    }
-    .alert(L("Couldn't save before quitting"), isPresented: Binding(
+      .alert(L("Couldn't save before quitting"), isPresented: Binding(
       get: { quitSaveFailure != nil }, set: { if !$0 && !quitRequestInFlight { cancelTopBarQuitFailure() } })) {
       if let failure = quitSaveFailure {
         Button(L("Retry")) { retryTopBarQuit(failure) }
