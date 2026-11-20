@@ -85,6 +85,12 @@ public:
 
   // Called on any XF command.
   virtual void OnXF(u16 address, u8 count, const u8* data) = 0;
+  // iCube: called before OnXF when an XF load's count does not fit its 4-bit field. Only a garbage
+  // stream produces that (the emulated GPU fell out of step with the CPU, or the game crashed), so
+  // it is guest data to report, not an emulator invariant to assert on: ASSERT's "Ignore and
+  // continue?" traps the app when the player answers "No" (ICUBE-BF, ICUBE-2Y).
+  // cmd2 is the word after the opcode; data[0] is the opcode.
+  virtual void OnInvalidXFLoad(u32 cmd2, const u8* data) {}
   // Called on any CP command.
   // Subclasses should update the CP state with GetCPState().LoadCPReg(command, value) so that
   // primitive commands decode properly.
@@ -116,6 +122,10 @@ public:
     const CPState& cpmem = GetCPState();
     return VertexLoaderBase::GetVertexSize(cpmem.vtx_desc, cpmem.vtx_attr[vat]);
   }
+#else
+public:
+  // iCube: the one callback with a default, so it needs one without inheritance too.
+  void OnInvalidXFLoad(u32 cmd2, const u8* data) {}
 #endif
 };
 
@@ -163,11 +173,17 @@ static DOLPHIN_FORCE_INLINE u32 RunCommand(const u8* data, u32 available,
     const u16 base_address = cmd2 & 0xffff;
 
     const u16 stream_size_temp = cmd2 >> 16;
-    ASSERT_MSG(VIDEO, stream_size_temp < 16, "cmd2 = 0x{:08X}", cmd2);
     const u8 stream_size = (stream_size_temp & 0xf) + 1;
 
     if (available < u32(5 + stream_size * 4))
       return 0;
+
+    // iCube: reported through the callback instead of ASSERT_MSG; see Callback::OnInvalidXFLoad.
+    // Decoding carries on with the low four bits, which is what answering "Yes" did. This sits
+    // after the length check so a command that is decoded again once its data arrives is reported
+    // once.
+    if (stream_size_temp >= 16) [[unlikely]]
+      callback.OnInvalidXFLoad(cmd2, data);
 
     callback.OnXF(base_address, stream_size, &data[5]);
 

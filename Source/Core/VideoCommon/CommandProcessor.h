@@ -183,6 +183,8 @@ public:
   void ResetFifo();
 
   void HandleUnknownOpcode(u8 cmd_byte, const u8* buffer, bool preprocess);
+  // iCube: an XF load whose count does not fit its 4-bit field (see OpcodeDecoder::Callback).
+  void HandleInvalidXFLoad(u32 cmd2, const u8* buffer, bool preprocess);
 
   // This one is shared between gfx thread and emulator thread.
   // It is only used by the Fifo and by the CommandProcessor.
@@ -204,6 +206,8 @@ private:
   Common::Flag m_interrupt_waiting;
 
   bool m_is_fifo_error_seen = false;
+  // iCube: reached from the GPU thread and, when preprocessing, the CPU thread.
+  std::atomic<u32> m_invalid_xf_load_count{0};
 
   Core::System& m_system;
 };
