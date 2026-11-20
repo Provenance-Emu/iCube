@@ -4,9 +4,14 @@
 Reuses the App Store Connect client from the vendored TestFlight distribute action,
 so it takes the same env: ASC_API_KEY_ID, ASC_API_ISSUER_ID, ASC_API_KEY_CONTENT,
 BUNDLE_ID (default com.joemattiello.iCube). Optional: DAYS (default 14), LIMIT (default 50),
-CRASH_LOG_DIR (download crash logs there).
+CRASH_LOG_DIR (save the crash logs Apple attached there; most submissions have none).
+The names asc.sh exports (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_FILE) are accepted too.
 
-Usage: source ~/.config/provenance-dev/asc.sh; python3 scripts/asc_feedback.py [--json]
+Usage:
+    set -a; source ~/.config/provenance-dev/asc.sh; set +a
+    python3 scripts/asc_feedback.py [--json]
+
+asc.sh sets its variables without exporting them, hence `set -a`.
 """
 from __future__ import annotations
 
@@ -47,7 +52,22 @@ def included_index(payload: dict) -> dict:
     return {(i["type"], i["id"]): i for i in payload.get("included", [])}
 
 
+def adopt_asc_sh_env() -> None:
+    """Accept the names asc.sh exports (ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_FILE).
+
+    The client reads the distribute action's names, so sourcing asc.sh alone was not enough:
+    each run needed the three variables mapped by hand.
+    """
+    for theirs, ours in (("ASC_KEY_ID", "ASC_API_KEY_ID"), ("ASC_ISSUER_ID", "ASC_API_ISSUER_ID")):
+        if os.environ.get(theirs) and not os.environ.get(ours):
+            os.environ[ours] = os.environ[theirs]
+    key_file = os.environ.get("ASC_KEY_FILE")
+    if key_file and not os.environ.get("ASC_API_KEY_CONTENT"):
+        os.environ["ASC_API_KEY_CONTENT"] = Path(key_file).expanduser().read_text(encoding="utf-8")
+
+
 def main() -> int:
+    adopt_asc_sh_env()
     mod = load_distribute()
     os.environ.setdefault("BUNDLE_ID", "com.joemattiello.iCube")
     days = int(os.environ.get("DAYS", "14"))
@@ -95,14 +115,15 @@ def main() -> int:
         for c in out["crashes"]:
             try:
                 log = client.get(f"/v1/betaFeedbackCrashSubmissions/{c['id']}/crashLog")
-                url = log["data"]["attributes"].get("url")
-                if url:
-                    import urllib.request
+                # The log comes inline as `logText`; there is no download URL.
+                text = log["data"]["attributes"].get("logText")
+                if text:
                     dest = Path(log_dir) / f"{c['created'][:10]}-{c['id']}.crash"
-                    urllib.request.urlretrieve(url, dest)
+                    dest.write_text(text, encoding="utf-8")
                     c["crash_log"] = str(dest)
             except Exception as exc:  # noqa: BLE001
-                c["crash_log_error"] = str(exc)
+                # Most submissions have no log attached: Apple answers 404 for those.
+                c["crash_log_error"] = "no log attached" if "404" in str(exc) else str(exc)
 
     if as_json:
         print(json.dumps(out, indent=2))
