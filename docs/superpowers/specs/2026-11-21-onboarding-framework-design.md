@@ -78,6 +78,7 @@ visionOS 1. No dependency on any app, on PVContinuity or on a design system: app
 Five pages. Skins, cheats and patches are not pages; they are TipKit hints where the feature lives.
 
 1. **Welcome.** What the app is, one sentence on what the next pages do, Skip All.
+   Skip All changes no setting: Share My Library stays off (decided 2026-11-21).
 2. **Keep your saves.** iCloud Sync on or off, with what syncs. Hidden when iCloud is unavailable.
 3. **Your devices.** Share My Library, **pre-selected on**, with the transport notice
    (`ContinuityManager.transportSecurityNotice`) on the page and "paired devices only". Continuing with it on
@@ -117,7 +118,6 @@ migrates to the store as "onboarding complete" so current users are not shown th
 
 ## Open questions
 
-- Skip All on a fresh install: does Share My Library end up off (proposed) or on?
 - Should completion sync through iCloud, so a second device skips the tour but still asks the per-device
   questions (sharing, local network)? Proposed: per-device for pages that set device settings.
 - iFly's performance page content, and which of WebDAV and SMB each app supports today.
