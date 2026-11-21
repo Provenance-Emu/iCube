@@ -81,8 +81,8 @@ Five pages. Skins, cheats and patches are not pages; they are TipKit hints where
    Skip All changes no setting: Share My Library stays off (decided 2026-11-21).
 2. **Keep your saves.** iCloud Sync on or off, with what syncs. Hidden when iCloud is unavailable.
 3. **Your devices.** Share My Library, **pre-selected on**, with the transport notice
-   (`ContinuityManager.transportSecurityNotice`) on the page and "paired devices only". Continuing with it on
-   triggers the local network prompt. Existing users see this page once as a `whatsNew` step, pre-selected to
+   (`ContinuityManager.transportSecurityNotice`) on the page and "paired devices only". This is the first page
+   allowed to cause the local network prompt (see "Local network prompt" below). Existing users see this page once as a `whatsNew` step, pre-selected to
    their current value (off), so upgrading never opens a listener by itself.
 4. **Performance.** iCube: JIT status and the one or two choices that matter on this device, link to the wiki.
    iFly: its equivalent, or the page is omitted by condition.
@@ -96,6 +96,21 @@ Five pages. Skins, cheats and patches are not pages; they are TipKit hints where
 
 `LibraryWelcomeView` becomes page 5's content and is removed as a separate overlay; `onboarding_seen_v1`
 migrates to the store as "onboarding complete" so current users are not shown the flow.
+
+## Local network prompt
+
+Today the library starts Bonjour browsing as soon as it appears (`TVLibraryView` calls
+`nearby.setLibraryVisible(true)` in `onAppear`), so the system's local network alert can come up behind the
+welcome on first launch, before anything has explained it. With a multi-page flow that would put the alert over
+page 1.
+
+- While a flow is on screen the app must not browse or advertise. `FlowCoordinator` publishes `isPresenting`;
+  the app holds `setLibraryVisible(true)` (and anything else that touches the local network, such as DSU
+  discovery) until it is false.
+- A step may declare `needsLocalNetwork`. The host lifts the hold when such a step is reached: page 3 when the
+  user continues with sharing on, otherwise page 5, whose live discovery needs it whatever the sharing choice.
+  Page 3's text therefore covers both uses: finding other libraries, and sharing this one.
+- Skip All before page 3 ends the flow, and the library's own browsing then causes the alert as it does today.
 
 ## Phases
 
@@ -114,6 +129,8 @@ migrates to the store as "onboarding complete" so current users are not shown th
 - Store: each implementation round-trips; legacy `onboarding_seen_v1` migrates.
 - Per app: Share My Library is unchanged for an upgrader who dismisses the page; on for a fresh install that
   continues; off for one that turns the switch off or skips all.
+- Local network: no browse or advert starts while a flow is presenting and no `needsLocalNetwork` step has
+  been reached; it starts on reaching one and on dismissal.
 - tvOS: focus lands on the primary button on every page; Menu cannot leave a required step.
 
 ## Open questions
