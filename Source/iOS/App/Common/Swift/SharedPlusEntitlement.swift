@@ -36,11 +36,19 @@ enum SharedPlusMirrorReader {
   /// must say active/grace AND (for subscriptions) be within expiry + grace —
   /// enforced HERE so a stale mirror decays even if Provenance never runs
   /// again (uninstalled, or lapsed while iFly is the only app in use).
-  static func activeSources(sandbox: Bool) -> [String] {
-    let provenanceAccount = sandbox ? provenancePlusAccount + ".sandbox" : provenancePlusAccount
-    return [(provenanceAccount, "Provenance"), (iflyProAccount, "iFly")].compactMap { account, name in
-      guard let raw = read(account: account), let mirror = decode(raw), grants(mirror, now: Date()) else { return nil }
-      return name
+  static func activeSources(
+    sandbox: Bool,
+    read: (String) -> String? = SharedPlusMirrorReader.read(account:)
+  ) -> [String] {
+    let now = Date()
+    func grantsAccess(_ account: String) -> Bool {
+      guard let raw = read(account), let mirror = decode(raw) else { return false }
+      return grants(mirror, now: now)
+    }
+    let hasProvenance = grantsAccess(provenancePlusAccount)
+      || (sandbox && grantsAccess(provenancePlusAccount + ".sandbox"))
+    return [(hasProvenance, "Provenance"), (grantsAccess(iflyProAccount), "iFly")].compactMap { active, name in
+      active ? name : nil
     }
   }
 
