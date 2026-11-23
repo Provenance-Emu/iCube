@@ -15,7 +15,7 @@ enum AboutLinks {
 /// Pure: the About leaf as rows. Captions carry the legal text the hand-built screen showed.
 enum AboutModelBuilder {
   static func make(appVersion: String, coreVersion: String, open: @escaping (URL) -> Void,
-                   blog: AnyView, help: AnyView, resetAll: @escaping () -> Void, membershipStatus: String? = nil) -> MenuModel {
+                   blog: AnyView, help: AnyView, resetAll: @escaping () -> Void, membershipStatus: String? = nil, openPlus: @escaping () -> Void = {}) -> MenuModel {
     let version = MenuSection(id: "version", header: L("Version"),
                               footer: L("iCube is an unofficial and separately maintained port of Dolphin to iOS. The iCube Project has no relation to Dolphin Team."),
                               items: [
@@ -47,7 +47,7 @@ enum AboutModelBuilder {
     if let membershipStatus {
       sections.insert(MenuSection(id: "shared-plus", header: L("Shared Plus Membership"),
                                   footer: L(SharedPlusEntitlement.restoreGuidance), items: [
-                                    SettingsRow.action("shared-plus-status", L("Shared Plus Membership"), L(membershipStatus), icon: "info.circle") {},
+                                    SettingsRow.action("shared-plus-status", L("Shared Plus Membership"), L(membershipStatus), icon: "info.circle", run: openPlus),
                                   ]), at: 1)
     }
     return MenuModel(sections: sections)

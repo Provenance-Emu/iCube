@@ -21,6 +21,7 @@ import GameController
 struct AboutView: View {
   @Environment(\.openURL) private var openURL
   @State private var membershipStatus = ""
+  @State private var showPlus = false
   #if os(tvOS)
   @Environment(\.dismiss) private var dismiss
   @Environment(\.settingsPaneBack) private var paneBack
@@ -28,13 +29,19 @@ struct AboutView: View {
   @State private var confirmReset = false
   #endif
 
+  private func openPlus() {
+    #if APPSTORE
+    showPlus = true
+    #endif
+  }
+
   var body: some View {
     Group {
       #if os(tvOS)
       MenuScreen(model: AboutModelBuilder.make(
         appVersion: VersionManager.shared().appVersion.userFacing, coreVersion: VersionManager.shared().coreVersion,
         open: { openURL($0) }, blog: AnyView(DolphinBlogView()), help: AnyView(WikiHelpView()),
-        resetAll: { confirmReset = true }, membershipStatus: membershipStatus),
+        resetAll: { confirmReset = true }, membershipStatus: membershipStatus, openPlus: openPlus),
       style: .list, onBack: SettingsLeafScreen.backAction(paneBack: paneBack, dismiss: { dismiss() }),
       tvHeader: SettingsLeafScreen.header(title: L("About"), parentTitle: parentTitle), tvInset: .xxl)
         .alert(L("Reset All Settings"), isPresented: $confirmReset) {
@@ -64,7 +71,11 @@ struct AboutView: View {
 
           VStack(spacing: 8) {
             Text(L("Shared Plus Membership")).icubeText(.section)
+            #if APPSTORE
+            Button(action: openPlus) { Text(L(membershipStatus)).icubeText(.body) }
+            #else
             Text(L(membershipStatus)).icubeText(.body)
+            #endif
             Text(L(SharedPlusEntitlement.restoreGuidance)).icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
           }
           .multilineTextAlignment(.center)
@@ -135,9 +146,58 @@ struct AboutView: View {
       .navigationTitle(L("About iCube"))
       #endif
     }
+    .sheet(isPresented: $showPlus) { PlusPurchaseView() }
     .onAppear { membershipStatus = SharedPlusEntitlement.shared.statusText }
     .onReceive(NotificationCenter.default.publisher(for: .sharedPlusEntitlementDidChange)) { _ in
       membershipStatus = SharedPlusEntitlement.shared.statusText
+    }
+  }
+}
+
+
+private struct PlusPurchaseView: View {
+  @Environment(\.dismiss) private var dismiss
+  @ObservedObject private var entitlement = SharedPlusEntitlement.shared
+  @State private var loaded = false
+  @State private var status = ""
+
+  var body: some View {
+    ScrollView {
+      VStack(spacing: 20) {
+        Text("iCube Plus Lifetime").font(.title)
+        Text(status)
+        Text("A one-time purchase. Provenance can recognize your Plus purchase on this device when both apps support sharing.")
+        Text("Manual library sharing and patches remain free.").foregroundStyle(.secondary)
+        if !entitlement.hasPurchased {
+          if let product = entitlement.product {
+            Button("Buy Lifetime · \(product.displayPrice)") {
+              Task { await entitlement.purchase() }
+            }.disabled(entitlement.busy)
+          } else if loaded {
+            Text("Lifetime is currently unavailable.")
+            Button("Retry") { Task { await entitlement.loadProduct() } }
+          } else {
+            ProgressView()
+          }
+        }
+        Button("Restore Purchases") {
+          Task { await entitlement.restore() }
+        }.disabled(entitlement.busy)
+        if let message = entitlement.message {
+          Text(message).foregroundStyle(.secondary)
+        }
+        Button("Done") { dismiss() }
+      }
+      .multilineTextAlignment(.center)
+      .padding(32)
+    }
+    .task {
+      status = entitlement.statusText
+      await entitlement.loadProduct()
+      loaded = true
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .sharedPlusEntitlementDidChange)) { _ in
+      status = entitlement.statusText
     }
   }
 }
