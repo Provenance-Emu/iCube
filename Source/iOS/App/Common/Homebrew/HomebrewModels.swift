@@ -155,7 +155,7 @@ extension HomebrewTitle: Decodable {
       throw DecodingError.dataCorruptedError(forKey: .slug, in: container, debugDescription: "unusable title")
     }
     func optional<Value: Decodable>(_ type: Value.Type, _ key: CodingKeys) -> Value? {
-      (try? container.decodeIfPresent(Value.self, forKey: key)) ?? nil
+      try? container.decodeIfPresent(Value.self, forKey: key)
     }
     self.slug = slug
     self.name = name
@@ -193,8 +193,8 @@ extension HomebrewCategory: Decodable {
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     name = try container.decode(String.self, forKey: .name)
-    displayName = ((try? container.decodeIfPresent(String.self, forKey: .displayName)) ?? nil) ?? name.capitalized
-    sortOrder = ((try? container.decodeIfPresent(Int.self, forKey: .sortOrder)) ?? nil) ?? Int.max
+    displayName = (try? container.decodeIfPresent(String.self, forKey: .displayName)) ?? name.capitalized
+    sortOrder = (try? container.decodeIfPresent(Int.self, forKey: .sortOrder)) ?? Int.max
   }
 }
 
@@ -227,8 +227,8 @@ extension HomebrewVersion: Decodable {
       throw DecodingError.dataCorruptedError(forKey: .assets, in: container, debugDescription: "no usable package")
     }
     fileName = asset.fileName
-    releaseDate = ((try? container.decodeIfPresent(String.self, forKey: .releaseDate)) ?? nil).flatMap(HomebrewDate.parse)
-    changelog = (try? container.decodeIfPresent(String.self, forKey: .changelog)) ?? nil
+    releaseDate = (try? container.decodeIfPresent(String.self, forKey: .releaseDate)).flatMap(HomebrewDate.parse)
+    changelog = try? container.decodeIfPresent(String.self, forKey: .changelog)
   }
 }
 
@@ -240,7 +240,7 @@ extension HomebrewLicence: Decodable {
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     func text(_ key: CodingKeys) -> String? {
-      let value = ((try? container.decodeIfPresent(String.self, forKey: key)) ?? nil)?
+      let value = (try? container.decodeIfPresent(String.self, forKey: key))?
         .trimmingCharacters(in: .whitespacesAndNewlines)
       return value?.isEmpty == false ? value : nil
     }
