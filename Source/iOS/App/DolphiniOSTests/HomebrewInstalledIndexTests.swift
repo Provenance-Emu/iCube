@@ -83,6 +83,17 @@ final class HomebrewInstalledIndexTests: XCTestCase {
     XCTAssertTrue(scratch.exists("stranger/apps/stranger/default.dol"))
   }
 
+  func testRemoveOrphansKeepsTitlesBeingInstalled() throws {
+    let scratch = try HomebrewScratch()
+    try scratch.file("busy/apps/busy/opening.bnr")
+    var index = HomebrewInstalledIndex()
+    index.titles["busy"] = entry("busy")
+    index.titles["gone"] = entry("gone")
+    XCTAssertEqual(index.removeOrphans(root: scratch.root, keeping: ["busy"]), ["gone"])
+    XCTAssertNotNil(index.titles["busy"])
+    XCTAssertTrue(scratch.exists("busy/apps/busy/opening.bnr"))
+  }
+
   func testProgramPathEscapingTheRootIsIgnored() throws {
     let scratch = try HomebrewScratch()
     let root = scratch.root.appendingPathComponent("Homebrew", isDirectory: true)

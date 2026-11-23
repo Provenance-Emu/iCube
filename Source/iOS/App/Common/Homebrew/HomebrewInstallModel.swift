@@ -68,6 +68,18 @@ final class HomebrewInstallModel: ObservableObject {
     self.state = HomebrewInstalledIndex.load(root: root).state(of: title, root: root)
   }
 
+  /// Installs in progress, by slug. An install outlives the screen that started it, so a screen
+  /// opened later attaches to it instead of starting a second one over the same folder.
+  private static var running: [String: HomebrewInstallModel] = [:]
+
+  /// Titles with an install in progress, on any screen.
+  static var installingSlugs: Set<String> { Set(running.keys) }
+
+  /// The model to show for `title`: the one already installing it, else a new one.
+  static func attach(title: HomebrewTitle, root: URL) -> HomebrewInstallModel {
+    running[title.slug] ?? HomebrewInstallModel(title: title, root: root)
+  }
+
   /// True from Download until the install has stopped, whichever way.
   var isBusy: Bool { task != nil }
 
@@ -84,7 +96,7 @@ final class HomebrewInstallModel: ObservableObject {
   // MARK: - Starting and stopping
 
   func requestStart() {
-    guard !isBusy else { return }
+    guard !isBusy, Self.running[title.slug] == nil else { return }
     guard let latest = title.latest else {
       phase = .failed(HomebrewInstallError.noPackage.localizedDescription)
       return
@@ -101,7 +113,8 @@ final class HomebrewInstallModel: ObservableObject {
   }
 
   func start() {
-    guard !isBusy else { return }
+    guard !isBusy, Self.running[title.slug] == nil else { return }
+    Self.running[title.slug] = self
     phase = .downloading(0)
     task = Task { [weak self] in await self?.run() }
   }
@@ -114,7 +127,10 @@ final class HomebrewInstallModel: ObservableObject {
   // MARK: - The install
 
   private func run() async {
-    defer { task = nil }
+    defer {
+      task = nil
+      Self.running[title.slug] = nil
+    }
     do {
       try await install()
       phase = .installed
@@ -123,7 +139,12 @@ final class HomebrewInstallModel: ObservableObject {
     } catch {
       phase = .failed(error.localizedDescription)
     }
-    try? FileManager.default.removeItem(at: workDirectory)
+    // If putting the previous version back failed, it is still in the work folder: leave it for
+    // the stale-download sweep rather than delete the only copy.
+    let previous = workDirectory.appendingPathComponent(Self.previousFolderName, isDirectory: true)
+    if !FileManager.default.fileExists(atPath: previous.path) {
+      try? FileManager.default.removeItem(at: workDirectory)
+    }
     refreshState()
   }
 
@@ -170,10 +191,12 @@ final class HomebrewInstallModel: ObservableObject {
     }
     try Task.checkCancellation()
 
-    // From here on the install is not cancelled half way: the swap either completes or is undone.
+    // The swap either completes or is undone: a failure or a cancellation while registering puts
+    // the previous version back.
     let root = root
+    let previous = workDirectory.appendingPathComponent(Self.previousFolderName, isDirectory: true)
     let swap = try await Task.detached(priority: .userInitiated) {
-      try Self.swapIn(extracted, root: root, slug: slug)
+      try Self.swapIn(extracted, root: root, slug: slug, previous: previous)
     }.value
     let program = swap.folder.appendingPathComponent(relative)
     do {
@@ -182,11 +205,15 @@ final class HomebrewInstallModel: ObservableObject {
       Self.undo(swap)
       throw error
     }
-    if let backup = swap.backup { try? FileManager.default.removeItem(at: backup) }
-
     index = HomebrewInstalledIndex.load(root: root)
     index.titles[slug] = .init(versionSlug: latest.versionSlug, version: latest.version, programPath: slug + "/" + relative)
-    try index.save(root: root)
+    do {
+      try index.save(root: root)
+    } catch {
+      Self.undo(swap)
+      throw error
+    }
+    try? FileManager.default.removeItem(at: previous)
   }
 
   // MARK: - File work
@@ -225,23 +252,26 @@ final class HomebrewInstallModel: ObservableObject {
     return rest.allSatisfy(HomebrewName.isSafe) ? rest.joined(separator: "/") : nil
   }
 
+  private static let previousFolderName = "previous"
+
   private struct Swap: Sendable {
     let folder: URL
     let backup: URL?
   }
 
-  /// Puts the unpacked package at `root/<slug>`, moving what was there aside until the caller is
-  /// sure the new one is good.
-  nonisolated private static func swapIn(_ extracted: URL, root: URL, slug: String) throws -> Swap {
+  /// Puts the unpacked package at `root/<slug>`, moving what was there to `previous` until the
+  /// caller is sure the new one is good. `previous` is outside the library folder, which is
+  /// scanned for games, so the old program never shows up as a second entry.
+  nonisolated private static func swapIn(_ extracted: URL, root: URL, slug: String, previous: URL) throws -> Swap {
     guard HomebrewName.isSafe(slug) else { throw CocoaError(.fileWriteInvalidFileName) }
     let fm = FileManager.default
     try fm.createDirectory(at: root, withIntermediateDirectories: true)
     let folder = root.appendingPathComponent(slug, isDirectory: true)
     var backup: URL?
     if fm.fileExists(atPath: folder.path) {
-      let aside = root.appendingPathComponent(".\(slug).old-\(UUID().uuidString)", isDirectory: true)
-      try fm.moveItem(at: folder, to: aside)
-      backup = aside
+      try? fm.removeItem(at: previous)
+      try fm.moveItem(at: folder, to: previous)
+      backup = previous
     }
     do {
       try fm.moveItem(at: extracted, to: folder)

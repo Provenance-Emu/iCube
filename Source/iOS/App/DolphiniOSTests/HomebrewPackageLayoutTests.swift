@@ -114,6 +114,20 @@ final class HomebrewPackageLayoutTests: XCTestCase {
     XCTAssertNil(HomebrewPackageLayout.program(in: scratch.root))
   }
 
+  func testMacArchiveLeftoversAreIgnored() throws {
+    let scratch = try HomebrewScratch()
+    try scratch.file("__MACOSX/._game.dol")
+    try scratch.file("__MACOSX/apps/a/._default.dol")
+    try scratch.file("._game.dol")
+    try scratch.file(".hidden/other.dol")
+    try scratch.file("game.dol")
+    XCTAssertEqual(relative(HomebrewPackageLayout.program(in: scratch.root), to: scratch), "game.dol")
+
+    let onlyLeftovers = try HomebrewScratch()
+    try onlyLeftovers.file("__MACOSX/._game.dol")
+    XCTAssertNil(HomebrewPackageLayout.program(in: onlyLeftovers.root))
+  }
+
   func testRenameUsesSlugAndKeepsExtension() throws {
     let scratch = try HomebrewScratch()
     let program = try scratch.file("apps/a/default.dol", "new")

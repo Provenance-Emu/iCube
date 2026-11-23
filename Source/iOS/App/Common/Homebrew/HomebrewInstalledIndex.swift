@@ -55,9 +55,9 @@ struct HomebrewInstalledIndex: Codable, Equatable {
 
   /// Forgets titles whose program is gone (the user deleted the game from the library) and removes
   /// what is left of their folders. Returns the forgotten slugs. A folder with no entry is left
-  /// alone: an install may be writing it.
-  mutating func removeOrphans(root: URL) -> [String] {
-    let orphans = titles.keys.filter { programURL(forSlug: $0, root: root) == nil }.sorted()
+  /// alone, and so is every title in `keeping`: an install may be half way through replacing it.
+  mutating func removeOrphans(root: URL, keeping: Set<String> = []) -> [String] {
+    let orphans = titles.keys.filter { !keeping.contains($0) && programURL(forSlug: $0, root: root) == nil }.sorted()
     for slug in orphans {
       titles[slug] = nil
       if HomebrewName.isSafe(slug) {

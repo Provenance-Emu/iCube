@@ -218,7 +218,8 @@ Deleting the game from the library is the uninstall; no separate remove button.
 
 - Catalogue unreachable: show the cached catalogue with a quiet "showing saved
   list" line, or an empty state with Retry when there is none.
-- Download failure keeps resume data; Cancel discards it.
+- Download failure keeps resume data, and so does Cancel (as the mod browser
+  does): Download then continues where it stopped. Changed while building.
 - Size mismatch, bad zip, no program: failed state with a plain sentence and
   staging removed. Nothing is registered with the library.
 

@@ -87,12 +87,23 @@ final class FakeHomebrewRegistrar: HomebrewLibraryRegistering, @unchecked Sendab
 
   var registered: [(program: URL, title: String, cover: Data?)] { lock.withLock { _registered } }
 
+  /// Called while a registration is in progress.
+  var onRegister: (@Sendable () -> Void)?
+
   func canBoot(_ program: URL) -> Bool { bootable }
   func metadata(of program: URL) async -> (title: String?, cover: Data?) { existing }
   func register(_ program: URL, title: String, cover: Data?) async throws {
     if let registerError { throw registerError }
+    onRegister?()
     lock.withLock { _registered.append((program, title, cover)) }
   }
+}
+
+final class Seen: @unchecked Sendable {
+  private let lock = NSLock()
+  private var stored: [String] = []
+  var value: [String] { lock.withLock { stored } }
+  func set(_ new: [String]) { lock.withLock { stored = new } }
 }
 
 @MainActor
@@ -430,6 +441,42 @@ final class HomebrewInstallModelTests: XCTestCase {
     model.requestStart()
     await settle(model)
     XCTAssertEqual(downloader.calls.count, 1)
+  }
+
+  func testSecondModelCannotStartWhileOneInstalls() async {
+    let (stream, gate) = AsyncStream<Void>.makeStream()
+    downloader.hold = stream
+    let archive = Self.package()
+    downloader.archive = archive
+    let first = model(title(archive: archive))
+    first.requestStart()
+    await Task.yield()
+    let second = model(title(archive: archive))
+    second.requestStart()
+    XCTAssertFalse(second.isBusy)
+    XCTAssertTrue(HomebrewInstallModel.installingSlugs.contains("quest"))
+    XCTAssertTrue(HomebrewInstallModel.attach(title: title(archive: archive), root: root) === first)
+    gate.finish()
+    await settle(first)
+    XCTAssertEqual(first.phase, .installed)
+    XCTAssertEqual(downloader.calls.count, 1)
+    XCTAssertFalse(HomebrewInstallModel.installingSlugs.contains("quest"))
+    XCTAssertFalse(HomebrewInstallModel.attach(title: title(archive: archive), root: root) === first)
+  }
+
+  func testUpdateKeepsThePreviousVersionOutOfTheLibraryFolder() async throws {
+    _ = await install(version: "10")
+    let root = try XCTUnwrap(self.root)
+    let seen = Seen()
+    registrar.onRegister = {
+      seen.set(((try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []).sorted())
+    }
+    let archive = Self.package(contents: "DOL v2")
+    downloader.archive = archive
+    let update = model(title(version: "11", archive: archive))
+    await run(update)
+    XCTAssertEqual(update.phase, .installed)
+    XCTAssertEqual(seen.value, ["installed.json", "quest"])
   }
 
   func testDeletedProgramShowsDownloadAgain() async throws {

@@ -14,7 +14,7 @@ protocol HomebrewLibraryRegistering: Sendable {
 }
 
 enum HomebrewPaths {
-  static let relativeRoot = "Software/Homebrew"
+  static let relativeRoot = "Software/" + ZipImportHelper.installedHomebrewFolderName
 
   /// Where installed homebrew lives: one folder per title, beside `installed.json`.
   static func root() throws -> URL {

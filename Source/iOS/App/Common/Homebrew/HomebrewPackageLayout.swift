@@ -8,19 +8,24 @@ import Foundation
 enum HomebrewPackageLayout {
   private static let programExtensions: Set<String> = ["dol", "elf"]
   private static let preferredNames = ["default.dol", "boot.dol"]
+  private static let macArchiveFolder = "__MACOSX"
 
   /// The program to start, or nil when the package has none. Only regular files count.
   static func program(in root: URL) -> URL? {
     let base = root.resolvingSymlinksInPath()
     let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey]
-    guard let walker = FileManager.default.enumerator(at: base, includingPropertiesForKeys: keys) else { return nil }
+    // Hidden files include the `._name` sidecars a Mac's zip adds; `__MACOSX` holds more of them.
+    guard let walker = FileManager.default.enumerator(at: base, includingPropertiesForKeys: keys,
+                                                      options: [.skipsHiddenFiles]) else { return nil }
     var programs: [(path: [String], url: URL)] = []
     for case let url as URL in walker {
       guard programExtensions.contains(url.pathExtension.lowercased()),
             let values = try? url.resourceValues(forKeys: Set(keys)),
             values.isRegularFile == true, values.isSymbolicLink != true else { continue }
       let path = Array(url.pathComponents.dropFirst(base.pathComponents.count))
-      if !path.isEmpty { programs.append((path, url)) }
+      if !path.isEmpty, !path.contains(where: { $0.caseInsensitiveCompare(macArchiveFolder) == .orderedSame }) {
+        programs.append((path, url))
+      }
     }
     programs.sort { $0.path.joined(separator: "/") < $1.path.joined(separator: "/") }
     if programs.count <= 1 { return programs.first?.url }

@@ -77,7 +77,9 @@ final class HomebrewBrowserModel: ObservableObject {
     var current = HomebrewInstalledIndex.load(root: root)
     if !didSweep {
       didSweep = true
-      if !current.removeOrphans(root: root).isEmpty { try? current.save(root: root) }
+      if !current.removeOrphans(root: root, keeping: HomebrewInstallModel.installingSlugs).isEmpty {
+        try? current.save(root: root)
+      }
     }
     index = current
   }

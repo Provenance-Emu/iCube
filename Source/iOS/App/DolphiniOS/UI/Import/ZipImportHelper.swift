@@ -344,6 +344,9 @@ final class ZipImportHelper: NSObject {
     }
   }
 
+  /// The folder under Software that holds installed homebrew (`HomebrewPaths.relativeRoot`'s last part).
+  static let installedHomebrewFolderName = "Homebrew"
+
   private static func processOrphanedArchivesImpl(inFolder folder: String, riivolutionRoot: URL) -> ArchiveBatchImportResult {
     let fm = FileManager.default
     let folderURL = URL(fileURLWithPath: folder, isDirectory: true)
@@ -356,7 +359,13 @@ final class ZipImportHelper: NSObject {
     if let enumerator = fm.enumerator(at: folderURL,
                                       includingPropertiesForKeys: [.isRegularFileKey],
                                       options: [.skipsHiddenFiles]) {
+      // An installed homebrew package's own archives are its data, not uploads waiting to be unpacked.
+      let homebrewFolder = folderURL.appendingPathComponent(installedHomebrewFolderName, isDirectory: true).standardizedFileURL.path
       for case let fileURL as URL in enumerator {
+        if fileURL.standardizedFileURL.path == homebrewFolder {
+          enumerator.skipDescendants()
+          continue
+        }
         let isRegular = (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile ?? false
         guard isRegular, isArchivePath(fileURL.path) else { continue }
         archivePaths.append(fileURL.path)

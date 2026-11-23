@@ -36,7 +36,7 @@ private struct HomebrewDetailContent: View {
   init(title: HomebrewTitle, browser: HomebrewBrowserModel, root: URL) {
     self.title = title
     self.browser = browser
-    _model = StateObject(wrappedValue: HomebrewInstallModel(title: title, root: root))
+    _model = StateObject(wrappedValue: HomebrewInstallModel.attach(title: title, root: root))
   }
 
   var body: some View {
