@@ -185,6 +185,18 @@ Deleting the game from the library is the uninstall; no separate remove button.
   every package's `default.dol` would share one set of per-game settings and
   save states. With the rename each title has its own, and they survive an
   update.
+- **Confirmed while building (2026-11-23).** The package file name comes from
+  the catalogue (`app_version_assets.file_name`), never from a pattern. The
+  CDN's `ETag` is the package's MD5, so a download is checked by size and by
+  MD5. Images are served at `<slug>/image/<file>`. The library cover is the
+  first screenshot, then the hero image, then the 96x32 banner. Categories are
+  read from the titles in the one catalogue request. The browser's own images
+  use `AsyncImage`; `RemoteCoverCache` is not involved.
+- **The library scans `Software/` recursively**, so an installed title is found
+  again by any rescan. A package with several programs therefore shows each
+  extra `.dol`/`.elf` as its own library entry under its file name; only the
+  chosen one gets the catalogue's name and cover. Left as is for the first
+  version.
 - **Registration is by explicit path** (`updateLibrary(withRemotePaths:)`), so
   folder depth does not matter.
 - **Nothing writes inside the install folder**: without an SD card the program
