@@ -163,7 +163,7 @@ private struct PlusPurchaseView: View {
   var body: some View {
     ScrollView {
       VStack(spacing: 20) {
-        Text("iCube Plus Lifetime").font(.title)
+        Text("iCube Plus Lifetime").icubeText(.section)
         Text(status)
         Text("A one-time purchase. Provenance can recognize your Plus purchase on this device when both apps support sharing.")
         Text("Manual library sharing and patches remain free.").foregroundStyle(.secondary)

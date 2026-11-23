@@ -36,8 +36,9 @@ enum SharedPlusMirrorReader {
   /// must say active/grace AND (for subscriptions) be within expiry + grace —
   /// enforced HERE so a stale mirror decays even if Provenance never runs
   /// again (uninstalled, or lapsed while iFly is the only app in use).
-  static var activeSources: [String] {
-    [(provenancePlusAccount, "Provenance"), (iflyProAccount, "iFly")].compactMap { account, name in
+  static func activeSources(sandbox: Bool) -> [String] {
+    let provenanceAccount = sandbox ? provenancePlusAccount + ".sandbox" : provenancePlusAccount
+    return [(provenanceAccount, "Provenance"), (iflyProAccount, "iFly")].compactMap { account, name in
       guard let raw = read(account: account), let mirror = decode(raw), grants(mirror, now: Date()) else { return nil }
       return name
     }
@@ -92,12 +93,12 @@ enum SharedPlusMirrorReader {
   }
 
   /// Publish only ownership verified by iCube's own StoreKit transaction.
-  static func publishLifetime(owned: Bool) {
+  static func publishLifetime(owned: Bool, account: String) {
     guard let group = sharedGroup else { return }
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
-      kSecAttrAccount as String: "icube.plus",
+      kSecAttrAccount as String: account,
       kSecAttrAccessGroup as String: group,
     ]
     guard owned else {
@@ -145,23 +146,36 @@ final class SharedPlusEntitlement: ObservableObject {
   @Published private(set) var message: String?
   private var updates: Task<Void, Never>?
   private var revision = 0
+  private var sandbox = false
   private init() {}
 
   func refresh() async {
     revision += 1
     let requestRevision = revision
+    // Refresh only the mirror for this verified storefront environment.
+    // A sandbox run must never clear or extend production ownership.
+    let environment: AppStore.Environment?
+    if case let .verified(app)? = try? await AppTransaction.shared {
+      environment = app.environment
+    } else {
+      environment = nil
+    }
     var owned = false
-    var productionOwned = false
+    var ownsInEnvironment = false
     for await result in Transaction.currentEntitlements {
       guard case let .verified(transaction) = result,
             transaction.productID == Self.productID,
             transaction.revocationDate == nil, !transaction.isUpgraded else { continue }
       owned = true
-      if transaction.environment == .production { productionOwned = true }
+      if transaction.environment == environment { ownsInEnvironment = true }
     }
     guard requestRevision == revision, !Task.isCancelled else { return }
+    sandbox = environment == .sandbox
     ownsLifetime = owned
-    SharedPlusMirrorReader.publishLifetime(owned: productionOwned)
+    if environment == .production || environment == .sandbox {
+      let account = environment == .sandbox ? "icube.plus.sandbox" : "icube.plus"
+      SharedPlusMirrorReader.publishLifetime(owned: ownsInEnvironment, account: account)
+    }
     NotificationCenter.default.post(name: .sharedPlusEntitlementDidChange, object: nil)
   }
 
@@ -207,11 +221,11 @@ final class SharedPlusEntitlement: ObservableObject {
   }
 
   /// Read at the decision boundary so expiry never relies on a launch latch.
-  var hasPurchased: Bool { ownsLifetime || !SharedPlusMirrorReader.activeSources.isEmpty }
+  var hasPurchased: Bool { ownsLifetime || !SharedPlusMirrorReader.activeSources(sandbox: sandbox).isEmpty }
 
   var statusText: String {
     if ownsLifetime { return "iCube Plus Lifetime is active." }
-    let sources = SharedPlusMirrorReader.activeSources
+    let sources = SharedPlusMirrorReader.activeSources(sandbox: sandbox)
     return sources.isEmpty ? "Plus membership is not recognized on this device" : "Plus recognized via " + sources.joined(separator: " and ")
   }
 
