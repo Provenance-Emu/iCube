@@ -180,6 +180,11 @@ Deleting the game from the library is the uninstall; no separate remove button.
   entry has no metadata, the catalogue's title and cover are written. The
   builder must check what per-game settings and save states key on for a
   `.dol` and say so in the plan if an update orphans them.
+- **The program is renamed to `<slug>.dol` (or `.elf`) on install** (added
+  while planning, 2026-11-23). Dolphin names a `.dol` `ID-<file name>`, so
+  every package's `default.dol` would share one set of per-game settings and
+  save states. With the rename each title has its own, and they survive an
+  update.
 - **Registration is by explicit path** (`updateLibrary(withRemotePaths:)`), so
   folder depth does not matter.
 - **Nothing writes inside the install folder**: without an SD card the program
