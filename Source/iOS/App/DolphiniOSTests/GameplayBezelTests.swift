@@ -67,6 +67,33 @@ final class GameplayBezelTests: XCTestCase {
 
   // MARK: - The package inside the app
 
+  /// The seat is a stored choice: Back until the player picks another, and Back again for a value this build
+  /// does not know.
+  func testTheSeatIsStoredAndFallsBackToTheBackSeat() throws {
+    let suite = "GameplayBezelTests.seat.\(UUID().uuidString)"
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+    defer { defaults.removePersistentDomain(forName: suite) }
+    XCTAssertEqual(ICubeBezels.seat(in: defaults), .back)
+    ICubeBezels.setSeat(.front, in: defaults)
+    XCTAssertEqual(defaults.string(forKey: ICubeBezels.seatKey), "front")
+    XCTAssertEqual(ICubeBezels.seat(in: defaults), .front)
+    defaults.set("wholeRoom", forKey: ICubeBezels.seatKey)
+    XCTAssertEqual(ICubeBezels.seat(in: defaults), .back)
+  }
+
+  /// A closer seat draws the tube larger on the same screen.
+  @MainActor
+  func testACloserSeatDrawsTheTubeLarger() throws {
+    ICubeBezels.configure()
+    let bezel = try XCTUnwrap(TVBezelCatalog.bezel(id: "living-room-tv"))
+    let container = CGSize(width: 1194, height: 834)
+    let aspect = CGSize(width: 4, height: 3)
+    let back = try XCTUnwrap(ICubeBezels.layout(bezel: bezel, container: container, pictureAspect: aspect, seat: .back))
+    let front = try XCTUnwrap(ICubeBezels.layout(bezel: bezel, container: container, pictureAspect: aspect, seat: .front))
+    XCTAssertGreaterThan(front.screenFrame.width, back.screenFrame.width)
+    XCTAssertEqual(front.artworkFrame, CGRect(origin: .zero, size: container))
+  }
+
   /// A built-in TV's room is drawn for the screen's shape, so it covers a phone and a tablet alike.
   @MainActor
   func testABuiltInTVCoversTheScreenOnPhoneAndTablet() throws {
