@@ -475,7 +475,7 @@ struct EmulationScreen: View {
   /// Where the game surface and a TV's artwork go, in the emulation surface's coordinates.
   private struct BezelStage {
     /// The TV and where its artwork goes; `nil` while the switcher previews the picture alone.
-    var artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement)?
+    var artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?)?
     /// Where the game picture shows.
     var picture: CGRect
     /// The frame of the surface the core draws into: `picture`, or larger while it keeps an older shape.
@@ -492,11 +492,11 @@ struct EmulationScreen: View {
     let state = bezelScreenState(canvas: canvas)
     let pictureAspect = stableAR ?? ICubeBezels.fallbackPictureAspect
     if let bezel = bezels.bezel, ICubeBezels.showsTV(state, choiceIsAutomatic: bezels.choiceIsAutomatic),
-       let layout = TVBezelLayout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1)) {
+       let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1)) {
       // The TV is laid out on the whole screen, like a skin; the surface's coordinates start inside the safe area.
       let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
       return BezelStage(
-        artwork: (bezel, layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top), layout.placement),
+        artwork: (bezel, layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top), layout.placement, layout.canvas),
         picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
     }
     guard bezelSwitcherIsUp || bezelDrawnAspect != nil, canvas.width > canvas.height else { return nil }
@@ -505,8 +505,8 @@ struct EmulationScreen: View {
     return BezelStage(artwork: nil, picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
   }
 
-  private func bezelArtwork(_ artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement)) -> some View {
-    TVBezelArtworkView(bezel: artwork.bezel) { loaded in bezels.artworkLoaded(loaded, id: artwork.bezel.id) }
+  private func bezelArtwork(_ artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?)) -> some View {
+    TVBezelArtworkView(bezel: artwork.bezel, canvas: artwork.canvas) { loaded in bezels.artworkLoaded(loaded, id: artwork.bezel.id) }
       .frame(width: artwork.frame.width, height: artwork.frame.height)
       .position(x: artwork.frame.midX, y: artwork.frame.midY)
       // One TV's artwork never lingers in the next TV's frame.

@@ -26,6 +26,14 @@ enum ICubeBezels {
   static let pauseReason = "bezel-switcher"
   /// The picture's shape until the core reports one.
   static let fallbackPictureAspect: CGFloat = 4.0 / 3.0
+  /// Where the player sits in front of a built-in TV: how much of the room is drawn.
+  static let seat = TVBezelSeat.back
+
+  /// `bezel` laid out as a plain image over `container`. A built-in TV's room is drawn for the container's shape,
+  /// so it covers the screen on a phone and a tablet alike; draw its artwork on `TVBezelLayout.canvas`.
+  static func layout(bezel: TVBezel, container: CGSize, pictureAspect: CGSize) -> TVBezelLayout? {
+    TVBezelLayout(bezel: bezel, container: container, pictureAspect: pictureAspect, seat: seat)
+  }
 
   private static let log = ICubeLog.logger("Bezels")
   private static let lock = NSLock()
