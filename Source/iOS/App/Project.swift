@@ -595,6 +595,8 @@ let iCubeTests = Target.target(
         .folderReference(path: "DolphiniOSTests/Fixtures/Skins"),
         // Recorded GameBanana API responses for GameBananaDecodingTests.
         .folderReference(path: "DolphiniOSTests/Fixtures/GameBanana"),
+        // Hand-written rows in the Dolphin Depot API's shape for HomebrewDecodingTests.
+        .folderReference(path: "DolphiniOSTests/Fixtures/Homebrew"),
     ],
     dependencies: [
         .target(name: "iCube"),
