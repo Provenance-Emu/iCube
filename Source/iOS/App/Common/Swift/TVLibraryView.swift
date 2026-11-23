@@ -2367,6 +2367,11 @@ struct TVLibraryView: View {
           Label(L("Find Mods Online…"), systemImage: "puzzlepiece.extension")
         }
       }
+      if HomebrewBrowser.isEnabled {
+        Button(action: { libraryMenuAction { HomebrewBrowserPresenter.shared.open() } }) {
+          Label(L("Get Homebrew…"), systemImage: "arrow.down.app")
+        }
+      }
     }
   }
 
@@ -2812,6 +2817,7 @@ struct TVLibraryView: View {
       .sheet(isPresented: $showSources) { SourcesView().claimsController() }
 #endif
       .modBrowserSheet(libraryGames: model.games)
+      .homebrewBrowserSheet()
 #if os(tvOS)
       // Full screen: tvOS 26 draws a `.sheet` as a small centred card, which truncated this screen.
       .fullScreenCover(isPresented: $showWebImportSheet) {
