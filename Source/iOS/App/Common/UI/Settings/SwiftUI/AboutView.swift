@@ -154,7 +154,6 @@ struct AboutView: View {
   }
 }
 
-
 private struct PlusPurchaseView: View {
   @Environment(\.dismiss) private var dismiss
   @ObservedObject private var entitlement = SharedPlusEntitlement.shared
