@@ -5,7 +5,7 @@
 ### Bugs
 
 - [X] If multiple sources found, and click cancle, still tries to boot game
-- [ ] Crash in Settings > Controllers > GameCube/Wii > Configure on tvOS (Could not find a storyboard named 'ButtonMapping' in bundle NSBundle)
+- [X] Crash in Settings > Controllers > GameCube/Wii > Configure on tvOS (Could not find a storyboard named 'ButtonMapping' in bundle NSBundle): nothing loads that storyboard any more
 
 ### WebDav
 
