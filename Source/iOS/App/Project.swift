@@ -859,7 +859,7 @@ let project = Project(
         // One package, two products: EmulatorContentClient and RomMClient (clients/swift and
         // clients/romm-swift there). The RomM client used to be a vendored snapshot under
         // Externals/RomMClient, kept only until the server repo published it as a product.
-        .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("8387f9bc4739fb3575d96eb27cec42216c5ac3a0")),
+        .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("f779275a927e5140ac8da3e95fef00073b3421fd")),
         .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.1")),
         .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.2")),
@@ -877,10 +877,8 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // Format 2 runtime and baker, and the TV bezels, pinned to the shared package revision. This one is the head
-        // of SkinKit's `bezels/shared-module` branch (Provenance-Emu/SkinKit#152, built on ab9dbb0); move it to the
-        // merge commit or a tag once that lands.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("6cfcebdddf2ea9da8a2c9ab7182af9b16c8cff83")),
+        // Format 2 runtime and baker, and the TV bezels (SkinKitBezels, SkinKitBezelsUI). 0.x: a minor may break.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.5.0")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
