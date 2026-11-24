@@ -1,0 +1,71 @@
+[
+  {
+    "slug": "block-quest",
+    "name": "Block Quest",
+    "author": "Example Author",
+    "description_short": "A block puzzle for the test suite",
+    "description_long": "Push blocks. Reach the exit.",
+    "source_url": "https://example.org/block-quest",
+    "banner_path": "block-quest/banner.png",
+    "hero_path": "block-quest/hero.png",
+    "screenshot_paths": ["block-quest/screenshot0.png", "block-quest/screenshot1.png"],
+    "downloads_count": 172,
+    "likes_count": 6,
+    "updated_at": "2026-11-20T08:45:09.843+00:00",
+    "categories": {"name": "games", "display_name": "Games", "sort_order": 1},
+    "app_versions": [
+      {
+        "size": 711640,
+        "version": "2026-11-20-ab02ba3b",
+        "version_slug": "20261120ab02ba3b",
+        "changelog": null,
+        "release_date": "2026-11-20T08:45:09.843+00:00",
+        "app_version_assets": [
+          {"file_name": "block-quest_2026-11-20-ab02ba3b_dist.zip", "file_size": 711640}
+        ]
+      }
+    ],
+    "app_peripherals": [
+      {"peripherals": {"id": "1", "name": "controller", "display_name": "Controller"}},
+      {"peripherals": {"id": "2", "name": "sd_gecko", "display_name": "SD Gecko"}}
+    ],
+    "app_platforms": [
+      {"platforms": {"id": "1", "name": "gamecube", "display_name": "GameCube"}}
+    ],
+    "app_licenses": {"spdx": "MIT", "url": "https://example.org/licence", "notes": null},
+    "app_external_resources": [
+      {"type": "download", "label": "Level pack", "url": "https://example.org/levels", "notes": null, "sort_order": 1}
+    ]
+  },
+  {
+    "slug": "no-release",
+    "name": "No Release Yet",
+    "author": "Someone",
+    "description_short": "Listed without a package",
+    "description_long": null,
+    "banner_path": "no-release/banner.png",
+    "hero_path": null,
+    "screenshot_paths": [],
+    "downloads_count": 3,
+    "likes_count": 0,
+    "updated_at": "2026-10-01T00:00:00+00:00",
+    "categories": {"name": "utilities", "display_name": "Utilities", "sort_order": 3},
+    "app_versions": [],
+    "app_peripherals": [],
+    "app_platforms": [],
+    "app_licenses": null,
+    "app_external_resources": []
+  },
+  {
+    "slug": "bare",
+    "name": "Bare Row",
+    "categories": null
+  },
+  {
+    "slug": "../evil",
+    "name": "Escapes",
+    "author": "Nobody",
+    "categories": {"name": "games", "display_name": "Games", "sort_order": 1},
+    "app_versions": []
+  }
+]

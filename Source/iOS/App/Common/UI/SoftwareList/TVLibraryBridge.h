@@ -31,6 +31,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Merge the provided absolute paths/URLs into the library cache and optionally fetch metadata.
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch;
++ (void)refreshLocalGameAtPath:(NSString*)path NS_SWIFT_NAME(refreshLocalGame(atPath:));
 
 @end
 

@@ -3,7 +3,7 @@
 
 import Foundation
 
-/// Downloads mod archives into `<User>/Cache/ModDownloads/<file id>-<session>/`.
+/// Downloads mod archives, and homebrew packages, into `<User>/Cache/ModDownloads/<key>-<session>/`.
 ///
 /// A foreground session: the app has no background-session plumbing, and these downloads are
 /// something the user watches. A cancelled download keeps its resume data, so asking for the same
@@ -16,20 +16,21 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
   private static let progressStep = 0.01
 
   private final class Job {
-    let fileID: Int
+    let key: String
     let destination: URL
     let expectedBytes: Int64
     let progress: @Sendable (Double) -> Void
-    var continuation: CheckedContinuation<URL, Error>?
+    var continuation: CheckedContinuation<HomebrewDownload, Error>?
     /// The outcome, when the transfer ended before the caller began waiting for it.
-    var earlyResult: Result<URL, Error>?
+    var earlyResult: Result<HomebrewDownload, Error>?
     /// Last fraction handed to `progress`; touched only on the session's serial delegate queue.
     var reportedFraction = 0.0
     var failure: Error?
     var finishedFile: URL?
+    var etag: String?
 
-    init(fileID: Int, destination: URL, expectedBytes: Int64, progress: @escaping @Sendable (Double) -> Void) {
-      self.fileID = fileID
+    init(key: String, destination: URL, expectedBytes: Int64, progress: @escaping @Sendable (Double) -> Void) {
+      self.key = key
       self.destination = destination
       self.expectedBytes = expectedBytes
       self.progress = progress
@@ -38,7 +39,7 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
 
   private let lock = NSLock()
   private var jobs: [Int: Job] = [:]
-  private var resumeData: [Int: Data] = [:]
+  private var resumeData: [String: Data] = [:]
   private lazy var session: URLSession = {
     let configuration = URLSessionConfiguration.default
     configuration.timeoutIntervalForRequest = Self.idleTimeout
@@ -54,14 +55,26 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
 
   /// A private staging folder for one install session, even when the same file is reopened.
   static func makeWorkDirectory(forFileID id: Int) -> URL {
-    downloadsDirectory.appendingPathComponent("\(id)-\(UUID().uuidString)", isDirectory: true)
+    makeWorkDirectory(forKey: String(id))
+  }
+
+  /// The same, for a download named by a key rather than a GameBanana file ID.
+  static func makeWorkDirectory(forKey key: String) -> URL {
+    downloadsDirectory.appendingPathComponent("\(key)-\(UUID().uuidString)", isDirectory: true)
   }
 
   /// Downloads `file`, reporting 0...1, and returns the saved archive's URL. Cancelling the
   /// calling task cancels the transfer and keeps its resume data. The checksum is not checked here.
   func download(_ file: GameBananaFile, into directory: URL, progress: @escaping @Sendable (Double) -> Void) async throws -> URL {
     guard let source = file.downloadURL else { throw ModDownloadError.noDownloadURL }
-    let name = file.fileName
+    return try await download(key: String(file.id), from: source, fileName: file.fileName, expectedBytes: file.size,
+                              into: directory, progress: progress).file
+  }
+
+  /// Downloads `source` to `directory/fileName`, reporting 0...1, and returns the saved file with
+  /// the server's ETag. `key` names the transfer: a cancelled one keeps its resume data under it.
+  func download(key: String, from source: URL, fileName name: String, expectedBytes: Int64, into directory: URL,
+                progress: @escaping @Sendable (Double) -> Void) async throws -> HomebrewDownload {
     guard !name.isEmpty, name == (name as NSString).lastPathComponent, !name.hasPrefix(".") else {
       throw ModDownloadError.unsafeFileName(name)
     }
@@ -69,11 +82,11 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
     let destination = directory.appendingPathComponent(name)
     try? FileManager.default.removeItem(at: destination)
 
-    let job = Job(fileID: file.id, destination: destination, expectedBytes: file.size, progress: progress)
+    let job = Job(key: key, destination: destination, expectedBytes: expectedBytes, progress: progress)
     let task = startTask(for: job, source: source)
     return try await withTaskCancellationHandler {
-      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
-        let early: Result<URL, Error>? = lock.withLock {
+      try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<HomebrewDownload, Error>) in
+        let early: Result<HomebrewDownload, Error>? = lock.withLock {
           if job.earlyResult == nil { job.continuation = continuation }
           return job.earlyResult
         }
@@ -86,7 +99,7 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
     } onCancel: {
       task.cancel(byProducingResumeData: { [weak self] data in
         guard let self, let data else { return }
-        self.lock.withLock { self.resumeData[file.id] = data }
+        self.lock.withLock { self.resumeData[key] = data }
       })
     }
   }
@@ -103,7 +116,7 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
   }
 
   private func startTask(for job: Job, source: URL) -> URLSessionDownloadTask {
-    let saved = lock.withLock { resumeData.removeValue(forKey: job.fileID) }
+    let saved = lock.withLock { resumeData.removeValue(forKey: job.key) }
     let task = saved.map { session.downloadTask(withResumeData: $0) } ?? session.downloadTask(with: source)
     lock.withLock { jobs[task.taskIdentifier] = job }
     return task
@@ -111,16 +124,16 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
 
   private func finish(taskID: Int, error: Error?) {
     guard let job = lock.withLock({ jobs.removeValue(forKey: taskID) }) else { return }
-    let result: Result<URL, Error>
+    let result: Result<HomebrewDownload, Error>
     if let failure = job.failure ?? error {
       result = .failure((failure as? URLError)?.code == .cancelled ? CancellationError() : failure)
     } else if let file = job.finishedFile {
-      result = .success(file)
+      result = .success(HomebrewDownload(file: file, etag: job.etag))
     } else {
       result = .failure(URLError(.unknown))
     }
     // Hand the result to the waiting caller, or park it for a caller that has not reached its wait yet.
-    let waiting: CheckedContinuation<URL, Error>? = lock.withLock {
+    let waiting: CheckedContinuation<HomebrewDownload, Error>? = lock.withLock {
       guard let continuation = job.continuation else {
         job.earlyResult = result
         return nil
@@ -157,6 +170,7 @@ extension ModDownloadManager: URLSessionDownloadDelegate {
       try? FileManager.default.removeItem(at: job.destination)
       try FileManager.default.moveItem(at: location, to: job.destination)
       job.finishedFile = job.destination
+      job.etag = (downloadTask.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "ETag")
     } catch {
       job.failure = error
     }
@@ -164,8 +178,8 @@ extension ModDownloadManager: URLSessionDownloadDelegate {
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
     if let data = (error as NSError?)?.userInfo[NSURLSessionDownloadTaskResumeData] as? Data,
-       let fileID = lock.withLock({ jobs[task.taskIdentifier]?.fileID }) {
-      lock.withLock { resumeData[fileID] = data }
+       let key = lock.withLock({ jobs[task.taskIdentifier]?.key }) {
+      lock.withLock { resumeData[key] = data }
     }
     finish(taskID: task.taskIdentifier, error: error)
   }
