@@ -882,7 +882,7 @@ let project = Project(
         // Format 2 runtime and baker, the TV bezels (SkinKitBezels, SkinKitBezelsUI) and the Skin Store screen.
         // Pinned to the commit of SkinKit PR 160 (the catalog browser as an app's store): 0.6.0 plus that change.
         // Go back to `.upToNextMinor` once a release is tagged with it. 0.x: a minor may break.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("391fd468b84408ba2fdad3bdbee3fce77e4a9107")),
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("729f5cabaf376018c0ecb191f18a80d544e4a481")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
