@@ -1,9 +1,8 @@
 import Combine
 import GameController
+import SkinKitBezelsUI
 import SwiftUI
 import UIKit
-
-import SkinKitBezelsUI
 
 private let log = ICubeLog.logger("Emulation")
 
@@ -492,7 +491,7 @@ struct EmulationScreen: View {
     let pictureAspect = gameAR
     if let bezel = bezels.bezel, ICubeBezels.showsTV(state, choiceIsAutomatic: bezels.choiceIsAutomatic),
        let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1),
-                                        seat: TVBezelSeat(rawValue: bezelSeat) ?? .back) {
+                                       seat: TVBezelSeat(rawValue: bezelSeat) ?? .back) {
       // The TV is laid out on the whole screen, like a skin; the surface's coordinates start inside the safe area.
       let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
       return BezelStage(
@@ -545,7 +544,7 @@ struct EmulationScreen: View {
   }
 
   private func pauseCoverDismissed() {
-    if bezelStripToken != nil && !showBezelLibrary { showBezelStrip = true }
+    if bezelStripToken != nil, !showBezelLibrary { showBezelStrip = true }
   }
 
   /// Keep or Cancel: back to the pause menu, which takes the pause over before the strip's claim goes.
@@ -1242,9 +1241,9 @@ struct EmulationScreen: View {
       guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
       TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
     }
-    .fullScreenCover(isPresented: $showPauseMenu, onDismiss: pauseCoverDismissed) {
-      pauseMenu(platform: .ios)
-    }
+      .fullScreenCover(isPresented: $showPauseMenu, onDismiss: pauseCoverDismissed) {
+        pauseMenu(platform: .ios)
+      }
     .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
       if case .success(let urls) = result {
         for url in urls {
@@ -1364,7 +1363,7 @@ struct EmulationScreen: View {
       if !visible { TVEmulationBridge.resizeSurfaceNow() }
     }
     .onChange(of: showQuickMenu) { postOverlayVisibility() }
-    .onChange(of: bezelSwitcherIsUp) { postOverlayVisibility() }
+      .onChange(of: bezelSwitcherIsUp) { postOverlayVisibility() }
   }
 
   private var iosNavigationCanvas: some View {
