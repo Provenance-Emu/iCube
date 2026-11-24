@@ -614,6 +614,8 @@ let iCubeTests = Target.target(
         .package(product: "SkinKitCore"),
         .package(product: "SkinCatalogKit"),
         .package(product: "SkinKitManager"),
+        // SkinStoreHostTests reads the host iCube hands the shared catalog browser.
+        .package(product: "SkinKitUI"),
         .package(product: "SkinKit2Core"),
         .package(product: "SkinKit2Render"),
         // GameplayBezelTests builds `GameplayBezelPlacement.Inputs` and `BezelNavigationCommand` values.
@@ -877,8 +879,9 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // Temporary pin for the bezel host APIs (SkinKit #163). Return to a release requirement once tagged.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("aa7a66a4dc16961e420e92b3f4faac65a5954a7b")),
+        // Includes the shared Skin Store browser (SkinKit #160) and bezel host APIs (#163).
+        // Go back to a release requirement once both changes are tagged.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("a37bf8be8f6314248f2914db535437491c0cfa2e")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
