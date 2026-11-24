@@ -1,7 +1,6 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#if os(iOS)
 import Combine
 import Foundation
 import SkinKitBezelsUI
@@ -81,7 +80,6 @@ final class GameplayBezelSession: ObservableObject, BezelSwitcherSession {
   func gameContext(filePath: String, title: String) -> ExternalDisplayGameContext? {
     guard let gameKey else { return nil }
     let romName = URL(fileURLWithPath: filePath).deletingPathExtension().lastPathComponent
-    return ExternalDisplayGameContext(md5: gameKey, systemID: ICubeBezels.systemID(isWii: isWii), romName: romName, title: title)
+    return ExternalDisplayGameContext(gameID: gameKey, systemID: ICubeBezels.systemID(isWii: isWii), romName: romName, title: title)
   }
 }
-#endif

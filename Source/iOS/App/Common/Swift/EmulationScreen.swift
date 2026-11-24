@@ -1,11 +1,8 @@
 import Combine
 import GameController
+import SkinKitBezelsUI
 import SwiftUI
 import UIKit
-
-#if os(iOS)
-import SkinKitBezelsUI
-#endif
 
 private let log = ICubeLog.logger("Emulation")
 
@@ -31,6 +28,7 @@ private final class EmuContainerViewController: UIViewController {
   private weak var emuVC: EmuEventVC?
   private var exitObserver: NSObjectProtocol?
   var gamePath: String = ""
+  private var holdsKeepAwake = false
   #if os(tvOS)
   private var pauseShownObserver: NSObjectProtocol?
   private var pauseHiddenObserver: NSObjectProtocol?
@@ -46,19 +44,11 @@ private final class EmuContainerViewController: UIViewController {
     // mid-game when playing on a controller (no touches), suspends the app, and tears down the
     // perf test-bench listener. Released in deinit (exit to library); refcounted so exiting a
     // game does not re-arm auto-lock while the debug server still needs the device awake.
-    KeepAwake.acquire(.emulation)
     super.viewDidAppear(animated)
-    // Tear down any previous child to ensure a fresh setup each time
-    if let existing = emuVC {
-      existing.willMove(toParent: nil)
-      existing.view.removeFromSuperview()
-      existing.removeFromParent()
-      emuVC = nil
-    }
-    if let token = exitObserver {
-      NotificationCenter.default.removeObserver(token)
-      exitObserver = nil
-    }
+    // Returning from a menu must keep the existing render host and its last presented frame.
+    guard emuVC == nil else { return }
+    KeepAwake.acquire(.emulation)
+    holdsKeepAwake = true
 
     let vc = EmuEventVC()
     // On Mac Catalyst EmuEventVC is a plain UIViewController: GCEventViewController, which owns
@@ -180,7 +170,7 @@ private final class EmuContainerViewController: UIViewController {
   }
 
   deinit {
-    KeepAwake.release(.emulation)
+    if holdsKeepAwake { KeepAwake.release(.emulation) }
     if let token = exitObserver {
       NotificationCenter.default.removeObserver(token)
     }
@@ -290,6 +280,22 @@ struct EmulationScreen: View {
   @State private var obsShowPause: NSObjectProtocol?
   @State private var obsShowQuickMenu: NSObjectProtocol?
 
+  // TV bezels (`ICubeBezels`): a TV around the picture, and the pause menu's switcher strip.
+  @StateObject private var bezels = GameplayBezelSession()
+  /// The whole screen the game is laid out on (safe areas included), as the surface last measured it.
+  @State private var bezelCanvas: CGSize = .zero
+  /// The pause menu's TV switcher is up over the paused game.
+  @State private var showBezelStrip = false
+  /// The strip's "More…" list is up in its place.
+  @State private var showBezelLibrary = false
+  /// Keeps the game paused from the pause menu closing for the strip until it is back (or the library closes).
+  @State private var bezelStripToken: PauseArbiter.Token?
+  /// The shape the game surface had when the strip opened. The core draws nothing while paused, so the surface
+  /// keeps this shape until the game runs again (`ICubeBezels.surfaceFrame`).
+  @State private var bezelDrawnAspect: CGFloat?
+
+  @AppStorage(ICubeBezels.seatKey) private var bezelSeat = TVBezelSeat.back.rawValue
+
   // iOS top overlay
   #if os(iOS)
 
@@ -390,22 +396,8 @@ struct EmulationScreen: View {
   /// The pad being edited: the one on screen when editing began.
   @State private var layoutEditPadKind: TouchOverlayPadKind = .gameCube
 
-  // TV bezels (`ICubeBezels`): a TV around the picture, and the pause menu's switcher strip.
-  @StateObject private var bezels = GameplayBezelSession()
-  /// The whole screen the game is laid out on (safe areas included), as the surface last measured it.
-  @State private var bezelCanvas: CGSize = .zero
   /// The picture is on an external display, where no TV is drawn around it.
   @State private var renderHostOnExternalDisplay = false
-  /// The pause menu's TV switcher is up over the paused game.
-  @State private var showBezelStrip = false
-  /// The strip's "More…" list is up in its place.
-  @State private var showBezelLibrary = false
-  /// Keeps the game paused from the pause menu closing for the strip until it is back (or the library closes).
-  @State private var bezelStripToken: PauseArbiter.Token?
-  /// The shape the game surface had when the strip opened. The core draws nothing while paused, so the surface
-  /// keeps this shape until the game runs again (`ICubeBezels.surfaceFrame`).
-  @State private var bezelDrawnAspect: CGFloat?
-
   private static let topRevealStripHeight: CGFloat = 80
 
   /// The on-screen controller, built in one place so the game picture is placed for the same pad the player sees.
@@ -472,6 +464,12 @@ struct EmulationScreen: View {
       onExternalDisplay: renderHostOnExternalDisplay, editingLayout: isEditingLayout)
   }
 
+  #else
+  private func bezelScreenState(canvas: CGSize) -> ICubeBezels.ScreenState {
+    ICubeBezels.ScreenState(isAppleTV: true, canvas: canvas)
+  }
+  #endif
+
   /// Where the game surface and a TV's artwork go, in the emulation surface's coordinates.
   private struct BezelStage {
     /// The TV and where its artwork goes; `nil` while the switcher previews the picture alone.
@@ -490,18 +488,24 @@ struct EmulationScreen: View {
     let canvas = CGSize(width: proxy.size.width + insets.leading + insets.trailing,
                         height: proxy.size.height + insets.top + insets.bottom)
     let state = bezelScreenState(canvas: canvas)
-    let pictureAspect = stableAR ?? ICubeBezels.fallbackPictureAspect
+    let pictureAspect = gameAR
     if let bezel = bezels.bezel, ICubeBezels.showsTV(state, choiceIsAutomatic: bezels.choiceIsAutomatic),
-       let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1)) {
+       let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1),
+                                       seat: TVBezelSeat(rawValue: bezelSeat) ?? .back) {
       // The TV is laid out on the whole screen, like a skin; the surface's coordinates start inside the safe area.
       let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
       return BezelStage(
         artwork: (bezel, layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top), layout.placement, layout.canvas),
         picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
     }
-    guard bezelSwitcherIsUp || bezelDrawnAspect != nil, canvas.width > canvas.height else { return nil }
-    // No TV: the picture where the plain landscape layout shows it.
-    let picture = ICubeBezels.aspectFit(aspect: gameAR, in: CGRect(origin: .zero, size: proxy.size))
+    guard bezelDrawnAspect != nil || bezelSwitcherIsUp else { return nil }
+    // Fit the old picture into the same bounds the unadorned surface would use.
+    #if os(iOS)
+    let plainBounds = plainIOSPicture(in: proxy, aspect: gameAR, portrait: proxy.size.height > proxy.size.width)
+    #else
+    let plainBounds = CGRect(origin: .zero, size: proxy.size)
+    #endif
+    let picture = ICubeBezels.aspectFit(aspect: gameAR, in: plainBounds)
     return BezelStage(artwork: nil, picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
   }
 
@@ -513,28 +517,8 @@ struct EmulationScreen: View {
       .id(artwork.bezel.id)
   }
 
-  /// The game surface inside a TV: a built-in TV's cabinet behind the picture (its tube is painted black), an
-  /// image bezel above it (its screen is see-through). The Wii pointer reads the surface's own frame, so it
-  /// follows the picture into the TV.
-  @ViewBuilder
-  private func bezelStageView(_ stage: BezelStage) -> some View {
-    // The plain landscape surface spans the screen, so a tap beside the picture shows the top bar there too.
-    Color.clear
-      .contentShape(Rectangle())
-      .onTapGesture { toggleTopBar() }
-    if let artwork = stage.artwork, artwork.placement == .behindPicture { bezelArtwork(artwork) }
-    EmulationSurfaceController(gamePath: game.filePath)
-      .frame(width: stage.surface.width, height: stage.surface.height)
-      // Hides the bars of a surface that keeps an older, wider or taller shape; nothing to clip otherwise.
-      .frame(width: stage.picture.width, height: stage.picture.height)
-      .clipped()
-      .position(x: stage.picture.midX, y: stage.picture.midY)
-      .onTapGesture { toggleTopBar() }
-    if let artwork = stage.artwork, artwork.placement == .abovePicture { bezelArtwork(artwork) }
-  }
-
   /// The TV switcher's strip or its "More…" list is up over the paused game.
-  private var bezelSwitcherIsUp: Bool { showBezelStrip || showBezelLibrary }
+  private var bezelSwitcherIsUp: Bool { bezelStripToken != nil }
 
   /// The game on screen, as the TV rules key it.
   private func refreshBezelGame() {
@@ -545,22 +529,29 @@ struct EmulationScreen: View {
   /// The pause menu's Bezels item. The menu is a cover, which hides the game, so it closes and the strip shows
   /// over the paused game in its place.
   private func openBezelStrip() {
-    guard !showBezelStrip else { return }
+    guard bezelStripToken == nil else { return }
     // Claimed before the menu lets go of its own, so the game never runs in between.
-    if bezelStripToken == nil { bezelStripToken = PauseArbiter.shared.claim(ICubeBezels.pauseReason) }
+    bezelStripToken = PauseArbiter.shared.claim(ICubeBezels.pauseReason)
     if bezelDrawnAspect == nil, let size = EmulationCoordinator.shared().mainDisplayView()?.bounds.size,
        size.width > 0, size.height > 0 {
       bezelDrawnAspect = size.width / size.height
     }
+    #if os(iOS)
     topBar.hideNow()
+    #endif
+    // Mount after the pause cover finishes dismissing.
     showPauseMenu = false
-    showBezelStrip = true
+  }
+
+  private func pauseCoverDismissed() {
+    if bezelStripToken != nil, !showBezelLibrary { showBezelStrip = true }
   }
 
   /// Keep or Cancel: back to the pause menu, which takes the pause over before the strip's claim goes.
   private func closeBezelStrip() {
     guard showBezelStrip else { return }
     showBezelStrip = false
+    bezels.bezelPreview = nil
     PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
     showPauseMenu = true
     releaseBezelStripToken()
@@ -593,7 +584,6 @@ struct EmulationScreen: View {
     }
     isPaused = TVEmulationBridge.isPaused()
   }
-  #endif
 
   // MARK: - Quick menu and recording overlays
 
@@ -631,9 +621,9 @@ struct EmulationScreen: View {
     #if os(tvOS)
     // The no-controller notice sits in the screen, not a cover: the game's event controller must hand
     // the remote's focus and Menu to it, as it does for the menus.
-    let visible = showPauseMenu || showQuickMenu || showNoControllerNotice
+    let visible = showPauseMenu || showQuickMenu || showNoControllerNotice || bezelStripToken != nil
     #else
-    let visible = showPauseMenu || showQuickMenu
+    let visible = showPauseMenu || showQuickMenu || bezelStripToken != nil
     #endif
     NotificationCenter.default.post(name: Notification.Name(visible ? "DOLPauseOverlayShown" : "DOLPauseOverlayHidden"), object: nil)
   }
@@ -665,10 +655,8 @@ struct EmulationScreen: View {
     menu.startsInSaveBrowser = pauseStartsInSaveBrowser
     menu.startsInPerformance = pauseStartsInPerformance
     menu.startsInControllers = pauseStartsInControllers
-    #if os(iOS)
     // Offered only where a TV the player chose could show right now (landscape, no skin, this screen).
     if ICubeBezels.offersSwitcher(bezelScreenState(canvas: bezelCanvas)) { menu.onOpenBezels = openBezelStrip }
-    #endif
     return menu
   }
 
@@ -761,17 +749,37 @@ struct EmulationScreen: View {
     showPauseMenu = true
   }
 
+  @State private var tvPictureAspect = ICubeBezels.fallbackPictureAspect
+
+  private var tvOSBezelSurface: some View {
+    GeometryReader { proxy in
+      let stage = bezelStage(in: proxy, gameAR: tvPictureAspect)
+      let picture = stage?.picture ?? CGRect(origin: .zero, size: proxy.size)
+      let surface = stage?.surface ?? picture
+      ZStack {
+        Color.black
+        if let art = stage?.artwork, art.placement == .behindPicture { bezelArtwork(art) }
+        EmulationSurfaceController(gamePath: game.filePath)
+          .frame(width: surface.width, height: surface.height)
+          .frame(width: picture.width, height: picture.height)
+          .clipped()
+          .position(x: picture.midX, y: picture.midY)
+        if let art = stage?.artwork, art.placement == .abovePicture { bezelArtwork(art) }
+      }
+    }
+    .ignoresSafeArea()
+  }
+
   private var tvOSScreen: some View {
     ZStack {
-      EmulationSurfaceController(gamePath: game.filePath)
-        .ignoresSafeArea()
-        .focusable(!(showPauseMenu || showQuickMenu || showNoControllerNotice))
-        .allowsHitTesting(!(showPauseMenu || showQuickMenu || showNoControllerNotice))
+      tvOSBezelSurface
+        .focusable(!(showPauseMenu || showQuickMenu || showNoControllerNotice || bezelStripToken != nil))
+        .allowsHitTesting(bezelStripToken == nil && !showPauseMenu && !showQuickMenu && !showNoControllerNotice)
         .navigationBarBackButtonHidden(true)
 
       // Centered "Paused" HUD pill (tap pill or x resumes). Hidden when the full
       // pause menu is open; the disconnect banner (zIndex 5) sits above it.
-      if isPaused && !showPauseMenu && !showNoControllerNotice && controllerManager.disconnectPause == nil {
+      if isPaused && bezelStripToken == nil && !showPauseMenu && !showNoControllerNotice && controllerManager.disconnectPause == nil {
         PausedPill(onResume: {
           if QuickStateHandoff.shared.hasPendingOperation {
             QuickStateHandoff.shared.noteGameplayInputBegan()
@@ -819,12 +827,23 @@ struct EmulationScreen: View {
         .pauseClaim("no-controller")
         .zIndex(6)
       }
+      if showBezelStrip {
+        GameplayBezelStrip(session: bezels, onClose: closeBezelStrip, onMore: openBezelLibrary)
+          .zIndex(8)
+      }
     }
-    .fullScreenCover(isPresented: $showPauseMenu) {
+    .fullScreenCover(isPresented: $showPauseMenu, onDismiss: pauseCoverDismissed) {
       pauseMenu(platform: .tvos)
+    }
+    .fullScreenCover(isPresented: $showBezelLibrary, onDismiss: bezelLibraryDismissed) {
+      GameplayBezelLibrarySheet(game: bezels.gameContext(filePath: game.filePath, title: game.title),
+                                onDone: { showBezelLibrary = false })
+        .onExitCommand { showBezelLibrary = false }
     }
     .onChange(of: showNoControllerNotice) { postOverlayVisibility() }
     .onAppear {
+      bezels.screenState = bezelScreenState(canvas: .zero)
+      refreshBezelGame()
       attachLivePerformance()
       log.debug("[INPUT] tvOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
       let initialCount = GCController.controllers().count
@@ -843,7 +862,7 @@ struct EmulationScreen: View {
         showPauseMenu = true
       }
       obsShowQuickMenu = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowQuickMenu"), object: nil, queue: .main) { _ in
-        if !showPauseMenu { showQuickMenu = true }
+        if !showPauseMenu && bezelStripToken == nil { showQuickMenu = true }
       }
 
       if initialCount == 0 {
@@ -858,6 +877,7 @@ struct EmulationScreen: View {
       // handlers) and auto-assigns, so the previous redundant local observer here
       // (with an empty disconnect handler) has been removed.
       endObserver = NotificationCenter.default.addObserver(forName: Notification.Name("DOLEmulationDidEndNotification"), object: nil, queue: .main) { _ in
+        dismissBezelStrip()
         livePerformance.detach(owner: livePerformanceOwner)
         dismiss()
       }
@@ -877,6 +897,7 @@ struct EmulationScreen: View {
           ControllerManager.shared.registerGCOverride(forController: 0)
           ControllerManager.shared.refreshInputHandlers()
           GameProfiles.shared.applyRuntimeOverrides(for: game)
+          refreshBezelGame()
         }
       }
       // Auto-pause when app goes to background on tvOS
@@ -907,7 +928,12 @@ struct EmulationScreen: View {
       timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
         elapsedSeconds += 1
         isPaused = TVEmulationBridge.isPaused()
-        checkNoControllerNotice()
+        if !isPaused {
+          let aspect = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
+          if aspect.isFinite, aspect > 0 { tvPictureAspect = aspect }
+          if bezelStripToken == nil { bezelDrawnAspect = nil }
+        }
+        if bezelStripToken == nil { checkNoControllerNotice() }
         // If the game resumed via any path other than a controller reconnect
         // (pill tap, pause menu Resume, new game), clear a stale disconnect banner.
         if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
@@ -985,6 +1011,7 @@ struct EmulationScreen: View {
       // pause) the moment the pause menu closed.
       if visible {
         PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+        if bezelStripToken != nil { dismissBezelStrip() }
         livePerformance.closeForPause()
         showQuickMenu = false
       } else {
@@ -999,8 +1026,10 @@ struct EmulationScreen: View {
       #endif
     }
     .onChange(of: showQuickMenu) { postOverlayVisibility() }
+    .onChange(of: bezelStripToken != nil) { postOverlayVisibility() }
     .onExitCommand {
-      if livePerformance.isPresented { _ = livePerformance.handleBack() }
+      if showBezelStrip { closeBezelStrip() }
+      else if livePerformance.isPresented { _ = livePerformance.handleBack() }
       else if showPauseMenu { showPauseMenu = false }
       else if showQuickMenu { showQuickMenu = false }
     }
@@ -1019,34 +1048,26 @@ struct EmulationScreen: View {
         .allowsHitTesting(false)
         .onAppear { bezelCanvas = canvas }
         .onChange(of: canvas) { _, size in bezelCanvas = size }
-      if let skinFrame = skinGamePictureFrame(in: proxy, gameAR: gameAR) {
+      let skinFrame = skinGamePictureFrame(in: proxy, gameAR: gameAR)
+      let stage = skinFrame == nil ? bezelStage(in: proxy, gameAR: stableAR ?? ICubeBezels.fallbackPictureAspect) : nil
+      let picture = skinFrame ?? stage?.picture ?? plainIOSPicture(in: proxy, aspect: gameAR, portrait: isPortrait)
+      let surface = stage?.surface ?? picture
+
+      ZStack {
+        if stage != nil {
+          Color.clear.contentShape(Rectangle()).onTapGesture { toggleTopBar() }
+        }
+        if let art = stage?.artwork, art.placement == .behindPicture { bezelArtwork(art) }
+        // Keep the same render host when previewing Off, showing a TV, or switching to a skin.
         EmulationSurfaceController(gamePath: game.filePath)
-          .frame(width: skinFrame.width, height: skinFrame.height)
-          .position(x: skinFrame.midX, y: skinFrame.midY)
-      } else if let stage = bezelStage(in: proxy, gameAR: gameAR) {
-        bezelStageView(stage)
-      } else if isPortrait {
-        VStack(spacing: 0) {
-          let topInset = proxy.safeAreaInsets.top
-          if topInset > 0 {
-            Color.clear.frame(height: topInset)
+          .frame(width: surface.width, height: surface.height)
+          .frame(width: picture.width, height: picture.height)
+          .clipped()
+          .onTapGesture {
+            if skinFrame == nil { toggleTopBar() }
           }
-          let availableHeight = proxy.size.height - topInset
-          let desiredHeight = min(availableHeight * 0.66, proxy.size.width / max(gameAR, 0.0001))
-          EmulationSurfaceController(gamePath: game.filePath)
-            .frame(width: proxy.size.width, height: desiredHeight)
-            .onTapGesture { toggleTopBar() }
-          Spacer()
-        }
-      } else {
-        let targetHeight = min(proxy.size.height, proxy.size.width / max(gameAR, 0.0001))
-        VStack(spacing: 0) {
-          Spacer()
-          EmulationSurfaceController(gamePath: game.filePath)
-            .frame(width: proxy.size.width, height: targetHeight)
-            .onTapGesture { toggleTopBar() }
-          Spacer()
-        }
+          .position(x: picture.midX, y: picture.midY)
+        if let art = stage?.artwork, art.placement == .abovePicture { bezelArtwork(art) }
       }
     }
     .onChange(of: UIDevice.current.orientation) {
@@ -1072,6 +1093,14 @@ struct EmulationScreen: View {
           refreshBezelGame()
         }
     }
+  }
+
+  private func plainIOSPicture(in proxy: GeometryProxy, aspect: CGFloat, portrait: Bool) -> CGRect {
+    let top = portrait ? proxy.safeAreaInsets.top : 0
+    let availableHeight = max(0, proxy.size.height - top)
+    let height = min(availableHeight * (portrait ? 0.66 : 1), proxy.size.width / max(aspect, 0.0001))
+    return CGRect(x: 0, y: portrait ? top : (availableHeight - height) / 2,
+                  width: proxy.size.width, height: height)
   }
 
   @ViewBuilder
@@ -1173,6 +1202,7 @@ struct EmulationScreen: View {
     ZStack {
       Color.black.ignoresSafeArea()
       iosEmulationSurface
+        .allowsHitTesting(!bezelSwitcherIsUp)
 
       iosStatusOverlays
 
@@ -1182,6 +1212,7 @@ struct EmulationScreen: View {
       performanceOverlay
 
       iosTouchOverlays
+        .allowsHitTesting(!bezelSwitcherIsUp)
 
       // The pause menu's TV switcher: over the paused game and the on-screen controls, which it replaces for now.
       if showBezelStrip {
@@ -1210,9 +1241,9 @@ struct EmulationScreen: View {
       guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
       TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
     }
-    .fullScreenCover(isPresented: $showPauseMenu) {
-      pauseMenu(platform: .ios)
-    }
+      .fullScreenCover(isPresented: $showPauseMenu, onDismiss: pauseCoverDismissed) {
+        pauseMenu(platform: .ios)
+      }
     .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
       if case .success(let urls) = result {
         for url in urls {
@@ -1332,6 +1363,7 @@ struct EmulationScreen: View {
       if !visible { TVEmulationBridge.resizeSurfaceNow() }
     }
     .onChange(of: showQuickMenu) { postOverlayVisibility() }
+      .onChange(of: bezelSwitcherIsUp) { postOverlayVisibility() }
   }
 
   private var iosNavigationCanvas: some View {
@@ -1516,7 +1548,7 @@ struct EmulationScreen: View {
       showPauseMenu = true
     }
     obsShowQuickMenu = NotificationCenter.default.addObserver(forName: Notification.Name("DOLShowQuickMenu"), object: nil, queue: .main) { _ in
-      if !showPauseMenu { showQuickMenu = true }
+      if !showPauseMenu && !bezelSwitcherIsUp { showQuickMenu = true }
     }
     // Re-fetch AR soon after appear to avoid tiny first layout
     scheduleARPoll()

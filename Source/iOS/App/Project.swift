@@ -406,8 +406,8 @@ let iCube = Target.target(
         .package(product: "SkinKit2Core", condition: .when([.ios, .catalyst])),
         .package(product: "SkinKit2Render", condition: .when([.ios, .catalyst])),
         // The TV drawn around the game picture and the pause menu's TV switcher (SkinKit docs/bezels.md).
-        .package(product: "SkinKitBezels", condition: .when([.ios, .catalyst])),
-        .package(product: "SkinKitBezelsUI", condition: .when([.ios, .catalyst])),
+        .package(product: "SkinKitBezels"),
+        .package(product: "SkinKitBezelsUI"),
         // PLzmaSDK, through a local package: see Source/iOS/PLzmaShim/Package.swift.
         .package(product: "PLzmaShim"),
         .package(product: "SWCompression"),
@@ -881,10 +881,9 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // Format 2 runtime and baker, the TV bezels (SkinKitBezels, SkinKitBezelsUI) and the Skin Store screen.
-        // Pinned to the commit of SkinKit PR 160 (the catalog browser as an app's store): 0.6.0 plus that change.
-        // Go back to `.upToNextMinor` once a release is tagged with it. 0.x: a minor may break.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("729f5cabaf376018c0ecb191f18a80d544e4a481")),
+        // Includes the shared Skin Store browser (SkinKit #160) and bezel host APIs (#163).
+        // Go back to a release requirement once both changes are tagged.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("a37bf8be8f6314248f2914db535437491c0cfa2e")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
