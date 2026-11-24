@@ -30,9 +30,13 @@ Rules that follow from this:
   same IPA re-signed by AltStore or SideStore. Anything else (`com.kdt.livecontainer.*`,
   `com.sonicheroes.appletv`, `local.shirahane.*`, `dev.daveroberts.iCube` and so on) is somebody
   else's repackage or a container host: count its users in one line and do not rank a finding on it.
-- **`MetricKit crash: ... in <name>` where `<name>` is not `iCube`** (`SideStore`, `unknown`, a
-  `crash.build` such as `3.8.11` that is not an iCube build) is the host app of a container
-  install crashing. Not ours.
+- **The name in `MetricKit crash: ... in <name>`** is the innermost frame in the app's own code
+  (`MetricKitCrashReport.culprit`: a binary whose name starts with `iCube`, `PV` or `Skin`), else
+  the innermost frame of any binary. So `in PVlibDolphin-ios` or `in SkinKit` is ours and gets a
+  full look, and `in unknown` only means the frames could not be parsed. Set a crash aside as a
+  container host's only when it is positively one: the `crash.binary` is a known host (`SideStore`,
+  `LiveContainer`) or the `crash.build` is not an iCube build number (`3.8.11` is LiveContainer's
+  version). Check `crash.build` on each event, not on the issue: one issue can hold both.
 
 ## Dispositions
 
@@ -68,7 +72,7 @@ TestFlight "fixed in" is the commit's Unix time: any TestFlight build numbered a
 
 | Issues | Why |
 |---|---|
-| ICUBE-QJ, QD | A container host (SideStore, LiveContainer) crashing, reported through iCube's MetricKit payload. |
+| ICUBE-QJ | SideStore's own process crashing (`crash.binary` SideStore, `crash.build` 3.8.0), reported through iCube's MetricKit payload. |
 | ICUBE-P4 `-[UIWindow avDisplayManager]` | Every event is `com.sonicheroes.appletv` build 13, a third-party repackage for Apple TV. |
 | ICUBE-2H, latest event 2026-11-21 | The main thread was inside the system's accessibility bundle load (`AXSpringBoardUIServicesGlue`) at launch. ICUBE-2H groups unrelated hangs by duration; read each event's own stack before blaming app code. |
 
@@ -85,6 +89,7 @@ TestFlight "fixed in" is the commit's Unix time: any TestFlight build numbered a
 
 | Issues | Evidence so far | Report again when |
 |---|---|---|
+| ICUBE-QD `MetricKit crash: SIGKILL / EXC_CRASH in unknown` | Four events whose frames did not parse. Three are iCube builds 546 and 1795200341, both older than the ICUBE-Q4 launch-watchdog fix and first seen the same day, so probably that kill; unproven without frames. The fourth has `crash.build` 3.8.11, a LiveContainer host. | An event whose `crash.build` is sideload 549 or later, or TestFlight 1795417420 or later. |
 | ICUBE-R9 hang, `PlayerScreenModelBuilder.buttonSections` | One event, iPad on iOS 17.2. The frame is a single `String(format:)`; `PlayerScreenView.body` rebuilds the whole menu model on every state change, which is the suspect, unproven. | A second user, or an event with a different top frame under the same `body`. |
 | ICUBE-R5 hang, `EmulationScreen.body` | One event, seconds after a cold launch of TestFlight 1794551144, a build that still had the ICUBE-Q4 launch block. Probably the same block seen by the hang detector. | An event from TestFlight 1795417420 or later. |
 | ICUBE-MC `ServiceManager.applicationWillTerminate` | Two events in three weeks, both TrollStore with legacy JIT, both while the app was being terminated: `objc_msgSend` jumped to a garbage address during a `respondsToSelector:` check. The user saw nothing. | An event from a build that is not TrollStore, or more than five users. |
