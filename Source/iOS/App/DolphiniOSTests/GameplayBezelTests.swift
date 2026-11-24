@@ -47,6 +47,14 @@ final class GameplayBezelTests: XCTestCase {
     XCTAssertTrue(ICubeBezels.showsTV(state(touch: true), choiceIsAutomatic: true))
   }
 
+  func testAppleTVShowsAutomaticAndOffersSwitcherWithoutTouchControls() {
+    var appleTV = ICubeBezels.ScreenState(isAppleTV: true)
+    XCTAssertTrue(ICubeBezels.showsTV(appleTV, choiceIsAutomatic: true))
+    XCTAssertTrue(ICubeBezels.offersSwitcher(appleTV))
+    appleTV.onExternalDisplay = true
+    XCTAssertFalse(ICubeBezels.offersSwitcher(appleTV))
+  }
+
   func test_noTV_withASkin_inPortrait_onAnExternalDisplay_orWhileEditing() {
     XCTAssertFalse(ICubeBezels.showsTV(state(touch: true, skin: true), choiceIsAutomatic: true))
     XCTAssertFalse(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, controller: true), choiceIsAutomatic: true))

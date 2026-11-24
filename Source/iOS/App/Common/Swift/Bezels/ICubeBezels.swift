@@ -1,7 +1,6 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#if os(iOS)
 import CoreGraphics
 import Foundation
 import SkinKitBezels
@@ -57,8 +56,13 @@ enum ICubeBezels {
     guard !isConfigured else { return }
     isConfigured = true
 
+    #if os(tvOS)
+    let libraryRoot = URL.cachesDirectory.appendingPathComponent("Bezels", isDirectory: true)
+    #else
+    let libraryRoot = BezelEnvironment.defaultLibraryRootURL
+    #endif
     BezelEnvironment.current = BezelEnvironment(
-      libraryRootURL: BezelEnvironment.defaultLibraryRootURL,
+      libraryRootURL: libraryRoot,
       userAgent: userAgent,
       settings: UserDefaultsBezelSettings(prefix: settingsKeyPrefix),
       systems: {
@@ -88,6 +92,7 @@ enum ICubeBezels {
   /// What the emulation screen knows that decides whether a TV may be drawn around the picture.
   struct ScreenState: Equatable {
     /// The whole screen the game is laid out on, safe areas included.
+    var isAppleTV = false
     var canvas: CGSize = .zero
     /// The on-screen controls are showing.
     var touchControlsShown = false
@@ -110,7 +115,7 @@ enum ICubeBezels {
   /// - Parameter choiceIsAutomatic: `Resolution.isAutomatic` of the TV that would show.
   static func placementInputs(_ state: ScreenState, choiceIsAutomatic: Bool) -> GameplayBezelPlacement.Inputs {
     GameplayBezelPlacement.Inputs(
-      isAppleTV: false,
+      isAppleTV: state.isAppleTV,
       isLandscape: state.canvas.width > state.canvas.height,
       controls: controls(state),
       layoutSupportsTV: !state.onExternalDisplay,
@@ -159,4 +164,3 @@ enum ICubeBezels {
     return CGRect(x: picture.midX - size.width / 2, y: picture.midY - size.height / 2, width: size.width, height: size.height)
   }
 }
-#endif

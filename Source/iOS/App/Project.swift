@@ -406,8 +406,8 @@ let iCube = Target.target(
         .package(product: "SkinKit2Core", condition: .when([.ios, .catalyst])),
         .package(product: "SkinKit2Render", condition: .when([.ios, .catalyst])),
         // The TV drawn around the game picture and the pause menu's TV switcher (SkinKit docs/bezels.md).
-        .package(product: "SkinKitBezels", condition: .when([.ios, .catalyst])),
-        .package(product: "SkinKitBezelsUI", condition: .when([.ios, .catalyst])),
+        .package(product: "SkinKitBezels"),
+        .package(product: "SkinKitBezelsUI"),
         // PLzmaSDK, through a local package: see Source/iOS/PLzmaShim/Package.swift.
         .package(product: "PLzmaShim"),
         .package(product: "SWCompression"),
@@ -877,8 +877,8 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // Format 2 runtime and baker, and the TV bezels (SkinKitBezels, SkinKitBezelsUI). 0.x: a minor may break.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.6.0")),
+        // Temporary pin for the bezel host APIs (SkinKit #163). Return to a release requirement once tagged.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("aa7a66a4dc16961e420e92b3f4faac65a5954a7b")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),

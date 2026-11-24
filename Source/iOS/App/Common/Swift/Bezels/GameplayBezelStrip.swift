@@ -1,7 +1,6 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#if os(iOS)
 import Combine
 import GameController
 import SkinKitBezelsUI
@@ -19,25 +18,37 @@ struct GameplayBezelStrip: View {
   /// "More…": the full list, in the strip's place.
   let onMore: () -> Void
 
+  #if os(iOS)
   @State private var scopeID = UUID()
   @State private var pad = BezelPadInput()
 
   private static let tick = Timer.publish(every: 1.0 / 60, on: .main, in: .common).autoconnect()
 
+  #endif
+
   var body: some View {
     VStack(spacing: 0) {
       Spacer(minLength: 0)
+      #if os(tvOS)
+      BezelSwitcherHost(session: session, commands: nil, showsControllerHints: false,
+                        supportsRoomLight: false, onClose: onClose, onMore: onMore)
+      #else
       BezelSwitcherHost(session: session,
                         commands: pad.commands.eraseToAnyPublisher(),
                         showsControllerHints: !ControllerManager.shared.controllers.isEmpty,
+                        supportsRoomLight: false,
                         onClose: onClose,
                         onMore: onMore)
+      #endif
     }
+    #if os(iOS)
     .controllerScope(scopeID)
     .onReceive(Self.tick) { _ in pad.poll(isActive: ControllerFocusCoordinator.isActiveScope(scopeID)) }
+    #endif
   }
 }
 
+#if os(iOS)
 /// Polls the pads for a bezel view and publishes what they ask for. A reference type held in `@State`: a tick
 /// changes it without invalidating the view.
 @MainActor
@@ -52,7 +63,7 @@ final class BezelPadInput {
       guard let gamepad = controller.extendedGamepad else { return nil }
       return BezelStripPadNav.Input(
         left: gamepad.dpad.left.isPressed, right: gamepad.dpad.right.isPressed, stickX: gamepad.leftThumbstick.xAxis.value,
-        a: gamepad.buttonA.isPressed, b: gamepad.buttonB.isPressed, x: gamepad.buttonX.isPressed, y: gamepad.buttonY.isPressed,
+        a: gamepad.buttonA.isPressed, b: gamepad.buttonB.isPressed, x: false, y: gamepad.buttonY.isPressed,
         leftShoulder: gamepad.leftShoulder.isPressed, rightShoulder: gamepad.rightShoulder.isPressed)
     }
     guard !inputs.isEmpty else { return }
@@ -66,6 +77,8 @@ final class BezelPadInput {
     nav.update(input, at: now).forEach(commands.send)
   }
 }
+
+#endif
 
 /// The full list of TVs, opened from the strip's "More…": the choice for every game, the player's own bezels,
 /// import, and The Bezel Project for the running game's system.
@@ -99,11 +112,12 @@ struct GameplayBezelLibrarySheet: View {
         Text(L("Middle")).tag(TVBezelSeat.middle.rawValue)
         Text(L("Front")).tag(TVBezelSeat.front.rawValue)
       }
+      #if os(iOS)
       .pickerStyle(.segmented)
+      #endif
     }
     .padding(.horizontal)
     .padding(.vertical, 10)
-    .background(.bar)
+    .background(.regularMaterial)
   }
 }
-#endif
