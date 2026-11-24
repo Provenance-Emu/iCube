@@ -133,24 +133,5 @@ final class SkinVirtualConsoleTests: XCTestCase {
     XCTAssertEqual(SkinStorePolicy.iCube.section(for: nes), .nes)
     XCTAssertEqual(SkinStorePolicy.iCube.section(for: snes), .snes)
   }
-
-  func testShelvesCollapseAfterTheLimit() {
-    func shelf(_ count: Int) -> SkinStoreShelf {
-      let families = (0 ..< count).map { index in
-        let entry = SkinCatalogEntry(id: "\(index)", name: "\(index)", systems: ["nes"],
-                                     downloadURL: URL(string: "https://e.com/\(index).deltaskin")!)
-        return SkinFamily(id: "entry:\(index)", groupId: nil, name: entry.name, members: [entry], labels: [:])
-      }
-      return SkinStoreShelf(section: .nes, families: families)
-    }
-    let limit = SkinStoreShelf.collapsedFamilyLimit
-    let big = shelf(limit + 3)
-    XCTAssertTrue(big.isCollapsible)
-    XCTAssertEqual(big.visibleFamilies(expanded: false).count, limit)
-    XCTAssertEqual(big.visibleFamilies(expanded: true).count, limit + 3)
-    let small = shelf(limit)
-    XCTAssertFalse(small.isCollapsible)
-    XCTAssertEqual(small.visibleFamilies(expanded: false).count, limit)
-  }
 }
 #endif

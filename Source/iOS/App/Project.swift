@@ -614,6 +614,8 @@ let iCubeTests = Target.target(
         .package(product: "SkinKitCore"),
         .package(product: "SkinCatalogKit"),
         .package(product: "SkinKitManager"),
+        // SkinStoreHostTests reads the host iCube hands the shared catalog browser.
+        .package(product: "SkinKitUI"),
         .package(product: "SkinKit2Core"),
         .package(product: "SkinKit2Render"),
         // GameplayBezelTests builds `GameplayBezelPlacement.Inputs` and `BezelNavigationCommand` values.
@@ -877,8 +879,10 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // Format 2 runtime and baker, and the TV bezels (SkinKitBezels, SkinKitBezelsUI). 0.x: a minor may break.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.6.0")),
+        // Format 2 runtime and baker, the TV bezels (SkinKitBezels, SkinKitBezelsUI) and the Skin Store screen.
+        // Pinned to the commit of SkinKit PR 160 (the catalog browser as an app's store): 0.6.0 plus that change.
+        // Go back to `.upToNextMinor` once a release is tagged with it. 0.x: a minor may break.
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("729f5cabaf376018c0ecb191f18a80d544e4a481")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
