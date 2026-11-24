@@ -10,6 +10,10 @@ name: TestFlight
 on:
   workflow_dispatch:
     inputs:
+      internal_only:
+        description: 'Upload for internal TestFlight without external distribution or Beta App Review'
+        type: boolean
+        default: false
       platform:
         description: 'Platform(s) to archive and upload'
         required: true
@@ -414,7 +418,7 @@ jobs:
       # build to every external group with a public link, submits for Beta App
       # Review. Shared with Provenance and iFly.
       - name: Distribute to external TestFlight groups
-        if: success()
+        if: success() && !inputs.internal_only
         # Local copy (see .github/actions/testflight-distribute/action.yml): the cross-repo
         # reference downloaded the whole Provenance tarball and timed out on 2026-09-15.
         uses: ./.github/actions/testflight-distribute
@@ -458,7 +462,7 @@ jobs:
     name: Move the nightly marker
     needs: [plan, testflight]
     # A Mac-only run ships nothing for iOS or tvOS, so it must not mark this commit as shipped.
-    if: needs.plan.outputs.should_build == 'true' && needs.testflight.result == 'success' && inputs.platform != 'mac'
+    if: needs.plan.outputs.should_build == 'true' && needs.testflight.result == 'success' && inputs.platform != 'mac' && !inputs.internal_only
     # The `nightly` tag is moved after a successful upload; that needs write access.
     permissions:
       contents: write

@@ -53,14 +53,17 @@ final class SkinStoreViewModel: ObservableObject {
   private let service: SkinCatalogService
   private let library: SkinLibrary
   let policy: SkinStorePolicy
+  /// The device class the shelves are filtered for, as in iFly's store; `nil` shows every entry.
+  private let device: SkinStoreDevice?
   private var hasLoaded = false
 
   init(service: SkinCatalogService = .shared, installer: SkinStoreInstaller = .shared, library: SkinLibrary = .shared,
-       policy: SkinStorePolicy = .iCube) {
+       policy: SkinStorePolicy = .iCube, device: SkinStoreDevice? = SkinStoreDevice.current) {
     self.service = service
     self.installer = installer
     self.library = library
     self.policy = policy
+    self.device = device
   }
 
   /// First appearance: cache first, then the network if the cache is stale.
@@ -104,7 +107,9 @@ final class SkinStoreViewModel: ObservableObject {
     // install's family (store-families.json) with the same labels.
     let index = catalog.familyIndex
     installer.familyIndex = index
-    shelves = policy.familySections(for: catalog.skins, index: index).map { SkinStoreShelf(section: $0.section, families: $0.families) }
+    // A skin made for the other device class is left out, so iPhone and iPad list what iFly lists.
+    let visible = SkinStorePolicy.filtered(catalog.skins, for: device)
+    shelves = policy.familySections(for: visible, index: index).map { SkinStoreShelf(section: $0.section, families: $0.families) }
     loadState = .loaded
   }
 }

@@ -74,6 +74,8 @@ struct GameplayBezelLibrarySheet: View {
   let onDone: () -> Void
 
   @BezelSetting(\.chosenBezel) private var chosenBezel
+  /// How close the player sits to a built-in TV (`ICubeBezels.seat`).
+  @AppStorage(ICubeBezels.seatKey) private var seat = TVBezelSeat.back.rawValue
 
   var body: some View {
     NavigationStack {
@@ -81,10 +83,27 @@ struct GameplayBezelLibrarySheet: View {
         selection: Binding(get: { chosenBezel }, set: { chosenBezel = $0 ?? ExternalDisplayBezelRules.automaticBezelID }),
         offersSystemAutomatic: true,
         game: game)
+        .safeAreaInset(edge: .bottom) { seatPicker }
         .toolbar {
           ToolbarItem(placement: .confirmationAction) { Button(L("Done"), action: onDone) }
         }
     }
+  }
+
+  /// Back, Middle or Front: a closer seat shows less of the room and a larger picture.
+  private var seatPicker: some View {
+    HStack(spacing: 12) {
+      Text(L("Seat"))
+      Picker(L("Seat"), selection: $seat) {
+        Text(L("Back")).tag(TVBezelSeat.back.rawValue)
+        Text(L("Middle")).tag(TVBezelSeat.middle.rawValue)
+        Text(L("Front")).tag(TVBezelSeat.front.rawValue)
+      }
+      .pickerStyle(.segmented)
+    }
+    .padding(.horizontal)
+    .padding(.vertical, 10)
+    .background(.bar)
   }
 }
 #endif

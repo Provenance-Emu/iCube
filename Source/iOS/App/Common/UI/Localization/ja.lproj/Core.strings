@@ -5946,3 +5946,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "iCube cannot start the program in this package." = "iCubeはこのパッケージのプログラムを起動できません。";
 "This program looks for files on an SD card, which iCube does not provide yet." = "このプログラムはSDカード上のファイルを探しますが、iCubeはまだSDカードに対応していません。";
 "iCube cannot reach its Homebrew folder, so nothing can be installed." = "iCubeが自作ソフトのフォルダにアクセスできないため、インストールできません。";
+"Seat" = "Seat";
+"Middle" = "Middle";
+"Front" = "Front";
