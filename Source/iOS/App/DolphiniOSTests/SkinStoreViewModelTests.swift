@@ -20,12 +20,12 @@ final class SkinStoreViewModelTests: XCTestCase {
     try? FileManager.default.removeItem(at: directory)
   }
 
-  private func service(offline: Bool) -> SkinCatalogService {
+  private func service(offline: Bool, data: Data = SkinCatalogFixture.data) -> SkinCatalogService {
     SkinCatalogService(catalogURLs: [URL(fileURLWithPath: "/catalog.json")],
                        cacheURL: directory.appendingPathComponent(SkinCatalogService.cacheFileName),
                        fetch: { url in
                          if offline { throw URLError(.notConnectedToInternet) }
-                         return (SkinCatalogFixture.data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) ?? URLResponse())
+                         return (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil) ?? URLResponse())
                        })
   }
 
@@ -45,6 +45,23 @@ final class SkinStoreViewModelTests: XCTestCase {
     XCTAssertEqual(model.shelves.map { shelf in shelf.families.map(\.members.count).reduce(0, +) }, [2, 1, 3])
     XCTAssertNotNil(model.installer.familyIndex)
     XCTAssertNil(model.offlineMessage)
+  }
+
+  func testASkinForTheOtherDeviceIsLeftOut() async throws {
+    let text = try XCTUnwrap(String(data: SkinCatalogFixture.data, encoding: .utf8))
+    let phoneOnly = Data(text.replacingOccurrences(of: "\"GameCube Pocket\"", with: "\"GameCube Pocket for iPhone\"").utf8)
+    func shelfSizes(_ device: SkinStoreDevice?) async -> [Int] {
+      let model = SkinStoreViewModel(service: service(offline: false, data: phoneOnly), installer: installer(),
+                                     library: SkinLibrary(rootURL: directory.appendingPathComponent("Skins")), device: device)
+      await model.loadIfNeeded()
+      return model.shelves.map(\.entries.count)
+    }
+    let onPad = await shelfSizes(.iPad)
+    let onPhone = await shelfSizes(.iPhone)
+    let unfiltered = await shelfSizes(nil)
+    XCTAssertEqual(onPad, [1, 1, 3])
+    XCTAssertEqual(onPhone, [2, 1, 3])
+    XCTAssertEqual(unfiltered, [2, 1, 3])
   }
 
   func testOfflineWithNoCacheFails() async {
