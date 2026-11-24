@@ -9,8 +9,10 @@ protocol HomebrewLibraryRegistering: Sendable {
   func canBoot(_ program: URL) async -> Bool
   /// The custom title and cover the library holds for this file, if any.
   func metadata(of program: URL) async -> (title: String?, cover: Data?)
-  /// Adds the file to the library and sets its title and cover.
+  /// Saves the title and cover before the file is published to the library.
   func register(_ program: URL, title: String, cover: Data?) async throws
+  /// Publishes the file after the install and index have committed.
+  @MainActor func publish(_ program: URL)
 }
 
 enum HomebrewPaths {
@@ -43,7 +45,6 @@ struct LiveHomebrewLibraryRegistrar: HomebrewLibraryRegistering {
 
   @MainActor
   func register(_ program: URL, title: String, cover: Data?) async throws {
-    TVLibraryBridge.updateLibrary(withRemotePaths: [program.path], fetchMetadata: true)
     guard let item = DiscImageBridge.gameItem(forPath: program.path) else { throw HomebrewInstallError.cannotBoot }
     let identity = try await LibraryMetadataService.resolveIdentity(for: item)
     // A cover the store cannot take (not an image, or too big even when shrunk) is dropped; the
@@ -53,6 +54,11 @@ struct LiveHomebrewLibraryRegistrar: HomebrewLibraryRegistering {
     try await Task.detached(priority: .utility) {
       try LibraryMetadataService.store().commit(draft, baseline: LibraryMetadataStore.Draft(), for: identity)
     }.value
+  }
+
+  @MainActor
+  func publish(_ program: URL) {
+    TVLibraryBridge.refreshLocalGame(atPath: program.path)
     LibraryMetadataService.didChange()
   }
 }

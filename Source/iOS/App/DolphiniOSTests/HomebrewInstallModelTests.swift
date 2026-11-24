@@ -16,30 +16,48 @@ enum TestZip {
       let crc = file.contents.withUnsafeBytes { UInt32(crc32(0, $0.bindMemory(to: Bytef.self).baseAddress, uInt($0.count))) }
       let offset = UInt32(body.count)
       var local = Data()
-      local.append(le32: 0x0403_4b50)
-      local.append(le16: 20); local.append(le16: 0); local.append(le16: 0)
-      local.append(le16: 0); local.append(le16: 0x21)
+      local.append(le32: 0x0403_4B50)
+      local.append(le16: 20)
+      local.append(le16: 0)
+      local.append(le16: 0)
+      local.append(le16: 0)
+      local.append(le16: 0x21)
       local.append(le32: crc)
-      local.append(le32: UInt32(file.contents.count)); local.append(le32: UInt32(file.contents.count))
-      local.append(le16: UInt16(name.count)); local.append(le16: 0)
-      body.append(local); body.append(name); body.append(file.contents)
+      local.append(le32: UInt32(file.contents.count))
+      local.append(le32: UInt32(file.contents.count))
+      local.append(le16: UInt16(name.count))
+      local.append(le16: 0)
+      body.append(local)
+      body.append(name)
+      body.append(file.contents)
 
-      directory.append(le32: 0x0201_4b50)
-      directory.append(le16: 20); directory.append(le16: 20); directory.append(le16: 0); directory.append(le16: 0)
-      directory.append(le16: 0); directory.append(le16: 0x21)
+      directory.append(le32: 0x0201_4B50)
+      directory.append(le16: 20)
+      directory.append(le16: 20)
+      directory.append(le16: 0)
+      directory.append(le16: 0)
+      directory.append(le16: 0)
+      directory.append(le16: 0x21)
       directory.append(le32: crc)
-      directory.append(le32: UInt32(file.contents.count)); directory.append(le32: UInt32(file.contents.count))
-      directory.append(le16: UInt16(name.count)); directory.append(le16: 0); directory.append(le16: 0)
-      directory.append(le16: 0); directory.append(le16: 0)
+      directory.append(le32: UInt32(file.contents.count))
+      directory.append(le32: UInt32(file.contents.count))
+      directory.append(le16: UInt16(name.count))
+      directory.append(le16: 0)
+      directory.append(le16: 0)
+      directory.append(le16: 0)
+      directory.append(le16: 0)
       directory.append(le32: 0)
       directory.append(le32: offset)
       directory.append(name)
     }
     var end = Data()
-    end.append(le32: 0x0605_4b50)
-    end.append(le16: 0); end.append(le16: 0)
-    end.append(le16: UInt16(files.count)); end.append(le16: UInt16(files.count))
-    end.append(le32: UInt32(directory.count)); end.append(le32: UInt32(body.count))
+    end.append(le32: 0x0605_4B50)
+    end.append(le16: 0)
+    end.append(le16: 0)
+    end.append(le16: UInt16(files.count))
+    end.append(le16: UInt16(files.count))
+    end.append(le32: UInt32(directory.count))
+    end.append(le32: UInt32(body.count))
     end.append(le16: 0)
     return body + directory + end
   }
@@ -92,6 +110,8 @@ final class FakeHomebrewRegistrar: HomebrewLibraryRegistering, @unchecked Sendab
 
   func canBoot(_ program: URL) -> Bool { bootable }
   func metadata(of program: URL) async -> (title: String?, cover: Data?) { existing }
+  @MainActor func publish(_ program: URL) {}
+
   func register(_ program: URL, title: String, cover: Data?) async throws {
     if let registerError { throw registerError }
     onRegister?()
@@ -164,7 +184,7 @@ final class HomebrewInstallModelTests: XCTestCase {
   }
 
   private func settle(_ model: HomebrewInstallModel, file: StaticString = #filePath, line: UInt = #line) async {
-    for _ in 0..<2000 {
+    for _ in 0 ..< 2000 {
       switch model.phase {
       case .idle, .installed, .failed: if !model.isBusy { return }
       case .downloading, .verifying, .installing: break

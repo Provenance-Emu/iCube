@@ -378,6 +378,18 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 }
 
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch {
+  [self updateWithExtraPaths:extraPaths fetchMetadata:fetch refreshingPath:nil];
+}
+
+- (void)refreshLocalGameAtPath:(NSString*)path
+{
+  [self updateWithExtraPaths:@[ path ] fetchMetadata:YES refreshingPath:path];
+}
+
+- (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths
+               fetchMetadata:(BOOL)fetch
+              refreshingPath:(nullable NSString*)refreshingPath
+{
   DOLDebugLog(@"CACHE MGR: updateWithExtraPaths called with %lu extra paths", (unsigned long)extraPaths.count);
   for (NSUInteger i = 0; i < extraPaths.count; i++) {
     DOLDebugLog(@"CACHE MGR:   input[%lu]: %s", (unsigned long)i, [extraPaths[i] UTF8String]);
@@ -435,7 +447,20 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
       }
 
       DOLDebugLog(@"CACHE MGR: About to call self->_cache->Update(all)");
-      updated = self->_cache->Update(all);
+      if (refreshingPath)
+      {
+        // Update normally keeps entries by path. Evict the replaced file before running
+        // the full scan, without publishing an intermediate snapshot.
+        const auto replaced = FoundationToCppString(refreshingPath);
+        std::vector<std::string> retained;
+        retained.reserve(self->_cache->GetSize());
+        self->_cache->ForEach([&](const auto& game) {
+          if (game->GetFilePath() != replaced)
+            retained.push_back(game->GetFilePath());
+        });
+        updated = self->_cache->Update(retained);
+      }
+      updated |= self->_cache->Update(all);
       DOLDebugLog(@"CACHE MGR: C++ Update returned %s", updated ? "true" : "false");
 
       if (fetch) {

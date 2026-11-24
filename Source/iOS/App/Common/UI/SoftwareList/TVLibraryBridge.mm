@@ -229,6 +229,11 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
 #endif
 }
 
++ (void)refreshLocalGameAtPath:(NSString*)path
+{
+  [[GameFileCacheManager sharedManager] refreshLocalGameAtPath:path];
+}
+
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch {
   printf("DEBUG BRIDGE: TVLibraryBridge received %lu remote paths\n", (unsigned long)paths.count);
   for (NSUInteger i = 0; i < paths.count; i++) {

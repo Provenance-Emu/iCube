@@ -114,18 +114,18 @@ final class ArchiveImportSafetyTests: XCTestCase {
         XCTAssertEqual(rescan.failedArchives, 0, "a rejected upload must not be processed again")
     }
 
-    func testArchivesInsideInstalledHomebrewAreLeftAlone() throws {
-        // A homebrew package's own data files are not uploads waiting to be unpacked.
-        let data = library.appendingPathComponent("Homebrew/quest/apps/quest/levels.zip")
-        try FileManager.default.createDirectory(at: data.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("not a zip".utf8).write(to: data)
+  func testArchivesInsideInstalledHomebrewAreLeftAlone() throws {
+    // A homebrew package's own data files are not uploads waiting to be unpacked.
+    let data = library.appendingPathComponent("Homebrew/quest/apps/quest/levels.zip")
+    try FileManager.default.createDirectory(at: data.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data("not a zip".utf8).write(to: data)
 
-        let result = ZipImportHelper.processOrphanedArchives(inFolder: library.path)
-        XCTAssertEqual(result.archivesProcessed, 0)
-        XCTAssertEqual(result.failedArchives, 0)
-        XCTAssertEqual(try Data(contentsOf: data), Data("not a zip".utf8))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: rejected.path))
-    }
+    let result = ZipImportHelper.processOrphanedArchives(inFolder: library.path)
+    XCTAssertEqual(result.archivesProcessed, 0)
+    XCTAssertEqual(result.failedArchives, 0)
+    XCTAssertEqual(try Data(contentsOf: data), Data("not a zip".utf8))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: rejected.path))
+  }
 
     func testReuploadingTheSameRejectedArchiveReplacesTheEarlierCopy() throws {
         let service = WebUploadImportService()

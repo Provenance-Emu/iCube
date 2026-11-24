@@ -53,15 +53,20 @@ struct HomebrewInstalledIndex: Codable, Equatable {
     return url
   }
 
-  /// Forgets titles whose program is gone (the user deleted the game from the library) and removes
-  /// what is left of their folders. Returns the forgotten slugs. A folder with no entry is left
-  /// alone, and so is every title in `keeping`: an install may be half way through replacing it.
+  /// Forgets entries whose program path is gone. Removes the package folder only if it holds no
+  /// other program. Returns the forgotten slugs. Folders without an entry and titles in `keeping`
+  /// are left alone.
   mutating func removeOrphans(root: URL, keeping: Set<String> = []) -> [String] {
     let orphans = titles.keys.filter { !keeping.contains($0) && programURL(forSlug: $0, root: root) == nil }.sorted()
     for slug in orphans {
       titles[slug] = nil
       if HomebrewName.isSafe(slug) {
-        try? FileManager.default.removeItem(at: root.appendingPathComponent(slug, isDirectory: true))
+        let folder = root.appendingPathComponent(slug, isDirectory: true)
+        // A crash after swapping directories can leave an old path in the index. Preserve
+        // packages that still have a program so a stale index cannot delete the new files.
+        if HomebrewPackageLayout.program(in: folder) == nil {
+          try? FileManager.default.removeItem(at: folder)
+        }
       }
     }
     return orphans

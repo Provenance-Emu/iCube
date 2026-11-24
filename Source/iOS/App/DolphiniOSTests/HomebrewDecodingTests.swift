@@ -31,7 +31,7 @@ final class HomebrewDecodingTests: XCTestCase {
     XCTAssertEqual(title.likes, 6)
     XCTAssertNotNil(title.updatedAt)
     XCTAssertEqual(title.latest?.fileName, "block-quest_2026-11-20-ab02ba3b_dist.zip")
-    XCTAssertEqual(title.latest?.size, 711640)
+    XCTAssertEqual(title.latest?.size, 711_640)
     XCTAssertEqual(title.latest?.version, "2026-11-20-ab02ba3b")
     XCTAssertEqual(title.latest?.versionSlug, "20261120ab02ba3b")
     XCTAssertNotNil(title.latest?.releaseDate)

@@ -141,7 +141,7 @@ actor DolphinDepotClient {
   /// One other file from the service (a cover image). 2xx only.
   func data(from url: URL) async throws -> Data {
     let (data, response) = try await transport.data(from: url, userAgent: userAgent)
-    guard (200..<300).contains(response.statusCode) else { throw DolphinDepotError.status(response.statusCode) }
+    guard (200 ..< 300).contains(response.statusCode) else { throw DolphinDepotError.status(response.statusCode) }
     return data
   }
 
@@ -153,7 +153,7 @@ actor DolphinDepotClient {
     let cacheFile = cacheFile
     let task = Task<HomebrewCatalogue, Error> {
       let (data, response) = try await transport.data(from: DolphinDepotEndpoint.catalogue, userAgent: userAgent)
-      guard (200..<300).contains(response.statusCode) else { throw DolphinDepotError.status(response.statusCode) }
+      guard (200 ..< 300).contains(response.statusCode) else { throw DolphinDepotError.status(response.statusCode) }
       let catalogue = try HomebrewCatalogue.decode(data)
       // An error object fails to decode and an empty list is never the real catalogue: neither may
       // replace a copy that works.

@@ -71,6 +71,21 @@ final class GameFileCacheManagerTests: XCTestCase {
         XCTAssertFalse(before === after, "item built in the old language was reused")
     }
 
+  func test_refreshLocalGame_reloadsSizeAtTheSamePath() throws {
+    let manager = GameFileCacheManager.shared()
+    let path = try addTestGame(manager)
+    defer { removeTestGame(path, manager) }
+    let before = try XCTUnwrap(manager.currentGames().first { $0.filePath == path })
+    XCTAssertEqual(before.fileSize, 0x100)
+
+    try Data(repeating: 0, count: 0x200).write(to: URL(fileURLWithPath: path), options: .atomic)
+    TVLibraryBridge.refreshLocalGame(atPath: path)
+    drainCacheQueue(manager)
+
+    let after = try XCTUnwrap(manager.currentGames().first { $0.filePath == path })
+    XCTAssertEqual(after.fileSize, 0x200)
+  }
+
     /// Adds a dummy game and rescans. Any .dol is a valid GameFile by extension alone
     /// (GameFile.cpp), so no real disc is needed.
     private func addTestGame(_ manager: GameFileCacheManager) throws -> String {

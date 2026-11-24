@@ -146,7 +146,10 @@ private struct HomebrewRootList: View {
           Button(L("Try Again")) { Task { await model.refresh() } }
         }
       } else {
-        Section { HStack { Spacer(); ProgressView(); Spacer() } }
+        Section { HStack { Spacer()
+          ProgressView()
+          Spacer()
+        } }
       }
       Section { HomebrewAttribution() }
       TVStorageNoteSection()

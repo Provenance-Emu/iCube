@@ -83,6 +83,21 @@ final class HomebrewInstalledIndexTests: XCTestCase {
     XCTAssertTrue(scratch.exists("stranger/apps/stranger/default.dol"))
   }
 
+  func testRemoveOrphansPreservesReplacementAfterInterruptedUpdate() throws {
+    let scratch = try HomebrewScratch()
+    try scratch.file("quest/apps/new-layout/quest.dol")
+    try scratch.file("quest/apps/new-layout/levels.dat")
+    var index = HomebrewInstalledIndex()
+    index.titles["quest"] = entry("quest")
+    try index.save(root: scratch.root)
+
+    var reopened = HomebrewInstalledIndex.load(root: scratch.root)
+    XCTAssertEqual(reopened.removeOrphans(root: scratch.root), ["quest"])
+    XCTAssertNil(reopened.titles["quest"])
+    XCTAssertTrue(scratch.exists("quest/apps/new-layout/quest.dol"))
+    XCTAssertTrue(scratch.exists("quest/apps/new-layout/levels.dat"))
+  }
+
   func testRemoveOrphansKeepsTitlesBeingInstalled() throws {
     let scratch = try HomebrewScratch()
     try scratch.file("busy/apps/busy/opening.bnr")

@@ -213,13 +213,14 @@ final class HomebrewInstallModel: ObservableObject {
       Self.undo(swap)
       throw error
     }
+    registrar.publish(program)
     try? FileManager.default.removeItem(at: previous)
   }
 
   // MARK: - File work
 
   /// Size always; MD5 when the server's ETag is one (Dolphin Depot's CDN sends the MD5 in quotes).
-  nonisolated private static func verify(_ download: HomebrewDownload, expectedBytes: Int64) throws {
+  private nonisolated static func verify(_ download: HomebrewDownload, expectedBytes: Int64) throws {
     let size = (try download.file.resourceValues(forKeys: [.fileSizeKey])).fileSize.map(Int64.init)
     guard size == expectedBytes else { throw HomebrewInstallError.sizeMismatch }
     guard let md5 = md5(fromETag: download.etag) else { return }
@@ -236,7 +237,7 @@ final class HomebrewInstallModel: ObservableObject {
   }
 
   /// Unpacks the archive, picks the program and gives it the title's own name.
-  nonisolated private static func unpack(_ archive: URL, to extracted: URL, slug: String) throws -> URL {
+  private nonisolated static func unpack(_ archive: URL, to extracted: URL, slug: String) throws -> URL {
     try? FileManager.default.removeItem(at: extracted)
     try ZipImportHelper.extractArchive(at: archive, to: extracted)
     try? FileManager.default.removeItem(at: archive)
@@ -244,7 +245,7 @@ final class HomebrewInstallModel: ObservableObject {
     return try HomebrewPackageLayout.rename(program, slug: slug)
   }
 
-  nonisolated private static func relativePath(of file: URL, in folder: URL) -> String? {
+  private nonisolated static func relativePath(of file: URL, in folder: URL) -> String? {
     let base = folder.resolvingSymlinksInPath().pathComponents
     let parts = file.resolvingSymlinksInPath().pathComponents
     guard parts.count > base.count, Array(parts.prefix(base.count)) == base else { return nil }
@@ -262,7 +263,7 @@ final class HomebrewInstallModel: ObservableObject {
   /// Puts the unpacked package at `root/<slug>`, moving what was there to `previous` until the
   /// caller is sure the new one is good. `previous` is outside the library folder, which is
   /// scanned for games, so the old program never shows up as a second entry.
-  nonisolated private static func swapIn(_ extracted: URL, root: URL, slug: String, previous: URL) throws -> Swap {
+  private nonisolated static func swapIn(_ extracted: URL, root: URL, slug: String, previous: URL) throws -> Swap {
     guard HomebrewName.isSafe(slug) else { throw CocoaError(.fileWriteInvalidFileName) }
     let fm = FileManager.default
     try fm.createDirectory(at: root, withIntermediateDirectories: true)
@@ -282,7 +283,7 @@ final class HomebrewInstallModel: ObservableObject {
     return Swap(folder: folder, backup: backup)
   }
 
-  nonisolated private static func undo(_ swap: Swap) {
+  private nonisolated static func undo(_ swap: Swap) {
     let fm = FileManager.default
     try? fm.removeItem(at: swap.folder)
     if let backup = swap.backup { try? fm.moveItem(at: backup, to: swap.folder) }
