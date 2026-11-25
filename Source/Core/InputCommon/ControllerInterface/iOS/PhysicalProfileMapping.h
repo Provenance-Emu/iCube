@@ -129,6 +129,7 @@ Bindings ResolveForPad(const std::string& vendor_name, const std::string& produc
 float TriggerValueFromAxis(float raw, bool& rests_at_minus_one);
 
 // The name of a pad that reports none: "<product category> Gamepad", so unnamed pads of
-// different kinds do not share one device name (and the mappings stored under it).
+// different kinds do not share one device name (and the mappings stored under it). Which pads
+// get it is MFiController::NameFor.
 std::string FallbackName(const std::string& product_category);
 }  // namespace ciface::iOS::PhysicalProfile

@@ -234,10 +234,8 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
   override var microGamepad: GCMicroGamepad? { nil }
   override var physicalInputProfile: GCPhysicalInputProfile { base.physicalInputProfile }
 
-  /// Never nil: an unnamed pad gets the name the core gives it (`MFiController::GetName`).
-  override var vendorName: String? {
-    base.vendorName ?? PhysicalProfileBridge.fallbackName(forProductCategory: base.productCategory)
-  }
+  /// Never nil: an unnamed pad gets the name the core gives it (`MFiController::NameFor`).
+  override var vendorName: String? { PhysicalProfileBridge.coreName(for: base) }
 
   override var productCategory: String { base.productCategory }
   override var isAttachedToDevice: Bool { false }

@@ -65,8 +65,12 @@ NS_SWIFT_NAME(PhysicalProfileBridge)
 /// NO and pass the same variable every time; it is set once the axis reports a negative value.
 + (float)triggerValueForAxisValue:(float)value restsAtMinusOne:(BOOL*)restsAtMinusOne;
 
-/// The name of a pad that reports none (`<product category> Gamepad`), as the core names it.
+/// The name of a pad that reports none and has no gamepad profile: `<product category> Gamepad`.
 + (NSString*)fallbackNameForProductCategory:(nullable NSString*)productCategory;
+
+/// The name the core gives `controller`'s device (`MFiController::NameFor`), never nil. A wrapper
+/// is resolved to its base first.
++ (NSString*)coreNameForController:(GCController*)controller;
 
 @end
 

@@ -446,17 +446,28 @@ Core::DeviceRemoval MFiController::UpdateInput()
 
 std::string MFiController::GetName() const
 {
-  NSString* vendor_name = [m_controller vendorName];
+  return NameFor(m_controller);
+}
+
+std::string MFiController::NameFor(GCController* controller)
+{
+  NSString* vendor_name = [controller vendorName];
   if (vendor_name != nil)
-  {
     return std::string([vendor_name UTF8String]);
-  }
-  // A pad with an extended gamepad keeps the name it has always had here, so mappings saved
-  // under "MFi/<n>/Unknown Controller" still find it. A pad without one is bound through its
-  // physical profile and is named by its kind ("HID Gamepad").
-  if ([m_controller extendedGamepad] != nil)
+
+  // A pad the system gives any gamepad profile, and a remote, keep the name they have always
+  // had here, so mappings saved under "MFi/<n>/Unknown Controller" still find them. Only a pad
+  // with no profile at all, which is bound through its physical profile and until now mostly
+  // had no inputs, is named by its kind ("HID Gamepad").
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  const bool has_gamepad_profile = controller.extendedGamepad != nil ||
+                                   controller.microGamepad != nil || controller.gamepad != nil;
+#pragma clang diagnostic pop
+  const std::string category([controller.productCategory UTF8String]);
+  if (has_gamepad_profile || PhysicalProfile::IsRemote(category))
     return "Unknown Controller";
-  return PhysicalProfile::FallbackName(std::string([[m_controller productCategory] UTF8String]));
+  return PhysicalProfile::FallbackName(category);
 }
 
 std::string MFiController::GetSource() const
@@ -575,7 +586,10 @@ std::string MFiController::TriggerAxis::GetName() const
 ControlState MFiController::TriggerAxis::GetState() const
 {
   // Read even while suppressed, so an axis resting at -1 is known as such by the time it counts.
-  const float value = PhysicalProfile::TriggerValueFromAxis([m_input value], m_rests_at_minus_one);
+  bool rests_at_minus_one = m_rests_at_minus_one.load(std::memory_order_relaxed);
+  const float value = PhysicalProfile::TriggerValueFromAxis([m_input value], rests_at_minus_one);
+  if (rests_at_minus_one)
+    m_rests_at_minus_one.store(true, std::memory_order_relaxed);
   return m_gate->IsSuppressed() ? 0 : value;
 }
 

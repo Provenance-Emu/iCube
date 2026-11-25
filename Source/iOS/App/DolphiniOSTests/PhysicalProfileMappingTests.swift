@@ -171,6 +171,20 @@ final class PhysicalProfileMappingTests: XCTestCase {
     XCTAssertEqual(result["Button 0"], .buttonA)
   }
 
+  /// Names that differ only in a trailing number go by that number, not "1, 10, 11, 2".
+  func testButtonsNamedWithAPrefixAndANumberKeepTheirNumericOrder() {
+    let result = generic(buttons: (1 ... 12).map { "Generic Button \($0)" }, directions: ["Hat Switch"])
+    XCTAssertEqual(result["Generic Button 1"], .buttonA)
+    XCTAssertEqual(result["Generic Button 2"], .buttonB)
+    XCTAssertEqual(result["Generic Button 9"], .options)
+    XCTAssertEqual(result["Generic Button 10"], .menu)
+    XCTAssertEqual(result["Generic Button 12"], .rightThumbstickButton)
+
+    let sticks = generic(buttons: ["Button 1"], directions: ["Axis Pair 10", "Axis Pair 2"])
+    XCTAssertEqual(sticks["Axis Pair 2"], .dpad)
+    XCTAssertEqual(sticks["Axis Pair 10"], .leftThumbstick)
+  }
+
   func testNamedElementsKeepTheirInputAndDirectionHalvesAreNotButtons() {
     let result = generic(
       buttons: ["Button A", "Button B", "Button Menu", "Direction Pad Up", "Direction Pad Left",

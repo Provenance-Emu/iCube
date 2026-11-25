@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "InputCommon/ControllerInterface/iOS/MFiController.h"
 #include "InputCommon/ControllerInterface/iOS/PhysicalProfileMapping.h"
 
 namespace PP = ciface::iOS::PhysicalProfile;
@@ -121,6 +122,12 @@ NSDictionary<NSString*, NSString*>* ToDictionary(const PP::Bindings& bindings)
 + (NSString*)fallbackNameForProductCategory:(NSString*)productCategory
 {
   return [NSString stringWithUTF8String:PP::FallbackName(ToString(productCategory)).c_str()];
+}
+
++ (NSString*)coreNameForController:(GCController*)controller
+{
+  const std::string name = ciface::iOS::MFiController::NameFor([self baseController:controller]);
+  return [NSString stringWithUTF8String:name.c_str()];
 }
 
 @end

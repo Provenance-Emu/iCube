@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <compare>
 #include <set>
 #include <sstream>
 
@@ -149,15 +150,40 @@ void SortStandardFirst(std::vector<std::string>& names)
   });
 }
 
-// "Button 2" before "Button 10"; other names alphabetically, after the numbered ones.
+// "Button 2" before "Button 10": bare numbered names first, by number. Other names
+// alphabetically, except that names differing only in a trailing number ("Trigger 2",
+// "Trigger 10") also go by number.
+struct NaturalKey
+{
+  bool named;
+  std::string prefix;
+  long number;
+  std::string name;
+  auto operator<=>(const NaturalKey&) const = default;
+};
+
+NaturalKey MakeNaturalKey(const std::string& name)
+{
+  if (const auto index = ButtonIndex(name))
+    return {false, "", *index, name};
+
+  const std::string normalized = Normalize(name);
+  size_t digits = 0;
+  while (digits < normalized.size() &&
+         std::isdigit(static_cast<unsigned char>(normalized[normalized.size() - 1 - digits])))
+  {
+    ++digits;
+  }
+  // Nine digits at most, so std::stol cannot overflow.
+  if (digits == 0 || digits > 9)
+    return {true, normalized, -1, name};
+  return {true, normalized.substr(0, normalized.size() - digits),
+          std::stol(normalized.substr(normalized.size() - digits)), name};
+}
+
 bool NaturalOrder(const std::string& lhs, const std::string& rhs)
 {
-  const auto l = ButtonIndex(lhs), r = ButtonIndex(rhs);
-  if (l && r)
-    return *l != *r ? *l < *r : lhs < rhs;
-  if (l || r)
-    return l.has_value();
-  return lhs < rhs;
+  return MakeNaturalKey(lhs) < MakeNaturalKey(rhs);
 }
 
 bool IsFaceButton(Input input)

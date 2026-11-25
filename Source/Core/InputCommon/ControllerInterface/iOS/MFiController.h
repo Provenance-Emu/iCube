@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include <GameController/GameController.h>
 
 #include "InputCommon/ControllerInterface/CoreDevice.h"
@@ -84,8 +86,8 @@ private:
     std::shared_ptr<ControllerInputGate> m_gate;
     GCControllerAxisInput* m_input;
     const std::string m_name;
-    // Written only by GetState, on the input thread.
-    mutable bool m_rests_at_minus_one = false;
+    // GetState runs on the input thread and, while a binding is being captured, on others.
+    mutable std::atomic<bool> m_rests_at_minus_one{false};
   };
 
   class AccelerometerAxis : public Core::Device::Input
@@ -133,6 +135,10 @@ public:
       GCController* controller, const std::shared_ptr<ControllerInputGate>& expected_gate = {});
 
   std::string GetName() const final override;
+  // The device name of `controller`: its vendor name, or for a pad that reports none,
+  // "Unknown Controller", except that a pad with no gamepad profile at all (bound through its
+  // physical profile) is named by its kind, PhysicalProfile::FallbackName.
+  static std::string NameFor(GCController* controller);
   std::string GetSource() const final override;
   bool SupportsAccelerometer() const;
   bool SupportsGyroscope() const;
