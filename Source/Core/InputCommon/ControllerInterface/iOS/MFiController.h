@@ -67,6 +67,27 @@ private:
     const std::string m_name;
   };
 
+  // A trigger the pad reports as an axis rather than a button (PhysicalProfile::
+  // TriggerValueFromAxis): 0...1 whether the axis rests at 0 or at -1.
+  class TriggerAxis : public Core::Device::Input
+  {
+  public:
+    TriggerAxis(GCControllerAxisInput* input, const std::string name,
+                std::shared_ptr<ControllerInputGate> gate)
+        : m_gate(std::move(gate)), m_input(input), m_name(name)
+    {
+    }
+    std::string GetName() const override;
+    ControlState GetState() const override;
+
+  private:
+    std::shared_ptr<ControllerInputGate> m_gate;
+    GCControllerAxisInput* m_input;
+    const std::string m_name;
+    // Written only by GetState, on the input thread.
+    mutable bool m_rests_at_minus_one = false;
+  };
+
   class AccelerometerAxis : public Core::Device::Input
   {
   public:
@@ -137,9 +158,9 @@ public:
   static void PruneStaleIds(NSArray<GCController*>* live_controllers);
 
 private:
-  // Binds a pad with no extended / micro gamepad, or a Switch Online pad with no extended one,
-  // through its physical input profile (PhysicalProfileMapping.h). Returns false, adding nothing,
-  // when the profile has nothing usable.
+  // Binds a pad with no extended / micro gamepad (a plain HID pad included), or a Switch Online
+  // pad with no extended one, through its physical input profile (PhysicalProfileMapping.h).
+  // Returns false, adding nothing, when the profile has nothing usable.
   bool AddPhysicalProfileInputs(GCController* controller);
 
   std::shared_ptr<ControllerInputGate> m_gate;

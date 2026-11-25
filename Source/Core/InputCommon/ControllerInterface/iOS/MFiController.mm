@@ -57,12 +57,20 @@ std::unordered_map<const void*, GateEntry> s_gates;
 
 namespace
 {
-std::vector<std::string> PhysicalElementNames(GCController* controller)
+// An axis at or below this is resting at -1 (a trigger axis with a -1...1 range).
+constexpr float AXIS_REST_AT_MINUS_ONE = -0.98f;
+
+std::vector<std::string> ToNames(NSDictionary<NSString*, id>* elements)
 {
   std::vector<std::string> names;
-  for (NSString* key in controller.physicalInputProfile.elements)
+  for (NSString* key in elements)
     names.push_back(std::string([key UTF8String]));
   return names;
+}
+
+std::vector<std::string> PhysicalElementNames(GCController* controller)
+{
+  return ToNames(controller.physicalInputProfile.elements);
 }
 
 std::string JoinNames(const std::vector<std::string>& names)
@@ -303,17 +311,21 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
 {
   namespace PP = PhysicalProfile;
 
-  const bool is_n64 = PP::IsN64Pad(GetName(), std::string([controller.productCategory UTF8String]));
-  const PP::Bindings bindings = PP::ResolveBindings(PhysicalElementNames(controller), is_n64);
+  GCPhysicalInputProfile* profile = controller.physicalInputProfile;
+  const std::string category([controller.productCategory UTF8String]);
+  const bool is_n64 = PP::IsN64Pad(GetName(), category);
+  const PP::Bindings bindings = PP::ResolveForPad(
+      GetName(), category, ToNames(profile.buttons), ToNames(profile.dpads), ToNames(profile.axes));
   if (!PP::IsUsable(bindings))
     return false;
 
-  GCPhysicalInputProfile* profile = controller.physicalInputProfile;
   std::string summary;
+  // `elements` can list one element under several names; each element drives one input.
+  NSMutableSet<GCControllerElement*>* bound = [NSMutableSet set];
   for (const auto& [name, input] : bindings)
   {
     GCControllerElement* element = profile.elements[[NSString stringWithUTF8String:name.c_str()]];
-    if (element == nil)
+    if (element == nil || [bound containsObject:element])
       continue;
 
     if (PP::IsDirection(input))
@@ -337,6 +349,13 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
         AddInput(new Axis(pad.yAxis, -1.0f, std::string(side) + " Stick Y-", m_gate));
       }
     }
+    else if ([element isKindOfClass:[GCControllerAxisInput class]])
+    {
+      // A trigger the pad reports as an axis only (ResolveGenericBindings).
+      if (input != PP::Input::LTrigger && input != PP::Input::RTrigger)
+        continue;
+      AddInput(new TriggerAxis((GCControllerAxisInput*)element, PP::InputName(input), m_gate));
+    }
     else
     {
       if (![element isKindOfClass:[GCControllerButtonInput class]])
@@ -351,6 +370,7 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
         AddInput(new Button(button, input_name, m_gate));
     }
 
+    [bound addObject:element];
     if (!summary.empty())
       summary += ", ";
     summary += name + " -> " + (PP::IsDirection(input) ? "(pad)" : PP::InputName(input));
@@ -400,7 +420,10 @@ bool MFiController::AreControlsNeutral(GCController* controller)
     }
     else if ([element isKindOfClass:[GCControllerAxisInput class]])
     {
-      if (std::abs(((GCControllerAxisInput*)element).value) > 0.001f)
+      // A trigger axis can rest at -1 (PhysicalProfile::TriggerValueFromAxis), which is neutral
+      // too. A stick held hard over is still caught through its direction pad below.
+      const float value = ((GCControllerAxisInput*)element).value;
+      if (std::abs(value) > 0.001f && value > AXIS_REST_AT_MINUS_ONE)
         return false;
     }
     else if ([element isKindOfClass:[GCControllerDirectionPad class]])
@@ -428,10 +451,12 @@ std::string MFiController::GetName() const
   {
     return std::string([vendor_name UTF8String]);
   }
-  else
-  {
+  // A pad with an extended gamepad keeps the name it has always had here, so mappings saved
+  // under "MFi/<n>/Unknown Controller" still find it. A pad without one is bound through its
+  // physical profile and is named by its kind ("HID Gamepad").
+  if ([m_controller extendedGamepad] != nil)
     return "Unknown Controller";
-  }
+  return PhysicalProfile::FallbackName(std::string([[m_controller productCategory] UTF8String]));
 }
 
 std::string MFiController::GetSource() const
@@ -540,6 +565,18 @@ ControlState MFiController::PressureSensitiveButton::GetState() const
   if (m_gate->IsSuppressed())
     return 0;
   return [m_input value];
+}
+
+std::string MFiController::TriggerAxis::GetName() const
+{
+  return m_name;
+}
+
+ControlState MFiController::TriggerAxis::GetState() const
+{
+  // Read even while suppressed, so an axis resting at -1 is known as such by the time it counts.
+  const float value = PhysicalProfile::TriggerValueFromAxis([m_input value], m_rests_at_minus_one);
+  return m_gate->IsSuppressed() ? 0 : value;
 }
 
 std::string MFiController::Axis::GetName() const
