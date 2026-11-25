@@ -501,6 +501,26 @@ float TriggerValueFromAxis(float raw, bool& rests_at_minus_one)
   return std::clamp(rests_at_minus_one ? (raw + 1.0f) / 2.0f : raw, 0.0f, 1.0f);
 }
 
+float DPadStickMagnitude(double held_seconds)
+{
+  const double progress = std::clamp(held_seconds / DPAD_STICK_RAMP_SECONDS, 0.0, 1.0);
+  return DPAD_STICK_START + (1.0f - DPAD_STICK_START) * static_cast<float>(progress);
+}
+
+StickPosition DPadStickPosition(int x_sign, double x_held_seconds, int y_sign,
+                                double y_held_seconds)
+{
+  float x = x_sign == 0 ? 0.0f : (x_sign > 0 ? 1.0f : -1.0f) * DPadStickMagnitude(x_held_seconds);
+  float y = y_sign == 0 ? 0.0f : (y_sign > 0 ? 1.0f : -1.0f) * DPadStickMagnitude(y_held_seconds);
+  if (x_sign != 0 && y_sign != 0)
+  {
+    constexpr float DIAGONAL = 0.70710678f;
+    x *= DIAGONAL;
+    y *= DIAGONAL;
+  }
+  return {x, y};
+}
+
 std::string FallbackName(const std::string& product_category)
 {
   if (Normalize(product_category).empty())

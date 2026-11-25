@@ -75,6 +75,14 @@ NS_SWIFT_NAME(PhysicalProfileBridge)
 /// NO and pass the same variable every time; it is set once the axis reports a negative value.
 + (float)triggerValueForAxisValue:(float)value restsAtMinusOne:(BOOL*)restsAtMinusOne;
 
+/// Where a D-pad used as a stick puts the stick (`PhysicalProfile::DPadStickPosition`): each axis
+/// reads -1, 0 or 1 and has been held for its own time. A tap is a partial push, a hold a full one.
++ (CGPoint)dpadStickPositionForXSign:(NSInteger)xSign
+                        xHeldSeconds:(double)xHeldSeconds
+                               ySign:(NSInteger)ySign
+                        yHeldSeconds:(double)yHeldSeconds
+    NS_SWIFT_NAME(dpadStickPosition(xSign:xHeldSeconds:ySign:yHeldSeconds:));
+
 /// The name of a pad that reports none and has no gamepad profile: `<product category> Gamepad`.
 + (NSString*)fallbackNameForProductCategory:(nullable NSString*)productCategory;
 

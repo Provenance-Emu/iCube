@@ -130,6 +130,16 @@ NSDictionary<NSString*, NSString*>* ToDictionary(const PP::Bindings& bindings)
   return result;
 }
 
++ (CGPoint)dpadStickPositionForXSign:(NSInteger)xSign
+                        xHeldSeconds:(double)xHeldSeconds
+                               ySign:(NSInteger)ySign
+                        yHeldSeconds:(double)yHeldSeconds
+{
+  const PP::StickPosition position =
+      PP::DPadStickPosition((int)xSign, xHeldSeconds, (int)ySign, yHeldSeconds);
+  return CGPointMake(position.x, position.y);
+}
+
 + (NSString*)fallbackNameForProductCategory:(NSString*)productCategory
 {
   return [NSString stringWithUTF8String:PP::FallbackName(ToString(productCategory)).c_str()];
