@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <functional>
 #include <map>
@@ -47,6 +48,10 @@ inline void LoadProfileKeepingExtension(ControllerEmu::EmulatedController* contr
 // direction is bound to exactly its `L Stick` input (so a mapping the player wrote is never
 // touched). A `D-Pad/<direction>` key bound to exactly the same D-pad input is cleared, so one
 // press is not both a stick push and a D-pad press. Wii profiles have no `Main Stick/` keys.
+//
+// The Main Stick goes to the device's `D-Pad Stick` inputs when it has all four (a pad bound
+// through its physical profile, MFiController::DPadStickAxis): the same D-pad, but a held
+// direction grows from a partial push to a full one. Otherwise it goes to the `D-Pad` inputs.
 inline std::map<std::string, std::string>
 MainStickFromDPadFallback(const std::function<std::string(const std::string&)>& value_for_key,
                           const std::function<bool(const std::string&)>& has_input)
@@ -56,12 +61,13 @@ MainStickFromDPadFallback(const std::function<std::string(const std::string&)>& 
     const char* name;
     const char* stick_input;
     const char* dpad_input;
+    const char* dpad_stick_input;
   };
   static constexpr std::array<Direction, 4> directions{{
-      {"Up", "L Stick Y+", "D-Pad Up"},
-      {"Down", "L Stick Y-", "D-Pad Down"},
-      {"Left", "L Stick X-", "D-Pad Left"},
-      {"Right", "L Stick X+", "D-Pad Right"},
+      {"Up", "L Stick Y+", "D-Pad Up", "D-Pad Stick Y+"},
+      {"Down", "L Stick Y-", "D-Pad Down", "D-Pad Stick Y-"},
+      {"Left", "L Stick X-", "D-Pad Left", "D-Pad Stick X-"},
+      {"Right", "L Stick X+", "D-Pad Right", "D-Pad Stick X+"},
   }};
   const auto quoted = [](const char* input) { return "`" + std::string(input) + "`"; };
   const auto trimmed = [](const std::string& value) {
@@ -81,10 +87,14 @@ MainStickFromDPadFallback(const std::function<std::string(const std::string&)>& 
     }
   }
 
+  const bool ramped = std::all_of(directions.begin(), directions.end(), [&](const Direction& d) {
+    return has_input(d.dpad_stick_input);
+  });
   std::map<std::string, std::string> changes;
   for (const Direction& direction : directions)
   {
-    changes[std::string("Main Stick/") + direction.name] = quoted(direction.dpad_input);
+    changes[std::string("Main Stick/") + direction.name] =
+        quoted(ramped ? direction.dpad_stick_input : direction.dpad_input);
     const std::string dpad_key = std::string("D-Pad/") + direction.name;
     if (trimmed(value_for_key(dpad_key)) == quoted(direction.dpad_input))
       changes[dpad_key] = "";

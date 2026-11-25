@@ -14,6 +14,7 @@ final class MainStickFromDPadFallbackTests: XCTestCase {
     "C-Stick/Up": "`R Stick Y+`",
   ]
   private let dpad = ["D-Pad Up", "D-Pad Down", "D-Pad Left", "D-Pad Right"]
+  private let dpadStick = ["D-Pad Stick X+", "D-Pad Stick X-", "D-Pad Stick Y+", "D-Pad Stick Y-"]
   private let leftStick = ["L Stick X+", "L Stick X-", "L Stick Y+", "L Stick Y-"]
 
   private func fallback(_ profile: [String: String], inputs: [String]) -> [String: String] {
@@ -27,6 +28,21 @@ final class MainStickFromDPadFallbackTests: XCTestCase {
       "Main Stick/Left": "`D-Pad Left`", "Main Stick/Right": "`D-Pad Right`",
       "D-Pad/Up": "", "D-Pad/Down": "", "D-Pad/Left": "", "D-Pad/Right": "",
     ])
+  }
+
+  /// A pad bound through its physical profile offers its D-pad as a ramped stick; the Main Stick takes that.
+  func testDPadOnlyPadWithDPadStickInputsSteersWithThem() {
+    let changes = fallback(physicalController, inputs: dpad + dpadStick + ["Button A"])
+    XCTAssertEqual(changes, [
+      "Main Stick/Up": "`D-Pad Stick Y+`", "Main Stick/Down": "`D-Pad Stick Y-`",
+      "Main Stick/Left": "`D-Pad Stick X-`", "Main Stick/Right": "`D-Pad Stick X+`",
+      "D-Pad/Up": "", "D-Pad/Down": "", "D-Pad/Left": "", "D-Pad/Right": "",
+    ])
+  }
+
+  func testAnIncompleteSetOfDPadStickInputsIsNotUsed() {
+    let changes = fallback(physicalController, inputs: dpad + dpadStick.dropLast())
+    XCTAssertEqual(changes["Main Stick/Up"], "`D-Pad Up`")
   }
 
   func testPadWithALeftStickIsLeftAlone() {

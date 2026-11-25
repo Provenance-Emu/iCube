@@ -4,6 +4,8 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
+#include <mutex>
 
 #include <GameController/GameController.h>
 
@@ -89,6 +91,41 @@ private:
     const std::string m_name;
     // GetState runs on the input thread and, while a binding is being captured, on others.
     mutable std::atomic<bool> m_rests_at_minus_one{false};
+  };
+
+  // What the four DPadStickAxis inputs of one D-pad share: when each axis last changed direction.
+  struct DPadStickState
+  {
+    std::mutex mutex;
+    int x_sign = 0;
+    int y_sign = 0;
+    std::chrono::steady_clock::time_point x_since{};
+    std::chrono::steady_clock::time_point y_since{};
+  };
+
+  // One half of one axis of a stick driven from a D-pad (PhysicalProfile::DPadStickPosition),
+  // for a pad with a D-pad and no stick: "D-Pad Stick X+" and so on. A held direction starts as
+  // a partial push and grows to a full one.
+  class DPadStickAxis : public Core::Device::Input
+  {
+  public:
+    DPadStickAxis(GCControllerDirectionPad* pad, bool is_x, const float multiplier,
+                  const std::string name, std::shared_ptr<DPadStickState> state,
+                  std::shared_ptr<ControllerInputGate> gate)
+        : m_gate(std::move(gate)), m_state(std::move(state)), m_pad(pad), m_is_x(is_x),
+          m_multiplier(multiplier), m_name(name)
+    {
+    }
+    std::string GetName() const override;
+    ControlState GetState() const override;
+
+  private:
+    std::shared_ptr<ControllerInputGate> m_gate;
+    std::shared_ptr<DPadStickState> m_state;
+    GCControllerDirectionPad* m_pad;
+    bool m_is_x;
+    float m_multiplier;
+    const std::string m_name;
   };
 
   class AccelerometerAxis : public Core::Device::Input

@@ -392,6 +392,28 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
     summary += name + " -> " + (PP::IsDirection(input) ? "(pad)" : PP::InputName(input));
   }
 
+  // A pad with a D-pad and no left stick also offers its D-pad as a stick. Nothing binds these
+  // by default; MainStickFromDPadFallback (ProfileLoading.h) points the Main Stick at them.
+  const auto bound_as = [&](PP::Input wanted) -> GCControllerDirectionPad* {
+    for (const auto& [name, input] : bindings)
+    {
+      GCControllerElement* element = profile.elements[[NSString stringWithUTF8String:name.c_str()]];
+      if (input == wanted && [element isKindOfClass:[GCControllerDirectionPad class]])
+        return (GCControllerDirectionPad*)element;
+    }
+    return nil;
+  };
+  if (GCControllerDirectionPad* dpad = bound_as(PP::Input::DPad);
+      dpad != nil && bound_as(PP::Input::LeftStick) == nil)
+  {
+    auto state = std::make_shared<DPadStickState>();
+    AddInput(new DPadStickAxis(dpad, true, 1.0f, "D-Pad Stick X+", state, m_gate));
+    AddInput(new DPadStickAxis(dpad, true, -1.0f, "D-Pad Stick X-", state, m_gate));
+    AddInput(new DPadStickAxis(dpad, false, 1.0f, "D-Pad Stick Y+", state, m_gate));
+    AddInput(new DPadStickAxis(dpad, false, -1.0f, "D-Pad Stick Y-", state, m_gate));
+    summary += ", D-pad as stick";
+  }
+
   INFO_LOG_FMT(CONTROLLERINTERFACE, "MFi controller '{}': synthesized inputs from physical profile{}: {}",
                GetName(), is_n64 ? " (N64 autoconfig)" : "", summary);
   return true;
@@ -618,6 +640,40 @@ ControlState MFiController::TriggerAxis::GetState() const
   if (rests_at_minus_one)
     m_rests_at_minus_one.store(true, std::memory_order_relaxed);
   return m_gate->IsSuppressed() ? 0 : value;
+}
+
+std::string MFiController::DPadStickAxis::GetName() const
+{
+  return m_name;
+}
+
+ControlState MFiController::DPadStickAxis::GetState() const
+{
+  const auto sign_of = [](float value) { return value > 0.5f ? 1 : (value < -0.5f ? -1 : 0); };
+  // Read even while suppressed, so a direction held through a menu is not timed from its close.
+  const int x_sign = sign_of([m_pad.xAxis value]);
+  const int y_sign = sign_of([m_pad.yAxis value]);
+  const auto now = std::chrono::steady_clock::now();
+
+  std::lock_guard lock(m_state->mutex);
+  if (x_sign != m_state->x_sign)
+  {
+    m_state->x_sign = x_sign;
+    m_state->x_since = now;
+  }
+  if (y_sign != m_state->y_sign)
+  {
+    m_state->y_sign = y_sign;
+    m_state->y_since = now;
+  }
+  if (m_gate->IsSuppressed())
+    return 0;
+  const auto held = [&](std::chrono::steady_clock::time_point since) {
+    return std::chrono::duration<double>(now - since).count();
+  };
+  const PhysicalProfile::StickPosition position = PhysicalProfile::DPadStickPosition(
+      x_sign, held(m_state->x_since), y_sign, held(m_state->y_since));
+  return std::max(0.0f, (m_is_x ? position.x : position.y) * m_multiplier);
 }
 
 std::string MFiController::Axis::GetName() const

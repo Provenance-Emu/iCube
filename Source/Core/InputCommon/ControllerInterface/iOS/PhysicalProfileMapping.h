@@ -134,6 +134,26 @@ Bindings ResolveForPad(const std::string& vendor_name, const std::string& produc
 // reported a negative value.
 float TriggerValueFromAxis(float raw, bool& rests_at_minus_one);
 
+// A stick driven from a D-pad, for a pad with a D-pad and no stick. A digital press as a full
+// deflection makes a character run the moment it is touched; this starts the push at
+// DPAD_STICK_START and reaches a full one DPAD_STICK_RAMP_SECONDS later, so a tap is a nudge and
+// a hold is a run.
+constexpr float DPAD_STICK_START = 0.4f;
+constexpr double DPAD_STICK_RAMP_SECONDS = 0.2;
+
+// How far a direction held for `held_seconds` pushes the stick, DPAD_STICK_START...1.
+float DPadStickMagnitude(double held_seconds);
+
+// The stick position for a D-pad whose axes read -1, 0 or 1 (`x_sign`, `y_sign`), each held for
+// its own time. A diagonal stays on the unit circle rather than reaching the corner of the square.
+struct StickPosition
+{
+  float x;
+  float y;
+};
+StickPosition DPadStickPosition(int x_sign, double x_held_seconds, int y_sign,
+                                double y_held_seconds);
+
 // The name of a pad that reports none: "<product category> Gamepad", so unnamed pads of
 // different kinds do not share one device name (and the mappings stored under it). Which pads
 // get it is MFiController::NameFor.
