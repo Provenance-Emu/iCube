@@ -137,7 +137,8 @@ jobs:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(needs.plan.outputs.matrix) }}
-    timeout-minutes: 300
+    # Includes up to 180 min queued behind another app's release (the lockf wait below).
+    timeout-minutes: 480
     env:
       DEST: ${{ matrix.platform == 'tvos' && 'generic/platform=tvOS' || matrix.platform == 'mac' && 'generic/platform=macOS,variant=Mac Catalyst' || 'generic/platform=iOS' }}
       DOL_ARCHIVE_PLATFORM: ${{ matrix.platform }}
