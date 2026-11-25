@@ -21,6 +21,10 @@ enum SynthesizedInput: String, CaseIterable {
   case menu = "Menu"
   case options = "Options"
   case home = "Home"
+  /// Stick clicks (L3 / R3). The core publishes them as "L Stick" / "R Stick", which are the stick
+  /// elements' names here, so the bridge gives them these.
+  case leftThumbstickButton = "L Stick Button"
+  case rightThumbstickButton = "R Stick Button"
   /// Digital buttons that stand in for a right-stick direction: the N64 C cluster.
   case rightStickUp = "R Stick Y+"
   case rightStickDown = "R Stick Y-"
@@ -148,11 +152,15 @@ final class SynthesizedGamepad: GCExtendedGamepad {
   let synthesizedMenu = SynthesizedButtonInput()
   let synthesizedOptions = SynthesizedButtonInput()
   let synthesizedHome = SynthesizedButtonInput()
+  let synthesizedLeftThumbstickButton = SynthesizedButtonInput()
+  let synthesizedRightThumbstickButton = SynthesizedButtonInput()
 
   /// Optional buttons are reported only when the physical pad has them, so the pause routes
   /// and the hub see the truth.
   var hasOptions = false
   var hasHome = false
+  var hasLeftThumbstickButton = false
+  var hasRightThumbstickButton = false
 
   weak var owner: GCController?
   private var _valueChangedHandler: GCExtendedGamepadValueChangedHandler?
@@ -173,8 +181,13 @@ final class SynthesizedGamepad: GCExtendedGamepad {
   override var buttonMenu: GCControllerButtonInput { synthesizedMenu }
   override var buttonOptions: GCControllerButtonInput? { hasOptions ? synthesizedOptions : nil }
   override var buttonHome: GCControllerButtonInput? { hasHome ? synthesizedHome : nil }
-  override var leftThumbstickButton: GCControllerButtonInput? { nil }
-  override var rightThumbstickButton: GCControllerButtonInput? { nil }
+  override var leftThumbstickButton: GCControllerButtonInput? {
+    hasLeftThumbstickButton ? synthesizedLeftThumbstickButton : nil
+  }
+
+  override var rightThumbstickButton: GCControllerButtonInput? {
+    hasRightThumbstickButton ? synthesizedRightThumbstickButton : nil
+  }
 
   override var valueChangedHandler: GCExtendedGamepadValueChangedHandler? {
     get { _valueChangedHandler }
@@ -195,6 +208,8 @@ final class SynthesizedGamepad: GCExtendedGamepad {
     case .menu: return synthesizedMenu
     case .options: return synthesizedOptions
     case .home: return synthesizedHome
+    case .leftThumbstickButton: return synthesizedLeftThumbstickButton
+    case .rightThumbstickButton: return synthesizedRightThumbstickButton
     default: return nil
     }
   }

@@ -37,12 +37,36 @@ NS_SWIFT_NAME(PhysicalProfileBridge)
 + (BOOL)isSwitchOnlinePadWithVendorName:(nullable NSString*)vendorName
                         productCategory:(nullable NSString*)productCategory;
 
+/// True when the product category names a remote. A remote is never wrapped or bound by position.
++ (BOOL)isRemoteProductCategory:(nullable NSString*)productCategory;
+
 /// Element name -> MFi input name: `Button A`, `R Shoulder`, `Menu`, the C cluster as the
-/// R Stick direction it drives (`R Stick Y+`), and `D-Pad` / `L Stick` / `R Stick` for
-/// direction-pad elements. Only usable profiles (a direction input and a face button) return
-/// a non-empty dictionary.
+/// R Stick direction it drives (`R Stick Y+`), `D-Pad` / `L Stick` / `R Stick` for
+/// direction-pad elements and `L Stick Button` / `R Stick Button` for the stick clicks (the core
+/// publishes those as `L Stick` / `R Stick`, the names the stick elements have here). Only usable
+/// profiles (a direction input and a face button) return a non-empty dictionary.
+///
+/// Resolves by name alone, as for a Switch Online pad.
 + (NSDictionary<NSString*, NSString*>*)bindingsForElementNames:(NSArray<NSString*>*)names
                                                       isN64Pad:(BOOL)isN64Pad;
+
+/// The bindings the core uses for a pad, from its element names by kind
+/// (`physicalInputProfile.buttons` / `.dpads` / `.axes`). A Switch Online pad and a remote
+/// resolve by name alone; any other pad (a plain HID pad) also takes leftover elements by
+/// position, and an axis named as a trigger when no button took that trigger. Same values as
+/// `bindingsForElementNames:isN64Pad:`.
++ (NSDictionary<NSString*, NSString*>*)bindingsForVendorName:(nullable NSString*)vendorName
+                                             productCategory:(nullable NSString*)productCategory
+                                                 buttonNames:(NSArray<NSString*>*)buttonNames
+                                              directionNames:(NSArray<NSString*>*)directionNames
+                                                   axisNames:(NSArray<NSString*>*)axisNames;
+
+/// A trigger read from an axis, in 0...1. `restsAtMinusOne` is the axis's own state: start it at
+/// NO and pass the same variable every time; it is set once the axis reports a negative value.
++ (float)triggerValueForAxisValue:(float)value restsAtMinusOne:(BOOL*)restsAtMinusOne;
+
+/// The name of a pad that reports none (`<product category> Gamepad`), as the core names it.
++ (NSString*)fallbackNameForProductCategory:(nullable NSString*)productCategory;
 
 @end
 

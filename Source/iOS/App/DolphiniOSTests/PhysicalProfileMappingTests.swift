@@ -112,6 +112,196 @@ final class PhysicalProfileMappingTests: XCTestCase {
     }
   }
 
+  // MARK: Stick clicks
+
+  func testStickClicksResolveByStandardNameAndAlias() {
+    let standard = bindings(["Direction Pad", "Button A", "Left Thumbstick", "Left Thumbstick Button", "Right Thumbstick Button"])
+    XCTAssertEqual(standard["Left Thumbstick"], "L Stick")
+    XCTAssertEqual(standard["Left Thumbstick Button"], "L Stick Button")
+    XCTAssertEqual(standard["Right Thumbstick Button"], "R Stick Button")
+
+    let aliases = bindings(["Direction Pad", "Button A", "L3", "Button R3"])
+    XCTAssertEqual(aliases["L3"], "L Stick Button")
+    XCTAssertEqual(aliases["Button R3"], "R Stick Button")
+  }
+
+  func testSynthesizedGamepadReportsStickClicksOnlyWhenThePadHasThem() {
+    let gamepad = SynthesizedGamepad()
+    XCTAssertNil(gamepad.leftThumbstickButton)
+    XCTAssertNil(gamepad.rightThumbstickButton)
+    gamepad.hasLeftThumbstickButton = true
+    XCTAssertTrue(gamepad.leftThumbstickButton === gamepad.button(for: .leftThumbstickButton))
+    XCTAssertNil(gamepad.rightThumbstickButton)
+    gamepad.hasRightThumbstickButton = true
+    XCTAssertTrue(gamepad.rightThumbstickButton === gamepad.button(for: .rightThumbstickButton))
+    XCTAssertFalse(SynthesizedInput.leftThumbstickButton.isDirection)
+  }
+
+  // MARK: Generic HID pads
+
+  private func generic(buttons: [String], directions: [String], axes: [String] = [],
+                       category: String = "HID") -> [String: SynthesizedInput] {
+    PhysicalProfileController.resolveBindings(
+      buttonNames: buttons, directionNames: directions, axisNames: axes, vendorName: nil, productCategory: category)
+  }
+
+  func testNumberedButtonsAndAnUnnamedDirectionFillInputsInOrder() {
+    let result = generic(buttons: (1 ... 13).map { "Button \($0)" }, directions: ["Hat Switch"])
+    XCTAssertEqual(result["Hat Switch"], .dpad)
+    XCTAssertEqual(result["Button 1"], .buttonA)
+    XCTAssertEqual(result["Button 2"], .buttonB)
+    XCTAssertEqual(result["Button 3"], .buttonX)
+    XCTAssertEqual(result["Button 4"], .buttonY)
+    XCTAssertEqual(result["Button 5"], .leftShoulder)
+    XCTAssertEqual(result["Button 6"], .rightShoulder)
+    XCTAssertEqual(result["Button 7"], .leftTrigger)
+    XCTAssertEqual(result["Button 8"], .rightTrigger)
+    XCTAssertEqual(result["Button 9"], .options)
+    XCTAssertEqual(result["Button 10"], .menu)
+    XCTAssertEqual(result["Button 11"], .leftThumbstickButton)
+    XCTAssertEqual(result["Button 12"], .rightThumbstickButton)
+    XCTAssertNil(result["Button 13"])
+  }
+
+  func testLeftoverDirectionElementsFillDpadThenSticks() {
+    let result = generic(buttons: ["Button 0", "Button 1"], directions: ["Axis Pair 2", "Axis Pair 1", "Hat Switch"])
+    XCTAssertEqual(result["Axis Pair 1"], .dpad)
+    XCTAssertEqual(result["Axis Pair 2"], .leftThumbstick)
+    XCTAssertEqual(result["Hat Switch"], .rightThumbstick)
+    XCTAssertEqual(result["Button 0"], .buttonA)
+  }
+
+  func testNamedElementsKeepTheirInputAndDirectionHalvesAreNotButtons() {
+    let result = generic(
+      buttons: ["Button A", "Button B", "Button Menu", "Direction Pad Up", "Direction Pad Left",
+                "Left Thumbstick Button", "Button Share"],
+      directions: ["Direction Pad", "Left Thumbstick"])
+    XCTAssertEqual(result["Button A"], .buttonA)
+    XCTAssertEqual(result["Direction Pad"], .dpad)
+    XCTAssertEqual(result["Left Thumbstick"], .leftThumbstick)
+    XCTAssertNil(result["Direction Pad Up"])
+    XCTAssertNil(result["Direction Pad Left"])
+    XCTAssertEqual(result["Left Thumbstick Button"], .leftThumbstickButton)
+    XCTAssertNil(result["Button Share"], "a named extra is left alone once the names gave a face button")
+  }
+
+  func testDirectionHalvesAreNeverTakenByPosition() {
+    // No face button by name, so oddly named buttons are taken, but never a half of a direction element.
+    let result = generic(buttons: ["Hat Switch Up", "Hat Switch Down", "Fire"], directions: ["Hat Switch"])
+    XCTAssertEqual(result, ["Hat Switch": .dpad, "Fire": .buttonA])
+  }
+
+  func testOddlyNamedButtonsAreTakenWhenNamesGiveNoFaceButton() {
+    let result = generic(buttons: ["Fire", "Jump"], directions: ["Direction Pad"])
+    XCTAssertEqual(Set(result.values), [.dpad, .buttonA, .buttonB])
+  }
+
+  func testNumberedButtonsFillOnlyTheInputsNamesLeftFree() {
+    let result = generic(buttons: ["Button A", "Button B", "Left Shoulder", "Button 14", "Button 15"],
+                         directions: ["Direction Pad"])
+    XCTAssertEqual(result["Button 14"], .buttonX)
+    XCTAssertEqual(result["Button 15"], .buttonY)
+    XCTAssertEqual(result["Left Shoulder"], .leftShoulder)
+  }
+
+  /// On a generic pad L / R are the shoulders and ZL / ZR the triggers; on the N64 pad L / R are the
+  /// GameCube analog triggers and ZR is Options.
+  func testPrintedShoulderLabelsFollowAModernPadOnAGenericPad() {
+    let result = generic(buttons: ["A", "L", "R", "ZL", "ZR"], directions: ["Direction Pad"])
+    XCTAssertEqual(result["L"], .leftShoulder)
+    XCTAssertEqual(result["R"], .rightShoulder)
+    XCTAssertEqual(result["ZL"], .leftTrigger)
+    XCTAssertEqual(result["ZR"], .rightTrigger)
+
+    let n64 = PhysicalProfileController.resolveBindings(
+      buttonNames: ["A", "L", "R", "ZR"], directionNames: ["Direction Pad"], vendorName: "N64 Controller",
+      productCategory: "HID")
+    XCTAssertEqual(n64["L"], .leftTrigger)
+    XCTAssertEqual(n64["ZR"], .options)
+  }
+
+  func testAButtonNeverTakesADirectionInputByName() {
+    // A button called "Hat" must not leave the pad without its real D-pad.
+    let result = generic(buttons: ["Hat", "Button 1"], directions: ["Axis Pair"])
+    XCTAssertEqual(result["Axis Pair"], .dpad)
+    XCTAssertNotEqual(result["Hat"], .dpad)
+  }
+
+  func testATriggerAxisTakesTheTriggerOnlyWhenNoButtonDid() {
+    let named = generic(buttons: ["Button A", "Button B"], directions: ["Direction Pad"],
+                        axes: ["Left Trigger", "R2", "Left Thumbstick X Axis"])
+    XCTAssertEqual(named["Left Trigger"], .leftTrigger)
+    XCTAssertEqual(named["R2"], .rightTrigger)
+    XCTAssertNil(named["Left Thumbstick X Axis"])
+
+    // Eight numbered buttons already cover the triggers; the axes are left alone.
+    let numbered = generic(buttons: (1 ... 10).map { "Button \($0)" }, directions: ["Hat Switch"],
+                           axes: ["Left Trigger", "Right Trigger"])
+    XCTAssertEqual(numbered["Button 7"], .leftTrigger)
+    XCTAssertNil(numbered["Left Trigger"])
+    XCTAssertEqual(numbered["Button 10"], .menu)
+  }
+
+  func testGenericPadWithoutAFaceButtonOrDirectionIsUnusable() {
+    XCTAssertTrue(generic(buttons: ["Button 1", "Button 2"], directions: []).isEmpty, "no direction input")
+    XCTAssertTrue(generic(buttons: [], directions: ["Hat Switch"]).isEmpty, "no button")
+  }
+
+  /// A remote is bound by name alone, never by position, and never wrapped.
+  func testRemotesAreNotBoundByPosition() {
+    XCTAssertTrue(PhysicalProfileBridge.isRemoteProductCategory("Siri Remote (2nd Generation)"))
+    XCTAssertTrue(PhysicalProfileBridge.isRemoteProductCategory("Control Center Remote"))
+    XCTAssertFalse(PhysicalProfileBridge.isRemoteProductCategory("HID"))
+    XCTAssertFalse(PhysicalProfileBridge.isRemoteProductCategory(nil))
+    XCTAssertTrue(generic(buttons: ["Button 1", "Button 2"], directions: ["Touch Surface"], category: "Some Remote").isEmpty)
+    XCTAssertFalse(generic(buttons: ["Button 1", "Button 2"], directions: ["Touch Surface"]).isEmpty)
+  }
+
+  func testGenericPadWithNoMicroGamepadIsWrappedAndPausesFromOptions() {
+    let result = generic(buttons: (1 ... 12).map { "Button \($0)" }, directions: ["Hat Switch"])
+    XCTAssertTrue(PhysicalProfileController.shouldWrap(
+      hasExtendedGamepad: false, hasMicroGamepad: false, isMenuRemote: false, isSwitchOnlinePad: false, bindings: result))
+    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: result, isSnesPad: false), .standard)
+  }
+
+  func testEveryGenericBridgeOutputIsASynthesizedInput() {
+    let raw = PhysicalProfileBridge.bindings(
+      forVendorName: nil, productCategory: "HID", buttonNames: (1 ... 12).map { "Button \($0)" },
+      directionNames: ["Hat Switch", "Stick 1", "Stick 2"], axisNames: [])
+    XCTAssertEqual(raw.count, 15)
+    for value in raw.values {
+      XCTAssertNotNil(SynthesizedInput(rawValue: value), "bridge returned '\(value)', which the Swift side does not know")
+    }
+  }
+
+  // MARK: Trigger axes
+
+  func testTriggerAxisRestingAtZeroIsReadAsIs() {
+    var rests: ObjCBool = false
+    XCTAssertEqual(PhysicalProfileBridge.triggerValue(forAxisValue: 0, restsAtMinusOne: &rests), 0)
+    XCTAssertEqual(PhysicalProfileBridge.triggerValue(forAxisValue: 0.5, restsAtMinusOne: &rests), 0.5)
+    XCTAssertEqual(PhysicalProfileBridge.triggerValue(forAxisValue: 1, restsAtMinusOne: &rests), 1)
+    XCTAssertEqual(PhysicalProfileBridge.triggerValue(forAxisValue: -0.02, restsAtMinusOne: &rests), 0, "noise around rest")
+    XCTAssertFalse(rests.boolValue)
+  }
+
+  func testTriggerAxisRestingAtMinusOneIsRescaled() {
+    var rests: ObjCBool = false
+    XCTAssertEqual(PhysicalProfileBridge.triggerValue(forAxisValue: -1, restsAtMinusOne: &rests), 0)
+    XCTAssertTrue(rests.boolValue)
+    XCTAssertEqual(PhysicalProfileBridge.triggerValue(forAxisValue: 0, restsAtMinusOne: &rests), 0.5, "half pulled, once known")
+    XCTAssertEqual(PhysicalProfileBridge.triggerValue(forAxisValue: 1, restsAtMinusOne: &rests), 1)
+    XCTAssertEqual(PhysicalProfileBridge.triggerValue(forAxisValue: -1, restsAtMinusOne: &rests), 0)
+  }
+
+  // MARK: Unnamed pads
+
+  func testUnnamedPadIsNamedByItsProductCategory() {
+    XCTAssertEqual(PhysicalProfileBridge.fallbackName(forProductCategory: "HID"), "HID Gamepad")
+    XCTAssertEqual(PhysicalProfileBridge.fallbackName(forProductCategory: ""), "Unknown Controller")
+    XCTAssertEqual(PhysicalProfileBridge.fallbackName(forProductCategory: nil), "Unknown Controller")
+  }
+
   // MARK: Switch Online SNES pad
 
   /// The nine elements Apple's `_GCNintendoSuperFamicomControllerProfile` describes. There is no
