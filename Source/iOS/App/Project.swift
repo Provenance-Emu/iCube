@@ -881,8 +881,9 @@ let project = Project(
         // release, then bump the version here; there is no local copy to edit.
         .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.2")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // 0.7.0 is the first release with the shared Skin Store browser and the bezel host APIs.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.7.0")),
+        // 0.8.0 is the first release that resolves to prebuilt frameworks (ZIPFoundation comes
+        // with it, from Provenance-Emu/PVDependencies).
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.8.0")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
