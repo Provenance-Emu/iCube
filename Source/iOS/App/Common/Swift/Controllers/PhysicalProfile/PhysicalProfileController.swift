@@ -5,7 +5,8 @@ import Foundation
 import GameController
 
 /// Wraps a `GCController` the system exposes without an extended or micro gamepad (the
-/// Nintendo Switch Online N64 controller on tvOS 17), or a Switch Online pad it exposes without
+/// Nintendo Switch Online N64 controller on tvOS 17, or a plain USB / Bluetooth HID pad, product
+/// category "HID"), or a Switch Online pad it exposes without
 /// an extended one (the SNES controller, which gets only the basic MFi profile: no Start or
 /// Select), and synthesizes an extended gamepad from its physical input profile, so the app's
 /// pause routes, menu navigation and hub, which only read `extendedGamepad`, see a real pad.
@@ -31,6 +32,11 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
   private var pausedHandler: ((GCController) -> Void)?
   private var cUp = false, cDown = false, cLeft = false, cRight = false
   private var chord = SelectStartChord()
+  /// Per trigger axis (by element name): whether it rests at -1 rather than 0.
+  private var axisRestsAtMinusOne: [String: ObjCBool] = [:]
+
+  /// A trigger driven from an axis reads pressed past this value.
+  static let triggerAxisPressedThreshold: Float = 0.25
 
   /// Called with a reason when the pad asks for the pause menu itself: Select + Start completing
   /// the chord (`PauseTrigger.selectStartChord`) or Start on a pad with nothing else
@@ -56,7 +62,8 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
     guard !(controller is PhysicalProfileController) else { return false }
     return shouldWrap(
       hasExtendedGamepad: controller.extendedGamepad != nil, hasMicroGamepad: controller.microGamepad != nil,
-      isMenuRemote: controller.isMenuRemote,
+      isMenuRemote: controller.isMenuRemote
+        || PhysicalProfileBridge.isRemoteProductCategory(controller.productCategory),
       isSwitchOnlinePad: PhysicalProfileBridge.isSwitchOnlinePad(
         withVendorName: controller.vendorName, productCategory: controller.productCategory),
       bindings: resolveBindings(for: controller))
@@ -66,7 +73,8 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
   /// and a face button, and either it has no micro gamepad either (the N64 pad on tvOS 17) or it
   /// is a Switch Online pad (the SNES pad, whose micro and legacy profiles lack Start / Select).
   /// A TV remote never is: the Siri Remote's profile has a direction pad and Button A too, and a
-  /// wrapper would turn it into a player.
+  /// wrapper would turn it into a player. `isMenuRemote` is also true for any other product
+  /// category naming a remote, with or without a micro gamepad.
   static func shouldWrap(hasExtendedGamepad: Bool, hasMicroGamepad: Bool, isMenuRemote: Bool,
                          isSwitchOnlinePad: Bool, bindings: [String: SynthesizedInput]) -> Bool {
     guard !hasExtendedGamepad, !isMenuRemote, !bindings.isEmpty else { return false }
@@ -75,10 +83,22 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
 
   /// The bindings the shared mapping produces for `controller`; empty when unusable.
   static func resolveBindings(for controller: GCController) -> [String: SynthesizedInput] {
-    resolveBindings(elementNames: Array(controller.physicalInputProfile.elements.keys),
-                    vendorName: controller.vendorName, productCategory: controller.productCategory)
+    PhysicalProfileBridge.bindings(for: controller).compactMapValues { SynthesizedInput(rawValue: $0) }
   }
 
+  /// What the core binds for the same pad (`PhysicalProfile::ResolveForPad`): a Switch Online pad
+  /// and a remote by name alone, any other pad also by position (leftover direction elements, then
+  /// leftover numbered buttons as A, B, X, Y, L, R, L2, R2, Select, Start, L3, R3), and an axis
+  /// named as a trigger when no button took that trigger.
+  static func resolveBindings(buttonNames: [String], directionNames: [String], axisNames: [String] = [],
+                              vendorName: String?, productCategory: String?) -> [String: SynthesizedInput] {
+    PhysicalProfileBridge.bindings(
+      forVendorName: vendorName, productCategory: productCategory, buttonNames: buttonNames,
+      directionNames: directionNames, axisNames: axisNames
+    ).compactMapValues { SynthesizedInput(rawValue: $0) }
+  }
+
+  /// By name alone, whatever the pad.
   static func resolveBindings(elementNames: [String], vendorName: String?,
                               productCategory: String?) -> [String: SynthesizedInput] {
     let n64 = PhysicalProfileBridge.isN64Pad(withVendorName: vendorName, productCategory: productCategory)
@@ -113,6 +133,8 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
       isSnesPad: PhysicalProfileBridge.isSnesPad(withVendorName: base.vendorName, productCategory: base.productCategory))
     synthesized.hasOptions = bindings.values.contains(.options) && pauseTrigger != .selectStartChord
     synthesized.hasHome = bindings.values.contains(.home)
+    synthesized.hasLeftThumbstickButton = bindings.values.contains(.leftThumbstickButton)
+    synthesized.hasRightThumbstickButton = bindings.values.contains(.rightThumbstickButton)
     NSLog("[INPUT] PhysicalProfileController[%@]: pause=%@ %@", base.vendorName ?? "?", String(describing: pauseTrigger),
           bindings.sorted { $0.key < $1.key }.map { "\($0.key) -> \($0.value.rawValue)" }.joined(separator: ", "))
 
@@ -129,8 +151,10 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
       micro.buttonMenu.pressedChangedHandler = { _, _, _ in }
     }
 
-    for (name, input) in bindings {
-      guard let element = profile.elements[name] else { continue }
+    // The bridge names each element once; this only guards an element listed under two kinds.
+    var bound: Set<ObjectIdentifier> = []
+    for (name, input) in bindings.sorted(by: { $0.key < $1.key }) {
+      guard let element = profile.elements[name], bound.insert(ObjectIdentifier(element)).inserted else { continue }
       if let button = element as? GCControllerButtonInput {
         button.preferredSystemGestureState = .disabled
       }
@@ -146,6 +170,8 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
         source.valueChangedHandler = { [weak self] _, _, pressed in
           self?.setCButton(input, pressed: pressed)
         }
+      } else if let axis = element as? GCControllerAxisInput {
+        bindTriggerAxis(axis, to: input, named: name)
       } else {
         guard let source = element as? GCControllerButtonInput, let target = synthesized.button(for: input) else { continue }
         source.valueChangedHandler = { [weak self, weak target] _, value, pressed in
@@ -164,6 +190,23 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
         }
       }
     }
+  }
+
+  /// Drives a synthesized trigger from an axis, for a pad that reports its analog triggers as axes
+  /// only. Such an axis rests at 0 on some pads and at -1 on others (`PhysicalProfileBridge
+  /// .triggerValue`).
+  private func bindTriggerAxis(_ axis: GCControllerAxisInput, to input: SynthesizedInput, named name: String) {
+    guard input == .leftTrigger || input == .rightTrigger, let target = synthesized.button(for: input) else { return }
+    axisRestsAtMinusOne[name] = false
+    let update: (Float) -> Void = { [weak self, weak target] raw in
+      guard let self, let target, var rests = self.axisRestsAtMinusOne[name] else { return }
+      let value = PhysicalProfileBridge.triggerValue(forAxisValue: raw, restsAtMinusOne: &rests)
+      self.axisRestsAtMinusOne[name] = rests
+      target.update(value: value, pressed: value > Self.triggerAxisPressedThreshold)
+      self.synthesized.notify(target)
+    }
+    update(axis.value)
+    axis.valueChangedHandler = { _, raw in update(raw) }
   }
 
   /// The N64 C cluster is four digital buttons; present them as the right stick (C-Stick).
@@ -186,7 +229,10 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
   override var extendedGamepad: GCExtendedGamepad? { synthesized }
   override var microGamepad: GCMicroGamepad? { nil }
   override var physicalInputProfile: GCPhysicalInputProfile { base.physicalInputProfile }
-  override var vendorName: String? { base.vendorName }
+
+  /// Never nil: an unnamed pad gets the name the core gives it (`MFiController::NameFor`).
+  override var vendorName: String? { PhysicalProfileBridge.coreName(for: base) }
+
   override var productCategory: String { base.productCategory }
   override var isAttachedToDevice: Bool { false }
   override var haptics: GCDeviceHaptics? { base.haptics }

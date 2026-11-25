@@ -37,12 +37,50 @@ NS_SWIFT_NAME(PhysicalProfileBridge)
 + (BOOL)isSwitchOnlinePadWithVendorName:(nullable NSString*)vendorName
                         productCategory:(nullable NSString*)productCategory;
 
+/// True when the product category names a remote. A remote is never wrapped or bound by position.
++ (BOOL)isRemoteProductCategory:(nullable NSString*)productCategory;
+
 /// Element name -> MFi input name: `Button A`, `R Shoulder`, `Menu`, the C cluster as the
-/// R Stick direction it drives (`R Stick Y+`), and `D-Pad` / `L Stick` / `R Stick` for
-/// direction-pad elements. Only usable profiles (a direction input and a face button) return
-/// a non-empty dictionary.
+/// R Stick direction it drives (`R Stick Y+`), `D-Pad` / `L Stick` / `R Stick` for
+/// direction-pad elements and `L Stick Button` / `R Stick Button` for the stick clicks (the core
+/// publishes those as `L Stick` / `R Stick`, the names the stick elements have here). Only usable
+/// profiles (a direction input and a face button) return a non-empty dictionary.
+///
+/// Resolves by name alone, as for a Switch Online pad.
 + (NSDictionary<NSString*, NSString*>*)bindingsForElementNames:(NSArray<NSString*>*)names
                                                       isN64Pad:(BOOL)isN64Pad;
+
+/// The bindings the core uses for a pad, from its element names by kind
+/// (`physicalInputProfile.buttons` / `.dpads` / `.axes`). A Switch Online pad and a remote
+/// resolve by name alone; any other pad (a plain HID pad) also takes leftover elements by
+/// position, and an axis named as a trigger when no button took that trigger. Same values as
+/// `bindingsForElementNames:isN64Pad:`.
++ (NSDictionary<NSString*, NSString*>*)bindingsForVendorName:(nullable NSString*)vendorName
+                                             productCategory:(nullable NSString*)productCategory
+                                                 buttonNames:(NSArray<NSString*>*)buttonNames
+                                              directionNames:(NSArray<NSString*>*)directionNames
+                                                   axisNames:(NSArray<NSString*>*)axisNames;
+
+/// The bindings the core uses for `controller` itself (a wrapper is resolved to its base): as
+/// `bindingsForVendorName:...`, with every physical element reduced to one name first, so an
+/// element the profile lists twice ("Button A" and "Button 1") is resolved once.
++ (NSDictionary<NSString*, NSString*>*)bindingsForController:(GCController*)controller;
+
+/// The one name a physical element listed under `aliases` is resolved by: a framework standard
+/// name, else a name that means something, else the first in positional order.
++ (NSString*)preferredNameAmongAliases:(NSArray<NSString*>*)aliases
+    NS_SWIFT_NAME(preferredName(amongAliases:));
+
+/// A trigger read from an axis, in 0...1. `restsAtMinusOne` is the axis's own state: start it at
+/// NO and pass the same variable every time; it is set once the axis reports a negative value.
++ (float)triggerValueForAxisValue:(float)value restsAtMinusOne:(BOOL*)restsAtMinusOne;
+
+/// The name of a pad that reports none and has no gamepad profile: `<product category> Gamepad`.
++ (NSString*)fallbackNameForProductCategory:(nullable NSString*)productCategory;
+
+/// The name the core gives `controller`'s device (`MFiController::NameFor`), never nil. A wrapper
+/// is resolved to its base first.
++ (NSString*)coreNameForController:(GCController*)controller;
 
 @end
 

@@ -3,10 +3,13 @@
 
 #pragma once
 
+#include <atomic>
+
 #include <GameController/GameController.h>
 
 #include "InputCommon/ControllerInterface/CoreDevice.h"
 #include "InputCommon/ControllerInterface/iOS/ControllerInputGate.h"
+#include "InputCommon/ControllerInterface/iOS/PhysicalProfileMapping.h"
 
 namespace ciface::iOS
 {
@@ -67,6 +70,27 @@ private:
     const std::string m_name;
   };
 
+  // A trigger the pad reports as an axis rather than a button (PhysicalProfile::
+  // TriggerValueFromAxis): 0...1 whether the axis rests at 0 or at -1.
+  class TriggerAxis : public Core::Device::Input
+  {
+  public:
+    TriggerAxis(GCControllerAxisInput* input, const std::string name,
+                std::shared_ptr<ControllerInputGate> gate)
+        : m_gate(std::move(gate)), m_input(input), m_name(name)
+    {
+    }
+    std::string GetName() const override;
+    ControlState GetState() const override;
+
+  private:
+    std::shared_ptr<ControllerInputGate> m_gate;
+    GCControllerAxisInput* m_input;
+    const std::string m_name;
+    // GetState runs on the input thread and, while a binding is being captured, on others.
+    mutable std::atomic<bool> m_rests_at_minus_one{false};
+  };
+
   class AccelerometerAxis : public Core::Device::Input
   {
   public:
@@ -112,6 +136,14 @@ public:
       GCController* controller, const std::shared_ptr<ControllerInputGate>& expected_gate = {});
 
   std::string GetName() const final override;
+  // The device name of `controller`: its vendor name, or for a pad that reports none,
+  // "Unknown Controller", except that a pad with no gamepad profile at all (bound through its
+  // physical profile) is named by its kind, PhysicalProfile::FallbackName.
+  static std::string NameFor(GCController* controller);
+  // What the physical profile of `controller` binds (PhysicalProfile::ResolveForPad), with every
+  // element reduced to one name first (PhysicalProfile::PreferredName). The app's wrapper reads
+  // the same bindings through DOLPhysicalProfileBridge.
+  static PhysicalProfile::Bindings PhysicalBindingsFor(GCController* controller);
   std::string GetSource() const final override;
   bool SupportsAccelerometer() const;
   bool SupportsGyroscope() const;
@@ -137,9 +169,9 @@ public:
   static void PruneStaleIds(NSArray<GCController*>* live_controllers);
 
 private:
-  // Binds a pad with no extended / micro gamepad, or a Switch Online pad with no extended one,
-  // through its physical input profile (PhysicalProfileMapping.h). Returns false, adding nothing,
-  // when the profile has nothing usable.
+  // Binds a pad with no extended / micro gamepad (a plain HID pad included), or a Switch Online
+  // pad with no extended one, through its physical input profile (PhysicalProfileMapping.h).
+  // Returns false, adding nothing, when the profile has nothing usable.
   bool AddPhysicalProfileInputs(GCController* controller);
 
   std::shared_ptr<ControllerInputGate> m_gate;

@@ -760,6 +760,23 @@ static void ApplyProfileToWiimote(int idx, ControllerEmu::EmulatedController* wm
   Wiimote::GetConfig()->SaveConfig();
 }
 
++ (NSDictionary<NSString*, NSString*>*)
+    mainStickFromDPadFallbackForProfile:(NSDictionary<NSString*, NSString*>*)entries
+                             inputNames:(NSArray<NSString*>*)inputNames
+{
+  const auto changes = MainStickFromDPadFallback(
+      [&](const std::string& key) {
+        return FoundationToCppString(entries[CppToFoundationString(key)] ?: @"");
+      },
+      [&](const std::string& input) {
+        return [inputNames containsObject:CppToFoundationString(input)] == YES;
+      });
+  NSMutableDictionary<NSString*, NSString*>* result = [NSMutableDictionary dictionary];
+  for (const auto& [key, value] : changes)
+    result[CppToFoundationString(key)] = CppToFoundationString(value);
+  return result;
+}
+
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore
 {
   auto* cfg = Pad::GetConfig();
@@ -778,6 +795,13 @@ static void ApplyProfileToWiimote(int idx, ControllerEmu::EmulatedController* wm
   else return NO;
   Common::IniFile ini;
   if (!ini.Load(loadPath)) return NO;
+  // The slot keeps its device: a profile written for a pad with a left stick still has to steer
+  // on one that has only a D-pad (ProfileLoading.h).
+  if (restore)
+  {
+    const auto device = g_controller_interface.FindDevice(pad->GetDefaultDevice());
+    ApplyMainStickFromDPadFallback(ini.GetOrCreateSection("Profile"), device.get());
+  }
   ApplyProfileToPad(pad, ini, restore);
   return YES;
 }
