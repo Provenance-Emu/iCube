@@ -8,6 +8,8 @@
 #import "GameFilePtrWrapper.h"
 #import "SharedDefaults.h"
 #import "TVGameItem.h"
+#import "FoundationStringUtil.h"
+#include "Common/FileUtil.h"
 #import "Core/Core.h"
 #import "Core/System.h"
 #import "UICommon/UICommon.h"
@@ -232,6 +234,11 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
 + (void)refreshLocalGameAtPath:(NSString*)path
 {
   [[GameFileCacheManager sharedManager] refreshLocalGameAtPath:path];
+}
+
++ (NSString*)coverCacheDirectory
+{
+  return CppToFoundationString(File::GetUserPath(D_COVERCACHE_IDX));
 }
 
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch {

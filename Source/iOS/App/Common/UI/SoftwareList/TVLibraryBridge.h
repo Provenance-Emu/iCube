@@ -33,6 +33,10 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch;
 + (void)refreshLocalGameAtPath:(NSString*)path NS_SWIFT_NAME(refreshLocalGame(atPath:));
 
+/// Where the core keeps the covers it downloads from GameTDB, one `<GameTDB ID>.png` per title.
+/// A cover written there is picked up by the next `refreshLocalGameAtPath:` of that game.
++ (NSString*)coverCacheDirectory;
+
 @end
 
 NS_ASSUME_NONNULL_END
