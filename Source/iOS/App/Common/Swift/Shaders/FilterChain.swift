@@ -595,12 +595,19 @@ public final class FilterChain {
     rce.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
   }
 
+  /// - Parameter background: drawn unfiltered over the whole drawable before the final pass. The caller passes
+  ///   the full frame when `sourceTexture` is only the picture cut out of it, so what the frame holds beside
+  ///   the picture (its bars, and any on-screen messages or counters the core drew there) is kept.
   public func render(sourceTexture: MTLTexture,
                      commandBuffer: MTLCommandBuffer,
                      renderPassDescriptor rpd: MTLRenderPassDescriptor,
-                     flipVertically: Bool = false) {
+                     flipVertically: Bool = false,
+                     background: MTLTexture? = nil) {
     renderOffscreenPasses(sourceTexture: sourceTexture, commandBuffer: commandBuffer)
     if let rce = commandBuffer.makeRenderCommandEncoder(descriptor: rpd) {
+      if let background {
+        renderBackground(background, renderCommandEncoder: rce, flipVertically: flipVertically)
+      }
       if !didLogOnce {
         #if DEBUG
         // Log a compact summary only once per load
@@ -636,6 +643,23 @@ public final class FilterChain {
       renderFinalPass(withCommandEncoder: rce, flipVertically: flipVertically)
       rce.endEncoding()
     }
+  }
+
+  private func renderBackground(_ texture: MTLTexture, renderCommandEncoder rce: MTLRenderCommandEncoder,
+                                flipVertically: Bool) {
+    guard Self.textureDimensions(drawableSize, limit: maxTextureDimension2D) != nil else { return }
+    if flipVertically {
+      rce.setVertexBytes(&vertexFlipped, length: vertexSizeBytes, index: BufferIndex.positions.rawValue)
+    } else {
+      rce.setVertexBytes(&vertex, length: vertexSizeBytes, index: BufferIndex.positions.rawValue)
+    }
+    rce.setVertexBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: BufferIndex.uniforms.rawValue)
+    rce.setRenderPipelineState(pipelineState)
+    rce.setFragmentSamplerState(samplers[.nearest][.edge], index: SamplerIndex.draw.rawValue)
+    rce.setViewport(MTLViewport(originX: 0, originY: 0, width: drawableSize.width, height: drawableSize.height,
+                                znear: 0, zfar: 1))
+    rce.setFragmentTexture(texture, index: TextureIndex.color.rawValue)
+    rce.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
   }
 
   public func renderOffscreenPasses(sourceTexture: MTLTexture, commandBuffer: MTLCommandBuffer) {

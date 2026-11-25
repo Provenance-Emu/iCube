@@ -357,7 +357,8 @@ import MetalKit
 
     let rpd = MTLRenderPassDescriptor()
     rpd.colorAttachments[0].texture = dst
-    // Beside a cut-out picture the drawable keeps its bars, which nothing else draws.
+    // Beside a cut-out picture the drawable shows the frame as the core drew it (see `background` below);
+    // the clear only covers a frame that cannot be drawn.
     rpd.colorAttachments[0].loadAction = cropped ? .clear : .dontCare
     rpd.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
     rpd.colorAttachments[0].storeAction = .store
@@ -420,7 +421,9 @@ import MetalKit
     // Invoke the filter
     /// Default to no vertical flip to match OpenEmu orientation assumptions
     let flip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
-    filter.render(sourceTexture: filterSource, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip)
+    // The core draws its messages and counters into the frame before the filters run; some sit in the bars.
+    filter.render(sourceTexture: filterSource, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip,
+                  background: cropped ? source : nil)
   }
 
   /// Copies `rect` of `source` into a texture of its own, which the filter chain takes as the whole picture.
