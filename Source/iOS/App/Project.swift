@@ -875,7 +875,7 @@ let project = Project(
         .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.2")),
         // Shared with Provenance and iFly; iCube's choices are in
         // Common/Swift/Controllers/PhysicalProfile/ICubePhysicalProfile.swift.
-        .remote(url: "https://github.com/Provenance-Emu/GamepadKit.git", requirement: .branch("feat/app-adoption-gaps")),
+        .remote(url: "https://github.com/Provenance-Emu/GamepadKit.git", requirement: .upToNextMinor(from: "0.3.0")),
         .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.2")),
         // Home screen game list widgets, shared with Provenance and iFly. 0.x: a minor may break.
         .remote(url: "https://github.com/Provenance-Emu/PVWidgets.git", requirement: .upToNextMinor(from: "0.1.0")),
