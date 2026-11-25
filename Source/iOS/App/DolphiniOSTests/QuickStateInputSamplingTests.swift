@@ -1,4 +1,5 @@
 import GameController
+import GamepadKit
 #if os(iOS)
 import UIKit
 #endif

@@ -6,15 +6,6 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// A `GCController` stand-in the app substitutes for a pad the system exposes without an
-/// extended gamepad and that the core binds through its physical profile
-/// (`PhysicalProfileController`). The core's MFi device holds the
-/// real controller, so anything that resolves a controller to a core device goes through
-/// `+[DOLPhysicalProfileBridge baseController:]` first.
-@protocol DOLPhysicalBaseController <NSObject>
-@property (nonatomic, readonly) GCController* dol_baseController;
-@end
-
 /// Swift access to the core's physical-profile mapping
 /// (`InputCommon/ControllerInterface/iOS/PhysicalProfileMapping.h`), the single table that
 /// decides what each element of such a pad means for GameCube / Wii.

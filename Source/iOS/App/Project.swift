@@ -387,6 +387,8 @@ let iCube = Target.target(
         .package(product: "EmulatorContentClient"),
         .package(product: "RomMClient"),
         .package(product: "PVHelp"),
+        // Synthesized extended gamepad for pads the system exposes without one.
+        .package(product: "GamepadKit"),
         // Streaming IPS/BPS/UPS/PPF/xdelta3 patcher behind the disc patching flow.
         .package(product: "PVPatchEngine"),
         // WS-5 CloudKit sync. PVCloudSync depends on PVSyncRules (the shared
@@ -608,6 +610,7 @@ let iCubeTests = Target.target(
         // AppIntentsTests needs `LibrarySnapshot`/`LibrarySnapshotGame` fixtures directly.
         .package(product: "PVLibrarySnapshot"),
         .package(product: "PVHelp"),
+        .package(product: "GamepadKit"),
         // Cloud safety tests exercise the coordinator with real scanner/index types.
         .package(product: "PVCloudSync"),
         .package(product: "PVLibraryMetadata"),
@@ -870,6 +873,9 @@ let project = Project(
         .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.1")),
         .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.4")),
         .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.2")),
+        // Shared with Provenance and iFly; iCube's choices are in
+        // Common/Swift/Controllers/PhysicalProfile/ICubePhysicalProfile.swift.
+        .remote(url: "https://github.com/Provenance-Emu/GamepadKit.git", requirement: .branch("feat/app-adoption-gaps")),
         .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.2")),
         // Home screen game list widgets, shared with Provenance and iFly. 0.x: a minor may break.
         .remote(url: "https://github.com/Provenance-Emu/PVWidgets.git", requirement: .upToNextMinor(from: "0.1.0")),
