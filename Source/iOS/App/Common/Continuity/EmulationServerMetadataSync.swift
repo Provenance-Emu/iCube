@@ -73,8 +73,8 @@ enum EmulationServerMetadataSync {
   }
 
   nonisolated private static func uploadCover(_ data: Data) -> Data? {
-    for size in [coverPixelSize, RemoteCoverCache.maximumPixelSize] {
-      if let cover = RemoteCoverCache.thumbnail(data, maximumPixelSize: size), cover.count <= maximumCoverBytes {
+    for size in [coverPixelSize, RemoteCovers.maximumPixelSize] {
+      if let cover = RemoteCovers.thumbnail(data, maximumPixelSize: size), cover.count <= maximumCoverBytes {
         return cover
       }
     }

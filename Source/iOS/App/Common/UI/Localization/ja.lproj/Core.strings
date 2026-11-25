@@ -6003,3 +6003,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "One download brings all of these." = "One download brings all of these.";
 "%lld VARIANTS" = "%lld VARIANTS";
 "%lld variants" = "%lld variants";
+"This library copies games straight into your library." = "このライブラリはゲームを直接ライブラリにコピーします。";
+"The cover could not be loaded." = "カバーを読み込めませんでした。";

@@ -4,6 +4,7 @@
 import CryptoKit
 import Foundation
 import PVContinuity
+import PVRemoteLibrary
 import RomMClient
 import XCTest
 
@@ -347,7 +348,7 @@ private actor HeldCatalog: RemoteGameCatalog {
   func openCatalog(search: String) async throws -> RemoteCatalogPage { throw URLError(.unsupportedURL) }
   func continueCatalog() async throws -> RemoteCatalogPage { throw URLError(.unsupportedURL) }
   func gameCount() async throws -> Int { 0 }
-  func artwork(for entry: ContinuityLibraryEntry) async -> Data? { nil }
+  func artwork(for entry: ContinuityLibraryEntry, etag: String?) async throws -> ArtworkResult { .none }
 
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
     copies += 1
@@ -358,4 +359,5 @@ private actor HeldCatalog: RemoteGameCatalog {
 
   nonisolated func isAccessDenied(_ error: any Error) -> Bool { false }
   nonisolated var downloadSourceID: String { "held-catalog" }
+  nonisolated var sourceKind: LibrarySourceInfo.Kind { .contentServer }
 }

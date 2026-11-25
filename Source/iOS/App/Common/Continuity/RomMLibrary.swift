@@ -4,6 +4,7 @@
 import CryptoKit
 import Foundation
 import PVContinuity
+import PVRemoteLibrary
 import RomMClient
 
 /// A RomM instance the user connected. Its login lives in the keychain under `id`.
@@ -43,7 +44,6 @@ actor RomMLibrary: RemoteGameCatalog {
 
   private let server: RomMServer
   private let client: RomMClient
-  private let covers: RemoteCoverCache
   private let fetcher: any GameFileFetching
   private var games: [String: RomMGame] = [:]
   private var platforms: ArraySlice<RomMPlatform> = []
@@ -51,20 +51,18 @@ actor RomMLibrary: RemoteGameCatalog {
   private var search = ""
   private var counted = 0
 
-  init(server: RomMServer, login: RomMSavedLogin?, covers: RemoteCoverCache = .shared,
+  init(server: RomMServer, login: RomMSavedLogin?,
        fetcher: any GameFileFetching = BackgroundGameDownloader.shared) throws {
     self.server = server
-    self.covers = covers
     self.fetcher = fetcher
     client = try RomMClient(address: server.address(), credential: login?.credential ?? .none,
                             allowHTTP: login?.allowHTTP ?? false, transport: RomMBackgroundTransport(downloader: fetcher))
   }
 
-  init(server: RomMServer, client: RomMClient, covers: RemoteCoverCache = .shared,
+  init(server: RomMServer, client: RomMClient,
        fetcher: any GameFileFetching = BackgroundGameDownloader.shared) {
     self.server = server
     self.client = client
-    self.covers = covers
     self.fetcher = fetcher
   }
 
@@ -110,13 +108,13 @@ actor RomMLibrary: RemoteGameCatalog {
     try await client.platforms().filter { Self.platform($0) != nil }.reduce(0) { $0 + max(0, $1.romCount) }
   }
 
-  /// RomM puts a timestamp in the cover path, so a changed cover has a new key and a cached one is current.
-  func artwork(for entry: ContinuityLibraryEntry) async -> Data? {
-    guard let game = games[entry.key], let path = game.coverPath else { return nil }
-    let key = server.id + "\n" + path
-    if let cached = await covers.cover(for: key) { return cached.data }
-    guard let data = try? await client.cover(for: game) else { return nil }
-    return await covers.store(data, etag: nil, for: key)
+  /// RomM sends no ETag but puts a timestamp in the cover path, so the path stands in for one: a cover
+  /// cached under the same path is current, and a changed cover has a new path.
+  func artwork(for entry: ContinuityLibraryEntry, etag: String?) async throws -> ArtworkResult {
+    guard let game = games[entry.key], let path = game.coverPath else { return .none }
+    if etag == path { return .notModified }
+    guard let data = try await client.cover(for: game) else { return .none }
+    return .image(data, etag: path)
   }
 
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
@@ -137,6 +135,8 @@ actor RomMLibrary: RemoteGameCatalog {
   }
 
   nonisolated var downloadSourceID: String { server.id }
+
+  nonisolated var sourceKind: LibrarySourceInfo.Kind { .romm }
 
   nonisolated func isAccessDenied(_ error: any Error) -> Bool {
     (error as? RomMError) == .accessDenied

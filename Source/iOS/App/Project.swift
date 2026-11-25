@@ -386,6 +386,10 @@ let iCube = Target.target(
         .package(product: "PVContinuity"),
         .package(product: "EmulatorContentClient"),
         .package(product: "RomMClient"),
+        // One model of a game on a server, a RomM share or a nearby device, and the cover cache
+        // every remote library shares. PVSystems names the system each of those games is for.
+        .package(product: "PVRemoteLibrary"),
+        .package(product: "PVSystems"),
         .package(product: "PVHelp"),
         // Streaming IPS/BPS/UPS/PPF/xdelta3 patcher behind the disc patching flow.
         .package(product: "PVPatchEngine"),
@@ -607,6 +611,9 @@ let iCubeTests = Target.target(
         // `.target(name: "iCube")` alone doesn't make a package the app links importable here —
         // AppIntentsTests needs `LibrarySnapshot`/`LibrarySnapshotGame` fixtures directly.
         .package(product: "PVLibrarySnapshot"),
+        // RemoteLibrarySourceTests reads `LibraryGame` values and drives the shared cover cache.
+        .package(product: "PVRemoteLibrary"),
+        .package(product: "PVSystems"),
         .package(product: "PVHelp"),
         // Cloud safety tests exercise the coordinator with real scanner/index types.
         .package(product: "PVCloudSync"),
@@ -868,6 +875,10 @@ let project = Project(
         .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("f779275a927e5140ac8da3e95fef00073b3421fd")),
         .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.5")),
         .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.1")),
+        // Shared with Provenance and iFly; 0.x: a minor may break. Resolves to prebuilt frameworks,
+        // as does the PVSystems it is built on.
+        .remote(url: "https://github.com/Provenance-Emu/PVRemoteLibrary.git", requirement: .upToNextMinor(from: "0.3.1")),
+        .remote(url: "https://github.com/Provenance-Emu/PVSystems.git", requirement: .upToNextMajor(from: "1.0.3")),
         .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.4")),
         .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.2")),
         .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.2")),
