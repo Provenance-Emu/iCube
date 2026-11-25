@@ -79,6 +79,13 @@ final class ShaderRenderTargetBudgetTests: XCTestCase {
     let wide = Request(size: CGSize(width: 16000, height: 1), bytesPerPixel: 16, copies: 2, canShrink: true)
     let sizes = try XCTUnwrap(FilterChain.fitRenderTargets([wide], fixedBytes: 0, budget: 1024))
     XCTAssertGreaterThanOrEqual(sizes[0].width, 1)
-    XCTAssertGreaterThanOrEqual(sizes[0].height, 1)
+    XCTAssertEqual(sizes[0].height, 1)
+    // The height cannot go below one pixel, so the width has to make up for it.
+    XCTAssertLessThanOrEqual(bytes([wide], sizes), 1024)
+  }
+
+  func testChainOverBudgetWithEveryTargetAtOnePixelIsRefused() {
+    let wide = Request(size: CGSize(width: 16000, height: 1), bytesPerPixel: 16, copies: 2, canShrink: true)
+    XCTAssertNil(FilterChain.fitRenderTargets([wide], fixedBytes: 0, budget: 16))
   }
 }
