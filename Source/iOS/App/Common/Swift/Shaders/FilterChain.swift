@@ -92,6 +92,12 @@ public final class FilterChain {
     var scaleX: ShaderPassScale?
     var scaleY: ShaderPassScale?
     var isScaled: Bool { scaleX != nil && scaleY != nil }
+    /// The preset gives this pass a size in pixels on at least one axis.
+    var hasAbsoluteSize: Bool {
+      if case .absolute = scaleX { return true }
+      if case .absolute = scaleY { return true }
+      return false
+    }
 
     func getOutputSize(viewport: CGSize, source: CGSize) -> CGSize {
       let width: CGFloat
@@ -896,6 +902,69 @@ public final class FilterChain {
     return device.supportsFamily(.apple3) || device.supportsFamily(.mac2) ? 16384 : 8192
   }
 
+  // MARK: - Render target memory budget
+
+  /// One pass's render target, as the preset asks for it.
+  struct RenderTargetRequest: Equatable {
+    var size: CGSize
+    var bytesPerPixel: Int
+    /// 0 when the pass draws straight into the output, 2 when it also keeps a feedback copy.
+    var copies: Int
+    /// False for the last pass (the output's own size) and for a pass the preset sizes in pixels.
+    var canShrink: Bool
+
+    func bytes(at size: CGSize) -> Double {
+      Double(copies) * Double(bytesPerPixel) * Double(size.width) * Double(size.height)
+    }
+  }
+
+  /// The most memory one chain's render targets and history may take. Starts at
+  /// `renderTargetBudget(physicalMemory:)` for this device.
+  var renderTargetBudget = FilterChain.renderTargetBudget(physicalMemory: ProcessInfo.processInfo.physicalMemory) {
+    didSet {
+      guard renderTargetBudget != oldValue else { return }
+      renderTargetsNeedResize = true
+      didLogBudgetShrink = false
+    }
+  }
+
+  private var didLogBudgetShrink = false
+
+  /// An eighth of the device's memory, between 256 MB and 2 GB: about 700 MB on a 6 GB iPad.
+  static func renderTargetBudget(physicalMemory: UInt64) -> Int {
+    let mib: UInt64 = 1_048_576
+    return Int(min(max(physicalMemory / 8, 256 * mib), 2048 * mib))
+  }
+
+  /// The sizes to allocate so the chain stays inside `budget` bytes, or `nil` when it cannot.
+  ///
+  /// Presets size their passes as multiples of the source, and they were written for 240-line
+  /// pictures. This app hands them the display-sized frame, so a "4x" pass on an iPad Pro asks for
+  /// 10928 x 8192 pixels, and one bundled preset's targets add up to 3.8 GB: iOS killed the app for
+  /// memory within a second of the game starting (2026-11-25). Every dimension was inside Metal's
+  /// limit, so the per-texture check let it through.
+  ///
+  /// Over budget, the targets that may shrink are scaled by one common factor, which keeps the
+  /// ratio between consecutive passes. `fixedBytes` (the history copies) and targets that may not
+  /// shrink are counted but left alone.
+  static func fitRenderTargets(_ requests: [RenderTargetRequest], fixedBytes: Double, budget: Double) -> [CGSize]? {
+    var fixed = fixedBytes
+    var shrinkable = 0.0
+    for request in requests {
+      if request.canShrink { shrinkable += request.bytes(at: request.size) } else { fixed += request.bytes(at: request.size) }
+    }
+    guard fixed.isFinite, shrinkable.isFinite, budget.isFinite else { return nil }
+    if fixed + shrinkable <= budget { return requests.map(\.size) }
+    guard fixed < budget, shrinkable > 0 else { return nil }
+    // Bytes go with the square of the linear factor. Rounding down keeps the total under budget.
+    let factor = ((budget - fixed) / shrinkable).squareRoot()
+    return requests.map { request in
+      guard request.canShrink else { return request.size }
+      return CGSize(width: max(1, (request.size.width * factor).rounded(.down)),
+                    height: max(1, (request.size.height * factor).rounded(.down)))
+    }
+  }
+
   static func textureDimensions(_ size: CGSize, limit: Int) -> (width: Int, height: Int)? {
     guard size.width.isFinite, size.height.isFinite,
           size.width >= 1, size.height >= 1,
@@ -908,15 +977,33 @@ public final class FilterChain {
 
     var sourceSize = sourceRect.size
     let viewportSize = CGSize(width: outputFrame.viewport.width, height: outputFrame.viewport.height)
-    var sizes: [CGSize] = []
+    var requests: [RenderTargetRequest] = []
     // Preflight the entire chain before modifying targets or asking Metal to allocate.
     for i in 0 ..< passCount {
       let p = pass[i]
       let size = p.isScaled ? p.getOutputSize(viewport: viewportSize, source: sourceSize)
         : (i == lastPassIndex ? viewportSize : sourceSize)
-      guard Self.textureDimensions(size, limit: maxTextureDimension2D) != nil else { return false }
-      sizes.append(size)
+      guard size.width.isFinite, size.height.isFinite, size.width >= 1, size.height >= 1 else { return false }
+      let isLast = i == lastPassIndex
+      let drawsToOutput = isLast && size == viewportSize && p.format == .bgra8Unorm && !p.hasFeedback
+      requests.append(RenderTargetRequest(size: size, bytesPerPixel: p.format.bytesPerPixel,
+                                          copies: drawsToOutput ? 0 : (p.hasFeedback ? 2 : 1),
+                                          canShrink: !isLast && !p.hasAbsoluteSize))
       sourceSize = size
+    }
+    // History keeps `historyCount + 1` BGRA copies of the source.
+    let historyBytes = historyCount > 0
+      ? Double(historyCount + 1) * Double(sourceRect.width) * Double(sourceRect.height) * 4 : 0
+    guard let sizes = Self.fitRenderTargets(requests, fixedBytes: historyBytes,
+                                            budget: Double(renderTargetBudget)) else { return false }
+    for (request, size) in zip(requests, sizes) {
+      guard Self.textureDimensions(size, limit: maxTextureDimension2D) != nil else { return false }
+      if size != request.size, !didLogBudgetShrink {
+        didLogBudgetShrink = true
+        os_log("[Shaders] render targets shrunk to fit %d MB (a pass asked for %d x %d, gets %d x %d)",
+               log: .default, type: .info, renderTargetBudget / 1_048_576,
+               Int(request.size.width), Int(request.size.height), Int(size.width), Int(size.height))
+      }
     }
 
     for i in 0 ..< passCount {
