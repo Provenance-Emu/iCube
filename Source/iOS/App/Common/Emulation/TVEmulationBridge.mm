@@ -741,6 +741,14 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
   return 4.0f / 3.0f;
 }
 
++ (CGRect)currentPictureRectInFrame
+{
+  if (!g_presenter)
+    return CGRectNull;
+  const MathUtil::Rectangle<int>& rc = g_presenter->GetTargetRectangle();
+  return CGRectMake(rc.left, rc.top, rc.GetWidth(), rc.GetHeight());
+}
+
 + (void)setWiiIMUPointEnabled:(BOOL)enabled forWiimote:(NSInteger)wiimote {
   // Enable/disable Wiimote IMUPoint group to avoid fighting with touch IR.
   //
