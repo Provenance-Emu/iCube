@@ -68,7 +68,8 @@ NS_SWIFT_NAME(PhysicalProfileBridge)
 
 /// The one name a physical element listed under `aliases` is resolved by: a framework standard
 /// name, else a name that means something, else the first in positional order.
-+ (NSString*)preferredNameAmongAliases:(NSArray<NSString*>*)aliases;
++ (NSString*)preferredNameAmongAliases:(NSArray<NSString*>*)aliases
+    NS_SWIFT_NAME(preferredName(amongAliases:));
 
 /// A trigger read from an axis, in 0...1. `restsAtMinusOne` is the axis's own state: start it at
 /// NO and pass the same variable every time; it is set once the axis reports a negative value.
