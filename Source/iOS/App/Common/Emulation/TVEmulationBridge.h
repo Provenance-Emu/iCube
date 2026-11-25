@@ -1,6 +1,7 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
 @class EmulationBootParameter;
@@ -167,6 +168,10 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 // System Detection
 + (BOOL)isCurrentSystemWii;
 + (float)currentDrawAspectRatio;
+/// The game picture's rectangle inside the frame the core draws, in frame pixels (origin top left), or
+/// CGRectNull with no game running. The frame is the size of the render view, so on a view that is wider or
+/// taller than the picture it has bars beside this rectangle. Read on the video thread while presenting.
++ (CGRect)currentPictureRectInFrame;
 // Enables/disables the emulated Wiimote's own IMUPoint group so it stops fighting with the
 // app's own touch/gyro IR. `wiimote` is the zero-based Wii Remote slot (0-3). Callers acting
 // for the on-screen overlay pass `ControllerManager.shared.touchscreenSlot(system: .wii)` and

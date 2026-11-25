@@ -394,8 +394,17 @@ public final class FilterChain {
     return outRect.integral
   }
 
+  /// Where the final pass draws in the drawable, in pixels. `nil` fits `aspectSize` into the drawable, centred.
+  /// Set it when the caller knows the picture's own rectangle, so the filtered picture lands exactly where the
+  /// unfiltered one would.
+  public var outputRect: CGRect? {
+    didSet {
+      if outputRect != oldValue { resize() }
+    }
+  }
+
   private func resize() {
-    let bounds = Self.fitAspectRectIntoRect(aspectSize: aspectSize, size: drawableSize)
+    let bounds = outputRect?.integral ?? Self.fitAspectRectIntoRect(aspectSize: aspectSize, size: drawableSize)
     if outputBounds == bounds {
       return
     }
