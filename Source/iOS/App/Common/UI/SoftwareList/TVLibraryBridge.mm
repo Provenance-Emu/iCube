@@ -8,8 +8,6 @@
 #import "GameFilePtrWrapper.h"
 #import "SharedDefaults.h"
 #import "TVGameItem.h"
-#import "FoundationStringUtil.h"
-#include "Common/FileUtil.h"
 #import "Core/Core.h"
 #import "Core/System.h"
 #import "UICommon/UICommon.h"
@@ -26,6 +24,9 @@
 #import "WiiSystemUpdateViewController.h"
 #import "TVWiiSystemUpdateViewController.h"
 #endif
+
+#include "Common/FileUtil.h"
+#import "FoundationStringUtil.h"
 
 @implementation TVLibraryBridge
 

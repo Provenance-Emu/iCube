@@ -390,11 +390,16 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 {
   dispatch_async(GameFileCacheQueue(), ^{
     bool updated = false;
-    try {
+    try
+    {
       updated = self->_cache->UpdateAdditionalMetadata();
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception& e)
+    {
       NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s", e.what());
-    } catch (...) {
+    }
+    catch (...)
+    {
       NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception");
     }
     if (!updated)
@@ -402,7 +407,8 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     self->_cache->Save();
     [self publishSnapshot];
     dispatch_async(dispatch_get_main_queue(), ^{
-      [[NSNotificationCenter defaultCenter] postNotificationName:@"RemoteLibraryUpdated" object:nil];
+      [[NSNotificationCenter defaultCenter] postNotificationName:@"RemoteLibraryUpdated"
+                                                          object:nil];
     });
   });
 }
