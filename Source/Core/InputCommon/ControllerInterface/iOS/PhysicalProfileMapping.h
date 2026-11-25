@@ -115,6 +115,12 @@ Bindings ResolveGenericBindings(const std::vector<std::string>& button_names,
                                 const std::vector<std::string>& direction_names,
                                 const std::vector<std::string>& axis_names);
 
+// A profile can list one physical element under several names ("Button A" and "Button 1").
+// The one name to resolve it by: a framework standard name, else a name that means something,
+// else the first in positional order. Callers reduce every element to this name BEFORE
+// resolving, so an alias neither takes a positional slot nor displaces the named binding.
+std::string PreferredName(const std::vector<std::string>& aliases);
+
 // The one entry point the core and the app share: a Switch Online pad and a remote resolve by
 // name alone (ResolveBindings over every element), any other pad through
 // ResolveGenericBindings.

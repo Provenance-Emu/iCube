@@ -9,6 +9,7 @@
 
 #include "InputCommon/ControllerInterface/CoreDevice.h"
 #include "InputCommon/ControllerInterface/iOS/ControllerInputGate.h"
+#include "InputCommon/ControllerInterface/iOS/PhysicalProfileMapping.h"
 
 namespace ciface::iOS
 {
@@ -139,6 +140,10 @@ public:
   // "Unknown Controller", except that a pad with no gamepad profile at all (bound through its
   // physical profile) is named by its kind, PhysicalProfile::FallbackName.
   static std::string NameFor(GCController* controller);
+  // What the physical profile of `controller` binds (PhysicalProfile::ResolveForPad), with every
+  // element reduced to one name first (PhysicalProfile::PreferredName). The app's wrapper reads
+  // the same bindings through DOLPhysicalProfileBridge.
+  static PhysicalProfile::Bindings PhysicalBindingsFor(GCController* controller);
   std::string GetSource() const final override;
   bool SupportsAccelerometer() const;
   bool SupportsGyroscope() const;

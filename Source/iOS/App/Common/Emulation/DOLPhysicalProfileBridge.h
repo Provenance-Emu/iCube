@@ -61,6 +61,15 @@ NS_SWIFT_NAME(PhysicalProfileBridge)
                                               directionNames:(NSArray<NSString*>*)directionNames
                                                    axisNames:(NSArray<NSString*>*)axisNames;
 
+/// The bindings the core uses for `controller` itself (a wrapper is resolved to its base): as
+/// `bindingsForVendorName:...`, with every physical element reduced to one name first, so an
+/// element the profile lists twice ("Button A" and "Button 1") is resolved once.
++ (NSDictionary<NSString*, NSString*>*)bindingsForController:(GCController*)controller;
+
+/// The one name a physical element listed under `aliases` is resolved by: a framework standard
+/// name, else a name that means something, else the first in positional order.
++ (NSString*)preferredNameAmongAliases:(NSArray<NSString*>*)aliases;
+
 /// A trigger read from an axis, in 0...1. `restsAtMinusOne` is the axis's own state: start it at
 /// NO and pass the same variable every time; it is set once the axis reports a negative value.
 + (float)triggerValueForAxisValue:(float)value restsAtMinusOne:(BOOL*)restsAtMinusOne;

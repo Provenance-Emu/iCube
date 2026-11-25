@@ -185,6 +185,23 @@ final class PhysicalProfileMappingTests: XCTestCase {
     XCTAssertEqual(sticks["Axis Pair 10"], .leftThumbstick)
   }
 
+  /// A profile can list one element twice. It is reduced to one name before resolving, so the
+  /// alias neither takes a positional slot nor displaces the standard name.
+  func testAnAliasedElementIsResolvedByItsBestName() {
+    XCTAssertEqual(PhysicalProfileBridge.preferredName(amongAliases: ["Button 1", "Button A"]), "Button A")
+    XCTAssertEqual(PhysicalProfileBridge.preferredName(amongAliases: ["Button 7", "L2"]), "L2")
+    XCTAssertEqual(PhysicalProfileBridge.preferredName(amongAliases: ["Button 10", "Button 2"]), "Button 2")
+    XCTAssertEqual(PhysicalProfileBridge.preferredName(amongAliases: ["Fire"]), "Fire")
+
+    // "Button A" and "Button 1" are one element: with the alias dropped, "Button 2" is B.
+    let names = [["Button A", "Button 1"], ["Button 2"], ["Button 3"]]
+      .map { PhysicalProfileBridge.preferredName(amongAliases: $0) }
+    let result = generic(buttons: names, directions: ["Direction Pad"])
+    XCTAssertEqual(result["Button A"], .buttonA)
+    XCTAssertEqual(result["Button 2"], .buttonB)
+    XCTAssertEqual(result["Button 3"], .buttonX)
+  }
+
   func testNamedElementsKeepTheirInputAndDirectionHalvesAreNotButtons() {
     let result = generic(
       buttons: ["Button A", "Button B", "Button Menu", "Direction Pad Up", "Direction Pad Left",

@@ -463,6 +463,22 @@ Bindings ResolveGenericBindings(const std::vector<std::string>& button_names,
   return result;
 }
 
+std::string PreferredName(const std::vector<std::string>& aliases)
+{
+  if (aliases.empty())
+    return "";
+  // Lower is better: standard name, then any name that resolves, then the rest.
+  const auto rank = [](const std::string& name) {
+    if (IsStandardName(name))
+      return 0;
+    return ResolveGenericElement(name) ? 1 : 2;
+  };
+  return *std::ranges::min_element(aliases, [&](const std::string& lhs, const std::string& rhs) {
+    const int l = rank(lhs), r = rank(rhs);
+    return l != r ? l < r : NaturalOrder(lhs, rhs);
+  });
+}
+
 Bindings ResolveForPad(const std::string& vendor_name, const std::string& product_category,
                        const std::vector<std::string>& button_names,
                        const std::vector<std::string>& direction_names,

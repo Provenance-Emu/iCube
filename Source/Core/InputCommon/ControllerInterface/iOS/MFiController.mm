@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <cmath>
+#include <map>
 #include <unordered_map>
 
 #include "Common/Logging/Log.h"
@@ -60,17 +61,25 @@ namespace
 // An axis at or below this is resting at -1 (a trigger axis with a -1...1 range).
 constexpr float AXIS_REST_AT_MINUS_ONE = -0.98f;
 
-std::vector<std::string> ToNames(NSDictionary<NSString*, id>* elements)
+// One name per physical element: a profile can list an element under several names.
+std::vector<std::string> UniqueNames(NSDictionary<NSString*, id>* elements)
 {
-  std::vector<std::string> names;
+  std::map<const void*, std::vector<std::string>> aliases;
   for (NSString* key in elements)
-    names.push_back(std::string([key UTF8String]));
+    aliases[(__bridge const void*)elements[key]].push_back(std::string([key UTF8String]));
+
+  std::vector<std::string> names;
+  for (const auto& [element, element_names] : aliases)
+    names.push_back(PhysicalProfile::PreferredName(element_names));
   return names;
 }
 
 std::vector<std::string> PhysicalElementNames(GCController* controller)
 {
-  return ToNames(controller.physicalInputProfile.elements);
+  std::vector<std::string> names;
+  for (NSString* key in controller.physicalInputProfile.elements)
+    names.push_back(std::string([key UTF8String]));
+  return names;
 }
 
 std::string JoinNames(const std::vector<std::string>& names)
@@ -314,13 +323,13 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
   GCPhysicalInputProfile* profile = controller.physicalInputProfile;
   const std::string category([controller.productCategory UTF8String]);
   const bool is_n64 = PP::IsN64Pad(GetName(), category);
-  const PP::Bindings bindings = PP::ResolveForPad(
-      GetName(), category, ToNames(profile.buttons), ToNames(profile.dpads), ToNames(profile.axes));
+  const PP::Bindings bindings = PhysicalBindingsFor(controller);
   if (!PP::IsUsable(bindings))
     return false;
 
   std::string summary;
-  // `elements` can list one element under several names; each element drives one input.
+  // PhysicalBindingsFor names each element once; this only guards an element that is listed
+  // under two kinds.
   NSMutableSet<GCControllerElement*>* bound = [NSMutableSet set];
   for (const auto& [name, input] : bindings)
   {
@@ -379,6 +388,15 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
   INFO_LOG_FMT(CONTROLLERINTERFACE, "MFi controller '{}': synthesized inputs from physical profile{}: {}",
                GetName(), is_n64 ? " (N64 autoconfig)" : "", summary);
   return true;
+}
+
+PhysicalProfile::Bindings MFiController::PhysicalBindingsFor(GCController* controller)
+{
+  GCPhysicalInputProfile* profile = controller.physicalInputProfile;
+  return PhysicalProfile::ResolveForPad(NameFor(controller),
+                                        std::string([controller.productCategory UTF8String]),
+                                        UniqueNames(profile.buttons), UniqueNames(profile.dpads),
+                                        UniqueNames(profile.axes));
 }
 
 std::shared_ptr<ControllerInputGate> MFiController::GetInputGate(GCController* controller)

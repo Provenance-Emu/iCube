@@ -83,11 +83,7 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
 
   /// The bindings the shared mapping produces for `controller`; empty when unusable.
   static func resolveBindings(for controller: GCController) -> [String: SynthesizedInput] {
-    let profile = controller.physicalInputProfile
-    return resolveBindings(
-      buttonNames: Array(profile.buttons.keys), directionNames: Array(profile.dpads.keys),
-      axisNames: Array(profile.axes.keys), vendorName: controller.vendorName,
-      productCategory: controller.productCategory)
+    PhysicalProfileBridge.bindings(for: controller).compactMapValues { SynthesizedInput(rawValue: $0) }
   }
 
   /// What the core binds for the same pad (`PhysicalProfile::ResolveForPad`): a Switch Online pad
@@ -155,7 +151,7 @@ final class PhysicalProfileController: GCController, DOLPhysicalBaseController {
       micro.buttonMenu.pressedChangedHandler = { _, _, _ in }
     }
 
-    // `elements` can list one element under several names; each element drives one input.
+    // The bridge names each element once; this only guards an element listed under two kinds.
     var bound: Set<ObjectIdentifier> = []
     for (name, input) in bindings.sorted(by: { $0.key < $1.key }) {
       guard let element = profile.elements[name], bound.insert(ObjectIdentifier(element)).inserted else { continue }

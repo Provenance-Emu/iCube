@@ -111,6 +111,17 @@ NSDictionary<NSString*, NSString*>* ToDictionary(const PP::Bindings& bindings)
                                         ToVector(axisNames)));
 }
 
++ (NSDictionary<NSString*, NSString*>*)bindingsForController:(GCController*)controller
+{
+  return ToDictionary(
+      ciface::iOS::MFiController::PhysicalBindingsFor([self baseController:controller]));
+}
+
++ (NSString*)preferredNameAmongAliases:(NSArray<NSString*>*)aliases
+{
+  return [NSString stringWithUTF8String:PP::PreferredName(ToVector(aliases)).c_str()];
+}
+
 + (float)triggerValueForAxisValue:(float)value restsAtMinusOne:(BOOL*)restsAtMinusOne
 {
   bool rests = *restsAtMinusOne;
