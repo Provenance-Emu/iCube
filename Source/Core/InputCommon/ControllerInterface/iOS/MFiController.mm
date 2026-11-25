@@ -61,12 +61,19 @@ namespace
 // An axis at or below this is resting at -1 (a trigger axis with a -1...1 range).
 constexpr float AXIS_REST_AT_MINUS_ONE = -0.98f;
 
-// One name per physical element: a profile can list an element under several names.
-std::vector<std::string> UniqueNames(NSDictionary<NSString*, id>* elements)
+// One name per physical element of class `kind`: a profile can list an element under several
+// names. Read from `elements` by class, not from the profile's `buttons` / `dpads` / `axes`
+// views: `elements` is the one dictionary every profile (and every test double) fills.
+std::vector<std::string> UniqueNames(NSDictionary<NSString*, GCControllerElement*>* elements,
+                                     Class kind)
 {
   std::map<const void*, std::vector<std::string>> aliases;
   for (NSString* key in elements)
-    aliases[(__bridge const void*)elements[key]].push_back(std::string([key UTF8String]));
+  {
+    GCControllerElement* element = elements[key];
+    if ([element isKindOfClass:kind])
+      aliases[(__bridge const void*)element].push_back(std::string([key UTF8String]));
+  }
 
   std::vector<std::string> names;
   for (const auto& [element, element_names] : aliases)
@@ -392,11 +399,13 @@ bool MFiController::AddPhysicalProfileInputs(GCController* controller)
 
 PhysicalProfile::Bindings MFiController::PhysicalBindingsFor(GCController* controller)
 {
-  GCPhysicalInputProfile* profile = controller.physicalInputProfile;
+  NSDictionary<NSString*, GCControllerElement*>* elements =
+      controller.physicalInputProfile.elements;
   return PhysicalProfile::ResolveForPad(NameFor(controller),
                                         std::string([controller.productCategory UTF8String]),
-                                        UniqueNames(profile.buttons), UniqueNames(profile.dpads),
-                                        UniqueNames(profile.axes));
+                                        UniqueNames(elements, [GCControllerButtonInput class]),
+                                        UniqueNames(elements, [GCControllerDirectionPad class]),
+                                        UniqueNames(elements, [GCControllerAxisInput class]));
 }
 
 std::shared_ptr<ControllerInputGate> MFiController::GetInputGate(GCController* controller)
