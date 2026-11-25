@@ -20,8 +20,10 @@
 #include "InputCommon/ControllerEmu/ControlGroup/ControlGroup.h"
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerEmu/Setting/NumericSetting.h"
+#include "InputCommon/ControllerInterface/ControllerInterface.h"
 #include "InputCommon/InputConfig.h"
 #include "LocalizationUtil.h"
+#include "ProfileLoading.h"
 
 @interface DOLExpressionParseResult ()
 @property (nonatomic, readwrite) DOLExpressionStatus status;
@@ -279,9 +281,18 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
   Common::IniFile ini;
   if (!ini.Load(path))
     return nil;
-  const auto* section = ini.GetSection("Profile");
+  auto* section = ini.GetSection("Profile");
   if (!section)
     return nil;
+  // What `loadProfile:forGCPort:` would load on this port's device (ProfileLoading.h).
+  if (owner == DOLControlGroupOwnerGCPad)
+  {
+    if (auto* pad = config->GetController(static_cast<int>(portOneBased - 1)))
+    {
+      const auto device = g_controller_interface.FindDevice(pad->GetDefaultDevice());
+      ApplyMainStickFromDPadFallback(section, device.get());
+    }
+  }
 
   // The key ControlGroup::LoadConfig reads: `<base><group>/<control>`, with ini names.
   std::string key;

@@ -166,7 +166,17 @@ NS_SWIFT_NAME(ProfileKeyInfo)
     NS_SWIFT_NAME(allProfiles(forGCPort:));
 + (NSArray<NSString*>*)allProfilesForWiimote:(NSInteger)indexOneBased
     NS_SWIFT_NAME(allProfiles(forWiimote:));
+/// Loads the profile into the slot. With `restore`, the slot keeps its device, and a profile that
+/// binds the Main Stick to the left stick is adapted to a pad that has only a D-pad
+/// (`mainStickFromDPadFallbackForProfile:inputNames:`).
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore;
+/// The profile keys rewritten when a GameCube profile is loaded for a device with these inputs, or
+/// none: on a pad with a D-pad and no left stick, a Main Stick bound to `L Stick` moves to the
+/// D-pad, and a `D-Pad/` key bound to that same D-pad input is cleared. `entries` is key -> value.
++ (NSDictionary<NSString*, NSString*>*)
+    mainStickFromDPadFallbackForProfile:(NSDictionary<NSString*, NSString*>*)entries
+                             inputNames:(NSArray<NSString*>*)inputNames
+    NS_SWIFT_NAME(mainStickFromDPadFallback(forProfile:inputNames:));
 + (BOOL)loadProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased restoreDevice:(BOOL)restore;
 
 /// Profiles (saving). Writes the live pad/Wiimote config to
