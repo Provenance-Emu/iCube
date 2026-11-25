@@ -309,34 +309,34 @@ final class PhysicalProfileMappingTests: XCTestCase {
 
   // MARK: D-pad as stick
 
-  private func dpadStick(x: Int, heldFor xHeld: Double = 0, y: Int = 0, heldFor yHeld: Double = 0) -> CGPoint {
+  private func dpadStick(x: Int, xHeld: Double = 0, y: Int = 0, yHeld: Double = 0) -> CGPoint {
     PhysicalProfileBridge.dpadStickPosition(xSign: x, xHeldSeconds: xHeld, ySign: y, yHeldSeconds: yHeld)
   }
 
   func testDPadStickStartsPartialAndGrowsToFull() {
     XCTAssertEqual(dpadStick(x: 1).x, 0.4, accuracy: 0.001, "a tap is a nudge")
-    XCTAssertEqual(dpadStick(x: 1, heldFor: 0.1).x, 0.7, accuracy: 0.001)
-    XCTAssertEqual(dpadStick(x: 1, heldFor: 0.2).x, 1, accuracy: 0.001)
-    XCTAssertEqual(dpadStick(x: 1, heldFor: 5).x, 1, accuracy: 0.001, "never past full")
-    XCTAssertEqual(dpadStick(x: -1, heldFor: 5).x, -1, accuracy: 0.001)
+    XCTAssertEqual(dpadStick(x: 1, xHeld: 0.1).x, 0.7, accuracy: 0.001)
+    XCTAssertEqual(dpadStick(x: 1, xHeld: 0.2).x, 1, accuracy: 0.001)
+    XCTAssertEqual(dpadStick(x: 1, xHeld: 5).x, 1, accuracy: 0.001, "never past full")
+    XCTAssertEqual(dpadStick(x: -1, xHeld: 5).x, -1, accuracy: 0.001)
   }
 
   func testDPadStickAtRestIsCentered() {
-    XCTAssertEqual(dpadStick(x: 0, heldFor: 5, y: 0, heldFor: 5), .zero)
+    XCTAssertEqual(dpadStick(x: 0, xHeld: 5, y: 0, yHeld: 5), .zero)
   }
 
   func testDPadStickAxesRampOnTheirOwn() {
-    let position = dpadStick(x: 0, y: -1, heldFor: 0.2)
+    let position = dpadStick(x: 0, y: -1, yHeld: 0.2)
     XCTAssertEqual(position.x, 0)
     XCTAssertEqual(position.y, -1, accuracy: 0.001)
   }
 
   func testDPadStickDiagonalStaysOnTheUnitCircle() {
-    let position = dpadStick(x: 1, heldFor: 1, y: 1, heldFor: 1)
+    let position = dpadStick(x: 1, xHeld: 1, y: 1, yHeld: 1)
     XCTAssertEqual(position.x, 0.7071, accuracy: 0.001)
     XCTAssertEqual(position.y, 0.7071, accuracy: 0.001)
     // The axis pressed second is still ramping while the first is full.
-    let late = dpadStick(x: 1, heldFor: 1, y: 1, heldFor: 0)
+    let late = dpadStick(x: 1, xHeld: 1, y: 1, yHeld: 0)
     XCTAssertEqual(late.x, 0.7071, accuracy: 0.001)
     XCTAssertEqual(late.y, 0.2828, accuracy: 0.001)
   }
