@@ -333,7 +333,14 @@ jobs:
 
           python3 Tools/release-audit/check_device_core.py --platform "$DOL_ARCHIVE_PLATFORM"
           set -o pipefail
-          xcodebuild archive \
+          # One release at a time on a build machine. Provenance, iCube and iFly each sign from
+          # their own temporary keychain but share the build user's security session, and
+          # overlapping archives failed codesign with errSecInternalComponent twice on 2026-11-25
+          # (Provenance runs 45581755556 and 45588055170, iFly 45582857351); the same commits
+          # passed when run alone. lockf(1) waits for any other app's archive or export to
+          # finish. All three workflows use this lock file name.
+          SIGNING_LOCK=/tmp/provenance-emu-release-signing.lock
+          lockf -k -t 10800 "$SIGNING_LOCK" xcodebuild archive \
             -workspace Source/iOS/App/iCube.xcworkspace \
             -scheme "iCube (AppStore)" \
             -configuration "Release (AppStore)" \
@@ -355,7 +362,9 @@ jobs:
           # -allowProvisioningUpdates is required on export too, not just archive:
           # the API key authenticates but does not authorise xcodebuild to create
           # or download profiles, and a fresh runner has none installed.
-          xcodebuild -exportArchive \
+          # Same machine-wide lock as the archive (see there).
+          SIGNING_LOCK=/tmp/provenance-emu-release-signing.lock
+          lockf -k -t 10800 "$SIGNING_LOCK" xcodebuild -exportArchive \
             -archivePath "$ARCHIVE" \
             -exportPath "$RUNNER_TEMP/export" \
             -exportOptionsPlist ExportOptions/ExportOptions-AppStore.plist \
