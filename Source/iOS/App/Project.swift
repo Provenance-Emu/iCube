@@ -864,11 +864,11 @@ let project = Project(
         // clients/romm-swift there). The RomM client used to be a vendored snapshot under
         // Externals/RomMClient, kept only until the server repo published it as a product.
         .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("f779275a927e5140ac8da3e95fef00073b3421fd")),
-        .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.3")),
-        .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.0")),
-        .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.2")),
-        .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.0")),
-        .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.5")),
+        .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.1")),
+        .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.4")),
+        .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.2")),
+        .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.2")),
         // Home screen game list widgets, shared with Provenance and iFly. 0.x: a minor may break.
         .remote(url: "https://github.com/Provenance-Emu/PVWidgets.git", requirement: .upToNextMinor(from: "0.1.0")),
         // Keep this wrapper local: Xcode rejects PLzmaSDK unsafe build flags
@@ -876,10 +876,10 @@ let project = Project(
         .local(path: "../PLzmaShim"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
-        .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.1.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.1.1")),
         // Streaming patch engine shared with iFly and Provenance. Change it in that repo, tag a
         // release, then bump the version here; there is no local copy to edit.
-        .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.2")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         // 0.7.0 is the first release with the shared Skin Store browser and the bezel host APIs.
         .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.7.0")),
