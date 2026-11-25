@@ -453,6 +453,8 @@ let iCube = Target.target(
             "INFOPLIST_FILE[sdk=appletv*]": "DolphiniOS/Info-TV.plist",
             "INFOPLIST_KEY_GCSupportsControllerUserInteraction": "YES",
             "INFOPLIST_KEY_GCSupportsGameMode": "YES",
+            // Xcode warns that Game Mode eligibility will require this key; GCSupportsGameMode is the older name.
+            "INFOPLIST_KEY_LSSupportsGameMode": "YES",
             "INFOPLIST_KEY_LSApplicationCategoryType": "public.app-category.entertainment",
             "INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace": "YES",
             "INFOPLIST_KEY_NSLocalNetworkUsageDescription": "iCube uses your local network to discover DSU controllers, to share your library with nearby devices, and to hand a game off to another device. Transfers between devices are not encrypted.",
