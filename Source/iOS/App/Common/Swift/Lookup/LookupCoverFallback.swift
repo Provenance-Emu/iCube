@@ -67,6 +67,7 @@ final class LookupCoverLedger {
   }
 
   func markAttempted(_ gametdbID: String) { attempted.insert(gametdbID) }
+  func unmarkAttempted(_ gametdbID: String) { attempted.remove(gametdbID) }
   func wasAttempted(_ gametdbID: String) -> Bool { attempted.contains(gametdbID) }
 }
 
@@ -125,7 +126,10 @@ final class LookupCoverFallback {
     var coverDirectory: @MainActor () -> URL = { URL(fileURLWithPath: TVLibraryBridge.coverCacheDirectory(), isDirectory: true) }
     /// The image's bytes and HTTP status, or nil when the request failed.
     var download: @Sendable (URL) async -> (data: Data, status: Int?)? = LookupCoverImage.download
-    var refresh: @MainActor (String) -> Void = { TVLibraryBridge.refreshLocalGame(atPath: $0) }
+    /// Has the library show the covers just stored. It must not rescan: a rescan drops remote entries.
+    var reloadCovers: @MainActor () -> Void = { TVLibraryBridge.reloadCovers() }
+    /// Lookups, downloads and the library reload wait for a running game to end.
+    var isEmulating: @MainActor () -> Bool = { EmulationState.shared.isActive }
     var now: @Sendable () -> Date = { Date() }
   }
 
@@ -140,6 +144,8 @@ final class LookupCoverFallback {
   private var queue: [Game] = []
   private var worker: Task<Void, Never>?
   private var observer: NSObjectProtocol?
+  /// Runs the sweep now, or when the running game ends.
+  private var deferral: EmulationDeferral?
 
   init(environment: Environment = Environment(), ledger: LookupCoverLedger = LookupCoverLedger()) {
     self.environment = environment
@@ -149,12 +155,22 @@ final class LookupCoverFallback {
   /// Looks again whenever the library changes. The launch scan calls `sweep` itself when it ends.
   func start() {
     guard observer == nil else { return }
+    deferral = EmulationDeferral { [weak self] in self?.sweepNow() }
     observer = NotificationCenter.default.addObserver(forName: Self.libraryUpdated, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.sweepLibrary() }
     }
   }
 
+  /// Sweeps the library, after the running game if there is one.
   func sweepLibrary() {
+    if let deferral {
+      deferral.request()
+    } else {
+      sweepNow()
+    }
+  }
+
+  private func sweepNow() {
     sweep(TVLibraryBridge.currentGames().map {
       Game(path: $0.filePath, gameID: $0.gameID, platform: $0.platform, gametdbID: $0.gametdbID, hasCoverArt: $0.hasCoverArt)
     })
@@ -162,6 +178,7 @@ final class LookupCoverFallback {
 
   /// Queues every game that may be looked up now. Returns once queued; `waitUntilIdle` awaits the work.
   func sweep(_ games: [Game]) {
+    guard !environment.isEmulating() else { return }
     let usesGameCovers = environment.usesGameCovers()
     let now = environment.now()
     for game in games where LookupCoverPolicy.shouldAttempt(
@@ -182,19 +199,34 @@ final class LookupCoverFallback {
   }
 
   private func drain() async {
+    var stored = false
     while !queue.isEmpty {
+      if environment.isEmulating() {
+        // A game started: leave the rest for the sweep that follows it.
+        queue.forEach { ledger.unmarkAttempted($0.gametdbID) }
+        queue.removeAll()
+        deferral?.request()
+        break
+      }
       let game = queue.removeFirst()
       switch await fetchCover(for: game) {
       case .stored:
-        environment.refresh(game.path)
+        stored = true
       case .noCover:
         ledger.recordAttempt(for: game.gametdbID, at: environment.now())
       case .tryLater:
-        // Offline or a server error: the next launch asks again.
+        // Offline, a server error or a database that would not open: the next launch asks again.
         break
       }
     }
     worker = nil
+    guard stored else { return }
+    if environment.isEmulating() {
+      // The covers are on disk; the sweep after the game reloads them with whatever it finds.
+      deferral?.request()
+    } else {
+      environment.reloadCovers()
+    }
   }
 
   private enum Outcome {
@@ -206,9 +238,18 @@ final class LookupCoverFallback {
   }
 
   private func fetchCover(for game: Game) async -> Outcome {
-    guard let metadata = await environment.lookup.metadata(gameID: game.gameID, platform: game.platform) else { return .noCover }
+    guard let query = GameLookupQuery(gameID: game.gameID, platform: game.platform) else { return .noCover }
+    let urls: [URL]
+    do {
+      // A lookup that fails is not a game without a cover.
+      guard let metadata = try await environment.lookup.search(query) else { return .noCover }
+      urls = try await environment.lookup.artwork(metadata)
+    } catch {
+      Self.log.error("Cover lookup for \(query.serial, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+      return .tryLater
+    }
     var outcome = Outcome.noCover
-    for url in LookupCoverPolicy.candidates(from: await environment.lookup.artworkURLs(for: metadata)) {
+    for url in LookupCoverPolicy.candidates(from: urls) {
       guard let response = await environment.download(url) else {
         outcome = .tryLater
         continue

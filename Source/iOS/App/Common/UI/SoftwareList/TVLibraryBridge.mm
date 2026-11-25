@@ -241,6 +241,11 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
   return CppToFoundationString(File::GetUserPath(D_COVERCACHE_IDX));
 }
 
++ (void)reloadCovers
+{
+  [[GameFileCacheManager sharedManager] refreshAdditionalMetadata];
+}
+
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch {
   printf("DEBUG BRIDGE: TVLibraryBridge received %lu remote paths\n", (unsigned long)paths.count);
   for (NSUInteger i = 0; i < paths.count; i++) {

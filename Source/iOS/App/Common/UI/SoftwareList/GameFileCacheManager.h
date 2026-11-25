@@ -36,6 +36,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Rebuilds the cache entry at a local path whose contents were replaced in place.
 - (void)refreshLocalGameAtPath:(NSString*)path;
+/// Re-reads covers and banners for the games already listed, without scanning for games. Every
+/// entry stays, remote ones included.
+- (void)refreshAdditionalMetadata;
 
 /// Test hook: runs `block` on the serial cache queue behind any scan already queued, so a test can
 /// hold the queue busy the way a long rescan does.

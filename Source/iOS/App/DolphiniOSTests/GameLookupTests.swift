@@ -93,8 +93,6 @@ final class GameLookupInfoTests: XCTestCase {
     XCTAssertNil(failed)
     let homebrew = await lookup.info(gameID: "GALE01", platform: DiscIOPlatform.elfOrDOL.rawValue)
     XCTAssertNil(homebrew)
-    let urls = await lookup.artworkURLs(for: rom())
-    XCTAssertEqual(urls, [])
     let serials = await asked.queries.map(\.serial)
     XCTAssertEqual(serials, ["GALE01", "GZLE01", "FAIL01"])
   }
@@ -157,8 +155,9 @@ final class LookupCoverFallbackTests: XCTestCase {
   private var directory: URL!
   private var defaults: UserDefaults!
   private var suiteName: String!
-  private var refreshed: [String] = []
+  private var reloads = 0
   private var usesGameCovers = true
+  private var isEmulating = false
 
   private let box = URL(string: "https://thumbnails.libretro.com/Nintendo%20-%20GameCube/Named_Boxarts/Melee.png")!
   private let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -167,8 +166,9 @@ final class LookupCoverFallbackTests: XCTestCase {
     directory = FileManager.default.temporaryDirectory.appendingPathComponent("LookupCoverFallbackTests-\(UUID().uuidString)")
     suiteName = "LookupCoverFallbackTests-\(UUID().uuidString)"
     defaults = UserDefaults(suiteName: suiteName)
-    refreshed = []
+    reloads = 0
     usesGameCovers = true
+    isEmulating = false
   }
 
   override func tearDown() async throws {
@@ -190,17 +190,18 @@ final class LookupCoverFallbackTests: XCTestCase {
   }
 
   private func fallback(
-    urls: [URL], download: @escaping @Sendable (URL) async -> (data: Data, status: Int?)?
+    urls: [URL], search: GameLookup.Search? = nil, download: @escaping @Sendable (URL) async -> (data: Data, status: Int?)?
   ) -> (LookupCoverFallback, LookupCoverLedger) {
     let ledger = LookupCoverLedger(defaults: defaults)
     let directory = directory!
     let now = now
     let environment = LookupCoverFallback.Environment(
-      lookup: GameLookup(search: { $0.serial == "GALE01" ? rom() : nil }, artwork: { _ in urls }),
+      lookup: GameLookup(search: search ?? { $0.serial == "GALE01" ? rom() : nil }, artwork: { _ in urls }),
       usesGameCovers: { [unowned self] in usesGameCovers },
       coverDirectory: { directory },
       download: download,
-      refresh: { [unowned self] in refreshed.append($0) },
+      reloadCovers: { [unowned self] in reloads += 1 },
+      isEmulating: { [unowned self] in isEmulating },
       now: { now })
     return (LookupCoverFallback(environment: environment, ledger: ledger), ledger)
   }
@@ -216,7 +217,7 @@ final class LookupCoverFallbackTests: XCTestCase {
     let cover = try XCTUnwrap(UIImage(data: stored))
     XCTAssertEqual(Array(stored.prefix(4)), [0x89, 0x50, 0x4E, 0x47])
     XCTAssertEqual(max(cover.size.width, cover.size.height), CGFloat(LookupCoverImage.maximumPixelSize))
-    XCTAssertEqual(refreshed, ["/games/GALE01.iso"])
+    XCTAssertEqual(reloads, 1, "The library re-reads its covers once, without a rescan")
     XCTAssertNil(ledger.lastAttempt(for: "GALE01"))
   }
 
@@ -230,7 +231,7 @@ final class LookupCoverFallbackTests: XCTestCase {
     await fallback.waitUntilIdle()
 
     XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("GALE01.png").path))
-    XCTAssertEqual(refreshed, [])
+    XCTAssertEqual(reloads, 0)
   }
 
   func testNoCoverAnywhereIsRememberedForAWeek() async {
@@ -241,7 +242,7 @@ final class LookupCoverFallbackTests: XCTestCase {
 
     XCTAssertEqual(ledger.lastAttempt(for: "GALE01"), now)
     XCTAssertEqual(ledger.lastAttempt(for: "GZLE01"), now, "a game the database does not know is not asked about every launch")
-    XCTAssertEqual(refreshed, [])
+    XCTAssertEqual(reloads, 0)
   }
 
   func testAFailedRequestIsTriedAgainNextLaunchButNotThisOne() async {
@@ -259,6 +260,40 @@ final class LookupCoverFallbackTests: XCTestCase {
     let count = await requests.value
     XCTAssertEqual(count, 1)
     XCTAssertNil(ledger.lastAttempt(for: "GALE01"))
+  }
+
+  func testALookupThatFailsIsNotRememberedAsNoCover() async {
+    struct Failure: Error {}
+    let (fallback, ledger) = fallback(urls: [box], search: { _ in throw Failure() }) { _ in nil }
+
+    fallback.sweep([game()])
+    await fallback.waitUntilIdle()
+
+    XCTAssertNil(ledger.lastAttempt(for: "GALE01"), "A database that would not open is asked again next launch")
+    XCTAssertEqual(reloads, 0)
+  }
+
+  func testNothingIsLookedUpWhileAGameRuns() async {
+    let data = image()
+    let requests = Counter()
+    let (fallback, ledger) = fallback(urls: [box]) { _ in
+      await requests.increment()
+      return (data, 200)
+    }
+
+    isEmulating = true
+    fallback.sweep([game()])
+    await fallback.waitUntilIdle()
+    var count = await requests.value
+    XCTAssertEqual(count, 0)
+    XCTAssertFalse(ledger.wasAttempted("GALE01"), "The sweep after the game still looks the game up")
+
+    isEmulating = false
+    fallback.sweep([game()])
+    await fallback.waitUntilIdle()
+    count = await requests.value
+    XCTAssertEqual(count, 1)
+    XCTAssertEqual(reloads, 1)
   }
 
   func testABodyThatIsNotAnImageIsNotStored() {

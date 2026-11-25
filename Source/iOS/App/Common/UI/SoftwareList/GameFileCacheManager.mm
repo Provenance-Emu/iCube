@@ -386,6 +386,27 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   [self updateWithExtraPaths:@[ path ] fetchMetadata:YES refreshingPath:path];
 }
 
+- (void)refreshAdditionalMetadata
+{
+  dispatch_async(GameFileCacheQueue(), ^{
+    bool updated = false;
+    try {
+      updated = self->_cache->UpdateAdditionalMetadata();
+    } catch (const std::exception& e) {
+      NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s", e.what());
+    } catch (...) {
+      NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception");
+    }
+    if (!updated)
+      return;
+    self->_cache->Save();
+    [self publishSnapshot];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [[NSNotificationCenter defaultCenter] postNotificationName:@"RemoteLibraryUpdated" object:nil];
+    });
+  });
+}
+
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths
                fetchMetadata:(BOOL)fetch
               refreshingPath:(nullable NSString*)refreshingPath

@@ -116,14 +116,4 @@ struct GameLookup: Sendable {
     let info = GameLookupInfo(metadata: metadata)
     return info.isEmpty ? nil : info
   }
-
-  /// Every artwork URL the databases know for the game, in the order they answered.
-  func artworkURLs(for metadata: ROMMetadata) async -> [URL] {
-    do {
-      return try await artwork(metadata)
-    } catch {
-      Self.log.error("Artwork lookup for \(metadata.serial ?? metadata.gameTitle, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
-      return []
-    }
-  }
 }
