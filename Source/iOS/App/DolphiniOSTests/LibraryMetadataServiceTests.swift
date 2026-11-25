@@ -94,6 +94,54 @@ final class LibraryMetadataServiceTests: XCTestCase {
     }
   }
 
+  /// Counts defaults posts and notes a post during which another thread could
+  /// not take the service lock.
+  private final class PostProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var posts = 0
+    private var blocked = false
+    func record(blocked wasBlocked: Bool) {
+      lock.lock(); posts += 1; if wasBlocked { blocked = true }; lock.unlock()
+    }
+    var result: (posts: Int, blocked: Bool) {
+      lock.lock(); defer { lock.unlock() }
+      return (posts, blocked)
+    }
+  }
+
+  /// Watchdog kill of 2026-11-25 (0x8BADF00D): the receipt was written to
+  /// `UserDefaults` under the service lock. The write posts `didChangeNotification`
+  /// before it returns, SwiftUI's `@AppStorage` observer waits for the main
+  /// thread's view update, and that update was waiting for the same lock in
+  /// `store()`. The observer below stands in for SwiftUI: while the post is in
+  /// flight, another thread must still be able to take the lock.
+  @MainActor
+  func testReceiptIsSavedToDefaultsWithoutHoldingTheServiceLock() async throws {
+    try await withFolder { folder in
+      let file = folder.appendingPathComponent("lock.dol")
+      try Data("abc".utf8).write(to: file)
+      let item = game(path: file)
+      let probeItem = game(path: folder.appendingPathComponent("probe.dol"))
+      let probe = PostProbe()
+      let observer = NotificationCenter.default.addObserver(
+        forName: UserDefaults.didChangeNotification, object: UserDefaults.standard, queue: nil
+      ) { _ in
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+          _ = LibraryMetadataService.identity(for: probeItem)
+          finished.signal()
+        }
+        probe.record(blocked: finished.wait(timeout: .now() + 2) == .timedOut)
+      }
+      defer { NotificationCenter.default.removeObserver(observer) }
+      _ = try await LibraryMetadataService.resolveIdentity(for: item)
+      LibraryMetadataService.waitForPersistedContentIdentities()
+      let result = probe.result
+      XCTAssertGreaterThan(result.posts, 0, "The receipt must still be saved")
+      XCTAssertFalse(result.blocked, "A defaults write must never happen under the service lock")
+    }
+  }
+
   private func largeImageData() throws -> Data {
     let format = UIGraphicsImageRendererFormat()
     format.scale = 1; format.opaque = true

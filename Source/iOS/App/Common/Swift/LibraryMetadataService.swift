@@ -24,6 +24,7 @@ final class LibraryMetadataService: NSObject {
     var latestItems: [TVGameItem] = []
     var warmingObservers: [NSObjectProtocol] = []
     let covers = NSCache<NSString, UIImage>()
+    let persistQueue = DispatchQueue(label: "com.joemattiello.iCube.libraryMetadata.persist", qos: .utility)
     init() {
       covers.totalCostLimit = 32 * 1024 * 1024
       covers.countLimit = 32
@@ -102,10 +103,30 @@ final class LibraryMetadataService: NSObject {
   private static func rememberContentIdentity(_ identity: ContentIdentity, path: String) {
     state.lock.lock()
     state.contentIdentities[path] = identity
-    if let data = try? JSONEncoder().encode(state.contentIdentities) {
-      UserDefaults.standard.set(data, forKey: contentIdentityKey)
-    }
     state.lock.unlock()
+    persistContentIdentities()
+  }
+
+  /// Saves the receipts without holding `state.lock`. A `UserDefaults` write
+  /// posts `didChangeNotification` on the writing thread before it returns, and
+  /// SwiftUI's `@AppStorage` observer then waits for the view update that is in
+  /// progress on the main thread. That update reads titles through `store()` and
+  /// `identity(for:)`, which take `state.lock`: writing under the lock deadlocked
+  /// the two and the watchdog killed the app (0x8BADF00D, 2026-11-25).
+  /// The queue is serial and each block encodes the newest receipts, so the last
+  /// write always holds the latest state.
+  private static func persistContentIdentities() {
+    state.persistQueue.async {
+      state.lock.lock()
+      let data = try? JSONEncoder().encode(state.contentIdentities)
+      state.lock.unlock()
+      if let data { UserDefaults.standard.set(data, forKey: contentIdentityKey) }
+    }
+  }
+
+  /// Returns once every receipt remembered so far has been written (tests).
+  static func waitForPersistedContentIdentities() {
+    state.persistQueue.sync {}
   }
 
   /// Resolve small unidentified/homebrew entries after a library scan, never in
