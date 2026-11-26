@@ -9,17 +9,20 @@
 
 @implementation BootNoticeNavigationViewController
 
-- (void)viewDidLoad {
+- (void)viewDidLoad
+{
   [super viewDidLoad];
   // Do any additional setup after loading the view.
 }
 
-- (UIViewController*)popViewControllerAnimated:(BOOL)animated {
+- (UIViewController*)popViewControllerAnimated:(BOOL)animated
+{
   // Dismiss ourselves if we are popping the last view controller.
-  if (self.viewControllers.count == 1) {
+  if (self.viewControllers.count == 1)
+  {
     [self dismissViewControllerAnimated:true completion:nil];
   }
-  
+
   return [super popViewControllerAnimated:animated];
 }
 

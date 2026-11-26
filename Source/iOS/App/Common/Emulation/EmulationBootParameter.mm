@@ -10,23 +10,30 @@
 
 @implementation EmulationBootParameter
 
-- (std::unique_ptr<BootParameters>) generateDolphinBootParameter {
+- (std::unique_ptr<BootParameters>)generateDolphinBootParameter
+{
   std::unique_ptr<BootParameters> boot;
-  
-  if (self.bootType == EmulationBootTypeFile) {
+
+  if (self.bootType == EmulationBootTypeFile)
+  {
     std::vector<std::string> paths = {FoundationToCppString(self.path)};
-    
-    if (self.secondPath != nil) {
+
+    if (self.secondPath != nil)
+    {
       paths.push_back(FoundationToCppString(self.secondPath));
     }
-    
+
     boot = BootParameters::GenerateFromFile(paths, BootSessionData());
-  } else if (self.bootType == EmulationBootTypeSystemMenu) {
+  }
+  else if (self.bootType == EmulationBootTypeSystemMenu)
+  {
     boot = std::make_unique<BootParameters>(BootParameters::NANDTitle{Titles::SYSTEM_MENU});
-  } else {
+  }
+  else
+  {
     boot = std::make_unique<BootParameters>(BootParameters::IPL{self.iplRegion});
   }
-  
+
   return boot;
 }
 

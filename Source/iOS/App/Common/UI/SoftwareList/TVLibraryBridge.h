@@ -18,8 +18,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)isScreenshotDemoMode;
 
 + (NSArray<TVGameItem*>*)currentGames;
-+ (void)rescanAndFetchMetadataWithCompletion:(void(^)(void))completion;
-+ (void)rescanLocalAndFetchMetadata:(void(^)(void))completion;
++ (void)rescanAndFetchMetadataWithCompletion:(void (^)(void))completion;
++ (void)rescanLocalAndFetchMetadata:(void (^)(void))completion;
 + (void)loadGameCubeMainMenu;
 + (void)performOnlineSystemUpdate;
 + (void)performOnlineSystemUpdateWithRegion:(NSString*)regionCode;

@@ -7,8 +7,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface TVWiiSystemUpdateViewController : UIViewController
 
-@property (nonatomic) bool isOnlineUpdate;
-@property (nonatomic) NSString* updateSource;
+@property(nonatomic) bool isOnlineUpdate;
+@property(nonatomic) NSString* updateSource;
 
 @end
 

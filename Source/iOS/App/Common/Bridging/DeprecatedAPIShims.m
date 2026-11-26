@@ -10,19 +10,24 @@
 
 @implementation DeprecatedAPIShims
 
-+ (void)disableNonFullyBlockingAppHangReportsOn:(SentryOptions*)options {
++ (void)disableNonFullyBlockingAppHangReportsOn:(SentryOptions*)options
+{
   options.enableReportNonFullyBlockingAppHangs = NO;
 }
 
-+ (void)pauseAppHangTracking {
++ (void)pauseAppHangTracking
+{
   [SentrySDK pauseAppHangTracking];
 }
 
-+ (void)resumeAppHangTracking {
++ (void)resumeAppHangTracking
+{
   [SentrySDK resumeAppHangTracking];
 }
 
-+ (void)setPausedHandler:(void (^)(GCController* controller))handler onController:(GCController*)controller {
++ (void)setPausedHandler:(void (^)(GCController* controller))handler
+            onController:(GCController*)controller
+{
   controller.controllerPausedHandler = handler;
 }
 

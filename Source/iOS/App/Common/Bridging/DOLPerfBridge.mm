@@ -9,12 +9,13 @@
 #import <Foundation/Foundation.h>
 
 // C++ includes
-#include "VideoCommon/PerformanceMetrics.h"
 #include "Core/System.h"  // 2606: PerformanceMetrics lives on Core::System
+#include "VideoCommon/PerformanceMetrics.h"
 
 @implementation DOLPerfBridge
 
-+ (NSDictionary<NSString*, NSNumber*>*)snapshot {
++ (NSDictionary<NSString*, NSNumber*>*)snapshot
+{
   // System::GetPerfMetrics() is the global instance declared at the bottom of
   // PerformanceMetrics.h. Its getters are atomic / any-thread-safe, so no
   // locking or main-thread hop is needed here.
@@ -30,7 +31,8 @@
   // rawFrameTimeMs is the last raw per-frame delta (PerformanceMetrics core
   // accessor added for this bench). The benchmark samples THIS at display rate
   // and de-dups on change to build a true frame-time distribution / 1%-low.
-  const double rawFrameTimeMs = Core::System::GetInstance().GetPerfMetrics().GetLastRawFrameTimeMs();
+  const double rawFrameTimeMs =
+      Core::System::GetInstance().GetPerfMetrics().GetLastRawFrameTimeMs();
 
   // GPU time per presented frame summed over the Metal command buffers, and the MetalFX share.
   const double gpuFrameMs = Core::System::GetInstance().GetPerfMetrics().GetGPUFrameMs();

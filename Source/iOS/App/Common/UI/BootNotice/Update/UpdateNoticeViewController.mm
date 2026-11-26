@@ -11,30 +11,35 @@
 
 @implementation UpdateNoticeViewController
 
-- (void)viewDidLoad {
+- (void)viewDidLoad
+{
   [super viewDidLoad];
-  
-  NSString* message = [NSString stringWithFormat:@"iCube version %@ is now available.", self.updateInfo[@"version"]];
+
+  NSString* message = [NSString
+      stringWithFormat:@"iCube version %@ is now available.", self.updateInfo[@"version"]];
   [self.versionLabel setText:message];
-  
+
   [self.changesLabel setText:self.updateInfo[@"changes"]];
-  
-  [self.saveStateLabel setHidden:(NSInteger)self.updateInfo[@"state_version"] != State::GetVersion()];
+
+  [self.saveStateLabel
+      setHidden:(NSInteger)self.updateInfo[@"state_version"] != State::GetVersion()];
 }
 
-- (IBAction)updateNowPressed:(id)sender {
+- (IBAction)updateNowPressed:(id)sender
+{
   NSURL* url = [NSURL URLWithString:self.updateInfo[@"install_url"]];
   [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
 }
 
-- (IBAction)seeChangesPressed:(id)sender {
+- (IBAction)seeChangesPressed:(id)sender
+{
   NSURL* url = [NSURL URLWithString:self.updateInfo[@"changes_url"]];
   [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
 }
 
-- (IBAction)notNowPressed:(id)sender {
+- (IBAction)notNowPressed:(id)sender
+{
   [self.navigationController popViewControllerAnimated:true];
 }
-
 
 @end

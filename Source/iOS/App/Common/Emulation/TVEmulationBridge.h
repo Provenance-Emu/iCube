@@ -20,11 +20,11 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 
 /// Identity captured with the serialized state, returned only after its file has been committed.
 @interface TVSaveStateSnapshot : NSObject
-@property (nonatomic, readonly, copy) NSString* filePath;
-@property (nonatomic, readonly, copy) NSString* gameID;
-@property (nonatomic, readonly) NSInteger playTimeSeconds;
-@property (nonatomic, readonly, copy) NSDate* savedAt;
-@property (nonatomic, readonly) uint64_t sessionIdentifier;
+@property(nonatomic, readonly, copy) NSString* filePath;
+@property(nonatomic, readonly, copy) NSString* gameID;
+@property(nonatomic, readonly) NSInteger playTimeSeconds;
+@property(nonatomic, readonly, copy) NSDate* savedAt;
+@property(nonatomic, readonly) uint64_t sessionIdentifier;
 @end
 
 @interface TVEmulationBridge : NSObject
@@ -32,24 +32,33 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 + (void)runWithBootParameter:(EmulationBootParameter*)param;
 + (void)stop;
 /// User Quit: a failed enabled auto-save leaves the session running and returns NO.
-/// A nonnil path must come from a successful save snapshot; it is copied to auto instead of serialized twice.
-+ (BOOL)stopForUserWithSavedStatePath:(nullable NSString*)savedStatePath NS_SWIFT_NAME(stopForUser(savedStatePath:));
-+ (BOOL)stopForUserWithSavedStatePath:(nullable NSString*)savedStatePath expectedGameID:(nullable NSString*)expectedGameID NS_SWIFT_NAME(stopForUser(savedStatePath:expectedGameID:));
-+ (BOOL)stopForUserWithSavedStatePath:(nullable NSString*)savedStatePath expectedGameID:(nullable NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(stopForUser(savedStatePath:expectedGameID:expectedSessionIdentifier:));
+/// A nonnil path must come from a successful save snapshot; it is copied to auto instead of
+/// serialized twice.
++ (BOOL)stopForUserWithSavedStatePath:(nullable NSString*)savedStatePath
+    NS_SWIFT_NAME(stopForUser(savedStatePath:));
++ (BOOL)stopForUserWithSavedStatePath:(nullable NSString*)savedStatePath
+                       expectedGameID:(nullable NSString*)expectedGameID
+    NS_SWIFT_NAME(stopForUser(savedStatePath:expectedGameID:));
++ (BOOL)stopForUserWithSavedStatePath:(nullable NSString*)savedStatePath
+                       expectedGameID:(nullable NSString*)expectedGameID
+            expectedSessionIdentifier:(uint64_t)session
+    NS_SWIFT_NAME(stopForUser(savedStatePath:expectedGameID:expectedSessionIdentifier:));
 + (uint64_t)currentSessionIdentifier;
 /// Explicit user recovery, or programmatic stop after its own save policy has run.
 + (void)stopWithoutSaving;
-+ (BOOL)stopWithoutSavingForUserExpectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(stopWithoutSavingForUser(expectedSessionIdentifier:));
++ (BOOL)stopWithoutSavingForUserExpectedSessionIdentifier:(uint64_t)session
+    NS_SWIFT_NAME(stopWithoutSavingForUser(expectedSessionIdentifier:));
 + (BOOL)isRunning;
 + (void)pause;
 + (void)resume;
-/// Non-blocking pause/resume for the app-inactive transition (PauseArbiter only): the SetState runs on the
-/// host queue, so the main thread never waits for the CPU thread there. A pause or resume made after
-/// the request supersedes it if it has not run yet.
+/// Non-blocking pause/resume for the app-inactive transition (PauseArbiter only): the SetState runs
+/// on the host queue, so the main thread never waits for the CPU thread there. A pause or resume
+/// made after the request supersedes it if it has not run yet.
 + (void)pauseAsync;
 + (void)resumeAsync;
 + (BOOL)isPaused;
-/// True while a `pauseAsync` / `resumeAsync` is still waiting on the host queue or inside its state change.
+/// True while a `pauseAsync` / `resumeAsync` is still waiting on the host queue or inside its state
+/// change.
 + (BOOL)hasQueuedPauseRequest;
 /// The console's reset button: the running game restarts from power-on. Resumes a paused core,
 /// because a reset only takes effect while the CPU runs. No-op when nothing is running.
@@ -67,15 +76,31 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 + (void)registerMainDisplayView:(UIView*)view;
 
 // Savestates
-// Returns YES only after the state worker committed this save. `wait` remains for source compatibility.
+// Returns YES only after the state worker committed this save. `wait` remains for source
+// compatibility.
 + (BOOL)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait;
-+ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot NS_SWIFT_NAME(saveStateSnapshot(toSlot:));
-+ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:));
-+ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:expectedSessionIdentifier:));
-/// UI slot consent: rechecks captured path and actual occupancy under the core guard. Nil path is legacy overwrite.
-+ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(nullable NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session expectedPath:(nullable NSString*)expectedPath allowOverwrite:(BOOL)allowOverwrite NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:expectedSessionIdentifier:expectedPath:allowOverwrite:));
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot
+    NS_SWIFT_NAME(saveStateSnapshot(toSlot:));
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot
+                                          expectedGameID:(nullable NSString*)expectedGameID
+    NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:));
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot
+                                          expectedGameID:(nullable NSString*)expectedGameID
+                               expectedSessionIdentifier:(uint64_t)session
+    NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:expectedSessionIdentifier:));
+/// UI slot consent: rechecks captured path and actual occupancy under the core guard. Nil path is
+/// legacy overwrite.
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot
+                                          expectedGameID:(nullable NSString*)expectedGameID
+                               expectedSessionIdentifier:(uint64_t)session
+                                            expectedPath:(nullable NSString*)expectedPath
+                                          allowOverwrite:(BOOL)allowOverwrite
+    NS_SWIFT_NAME(saveStateSnapshot(toSlot:expectedGameID:expectedSessionIdentifier:expectedPath:allowOverwrite:));
 /// Unique history paths only; validates identity and StateSaves containment under the core guard.
-+ (nullable TVSaveStateSnapshot*)saveStateSnapshotToPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(saveStateSnapshot(toPath:expectedGameID:expectedSessionIdentifier:));
++ (nullable TVSaveStateSnapshot*)saveStateSnapshotToPath:(NSString*)path
+                                          expectedGameID:(NSString*)expectedGameID
+                               expectedSessionIdentifier:(uint64_t)session
+    NS_SWIFT_NAME(saveStateSnapshot(toPath:expectedGameID:expectedSessionIdentifier:));
 // YES while the core can take a save or load (running, including a user pause).
 + (BOOL)isStateOperationAllowed;
 + (void)loadStateFromSlot:(NSInteger)slot;
@@ -119,9 +144,16 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 + (void)markResumeSettledAfterRequestedLoads;
 + (void)loadStateFromPath:(NSString*)path;
 /// YES means requested, not completed. The queued job rechecks identity before loading.
-+ (BOOL)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session NS_SWIFT_NAME(loadState(fromPath:expectedGameID:expectedSessionIdentifier:));
++ (BOOL)loadStateFromPath:(NSString*)path
+               expectedGameID:(NSString*)expectedGameID
+    expectedSessionIdentifier:(uint64_t)session
+    NS_SWIFT_NAME(loadState(fromPath:expectedGameID:expectedSessionIdentifier:));
 // Completion reports actual load success, after the CPU guard restores the previous pause state.
-+ (void)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session completion:(void (^)(BOOL loaded))completion NS_SWIFT_NAME(loadState(fromPath:expectedGameID:expectedSessionIdentifier:completion:));
++ (void)loadStateFromPath:(NSString*)path
+               expectedGameID:(NSString*)expectedGameID
+    expectedSessionIdentifier:(uint64_t)session
+                   completion:(void (^)(BOOL loaded))completion
+    NS_SWIFT_NAME(loadState(fromPath:expectedGameID:expectedSessionIdentifier:completion:));
 
 // Returns YES if the state file at path was written by a build whose save format
 // matches the running build (header SCM revision == current). Conservative: a
@@ -181,7 +213,8 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 + (void)setWiiIMUPointEnabled:(BOOL)enabled forWiimote:(NSInteger)wiimote;
 
 // Video Geometry
-// Returns the current video content rect in the coordinate space of the registered main display view.
+// Returns the current video content rect in the coordinate space of the registered main display
+// view.
 + (CGRect)currentVideoContentRect;
 
 @end

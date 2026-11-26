@@ -11,9 +11,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface GeckoCodeViewController : UITableViewController
 
-@property (nonatomic) std::string gameId;
-@property (nonatomic) std::string gametdbId;
-@property (nonatomic) u16 revision;
+@property(nonatomic) std::string gameId;
+@property(nonatomic) std::string gametdbId;
+@property(nonatomic) u16 revision;
 
 - (void)setGameIdString:(NSString*)value;
 - (void)setGametdbIdString:(NSString*)value;
