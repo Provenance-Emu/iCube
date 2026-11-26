@@ -7,7 +7,6 @@ import XCTest
 /// to. Control orders are the core's `AddInput` lists (GCPadEmu.cpp, WiimoteEmu.cpp, Nunchuk.cpp,
 /// Classic.cpp), as the bridges report them.
 final class ControlCategoryTests: XCTestCase {
-
   private func rows(_ owner: RemapGroupOwner, _ group: Int, _ names: [String]) -> [RemapControlRow] {
     names.enumerated().map { RemapControlRow(owner: owner, groupId: group, index: $0.offset, name: $0.element, expression: "") }
   }

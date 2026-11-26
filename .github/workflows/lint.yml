@@ -153,7 +153,9 @@ jobs:
             echo "No Swift files changed under Source/iOS/App; nothing to check."
             exit 0
           fi
-          { echo "$files" | xargs swiftlint lint --quiet 2>&1 || true; } \
+          # --force-exclude: files named on the command line otherwise ignore `excluded:` in
+          # .swiftlint.yml, so the test folder was linted on pull requests and nowhere else.
+          { echo "$files" | xargs swiftlint lint --quiet --force-exclude 2>&1 || true; } \
             | python3 "$RUNNER_TEMP/lint_filter.py" "$LINT_BASE_SHA"
 
   clang-format:

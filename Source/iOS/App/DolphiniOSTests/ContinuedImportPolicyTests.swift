@@ -92,7 +92,7 @@ final class ImportProgressAggregatorTests: XCTestCase {
     agg.update(item: 0, copiedBytes: 60)
     agg.update(item: 0, copiedBytes: 20)
     XCTAssertEqual(agg.copiedBytes, 60)
-    agg.update(item: 0, copiedBytes: 5_000)
+    agg.update(item: 0, copiedBytes: 5000)
     XCTAssertEqual(agg.copiedBytes, 100)
     agg.update(item: 0, copiedBytes: -4)
     XCTAssertEqual(agg.copiedBytes, 100)
@@ -278,7 +278,7 @@ final class ContinuedImportSessionTests: XCTestCase {
     let session = makeSession(host: host, items: [("a", 100_000_000)])
     session.taskStarted(port: task)
     let pushedAtStart = task.progress.count
-    for bytes in stride(from: Int64(1), through: 900_000, by: 1_000) { session.update(item: 0, copiedBytes: bytes) }
+    for bytes in stride(from: Int64(1), through: 900_000, by: 1000) { session.update(item: 0, copiedBytes: bytes) }
     XCTAssertEqual(task.progress.count, pushedAtStart, "under one interval of progress must not be pushed")
     session.update(item: 0, copiedBytes: ContinuedImportSession.progressPushIntervalBytes + 1)
     XCTAssertEqual(task.progress.count, pushedAtStart + 1)

@@ -1,7 +1,7 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
-#import <XCTest/XCTest.h>
 #import <GameController/GameController.h>
+#import <XCTest/XCTest.h>
 
 #include <algorithm>
 #include <cmath>
@@ -20,15 +20,24 @@
 @property(nonatomic) GCRotationRate rotationRate;
 @end
 @implementation DOLAxisMotionFixture
-- (BOOL)sensorsRequireManualActivation { return NO; }
-- (BOOL)hasRotationRate { return YES; }
+- (BOOL)sensorsRequireManualActivation
+{
+  return NO;
+}
+- (BOOL)hasRotationRate
+{
+  return YES;
+}
 @end
 
 @interface DOLAxisProfileFixture : NSObject
 @property(nonatomic, strong) NSDictionary<NSString*, GCControllerElement*>* elements;
 @end
 @implementation DOLAxisProfileFixture
-- (instancetype)capture { return self; }
+- (instancetype)capture
+{
+  return self;
+}
 @end
 
 @interface DOLAxisControllerFixture : NSObject
@@ -37,11 +46,26 @@
 @property(nonatomic, strong) DOLAxisMotionFixture* motion;
 @end
 @implementation DOLAxisControllerFixture
-- (NSString*)vendorName { return @"Axis Test Controller"; }
-- (NSString*)productCategory { return @"Axis Test"; }
-- (GCMicroGamepad*)microGamepad { return nil; }
-- (GCGamepad*)gamepad { return nil; }
-- (GCDeviceHaptics*)haptics { return nil; }
+- (NSString*)vendorName
+{
+  return @"Axis Test Controller";
+}
+- (NSString*)productCategory
+{
+  return @"Axis Test";
+}
+- (GCMicroGamepad*)microGamepad
+{
+  return nil;
+}
+- (GCGamepad*)gamepad
+{
+  return nil;
+}
+- (GCDeviceHaptics*)haptics
+{
+  return nil;
+}
 @end
 
 namespace
@@ -104,8 +128,8 @@ Common::Vec3 RemoteAngularVelocity(const MFiController& pad)
 }
 
 - (void)expectPadAcceleration:(GCAcceleration)pad
-            readsOnTheRemoteAs:(Common::Vec3)expected
-                          pose:(NSString*)pose
+           readsOnTheRemoteAs:(Common::Vec3)expected
+                         pose:(NSString*)pose
 {
   _fixture.motion.acceleration = pad;
   MFiController device((GCController*)(id)_fixture);
@@ -123,7 +147,9 @@ Common::Vec3 RemoteAngularVelocity(const MFiController& pad)
   const float G = float(g);
   [self expectPadAcceleration:{0, 0, -1} readsOnTheRemoteAs:{0, 0, G} pose:@"flat, face up"];
   [self expectPadAcceleration:{0, 0, 1} readsOnTheRemoteAs:{0, 0, -G} pose:@"flat, face down"];
-  [self expectPadAcceleration:{0, -1, 0} readsOnTheRemoteAs:{0, -G, 0} pose:@"pointing at the ceiling"];
+  [self expectPadAcceleration:{0, -1, 0}
+           readsOnTheRemoteAs:{0, -G, 0}
+                         pose:@"pointing at the ceiling"];
   [self expectPadAcceleration:{0, 1, 0} readsOnTheRemoteAs:{0, G, 0} pose:@"pointing at the floor"];
   [self expectPadAcceleration:{1, 0, 0} readsOnTheRemoteAs:{G, 0, 0} pose:@"right side down"];
   [self expectPadAcceleration:{-1, 0, 0} readsOnTheRemoteAs:{-G, 0, 0} pose:@"left side down"];

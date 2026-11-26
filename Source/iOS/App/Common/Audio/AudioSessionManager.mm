@@ -18,7 +18,8 @@
 static const NSTimeInterval kPreferredIOBufferDuration = 512.0 / 48000.0;
 static const double kPreferredSampleRate = 48000.0;
 
-@implementation AudioSessionManager {
+@implementation AudioSessionManager
+{
   id _routeChangeObserver;
   BOOL _hookRegistered;
   BOOL _microphoneActive;
@@ -27,16 +28,20 @@ static const double kPreferredSampleRate = 48000.0;
 /// "HDMI:Living Room TV, BluetoothA2DP:AirPods Pro" — the output ports the session is actually
 /// using. Logged at activation and on every route change so an "I hear it on the TV, not the
 /// AirPods" report can be read straight from the console.
-+ (NSString*)describeRoute:(AVAudioSessionRouteDescription*)route {
++ (NSString*)describeRoute:(AVAudioSessionRouteDescription*)route
+{
   NSMutableArray<NSString*>* parts = [NSMutableArray array];
-  for (AVAudioSessionPortDescription* out in route.outputs) {
+  for (AVAudioSessionPortDescription* out in route.outputs)
+  {
     [parts addObject:[NSString stringWithFormat:@"%@:%@", out.portType, out.portName]];
   }
   return parts.count > 0 ? [parts componentsJoinedByString:@", "] : @"(none)";
 }
 
-- (void)observeRouteChangesOnce {
-  if (_routeChangeObserver != nil) {
+- (void)observeRouteChangesOnce
+{
+  if (_routeChangeObserver != nil)
+  {
     return;
   }
   _routeChangeObserver = [[NSNotificationCenter defaultCenter]
@@ -46,7 +51,8 @@ static const double kPreferredSampleRate = 48000.0;
               usingBlock:^(NSNotification* note) {
                 NSNumber* reason = note.userInfo[AVAudioSessionRouteChangeReasonKey];
                 NSLog(@"[Audio] route changed (reason %@) -> %@", reason,
-                      [AudioSessionManager describeRoute:[AVAudioSession sharedInstance].currentRoute]);
+                      [AudioSessionManager
+                          describeRoute:[AVAudioSession sharedInstance].currentRoute]);
               }];
 }
 
@@ -70,7 +76,8 @@ static const double kPreferredSampleRate = 48000.0;
   });
 }
 
-+ (AudioSessionManager*)shared {
++ (AudioSessionManager*)shared
+{
   static AudioSessionManager* sharedInstance = nil;
   static dispatch_once_t onceToken;
 
@@ -87,7 +94,8 @@ static const double kPreferredSampleRate = 48000.0;
 }
 
 /// Serial: activation is a blocking IPC to the audio server, so the main thread never waits on it.
-+ (dispatch_queue_t)sessionQueue {
++ (dispatch_queue_t)sessionQueue
+{
   static dispatch_queue_t queue;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
@@ -96,16 +104,19 @@ static const double kPreferredSampleRate = 48000.0;
   return queue;
 }
 
-- (void)setSessionCategory {
+- (void)setSessionCategory
+{
   [self registerMicrophoneHookOnce];
   // Every caller is on the main thread (launch, the mute-switch setting, and the core's microphone
-  // hook, which IOSAudioSession already posts to main asynchronously), and none waits on the result.
+  // hook, which IOSAudioSession already posts to main asynchronously), and none waits on the
+  // result.
   dispatch_async([AudioSessionManager sessionQueue], ^{
     [self applySessionCategory];
   });
 }
 
-- (void)applySessionCategory {
+- (void)applySessionCategory
+{
   AVAudioSession* session = [AVAudioSession sharedInstance];
   NSError* error = nil;
 
@@ -150,7 +161,8 @@ static const double kPreferredSampleRate = 48000.0;
   [session setPreferredSampleRate:kPreferredSampleRate error:nil];
   [session setPreferredIOBufferDuration:kPreferredIOBufferDuration error:nil];
   NSError* activateError = nil;
-  if (![session setActive:YES error:&activateError]) {
+  if (![session setActive:YES error:&activateError])
+  {
     NSLog(@"[Audio] setActive failed: %@", activateError);
   }
   NSLog(@"[Audio] session category=%@ mode=%@ options=0x%lx mic=%d route=%@", session.category,

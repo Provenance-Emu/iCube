@@ -9,7 +9,6 @@ import XCTest
 /// it reloads on assignment changes only while started. Observers deliver on the main queue, so
 /// the notification tests wait on expectations instead of assuming inline delivery.
 final class ControllerHubViewModelTests: XCTestCase {
-
   @MainActor
   private final class FakeReader: ControllerHubReading {
     var gameCube: [Int: String] = [:]
@@ -46,6 +45,7 @@ final class ControllerHubViewModelTests: XCTestCase {
       onPadRead?()
       return pads
     }
+
     func isGameRunning() -> Bool { gameRunning }
     func overlayVisible() -> Bool { true }
     func overlayMode() -> ControllerManager.OverlayMode { overlayModeValue }
@@ -184,8 +184,11 @@ final class ControllerHubViewModelTests: XCTestCase {
       let delay: TimeInterval
       let work: @MainActor () -> Void
       var isCancelled = false
-      init(delay: TimeInterval, work: @escaping @MainActor () -> Void) { self.delay = delay; self.work = work }
+      init(delay: TimeInterval, work: @escaping @MainActor () -> Void) { self.delay = delay
+        self.work = work
+      }
     }
+
     private var jobs: [Job] = []
     /// Delays of the jobs that are scheduled and not cancelled.
     var liveDelays: [TimeInterval] { jobs.filter { !$0.isCancelled }.map(\.delay) }
@@ -194,6 +197,7 @@ final class ControllerHubViewModelTests: XCTestCase {
       jobs.append(job)
       return { job.isCancelled = true }
     }
+
     /// Runs every live job once, as the settle delay elapsing would.
     func fire() {
       let due = jobs.filter { !$0.isCancelled }
@@ -222,6 +226,7 @@ final class ControllerHubViewModelTests: XCTestCase {
       if slot.kind == .gameCube { reader.gameCube[slot.port] = bound } else { reader.wii[slot.port] = bound }
       onBind?()
     }
+
     func setDevice(_ choice: PlayerDeviceChoice, slot: PlayerSlot) {
       log.append("setDevice \(choice) \(slot.playerID)")
       switch choice {
@@ -231,13 +236,18 @@ final class ControllerHubViewModelTests: XCTestCase {
       case .automatic: break
       }
     }
+
     func assign(qualifier: String, slot: PlayerSlot) -> Bool {
       log.append("assign \(qualifier) \(slot.playerID)")
       guard !refuseAssign else { return false }
       bind(qualifier, slot)
       return true
     }
-    func clear(slot: PlayerSlot) { log.append("clear \(slot.playerID)"); bind("", slot) }
+
+    func clear(slot: PlayerSlot) { log.append("clear \(slot.playerID)")
+      bind("", slot)
+    }
+
     func setExtension(_ value: Int, wiimote: Int) { log.append("ext \(wiimote) \(value)") }
     func setSideways(_ enabled: Bool, wiimote: Int) { log.append("side \(wiimote) \(enabled)") }
     func setPointerMode(_ mode: PointerMode) { log.append("pointer \(mode)") }
@@ -725,7 +735,7 @@ final class ControllerHubViewModelTests: XCTestCase {
   /// Tap-cycling the on-screen controller: nothing it passes through is ever written.
   @MainActor
   func test_onScreenControllerCycledThroughOthers_writesOnlyTheFinalChoice() {
-    let reader = FakeReader()   // committed mode: .wii
+    let reader = FakeReader() // committed mode: .wii
     let writer = FakeWriter(reader: reader)
     let scheduler = FakeScheduler()
     let model = makeModel(system: .wii, reader: reader, writer: writer, scheduler: scheduler)

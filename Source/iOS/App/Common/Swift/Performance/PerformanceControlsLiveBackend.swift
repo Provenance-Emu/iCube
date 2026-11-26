@@ -7,7 +7,7 @@ extension PerformanceControlsController {
   /// The app backend is isolated from the pure state/controller so host tests never impersonate a bridge.
   static func live() -> PerformanceControlsController {
     PerformanceControlsController(read: readLiveState, apply: applyLiveChange,
-      sessionIdentifier: { TVEmulationBridge.currentSessionIdentifier() })
+                                  sessionIdentifier: { TVEmulationBridge.currentSessionIdentifier() })
   }
 
   private static func readLiveState() -> PerformanceControlsState {

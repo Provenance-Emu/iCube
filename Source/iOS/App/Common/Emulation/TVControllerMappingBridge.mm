@@ -5,32 +5,34 @@
 #import "DOLPhysicalProfileBridge.h"
 
 // Dolphin includes
-#include "InputCommon/ControllerInterface/ControllerInterface.h"
-#include "InputCommon/ControllerInterface/iOS/MFiController.h"
+#include <unordered_set>
+#include "Common/FileSearch.h"
+#include "Common/FileUtil.h"
+#include "Common/IniFile.h"
+#include "Core/ConfigManager.h"
 #include "Core/HW/GCPad.h"
 #include "Core/HW/GCPadEmu.h"
 #include "Core/HW/Wiimote.h"
-#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
-#include "Core/HW/WiimoteEmu/Extension/Nunchuk.h"
 #include "Core/HW/WiimoteEmu/Extension/Classic.h"
-#include "InputCommon/InputConfig.h"
-#include "InputCommon/ControllerEmu/ControllerEmu.h"
-#include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
-#include "InputCommon/ControllerInterface/MappingCommon.h"
-#include "Core/ConfigManager.h"
-#include "Common/FileUtil.h"
-#include "Common/FileSearch.h"
-#include "Common/IniFile.h"
+#include "Core/HW/WiimoteEmu/Extension/Nunchuk.h"
+#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 #include "FoundationStringUtil.h"
+#include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
+#include "InputCommon/ControllerEmu/ControllerEmu.h"
+#include "InputCommon/ControllerInterface/ControllerInterface.h"
+#include "InputCommon/ControllerInterface/MappingCommon.h"
+#include "InputCommon/ControllerInterface/iOS/MFiController.h"
+#include "InputCommon/InputConfig.h"
 #include "LocalizationUtil.h"
-#include <unordered_set>
 
 #include "ProfileLoading.h"
 
 NSString* const TVControllerDevicesChangedNotification = @"TVControllerDevicesChangedNotification";
 
 @implementation DOLProfileKey
-- (instancetype)initWithName:(NSString*)name kind:(DOLProfileKeyKind)kind choices:(NSArray<NSString*>*)choices
+- (instancetype)initWithName:(NSString*)name
+                        kind:(DOLProfileKeyKind)kind
+                     choices:(NSArray<NSString*>*)choices
 {
   if ((self = [super init]))
   {
@@ -50,14 +52,17 @@ static BOOL s_posting = NO;
 
 static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core::Device>& dev)
 {
-  if (!dev) return true;
+  if (!dev)
+    return true;
   const std::string q = dev->GetQualifiedName();
   const std::string n = dev->GetName();
   auto contains_dis = [](const std::string& s) {
-    for (size_t i = 0; i + 11 <= s.size(); ++i) {
+    for (size_t i = 0; i + 11 <= s.size(); ++i)
+    {
       char c0 = s[i];
       // compare case-insensitively for "disconnected"
-      if ((c0 == 'd' || c0 == 'D') && strncasecmp(s.c_str() + i, "disconnected", 12) == 0) return true;
+      if ((c0 == 'd' || c0 == 'D') && strncasecmp(s.c_str() + i, "disconnected", 12) == 0)
+        return true;
     }
     return false;
   };
@@ -66,18 +71,23 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
 
 + (void)beginPostingDevicesChangedNotifications
 {
-  if (s_posting) return;
-  if (!g_controller_interface.IsInit()) {
+  if (s_posting)
+    return;
+  if (!g_controller_interface.IsInit())
+  {
     // Retry registration shortly until ControllerInterface is ready
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-      [self beginPostingDevicesChangedNotifications];
-    });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+                     [self beginPostingDevicesChangedNotifications];
+                   });
     return;
   }
   __weak Class weakSelf = self;
   s_hotplugHandle = g_controller_interface.RegisterDevicesChangedCallback([weakSelf]() {
     dispatch_async(dispatch_get_main_queue(), ^{
-      [[NSNotificationCenter defaultCenter] postNotificationName:TVControllerDevicesChangedNotification object:nil];
+      [[NSNotificationCenter defaultCenter]
+          postNotificationName:TVControllerDevicesChangedNotification
+                        object:nil];
     });
   });
   s_posting = YES;
@@ -85,8 +95,10 @@ static inline bool IsDisconnectedPlaceholder(const std::shared_ptr<ciface::Core:
 
 + (void)endPostingDevicesChangedNotifications
 {
-  if (!s_posting) return;
-  if (g_controller_interface.IsInit()) {
+  if (!s_posting)
+    return;
+  if (g_controller_interface.IsInit())
+  {
     s_hotplugHandle.reset();
   }
   s_posting = NO;
@@ -358,7 +370,8 @@ static ControllerEmu::ControlGroup* WiimoteIRGroup(int idx)
 }
 
 // Whether every IR direction's expression is `expressions[i]`. Takes the state lock.
-static bool WiimoteIRExpressionsEqual(ControllerEmu::ControlGroup* ir, const char* const* expressions)
+static bool WiimoteIRExpressionsEqual(ControllerEmu::ControlGroup* ir,
+                                      const char* const* expressions)
 {
   const auto lock = ControllerEmu::EmulatedController::GetStateLock();
   for (int i = 0; i < kIRDirectionCount; ++i)
@@ -386,7 +399,8 @@ static bool WiimoteIRHasOwnBinding(ControllerEmu::ControlGroup* ir)
 }
 
 // Writes the four IR expressions, re-resolves the controller and saves.
-static void SetWiimoteIRExpressions(int idx, ControllerEmu::ControlGroup* ir, const char* const* expressions)
+static void SetWiimoteIRExpressions(int idx, ControllerEmu::ControlGroup* ir,
+                                    const char* const* expressions)
 {
   {
     const auto lock = ControllerEmu::EmulatedController::GetStateLock();
@@ -401,7 +415,8 @@ static void SetWiimoteIRExpressions(int idx, ControllerEmu::ControlGroup* ir, co
 {
   const int idx = static_cast<int>(indexOneBased - 1);
   auto* ir = WiimoteIRGroup(idx);
-  if (!ir || WiimoteIRExpressionsEqual(ir, kRemotePointerIRExpressions) || WiimoteIRHasOwnBinding(ir))
+  if (!ir || WiimoteIRExpressionsEqual(ir, kRemotePointerIRExpressions) ||
+      WiimoteIRHasOwnBinding(ir))
     return NO;
   SetWiimoteIRExpressions(idx, ir, kRemotePointerIRExpressions);
   NSLog(@"[iCube][Input] Wiimote%d: IR pointer bound to the Siri Remote", idx + 1);
@@ -466,17 +481,20 @@ static bool RepairTouchscreenMicrophone(int port)
   std::shared_ptr<ciface::Core::Device> touchscreen_dev;
   for (const auto& dev : g_controller_interface.GetAllDevices())
   {
-    if (dev && dev->GetSource() == std::string("iOS") && dev->GetName() == std::string("Touchscreen") &&
-        dev->GetId() == port)
+    if (dev && dev->GetSource() == std::string("iOS") &&
+        dev->GetName() == std::string("Touchscreen") && dev->GetId() == port)
     {
-      touchscreen_dev = dev; break;
+      touchscreen_dev = dev;
+      break;
     }
   }
   if (!touchscreen_dev)
     return;
-  ciface::Core::DeviceQualifier dq; dq.FromDevice(touchscreen_dev.get());
+  ciface::Core::DeviceQualifier dq;
+  dq.FromDevice(touchscreen_dev.get());
   auto* pad = cfg->GetController(port);
-  if (!pad) return;
+  if (!pad)
+    return;
   // As the coordinator's BindTouchscreen: the on-screen profile is loaded only when the port
   // changes device or has no mapping, so a touch mapping the user edited survives a re-bind (and
   // the boot pass, which offers Pad 1 to the Touchscreen at every launch).
@@ -486,8 +504,11 @@ static bool RepairTouchscreenMicrophone(int port)
   {
     const std::string sysDir = pad->GetConfig()->GetSysProfileDirectoryPath();
     const std::string userDir = pad->GetConfig()->GetUserProfileDirectoryPath();
-    const std::string sysProfile = sysDir + (sysDir.empty() || sysDir.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
-    const std::string userProfile = userDir + (userDir.empty() || userDir.back() == '/' ? "" : "/") + std::string("Touchscreen.ini");
+    const std::string sysProfile = sysDir + (sysDir.empty() || sysDir.back() == '/' ? "" : "/") +
+                                   std::string("Touchscreen.ini");
+    const std::string userProfile = userDir +
+                                    (userDir.empty() || userDir.back() == '/' ? "" : "/") +
+                                    std::string("Touchscreen.ini");
 
     Common::IniFile ini;
     if (File::Exists(userProfile) && ini.Load(userProfile))
@@ -551,10 +572,12 @@ static bool RepairTouchscreenMicrophone(int port)
 + (void)setDefaultDevice:(NSString*)qualified forGCPort:(NSInteger)portOneBased
 {
   auto* cfg = Pad::GetConfig();
-  if (!cfg) return;
+  if (!cfg)
+    return;
   const int port = (int)portOneBased - 1;
   auto* pad = cfg->GetController(port);
-  if (!pad) return;
+  if (!pad)
+    return;
   pad->SetDefaultDevice([qualified UTF8String]);
   pad->UpdateReferences(g_controller_interface);
   Pad::GetConfig()->SaveConfig();
@@ -563,10 +586,12 @@ static bool RepairTouchscreenMicrophone(int port)
 + (NSString*)defaultDeviceForWiimote:(NSInteger)indexOneBased
 {
   auto* cfg = Wiimote::GetConfig();
-  if (!cfg) return @"";
+  if (!cfg)
+    return @"";
   const int idx = (int)indexOneBased - 1;
   auto* wm = cfg->GetController(idx);
-  if (!wm) return @"";
+  if (!wm)
+    return @"";
   const auto def = wm->GetDefaultDevice().ToString();
   return [NSString stringWithUTF8String:def.c_str()];
 }
@@ -574,10 +599,12 @@ static bool RepairTouchscreenMicrophone(int port)
 + (void)setDefaultDevice:(NSString*)qualified forWiimote:(NSInteger)indexOneBased
 {
   auto* cfg = Wiimote::GetConfig();
-  if (!cfg) return;
+  if (!cfg)
+    return;
   const int idx = (int)indexOneBased - 1;
   auto* wm = cfg->GetController(idx);
-  if (!wm) return;
+  if (!wm)
+    return;
   wm->SetDefaultDevice([qualified UTF8String]);
   wm->UpdateReferences(g_controller_interface);
   Wiimote::GetConfig()->SaveConfig();
@@ -586,7 +613,8 @@ static bool RepairTouchscreenMicrophone(int port)
 + (NSArray<NSString*>*)inputsForQualifiedDevice:(NSString*)qualified
 {
   NSMutableArray<NSString*>* names = [NSMutableArray array];
-  ciface::Core::DeviceQualifier dq; dq.FromString([qualified UTF8String]);
+  ciface::Core::DeviceQualifier dq;
+  dq.FromString([qualified UTF8String]);
   auto dev = g_controller_interface.FindDevice(dq);
   if (!dev)
     return names;
@@ -600,7 +628,8 @@ static bool RepairTouchscreenMicrophone(int port)
 + (NSArray<NSNumber*>*)inputStatesForQualifiedDevice:(NSString*)qualified
 {
   NSMutableArray<NSNumber*>* values = [NSMutableArray array];
-  ciface::Core::DeviceQualifier dq; dq.FromString([qualified UTF8String]);
+  ciface::Core::DeviceQualifier dq;
+  dq.FromString([qualified UTF8String]);
   auto dev = g_controller_interface.FindDevice(dq);
   if (!dev)
     return values;
@@ -615,8 +644,10 @@ static bool RepairTouchscreenMicrophone(int port)
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
   const int idx = (int)indexOneBased - 1;
-  auto* attachments = static_cast<ControllerEmu::Attachments*>(Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Attachments));
-  if (!attachments) return result;
+  auto* attachments = static_cast<ControllerEmu::Attachments*>(
+      Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Attachments));
+  if (!attachments)
+    return result;
   for (const auto& att : attachments->GetAttachmentList())
   {
     [result addObject:[NSString stringWithUTF8String:att->GetDisplayName().c_str()]];
@@ -627,16 +658,20 @@ static bool RepairTouchscreenMicrophone(int port)
 + (NSInteger)selectedWiimoteAttachmentForIndex:(NSInteger)indexOneBased
 {
   const int idx = (int)indexOneBased - 1;
-  auto* attachments = static_cast<ControllerEmu::Attachments*>(Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Attachments));
-  if (!attachments) return 0;
+  auto* attachments = static_cast<ControllerEmu::Attachments*>(
+      Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Attachments));
+  if (!attachments)
+    return 0;
   return (NSInteger)attachments->GetSelectedAttachment();
 }
 
 + (void)setSelectedWiimoteAttachment:(NSInteger)attachmentIndex forWiimote:(NSInteger)indexOneBased
 {
   const int idx = (int)indexOneBased - 1;
-  auto* attachments = static_cast<ControllerEmu::Attachments*>(Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Attachments));
-  if (!attachments) return;
+  auto* attachments = static_cast<ControllerEmu::Attachments*>(
+      Wiimote::GetWiimoteGroup(idx, WiimoteEmu::WiimoteGroup::Attachments));
+  if (!attachments)
+    return;
   attachments->SetSelectedAttachment((u32)attachmentIndex);
 }
 
@@ -740,20 +775,24 @@ static const ControllerEmu::EmulatedController* WiimoteAt(NSInteger indexOneBase
 
 // What loading a profile does to a slot once its file is read; `loadProfile:` and the profile text
 // editor (`applyProfileText:`) share it.
-static void ApplyProfileToPad(ControllerEmu::EmulatedController* pad, Common::IniFile& ini, bool restore)
+static void ApplyProfileToPad(ControllerEmu::EmulatedController* pad, Common::IniFile& ini,
+                              bool restore)
 {
   const auto selectedDev = pad->GetDefaultDevice();
   pad->LoadConfig(ini.GetOrCreateSection("Profile"));
-  if (restore) pad->SetDefaultDevice(selectedDev);
+  if (restore)
+    pad->SetDefaultDevice(selectedDev);
   pad->UpdateReferences(g_controller_interface);
   Pad::GetConfig()->SaveConfig();
 }
 
-static void ApplyProfileToWiimote(int idx, ControllerEmu::EmulatedController* wm, Common::IniFile& ini, bool restore)
+static void ApplyProfileToWiimote(int idx, ControllerEmu::EmulatedController* wm,
+                                  Common::IniFile& ini, bool restore)
 {
   const auto selectedDev = wm->GetDefaultDevice();
   LoadProfileKeepingExtension(wm, ini.GetOrCreateSection("Profile"));
-  if (restore) wm->SetDefaultDevice(selectedDev);
+  if (restore)
+    wm->SetDefaultDevice(selectedDev);
   wm->UpdateReferences(g_controller_interface);
   DisableCoreIMUPointerIfTouchscreen(idx);
   RepairTouchscreenIRPointer(idx);
@@ -780,21 +819,29 @@ static void ApplyProfileToWiimote(int idx, ControllerEmu::EmulatedController* wm
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore
 {
   auto* cfg = Pad::GetConfig();
-  if (!cfg) return NO;
+  if (!cfg)
+    return NO;
   const int port = (int)portOneBased - 1;
   auto* pad = cfg->GetController(port);
-  if (!pad) return NO;
+  if (!pad)
+    return NO;
   const std::string n = [name UTF8String];
   const std::string sysDir = pad->GetConfig()->GetSysProfileDirectoryPath();
   const std::string userDir = pad->GetConfig()->GetUserProfileDirectoryPath();
-  const std::string sysPath = sysDir + (sysDir.empty() || sysDir.back() == '/' ? "" : "/") + n + ".ini";
-  const std::string userPath = userDir + (userDir.empty() || userDir.back() == '/' ? "" : "/") + n + ".ini";
+  const std::string sysPath =
+      sysDir + (sysDir.empty() || sysDir.back() == '/' ? "" : "/") + n + ".ini";
+  const std::string userPath =
+      userDir + (userDir.empty() || userDir.back() == '/' ? "" : "/") + n + ".ini";
   std::string loadPath;
-  if (File::Exists(userPath)) loadPath = userPath;
-  else if (File::Exists(sysPath)) loadPath = sysPath;
-  else return NO;
+  if (File::Exists(userPath))
+    loadPath = userPath;
+  else if (File::Exists(sysPath))
+    loadPath = sysPath;
+  else
+    return NO;
   Common::IniFile ini;
-  if (!ini.Load(loadPath)) return NO;
+  if (!ini.Load(loadPath))
+    return NO;
   // The slot keeps its device: a profile written for a pad with a left stick still has to steer
   // on one that has only a D-pad (ProfileLoading.h).
   if (restore)
@@ -809,21 +856,29 @@ static void ApplyProfileToWiimote(int idx, ControllerEmu::EmulatedController* wm
 + (BOOL)loadProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased restoreDevice:(BOOL)restore
 {
   auto* cfg = Wiimote::GetConfig();
-  if (!cfg) return NO;
+  if (!cfg)
+    return NO;
   const int idx = (int)indexOneBased - 1;
   auto* wm = cfg->GetController(idx);
-  if (!wm) return NO;
+  if (!wm)
+    return NO;
   const std::string n = [name UTF8String];
   const std::string sysDir = wm->GetConfig()->GetSysProfileDirectoryPath();
   const std::string userDir = wm->GetConfig()->GetUserProfileDirectoryPath();
-  const std::string sysPath = sysDir + (sysDir.empty() || sysDir.back() == '/' ? "" : "/") + n + ".ini";
-  const std::string userPath = userDir + (userDir.empty() || userDir.back() == '/' ? "" : "/") + n + ".ini";
+  const std::string sysPath =
+      sysDir + (sysDir.empty() || sysDir.back() == '/' ? "" : "/") + n + ".ini";
+  const std::string userPath =
+      userDir + (userDir.empty() || userDir.back() == '/' ? "" : "/") + n + ".ini";
   std::string loadPath;
-  if (File::Exists(userPath)) loadPath = userPath;
-  else if (File::Exists(sysPath)) loadPath = sysPath;
-  else return NO;
+  if (File::Exists(userPath))
+    loadPath = userPath;
+  else if (File::Exists(sysPath))
+    loadPath = sysPath;
+  else
+    return NO;
   Common::IniFile ini;
-  if (!ini.Load(loadPath)) return NO;
+  if (!ini.Load(loadPath))
+    return NO;
   ApplyProfileToWiimote(idx, wm, ini, restore);
   return YES;
 }
@@ -833,12 +888,16 @@ static void ApplyProfileToWiimote(int idx, ControllerEmu::EmulatedController* wm
 // section — the same shape the bundled Data/Sys/Profiles/*.ini files have.
 static BOOL SaveControllerProfile(ControllerEmu::EmulatedController* controller, NSString* name)
 {
-  if (!controller || name.length == 0) return NO;
+  if (!controller || name.length == 0)
+    return NO;
   const std::string n = [name UTF8String];
   std::string userDir = controller->GetConfig()->GetUserProfileDirectoryPath();
-  if (userDir.empty()) return NO;
-  if (userDir.back() != '/') userDir += '/';
-  if (!File::CreateFullPath(userDir)) return NO;
+  if (userDir.empty())
+    return NO;
+  if (userDir.back() != '/')
+    userDir += '/';
+  if (!File::CreateFullPath(userDir))
+    return NO;
   const std::string userPath = userDir + n + ".ini";
   Common::IniFile ini;
   controller->SaveConfig(ini.GetOrCreateSection("Profile"));
@@ -848,14 +907,16 @@ static BOOL SaveControllerProfile(ControllerEmu::EmulatedController* controller,
 + (BOOL)saveProfile:(NSString*)name forGCPort:(NSInteger)portOneBased
 {
   auto* cfg = Pad::GetConfig();
-  if (!cfg) return NO;
+  if (!cfg)
+    return NO;
   return SaveControllerProfile(cfg->GetController((int)portOneBased - 1), name);
 }
 
 + (BOOL)saveProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased
 {
   auto* cfg = Wiimote::GetConfig();
-  if (!cfg) return NO;
+  if (!cfg)
+    return NO;
   return SaveControllerProfile(cfg->GetController((int)indexOneBased - 1), name);
 }
 
@@ -871,7 +932,8 @@ static std::string ProfileScratchPath()
 
 static NSString* ProfileText(ControllerEmu::EmulatedController* controller)
 {
-  if (!controller) return @"";
+  if (!controller)
+    return @"";
   Common::IniFile ini;
   controller->SaveConfig(ini.GetOrCreateSection("Profile"));
   const std::string path = ProfileScratchPath();
@@ -889,14 +951,15 @@ static bool LoadProfileText(NSString* text, Common::IniFile* ini)
 {
   const std::string path = ProfileScratchPath();
   NSString* file = [NSString stringWithUTF8String:path.c_str()];
-  if (![text writeToFile:file atomically:YES encoding:NSUTF8StringEncoding error:nil]) return false;
+  if (![text writeToFile:file atomically:YES encoding:NSUTF8StringEncoding error:nil])
+    return false;
   const bool loaded = ini->Load(path);
   [NSFileManager.defaultManager removeItemAtPath:file error:nil];
   return loaded;
 }
 
-static void AppendProfileKey(NSMutableArray<DOLProfileKey*>* keys, const std::string& name, DOLProfileKeyKind kind,
-                             NSArray<NSString*>* choices = @[])
+static void AppendProfileKey(NSMutableArray<DOLProfileKey*>* keys, const std::string& name,
+                             DOLProfileKeyKind kind, NSArray<NSString*>* choices = @[])
 {
   [keys addObject:[[DOLProfileKey alloc] initWithName:[NSString stringWithUTF8String:name.c_str()]
                                                  kind:kind
@@ -905,11 +968,13 @@ static void AppendProfileKey(NSMutableArray<DOLProfileKey*>* keys, const std::st
 
 static DOLProfileKeyKind KindOf(const ControllerEmu::NumericSettingBase& setting)
 {
-  return setting.GetType() == ControllerEmu::SettingType::Bool ? DOLProfileKeyKindToggle : DOLProfileKeyKindNumber;
+  return setting.GetType() == ControllerEmu::SettingType::Bool ? DOLProfileKeyKindToggle :
+                                                                 DOLProfileKeyKindNumber;
 }
 
 // The keys `ControlGroup::SaveConfig` / `Attachments::SaveConfig` write, in their order.
-static void AppendGroupKeys(NSMutableArray<DOLProfileKey*>* keys, ControllerEmu::ControlGroup* group, const std::string& base)
+static void AppendGroupKeys(NSMutableArray<DOLProfileKey*>* keys,
+                            ControllerEmu::ControlGroup* group, const std::string& base)
 {
   const std::string prefix = base + group->name + "/";
   if (group->HasEnabledSetting())
@@ -919,10 +984,12 @@ static void AppendGroupKeys(NSMutableArray<DOLProfileKey*>* keys, ControllerEmu:
   for (const auto& control : group->controls)
   {
     AppendProfileKey(keys, prefix + control->name,
-                     control->control_ref->IsInput() ? DOLProfileKeyKindControl : DOLProfileKeyKindOutput);
+                     control->control_ref->IsInput() ? DOLProfileKeyKindControl :
+                                                       DOLProfileKeyKindOutput);
     AppendProfileKey(keys, prefix + control->name + "/Range", DOLProfileKeyKindNumber);
   }
-  if (group->type != ControllerEmu::GroupType::Attachments) return;
+  if (group->type != ControllerEmu::GroupType::Attachments)
+    return;
   auto* attachments = static_cast<ControllerEmu::Attachments*>(group);
   NSMutableArray<NSString*>* names = [NSMutableArray array];
   for (const auto& attachment : attachments->GetAttachmentList())
@@ -936,7 +1003,8 @@ static void AppendGroupKeys(NSMutableArray<DOLProfileKey*>* keys, ControllerEmu:
 static NSArray<DOLProfileKey*>* ProfileKeys(ControllerEmu::EmulatedController* controller)
 {
   NSMutableArray<DOLProfileKey*>* keys = [NSMutableArray array];
-  if (!controller) return keys;
+  if (!controller)
+    return keys;
   const auto lock = ControllerEmu::EmulatedController::GetStateLock();
   AppendProfileKey(keys, "Device", DOLProfileKeyKindDevice);
   for (const auto& group : controller->groups)
@@ -968,23 +1036,29 @@ static NSArray<DOLProfileKey*>* ProfileKeys(ControllerEmu::EmulatedController* c
   return ProfileKeys(cfg ? cfg->GetController((int)indexOneBased - 1) : nullptr);
 }
 
-+ (BOOL)applyProfileText:(NSString*)text forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore
++ (BOOL)applyProfileText:(NSString*)text
+               forGCPort:(NSInteger)portOneBased
+           restoreDevice:(BOOL)restore
 {
   auto* cfg = Pad::GetConfig();
   auto* pad = cfg ? cfg->GetController((int)portOneBased - 1) : nullptr;
   Common::IniFile ini;
-  if (!pad || !LoadProfileText(text, &ini)) return NO;
+  if (!pad || !LoadProfileText(text, &ini))
+    return NO;
   ApplyProfileToPad(pad, ini, restore);
   return YES;
 }
 
-+ (BOOL)applyProfileText:(NSString*)text forWiimote:(NSInteger)indexOneBased restoreDevice:(BOOL)restore
++ (BOOL)applyProfileText:(NSString*)text
+              forWiimote:(NSInteger)indexOneBased
+           restoreDevice:(BOOL)restore
 {
   auto* cfg = Wiimote::GetConfig();
   const int idx = (int)indexOneBased - 1;
   auto* wm = cfg ? cfg->GetController(idx) : nullptr;
   Common::IniFile ini;
-  if (!wm || !LoadProfileText(text, &ini)) return NO;
+  if (!wm || !LoadProfileText(text, &ini))
+    return NO;
   ApplyProfileToWiimote(idx, wm, ini, restore);
   return YES;
 }
@@ -1149,43 +1223,66 @@ static BOOL RestoreStashedMapping(ControllerEmu::EmulatedController* controller,
 + (NSArray<NSString*>*)padControlNamesForGroup:(NSInteger)portOneBased group:(NSInteger)groupId
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
-  auto* cfg = Pad::GetConfig(); if (!cfg) return result;
+  auto* cfg = Pad::GetConfig();
+  if (!cfg)
+    return result;
   const int port = (int)portOneBased - 1;
-  auto* controller = cfg->GetController(port); if (!controller) return result;
+  auto* controller = cfg->GetController(port);
+  if (!controller)
+    return result;
   auto* group = Pad::GetGroup(port, (PadGroup)groupId);
-  if (!group) return result;
+  if (!group)
+    return result;
   const auto lock = ControllerEmu::EmulatedController::GetStateLock();
-  for (const auto& control : group->controls) {
+  for (const auto& control : group->controls)
+  {
     NSString* name = CppToFoundationString(control->ui_name);
-    if (control->translate == ControllerEmu::Translatability::Translate) name = DOLCoreLocalizedString(name);
+    if (control->translate == ControllerEmu::Translatability::Translate)
+      name = DOLCoreLocalizedString(name);
     [result addObject:name];
   }
   return result;
 }
 
-+ (NSArray<NSString*>*)padControlExpressionsForGroup:(NSInteger)portOneBased group:(NSInteger)groupId
++ (NSArray<NSString*>*)padControlExpressionsForGroup:(NSInteger)portOneBased
+                                               group:(NSInteger)groupId
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
-  auto* cfg = Pad::GetConfig(); if (!cfg) return result;
+  auto* cfg = Pad::GetConfig();
+  if (!cfg)
+    return result;
   const int port = (int)portOneBased - 1;
-  auto* controller = cfg->GetController(port); if (!controller) return result;
+  auto* controller = cfg->GetController(port);
+  if (!controller)
+    return result;
   auto* group = Pad::GetGroup(port, (PadGroup)groupId);
-  if (!group) return result;
-  for (const auto& control : group->controls) {
+  if (!group)
+    return result;
+  for (const auto& control : group->controls)
+  {
     const std::string expr = control->control_ref->GetExpression();
     [result addObject:expr.empty() ? @"—" : [NSString stringWithUTF8String:expr.c_str()]];
   }
   return result;
 }
 
-+ (void)setPadControlExpressionForPort:(NSInteger)portOneBased group:(NSInteger)groupId index:(NSInteger)controlIndex expression:(NSString*)expression
++ (void)setPadControlExpressionForPort:(NSInteger)portOneBased
+                                 group:(NSInteger)groupId
+                                 index:(NSInteger)controlIndex
+                            expression:(NSString*)expression
 {
-  auto* cfg = Pad::GetConfig(); if (!cfg) return;
+  auto* cfg = Pad::GetConfig();
+  if (!cfg)
+    return;
   const int port = (int)portOneBased - 1;
-  auto* controller = cfg->GetController(port); if (!controller) return;
+  auto* controller = cfg->GetController(port);
+  if (!controller)
+    return;
   auto* group = Pad::GetGroup(port, (PadGroup)groupId);
-  if (!group) return;
-  if (controlIndex < 0 || (size_t)controlIndex >= group->controls.size()) return;
+  if (!group)
+    return;
+  if (controlIndex < 0 || (size_t)controlIndex >= group->controls.size())
+    return;
   auto& controlRef = group->controls[controlIndex]->control_ref;
   controlRef->SetExpression([expression UTF8String]);
   controller->UpdateSingleControlReference(g_controller_interface, controlRef.get());
@@ -1195,43 +1292,66 @@ static BOOL RestoreStashedMapping(ControllerEmu::EmulatedController* controller,
 + (NSArray<NSString*>*)wiimoteControlNamesForGroup:(NSInteger)indexOneBased group:(NSInteger)groupId
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
-  auto* cfg = Wiimote::GetConfig(); if (!cfg) return result;
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg)
+    return result;
   const int idx = (int)indexOneBased - 1;
-  auto* controller = cfg->GetController(idx); if (!controller) return result;
+  auto* controller = cfg->GetController(idx);
+  if (!controller)
+    return result;
   auto* group = Wiimote::GetWiimoteGroup(idx, (WiimoteEmu::WiimoteGroup)groupId);
-  if (!group) return result;
+  if (!group)
+    return result;
   const auto lock = ControllerEmu::EmulatedController::GetStateLock();
-  for (const auto& control : group->controls) {
+  for (const auto& control : group->controls)
+  {
     NSString* name = CppToFoundationString(control->ui_name);
-    if (control->translate == ControllerEmu::Translatability::Translate) name = DOLCoreLocalizedString(name);
+    if (control->translate == ControllerEmu::Translatability::Translate)
+      name = DOLCoreLocalizedString(name);
     [result addObject:name];
   }
   return result;
 }
 
-+ (NSArray<NSString*>*)wiimoteControlExpressionsForGroup:(NSInteger)indexOneBased group:(NSInteger)groupId
++ (NSArray<NSString*>*)wiimoteControlExpressionsForGroup:(NSInteger)indexOneBased
+                                                   group:(NSInteger)groupId
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
-  auto* cfg = Wiimote::GetConfig(); if (!cfg) return result;
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg)
+    return result;
   const int idx = (int)indexOneBased - 1;
-  auto* controller = cfg->GetController(idx); if (!controller) return result;
+  auto* controller = cfg->GetController(idx);
+  if (!controller)
+    return result;
   auto* group = Wiimote::GetWiimoteGroup(idx, (WiimoteEmu::WiimoteGroup)groupId);
-  if (!group) return result;
-  for (const auto& control : group->controls) {
+  if (!group)
+    return result;
+  for (const auto& control : group->controls)
+  {
     const std::string expr = control->control_ref->GetExpression();
     [result addObject:expr.empty() ? @"—" : [NSString stringWithUTF8String:expr.c_str()]];
   }
   return result;
 }
 
-+ (void)setWiimoteControlExpressionForIndex:(NSInteger)indexOneBased group:(NSInteger)groupId index:(NSInteger)controlIndex expression:(NSString*)expression
++ (void)setWiimoteControlExpressionForIndex:(NSInteger)indexOneBased
+                                      group:(NSInteger)groupId
+                                      index:(NSInteger)controlIndex
+                                 expression:(NSString*)expression
 {
-  auto* cfg = Wiimote::GetConfig(); if (!cfg) return;
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg)
+    return;
   const int idx = (int)indexOneBased - 1;
-  auto* controller = cfg->GetController(idx); if (!controller) return;
+  auto* controller = cfg->GetController(idx);
+  if (!controller)
+    return;
   auto* group = Wiimote::GetWiimoteGroup(idx, (WiimoteEmu::WiimoteGroup)groupId);
-  if (!group) return;
-  if (controlIndex < 0 || (size_t)controlIndex >= group->controls.size()) return;
+  if (!group)
+    return;
+  if (controlIndex < 0 || (size_t)controlIndex >= group->controls.size())
+    return;
   auto& controlRef = group->controls[controlIndex]->control_ref;
   controlRef->SetExpression([expression UTF8String]);
   controller->UpdateSingleControlReference(g_controller_interface, controlRef.get());
@@ -1243,58 +1363,86 @@ static BOOL RestoreStashedMapping(ControllerEmu::EmulatedController* controller,
 // `Wiimote::GetWiimoteGroup`'s signature shape but dispatches to
 // `Wiimote::GetNunchukGroup` / `Wiimote::GetClassicGroup` (Core/HW/Wiimote.h),
 // which reach the attached extension's own groups — `GetWiimoteGroup` cannot.
-static ControllerEmu::ControlGroup* GetWiimoteExtensionGroup(int idx, DOLWiimoteExtensionKind kind, NSInteger groupId)
+static ControllerEmu::ControlGroup* GetWiimoteExtensionGroup(int idx, DOLWiimoteExtensionKind kind,
+                                                             NSInteger groupId)
 {
   switch (kind)
   {
-    case DOLWiimoteExtensionKindNunchuk:
-      return Wiimote::GetNunchukGroup(idx, (WiimoteEmu::NunchukGroup)groupId);
-    case DOLWiimoteExtensionKindClassic:
-      return Wiimote::GetClassicGroup(idx, (WiimoteEmu::ClassicGroup)groupId);
+  case DOLWiimoteExtensionKindNunchuk:
+    return Wiimote::GetNunchukGroup(idx, (WiimoteEmu::NunchukGroup)groupId);
+  case DOLWiimoteExtensionKindClassic:
+    return Wiimote::GetClassicGroup(idx, (WiimoteEmu::ClassicGroup)groupId);
   }
   return nullptr;
 }
 
-+ (NSArray<NSString*>*)wiimoteExtensionControlNamesForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId
++ (NSArray<NSString*>*)wiimoteExtensionControlNamesForIndex:(NSInteger)indexOneBased
+                                                       kind:(DOLWiimoteExtensionKind)kind
+                                                      group:(NSInteger)groupId
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
-  auto* cfg = Wiimote::GetConfig(); if (!cfg) return result;
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg)
+    return result;
   const int idx = (int)indexOneBased - 1;
-  auto* controller = cfg->GetController(idx); if (!controller) return result;
+  auto* controller = cfg->GetController(idx);
+  if (!controller)
+    return result;
   auto* group = GetWiimoteExtensionGroup(idx, kind, groupId);
-  if (!group) return result;
+  if (!group)
+    return result;
   const auto lock = ControllerEmu::EmulatedController::GetStateLock();
-  for (const auto& control : group->controls) {
+  for (const auto& control : group->controls)
+  {
     NSString* name = CppToFoundationString(control->ui_name);
-    if (control->translate == ControllerEmu::Translatability::Translate) name = DOLCoreLocalizedString(name);
+    if (control->translate == ControllerEmu::Translatability::Translate)
+      name = DOLCoreLocalizedString(name);
     [result addObject:name];
   }
   return result;
 }
 
-+ (NSArray<NSString*>*)wiimoteExtensionControlExpressionsForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId
++ (NSArray<NSString*>*)wiimoteExtensionControlExpressionsForIndex:(NSInteger)indexOneBased
+                                                             kind:(DOLWiimoteExtensionKind)kind
+                                                            group:(NSInteger)groupId
 {
   NSMutableArray<NSString*>* result = [NSMutableArray array];
-  auto* cfg = Wiimote::GetConfig(); if (!cfg) return result;
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg)
+    return result;
   const int idx = (int)indexOneBased - 1;
-  auto* controller = cfg->GetController(idx); if (!controller) return result;
+  auto* controller = cfg->GetController(idx);
+  if (!controller)
+    return result;
   auto* group = GetWiimoteExtensionGroup(idx, kind, groupId);
-  if (!group) return result;
-  for (const auto& control : group->controls) {
+  if (!group)
+    return result;
+  for (const auto& control : group->controls)
+  {
     const std::string expr = control->control_ref->GetExpression();
     [result addObject:expr.empty() ? @"—" : [NSString stringWithUTF8String:expr.c_str()]];
   }
   return result;
 }
 
-+ (void)setWiimoteExtensionControlExpressionForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId index:(NSInteger)controlIndex expression:(NSString*)expression
++ (void)setWiimoteExtensionControlExpressionForIndex:(NSInteger)indexOneBased
+                                                kind:(DOLWiimoteExtensionKind)kind
+                                               group:(NSInteger)groupId
+                                               index:(NSInteger)controlIndex
+                                          expression:(NSString*)expression
 {
-  auto* cfg = Wiimote::GetConfig(); if (!cfg) return;
+  auto* cfg = Wiimote::GetConfig();
+  if (!cfg)
+    return;
   const int idx = (int)indexOneBased - 1;
-  auto* controller = cfg->GetController(idx); if (!controller) return;
+  auto* controller = cfg->GetController(idx);
+  if (!controller)
+    return;
   auto* group = GetWiimoteExtensionGroup(idx, kind, groupId);
-  if (!group) return;
-  if (controlIndex < 0 || (size_t)controlIndex >= group->controls.size()) return;
+  if (!group)
+    return;
+  if (controlIndex < 0 || (size_t)controlIndex >= group->controls.size())
+    return;
   auto& controlRef = group->controls[controlIndex]->control_ref;
   controlRef->SetExpression([expression UTF8String]);
   controller->UpdateSingleControlReference(g_controller_interface, controlRef.get());
@@ -1307,7 +1455,9 @@ static ControllerEmu::ControlGroup* GetWiimoteExtensionGroup(int idx, DOLWiimote
     return;
   g_controller_interface.RefreshDevices(ControllerInterface::RefreshReason::Other);
   dispatch_async(dispatch_get_main_queue(), ^{
-    [[NSNotificationCenter defaultCenter] postNotificationName:TVControllerDevicesChangedNotification object:nil];
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName:TVControllerDevicesChangedNotification
+                      object:nil];
   });
 }
 

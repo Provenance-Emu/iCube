@@ -145,7 +145,9 @@ struct SettingsSidebarShell: View {
 
   /// A deep link (DSU → "controllers") or a debug preview lands on one leaf.
   private func consumeJump() {
-    guard let id = jumpToLeafID, entries.contains(where: { $0.id == id }) else { jumpToLeafID = nil; return }
+    guard let id = jumpToLeafID, entries.contains(where: { $0.id == id }) else { jumpToLeafID = nil
+      return
+    }
     selectedID = id
     if rowTarget?.isPending != true { sidebarFocus = id }
     jumpToLeafID = nil

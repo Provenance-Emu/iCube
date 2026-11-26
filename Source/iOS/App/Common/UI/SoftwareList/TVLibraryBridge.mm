@@ -4,25 +4,25 @@
 #import "TVLibraryBridge.h"
 #import <TargetConditionals.h>
 
+#include "Core/Boot/Boot.h"
+#include "Core/BootManager.h"
+#include "Core/CommonTitles.h"
+#import "Core/Core.h"
+#include "Core/IOS/ES/ES.h"
+#include "Core/IOS/IOS.h"
+#import "Core/System.h"
+#include "DiscIO/Enums.h"
+#import "EmulationBootParameter.h"
+#import "EmulationBootType.h"
+#import "EmulationCoordinator.h"
 #import "GameFileCacheManager.h"
 #import "GameFilePtrWrapper.h"
 #import "SharedDefaults.h"
 #import "TVGameItem.h"
-#import "Core/Core.h"
-#import "Core/System.h"
 #import "UICommon/UICommon.h"
-#import "EmulationCoordinator.h"
-#include "Core/BootManager.h"
-#include "Core/Boot/Boot.h"
-#include "DiscIO/Enums.h"
-#include "Core/IOS/IOS.h"
-#include "Core/IOS/ES/ES.h"
-#include "Core/CommonTitles.h"
-#import "EmulationBootParameter.h"
-#import "EmulationBootType.h"
 #if !APPSTORE
-#import "WiiSystemUpdateViewController.h"
 #import "TVWiiSystemUpdateViewController.h"
+#import "WiiSystemUpdateViewController.h"
 #endif
 
 #include "Common/FileUtil.h"
@@ -39,44 +39,47 @@
 // trademark is referenced. Order is fixed so captures are reproducible.
 //
 // platform: DiscIO::Platform raw values — 0 GameCube disc, 2 Wii disc, 3 WAD.
-typedef struct {
-  __unsafe_unretained NSString *title;
-  __unsafe_unretained NSString *gameID;
+typedef struct
+{
+  __unsafe_unretained NSString* title;
+  __unsafe_unretained NSString* gameID;
   NSInteger platform;
-  __unsafe_unretained NSString *maker;
-  __unsafe_unretained NSString *country;
+  __unsafe_unretained NSString* maker;
+  __unsafe_unretained NSString* country;
   NSUInteger sizeMB;
   CGFloat hue;
 } DOLDemoGameSpec;
 
-static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
+static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void)
+{
   static NSArray<TVGameItem*>* cached = nil;
   static dispatch_once_t once;
   dispatch_once(&once, ^{
     const DOLDemoGameSpec specs[] = {
-      { @"Starfall Rally",       @"GSRE01", 0, @"Nimbus Interactive",  @"USA",    1350, 0.58 },
-      { @"Cube Quest",           @"GCQP01", 0, @"Bitwave Studios",     @"Europe", 1180, 0.09 },
-      { @"Lantern Hollow",       @"GLHE01", 0, @"Foxglove Games",      @"USA",     940, 0.33 },
-      { @"Tidebreaker",          @"GTBJ01", 0, @"Kaisei Works",        @"Japan",  1420, 0.53 },
-      { @"Neon Circuit GP",      @"GNCE01", 0, @"Nimbus Interactive",  @"USA",    1290, 0.78 },
-      { @"Marbles & Machines",   @"GMME01", 0, @"Tiny Anvil",          @"USA",     760, 0.13 },
-      { @"Emberfall Chronicles", @"RECE01", 2, @"Foxglove Games",      @"USA",    4300, 0.02 },
-      { @"Skyward Drift",        @"RSDP01", 2, @"Bitwave Studios",     @"Europe", 3980, 0.55 },
-      { @"Wavelink Sports",      @"RWSE01", 2, @"Harbor Light",        @"USA",    2140, 0.44 },
-      { @"Glacier Point",        @"RGPE01", 2, @"Kaisei Works",        @"USA",    4510, 0.50 },
-      { @"Orchard Party",        @"ROPE01", 2, @"Tiny Anvil",          @"USA",    1870, 0.26 },
-      { @"Deep Signal",          @"RDSJ01", 2, @"Harbor Light",        @"Japan",  4720, 0.66 },
-      { @"Pixel Pilots",         @"WPPE01", 3, @"Tiny Anvil",          @"USA",      42, 0.86 },
-      { @"Tower of Cogs",        @"WTCE01", 3, @"Bitwave Studios",     @"USA",      68, 0.11 },
-      { @"Lumen Lanes",          @"WLLP01", 3, @"Harbor Light",        @"Europe",   31, 0.71 },
-      { @"Root & Rune",          @"WRRE01", 3, @"Foxglove Games",      @"USA",      55, 0.30 },
+        {@"Starfall Rally", @"GSRE01", 0, @"Nimbus Interactive", @"USA", 1350, 0.58},
+        {@"Cube Quest", @"GCQP01", 0, @"Bitwave Studios", @"Europe", 1180, 0.09},
+        {@"Lantern Hollow", @"GLHE01", 0, @"Foxglove Games", @"USA", 940, 0.33},
+        {@"Tidebreaker", @"GTBJ01", 0, @"Kaisei Works", @"Japan", 1420, 0.53},
+        {@"Neon Circuit GP", @"GNCE01", 0, @"Nimbus Interactive", @"USA", 1290, 0.78},
+        {@"Marbles & Machines", @"GMME01", 0, @"Tiny Anvil", @"USA", 760, 0.13},
+        {@"Emberfall Chronicles", @"RECE01", 2, @"Foxglove Games", @"USA", 4300, 0.02},
+        {@"Skyward Drift", @"RSDP01", 2, @"Bitwave Studios", @"Europe", 3980, 0.55},
+        {@"Wavelink Sports", @"RWSE01", 2, @"Harbor Light", @"USA", 2140, 0.44},
+        {@"Glacier Point", @"RGPE01", 2, @"Kaisei Works", @"USA", 4510, 0.50},
+        {@"Orchard Party", @"ROPE01", 2, @"Tiny Anvil", @"USA", 1870, 0.26},
+        {@"Deep Signal", @"RDSJ01", 2, @"Harbor Light", @"Japan", 4720, 0.66},
+        {@"Pixel Pilots", @"WPPE01", 3, @"Tiny Anvil", @"USA", 42, 0.86},
+        {@"Tower of Cogs", @"WTCE01", 3, @"Bitwave Studios", @"USA", 68, 0.11},
+        {@"Lumen Lanes", @"WLLP01", 3, @"Harbor Light", @"Europe", 31, 0.71},
+        {@"Root & Rune", @"WRRE01", 3, @"Foxglove Games", @"USA", 55, 0.30},
     };
     const size_t count = sizeof(specs) / sizeof(specs[0]);
 
-    NSMutableArray *items = [NSMutableArray arrayWithCapacity:count];
-    for (size_t i = 0; i < count; i++) {
+    NSMutableArray* items = [NSMutableArray arrayWithCapacity:count];
+    for (size_t i = 0; i < count; i++)
+    {
       const DOLDemoGameSpec s = specs[i];
-      TVGameItem *item = [[TVGameItem alloc] initWithDemoTitle:s.title
+      TVGameItem* item = [[TVGameItem alloc] initWithDemoTitle:s.title
                                                         gameID:s.gameID
                                                       platform:s.platform
                                                          maker:s.maker
@@ -90,16 +93,18 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
     // Seed a deterministic Favorites row (the library reads this defaults key
     // directly). Overwrites rather than merges, so repeat runs are identical.
     [DOLSharedUserDefaults() setObject:@{
-      @"GSRE01": @YES,
-      @"RECE01": @YES,
-      @"GNCE01": @YES,
-    } forKey:@"favorites_by_gameid"];
+      @"GSRE01" : @YES,
+      @"RECE01" : @YES,
+      @"GNCE01" : @YES,
+    }
+                                forKey:@"favorites_by_gameid"];
     // Newest first: Emberfall, Starfall Rally, Pixel Pilots.
     [DOLSharedUserDefaults() setObject:@{
-      @"RECE01": @1700000003.0,
-      @"GSRE01": @1700000002.0,
-      @"WPPE01": @1700000001.0,
-    } forKey:@"last_played_v1"];
+      @"RECE01" : @1700000003.0,
+      @"GSRE01" : @1700000002.0,
+      @"WPPE01" : @1700000001.0,
+    }
+                                forKey:@"last_played_v1"];
 
     NSLog(@"[ScreenshotMode] seeded %zu demo library entries", count);
   });
@@ -108,7 +113,8 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
 
 #endif  // DEBUG
 
-+ (BOOL)isScreenshotDemoMode {
++ (BOOL)isScreenshotDemoMode
+{
 #ifdef DEBUG
   static BOOL enabled = NO;
   static dispatch_once_t once;
@@ -116,7 +122,8 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
     // NSUserDefaults surfaces `-SCREENSHOT_MODE 1` launch arguments in the
     // NSArgumentDomain, so simctl launch --args works with no extra parsing.
     enabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"SCREENSHOT_MODE"];
-    if (enabled) NSLog(@"[ScreenshotMode] enabled — library will show synthetic demo titles");
+    if (enabled)
+      NSLog(@"[ScreenshotMode] enabled — library will show synthetic demo titles");
   });
   return enabled;
 #else
@@ -124,58 +131,83 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
 #endif
 }
 
-+ (NSArray<TVGameItem*>*)currentGames {
++ (NSArray<TVGameItem*>*)currentGames
+{
 #ifdef DEBUG
-  if ([self isScreenshotDemoMode]) {
+  if ([self isScreenshotDemoMode])
+  {
     return DOLScreenshotDemoGames();
   }
 #endif
   return [[GameFileCacheManager sharedManager] currentGames];
 }
 
-+ (void)rescanAndFetchMetadataWithCompletion:(void(^)(void))completion {
++ (void)rescanAndFetchMetadataWithCompletion:(void (^)(void))completion
+{
 #ifdef DEBUG
   // Screenshot mode's library is fixed: a real rescan would spin the refresh UI
   // (and hit remote sources) for a list that cannot change.
-  if ([self isScreenshotDemoMode]) { if (completion) completion(); return; }
+  if ([self isScreenshotDemoMode])
+  {
+    if (completion)
+      completion();
+    return;
+  }
 #endif
   [[GameFileCacheManager sharedManager] rescanAndFetchMetadataWithCompletionHandler:^{
-    if (completion) completion();
+    if (completion)
+      completion();
   }];
 }
 
-+ (void)rescanLocalAndFetchMetadata:(void(^)(void))completion {
++ (void)rescanLocalAndFetchMetadata:(void (^)(void))completion
+{
 #ifdef DEBUG
-  if ([self isScreenshotDemoMode]) { if (completion) completion(); return; }
+  if ([self isScreenshotDemoMode])
+  {
+    if (completion)
+      completion();
+    return;
+  }
 #endif
   [[GameFileCacheManager sharedManager] rescanLocalAndFetchMetadataWithCompletionHandler:^{
-    if (completion) completion();
+    if (completion)
+      completion();
   }];
 }
 
-+ (void)loadGameCubeMainMenu {
++ (void)loadGameCubeMainMenu
+{
   EmulationBootParameter* p = [EmulationBootParameter new];
   p.bootType = EmulationBootTypeGCIPL;
   p.iplRegion = DiscIO::Region::NTSC_U;
   [[EmulationCoordinator shared] runEmulationWithBootParameter:p];
 }
 
-+ (BOOL)isWiiSystemMenuInstalled {
++ (BOOL)isWiiSystemMenuInstalled
+{
   // Prefer existing IOS if present to avoid creating a temporary Kernel while one exists
-  if (Core::System::GetInstance().GetIOS() != nullptr) {
-    const auto tmd = Core::System::GetInstance().GetIOS()->GetESCore().FindInstalledTMD(Titles::SYSTEM_MENU);
+  if (Core::System::GetInstance().GetIOS() != nullptr)
+  {
+    const auto tmd =
+        Core::System::GetInstance().GetIOS()->GetESCore().FindInstalledTMD(Titles::SYSTEM_MENU);
     return tmd.IsValid();
-  } else {
+  }
+  else
+  {
     IOS::HLE::Kernel ios;
     const auto tmd = ios.GetESCore().FindInstalledTMD(Titles::SYSTEM_MENU);
     return tmd.IsValid();
   }
 }
 
-+ (void)loadWiiSystemMenu {
-  if (![self isWiiSystemMenuInstalled]) return;
++ (void)loadWiiSystemMenu
+{
+  if (![self isWiiSystemMenuInstalled])
+    return;
   // Ensure no IOS instance is attached before boot pipeline constructs a temporary Kernel
-  if (Core::System::GetInstance().GetIOS() != nullptr) {
+  if (Core::System::GetInstance().GetIOS() != nullptr)
+  {
     Core::System::GetInstance().SetIOS(std::unique_ptr<IOS::HLE::EmulationKernel>());
   }
   EmulationBootParameter* p = [EmulationBootParameter new];
@@ -185,48 +217,63 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
 
 // The App Store build never downloads Nintendo firmware, so these stay empty there and no
 // other caller (a deep link, say) can reach the downloader.
-+ (void)presentUpdateControllerWithRegion:(NSString*)regionCode {
++ (void)presentUpdateControllerWithRegion:(NSString*)regionCode
+{
 #if !APPSTORE
   UIViewController* root = UIApplication.sharedApplication.keyWindow.rootViewController;
-  if (!root) return;
+  if (!root)
+    return;
 
   // Prefer the unified TVWiiSystemUpdateViewController on all platforms
-  if ([TVWiiSystemUpdateViewController class]) {
+  if ([TVWiiSystemUpdateViewController class])
+  {
     TVWiiSystemUpdateViewController* vc = [TVWiiSystemUpdateViewController new];
-    if (regionCode.length > 0) { vc.updateSource = regionCode; }
+    if (regionCode.length > 0)
+    {
+      vc.updateSource = regionCode;
+    }
     vc.isOnlineUpdate = YES;
     [root presentViewController:vc animated:YES completion:nil];
     return;
   }
 
   // Fallback (older iOS builds): storyboard-based updater
-  @try {
+  @try
+  {
     UIStoryboard* sb = [UIStoryboard storyboardWithName:@"WiiSystemUpdate" bundle:nil];
-    if (sb) {
+    if (sb)
+    {
       UIViewController* vc = (UIViewController*)[sb instantiateInitialViewController];
-      if (vc) {
-        if (regionCode.length > 0 && [vc respondsToSelector:@selector(setUpdateSource:)]) {
+      if (vc)
+      {
+        if (regionCode.length > 0 && [vc respondsToSelector:@selector(setUpdateSource:)])
+        {
           [vc setValue:regionCode forKey:@"updateSource"];
         }
-        if ([vc respondsToSelector:@selector(setIsOnlineUpdate:)]) {
+        if ([vc respondsToSelector:@selector(setIsOnlineUpdate:)])
+        {
           [vc setValue:@(YES) forKey:@"isOnlineUpdate"];
         }
         [root presentViewController:vc animated:YES completion:nil];
         return;
       }
     }
-  } @catch (...) {
+  }
+  @catch (...)
+  {
   }
 #endif
 }
 
-+ (void)performOnlineSystemUpdate {
++ (void)performOnlineSystemUpdate
+{
 #if !APPSTORE
   [self presentUpdateControllerWithRegion:nil];
 #endif
 }
 
-+ (void)performOnlineSystemUpdateWithRegion:(NSString*)regionCode {
++ (void)performOnlineSystemUpdateWithRegion:(NSString*)regionCode
+{
 #if !APPSTORE
   [self presentUpdateControllerWithRegion:regionCode];
 #endif
@@ -247,9 +294,11 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
   [[GameFileCacheManager sharedManager] refreshAdditionalMetadata];
 }
 
-+ (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch {
++ (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch
+{
   printf("DEBUG BRIDGE: TVLibraryBridge received %lu remote paths\n", (unsigned long)paths.count);
-  for (NSUInteger i = 0; i < paths.count; i++) {
+  for (NSUInteger i = 0; i < paths.count; i++)
+  {
     printf("DEBUG BRIDGE:   [%lu]: %s\n", (unsigned long)i, [paths[i] UTF8String]);
   }
   printf("DEBUG BRIDGE: Calling GameFileCacheManager updateWithExtraPaths\n");

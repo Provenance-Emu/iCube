@@ -6,15 +6,30 @@ import Foundation
 // MARK: - Graphics enums
 
 enum GraphicsBackend: CaseIterable { case metal, opengl, vulkan
-  var label: String { switch self { case .metal: return L("Metal"); case .opengl: return L("OpenGL"); case .vulkan: return L("Vulkan") } }
-  var backendKey: String { switch self { case .metal: return "Metal"; case .opengl: return "OGL"; case .vulkan: return "Vulkan" } }
-  static func from(key: String) -> GraphicsBackend { switch key.lowercased() { case "ogl", "opengl": return .opengl; case "vulkan": return .vulkan; default: return .metal } }
+  var label: String { switch self { case .metal: return L("Metal")
+  case .opengl: return L("OpenGL")
+  case .vulkan: return L("Vulkan") } }
+  var backendKey: String { switch self { case .metal: return "Metal"
+  case .opengl: return "OGL"
+  case .vulkan: return "Vulkan" } }
+  static func from(key: String) -> GraphicsBackend { switch key.lowercased() { case "ogl", "opengl": return .opengl
+  case "vulkan": return .vulkan
+  default: return .metal } }
 }
 
 enum AspectRatio: CaseIterable { case auto, stretch, _4_3, _16_9
-  var label: String { switch self { case .auto: return L("Auto"); case .stretch: return L("Stretch to Window"); case ._4_3: return "4:3"; case ._16_9: return "16:9" } }
-  var aspectRaw: Int { switch self { case .auto: return 0; case .stretch: return 3; case ._4_3: return 2; case ._16_9: return 1 } }
-  static func from(raw: Int) -> AspectRatio { switch raw { case 1: return ._16_9; case 2: return ._4_3; case 3: return .stretch; default: return .auto } }
+  var label: String { switch self { case .auto: return L("Auto")
+  case .stretch: return L("Stretch to Window")
+  case ._4_3: return "4:3"
+  case ._16_9: return "16:9" } }
+  var aspectRaw: Int { switch self { case .auto: return 0
+  case .stretch: return 3
+  case ._4_3: return 2
+  case ._16_9: return 1 } }
+  static func from(raw: Int) -> AspectRatio { switch raw { case 1: return ._16_9
+  case 2: return ._4_3
+  case 3: return .stretch
+  default: return .auto } }
 }
 
 // Mirrors Dolphin's ShaderCompilationMode (VideoConfig.h): Synchronous(0) is the
@@ -27,8 +42,14 @@ enum ShaderCompileType: CaseIterable { case specialized, exclusiveUber, hybridUb
   case .hybridUber: return L("Hybrid Ubershaders")
   case .skipDrawing: return L("Skip Drawing")
   } }
-  var modeRaw: Int { switch self { case .specialized: return 0; case .exclusiveUber: return 1; case .hybridUber: return 2; case .skipDrawing: return 3 } }
-  static func from(raw: Int) -> ShaderCompileType { switch raw { case 1: return .exclusiveUber; case 2: return .hybridUber; case 3: return .skipDrawing; default: return .specialized } }
+  var modeRaw: Int { switch self { case .specialized: return 0
+  case .exclusiveUber: return 1
+  case .hybridUber: return 2
+  case .skipDrawing: return 3 } }
+  static func from(raw: Int) -> ShaderCompileType { switch raw { case 1: return .exclusiveUber
+  case 2: return .hybridUber
+  case 3: return .skipDrawing
+  default: return .specialized } }
 }
 
 // MARK: - CPU engine
@@ -56,6 +77,7 @@ enum CpuEngine: Int, CaseIterable {
     case .jitARM64: return L("JIT Recompiler for ARM64 (recommended)")
     }
   }
+
   static func from(raw: Int) -> CpuEngine { CpuEngine(rawValue: raw) ?? .jitARM64 }
 }
 
@@ -63,7 +85,11 @@ enum CpuEngine: Int, CaseIterable {
 
 /// Mirrors Dolphin's DiscIO::Region. Raw values are what `mainFallbackRegion()` stores; `unknown` is the core's Error value.
 enum Region: Int, CaseIterable { case ntscJ = 0, ntscU = 1, pal = 2, unknown = 3, ntscK = 4
-  var label: String { switch self { case .ntscJ: return "NTSC-J"; case .ntscU: return "NTSC-U"; case .pal: return "PAL"; case .ntscK: return "NTSC-K"; case .unknown: return "Error" } }
+  var label: String { switch self { case .ntscJ: return "NTSC-J"
+  case .ntscU: return "NTSC-U"
+  case .pal: return "PAL"
+  case .ntscK: return "NTSC-K"
+  case .unknown: return "Error" } }
   static func from(raw: Int) -> Region { Region(rawValue: raw) ?? .unknown }
   /// What a picker offers: every region except the Error placeholder.
   static let selectable = allCases.filter { $0 != .unknown }
@@ -71,7 +97,9 @@ enum Region: Int, CaseIterable { case ntscJ = 0, ntscU = 1, pal = 2, unknown = 3
 
 /// Library backdrop. Raw values are what `@AppStorage("library_background_style")` stores (TVLibraryView keeps its own identical enum).
 enum LibraryBackgroundStyle: String, CaseIterable { case clean, gradient, animated
-  var label: String { switch self { case .clean: return L("Clean"); case .gradient: return L("GameCube Gradient"); case .animated: return L("Animated (Full Effects)") } }
+  var label: String { switch self { case .clean: return L("Clean")
+  case .gradient: return L("GameCube Gradient")
+  case .animated: return L("Animated (Full Effects)") } }
   /// What an unset or unknown stored value means.
   static let `default`: LibraryBackgroundStyle = .animated
   static func from(stored: String?) -> LibraryBackgroundStyle { stored.flatMap(LibraryBackgroundStyle.init(rawValue:)) ?? .default }
@@ -79,6 +107,8 @@ enum LibraryBackgroundStyle: String, CaseIterable { case clean, gradient, animat
 
 /// Which gesture moves the gyro pointer sideways.
 enum HorizontalMotionMode: Int, CaseIterable { case roll = 0, yaw = 1
-  var label: String { switch self { case .roll: return L("Roll (Tilt Left/Right)"); case .yaw: return L("Yaw (Turn Left/Right)") } }
-  var description: String { switch self { case .roll: return L("Tilt device left/right to move cursor"); case .yaw: return L("Rotate device left/right to move cursor") } }
+  var label: String { switch self { case .roll: return L("Roll (Tilt Left/Right)")
+  case .yaw: return L("Yaw (Turn Left/Right)") } }
+  var description: String { switch self { case .roll: return L("Tilt device left/right to move cursor")
+  case .yaw: return L("Rotate device left/right to move cursor") } }
 }

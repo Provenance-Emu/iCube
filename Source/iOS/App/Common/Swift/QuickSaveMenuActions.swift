@@ -36,8 +36,16 @@ final class QuickSaveMenuActions {
        isActive: @escaping () -> Bool = { true }, runtime: Runtime? = nil,
        dismiss: @escaping () -> Void = {}, handoff: QuickStateHandoff? = nil,
        openBrowser: @escaping () -> Void, onBusyChanged: @escaping (Bool) -> Void = { _ in }, report: @escaping (QuickSaveActions.Outcome) -> Void) {
-    self.mode = mode; self.slot = slot; self.session = session; self.isActive = isActive
-    self.runtime = runtime ?? .live; self.dismiss = dismiss; self.handoff = handoff; self.openBrowser = openBrowser; self.onBusyChanged = onBusyChanged; self.report = report
+    self.mode = mode
+    self.slot = slot
+    self.session = session
+    self.isActive = isActive
+    self.runtime = runtime ?? .live
+    self.dismiss = dismiss
+    self.handoff = handoff
+    self.openBrowser = openBrowser
+    self.onBusyChanged = onBusyChanged
+    self.report = report
   }
 
   private var acceptsAction: Bool { !session.gameID.isEmpty && isActive() && runtime.isCurrent(session) }
@@ -55,7 +63,8 @@ final class QuickSaveMenuActions {
     task = Task { @MainActor in
       defer {
         if let operation { handoff?.complete(operation) }
-        task = nil; onBusyChanged(false)
+        task = nil
+        onBusyChanged(false)
       }
       guard runtime.isCurrent(session) else { return }
       let outcome = await runtime.saveHistory(session)
@@ -75,7 +84,8 @@ final class QuickSaveMenuActions {
     task = Task { @MainActor in
       defer {
         if let operation { handoff?.complete(operation) }
-        task = nil; onBusyChanged(false)
+        task = nil
+        onBusyChanged(false)
       }
       guard runtime.isCurrent(session) else { return }
       let outcome = await runtime.load(mode, slot, session)

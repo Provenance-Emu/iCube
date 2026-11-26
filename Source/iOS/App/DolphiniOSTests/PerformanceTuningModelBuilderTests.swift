@@ -11,14 +11,22 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   private func model(_ state: PerformanceTuningState, showValidation: Bool = false) -> MenuModel {
     PerformanceTuningModelBuilder.make(state: state, showValidation: showValidation) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout PerformanceTuningState) -> Void) -> PerformanceTuningState {
     var s = PerformanceTuningState()
     edit(&s)
     return s
   }
-  private var cir: PerformanceTuningState { state { $0.jitAvailable = true; $0.engine = .cachedInterpreter } }
-  private var ir: PerformanceTuningState { state { $0.jitAvailable = true; $0.engine = .cachedInterpreterIR } }
-  private var jit: PerformanceTuningState { state { $0.jitAvailable = true; $0.engine = .jitARM64 } }
+
+  private var cir: PerformanceTuningState { state { $0.jitAvailable = true
+    $0.engine = .cachedInterpreter
+  } }
+  private var ir: PerformanceTuningState { state { $0.jitAvailable = true
+    $0.engine = .cachedInterpreterIR
+  } }
+  private var jit: PerformanceTuningState { state { $0.jitAvailable = true
+    $0.engine = .jitARM64
+  } }
 
   func test_clockMetadata_explainsParentAndAutomaticOrGameOverrides() {
     var value = cir
@@ -63,7 +71,9 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   }
 
   func test_plainInterpreter_showsTheFallbackToo() {
-    let m = model(state { $0.jitAvailable = true; $0.engine = .interpreter })
+    let m = model(state { $0.jitAvailable = true
+      $0.engine = .interpreter
+    })
     XCTAssertNotNil(m.item(id: "engine-optimizations-hint"))
     XCTAssertNil(m.item(id: "reset-optimizations"))
   }
@@ -117,7 +127,9 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   // MARK: Engine cycle
 
   func test_engineCycle_showsCachedInterpreter_whenJITIsUnavailable() {
-    let m = model(state { $0.jitAvailable = false; $0.engine = .jitARM64 })
+    let m = model(state { $0.jitAvailable = false
+      $0.engine = .jitARM64
+    })
     XCTAssertEqual(m.item(id: "cpu-engine")?.currentValueTitle, CpuEngine.cachedInterpreter.label)
     guard case .cycle(let options, _)? = m.item(id: "cpu-engine")?.role else { return XCTFail("cycle") }
     XCTAssertEqual(options.map { $0.1 }, [CpuEngine.interpreter, .cachedInterpreter, .cachedInterpreterIR].map { AnyHashable($0) })
@@ -128,11 +140,15 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   /// A normal store install has no JIT, and nothing on this screen may mention it there.
   func test_jitlessStoreBuild_hasNoJitCopy() {
     #if APPSTORE
-    let m = model(state { $0.jitAvailable = false; $0.engine = .cachedInterpreter })
+    let m = model(state { $0.jitAvailable = false
+      $0.engine = .cachedInterpreter
+    })
     let section = m.sections.first { $0.id == "cpu-options" }
     XCTAssertFalse(section?.footer?.contains("JIT") == true)
     XCTAssertFalse(m.item(id: "cpu-engine")?.description?.contains("JIT") == true)
-    let interpreter = model(state { $0.jitAvailable = false; $0.engine = .interpreter })
+    let interpreter = model(state { $0.jitAvailable = false
+      $0.engine = .interpreter
+    })
     XCTAssertFalse(interpreter.item(id: "engine-optimizations-hint")?.description?.contains("JIT") == true)
     #endif
   }
@@ -146,10 +162,18 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   }
 
   func test_effectiveEngine_mapsJITOnlyWhenJitless() {
-    XCTAssertEqual(state { $0.jitAvailable = false; $0.engine = .jit64 }.effectiveEngine, .cachedInterpreter)
-    XCTAssertEqual(state { $0.jitAvailable = true; $0.engine = .jit64 }.effectiveEngine, .jit64)
-    XCTAssertEqual(state { $0.jitAvailable = false; $0.engine = .interpreter }.effectiveEngine, .interpreter)
-    XCTAssertEqual(state { $0.jitAvailable = false; $0.engine = .cachedInterpreterIR }.effectiveEngine, .cachedInterpreterIR)
+    XCTAssertEqual(state { $0.jitAvailable = false
+      $0.engine = .jit64
+    }.effectiveEngine, .cachedInterpreter)
+    XCTAssertEqual(state { $0.jitAvailable = true
+      $0.engine = .jit64
+    }.effectiveEngine, .jit64)
+    XCTAssertEqual(state { $0.jitAvailable = false
+      $0.engine = .interpreter
+    }.effectiveEngine, .interpreter)
+    XCTAssertEqual(state { $0.jitAvailable = false
+      $0.engine = .cachedInterpreterIR
+    }.effectiveEngine, .cachedInterpreterIR)
   }
 
   // MARK: Vertex loader
@@ -173,7 +197,9 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   // MARK: Clock overrides
 
   func test_cpuClockPercent_isAStepper_1to400() {
-    let item = model(state { $0.cpuClockEnabled = true; $0.cpuClockPercent = 150 }).item(id: "cpu-clock-percent")
+    let item = model(state { $0.cpuClockEnabled = true
+      $0.cpuClockPercent = 150
+    }).item(id: "cpu-clock-percent")
     guard case .stepper(let stepper)? = item?.role else { return XCTFail("stepper") }
     XCTAssertEqual(stepper.range, 1 ... 400)
     XCTAssertEqual(stepper.step, 1)
@@ -198,7 +224,9 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   }
 
   func test_cpuClockPercent_disabledAndBadgedAuto_whenAdaptiveClockDrivesIt() {
-    let m = model(state { $0.cpuClockEnabled = true; $0.cpuClockOverride = .auto })
+    let m = model(state { $0.cpuClockEnabled = true
+      $0.cpuClockOverride = .auto
+    })
     XCTAssertEqual(m.item(id: "cpu-clock-enabled")?.isEnabled, false)
     XCTAssertEqual(m.item(id: "cpu-clock-percent")?.isEnabled, false)
     XCTAssertEqual(m.item(id: "cpu-clock-percent")?.badge, L("Auto"))
@@ -206,7 +234,9 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   }
 
   func test_vbi_disabledAndBadgedGame_whenTheGameDrivesIt() {
-    let m = model(state { $0.vbiEnabled = true; $0.vbiOverride = .game })
+    let m = model(state { $0.vbiEnabled = true
+      $0.vbiOverride = .game
+    })
     XCTAssertEqual(m.item(id: "vbi-enabled")?.isEnabled, false)
     XCTAssertEqual(m.item(id: "vbi-percent")?.isEnabled, false)
     XCTAssertEqual(m.item(id: "vbi-percent")?.badge, L("Game"))
@@ -219,18 +249,32 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
     let off = model(cir, showValidation: true)
     XCTAssertEqual(off.item(id: "cir-validate-specialized-ops")?.isEnabled, true, "Specialized Ops defaults ON")
     XCTAssertEqual(off.item(id: "cir-validate-micro-op-fusion")?.isEnabled, false)
-    let parentsOff = model(state { $0.jitAvailable = true; $0.engine = .cachedInterpreter; $0.cirSpecializedOps = false }, showValidation: true)
+    let parentsOff = model(state { $0.jitAvailable = true
+      $0.engine = .cachedInterpreter
+      $0.cirSpecializedOps = false
+    }, showValidation: true)
     XCTAssertEqual(parentsOff.item(id: "cir-validate-specialized-ops")?.isEnabled, false)
-    let on = model(state { $0.jitAvailable = true; $0.engine = .cachedInterpreter; $0.cirSpecializedOps = true; $0.cirMicroOpFusion = true }, showValidation: true)
+    let on = model(state { $0.jitAvailable = true
+      $0.engine = .cachedInterpreter
+      $0.cirSpecializedOps = true
+      $0.cirMicroOpFusion = true
+    }, showValidation: true)
     XCTAssertEqual(on.item(id: "cir-validate-specialized-ops")?.isEnabled, true)
     XCTAssertEqual(on.item(id: "cir-validate-micro-op-fusion")?.isEnabled, true)
   }
 
   func test_irValidateRows_followTheirOwnParents() {
-    let off = model(state { $0.jitAvailable = true; $0.engine = .cachedInterpreterIR; $0.cirPicLoadStore = false }, showValidation: true)
+    let off = model(state { $0.jitAvailable = true
+      $0.engine = .cachedInterpreterIR
+      $0.cirPicLoadStore = false
+    }, showValidation: true)
     XCTAssertEqual(off.item(id: "ir-validate-pic-load-store")?.isEnabled, false)
     XCTAssertEqual(off.item(id: "ir-validate-constant-address-fusion")?.isEnabled, false)
-    let on = model(state { $0.jitAvailable = true; $0.engine = .cachedInterpreterIR; $0.cirPicLoadStore = true; $0.cirIrConstFusion = true }, showValidation: true)
+    let on = model(state { $0.jitAvailable = true
+      $0.engine = .cachedInterpreterIR
+      $0.cirPicLoadStore = true
+      $0.cirIrConstFusion = true
+    }, showValidation: true)
     XCTAssertEqual(on.item(id: "ir-validate-pic-load-store")?.isEnabled, true)
     XCTAssertEqual(on.item(id: "ir-validate-constant-address-fusion")?.isEnabled, true)
   }
@@ -301,14 +345,20 @@ final class PerformanceTuningModelBuilderTests: XCTestCase {
   /// A mapping slip (a row wired to the wrong flag) fails here: each row reads its flag from the snapshot and emits its own.
   func test_everyToggleRow_readsAndEmitsItsOwnFlag() {
     for (id, flag) in toggleRows {
-      let base = state { $0.jitAvailable = true; $0.engine = id.hasPrefix("ir-") ? .cachedInterpreterIR : .cachedInterpreter }
+      let base = state { $0.jitAvailable = true
+        $0.engine = id.hasPrefix("ir-") ? .cachedInterpreterIR : .cachedInterpreter
+      }
       var allOff = base
       var allOn = base
-      for other in PerformanceTuningFlag.allCases { allOff[keyPath: other.keyPath] = false; allOn[keyPath: other.keyPath] = false }
+      for other in PerformanceTuningFlag.allCases { allOff[keyPath: other.keyPath] = false
+        allOn[keyPath: other.keyPath] = false
+      }
       allOn[keyPath: flag.keyPath] = true
       XCTAssertEqual(isOn(model(allOn, showValidation: true).item(id: id)), true, "\(id) reads \(flag)")
       XCTAssertEqual(isOn(model(allOff, showValidation: true).item(id: id)), false, "\(id) reads only \(flag)")
-      guard case .toggle(let binding)? = model(allOff, showValidation: true).item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = model(allOff, showValidation: true).item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       changes = []
       binding.wrappedValue = true
       XCTAssertEqual(changes, [.flag(flag, true)], id)

@@ -13,16 +13,16 @@ import PVLibrarySnapshot
 /// still succeeds and the app simply opens. Hidden from Shortcuts: `ContinueLastGameIntent` is the
 /// Siri/Shortcuts version of this.
 struct ResumeLastGameIntent: AppIntent {
-    static var title: LocalizedStringResource = "Resume Last Game"
-    static var description = IntentDescription("Opens iCube and resumes the game you played most recently.")
-    static var openAppWhenRun: Bool = true
-    static var isDiscoverable: Bool = false
+  static var title: LocalizedStringResource = "Resume Last Game"
+  static var description = IntentDescription("Opens iCube and resumes the game you played most recently.")
+  static var openAppWhenRun: Bool = true
+  static var isDiscoverable: Bool = false
 
-    func perform() async throws -> some IntentResult {
-        let snapshot = LibrarySnapshotStore().load()
-        if case .resume(let gameID) = ResumeLastGame.decide(snapshot: snapshot) {
-            ICubeSnapshot.appGroup.defaults?.set(gameID, forKey: PendingGameLaunchKey.defaultsKey)
-        }
-        return .result()
+  func perform() async throws -> some IntentResult {
+    let snapshot = LibrarySnapshotStore().load()
+    if case .resume(let gameID) = ResumeLastGame.decide(snapshot: snapshot) {
+      ICubeSnapshot.appGroup.defaults?.set(gameID, forKey: PendingGameLaunchKey.defaultsKey)
     }
+    return .result()
+  }
 }

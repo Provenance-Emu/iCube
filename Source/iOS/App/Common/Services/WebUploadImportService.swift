@@ -164,12 +164,12 @@ final class WebUploadImportService: NSObject, UIApplicationDelegate {
 
   private func finishNandImport(success: Bool, staged: URL, usedKeys: Bool) {
     try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
-    if success && usedKeys { try? FileManager.default.removeItem(at: stagedKeysURL) }
+    if success, usedKeys { try? FileManager.default.removeItem(at: stagedKeysURL) }
     lock.lock()
     nandImportInProgress = false
     lock.unlock()
     postSnackbar(success ? L("Wii NAND backup imported.")
-                         : L("The Wii NAND backup couldn't be imported. Check that it is a BootMii dump with its keys, then upload it again."))
+      : L("The Wii NAND backup couldn't be imported. Check that it is a BootMii dump with its keys, then upload it again."))
   }
 
   private func noteNandNotice(_ text: String) {

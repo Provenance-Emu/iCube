@@ -18,7 +18,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (EmulationCoordinator*)shared;
 
-@property (nonatomic, setter=setIsExternalDisplayConnected:) bool isExternalDisplayConnected;
+@property(nonatomic, setter=setIsExternalDisplayConnected:) bool isExternalDisplayConnected;
 
 - (void)registerMainDisplayView:(UIView*)mainView;
 - (void)registerExternalDisplayView:(UIView*)externalView;

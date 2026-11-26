@@ -13,18 +13,18 @@ import SwiftUI
 /// section footer is easy to miss entirely, and "your saves cross the network
 /// unencrypted" is not a footnote.
 struct ContinuitySecurityNotice: View {
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "lock.open")
-                .foregroundColor(.orange)
-                .font(.system(size: 18, weight: .semibold))
-                .accessibilityHidden(true)
-            Text(ContinuityManager.transportSecurityNotice)
-                .font(.footnote)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.vertical, 6)
-        .accessibilityElement(children: .combine)
+  var body: some View {
+    HStack(alignment: .top, spacing: 12) {
+      Image(systemName: "lock.open")
+        .foregroundColor(.orange)
+        .font(.system(size: 18, weight: .semibold))
+        .accessibilityHidden(true)
+      Text(ContinuityManager.transportSecurityNotice)
+        .font(.footnote)
+        .foregroundColor(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
+    .padding(.vertical, 6)
+    .accessibilityElement(children: .combine)
+  }
 }

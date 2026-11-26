@@ -630,15 +630,15 @@ struct EmulationScreen: View {
 
   private var quickMenuSaveActions: QuickSaveMenuActions {
     QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
-      session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
-      isActive: { showQuickMenu && !showPauseMenu && !quickStateActionInFlight },
-      dismiss: { showQuickMenu = false }, handoff: .shared, openBrowser: {
-        // Acquire before the Quick Menu relinquishes its claim; Pause adopts it before showing the browser.
-        SaveStateService.capturePausePreview()
-        PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
-        pauseStartsInSaveBrowser = true
-        showPauseMenu = true
-      }, onBusyChanged: { quickStateActionInFlight = $0 }, report: { EmulationToast.post($0.message) })
+                         session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
+                         isActive: { showQuickMenu && !showPauseMenu && !quickStateActionInFlight },
+                         dismiss: { showQuickMenu = false }, handoff: .shared, openBrowser: {
+                           // Acquire before the Quick Menu relinquishes its claim; Pause adopts it before showing the browser.
+                           SaveStateService.capturePausePreview()
+                           PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+                           pauseStartsInSaveBrowser = true
+                           showPauseMenu = true
+                         }, onBusyChanged: { quickStateActionInFlight = $0 }, report: { EmulationToast.post($0.message) })
   }
 
   private func pauseMenu(platform: PlatformKind) -> PauseMenuView {
@@ -1225,46 +1225,46 @@ struct EmulationScreen: View {
 
   private var iosPresentedCanvas: some View {
     iosCanvas
-    // Single owner of the core's IMU pointer on the touchscreen Wii Remote: always OFF, whether the
-    // overlay is shown or hidden. The app drives that slot's IR itself (touch in drag/follow,
-    // device attitude in gyro mode) and keeps feeding the phone's motion into its IMU axes, so
-    // turning the core pointer ON while the overlay was hidden aimed the remote at the ceiling as
-    // soon as the phone was held upright: the hand vanished and never came back (there is no
-    // working Recenter on the touchscreen device). Only a slot bound to a physical motion
-    // controller owns the core pointer, and its profile sets it; this never touches that slot.
-    // This used to be toggled from four places (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode,
-    // the long-press handler, and setup).
-    .onChange(of: isTouchControlsActive) {
-      // No touchscreen Wii Remote: the overlay drives no pointer, so there is nothing to keep from
-      // fighting. `?? 0` used to flip Wii Remote 1's IMU pointer here even when a gyro pad owns it
-      // (controller hub decision 12).
-      guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
-      TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
-    }
+      // Single owner of the core's IMU pointer on the touchscreen Wii Remote: always OFF, whether the
+      // overlay is shown or hidden. The app drives that slot's IR itself (touch in drag/follow,
+      // device attitude in gyro mode) and keeps feeding the phone's motion into its IMU axes, so
+      // turning the core pointer ON while the overlay was hidden aimed the remote at the ceiling as
+      // soon as the phone was held upright: the hand vanished and never came back (there is no
+      // working Recenter on the touchscreen device). Only a slot bound to a physical motion
+      // controller owns the core pointer, and its profile sets it; this never touches that slot.
+      // This used to be toggled from four places (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode,
+      // the long-press handler, and setup).
+      .onChange(of: isTouchControlsActive) {
+        // No touchscreen Wii Remote: the overlay drives no pointer, so there is nothing to keep from
+        // fighting. `?? 0` used to flip Wii Remote 1's IMU pointer here even when a gyro pad owns it
+        // (controller hub decision 12).
+        guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
+        TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
+      }
       .fullScreenCover(isPresented: $showPauseMenu, onDismiss: pauseCoverDismissed) {
         pauseMenu(platform: .ios)
       }
-    .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
-      if case .success(let urls) = result {
-        for url in urls {
-          let started = url.startAccessingSecurityScopedResource()
-          defer { if started { url.stopAccessingSecurityScopedResource() } }
-          let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
-          if slot > 0 { skyLastLoadedSlot = slot }
+      .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
+        if case .success(let urls) = result {
+          for url in urls {
+            let started = url.startAccessingSecurityScopedResource()
+            defer { if started { url.stopAccessingSecurityScopedResource() } }
+            let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
+            if slot > 0 { skyLastLoadedSlot = slot }
+          }
         }
       }
-    }
-    .confirmationDialog("Clear Skylander Slot", isPresented: $showSkyClearPicker, titleVisibility: .visible) {
-      ForEach(1 ... 16, id: \.self) { slot in
-        Button("Slot \(slot)") { _ = DOLConfigBridge.skylanderRemove(atSlot: slot) }
-      }
-      if skyLastLoadedSlot > 0 {
-        Button("Clear Last Loaded (Slot \(skyLastLoadedSlot))", role: .destructive) {
-          _ = DOLConfigBridge.skylanderRemove(atSlot: skyLastLoadedSlot)
+      .confirmationDialog("Clear Skylander Slot", isPresented: $showSkyClearPicker, titleVisibility: .visible) {
+        ForEach(1 ... 16, id: \.self) { slot in
+          Button("Slot \(slot)") { _ = DOLConfigBridge.skylanderRemove(atSlot: slot) }
         }
+        if skyLastLoadedSlot > 0 {
+          Button("Clear Last Loaded (Slot \(skyLastLoadedSlot))", role: .destructive) {
+            _ = DOLConfigBridge.skylanderRemove(atSlot: skyLastLoadedSlot)
+          }
+        }
+        Button(L("Cancel"), role: .cancel) {}
       }
-      Button(L("Cancel"), role: .cancel) {}
-    }
   }
 
   private var iosLifecycleCanvas: some View {
@@ -1354,27 +1354,27 @@ struct EmulationScreen: View {
           pauseStartsInPerformance = false
           pauseStartsInControllers = false
         }
-      postOverlayVisibility()
-      isPaused = TVEmulationBridge.isPaused()
-      // The fullScreenCover transition perturbs the GeometryReader size and the Metal
-      // surface never resizes itself (updateUIViewController is empty), so without this
-      // the game could come back small, bottom-left, or half off screen until the next
-      // rotation.
-      if !visible { TVEmulationBridge.resizeSurfaceNow() }
-    }
-    .onChange(of: showQuickMenu) { postOverlayVisibility() }
+        postOverlayVisibility()
+        isPaused = TVEmulationBridge.isPaused()
+        // The fullScreenCover transition perturbs the GeometryReader size and the Metal
+        // surface never resizes itself (updateUIViewController is empty), so without this
+        // the game could come back small, bottom-left, or half off screen until the next
+        // rotation.
+        if !visible { TVEmulationBridge.resizeSurfaceNow() }
+      }
+      .onChange(of: showQuickMenu) { postOverlayVisibility() }
       .onChange(of: bezelSwitcherIsUp) { postOverlayVisibility() }
   }
 
   private var iosNavigationCanvas: some View {
     iosInputCanvas
-    // The library stack pushes this screen; hide its bar (iOS 26 renders leftover
-    // toolbar items as floating glass buttons that also swallow the top-edge tap).
-    .toolbar(.hidden, for: .navigationBar)
-    .navigationBarBackButtonHidden(true)
-    .statusBar(hidden: true)
-    .animation(TopBarStyle.transition, value: showTopBar)
-    .modifier(TopBarChildPresentationHold(visibility: $topBar, isPresented: topBarChildPresented))
+      // The library stack pushes this screen; hide its bar (iOS 26 renders leftover
+      // toolbar items as floating glass buttons that also swallow the top-edge tap).
+      .toolbar(.hidden, for: .navigationBar)
+      .navigationBarBackButtonHidden(true)
+      .statusBar(hidden: true)
+      .animation(TopBarStyle.transition, value: showTopBar)
+      .modifier(TopBarChildPresentationHold(visibility: $topBar, isPresented: topBarChildPresented))
   }
 
   private var iosScreen: some View {
@@ -1433,24 +1433,24 @@ struct EmulationScreen: View {
         Text("Do you want to stop the current game and return to the library?")
       }
       .alert(L("Couldn't save before quitting"), isPresented: Binding(
-      get: { quitSaveFailure != nil }, set: { if !$0 && !quitRequestInFlight { cancelTopBarQuitFailure() } })) {
-      if let failure = quitSaveFailure {
-        Button(L("Retry")) { retryTopBarQuit(failure) }
-        Button(L("Quit Without Saving"), role: .destructive) {
-          if TVEmulationBridge.stopWithoutSavingForUser(expectedSessionIdentifier: quitExpectedSessionIdentifier) {
-            finishQuitFromTopBar()
-          } else { cancelTopBarQuitFailure() }
-        }
-        Button(L("Cancel"), role: .cancel) { cancelTopBarQuitFailure() }
+        get: { quitSaveFailure != nil }, set: { if !$0, !quitRequestInFlight { cancelTopBarQuitFailure() } })) {
+          if let failure = quitSaveFailure {
+            Button(L("Retry")) { retryTopBarQuit(failure) }
+            Button(L("Quit Without Saving"), role: .destructive) {
+              if TVEmulationBridge.stopWithoutSavingForUser(expectedSessionIdentifier: quitExpectedSessionIdentifier) {
+                finishQuitFromTopBar()
+              } else { cancelTopBarQuitFailure() }
+            }
+            Button(L("Cancel"), role: .cancel) { cancelTopBarQuitFailure() }
+          }
+      } message: {
+        Text(L("Retry the save or choose Quit Without Saving. Unsaved progress will be lost."))
       }
-    } message: {
-      Text(L("Retry the save or choose Quit Without Saving. Unsaved progress will be lost."))
-    }
-    // Claim controller ownership for as long as the game is on screen. The
-    // library is only *covered*, not dismissed, so SwiftUI never sends it an
-    // onDisappear and its raw nav handlers would otherwise keep moving the grid
-    // (and could launch another game) underneath the running one.
-    .claimsController()
+      // Claim controller ownership for as long as the game is on screen. The
+      // library is only *covered*, not dismissed, so SwiftUI never sends it an
+      // onDisappear and its raw nav handlers would otherwise keep moving the grid
+      // (and could launch another game) underneath the running one.
+      .claimsController()
   }
 
   private func iosDidAppear() {
@@ -1946,10 +1946,10 @@ struct EmulationScreen: View {
 
   private func toolbarQuickActions() -> QuickSaveMenuActions {
     QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
-      session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
-      isActive: { UIApplication.shared.applicationState == .active && !showPauseMenu },
-      handoff: .shared, openBrowser: presentQuickSavePicker, onBusyChanged: { quickStateActionInFlight = $0 },
-      report: { EmulationToast.post($0.message) })
+                         session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
+                         isActive: { UIApplication.shared.applicationState == .active && !showPauseMenu },
+                         handoff: .shared, openBrowser: presentQuickSavePicker, onBusyChanged: { quickStateActionInFlight = $0 },
+                         report: { EmulationToast.post($0.message) })
   }
 
   private func quickSaveFromTopBar() {
@@ -2157,6 +2157,7 @@ struct EmulationScreen: View {
   }
 
   // MARK: - HUD overlay/diagnostics toggle grid
+
   //
   // Replaces the stacked pile of overlay toggles (FPS/VPS/Speed/VBlank + perf graph
   // + overlay stats) with a scannable icon-over-label grid. Pure layout reorg —
@@ -2180,7 +2181,7 @@ struct EmulationScreen: View {
       .frame(maxWidth: .infinity)
       .padding(.vertical, 8)
       .foregroundColor(isOn.wrappedValue ? .white : .white.opacity(0.55))
-      .background((isOn.wrappedValue ? Color.blue.opacity(0.45) : Color.white.opacity(0.08)))
+      .background(isOn.wrappedValue ? Color.blue.opacity(0.45) : Color.white.opacity(0.08))
       .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
     .buttonStyle(.plain)
@@ -2208,7 +2209,7 @@ struct EmulationScreen: View {
   private func overlayToggleGrid() -> some View {
     let columns = [GridItem(.adaptive(minimum: 84), spacing: 8)]
     Toggle(L("Performance HUD"), isOn: Binding(get: { performanceControls.state.hud.isEnabled },
-      set: { performanceControls.apply(.hudEnabled($0)) }))
+                                               set: { performanceControls.apply(.hudEnabled($0)) }))
       .tint(.blue)
       .foregroundColor(.white)
     LazyVGrid(columns: columns, spacing: 8) {

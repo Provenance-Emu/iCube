@@ -228,8 +228,7 @@ import simd
   /// The screen's right, up and out-of-screen directions in device coordinates (+X the portrait
   /// right edge, +Y the portrait top edge, +Z out of the screen). Unknown folds into portrait.
   private static func screenAxes(for orientation: UIInterfaceOrientation)
-    -> (right: SIMD3<Double>, up: SIMD3<Double>, out: SIMD3<Double>)
-  {
+    -> (right: SIMD3<Double>, up: SIMD3<Double>, out: SIMD3<Double>) {
     let out = SIMD3<Double>(0, 0, 1)
     switch orientation {
     case .portraitUpsideDown:
@@ -634,6 +633,7 @@ import simd
   }
 
   // MARK: - IMU axis mapping (pure, unit-testable)
+
   //
   // These are `internal` rather than `private` on purpose: they're implementation
   // details of this file, not part of any public API, but DolphiniOSTests needs to

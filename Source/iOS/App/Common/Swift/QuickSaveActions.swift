@@ -56,6 +56,7 @@ enum QuickSaveActions {
       gameID = expected?.gameID ?? TVEmulationBridge.currentGameID()
       identifier = expected?.identifier ?? TVEmulationBridge.currentSessionIdentifier()
     }
+
     var isCurrent: Bool {
       !gameID.isEmpty && gameID == TVEmulationBridge.currentGameID() &&
         identifier == TVEmulationBridge.currentSessionIdentifier()
@@ -81,15 +82,15 @@ enum QuickSaveActions {
 
     static var live: Self {
       Self(session: { .init(gameID: TVEmulationBridge.currentGameID(), identifier: TVEmulationBridge.currentSessionIdentifier()) },
-        isCurrent: { TVEmulationBridge.currentGameID() == $0.gameID && TVEmulationBridge.currentSessionIdentifier() == $0.identifier },
-        allowed: { TVEmulationBridge.isStateOperationAllowed() }, isModded: { ModdedBoot.isCurrentBootModded },
-        states: { await FilesystemSaveStateProvider().states(for: $0) },
-        slotPath: { TVEmulationBridge.stateFilePath(forSlot: $0).map { URL(fileURLWithPath: $0) } },
-        exists: { FileManager.default.fileExists(atPath: $0.path) },
-        compatible: { TVEmulationBridge.stateFileIsCompatible(atPath: $0.path) },
-        request: { TVEmulationBridge.loadState(fromPath: $0.path, expectedGameID: $1.gameID, expectedSessionIdentifier: $1.identifier) }, requestCompletion: { url, session in
-          await completedLoad(url, session: session)
-        })
+           isCurrent: { TVEmulationBridge.currentGameID() == $0.gameID && TVEmulationBridge.currentSessionIdentifier() == $0.identifier },
+           allowed: { TVEmulationBridge.isStateOperationAllowed() }, isModded: { ModdedBoot.isCurrentBootModded },
+           states: { await FilesystemSaveStateProvider().states(for: $0) },
+           slotPath: { TVEmulationBridge.stateFilePath(forSlot: $0).map { URL(fileURLWithPath: $0) } },
+           exists: { FileManager.default.fileExists(atPath: $0.path) },
+           compatible: { TVEmulationBridge.stateFileIsCompatible(atPath: $0.path) },
+           request: { TVEmulationBridge.loadState(fromPath: $0.path, expectedGameID: $1.gameID, expectedSessionIdentifier: $1.identifier) }, requestCompletion: { url, session in
+             await completedLoad(url, session: session)
+           })
     }
   }
 
@@ -137,7 +138,7 @@ enum QuickSaveActions {
     guard session.isCurrent, !ModdedBoot.isCurrentBootModded,
           TVEmulationBridge.isStateOperationAllowed() else { return .unavailable }
     let result = await SaveStateService.saveHistoryResultAsync(expectedGameID: session.gameID,
-      expectedSessionIdentifier: session.identifier)
+                                                               expectedSessionIdentifier: session.identifier)
     guard session.isCurrent, !result.cancelled else { return .cancelled }
     guard let snapshot = result.snapshot else { return .saveFailed }
     let url = URL(fileURLWithPath: snapshot.filePath)
@@ -179,7 +180,7 @@ enum QuickSaveActions {
     let session = Session(expected: expectedSession)
     guard session.isCurrent, state.gameID == session.gameID, state.isQuickSave else { return .keepFailed }
     let updated = await SaveStateService.setHistoryKeptAsync(kept, state: state,
-      expectedSessionIdentifier: session.identifier)
+                                                             expectedSessionIdentifier: session.identifier)
     guard session.isCurrent else { return .cancelled }
     return updated ? .keepUpdated : .keepFailed
   }
@@ -192,11 +193,11 @@ enum QuickSaveActions {
     guard session.isCurrent else { return .cancelled }
     return loadOutcome(url, loaded: loaded, allowed: TVEmulationBridge.isStateOperationAllowed())
   }
+
   private static func completedLoad(_ url: URL, session: QuickSaveSurfaceSession) async -> Bool {
     await withCheckedContinuation { continuation in
       TVEmulationBridge.loadState(fromPath: url.path, expectedGameID: session.gameID,
-        expectedSessionIdentifier: session.identifier, completion: { continuation.resume(returning: $0) })
+                                  expectedSessionIdentifier: session.identifier, completion: { continuation.resume(returning: $0) })
     }
   }
-
 }

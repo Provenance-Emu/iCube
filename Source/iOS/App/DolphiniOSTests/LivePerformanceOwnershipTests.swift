@@ -14,6 +14,7 @@ final class LivePerformanceOwnershipTests: XCTestCase {
     XCTAssertTrue(unrelatedPause)
     unrelatedPause = false
   }
+
   func testPauseIsClaimedBeforeClosing() {
     let state = LivePerformanceOwnership()
     _ = state.open(session: "game:1")
@@ -23,6 +24,7 @@ final class LivePerformanceOwnershipTests: XCTestCase {
     XCTAssertFalse(state.isPresented)
     state.transitionToPause { XCTFail("Closed panels must not claim another pause") }
   }
+
   func testSessionChangeAndBackgroundCloseWithoutResume() {
     let state = LivePerformanceOwnership()
     _ = state.open(session: "a")
@@ -35,6 +37,7 @@ final class LivePerformanceOwnershipTests: XCTestCase {
     state.close()
     XCTAssertFalse(state.isPresented)
   }
+
   func testOpeningFenceAndSelectAreReleaseGated() {
     var input = LivePerformanceRemoteInput()
     XCTAssertEqual(input.poll(horizontal: 0, vertical: 1, select: true, now: 0), [])
@@ -45,6 +48,7 @@ final class LivePerformanceOwnershipTests: XCTestCase {
     XCTAssertEqual(input.poll(horizontal: 0, vertical: 0, select: false, now: 3), [])
     XCTAssertEqual(input.poll(horizontal: 0, vertical: 0, select: true, now: 4), [.select])
   }
+
   func testClosingLeaseWaitsForNeutralAndDisconnectOnlyReleasesExactRemote() {
     let fence = LivePerformanceReleaseFence<NSObject>()
     let remote = NSObject(), other = NSObject()
@@ -63,6 +67,7 @@ final class LivePerformanceOwnershipTests: XCTestCase {
     XCTAssertTrue(fence.isEmpty)
     XCTAssertEqual(disconnected, 1)
   }
+
   func testDuplicateOpenKeepsCurrentSessionAndSessionChangeCloses() {
     let state = LivePerformanceOwnership()
     XCTAssertTrue(state.open(session: "first"))
@@ -72,6 +77,7 @@ final class LivePerformanceOwnershipTests: XCTestCase {
     state.reconcile(session: "second")
     XCTAssertFalse(state.isPresented)
   }
+
   func testDirectionChangeAndRepeatAreBounded() {
     var input = LivePerformanceRemoteInput()
     _ = input.poll(horizontal: 0, vertical: 0, select: false, now: 0)

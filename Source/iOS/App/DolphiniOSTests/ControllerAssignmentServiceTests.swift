@@ -41,18 +41,19 @@ private final class FakeWriter: ControllerConfigWriting {
     bindCheckedAfter.append(calls)
     return mappingBindsByPort[port] ?? false
   }
+
   func defaultProfileName(forQualifier q: String) -> String? {
     if q.hasPrefix("MFi") { return "Physical Controller" }
     if q.hasPrefix("iOS/") { return "Touchscreen" }
     return nil
   }
+
   func loadProfile(_ n: String, system: EmulatedSystem, port: Int, restoreDevice: Bool) { calls.append("profile=\(n)@\(port)") }
   func assignTouchscreen(system: EmulatedSystem, port: Int) { calls.append("touch@\(port)") }
   func saveConfig(system: EmulatedSystem) { calls.append("save") }
 }
 
 final class ControllerAssignmentServiceTests: XCTestCase {
-
   func test_assignPhysical_GCPort2_activatesBindsProfilesSaves() {
     let fake = FakeWriter()
     let svc = ControllerAssignmentService(writer: fake)

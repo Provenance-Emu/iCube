@@ -21,7 +21,7 @@ final class DiscImageBridgeTests: XCTestCase {
 
   private func makeImage(named name: String, megabytes: Int) throws -> URL {
     let url = folder.appendingPathComponent(name)
-    try Data((0..<(megabytes << 20)).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ $0 >> 8) }).write(to: url)
+    try Data((0 ..< (megabytes << 20)).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ $0 >> 8) }).write(to: url)
     return url
   }
 

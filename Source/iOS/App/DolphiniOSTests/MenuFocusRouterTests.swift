@@ -7,7 +7,6 @@ import XCTest
 @testable import iCube
 
 final class MenuFocusRouterTests: XCTestCase {
-
   private func item(_ id: String, enabled: Bool = true) -> MenuItem {
     MenuItem(id: id, title: id, role: .action({}), isEnabled: enabled)
   }
@@ -225,6 +224,7 @@ final class MenuFocusRouterTests: XCTestCase {
   }
 
   // MARK: Multi-pad merge (D18 engine gap #3 — "MenuScreen listens only to
+
   // the first connected extended gamepad")
 
   /// One pad moves, another activates, in the same tick: both edges must
@@ -590,7 +590,7 @@ final class MenuFocusRouterTests: XCTestCase {
   func test_heldLeft_onStepper_repeatsAfterTheInitialDelay() {
     var router = MenuFocusRouter(config: cfg)
     let model = singleRowModel(stepperRole())
-    _ = leftTick(&router, model, at: 0, held: false)   // a pad's first tick is a resync
+    _ = leftTick(&router, model, at: 0, held: false) // a pad's first tick is a resync
     XCTAssertEqual(leftTick(&router, model, at: 0.1, held: true).adjust?.step, -1)
     XCTAssertNil(leftTick(&router, model, at: 0.3, held: true).adjust, "inside the initial delay")
     XCTAssertEqual(leftTick(&router, model, at: 0.55, held: true).adjust?.step, -1)
@@ -673,7 +673,7 @@ final class MenuFocusRouterTests: XCTestCase {
     }
     _ = tick(false, at: 0)
     XCTAssertEqual(tick(true, at: 0.1).adjust?.step, -1)
-    _ = tick(true, at: 0.2, active: false)   // another surface took the controller: the pad resyncs
+    _ = tick(true, at: 0.2, active: false) // another surface took the controller: the pad resyncs
     XCTAssertNil(tick(true, at: 0.7).adjust, "the held press belongs to whoever owned the controller")
     XCTAssertNil(tick(true, at: 1.2).adjust)
     _ = tick(false, at: 1.3)

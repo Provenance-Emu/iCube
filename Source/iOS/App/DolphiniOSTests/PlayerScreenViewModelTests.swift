@@ -9,7 +9,6 @@ import XCTest
 /// spec's edge cases (disconnect while armed, timeout, a broken expression), the signed-off
 /// decisions 5, 9, 10, 11 and 12, and the first-render read.
 final class PlayerScreenViewModelTests: XCTestCase {
-
   private static let xbox = "MFi/0/Xbox Wireless Controller"
   private static let dualSense = "MFi/1/DualSense Wireless Controller"
   private static let dsu = "DSUClient/0/Pad C"
@@ -137,7 +136,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
     let row = model.state.controls[0]
     model.toggleCapture(row)
     XCTAssertEqual(model.state.armedControlID, row.id)
-    model.pollCapture()  // nothing was held at arm time: listening starts
+    model.pollCapture() // nothing was held at arm time: listening starts
     io.inputValues = [1, 0]
     // A press must hold for `holdPolls` polls: one short of it writes nothing, the last binds.
     let holdPolls = RemapCaptureMachine.Config().holdPolls
@@ -179,7 +178,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
   private func bindAndKeepHolding(_ model: PlayerScreenViewModel, _ io: FakePlayerScreenIO) -> RemapControlRow {
     let row = model.state.controls[0]
     model.toggleCapture(row)
-    model.pollCapture()  // nothing was held at arm time: listening starts
+    model.pollCapture() // nothing was held at arm time: listening starts
     io.inputValues = [1, 0]
     for _ in 0 ..< RemapCaptureMachine.Config().holdPolls { model.pollCapture() }
     XCTAssertNil(model.state.armedControlID, "bound")
@@ -217,9 +216,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
     model.reload()
     let row = bindAndKeepHolding(model, io)
     io.inputValues = [0, 0]
-    model.pollCapture()  // the settle tick sees the release
+    model.pollCapture() // the settle tick sees the release
     clock.now = PlayerScreenViewModel.rearmDelay + 1
-    io.inputValues = [1, 0]  // A pressed again, to arm a row
+    io.inputValues = [1, 0] // A pressed again, to arm a row
     XCTAssertFalse(model.isCaptureSettling)
     model.toggleCapture(row)
     XCTAssertEqual(model.state.armedControlID, row.id)
@@ -255,7 +254,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
     model.toggleCapture(row)
     for _ in 0 ... RemapCaptureMachine.Config().timeoutPolls { model.pollCapture() }
     XCTAssertNil(model.state.armedControlID, "timed out")
-    io.inputValues = [1, 0]  // something is held, but nothing was captured
+    io.inputValues = [1, 0] // something is held, but nothing was captured
     clock.now = PlayerScreenViewModel.rearmDelay + 0.1
     XCTAssertFalse(model.isCaptureSettling)
   }
@@ -396,7 +395,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
     let model = make(reader, io)
     model.reload()
     model.clear(model.state.controls[0])
-    reader.gameCube[1] = Self.xbox  // bound, but the pad is not connected
+    reader.gameCube[1] = Self.xbox // bound, but the pad is not connected
     model.reload()
     XCTAssertTrue(model.state.isDisconnected)
     model.clear(model.state.controls[0])
@@ -422,7 +421,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
     model.reload()
     model.toggleCapture(model.state.controls[0])
     XCTAssertNotNil(model.state.armedControlID)
-    reader.gameCube[1] = Self.dualSense  // both pads stay connected: only the qualifier differs
+    reader.gameCube[1] = Self.dualSense // both pads stay connected: only the qualifier differs
     model.reload()
     XCTAssertNil(model.state.armedControlID)
     io.inputValues = [1, 0]
@@ -505,7 +504,7 @@ final class PlayerScreenViewModelTests: XCTestCase {
     reader.wii[1] = Self.xbox
     reader.pads = [pad(Self.xbox, "Xbox Wireless Controller")]
     let io = FakePlayerScreenIO()
-    io.assignmentReplacesMapping = false  // the touchscreen reloads its profile whatever the mapping
+    io.assignmentReplacesMapping = false // the touchscreen reloads its profile whatever the mapping
     io.onSetDevice = { choice in
       if choice == .touchscreen { reader.wii[1] = "iOS/4/Touchscreen" }
     }
@@ -559,9 +558,9 @@ final class PlayerScreenViewModelTests: XCTestCase {
     }
     let model = make(reader, io, slot: PlayerSlot(kind: .wiiRemote, port: 1))
     model.start()
-    model.stop()  // the Device list was pushed
+    model.stop() // the Device list was pushed
     reader.pads = [pad(Self.dualSense, "DualSense", gyro: true)]
-    model.reload()  // what DeviceListView's refresh does on .GCControllerDidConnect
+    model.reload() // what DeviceListView's refresh does on .GCControllerDidConnect
     let options = PlayerScreenModelBuilder.deviceOptions(state: model.displayState, platform: .ios)
     XCTAssertTrue(options.contains { $0.choice == .pad(Self.dualSense) })
     model.setDevice(.pad(Self.dualSense))

@@ -258,8 +258,8 @@ final class PlayerScreenViewModel {
     // enabled.
     if let capture,
        capture.qualifier != snapshot.player.deviceQualifier
-        || PlayerScreenState.isMissing(capture.qualifier, pads: snapshot.pads)
-        || !snapshot.controls.contains(where: { $0.id == capture.row.id }) {
+       || PlayerScreenState.isMissing(capture.qualifier, pads: snapshot.pads)
+       || !snapshot.controls.contains(where: { $0.id == capture.row.id }) {
       endCapture()
       snapshot.armedControlID = nil
     }

@@ -33,6 +33,7 @@ public final class LiveTipsService: TipsProviding {
     if TVLibraryBridge.isScreenshotDemoMode() { return }
     try? Tips.configure()
   }
+
   public func record(event: String) {}
 }
 #endif

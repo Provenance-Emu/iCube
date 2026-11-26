@@ -25,15 +25,15 @@ enum GraphicsAdvancedModelBuilder {
 
     let statistics = MenuSection(id: "performance-statistics", header: L("Performance Statistics"),
                                  footer: L("These overlays can also be toggled in-game from the pause menu."), items: [
-      flag("show-fps", L("Show FPS"), .showFPS, L("Frames per second actually presented to the display.")),
-      flag("show-vps", L("Show VPS"), .showVPS, L("Emulated video interrupts per second — the game's internal frame rate.")),
-      flag("show-speed", L("Show Speed"), .showSpeed, L("Emulation speed as a percentage of full speed.")),
-      flag("show-frame-times", L("Show Frame Times"), .showFrameTimes, L("Per-frame render time in milliseconds. Useful for spotting hitches.")),
-      flag("show-vblank-times", L("Show VBlank Times"), .showVBlankTimes, L("Time between emulated vertical-blank interrupts.")),
-      flag("show-graphs", L("Show Graphs"), .showGraphs, L("Draws the timing stats as live graphs instead of numbers.")),
-      flag("log-render-time", L("Log Render Time to File"), .logRenderTime, L("Writes per-frame render times to a log file for offline analysis.")),
-      flag("speed-colors", L("Speed Colors"), .speedColors, L("Color-codes the speed readout (green = full speed, red = slow).")),
-    ])
+                                   flag("show-fps", L("Show FPS"), .showFPS, L("Frames per second actually presented to the display.")),
+                                   flag("show-vps", L("Show VPS"), .showVPS, L("Emulated video interrupts per second — the game's internal frame rate.")),
+                                   flag("show-speed", L("Show Speed"), .showSpeed, L("Emulation speed as a percentage of full speed.")),
+                                   flag("show-frame-times", L("Show Frame Times"), .showFrameTimes, L("Per-frame render time in milliseconds. Useful for spotting hitches.")),
+                                   flag("show-vblank-times", L("Show VBlank Times"), .showVBlankTimes, L("Time between emulated vertical-blank interrupts.")),
+                                   flag("show-graphs", L("Show Graphs"), .showGraphs, L("Draws the timing stats as live graphs instead of numbers.")),
+                                   flag("log-render-time", L("Log Render Time to File"), .logRenderTime, L("Writes per-frame render times to a log file for offline analysis.")),
+                                   flag("speed-colors", L("Speed Colors"), .speedColors, L("Color-codes the speed readout (green = full speed, red = slow).")),
+                                 ])
 
     let debugging = MenuSection(id: "debugging", header: L("Debugging"), items: [
       flag("overlay-stats", L("Overlay Stats"), .overlayStats, L("Detailed rendering statistics overlay for developers.")),
@@ -87,15 +87,15 @@ enum GraphicsAdvancedModelBuilder {
 
     let experimental = MenuSection(id: "experimental", header: L("Experimental"),
                                    footer: L("⚠️ Experimental — may cause instability or glitches in some games."), items: [
-      flag("defer-efb-invalidation", L("Defer EFB Cache Invalidation"), .deferEfbInvalidation,
-           L("Delays invalidating cached framebuffer copies. Can speed things up but may show stale graphics.")),
-      SettingsRow.cycle("use-present-drawable", L("Use Present Drawable"), triStateOptions(including: state.usePresentDrawable), state.usePresentDrawable,
-                        L("Metal present path. Auto uses the presentDrawable path when VSync is active (correct for most). Force On/Off to A/B present latency vs stability."),
-                        set: { apply(.presentDrawable($0)) }),
-      SettingsRow.cycle("manually-upload-buffers", L("Manually Upload Buffers"), triStateOptions(including: state.manuallyUploadBuffers), state.manuallyUploadBuffers,
-                        L("Metal buffer upload strategy (managed vs shared). Auto detects unified memory and is correct on Apple Silicon; override only for benchmarking."),
-                        set: { apply(.manuallyUploadBuffers($0)) }),
-    ])
+                                     flag("defer-efb-invalidation", L("Defer EFB Cache Invalidation"), .deferEfbInvalidation,
+                                          L("Delays invalidating cached framebuffer copies. Can speed things up but may show stale graphics.")),
+                                     SettingsRow.cycle("use-present-drawable", L("Use Present Drawable"), triStateOptions(including: state.usePresentDrawable), state.usePresentDrawable,
+                                                       L("Metal present path. Auto uses the presentDrawable path when VSync is active (correct for most). Force On/Off to A/B present latency vs stability."),
+                                                       set: { apply(.presentDrawable($0)) }),
+                                     SettingsRow.cycle("manually-upload-buffers", L("Manually Upload Buffers"), triStateOptions(including: state.manuallyUploadBuffers), state.manuallyUploadBuffers,
+                                                       L("Metal buffer upload strategy (managed vs shared). Auto detects unified memory and is correct on Apple Silicon; override only for benchmarking."),
+                                                       set: { apply(.manuallyUploadBuffers($0)) }),
+                                   ])
 
     return MenuModel(sections: [statistics, debugging, threads, utility, misc, rendering, experimental])
   }

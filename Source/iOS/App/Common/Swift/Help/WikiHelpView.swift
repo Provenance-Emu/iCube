@@ -1,8 +1,8 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import SwiftUI
 import PVHelp
+import SwiftUI
 
 /// Top-level in-app documentation browser. Its table of contents IS the wiki's own
 /// `SUMMARY.md` (see `WikiContentProvider.loadNavigationTree()`), so this view never needs to
@@ -30,9 +30,9 @@ struct WikiHelpView: View {
       }
     }
     .navigationTitle(L("Help"))
-#if os(tvOS)
+    #if os(tvOS)
     .focusSection()
-#endif
+    #endif
     .task {
       await viewModel.loadNavigationTree()
     }
@@ -79,9 +79,9 @@ struct WikiHelpView: View {
         }
       }
     }
-#if os(tvOS)
+    #if os(tvOS)
     .listStyle(.grouped)
-#endif
+    #endif
   }
 
   @ViewBuilder

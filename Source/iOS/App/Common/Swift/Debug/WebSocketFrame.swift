@@ -14,8 +14,12 @@ struct WebSocketFrame {
     out.append((fin ? 0x80 : 0) | opcode.rawValue)
     let n = payload.count
     if n < 126 { out.append(UInt8(n)) }
-    else if n <= 0xFFFF { out.append(126); out.append(UInt8(n >> 8)); out.append(UInt8(n & 0xFF)) }
-    else { out.append(127); for s in stride(from: 56, through: 0, by: -8) { out.append(UInt8((UInt64(n) >> UInt64(s)) & 0xFF)) } }
+    else if n <= 0xFFFF { out.append(126)
+      out.append(UInt8(n >> 8))
+      out.append(UInt8(n & 0xFF))
+    } else { out.append(127)
+      for s in stride(from: 56, through: 0, by: -8) { out.append(UInt8((UInt64(n) >> UInt64(s)) & 0xFF)) }
+    }
     out.append(payload)
     return out
   }
@@ -29,8 +33,10 @@ struct WebSocketFrame {
     let masked = b[1] & 0x80 != 0
     var len = Int(b[1] & 0x7F)
     var i = 2
-    if len == 126 { guard b.count >= 4 else { return nil }; len = Int(b[2]) << 8 | Int(b[3]); i = 4 }
-    else if len == 127 {
+    if len == 126 { guard b.count >= 4 else { return nil }
+      len = Int(b[2]) << 8 | Int(b[3])
+      i = 4
+    } else if len == 127 {
       guard b.count >= 10 else { return nil }
       // Accumulate as UInt64 first: a signed Int can't safely hold an
       // arbitrary 64-bit big-endian length (bit 63 set becomes negative,
@@ -38,7 +44,7 @@ struct WebSocketFrame {
       // Reject anything that doesn't fit in Int or in the remaining buffer
       // instead of trapping.
       var extLen: UInt64 = 0
-      for k in 2..<10 { extLen = (extLen << 8) | UInt64(b[k]) }
+      for k in 2 ..< 10 { extLen = (extLen << 8) | UInt64(b[k]) }
       guard extLen <= UInt64(Int.max) else { return nil }
       let remaining = UInt64(b.count - 10)
       guard extLen <= remaining else { return nil }
@@ -46,10 +52,13 @@ struct WebSocketFrame {
       i = 10
     }
     var key: [UInt8] = []
-    if masked { guard b.count >= i + 4 else { return nil }; key = Array(b[i..<i+4]); i += 4 }
+    if masked { guard b.count >= i + 4 else { return nil }
+      key = Array(b[i ..< i + 4])
+      i += 4
+    }
     guard b.count >= i + len else { return nil }
-    var payload = Array(b[i..<i+len])
-    if masked { for k in 0..<payload.count { payload[k] ^= key[k % 4] } }
+    var payload = Array(b[i ..< i + len])
+    if masked { for k in 0 ..< payload.count { payload[k] ^= key[k % 4] } }
     return (WebSocketFrame(fin: fin, opcode: op, payload: Data(payload)), i + len)
   }
 }
@@ -59,6 +68,7 @@ enum WebSocketHandshake {
   static func acceptKey(for clientKey: String) -> String {
     Data(Insecure.SHA1.hash(data: Data((clientKey + guid).utf8))).base64EncodedString()
   }
+
   static func response(for clientKey: String) -> Data {
     Data("""
     HTTP/1.1 101 Switching Protocols\r\n\

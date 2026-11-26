@@ -7,7 +7,8 @@
 // instrumented (shipping) core — the calls become no-ops in that case.
 //
 // Usage (app target):
-//   * At launch, before booting a game: ICubePGOSetPath("<Documents>/Software/pgo/icube-%m.profraw")
+//   * At launch, before booting a game:
+//   ICubePGOSetPath("<Documents>/Software/pgo/icube-%m.profraw")
 //     so the profile lands in the folder the in-app web server already serves for download.
 //   * On applicationDidEnterBackground / willTerminate, and from a Settings "Dump PGO
 //     profile" action: call ICubePGOFlush(). Background is the reliable kill-safe flush

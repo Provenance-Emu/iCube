@@ -31,16 +31,26 @@ struct ConfigInterfaceView: View {
   private func apply(_ change: ConfigInterfaceChange) {
     let defaults = UserDefaults.standard
     switch change {
-    case .useNamesDB(let v): state.useNamesDB = v; DOLConfigBridge.setMainUseBuiltInTitleDatabase(v)
-    case .useCovers(let v): state.useCovers = v; DOLConfigBridge.setMainUseGameCovers(v)
-    case .backgroundStyle(let v): state.backgroundStyle = v; defaults.set(v.rawValue, forKey: ConfigInterfaceDefaultsKey.backgroundStyle)
-    case .showSubtitles(let v): state.showSubtitles = v; defaults.set(v, forKey: ConfigInterfaceDefaultsKey.showSubtitles)
-    case .showPatchedSeparately(let v): state.showPatchedSeparately = v; defaults.set(v, forKey: ConfigInterfaceDefaultsKey.showPatchedSeparately)
-    case .confirmOnStop(let v): state.confirmOnStop = v; DOLConfigBridge.setMainConfirmOnStop(v)
-    case .usePanicHandlers(let v): state.usePanicHandlers = v; DOLConfigBridge.setMainUsePanicHandlers(v)
-    case .osdMessages(let v): state.osdMessages = v; DOLConfigBridge.setMainOSDMessages(v)
-    case .recordingWatermark(let v): state.recordingWatermark = v; defaults.set(v, forKey: ConfigInterfaceDefaultsKey.recordingWatermark)
-    case .recordingCamera(let v): state.recordingCamera = v; defaults.set(v, forKey: ConfigInterfaceDefaultsKey.recordingCamera)
+    case .useNamesDB(let v): state.useNamesDB = v
+      DOLConfigBridge.setMainUseBuiltInTitleDatabase(v)
+    case .useCovers(let v): state.useCovers = v
+      DOLConfigBridge.setMainUseGameCovers(v)
+    case .backgroundStyle(let v): state.backgroundStyle = v
+      defaults.set(v.rawValue, forKey: ConfigInterfaceDefaultsKey.backgroundStyle)
+    case .showSubtitles(let v): state.showSubtitles = v
+      defaults.set(v, forKey: ConfigInterfaceDefaultsKey.showSubtitles)
+    case .showPatchedSeparately(let v): state.showPatchedSeparately = v
+      defaults.set(v, forKey: ConfigInterfaceDefaultsKey.showPatchedSeparately)
+    case .confirmOnStop(let v): state.confirmOnStop = v
+      DOLConfigBridge.setMainConfirmOnStop(v)
+    case .usePanicHandlers(let v): state.usePanicHandlers = v
+      DOLConfigBridge.setMainUsePanicHandlers(v)
+    case .osdMessages(let v): state.osdMessages = v
+      DOLConfigBridge.setMainOSDMessages(v)
+    case .recordingWatermark(let v): state.recordingWatermark = v
+      defaults.set(v, forKey: ConfigInterfaceDefaultsKey.recordingWatermark)
+    case .recordingCamera(let v): state.recordingCamera = v
+      defaults.set(v, forKey: ConfigInterfaceDefaultsKey.recordingCamera)
     case .showMatureSkins(let v): state.showMatureSkins = v
       defaults.set(v, forKey: SkinStoreVisibilityDefaultsKey.showMatureSkins)
     }

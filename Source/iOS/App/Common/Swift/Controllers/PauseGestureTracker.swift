@@ -11,10 +11,12 @@ struct MenuPressOwnership {
     routes.insert(route)
     self.overlayOwned = self.overlayOwned || overlayOwned
   }
+
   mutating func ended(route: String) -> Bool {
     guard routes.remove(route) != nil, routes.isEmpty else { return false }
     return !overlayOwned
   }
+
   mutating func cancel() { overlayOwned = true }
 }
 
@@ -103,7 +105,7 @@ final class PauseGestureTracker {
 
   /// Both deliveries of a remote press share the same explicit installation preference.
   static func routesToLivePerformance(reason: String, preference: SiriRemoteMenuAction,
-                                     hasGameplayController: Bool, isPaused: Bool) -> Bool {
+                                      hasGameplayController: Bool, isPaused: Bool) -> Bool {
     (reason == siriRemoteMenuReason || reason == uipressMenuReason)
       && preference.opensLive(hasGameplayController: hasGameplayController, isPaused: isPaused)
   }
@@ -144,8 +146,8 @@ final class PauseGestureTracker {
     menuTransitionObserver = NotificationCenter.default.addObserver(forName: .DOLMenuPressChanged, object: nil, queue: .main) { [weak self] note in
       guard let pressed = note.userInfo?["pressed"] as? Bool else { return }
       self?.menuButtonChanged(pressed: pressed, reason: Self.uipressMenuReason,
-        overlayOwned: note.userInfo?["overlayOwned"] as? Bool ?? false,
-        cancelled: note.userInfo?["cancelled"] as? Bool ?? false)
+                              overlayOwned: note.userInfo?["overlayOwned"] as? Bool ?? false,
+                              cancelled: note.userInfo?["cancelled"] as? Bool ?? false)
     }
   }
 
@@ -204,7 +206,9 @@ final class PauseGestureTracker {
         if cancelled { ownership.cancel() }
         eligible = ownership.ended(route: reason)
       }
-      if !eligible { menuPressStart.removeValue(forKey: reason); return }
+      if !eligible { menuPressStart.removeValue(forKey: reason)
+        return
+      }
     }
     let now = Date().timeIntervalSinceReferenceDate
     guard !pressed else {
@@ -304,8 +308,8 @@ final class PauseGestureTracker {
           return true
         }
         if Self.routesToLivePerformance(reason: reason, preference: .stored(),
-             hasGameplayController: LivePerformanceSession.hasGameplayController(), isPaused: TVEmulationBridge.isPaused()),
-           live.toggleFromRemote() {
+                                        hasGameplayController: LivePerformanceSession.hasGameplayController(), isPaused: TVEmulationBridge.isPaused()),
+          live.toggleFromRemote() {
           lastPauseRequest = now
           return true
         }

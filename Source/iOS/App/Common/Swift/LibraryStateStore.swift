@@ -32,6 +32,7 @@ final class LibraryStateStore {
     defer { fileAccessLock.unlock() }
     return try operation()
   }
+
   private let fileURL: URL?
   private let defaults: UserDefaults
   private let deviceID: String
@@ -145,7 +146,7 @@ final class LibraryStateStore {
       // mirror values over remote edits committed just before the reload.
       guard onlyMissingFavorites || lastMirroredFavorites[gameID] != value else { continue }
       var state = document.games[gameID] ?? .init()
-      if state.favorite?.value != value && (!onlyMissingFavorites || state.favorite == nil) {
+      if state.favorite?.value != value, !onlyMissingFavorites || state.favorite == nil {
         state.favorite = .init(value: value, updatedAt: max(stamp, state.favorite.map { $0.updatedAt.addingTimeInterval(1) } ?? .distantPast))
         document.games[gameID] = state
         changed = true

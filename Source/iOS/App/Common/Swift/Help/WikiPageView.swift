@@ -1,8 +1,8 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import SwiftUI
 import PVHelp
+import SwiftUI
 #if canImport(SafariServices)
 import SafariServices
 #endif
@@ -31,16 +31,16 @@ struct WikiPageView: View {
     }
     .navigationTitle(title)
     .accessibilityLabel(title)
-#if os(tvOS)
+    #if os(tvOS)
     .focusSection()
-#endif
-#if os(iOS)
+    #endif
+    #if os(iOS)
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
         viewOnWebButton
       }
     }
-#endif
+    #endif
     .task {
       await viewModel.loadPage(path: path, title: title)
     }
@@ -55,7 +55,7 @@ struct WikiPageView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
-#if os(iOS)
+  #if os(iOS)
   @State private var showSafari = false
 
   private var viewOnWebButton: some View {
@@ -69,5 +69,5 @@ struct WikiPageView: View {
       SafariView(url: ICubeWiki.webURL(for: path))
     }
   }
-#endif
+  #endif
 }

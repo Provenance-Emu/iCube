@@ -31,7 +31,9 @@ enum BenchAwait {
     private var continuation: CheckedContinuation<T?, Never>?
 
     func arm(_ c: CheckedContinuation<T?, Never>) {
-      lock.lock(); continuation = c; lock.unlock()
+      lock.lock()
+      continuation = c
+      lock.unlock()
     }
 
     func resume(with value: T?) {

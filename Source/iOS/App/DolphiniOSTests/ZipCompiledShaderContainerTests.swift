@@ -52,7 +52,7 @@ final class ZipCompiledShaderContainerTests: XCTestCase {
   /// The archive was written beside its extraction, so an entry named `in.zip` truncated it while minizip was still reading
   /// it. The entry is larger than stdio's read buffer, or minizip would have the whole small archive in memory already.
   func testAnEntryNamedLikeTheArchiveDoesNotCorruptTheExtraction() throws {
-    let largeEntry = Data((0..<Self.largeEntrySize).map { UInt8(truncatingIfNeeded: $0 &* 31) })
+    let largeEntry = Data((0 ..< Self.largeEntrySize).map { UInt8(truncatingIfNeeded: $0 &* 31) })
     let archive = TestZipBuilder.build([.init(name: "in.zip", contents: largeEntry), .init(name: "shader.json", contents: Self.shaderJSON)])
     let decoder = try Decoder(data: archive)
     XCTAssertEqual(decoder.shader.historyCount, 3)

@@ -47,102 +47,106 @@ import UIKit
 ///   that row now reads blank instead of a working URL — previously it force-started the
 ///   server itself. No error is surfaced explaining why.
 final class WebServerLifecycleService: NSObject, UIApplicationDelegate {
-    private let lock = NSLock()
-    private var policy = WebServerLifecyclePolicy()
-    private var observers: [NSObjectProtocol] = []
+  private let lock = NSLock()
+  private var policy = WebServerLifecyclePolicy()
+  private var observers: [NSObjectProtocol] = []
 
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
-    ) -> Bool {
-        installObserversIfNeeded()
-        return true
+  func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    installObserversIfNeeded()
+    return true
+  }
+
+  func applicationDidBecomeActive(_ application: UIApplication) {
+    apply(.appForegrounded)
+    // The policy assumes a suspended listener resumes on its own, but iOS can
+    // defunct it instead (iFly logged `DefunctConnection` on port 80 after a
+    // suspension). Network.framework may report that only after this callback,
+    // when the server still reads as running and the policy says "nothing to do".
+    // Ask again once the failure has had time to land.
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.foregroundRecheckDelay) { [weak self] in
+      let active = MainActor.assumeIsolated { UIApplication.shared.applicationState == .active }
+      guard active else { return }
+      self?.apply(.appForegrounded)
     }
+  }
 
-    func applicationDidBecomeActive(_ application: UIApplication) {
-        apply(.appForegrounded)
-        // The policy assumes a suspended listener resumes on its own, but iOS can
-        // defunct it instead (iFly logged `DefunctConnection` on port 80 after a
-        // suspension). Network.framework may report that only after this callback,
-        // when the server still reads as running and the policy says "nothing to do".
-        // Ask again once the failure has had time to land.
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.foregroundRecheckDelay) { [weak self] in
-            let active = MainActor.assumeIsolated { UIApplication.shared.applicationState == .active }
-            guard active else { return }
-            self?.apply(.appForegrounded)
-        }
+  private static let foregroundRecheckDelay: TimeInterval = 1.5
+
+  func applicationDidEnterBackground(_ application: UIApplication) {
+    apply(.appBackgrounded)
+  }
+
+  private func installObserversIfNeeded() {
+    lock.lock()
+    guard observers.isEmpty else { lock.unlock()
+      return
     }
+    lock.unlock()
 
-    private static let foregroundRecheckDelay: TimeInterval = 1.5
+    let center = NotificationCenter.default
+    let tokens: [NSObjectProtocol] = [
+      center.addObserver(
+        forName: Notification.Name("DOLEmulationWillStartNotification"),
+        object: nil, queue: .main
+      ) { [weak self] _ in self?.apply(.emulationWillStart) },
+      center.addObserver(
+        forName: Notification.Name("DOLEmulationDidEndNotification"),
+        object: nil, queue: .main
+      ) { [weak self] _ in self?.apply(.emulationDidEnd) },
+      center.addObserver(
+        forName: Notification.Name(PVWebServerFileUploadStartedNotificationName),
+        object: nil, queue: .main
+      ) { [weak self] _ in self?.apply(.uploadStarted) },
+      center.addObserver(
+        forName: Notification.Name(PVWebServerFileUploadCompletedNotificationName),
+        object: nil, queue: .main
+      ) { [weak self] _ in self?.apply(.uploadEnded) },
+      // WS-4: a handoff is started FROM the in-game pause menu, by which
+      // point `emulationWillStart` has already stopped the server. So
+      // these do not merely suppress the next pause — an open session
+      // restarts the server. See the events' docs in
+      // `WebServerLifecyclePolicy`.
+      center.addObserver(
+        forName: Notification.Name(ContinuityNotificationNames.sessionDidBegin),
+        object: nil, queue: .main
+      ) { [weak self] _ in self?.apply(.continuitySessionBegan) },
+      center.addObserver(
+        forName: Notification.Name(PVWebServerUserAccessRequestedNotificationName),
+        object: nil, queue: .main
+      ) { [weak self] _ in self?.apply(.userRequestedAccess) },
+      center.addObserver(
+        forName: Notification.Name(PVWebServerUserAccessReleasedNotificationName),
+        object: nil, queue: .main
+      ) { [weak self] _ in self?.apply(.userReleasedAccess) },
+      center.addObserver(
+        forName: Notification.Name(ContinuityNotificationNames.sessionDidEnd),
+        object: nil, queue: .main
+      ) { [weak self] _ in self?.apply(.continuitySessionEnded) }
+    ]
 
-    func applicationDidEnterBackground(_ application: UIApplication) {
-        apply(.appBackgrounded)
+    lock.lock()
+    observers = tokens
+    lock.unlock()
+  }
+
+  private func apply(_ event: WebServerLifecycleEvent) {
+    lock.lock()
+    let action = policy.handle(event, serverIsRunning: PVWebServer.shared.isWWWUploadServerRunning)
+    lock.unlock()
+
+    switch action {
+    case .start:
+      // A listener that died (not one we stopped) leaves its `_webdav._tcp`
+      // record published on the old port until `stopServers()`, and the port
+      // may belong to iFly or Provenance by now. Clear it before binding again.
+      PVWebServer.shared.stopServers()
+      PVWebServer.shared.preferredPorts = ICubeServerPorts.candidates
+      PVWebServer.shared.startServers()
+    case .stop: PVWebServer.shared.stopServers()
+    case .none: break
     }
-
-    private func installObserversIfNeeded() {
-        lock.lock()
-        guard observers.isEmpty else { lock.unlock(); return }
-        lock.unlock()
-
-        let center = NotificationCenter.default
-        let tokens: [NSObjectProtocol] = [
-            center.addObserver(
-                forName: Notification.Name("DOLEmulationWillStartNotification"),
-                object: nil, queue: .main
-            ) { [weak self] _ in self?.apply(.emulationWillStart) },
-            center.addObserver(
-                forName: Notification.Name("DOLEmulationDidEndNotification"),
-                object: nil, queue: .main
-            ) { [weak self] _ in self?.apply(.emulationDidEnd) },
-            center.addObserver(
-                forName: Notification.Name(PVWebServerFileUploadStartedNotificationName),
-                object: nil, queue: .main
-            ) { [weak self] _ in self?.apply(.uploadStarted) },
-            center.addObserver(
-                forName: Notification.Name(PVWebServerFileUploadCompletedNotificationName),
-                object: nil, queue: .main
-            ) { [weak self] _ in self?.apply(.uploadEnded) },
-            // WS-4: a handoff is started FROM the in-game pause menu, by which
-            // point `emulationWillStart` has already stopped the server. So
-            // these do not merely suppress the next pause — an open session
-            // restarts the server. See the events' docs in
-            // `WebServerLifecyclePolicy`.
-            center.addObserver(
-                forName: Notification.Name(ContinuityNotificationNames.sessionDidBegin),
-                object: nil, queue: .main
-            ) { [weak self] _ in self?.apply(.continuitySessionBegan) },
-            center.addObserver(
-                forName: Notification.Name(PVWebServerUserAccessRequestedNotificationName),
-                object: nil, queue: .main
-            ) { [weak self] _ in self?.apply(.userRequestedAccess) },
-            center.addObserver(
-                forName: Notification.Name(PVWebServerUserAccessReleasedNotificationName),
-                object: nil, queue: .main
-            ) { [weak self] _ in self?.apply(.userReleasedAccess) },
-            center.addObserver(
-                forName: Notification.Name(ContinuityNotificationNames.sessionDidEnd),
-                object: nil, queue: .main
-            ) { [weak self] _ in self?.apply(.continuitySessionEnded) }
-        ]
-
-        lock.lock(); observers = tokens; lock.unlock()
-    }
-
-    private func apply(_ event: WebServerLifecycleEvent) {
-        lock.lock()
-        let action = policy.handle(event, serverIsRunning: PVWebServer.shared.isWWWUploadServerRunning)
-        lock.unlock()
-
-        switch action {
-        case .start:
-            // A listener that died (not one we stopped) leaves its `_webdav._tcp`
-            // record published on the old port until `stopServers()`, and the port
-            // may belong to iFly or Provenance by now. Clear it before binding again.
-            PVWebServer.shared.stopServers()
-            PVWebServer.shared.preferredPorts = ICubeServerPorts.candidates
-            PVWebServer.shared.startServers()
-        case .stop: PVWebServer.shared.stopServers()
-        case .none: break
-        }
-    }
+  }
 }

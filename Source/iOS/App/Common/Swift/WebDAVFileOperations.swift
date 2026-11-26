@@ -37,7 +37,7 @@ struct WebDAVFileOperations {
   /// DELETE a resource.
   func deleteItem(at url: URL) async throws {
     let (code, _, _) = try await request("DELETE", url: url)
-    guard (200...299).contains(code) || code == 404 else {
+    guard (200 ... 299).contains(code) || code == 404 else {
       throw Failure.unexpectedStatus(code)
     }
   }

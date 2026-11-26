@@ -79,11 +79,11 @@ struct ControllerHubView: View {
     guard page == .root else { return model }
     let remote = MenuSection(id: "siri-remote", header: L("Siri Remote"), items: [
       MenuItem(id: "siri-remote-menu-action", title: L("Siri Remote Menu Button"), icon: "appletvremote.gen2",
-        role: .picker(options: SiriRemoteMenuAction.allCases.map { (L($0.title), AnyHashable($0)) },
-          selection: Binding(get: { AnyHashable(remoteMenuAction) }, set: {
-            if let value = $0.base as? SiriRemoteMenuAction { remoteMenuAction = value }
-          })),
-        description: L("Pause Menu stops the game. Live Performance adjusts settings while you play with a controller; without a controller it opens Pause Menu. Back closes the live panel.")),
+               role: .picker(options: SiriRemoteMenuAction.allCases.map { (L($0.title), AnyHashable($0)) },
+                             selection: Binding(get: { AnyHashable(remoteMenuAction) }, set: {
+                               if let value = $0.base as? SiriRemoteMenuAction { remoteMenuAction = value }
+                             })),
+               description: L("Pause Menu stops the game. Live Performance adjusts settings while you play with a controller; without a controller it opens Pause Menu. Back closes the live panel.")),
     ])
     model.sections.insert(remote, at: max(0, model.sections.count - 1))
     #endif

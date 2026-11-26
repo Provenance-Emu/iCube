@@ -58,6 +58,7 @@ final class EmulationServerBackups: ObservableObject {
     return EmulationServerSaveSyncWorker(indexDirectory: support.appendingPathComponent("EmulationServer", isDirectory: true),
                                          trash: SyncTrash(rootURL: support.appendingPathComponent("Trash", isDirectory: true)))
   }()
+
   /// The user's answers to conflicts, by server and path, applied by the next pass.
   private var resolutions: [String: [String: EmulationServerSaveSyncWorker.Choice]] = [:]
   private var task: Task<Void, Never>?

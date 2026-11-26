@@ -215,7 +215,7 @@ struct RemapCaptureMachine: Equatable {
       var bestDelta: Float = 0
       for i in 0 ..< restBaseline.count where i < capturable.count && capturable[i] {
         let delta = value(values, i) - restBaseline[i]
-        if delta > config.threshold && delta > bestDelta {
+        if delta > config.threshold, delta > bestDelta {
           best = i
           bestDelta = delta
         }

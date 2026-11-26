@@ -16,29 +16,29 @@ NS_ASSUME_NONNULL_BEGIN
 + (instancetype)shared;
 
 /// Start the DSU server on the given UDP port (default 26760).
-+ (BOOL)startOnPort:(NSInteger)port NS_SWIFT_NAME(start(onPort:)); // returns NO on bind/failure
++ (BOOL)startOnPort:(NSInteger)port NS_SWIFT_NAME(start(onPort:));  // returns NO on bind/failure
 + (void)stop;
 + (BOOL)isRunning;
 + (NSInteger)port;
 
 /// Error of last start attempt (nil or empty on success)
-+ (NSString *)lastError;
++ (NSString*)lastError;
 
 /// Lightweight counters for troubleshooting
 + (NSUInteger)txCount;
 + (NSUInteger)rxCount;
 
 /// Returns best-effort LAN IPv4 address (for display/QR).
-+ (NSString *)ipAddress;
++ (NSString*)ipAddress;
 
 /// Receiver connection status (best-effort)
 + (BOOL)hasClient;
-+ (NSString *)lastClientAddress; // empty if none seen yet
++ (NSString*)lastClientAddress;  // empty if none seen yet
 /// List of recently seen clients (address:port), newest first
-+ (NSArray<NSString *> *)clients;
++ (NSArray<NSString*>*)clients;
 /// Restrict sending to a specific client (address:port). Pass nil/empty to allow all.
-+ (void)setRestrictToClient:(NSString * _Nullable)addr;
-+ (NSString * _Nullable)restrictedClient;
++ (void)setRestrictToClient:(NSString* _Nullable)addr;
++ (NSString* _Nullable)restrictedClient;
 
 /// Send a frame immediately to the last client (if any)
 + (void)sendNow;
@@ -46,9 +46,9 @@ NS_ASSUME_NONNULL_BEGIN
 /// Approval/allowlist control
 + (void)setApprovalRequired:(BOOL)required;
 + (BOOL)approvalRequired;
-+ (NSSet<NSString *> *)allowedClients;
-+ (void)setClient:(NSString *)addr allowed:(BOOL)allowed;
-+ (BOOL)isClientAllowed:(NSString *)addr;
++ (NSSet<NSString*>*)allowedClients;
++ (void)setClient:(NSString*)addr allowed:(BOOL)allowed;
++ (BOOL)isClientAllowed:(NSString*)addr;
 
 /// Session approval, for the phone's one-tap controller session. While on, only clients approved
 /// with `setSessionClient:allowed:` may receive input (the persisted allowlist is ignored, so a TV
@@ -57,12 +57,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// TV is asked again the next time.
 + (void)setSessionApprovalMode:(BOOL)on;
 + (BOOL)sessionApprovalMode;
-+ (void)setSessionClient:(NSString *)addr allowed:(BOOL)allowed;
++ (void)setSessionClient:(NSString*)addr allowed:(BOOL)allowed;
 /// Whether input may be sent to `addr` (ip or ip:port) under the current approval mode.
-+ (BOOL)isClientPermitted:(NSString *)addr;
++ (BOOL)isClientPermitted:(NSString*)addr;
 /// Whether the receive path should post `DSUNewClientApproval` for `ip` now. Marks it asked, so it
 /// answers YES once per IP until `setSessionApprovalMode:` clears the memory.
-+ (BOOL)shouldPromptForClientIP:(NSString *)ip;
++ (BOOL)shouldPromptForClientIP:(NSString*)ip;
 
 /// Input updates from the touch controller (or other sources)
 + (void)setButton:(NSInteger)button controller:(NSInteger)controller state:(BOOL)state;
@@ -75,14 +75,15 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)setDPadRightForController:(NSInteger)controller state:(BOOL)state;
 
 /// Layout metadata for Bonjour TXT record
-+ (void)setLayout:(NSString *)layout extension:(NSString * _Nullable)ext sideways:(BOOL)sideways;
++ (void)setLayout:(NSString*)layout extension:(NSString* _Nullable)ext sideways:(BOOL)sideways;
 
 /// Identity keys for the Bonjour TXT record (see `DSUAdvert`). Merged with the layout keys and
 /// published at once, even before a layout is chosen.
-+ (void)setIdentity:(NSDictionary<NSString *, NSString *> *)identity;
++ (void)setIdentity:(NSDictionary<NSString*, NSString*>*)identity;
 
 /// The Bonjour service name for a device name: at most 63 UTF-8 bytes, cut on a character boundary.
-+ (NSString *)bonjourServiceNameForDeviceName:(NSString *)name NS_SWIFT_NAME(bonjourServiceName(forDeviceName:));
++ (NSString*)bonjourServiceNameForDeviceName:(NSString*)name
+    NS_SWIFT_NAME(bonjourServiceName(forDeviceName:));
 
 /// Shoulders (L1/R1) as analog (255/0)
 + (void)setShoulderL:(NSInteger)controller state:(BOOL)state;
@@ -96,10 +97,15 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Touch points (DSU supports 2 touch points with X/Y coordinates)
 /// Coordinates are in range [0, 1920] x [0, 1080] (DS4 touchpad resolution)
-+ (void)setTouchPoint:(NSInteger)touchId controller:(NSInteger)controller active:(BOOL)active x:(NSInteger)x y:(NSInteger)y;
++ (void)setTouchPoint:(NSInteger)touchId
+           controller:(NSInteger)controller
+               active:(BOOL)active
+                    x:(NSInteger)x
+                    y:(NSInteger)y;
 
 /// Rumble support (unofficial DSU extension)
-+ (void)setRumbleHandler:(void (^_Nullable)(NSInteger controller, NSInteger motorId, NSInteger intensity))handler;
++ (void)setRumbleHandler:(void (^_Nullable)(NSInteger controller, NSInteger motorId,
+                                            NSInteger intensity))handler;
 
 /// Gyro/Motion support for Wiimote DSU (degrees per second)
 + (void)setGyro:(NSInteger)controller pitch:(float)pitch yaw:(float)yaw roll:(float)roll;

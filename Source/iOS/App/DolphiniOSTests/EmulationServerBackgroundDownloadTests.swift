@@ -110,7 +110,7 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
       let fetcher = RecordingFetcher(failure: failure)
       let (library, _) = try makeLibrary(fetcher: fetcher)
       let page = try await library.catalog()
-    let entry = try XCTUnwrap(page.entries.first)
+      let entry = try XCTUnwrap(page.entries.first)
       do {
         _ = try await library.copy(entry) { _ in }
         XCTFail("Expected \(failure)")

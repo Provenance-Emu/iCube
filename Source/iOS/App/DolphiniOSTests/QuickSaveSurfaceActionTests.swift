@@ -11,8 +11,8 @@ final class QuickSaveSurfaceActionTests: XCTestCase {
 
   private func state(compatible: Bool = true) -> SaveStateInfo {
     SaveStateInfo(gameID: "GALE01", displayName: "Slot 4", slot: 4, createdAt: nil,
-      modifiedAt: nil, sizeBytes: nil, versionHash: nil, isCompatible: compatible,
-      path: path, thumbnailURL: nil, isAuto: false)
+                  modifiedAt: nil, sizeBytes: nil, versionHash: nil, isCompatible: compatible,
+                  path: path, thumbnailURL: nil, isAuto: false)
   }
 
   func testSuspendedInitialScanCannotSaveThenOccupiedSlotRequiresExplicitConfirmation() async {
@@ -30,14 +30,16 @@ final class QuickSaveSurfaceActionTests: XCTestCase {
       return XCTFail("Occupied slot must require confirmation")
     }
     let unconfirmed = await scan.save(request, confirmed: false, isCurrent: { $0 == self.session }, destination: { _ in self.path }, occupancy: { _ in .occupied }) { _ in
-      writes += 1; return true
+      writes += 1
+      return true
     }
     XCTAssertNil(unconfirmed)
     XCTAssertEqual(writes, 0)
     let confirmed = await scan.save(request, confirmed: true, isCurrent: { $0 == self.session }, destination: { _ in self.path }, occupancy: { _ in .occupied }) { saved in
       XCTAssertEqual(saved.slot, 4)
       XCTAssertEqual(saved.path, self.path)
-      writes += 1; return true
+      writes += 1
+      return true
     }
     XCTAssertEqual(confirmed, true)
     XCTAssertEqual(writes, 1)
@@ -60,7 +62,9 @@ final class QuickSaveSurfaceActionTests: XCTestCase {
       return XCTFail("Completed scan and empty destination should allow save")
     }
     var writes = 0
-    let result = await scan.save(request, confirmed: false, isCurrent: { _ in true }, destination: { _ in self.path }, occupancy: { _ in .occupied }) { _ in writes += 1; return true }
+    let result = await scan.save(request, confirmed: false, isCurrent: { _ in true }, destination: { _ in self.path }, occupancy: { _ in .occupied }) { _ in writes += 1
+      return true
+    }
     XCTAssertNil(result)
     XCTAssertEqual(writes, 0)
   }
@@ -70,8 +74,12 @@ final class QuickSaveSurfaceActionTests: XCTestCase {
     await scan.reload { [self.state()] }
     guard case .confirm(let request) = scan.prepareSave(slot: 4, session: session, destination: path, occupancy: .occupied) else { return XCTFail("Missing confirmation") }
     var writes = 0
-    let changedPath = await scan.save(request, confirmed: true, isCurrent: { _ in true }, destination: { _ in URL(fileURLWithPath: "/modded/GALE01.s04") }, occupancy: { _ in .occupied }) { _ in writes += 1; return true }
-    let changedSession = await scan.save(request, confirmed: true, isCurrent: { _ in false }, destination: { _ in self.path }, occupancy: { _ in .occupied }) { _ in writes += 1; return true }
+    let changedPath = await scan.save(request, confirmed: true, isCurrent: { _ in true }, destination: { _ in URL(fileURLWithPath: "/modded/GALE01.s04") }, occupancy: { _ in .occupied }) { _ in writes += 1
+      return true
+    }
+    let changedSession = await scan.save(request, confirmed: true, isCurrent: { _ in false }, destination: { _ in self.path }, occupancy: { _ in .occupied }) { _ in writes += 1
+      return true
+    }
     XCTAssertNil(changedPath)
     XCTAssertNil(changedSession)
     XCTAssertEqual(writes, 0)
@@ -79,7 +87,9 @@ final class QuickSaveSurfaceActionTests: XCTestCase {
 
   func testCancelledScanDoesNotEstablishEmptyOccupancy() async {
     let scan = QuickSavePickerScan()
-    let task = Task { await scan.reload { withUnsafeCurrentTask { $0?.cancel() }; return [] } }
+    let task = Task { await scan.reload { withUnsafeCurrentTask { $0?.cancel() }
+      return []
+    } }
     await task.value
     XCTAssertFalse(scan.hasCompletedScan)
     XCTAssertEqual(scan.prepareSave(slot: 4, session: session, destination: path, occupancy: .empty), .unavailable)
@@ -100,7 +110,9 @@ final class QuickSaveSurfaceActionTests: XCTestCase {
   func testPrimaryPaneLoadRejectsEmptyIncompatibleAndStaleSessionBeforeCallback() async {
     var loads = 0
     for candidate in [nil, state(compatible: false), state()] {
-      let result = await QuickSaveSurfaceActions.load(candidate, session: session, isCurrent: { _ in candidate?.isCompatible != true }) { _ in loads += 1; return QuickSaveActions.Outcome.loadRequested(self.path) }
+      let result = await QuickSaveSurfaceActions.load(candidate, session: session, isCurrent: { _ in candidate?.isCompatible != true }) { _ in loads += 1
+        return QuickSaveActions.Outcome.loadRequested(self.path)
+      }
       XCTAssertNil(result)
     }
     XCTAssertEqual(loads, 0)
@@ -112,7 +124,9 @@ final class QuickSaveSurfaceActionTests: XCTestCase {
     XCTAssertEqual(failed, .unavailable)
     XCTAssertFalse(failed!.isSuccess)
     XCTAssertEqual(failed!.message, "Game isn't ready to load yet")
-    let stale = await QuickSaveSurfaceActions.load(state(), session: session, isCurrent: { _ in current }) { _ in current = false; return QuickSaveActions.Outcome.loadRequested(self.path) }
+    let stale = await QuickSaveSurfaceActions.load(state(), session: session, isCurrent: { _ in current }) { _ in current = false
+      return QuickSaveActions.Outcome.loadRequested(self.path)
+    }
     XCTAssertNil(stale)
   }
 

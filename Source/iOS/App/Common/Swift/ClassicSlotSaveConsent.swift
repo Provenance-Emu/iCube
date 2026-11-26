@@ -29,7 +29,7 @@ enum QuickSaveDestinationOccupancy: Equatable, Sendable {
     } catch {
       let error = error as NSError
       if error.domain == NSCocoaErrorDomain &&
-          [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(error.code) { return .empty }
+        [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(error.code) { return .empty }
       return .unknown
     }
   }
@@ -42,20 +42,22 @@ final class ClassicSlotSaveExecutor: @unchecked Sendable {
   init(queue: DispatchQueue) { self.queue = queue }
 
   func enqueue<Result: Sendable>(_ consent: ClassicSlotSaveConsent,
-    currentSession: @escaping @Sendable () -> QuickSaveSurfaceSession,
-    destination: @escaping @Sendable (Int) -> URL?,
-    occupancy: @escaping @Sendable (URL) -> QuickSaveDestinationOccupancy = { QuickSaveDestinationOccupancy.read($0) },
-    write: @escaping @Sendable (ClassicSlotSaveConsent) -> Result?,
-    completion: @escaping @Sendable (Result?) -> Void) {
+                                 currentSession: @escaping @Sendable () -> QuickSaveSurfaceSession,
+                                 destination: @escaping @Sendable (Int) -> URL?,
+                                 occupancy: @escaping @Sendable (URL) -> QuickSaveDestinationOccupancy = { QuickSaveDestinationOccupancy.read($0) },
+                                 write: @escaping @Sendable (ClassicSlotSaveConsent) -> Result?,
+                                 completion: @escaping @Sendable (Result?) -> Void) {
     queue.async {
       let request = consent.request
       guard request.slot > 0, !request.session.gameID.isEmpty, request.path.isFileURL,
             currentSession() == request.session, destination(request.slot) == request.path else {
-        completion(nil); return
+        completion(nil)
+        return
       }
       let status = occupancy(request.path)
       guard status != .unknown, consent.allowsOverwrite || status == .empty else {
-        completion(nil); return
+        completion(nil)
+        return
       }
       completion(write(consent))
     }

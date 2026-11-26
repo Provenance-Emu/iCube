@@ -118,7 +118,7 @@ final class ContinuedImportSession {
   /// A completed batch reports 100% (an archive's progress only moves when it ends) before the task completes.
   func workEnded(_ outcome: ImportTerminationOutcome) {
     if outcome == .completed {
-      for index in 0..<locked({ aggregator.itemCount }) { finish(item: index) }
+      for index in 0 ..< locked({ aggregator.itemCount }) { finish(item: index) }
     }
     send(.workEnded(outcome))
   }

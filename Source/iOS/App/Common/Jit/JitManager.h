@@ -7,26 +7,26 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface JitManager : NSObject
 
-@property (readonly, assign) bool acquiredJit;
-@property (nonatomic, nullable) NSString* acquisitionError;
+@property(readonly, assign) bool acquiredJit;
+@property(nonatomic, nullable) NSString* acquisitionError;
 
-@property (readonly, assign) bool deviceHasTxm;
+@property(readonly, assign) bool deviceHasTxm;
 
 /// True when this build/distribution can ever acquire JIT. False on App Store /
 /// TestFlight (jitless) builds, where no external debugger path is available and
 /// the core always runs the Cached Interpreter. Callers use this to avoid showing
 /// the "Waiting for JIT" prompt when JIT can never be enabled.
-@property (readonly, assign) bool jitSupported;
+@property(readonly, assign) bool jitSupported;
 
 /// True when a debugger is attached to this process RIGHT NOW (P_TRACED), as opposed to
 /// acquiredJit, which reads CS_DEBUGGED and stays set after the debugger detaches. On an
 /// iOS 26 TXM device this is the signal that a StikDebug broker may be listening for the
 /// brk #0x69 handshake. Refreshed by recheckIfJitIsAcquired.
-@property (readonly, assign) bool debuggerAttached;
+@property(readonly, assign) bool debuggerAttached;
 
 /// True once the TXM handshake succeeded in this process: the dual-mapped JIT region is
 /// authorized and every later boot can use it without a broker attached.
-@property (readonly, assign) bool txmAuthorized;
+@property(readonly, assign) bool txmAuthorized;
 
 + (JitManager*)shared;
 
@@ -53,7 +53,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// True when the cookie is set, i.e. a previous handshake never returned and JIT is being
 /// declined for safety. Surfaced in Settings so a stuck device has a way back that does not
 /// depend on StikDebug being installed.
-@property (readonly, assign) bool txmHandshakeBlocked;
+@property(readonly, assign) bool txmHandshakeBlocked;
 
 @end
 

@@ -126,7 +126,9 @@ final class GraphicsHacksModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       changes = []
       binding.wrappedValue = true
       XCTAssertEqual(changes, [change(true)], id)

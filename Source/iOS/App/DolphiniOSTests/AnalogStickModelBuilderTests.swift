@@ -25,13 +25,15 @@ final class AnalogStickModelBuilderTests: XCTestCase {
 
   func test_steppers_haveTheirRanges_andEmitTheirOwnChange() {
     let table: [(String, ClosedRange<Double>, Double, Double, AnalogStickChange)] = [
-      ("gain", 0.1...3.0, 0.05, 2.0, .gain(2.0)),
-      ("deadzone", 0.0...0.49, 0.01, 0.2, .deadzone(0.2)),
-      ("smoothing", 0.0...0.9, 0.05, 0.5, .smoothing(0.5)),
+      ("gain", 0.1 ... 3.0, 0.05, 2.0, .gain(2.0)),
+      ("deadzone", 0.0 ... 0.49, 0.01, 0.2, .deadzone(0.2)),
+      ("smoothing", 0.0 ... 0.9, 0.05, 0.5, .smoothing(0.5)),
     ]
     let m = model()
     for (id, range, step, value, change) in table {
-      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper"); continue }
+      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper")
+        continue
+      }
       XCTAssertEqual(stepper.range, range, id)
       XCTAssertEqual(stepper.step, step, id)
       changes = []
@@ -48,7 +50,9 @@ final class AnalogStickModelBuilderTests: XCTestCase {
     let m = model(s)
     let table: [(String, Double, String)] = [("gain", 1.5, "1.50"), ("deadzone", 0.1, "0.10"), ("smoothing", 0.25, "0.25")]
     for (id, value, text) in table {
-      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper"); continue }
+      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper")
+        continue
+      }
       XCTAssertEqual(stepper.value.wrappedValue, value, id)
       XCTAssertEqual(stepper.format(value), text, id)
     }

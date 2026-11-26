@@ -7,11 +7,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface UpdateNoticeViewController : UIViewController
 
-@property (nonatomic) NSDictionary* updateInfo;
+@property(nonatomic) NSDictionary* updateInfo;
 
-@property (weak, nonatomic) IBOutlet UILabel* versionLabel;
-@property (weak, nonatomic) IBOutlet UILabel* changesLabel;
-@property (weak, nonatomic) IBOutlet UILabel* saveStateLabel;
+@property(weak, nonatomic) IBOutlet UILabel* versionLabel;
+@property(weak, nonatomic) IBOutlet UILabel* changesLabel;
+@property(weak, nonatomic) IBOutlet UILabel* saveStateLabel;
 
 @end
 

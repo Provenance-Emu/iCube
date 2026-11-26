@@ -8,8 +8,11 @@ import XCTest
 final class SettingsEnumsTests: XCTestCase {
   func test_region_selectableExcludesTheErrorPlaceholder_andKeepsTheRawValues() {
     XCTAssertEqual(Region.selectable, [.ntscJ, .ntscU, .pal, .ntscK])
-    XCTAssertEqual(Region.ntscJ.rawValue, 0); XCTAssertEqual(Region.ntscU.rawValue, 1); XCTAssertEqual(Region.pal.rawValue, 2)
-    XCTAssertEqual(Region.unknown.rawValue, 3); XCTAssertEqual(Region.ntscK.rawValue, 4)
+    XCTAssertEqual(Region.ntscJ.rawValue, 0)
+    XCTAssertEqual(Region.ntscU.rawValue, 1)
+    XCTAssertEqual(Region.pal.rawValue, 2)
+    XCTAssertEqual(Region.unknown.rawValue, 3)
+    XCTAssertEqual(Region.ntscK.rawValue, 4)
   }
 
   func test_region_unknownRawValuesReadAsTheErrorCase() {

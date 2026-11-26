@@ -16,6 +16,7 @@ final class GameplayTouchContacts {
   var onGameplayBegan: () -> Void = {
     NotificationCenter.default.post(name: .DOLGameplayInputBegan, object: nil)
   }
+
   var hasGameplayContacts: Bool { !gameplay.isEmpty }
 
   func began(_ contacts: Set<ObjectIdentifier>, gameplay eligible: Set<ObjectIdentifier>) {
@@ -46,6 +47,7 @@ final class GameplayTouchContacts {
 }
 
 // MARK: - UIKit contact delivery
+
 #if os(iOS)
 import UIKit
 
@@ -58,6 +60,7 @@ final class GameplayTouchContactObserver: UIGestureRecognizer {
     weak var view: UIView?
     init(_ view: UIView) { self.view = view }
   }
+
   private var targets: [ObjectIdentifier: Target] = [:]
 
   struct BeganContact {
@@ -77,7 +80,10 @@ final class GameplayTouchContactObserver: UIGestureRecognizer {
   func recordContactsBegan(_ ids: Set<ObjectIdentifier>, target: UIView, gameplay: Set<ObjectIdentifier>) {
     recordContactsBegan(ids.map { BeganContact(id: $0, target: target, gameplay: gameplay.contains($0)) })
   }
-  func cancelAllContacts() { targets.removeAll(); contacts.cancelAll() }
+
+  func cancelAllContacts() { targets.removeAll()
+    contacts.cancelAll()
+  }
 
   override init(target: Any?, action: Selector?) {
     super.init(target: target, action: action)
@@ -85,6 +91,7 @@ final class GameplayTouchContactObserver: UIGestureRecognizer {
     delaysTouchesBegan = false
     delaysTouchesEnded = false
   }
+
   // This observer is installed programmatically and is never decoded from an archive.
   required init?(coder: NSCoder) { return nil }
 
@@ -107,7 +114,7 @@ final class GameplayTouchContactObserver: UIGestureRecognizer {
     let batch = touches.compactMap { touch -> BeganContact? in
       guard let target = touch.view else { return nil }
       return BeganContact(id: ObjectIdentifier(touch), target: target,
-        gameplay: Self.isGameplayControl(target, in: root, at: touch.location(in: target)))
+                          gameplay: Self.isGameplayControl(target, in: root, at: touch.location(in: target)))
     }
     recordContactsBegan(batch)
   }
@@ -119,9 +126,11 @@ final class GameplayTouchContactObserver: UIGestureRecognizer {
     contacts.ended(ended)
     if !GameplayTouchContacts.hasAnyContacts { state = .failed }
   }
+
   override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
     touchesEnded(touches, with: event)
   }
+
   static func cancelContacts(in subtree: UIView) {
     var node: UIView? = subtree
     while let candidate = node {
@@ -136,11 +145,16 @@ final class GameplayTouchContactObserver: UIGestureRecognizer {
       node = candidate.superview
     }
   }
+
   deinit {
     let owned = contacts
     MainActor.assumeIsolated { owned.cancelAll() }
   }
-  override func reset() { cancelAllContacts(); super.reset() }
+
+  override func reset() { cancelAllContacts()
+    super.reset()
+  }
+
   override func canPrevent(_ preventedGestureRecognizer: UIGestureRecognizer) -> Bool { false }
   override func canBePrevented(by preventingGestureRecognizer: UIGestureRecognizer) -> Bool { false }
 }

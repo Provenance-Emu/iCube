@@ -7,7 +7,6 @@ import XCTest
 /// and the mapping of its answer to what the editor shows. Only backquoted forms are used: a bare
 /// word can parse as a working bareword fallback even when the full parse reports a syntax error.
 final class ExpressionCheckTests: XCTestCase {
-
   // MARK: The parser, through DOLControllerSettingsBridge
 
   func test_parser_aBackquotedInputParses() {

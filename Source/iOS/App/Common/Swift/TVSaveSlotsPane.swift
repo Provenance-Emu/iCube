@@ -192,7 +192,9 @@ struct TVSaveSlotsPane: View {
       return
     }
     guard !busy else { return }
-    if state != nil { openManage(slot); return }
+    if state != nil { openManage(slot)
+      return
+    }
     switch saveDecision(slot) {
     case .save(let request): save(request, confirmed: false)
     case .confirm(let request): openManage(slot, request: request)
@@ -204,17 +206,21 @@ struct TVSaveSlotsPane: View {
     guard let openingSession, isCurrent(openingSession) else { return .unavailable }
     let destination = operations.slotDestination(slot)
     return scan.prepareSave(slot: slot, session: openingSession, destination: destination,
-      occupancy: destination.map(operations.occupancy) ?? .unknown)
+                            occupancy: destination.map(operations.occupancy) ?? .unknown)
   }
 
   private func openManage(_ slot: Int, request: QuickSaveSlotSaveRequest? = nil) {
     guard !busy, scan.hasCompletedScan else { return }
-    if let request { managedSaveRequest = request; managedRequiresOverwrite = true }
-    else {
+    if let request { managedSaveRequest = request
+      managedRequiresOverwrite = true
+    } else {
       switch saveDecision(slot) {
-      case .confirm(let request): managedSaveRequest = request; managedRequiresOverwrite = true
-      case .save(let request): managedSaveRequest = request; managedRequiresOverwrite = false
-      case .unavailable: managedSaveRequest = nil; managedRequiresOverwrite = false
+      case .confirm(let request): managedSaveRequest = request
+        managedRequiresOverwrite = true
+      case .save(let request): managedSaveRequest = request
+        managedRequiresOverwrite = false
+      case .unavailable: managedSaveRequest = nil
+        managedRequiresOverwrite = false
       }
     }
     managedSlot = slot
@@ -231,10 +237,12 @@ struct TVSaveSlotsPane: View {
     closeManage()
     busy = true
     actionTask = Task { @MainActor in
-      defer { busy = false; actionTask = nil }
+      defer { busy = false
+        actionTask = nil
+      }
       guard let outcome = await scan.save(request, confirmed: confirmed, isCurrent: isCurrent,
-        destination: operations.slotDestination, occupancy: operations.occupancy,
-        operation: { await operations.saveSlot(.init(request: $0, allowsOverwrite: confirmed)) }), !Task.isCancelled else { return }
+                                          destination: operations.slotDestination, occupancy: operations.occupancy,
+                                          operation: { await operations.saveSlot(.init(request: $0, allowsOverwrite: confirmed)) }), !Task.isCancelled else { return }
       report(outcome, session: request.session)
       if outcome.isSuccess { await reload() }
     }
@@ -245,9 +253,11 @@ struct TVSaveSlotsPane: View {
     closeManage()
     busy = true
     actionTask = Task { @MainActor in
-      defer { busy = false; actionTask = nil }
+      defer { busy = false
+        actionTask = nil
+      }
       guard let outcome = await QuickSaveSurfaceActions.load(state, session: openingSession,
-        isCurrent: isCurrent, operation: { await operations.load($0, openingSession) }), !Task.isCancelled else { return }
+                                                             isCurrent: isCurrent, operation: { await operations.load($0, openingSession) }), !Task.isCancelled else { return }
       report(outcome, session: openingSession)
     }
   }
@@ -304,10 +314,10 @@ struct TVSaveSlotsPane: View {
   static func saveItem(request: QuickSaveSlotSaveRequest?, requiresOverwrite: Bool, busy: Bool,
                        onSave: @escaping (QuickSaveSlotSaveRequest, Bool) -> Void) -> MenuItem {
     MenuItem(id: "slot-save", title: requiresOverwrite ? L("Overwrite") : L("Save Here"), icon: "square.and.arrow.down",
-      role: .action {
-        guard let request else { return }
-        onSave(request, requiresOverwrite)
-      }, isEnabled: !busy && request != nil)
+             role: .action {
+               guard let request else { return }
+               onSave(request, requiresOverwrite)
+             }, isEnabled: !busy && request != nil)
   }
 
   /// Cancel first, as in the Exit confirm: a second impatient press must not load over the running game.

@@ -11,7 +11,6 @@ import XCTest
 /// signed-off decisions 4, 7, 9 and 11. Pure: every action is a recorded closure, every
 /// destination an `EmptyView`.
 final class PlayerScreenModelBuilderTests: XCTestCase {
-
   private static let xbox = "MFi/0/Xbox Wireless Controller"
   private static let dualSense = "MFi/1/DualSense Wireless Controller"
   private static let dsu = "DSUClient/0/Pad C"
@@ -275,7 +274,7 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
       XCTAssertEqual(ids(model, section: "pointer"), ["pointer-source", "pointer-motion"] + axes.map(\.id))
       XCTAssertEqual(model.sections.flatMap(\.items).filter { $0.id == axes[0].id }.count, 1)
       guard case .toggle(let x)? = model.item(id: axes[0].id)?.role,
-        case .toggle(let y)? = model.item(id: axes[1].id)?.role
+            case .toggle(let y)? = model.item(id: axes[1].id)?.role
       else { return XCTFail("Expected independent axis toggles") }
       XCTAssertFalse(x.wrappedValue)
       XCTAssertTrue(y.wrappedValue)
@@ -413,7 +412,7 @@ final class PlayerScreenModelBuilderTests: XCTestCase {
     let item = make(screen, recorder).item(id: scripted.id)
     XCTAssertNotNil(item)
     guard case .action = item?.role else { return XCTFail("an expression row must be a plain action, not a picker or toggle") }
-    run(item)  // activation
+    run(item) // activation
     XCTAssertEqual(recorder.calls, [], "activating writes nothing")
     // Adjustment (d-pad left/right, tvOS compact stepping) only exists on a picker or a toggle.
     if case .picker = item?.role { XCTFail("adjustable") }

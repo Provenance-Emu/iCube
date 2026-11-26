@@ -45,11 +45,11 @@ final class BenchAccessApproval {
   func requestApproval(for address: String) {
     guard !pending.contains(address), !isAllowed(address) else { return }
     pending.insert(address)
-#if canImport(UIKit)
+    #if canImport(UIKit)
     presentPrompt(for: address)
-#else
+    #else
     pending.remove(address)
-#endif
+    #endif
   }
 
   /// Forget every remembered address. Surfaced in Settings so a mis-tapped
@@ -61,12 +61,12 @@ final class BenchAccessApproval {
 
   var rememberedAddresses: [String] { Array(remembered).sorted() }
 
-#if canImport(UIKit)
+  #if canImport(UIKit)
   private func presentPrompt(for address: String) {
     guard let scene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.activationState == .foregroundActive }),
-          let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
+      .compactMap({ $0 as? UIWindowScene })
+      .first(where: { $0.activationState == .foregroundActive }),
+      let root = scene.windows.first(where: { $0.isKeyWindow })?.rootViewController
     else {
       pending.remove(address)
       return
@@ -97,5 +97,5 @@ final class BenchAccessApproval {
     while let presented = presenter.presentedViewController { presenter = presented }
     presenter.present(alert, animated: true)
   }
-#endif
+  #endif
 }

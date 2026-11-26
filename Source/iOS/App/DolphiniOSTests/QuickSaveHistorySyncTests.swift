@@ -1,7 +1,8 @@
+import PVSyncRules
+
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 import XCTest
-import PVSyncRules
 
 final class QuickSaveHistorySyncTests: XCTestCase {
   func testHistoryStateAndBothSidecarsUseExistingSyncCategories() {

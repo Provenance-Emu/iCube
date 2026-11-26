@@ -1,7 +1,8 @@
+import CryptoKit
+
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
-import CryptoKit
 import ImageIO
 import PVContinuity
 import UIKit
@@ -14,6 +15,7 @@ final class LibraryMetadataService: NSObject {
     let sha256: String
     let fingerprint: ContinuityFileDigestCache.Fingerprint
   }
+
   private final class State: @unchecked Sendable {
     let lock = NSRecursiveLock()
     var store: LibraryMetadataStore?
@@ -34,6 +36,7 @@ final class LibraryMetadataService: NSObject {
       }
     }
   }
+
   private static let state = State()
 
   static func store() throws -> LibraryMetadataStore {
@@ -230,7 +233,7 @@ final class LibraryMetadataService: NSObject {
     }
     for pixels in [1024, 640, 400] {
       let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-        kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: pixels]
+                                      kCGImageSourceCreateThumbnailWithTransform: true, kCGImageSourceThumbnailMaxPixelSize: pixels]
       guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { continue }
       for quality in [0.8, 0.6, 0.4] {
         if let jpeg = UIImage(cgImage: image).jpegData(compressionQuality: CGFloat(quality)), jpeg.count <= LibraryMetadataStore.maxCoverBytes {

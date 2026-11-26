@@ -10,7 +10,6 @@ import XCTest
 /// go through the IO, and Extension / Sideways, which bypass it for `WiimoteSlotOptions`. The IO
 /// fake follows a device write into the reader, as the real config does.
 final class LiveControllerHubWriterTests: XCTestCase {
-
   private static let xbox = "MFi/0/Xbox Wireless Controller"
   private static let dualSense = "MFi/1/DualSense Wireless Controller"
   private static let dsu = "DSUClient/0/Pad C"

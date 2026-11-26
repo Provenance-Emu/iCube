@@ -9,14 +9,15 @@ final class QuickSaveHistoryPersistenceTests: XCTestCase {
     root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
   }
+
   override func tearDownWithError() throws { try? FileManager.default.removeItem(at: root) }
 
   @discardableResult private func existing(_ age: Int, kept: Bool = false, name: String? = nil,
-                                            metadataGame: String = "GALE01") throws -> URL {
+                                           metadataGame: String = "GALE01") throws -> URL {
     let url = root.appendingPathComponent(name ?? "GALE01.quick-\(UUID().uuidString).s01")
     try Data("state".utf8).write(to: url)
     XCTAssertTrue(SaveStateMetadataStore.write(SaveStateMetadata(title: "Existing", gameID: metadataGame,
-      savedAt: Date(timeIntervalSince1970: Double(age)), isQuickSave: true, isKept: kept), forStateFile: url))
+                                                                 savedAt: Date(timeIntervalSince1970: Double(age)), isQuickSave: true, isKept: kept), forStateFile: url))
     try Data("png".utf8).write(to: url.appendingPathExtension("png"))
     return url
   }
@@ -41,19 +42,22 @@ final class QuickSaveHistoryPersistenceTests: XCTestCase {
     XCTAssertEqual(SaveStateMetadataStore.read(forStateFile: url)?.playTimeSeconds, 42)
     XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
   }
+
   func testWriteFailureRetainsEveryPreviousSave() throws {
-    let old = try (0..<11).map { try existing($0) }
+    let old = try (0 ..< 11).map { try existing($0) }
     XCTAssertNil(store(writer: { _ in nil }).save(gameID: "GALE01", sessionIdentifier: 7).snapshot)
     XCTAssertTrue(old.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
   }
+
   func testMetadataFailureDoesNotPruneAndRemovesOnlyNewFile() throws {
-    let old = try (0..<11).map { try existing($0) }
+    let old = try (0 ..< 11).map { try existing($0) }
     XCTAssertNil(store(metadata: { _, _ in false }).save(gameID: "GALE01", sessionIdentifier: 7).snapshot)
     XCTAssertTrue(old.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
     XCTAssertEqual(try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).count, 33)
   }
+
   func testPruningRunsOnlyAfterMetadataHasCommitted() throws {
-    _ = try (0..<11).map { try existing($0) }
+    _ = try (0 ..< 11).map { try existing($0) }
     var committed = false
     let result = store(metadata: { meta, url in
       committed = SaveStateMetadataStore.write(meta, forStateFile: url)
@@ -65,30 +69,34 @@ final class QuickSaveHistoryPersistenceTests: XCTestCase {
     XCTAssertNotNil(result.snapshot)
     XCTAssertEqual(try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).filter { QuickSaveHistoryPolicy.historyGameID(for: $0) != nil }.count, 10)
   }
+
   func testKeptClassicAutoForeignAndMalformedFilesNeverRotate() throws {
     let protected = try [existing(-10, kept: true), existing(-9, name: "GALE01.s01"),
-      existing(-8, name: "GALE01.auto"), existing(-7, metadataGame: "RSBE01"),
-      existing(-6, name: "GALE01.quick-not-a-uuid.s01"), existing(-5, name: "GALE01.s99")]
-    _ = try (0..<11).map { try existing($0) }
+                         existing(-8, name: "GALE01.auto"), existing(-7, metadataGame: "RSBE01"),
+                         existing(-6, name: "GALE01.quick-not-a-uuid.s01"), existing(-5, name: "GALE01.s99")]
+    _ = try (0 ..< 11).map { try existing($0) }
     XCTAssertNotNil(store().save(gameID: "GALE01", sessionIdentifier: 7).snapshot)
     XCTAssertTrue(protected.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
   }
+
   func testPruningCleansStateMetadataAndThumbnailTogether() throws {
     let oldest = try existing(-1)
-    _ = try (0..<10).map { try existing($0) }
+    _ = try (0 ..< 10).map { try existing($0) }
     XCTAssertNotNil(store().save(gameID: "GALE01", sessionIdentifier: 7).snapshot)
     for url in [oldest, oldest.appendingPathExtension("json"), oldest.appendingPathExtension("png")] {
       XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
   }
+
   func testFreshSaveSurvivesClockRollbackWhileRetentionStaysTen() throws {
-    _ = try (101..<112).map { try existing($0) }
+    _ = try (101 ..< 112).map { try existing($0) }
     let saved = try XCTUnwrap(store().save(gameID: "GALE01", sessionIdentifier: 7).snapshot)
     XCTAssertTrue(FileManager.default.fileExists(atPath: saved.filePath))
     XCTAssertEqual(try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).filter { QuickSaveHistoryPolicy.historyGameID(for: $0) != nil }.count, 10)
   }
+
   func testSessionChangeDuringMetadataCommitNeverPrunes() throws {
-    let old = try (0..<11).map { try existing($0) }
+    let old = try (0 ..< 11).map { try existing($0) }
     var current = true
     let result = store(current: { current }, metadata: { metadata, url in
       let written = SaveStateMetadataStore.write(metadata, forStateFile: url)
@@ -98,33 +106,39 @@ final class QuickSaveHistoryPersistenceTests: XCTestCase {
     XCTAssertTrue(result.cancelled)
     XCTAssertTrue(old.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
   }
+
   func testCleanupFailureStillReportsCommittedSaveWithWarning() throws {
-    _ = try (0..<11).map { try existing($0) }
+    _ = try (0 ..< 11).map { try existing($0) }
     let result = store(remove: { _ in throw CocoaError(.fileWriteNoPermission) }).save(gameID: "GALE01", sessionIdentifier: 7)
     XCTAssertNotNil(result.snapshot)
     XCTAssertTrue(result.cleanupFailed)
   }
+
   func testChangedSessionBeforeWriteDoesNotInvokeWriterOrPrune() throws {
     let old = try existing(1)
     var called = false
-    let result = store(current: { false }, writer: { _ in called = true; return nil }).save(gameID: "GALE01", sessionIdentifier: 7)
+    let result = store(current: { false }, writer: { _ in called = true
+      return nil
+    }).save(gameID: "GALE01", sessionIdentifier: 7)
     XCTAssertTrue(result.cancelled)
     XCTAssertFalse(called)
     XCTAssertTrue(FileManager.default.fileExists(atPath: old.path))
   }
+
   func testChangedSessionAfterDiskCompletionNeverPublishesOrPrunes() throws {
-    let old = try (0..<11).map { try existing($0) }
+    let old = try (0 ..< 11).map { try existing($0) }
     var current = true
     let result = store(current: { current }, writer: { url in
       try? Data("new".utf8).write(to: url)
       current = false
       return SaveStateCompletedSnapshot(filePath: url.path, gameID: "GALE01", playTimeSeconds: 0,
-        savedAt: Date(), sessionIdentifier: 7)
+                                        savedAt: Date(), sessionIdentifier: 7)
     }).save(gameID: "GALE01", sessionIdentifier: 7)
     XCTAssertTrue(result.cancelled)
     XCTAssertNil(result.snapshot)
     XCTAssertTrue(old.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
   }
+
   func testKeepUpdatesOnlySelectedMetadata() throws {
     let first = try existing(1), second = try existing(2)
     XCTAssertTrue(store().setKept(true, at: first, gameID: "GALE01"))
@@ -132,52 +146,60 @@ final class QuickSaveHistoryPersistenceTests: XCTestCase {
     XCTAssertEqual(SaveStateMetadataStore.read(forStateFile: second)?.isKept, false)
     XCTAssertEqual(SaveStateMetadataStore.read(forStateFile: first)?.savedAt, Date(timeIntervalSince1970: 1))
   }
+
   func testKeepFailureLeavesExistingMetadataUntouched() throws {
     let url = try existing(1)
     XCTAssertFalse(store(metadata: { _, _ in false }).setKept(true, at: url, gameID: "GALE01"))
     XCTAssertEqual(SaveStateMetadataStore.read(forStateFile: url)?.isKept, false)
   }
+
   func testHomebrewAndShortGameIDsCreateValidUniqueHistory() throws {
     for gameID in ["ID-Slot-3", "ID-Homebrew 日本語.quick-demo", "HBW"] {
       let persistence = store(writer: { url in
         try? Data("state".utf8).write(to: url)
         return SaveStateCompletedSnapshot(filePath: url.path, gameID: gameID,
-          playTimeSeconds: 1, savedAt: Date(), sessionIdentifier: 7)
+                                          playTimeSeconds: 1, savedAt: Date(), sessionIdentifier: 7)
       })
       let saved = try XCTUnwrap(persistence.save(gameID: gameID, sessionIdentifier: 7).snapshot)
       XCTAssertEqual(QuickSaveHistoryPolicy.historyGameID(for: URL(fileURLWithPath: saved.filePath)), gameID)
     }
   }
+
   func testWrongGameOrSessionSnapshotNeverCommitsMetadataOrPrunes() throws {
-    let old = try (0..<11).map { try existing($0) }
+    let old = try (0 ..< 11).map { try existing($0) }
     for identity in [("RSBE01", UInt64(7)), ("GALE01", UInt64(8))] {
       let result = store(writer: { url in
         try? Data("state".utf8).write(to: url)
         return SaveStateCompletedSnapshot(filePath: url.path, gameID: identity.0,
-          playTimeSeconds: 1, savedAt: Date(), sessionIdentifier: identity.1)
+                                          playTimeSeconds: 1, savedAt: Date(), sessionIdentifier: identity.1)
       }).save(gameID: "GALE01", sessionIdentifier: 7)
       XCTAssertTrue(result.cancelled)
     }
     XCTAssertTrue(old.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
     XCTAssertEqual(try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).count, 33)
   }
+
   func testTraversalGameIDIsRejectedBeforeWriter() {
     var called = false
-    let persistence = store(writer: { _ in called = true; return nil })
+    let persistence = store(writer: { _ in called = true
+      return nil
+    })
     XCTAssertNil(persistence.save(gameID: "../GALE01", sessionIdentifier: 7).snapshot)
     XCTAssertFalse(called)
   }
+
   func testCanonicalNamedDirectoryIsNeverPruned() throws {
     let directory = root.appendingPathComponent("GALE01.quick-\(UUID().uuidString).s01")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
     XCTAssertTrue(SaveStateMetadataStore.write(SaveStateMetadata(title: "Directory", gameID: "GALE01",
-      savedAt: Date(timeIntervalSince1970: -1), isQuickSave: true), forStateFile: directory))
-    _ = try (0..<11).map { try existing($0) }
+                                                                 savedAt: Date(timeIntervalSince1970: -1), isQuickSave: true), forStateFile: directory))
+    _ = try (0 ..< 11).map { try existing($0) }
     XCTAssertNotNil(store().save(gameID: "GALE01", sessionIdentifier: 7).snapshot)
     XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
   }
+
   func testFailedWriterCleansOnlyItsPartialUniqueFile() throws {
-    let old = try (0..<11).map { try existing($0) }
+    let old = try (0 ..< 11).map { try existing($0) }
     let result = store(writer: { url in
       try? Data("partial".utf8).write(to: url)
       return nil
@@ -186,8 +208,9 @@ final class QuickSaveHistoryPersistenceTests: XCTestCase {
     XCTAssertTrue(old.allSatisfy { FileManager.default.fileExists(atPath: $0.path) })
     XCTAssertEqual(try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).count, 33)
   }
+
   func testSidecarCleanupFailureKeepsSuccessfulNewSnapshot() throws {
-    _ = try (0..<11).map { try existing($0) }
+    _ = try (0 ..< 11).map { try existing($0) }
     let result = store(remove: { url in
       if url.pathExtension == "png" { throw CocoaError(.fileWriteNoPermission) }
       try FileManager.default.removeItem(at: url)
@@ -197,6 +220,7 @@ final class QuickSaveHistoryPersistenceTests: XCTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: saved.filePath))
     XCTAssertNotNil(SaveStateMetadataStore.read(forStateFile: URL(fileURLWithPath: saved.filePath)))
   }
+
   func testKeepRejectsClassicAndOutsideRootAndSymlink() throws {
     let classic = try existing(1, name: "GALE01.s01")
     XCTAssertFalse(store().setKept(true, at: classic, gameID: "GALE01"))

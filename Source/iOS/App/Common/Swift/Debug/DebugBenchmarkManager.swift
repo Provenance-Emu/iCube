@@ -47,6 +47,7 @@ struct BenchSummary: Codable, Sendable {
   let meanFps: Double
   let meanSpeed: Double
 }
+
 // BenchSummary(from: FrameTimeStats) is defined in FrameTimeStats.swift, which owns the
 // shared frame-time distribution math; this file only builds a BenchSummary from it.
 
@@ -159,7 +160,7 @@ final class DebugBenchmarkManager {
     }
     guard loaded == true else {
       NSLog("[Bench] runBenchmark: loadStateSlot(\(slot)) \(loaded == nil ? "timed out" : "failed") "
-            + "(state=\(DOLDebugBridge.coreState()))")
+        + "(state=\(DOLDebugBridge.coreState()))")
       return nil
     }
     // Let frame pacing settle after the state reload before sampling.

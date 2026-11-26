@@ -8,7 +8,6 @@ import XCTest
 /// `PointerSourceResolver` (design B2, plan call 4): one table per platform and pad class, the
 /// override rules, and the labels every pointer row shows.
 final class PointerSourceResolverTests: XCTestCase {
-
   private static let gyro = PadCapabilities(hasGyro: true, hasTouchpad: false)
   private static let touchpad = PadCapabilities(hasGyro: false, hasTouchpad: true)
   private static let both = PadCapabilities(hasGyro: true, hasTouchpad: true)

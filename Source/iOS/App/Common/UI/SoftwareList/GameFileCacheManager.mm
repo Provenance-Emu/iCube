@@ -4,20 +4,20 @@
 #import "GameFileCacheManager.h"
 
 #import "FoundationStringUtil.h"
-#import "ICubeLog.h"
 #import "GameFilePtrWrapper.h"
-#import "TVGameItem.h"
+#import "ICubeLog.h"
 #import "Swift.h"
+#import "TVGameItem.h"
 #import "UICommon/GameFile.h"
 
-#import "UICommon/GameFileCache.h"
-#include "Core/ConfigManager.h"
-#include "DiscIO/Enums.h"
 #include <memory>
 #include <os/lock.h>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include "Core/ConfigManager.h"
+#include "DiscIO/Enums.h"
+#import "UICommon/GameFileCache.h"
 
 using GameFileSnapshot = std::vector<std::shared_ptr<const UICommon::GameFile>>;
 
@@ -28,7 +28,8 @@ static std::vector<std::string_view> AsViews(const std::vector<std::string>& pat
   return std::vector<std::string_view>(paths.begin(), paths.end());
 }
 
-static dispatch_queue_t GameFileCacheQueue() {
+static dispatch_queue_t GameFileCacheQueue()
+{
   static dispatch_once_t onceToken;
   static dispatch_queue_t queue;
   dispatch_once(&onceToken, ^{
@@ -42,15 +43,16 @@ static dispatch_queue_t GameFileCacheQueue() {
 /// the game's extension, so builds before this listed and booted them as a second copy of the
 /// title ("IntCPU: Unknown instruction 00000000"). The scan now skips them, and this removes
 /// the ones users already imported. `.DS_Store` goes too. Nothing iCube uses lives in either.
-static void PurgeAppleDoubleSidecars(NSString* softwareFolder) {
+static void PurgeAppleDoubleSidecars(NSString* softwareFolder)
+{
   NSFileManager* fm = [NSFileManager defaultManager];
-  NSDirectoryEnumerator<NSURL*>* e =
-      [fm enumeratorAtURL:[NSURL fileURLWithPath:softwareFolder]
-          includingPropertiesForKeys:@[ NSURLIsRegularFileKey ]
-                             options:0
-                        errorHandler:nil];
+  NSDirectoryEnumerator<NSURL*>* e = [fm enumeratorAtURL:[NSURL fileURLWithPath:softwareFolder]
+                              includingPropertiesForKeys:@[ NSURLIsRegularFileKey ]
+                                                 options:0
+                                            errorHandler:nil];
   NSUInteger removed = 0;
-  for (NSURL* url in e) {
+  for (NSURL* url in e)
+  {
     NSString* name = url.lastPathComponent;
     if (![name hasPrefix:@"._"] && ![name isEqualToString:@".DS_Store"])
       continue;
@@ -62,30 +64,40 @@ static void PurgeAppleDoubleSidecars(NSString* softwareFolder) {
       removed++;
   }
   if (removed > 0)
-    DOLDebugLog(@"[GameFileCache] Removed %lu AppleDouble/.DS_Store sidecar(s) from the Software folder", (unsigned long)removed);
+    DOLDebugLog(
+        @"[GameFileCache] Removed %lu AppleDouble/.DS_Store sidecar(s) from the Software folder",
+        (unsigned long)removed);
 }
 
 /// Extract orphaned archives in the Software folder before scanning so web uploads and
 /// stale `.7z`/`.zip` files are imported through the same pipeline as the document picker.
-static void ProcessOrphanedArchivesBeforeRescan(void) {
+static void ProcessOrphanedArchivesBeforeRescan(void)
+{
   NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
   PurgeAppleDoubleSidecars(softwareFolder);
-  DOLArchiveBatchImportResult* batch = [DOLZipImportHelper processOrphanedArchivesInFolder:softwareFolder];
-  if (batch.archivesProcessed > 0 || batch.failedArchives > 0 || batch.installedPackMessages.count > 0) {
-    NSLog(@"[ArchiveImport] Recovered %ld archive(s), imported %ld game(s), skipped %ld existing, %ld failed",
-          (long)batch.archivesProcessed, (long)batch.gamesImported, (long)batch.gamesSkipped, (long)batch.failedArchives);
+  DOLArchiveBatchImportResult* batch =
+      [DOLZipImportHelper processOrphanedArchivesInFolder:softwareFolder];
+  if (batch.archivesProcessed > 0 || batch.failedArchives > 0 ||
+      batch.installedPackMessages.count > 0)
+  {
+    NSLog(@"[ArchiveImport] Recovered %ld archive(s), imported %ld game(s), skipped %ld existing, "
+          @"%ld failed",
+          (long)batch.archivesProcessed, (long)batch.gamesImported, (long)batch.gamesSkipped,
+          (long)batch.failedArchives);
     NSString* snackbar = [DOLZipImportHelper snackbarTextForBatchImportResult:batch];
-    if (snackbar.length > 0) {
+    if (snackbar.length > 0)
+    {
       dispatch_async(dispatch_get_main_queue(), ^{
         [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLShowSnackbar"
                                                             object:nil
-                                                          userInfo:@{@"text": snackbar}];
+                                                          userInfo:@{@"text" : snackbar}];
       });
     }
   }
 }
 
-@interface GameFileCacheManager () {
+@interface GameFileCacheManager ()
+{
   // The game list as of the last cache-queue job. Readers copy this instead of dispatch_sync'ing
   // onto the queue, which a rescan can hold for seconds (ICUBE-F: main-thread Library, Spotlight
   // and ecosystem reads hung 3-5 s). Sharing the pointers is safe because GameFileCache never
@@ -104,7 +116,8 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 
 @implementation GameFileCacheManager
 
-+ (GameFileCacheManager*)sharedManager {
++ (GameFileCacheManager*)sharedManager
+{
   static dispatch_once_t _onceToken = 0;
   static GameFileCacheManager* _sharedManager = nil;
 
@@ -115,8 +128,10 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   return _sharedManager;
 }
 
-- (id)init {
-  if (self = [super init]) {
+- (id)init
+{
+  if (self = [super init])
+  {
     self->_publishedLock = OS_UNFAIR_LOCK_INIT;
     self->_cache = new UICommon::GameFileCache();
     self->_cache->Load();
@@ -128,12 +143,12 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
 
 /// Republishes `_cache` for readers. Call on the cache queue after anything that can change the
 /// cache, and before posting a completion or notification that makes someone read the list.
-- (void)publishSnapshot {
+- (void)publishSnapshot
+{
   GameFileSnapshot next;
   next.reserve(self->_cache->GetSize());
-  self->_cache->ForEach([&next](const std::shared_ptr<const UICommon::GameFile>& game) {
-    next.push_back(game);
-  });
+  self->_cache->ForEach(
+      [&next](const std::shared_ptr<const UICommon::GameFile>& game) { next.push_back(game); });
 
   // Reuse the item of every game whose GameFile is unchanged: a published GameFile is never
   // mutated, so its item's cover, banner and metadata are still right. The previous items keep
@@ -142,34 +157,41 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   const SConfig& config = SConfig::GetInstance();
   const DiscIO::Language gcLanguage = config.GetCurrentLanguage(false);
   const DiscIO::Language wiiLanguage = config.GetCurrentLanguage(true);
-  const bool languageChanged = gcLanguage != self->_itemsGCLanguage || wiiLanguage != self->_itemsWiiLanguage;
+  const bool languageChanged =
+      gcLanguage != self->_itemsGCLanguage || wiiLanguage != self->_itemsWiiLanguage;
   self->_itemsGCLanguage = gcLanguage;
   self->_itemsWiiLanguage = wiiLanguage;
 
   std::unordered_map<const UICommon::GameFile*, TVGameItem*> previous;
-  if (!languageChanged) {
-    for (TVGameItem* item in self->_publishedItems) {
+  if (!languageChanged)
+  {
+    for (TVGameItem* item in self->_publishedItems)
+    {
       previous.emplace(item.wrapper.gameFile.get(), item);
     }
   }
 
   NSMutableArray<TVGameItem*>* items = [[NSMutableArray alloc] initWithCapacity:next.size()];
   NSUInteger reused = 0;
-  for (const std::shared_ptr<const UICommon::GameFile>& game : next) {
+  for (const std::shared_ptr<const UICommon::GameFile>& game : next)
+  {
     // Protect against null GameFile shared_ptr in cache
-    if (!game) {
+    if (!game)
+    {
       DOLDebugLog(@"CACHE MGR: SKIPPED null GameFile shared_ptr in cache");
       continue;
     }
 
     // Additional safety check - ensure GameFile is valid
-    if (!game->IsValid()) {
+    if (!game->IsValid())
+    {
       DOLDebugLog(@"CACHE MGR: SKIPPED invalid GameFile in cache: %s", game->GetFilePath().c_str());
       continue;
     }
 
     auto it = previous.find(game.get());
-    if (it != previous.end()) {
+    if (it != previous.end())
+    {
       [items addObject:it->second];
       reused++;
       continue;
@@ -181,7 +203,8 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   }
   NSArray<TVGameItem*>* nextItems = [items copy];
 
-  DOLDebugLog(@"GameFileCacheManager: published %lu games (%lu reused)", (unsigned long)nextItems.count, (unsigned long)reused);
+  DOLDebugLog(@"GameFileCacheManager: published %lu games (%lu reused)",
+              (unsigned long)nextItems.count, (unsigned long)reused);
 
   os_unfair_lock_lock(&self->_publishedLock);
   self->_published.swap(next);
@@ -190,178 +213,256 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   // The previous list and items are released here, outside the lock.
 }
 
-- (GameFileSnapshot)publishedSnapshot {
+- (GameFileSnapshot)publishedSnapshot
+{
   os_unfair_lock_lock(&self->_publishedLock);
   GameFileSnapshot snapshot = self->_published;
   os_unfair_lock_unlock(&self->_publishedLock);
   return snapshot;
 }
 
-- (void)updateCacheWithShouldUpdateMetadata:(bool)updateMetadata {
+- (void)updateCacheWithShouldUpdateMetadata:(bool)updateMetadata
+{
   dispatch_async(GameFileCacheQueue(), ^{
     ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
-    std::vector<std::string> scanPaths{ FoundationToCppString(softwareFolder) };
+    std::vector<std::string> scanPaths{FoundationToCppString(softwareFolder)};
     bool cacheUpdated = self->_cache->Update(UICommon::FindAllGamePaths(AsViews(scanPaths), true));
-    if (updateMetadata) {
+    if (updateMetadata)
+    {
       cacheUpdated |= self->_cache->UpdateAdditionalMetadata();
     }
-    if (cacheUpdated) {
+    if (cacheUpdated)
+    {
       self->_cache->Save();
     }
     [self publishSnapshot];
   });
 }
 
-- (void)rescan {
+- (void)rescan
+{
   dispatch_async(GameFileCacheQueue(), ^{
     ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
     // Only scan local folders during rescan - don't preserve old remote URLs
     // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
-    std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
+    std::vector<std::string> localRoots{FoundationToCppString(softwareFolder)};
     std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
-    DOLDebugLog(@"CACHE MGR: rescan() - only using %lu local paths (not preserving old remote URLs)", (unsigned long)all.size());
+    DOLDebugLog(
+        @"CACHE MGR: rescan() - only using %lu local paths (not preserving old remote URLs)",
+        (unsigned long)all.size());
     bool updated = self->_cache->Update(all);
-    if (updated) {
+    if (updated)
+    {
       self->_cache->Save();
     }
     [self publishSnapshot];
   });
 }
 
-- (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
+- (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler
+{
   dispatch_async(GameFileCacheQueue(), ^{
     ProcessOrphanedArchivesBeforeRescan();
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Only scan local folders - don't preserve old remote URLs during refresh
     // Fresh remote URLs should come from WebDAV sources via updateWithExtraPaths
-    std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
+    std::vector<std::string> localRoots{FoundationToCppString(softwareFolder)};
     std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
 
-    DOLDebugLog(@"CACHE MGR: rescanAndFetchMetadata() - only using %lu local paths (not preserving old remote URLs)", (unsigned long)all.size());
+    DOLDebugLog(@"CACHE MGR: rescanAndFetchMetadata() - only using %lu local paths (not preserving "
+                @"old remote URLs)",
+                (unsigned long)all.size());
 
     bool updated = false;
-    @try {
+    @try
+    {
       updated = self->_cache->Update(all);
-      try {
+      try
+      {
         updated |= self->_cache->UpdateAdditionalMetadata();
-      } catch (const std::exception& e) {
-        NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s -- attempting cache rebuild", e.what());
+      }
+      catch (const std::exception& e)
+      {
+        NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s -- attempting cache "
+              @"rebuild",
+              e.what());
         // One-shot rebuild on metadata failure
         delete self->_cache;
         self->_cache = new UICommon::GameFileCache();
         bool rebuiltUpdated = self->_cache->Update(all);
-        try { rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata(); }
-        catch (...) { NSLog(@"GameFileCache metadata failed again after rebuild"); }
+        try
+        {
+          rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata();
+        }
+        catch (...)
+        {
+          NSLog(@"GameFileCache metadata failed again after rebuild");
+        }
         updated |= rebuiltUpdated;
-      } catch (...) {
-        NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception -- attempting cache rebuild");
+      }
+      catch (...)
+      {
+        NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception -- attempting cache "
+              @"rebuild");
         delete self->_cache;
         self->_cache = new UICommon::GameFileCache();
         bool rebuiltUpdated = self->_cache->Update(all);
-        try { rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata(); }
-        catch (...) { NSLog(@"GameFileCache metadata failed again after rebuild"); }
+        try
+        {
+          rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata();
+        }
+        catch (...)
+        {
+          NSLog(@"GameFileCache metadata failed again after rebuild");
+        }
         updated |= rebuiltUpdated;
       }
-    } @catch (NSException* ex) {
+    }
+    @catch (NSException* ex)
+    {
       NSLog(@"GameFileCache rescan exception: %@", ex);
     }
 
-    if (updated) {
+    if (updated)
+    {
       self->_cache->Save();
     }
     [self publishSnapshot];
 
-    if (completion_handler) {
+    if (completion_handler)
+    {
       completion_handler();
     }
   });
 }
 
-- (void)rescanLocalAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler {
+- (void)rescanLocalAndFetchMetadataWithCompletionHandler:(nullable void (^)())completion_handler
+{
   dispatch_async(GameFileCacheQueue(), ^{
-    [DOLSentryTelemetryBridge traceSyncWithName:@"library.metadata_fetch"
-                                      operation:@"library.metadata_fetch"
-                                           tags:@{@"source": @"local_remote"}
-                                           work:^{
-    ProcessOrphanedArchivesBeforeRescan();
-    NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
+    [DOLSentryTelemetryBridge
+        traceSyncWithName:@"library.metadata_fetch"
+                operation:@"library.metadata_fetch"
+                     tags:@{@"source" : @"local_remote"}
+                     work:^{
+                       ProcessOrphanedArchivesBeforeRescan();
+                       NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
-    // During refresh: preserve existing remote URLs and only add/update local files
-    // This provides better UX - remote files stay visible until WebDAV updates arrive
-    NSMutableArray<NSString*>* remoteUrls = [[NSMutableArray alloc] init];
-    self->_cache->ForEach([remoteUrls](const std::shared_ptr<const UICommon::GameFile>& game) {
-      std::string path = game->GetFilePath();
-      if (path.empty()) {
-        DOLDebugLog(@"CACHE MGR: SKIPPED empty path from cached GameFile");
-        return;
-      }
-      NSString* pathStr = [NSString stringWithUTF8String:path.c_str()];
-      if ([pathStr hasPrefix:@"http://"] || [pathStr hasPrefix:@"https://"] ||
-          [pathStr hasPrefix:@"webdav://"] || [pathStr hasPrefix:@"webdavs://"]) {
-        [remoteUrls addObject:pathStr];
-      }
-    });
+                       // During refresh: preserve existing remote URLs and only add/update local
+                       // files This provides better UX - remote files stay visible until WebDAV
+                       // updates arrive
+                       NSMutableArray<NSString*>* remoteUrls = [[NSMutableArray alloc] init];
+                       self->_cache->ForEach(
+                           [remoteUrls](const std::shared_ptr<const UICommon::GameFile>& game) {
+                             std::string path = game->GetFilePath();
+                             if (path.empty())
+                             {
+                               DOLDebugLog(@"CACHE MGR: SKIPPED empty path from cached GameFile");
+                               return;
+                             }
+                             NSString* pathStr = [NSString stringWithUTF8String:path.c_str()];
+                             if ([pathStr hasPrefix:@"http://"] ||
+                                 [pathStr hasPrefix:@"https://"] ||
+                                 [pathStr hasPrefix:@"webdav://"] ||
+                                 [pathStr hasPrefix:@"webdavs://"])
+                             {
+                               [remoteUrls addObject:pathStr];
+                             }
+                           });
 
-    // Scan local folders
-    std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
-    std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
+                       // Scan local folders
+                       std::vector<std::string> localRoots{FoundationToCppString(softwareFolder)};
+                       std::vector<std::string> all =
+                           UICommon::FindAllGamePaths(AsViews(localRoots), true);
 
-    // Preserve existing remote URLs during refresh for better UX
-    for (NSString* remoteUrl in remoteUrls) {
-      if (remoteUrl.length > 0) {
-        all.push_back(FoundationToCppString(remoteUrl));
-      } else {
-        DOLDebugLog(@"CACHE MGR: SKIPPED empty remote URL from cache");
-      }
-    }
+                       // Preserve existing remote URLs during refresh for better UX
+                       for (NSString* remoteUrl in remoteUrls)
+                       {
+                         if (remoteUrl.length > 0)
+                         {
+                           all.push_back(FoundationToCppString(remoteUrl));
+                         }
+                         else
+                         {
+                           DOLDebugLog(@"CACHE MGR: SKIPPED empty remote URL from cache");
+                         }
+                       }
 
-    DOLDebugLog(@"CACHE MGR: rescanLocalAndFetchMetadata() - using %lu local paths + %lu preserved remote URLs",
-                (unsigned long)(all.size() - remoteUrls.count), (unsigned long)remoteUrls.count);
+                       DOLDebugLog(@"CACHE MGR: rescanLocalAndFetchMetadata() - using %lu local "
+                                   @"paths + %lu preserved remote URLs",
+                                   (unsigned long)(all.size() - remoteUrls.count),
+                                   (unsigned long)remoteUrls.count);
 
-    bool updated = false;
-    @try {
-      updated = self->_cache->Update(all);
-      try {
-        updated |= self->_cache->UpdateAdditionalMetadata();
-      } catch (const std::exception& e) {
-        NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s -- attempting cache rebuild", e.what());
-        delete self->_cache;
-        self->_cache = new UICommon::GameFileCache();
-        bool rebuiltUpdated = self->_cache->Update(all);
-        try { rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata(); }
-        catch (...) { NSLog(@"GameFileCache metadata failed again after rebuild"); }
-        updated |= rebuiltUpdated;
-      } catch (...) {
-        NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception -- attempting cache rebuild");
-        delete self->_cache;
-        self->_cache = new UICommon::GameFileCache();
-        bool rebuiltUpdated = self->_cache->Update(all);
-        try { rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata(); }
-        catch (...) { NSLog(@"GameFileCache metadata failed again after rebuild"); }
-        updated |= rebuiltUpdated;
-      }
-    } @catch (NSException* ex) {
-      NSLog(@"GameFileCache rescanLocal exception: %@", ex);
-    }
+                       bool updated = false;
+                       @try
+                       {
+                         updated = self->_cache->Update(all);
+                         try
+                         {
+                           updated |= self->_cache->UpdateAdditionalMetadata();
+                         }
+                         catch (const std::exception& e)
+                         {
+                           NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s -- "
+                                 @"attempting cache rebuild",
+                                 e.what());
+                           delete self->_cache;
+                           self->_cache = new UICommon::GameFileCache();
+                           bool rebuiltUpdated = self->_cache->Update(all);
+                           try
+                           {
+                             rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata();
+                           }
+                           catch (...)
+                           {
+                             NSLog(@"GameFileCache metadata failed again after rebuild");
+                           }
+                           updated |= rebuiltUpdated;
+                         }
+                         catch (...)
+                         {
+                           NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception -- "
+                                 @"attempting cache rebuild");
+                           delete self->_cache;
+                           self->_cache = new UICommon::GameFileCache();
+                           bool rebuiltUpdated = self->_cache->Update(all);
+                           try
+                           {
+                             rebuiltUpdated |= self->_cache->UpdateAdditionalMetadata();
+                           }
+                           catch (...)
+                           {
+                             NSLog(@"GameFileCache metadata failed again after rebuild");
+                           }
+                           updated |= rebuiltUpdated;
+                         }
+                       }
+                       @catch (NSException* ex)
+                       {
+                         NSLog(@"GameFileCache rescanLocal exception: %@", ex);
+                       }
 
-    if (updated) {
-      self->_cache->Save();
-    }
-    [self publishSnapshot];
+                       if (updated)
+                       {
+                         self->_cache->Save();
+                       }
+                       [self publishSnapshot];
 
-    if (completion_handler) {
-      completion_handler();
-    }
-    }];
+                       if (completion_handler)
+                       {
+                         completion_handler();
+                       }
+                     }];
   });
 }
 
-- (NSArray<GameFilePtrWrapper*>*)getGames {
+- (NSArray<GameFilePtrWrapper*>*)getGames
+{
   NSMutableArray<GameFilePtrWrapper*>* array = [[NSMutableArray alloc] init];
-  for (const std::shared_ptr<const UICommon::GameFile>& game : [self publishedSnapshot]) {
+  for (const std::shared_ptr<const UICommon::GameFile>& game : [self publishedSnapshot])
+  {
     GameFilePtrWrapper* wrapper = [[GameFilePtrWrapper alloc] init];
     wrapper.gameFile = game;
     [array addObject:wrapper];
@@ -370,14 +471,16 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
   return array;
 }
 
-- (NSArray<TVGameItem*>*)currentGames {
+- (NSArray<TVGameItem*>*)currentGames
+{
   os_unfair_lock_lock(&self->_publishedLock);
   NSArray<TVGameItem*>* items = self->_publishedItems;
   os_unfair_lock_unlock(&self->_publishedLock);
   return items ?: @[];
 }
 
-- (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch {
+- (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch
+{
   [self updateWithExtraPaths:extraPaths fetchMetadata:fetch refreshingPath:nil];
 }
 
@@ -417,8 +520,10 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
                fetchMetadata:(BOOL)fetch
               refreshingPath:(nullable NSString*)refreshingPath
 {
-  DOLDebugLog(@"CACHE MGR: updateWithExtraPaths called with %lu extra paths", (unsigned long)extraPaths.count);
-  for (NSUInteger i = 0; i < extraPaths.count; i++) {
+  DOLDebugLog(@"CACHE MGR: updateWithExtraPaths called with %lu extra paths",
+              (unsigned long)extraPaths.count);
+  for (NSUInteger i = 0; i < extraPaths.count; i++)
+  {
     DOLDebugLog(@"CACHE MGR:   input[%lu]: %s", (unsigned long)i, [extraPaths[i] UTF8String]);
   }
 
@@ -428,15 +533,17 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
     NSString* softwareFolder = [UserFolderUtil getSoftwareFolder];
 
     // Expand only local folders via FindAllGamePaths
-    std::vector<std::string> localRoots{ FoundationToCppString(softwareFolder) };
+    std::vector<std::string> localRoots{FoundationToCppString(softwareFolder)};
     std::vector<std::string> all = UICommon::FindAllGamePaths(AsViews(localRoots), true);
     DOLDebugLog(@"CACHE MGR: Found %lu local paths", (unsigned long)all.size());
 
     // Filter and append only accessible remote URLs
     DOLDebugLog(@"CACHE MGR: Processing %lu extra paths", (unsigned long)extraPaths.count);
     NSUInteger acceptedCount = 0, rejectedCount = 0;
-    for (NSString* s in extraPaths) {
-      if (s.length == 0) {
+    for (NSString* s in extraPaths)
+    {
+      if (s.length == 0)
+      {
         DOLDebugLog(@"CACHE MGR: SKIPPED empty string");
         continue;
       }
@@ -444,32 +551,42 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
       DOLDebugLog(@"CACHE MGR: Processing path: %s", [s UTF8String]);
 
       // Check if it's a remote URL
-      if ([s hasPrefix:@"http://"] || [s hasPrefix:@"https://"] ||
-          [s hasPrefix:@"webdav://"] || [s hasPrefix:@"webdavs://"]) {
+      if ([s hasPrefix:@"http://"] || [s hasPrefix:@"https://"] || [s hasPrefix:@"webdav://"] ||
+          [s hasPrefix:@"webdavs://"])
+      {
         // For remote URLs, do a quick accessibility check
         // Only add if we can create a basic URL object
         NSURL* url = [NSURL URLWithString:s];
-        if (url && url.host) {
+        if (url && url.host)
+        {
           DOLDebugLog(@"CACHE MGR: ACCEPTED remote URL: %s", [s UTF8String]);
           all.push_back(FoundationToCppString(s));
           acceptedCount++;
-        } else {
+        }
+        else
+        {
           DOLDebugLog(@"CACHE MGR: REJECTED remote URL (invalid): %s", [s UTF8String]);
           rejectedCount++;
         }
-      } else {
+      }
+      else
+      {
         DOLDebugLog(@"CACHE MGR: ACCEPTED local path: %s", [s UTF8String]);
         // Local files - add as-is
         all.push_back(FoundationToCppString(s));
         acceptedCount++;
       }
     }
-    DOLDebugLog(@"CACHE MGR: *** FILTER RESULTS: %lu accepted, %lu rejected ***", (unsigned long)acceptedCount, (unsigned long)rejectedCount);
+    DOLDebugLog(@"CACHE MGR: *** FILTER RESULTS: %lu accepted, %lu rejected ***",
+                (unsigned long)acceptedCount, (unsigned long)rejectedCount);
 
     bool updated = false;
-    @try {
-      DOLDebugLog(@"CACHE MGR: *** CALLING C++ GameFileCache::Update with %lu TOTAL paths ***", (unsigned long)all.size());
-      for (size_t i = 0; i < all.size(); ++i) {
+    @try
+    {
+      DOLDebugLog(@"CACHE MGR: *** CALLING C++ GameFileCache::Update with %lu TOTAL paths ***",
+                  (unsigned long)all.size());
+      for (size_t i = 0; i < all.size(); ++i)
+      {
         DOLDebugLog(@"CACHE MGR:   final[%zu]: %s", i, all[i].c_str());
       }
 
@@ -490,32 +607,44 @@ static void ProcessOrphanedArchivesBeforeRescan(void) {
       updated |= self->_cache->Update(all);
       DOLDebugLog(@"CACHE MGR: C++ Update returned %s", updated ? "true" : "false");
 
-      if (fetch) {
-        try {
+      if (fetch)
+      {
+        try
+        {
           updated |= self->_cache->UpdateAdditionalMetadata();
-        } catch (const std::exception& e) {
+        }
+        catch (const std::exception& e)
+        {
           NSLog(@"GameFileCache UpdateAdditionalMetadata std::exception: %s", e.what());
-        } catch (...) {
+        }
+        catch (...)
+        {
           NSLog(@"GameFileCache UpdateAdditionalMetadata unknown exception");
         }
       }
-      if (updated) {
+      if (updated)
+      {
         self->_cache->Save();
         DOLDebugLog(@"GameFileCacheManager: Cache saved");
       }
-    } @catch (NSException* exception) {
+    }
+    @catch (NSException* exception)
+    {
       NSLog(@"GameFileCache update failed: %@", exception);
     }
     [self publishSnapshot];
-    if (updated) {
+    if (updated)
+    {
       dispatch_async(dispatch_get_main_queue(), ^{
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"RemoteLibraryUpdated" object:nil];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"RemoteLibraryUpdated"
+                                                            object:nil];
       });
     }
   });
 }
 
-- (void)enqueueOnCacheQueueForTesting:(void (^)(void))block {
+- (void)enqueueOnCacheQueueForTesting:(void (^)(void))block
+{
   dispatch_async(GameFileCacheQueue(), block);
 }
 

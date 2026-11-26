@@ -1,8 +1,8 @@
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import Foundation
 import Combine
+import Foundation
 
 /// Shared UI state and the single manual-write admission boundary. Use from the main thread.
 final class PerformanceControlsController: ObservableObject {
@@ -35,7 +35,7 @@ final class PerformanceControlsController: ObservableObject {
     currentSession = sessionIdentifier()
     state = Self.manualSnapshot(read())
     // A reopened surface may still be waiting for the previous CurrentRun clear.
-    if !state.adaptiveClock && (state.cpuOverride == .auto || state.viOverride == .auto) {
+    if !state.adaptiveClock, state.cpuOverride == .auto || state.viOverride == .auto {
       reconciliationTarget = false
       scheduleReconciliation()
     }
@@ -49,7 +49,9 @@ final class PerformanceControlsController: ObservableObject {
   }
 
   func apply(_ change: PerformanceControlChange) {
-    guard currentSession == sessionIdentifier() else { stopRefreshing(); return }
+    guard currentSession == sessionIdentifier() else { stopRefreshing()
+      return
+    }
     let accepted: PerformanceControlChange
     switch change {
     case .cpuEnabled(let value):

@@ -8,7 +8,6 @@ import XCTest
 /// `NoControllerNotice` (design A4, plan call 2): when the tvOS "No controller connected" notice
 /// shows, which devices count as a gameplay pad, and which launches never show it.
 final class NoControllerNoticeTests: XCTestCase {
-
   private func inputs(
     secondsRunning: TimeInterval? = 3, alreadyShown: Bool = false, pad: Bool = false, overlay: Bool = false,
     harness: Bool = false
