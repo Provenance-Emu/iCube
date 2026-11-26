@@ -117,6 +117,7 @@ template <typename T>
 static DOLLayerGetterBlock MakeLayerGetter(const Config::Info<T>& info)
 {
   const Config::Location location = info.GetLocation();
+  // clang-format off: RemoveSemicolon takes the `;` that ends a returned block literal.
   return ^id _Nullable(Config::LayerType layer)
   {
     std::shared_ptr<Config::Layer> layerPtr = Config::GetLayer(layer);
@@ -126,7 +127,8 @@ static DOLLayerGetterBlock MakeLayerGetter(const Config::Info<T>& info)
     if (!value)
       return nil;
     return BoxConfigValue<T>(*value);
-  }
+  };
+  // clang-format on
 }
 
 // Deletes `location` from Base, PerGame (Config::LayerType::LocalGame), and CurrentRun,
@@ -167,6 +169,7 @@ static int AnisotropyExponentToSamples(int exponent)
 static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter()
 {
   const Config::Location location = Config::GFX_ENHANCE_MAX_ANISOTROPY.GetLocation();
+  // clang-format off: RemoveSemicolon takes the `;` that ends a returned block literal.
   return ^id _Nullable(Config::LayerType layer)
   {
     std::shared_ptr<Config::Layer> layerPtr = Config::GetLayer(layer);
@@ -176,7 +179,8 @@ static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter()
     if (!raw)
       return nil;
     return @(AnisotropyExponentToSamples(static_cast<int>(*raw)));
-  }
+  };
+  // clang-format on
 }
 
 // MARK: - Key table
