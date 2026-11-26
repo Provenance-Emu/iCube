@@ -1073,8 +1073,6 @@ static bool HasCurrentRunLayer()
 + (void)setGfxHackBboxEnable:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_BBOX_ENABLE, (bool)enabled); }
 + (NSInteger)gfxBboxSyncMode { return (NSInteger)Config::Get(Config::GFX_BBOX_SYNC_MODE); }
 + (void)setGfxBboxSyncMode:(NSInteger)mode { Config::SetBaseOrCurrent(Config::GFX_BBOX_SYNC_MODE, (int)mode); }
-+ (BOOL)gfxHackGpuEfbPeekResolve { return Config::Get(Config::GFX_HACK_GPU_EFB_PEEK_RESOLVE); }
-+ (void)setGfxHackGpuEfbPeekResolve:(BOOL)enabled { Config::SetBaseOrCurrent(Config::GFX_HACK_GPU_EFB_PEEK_RESOLVE, (bool)enabled); }
 + (BOOL)gfxBackendSupportsBoundingBox
 {
   // iCube ships Metal on Apple platforms; MTLUtil sets bSupportsBBox = true.

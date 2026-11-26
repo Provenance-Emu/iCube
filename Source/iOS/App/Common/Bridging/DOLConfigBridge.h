@@ -488,9 +488,6 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 // iCube bbox latch: 0=Latched (perf default, 1-frame-stale snapshot), 1=Force Sync (exact, stalls CPU)
 + (NSInteger)gfxBboxSyncMode;
 + (void)setGfxBboxSyncMode:(NSInteger)mode;
-// iCube experimental: resolve EFB peek reads on the GPU instead of CPU readback
-+ (BOOL)gfxHackGpuEfbPeekResolve;
-+ (void)setGfxHackGpuEfbPeekResolve:(BOOL)enabled;
 + (BOOL)gfxBackendSupportsBoundingBox;
 + (NSInteger)gfxSafeTextureCacheColorSamples;
 + (void)setGfxSafeTextureCacheColorSamples:(NSInteger)samples;
