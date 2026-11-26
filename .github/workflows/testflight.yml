@@ -19,8 +19,8 @@ on:
         required: true
         default: all
         type: choice
-        # `mac` is the Mac Catalyst build. It is opt-in: `all` and the nightly stay iOS + tvOS,
-        # because a cold Catalyst core build adds about 40 minutes.
+        # `mac` is the Mac Catalyst build. `all` and the nightly include it; a cold Catalyst
+        # core build adds about 40 minutes.
         options: [all, ios, tvos, mac]
       force:
         description: 'Upload even if develop has not moved since the last nightly'
@@ -52,7 +52,7 @@ jobs:
             ios)  M='["ios"]' ;;
             tvos) M='["tvos"]' ;;
             mac)  M='["mac"]' ;;
-            *)    M='["ios","tvos"]' ;;
+            *)    M='["ios","tvos","mac"]' ;;
           esac
           echo "matrix=$M" >> "$GITHUB_OUTPUT"
 
@@ -137,6 +137,10 @@ jobs:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    # The Mac leg is new to the nightly. Until it has a record of passing, its failure must
+    # not stop iOS and tvOS from shipping or the nightly marker from moving; a Mac-only run
+    # (platform: mac) still fails loudly.
+    continue-on-error: ${{ matrix.platform == 'mac' && inputs.platform != 'mac' }}
     # Includes up to 180 min queued behind another app's release (the lockf wait below).
     timeout-minutes: 480
     env:
