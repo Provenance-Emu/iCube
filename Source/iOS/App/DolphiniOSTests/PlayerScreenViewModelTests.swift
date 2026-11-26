@@ -51,6 +51,31 @@ final class PlayerScreenViewModelTests: XCTestCase {
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))
   }
 
+  // MARK: Menu
+
+  @MainActor
+  func test_menuModel_isRebuiltOnlyWhenTheShownStateChanges() {
+    let (reader, io) = boundGameCube()
+    let model = make(reader, io)
+    model.reload()
+
+    _ = model.menuModel(platform: .ios)
+    XCTAssertEqual(model.menuBuildCount, 1)
+
+    // What `body` also observes, but the menu does not show.
+    model.saveName = "Mine"
+    model.prompt = .confirmClearAll
+    _ = model.menuModel(platform: .ios)
+    XCTAssertEqual(model.menuBuildCount, 1, "a prompt or a keystroke must not rebuild every row")
+
+    model.actions.toggleAdvanced()
+    _ = model.menuModel(platform: .ios)
+    XCTAssertEqual(model.menuBuildCount, 2, "a state change rebuilds")
+
+    _ = model.menuModel(platform: .tvos)
+    XCTAssertEqual(model.menuBuildCount, 3, "the other platform has its own rows")
+  }
+
   // MARK: Snapshot
 
   @MainActor
