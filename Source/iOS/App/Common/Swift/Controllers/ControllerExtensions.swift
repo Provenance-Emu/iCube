@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import GameController
+import GamepadKit
 
 // Track per-controller state for touchpad-based Wii IR drag mode
 private final class TouchpadIRState {
@@ -496,7 +497,7 @@ func installExtraInputHandlers(_ c: GCController) {
     // A pad adapted from its physical profile (PhysicalProfileController): its Home button is
     // the pause button, like the PlayStation / Xbox home buttons above. Start is `buttonMenu`
     // and reaches the game (GameCube Start / Wii +) through the core's own binding of the pad.
-    if let synthesized = eg as? SynthesizedGamepad {
+    if let synthesized = eg as? SynthesizedExtendedGamepad {
       synthesized.buttonHome?.pressedChangedHandler = { _, _, pressed in
         guard pressed else { return }
         presentPauseMenu("synthesized.buttonHome")
@@ -506,9 +507,12 @@ func installExtraInputHandlers(_ c: GCController) {
     // pauses from Select + Start held together. The wrapper detects the chord on the physical
     // elements; Start and Select alone still reach the game, and its `buttonOptions` stays nil
     // so `installPauseMenuHandlers` gives Select no pause route of its own. A wrapped pad with
-    // no Home, Options or chord pauses from Start (`PhysicalProfileController.PauseTrigger`).
+    // no Home, Options or chord pauses from Start (`PausePolicy.homeSnesChordOrStart`).
     if let wrapper = c as? PhysicalProfileController {
-      wrapper.pauseRequestHandler = { reason in presentPauseMenu(reason) }
+      wrapper.onPauseRequested = { trigger in
+        guard let reason = ICubePhysicalProfile.pauseReason(for: trigger) else { return }
+        presentPauseMenu(reason)
+      }
     }
   }
 

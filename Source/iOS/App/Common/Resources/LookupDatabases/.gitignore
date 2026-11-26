@@ -1,0 +1,3 @@
+# Filled at build time by Scripts/fetch-lookup-databases.sh from databases.lock.json.
+*
+!.gitignore

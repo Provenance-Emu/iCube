@@ -6,6 +6,7 @@ import EmulatorContentClient
 import Foundation
 import PVContinuity
 import PVRemoteLibrary
+import PVSystems
 
 struct EmulationServer: Codable, Equatable, Identifiable, Sendable {
   let origin: URL
@@ -142,7 +143,7 @@ actor EmulationServerLibrary {
   private static let pageSize = 100
   /// The server stores covers up to this size.
   private static let maximumCoverBytes = 8_000_000
-  private static let systemIDs = ["com.provenance.gamecube", "com.provenance.wii"]
+  private static let systemIDs = [SystemIdentifier.GameCube.rawValue, SystemIdentifier.Wii.rawValue]
 
   /// Never send a configured server's bearer token to a redirected URL.
   private final class NoRedirects: NSObject, URLSessionTaskDelegate, Sendable {
@@ -653,9 +654,9 @@ actor EmulationServerLibrary {
   }
 
   private static func platform(_ value: String?) -> String? {
-    switch value {
-    case "com.provenance.gamecube": return "gc"
-    case "com.provenance.wii": return "wii"
+    switch value.flatMap(SystemIdentifier.init(rawValue:)) {
+    case .GameCube: return "gc"
+    case .Wii: return "wii"
     default: return nil
     }
   }

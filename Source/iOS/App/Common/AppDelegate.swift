@@ -15,6 +15,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     #endif
     // Where TV bezels are stored and logged, before the first game resolves one.
     ICubeBezels.configure()
+    // Where the shared lookup databases are, before the first game is looked up.
+    LookupDatabaseSetup.configure()
     MotionSettings.registerDefaults()
     DSUSettings.registerDefaults()
 

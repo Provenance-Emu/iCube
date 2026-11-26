@@ -229,6 +229,16 @@ let preScripts: [TargetScript] = [
         name: "Transfer Core Strings to Storyboard Strings",
         basedOnDependencyAnalysis: false
     ),
+    // Download (once; cached by sha256 in ~/Library/Caches/PVLookupDatabases) and verify the
+    // PVLookup databases pinned in databases.lock.json, before the resources phase copies
+    // Common/Resources/LookupDatabases into the app.
+    .pre(
+        script: """
+        /bin/bash "${SRCROOT}/Scripts/fetch-lookup-databases.sh" "${SRCROOT}/databases.lock.json" "${SRCROOT}/Common/Resources/LookupDatabases"
+        """,
+        name: "Fetch Lookup Databases",
+        basedOnDependencyAnalysis: false
+    ),
 ]
 
 // MARK: - Sentry dSYM upload (post-compile)
@@ -366,6 +376,9 @@ let iCube = Target.target(
         .folderReference(path: "../../../Data/Sys"),
         .folderReference(path: "Project/Assets/compiled_shaders"),
         .folderReference(path: "Common/Resources/WikiContent"),
+        // Lookup databases, fetched by the "Fetch Lookup Databases" phase (gitignored contents).
+        // LookupDatabaseSetup points PVLookup at this folder at launch.
+        .folderReference(path: "Common/Resources/LookupDatabases"),
     ],
     entitlements: nil, // per-config via CODE_SIGN_ENTITLEMENTS in appConfigs
     scripts: preScripts + [uploadDsymScript, macOutliveWindowScript],
@@ -387,10 +400,11 @@ let iCube = Target.target(
         .package(product: "EmulatorContentClient"),
         .package(product: "RomMClient"),
         // One model of a game on a server, a RomM share or a nearby device, and the cover cache
-        // every remote library shares. PVSystems names the system each of those games is for.
+        // every remote library shares.
         .package(product: "PVRemoteLibrary"),
-        .package(product: "PVSystems"),
         .package(product: "PVHelp"),
+        // Synthesized extended gamepad for pads the system exposes without one.
+        .package(product: "GamepadKit"),
         // Streaming IPS/BPS/UPS/PPF/xdelta3 patcher behind the disc patching flow.
         .package(product: "PVPatchEngine"),
         // WS-5 CloudKit sync. PVCloudSync depends on PVSyncRules (the shared
@@ -401,6 +415,10 @@ let iCube = Target.target(
         .package(product: "PVCloudSync"),
         .package(product: "PVLibraryMetadata"),
         .package(product: "PVLibrarySnapshot"),
+        // SystemIdentifier for GameCube and Wii, and the metadata/artwork lookup keyed on it
+        // (libretrodb by game ID). See databases.lock.json and the "Fetch Lookup Databases" phase.
+        .package(product: "PVSystems"),
+        .package(product: "PVLookup"),
         .package(product: "Zip"),
         // Shared skin models, catalog, installation and format 2 rendering.
         .package(product: "SkinKitCore", condition: .when([.ios, .catalyst])),
@@ -613,12 +631,15 @@ let iCubeTests = Target.target(
         .package(product: "PVLibrarySnapshot"),
         // RemoteLibrarySourceTests reads `LibraryGame` values and drives the shared cover cache.
         .package(product: "PVRemoteLibrary"),
-        .package(product: "PVSystems"),
         .package(product: "PVHelp"),
+        .package(product: "GamepadKit"),
         // Cloud safety tests exercise the coordinator with real scanner/index types.
         .package(product: "PVCloudSync"),
         .package(product: "PVLibraryMetadata"),
         .package(product: "PVSyncRules"),
+        // GameLookupTests builds `ROMMetadata` values and checks `SystemIdentifier` mappings.
+        .package(product: "PVSystems"),
+        .package(product: "PVLookup"),
         // SkinLibraryTests zips the skin fixture with `Zip.zipFiles`.
         .package(product: "Zip"),
         // The skin tests decode catalog entries and drive the store installer directly.
@@ -875,13 +896,20 @@ let project = Project(
         .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("f779275a927e5140ac8da3e95fef00073b3421fd")),
         .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.5")),
         .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.1")),
-        // Shared with Provenance and iFly; 0.x: a minor may break. Resolves to prebuilt frameworks,
-        // as does the PVSystems it is built on.
+        // Shared with Provenance and iFly; 0.x: a minor may break. Resolves to prebuilt frameworks.
         .remote(url: "https://github.com/Provenance-Emu/PVRemoteLibrary.git", requirement: .upToNextMinor(from: "0.3.1")),
-        .remote(url: "https://github.com/Provenance-Emu/PVSystems.git", requirement: .upToNextMajor(from: "1.0.3")),
         .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.4")),
         .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.2")),
+        // Shared with Provenance and iFly; iCube's choices are in
+        // Common/Swift/Controllers/PhysicalProfile/ICubePhysicalProfile.swift.
+        .remote(url: "https://github.com/Provenance-Emu/GamepadKit.git", requirement: .upToNextMinor(from: "0.3.0")),
         .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.2")),
+        // SystemIdentifier and per-system metadata, and game metadata + artwork lookup keyed on it.
+        // Shared with Provenance and iFly; both resolve to prebuilt frameworks. PVLookup ships no
+        // database bytes: see databases.lock.json and the "Fetch Lookup Databases" phase. Its
+        // SQLite.swift and ZIPFoundation come from Provenance-Emu/PVDependencies, like SkinKit's.
+        .remote(url: "https://github.com/Provenance-Emu/PVSystems.git", requirement: .upToNextMajor(from: "1.0.3")),
+        .remote(url: "https://github.com/Provenance-Emu/PVLookup.git", requirement: .upToNextMajor(from: "1.1.0")),
         // Home screen game list widgets, shared with Provenance and iFly. 0.x: a minor may break.
         .remote(url: "https://github.com/Provenance-Emu/PVWidgets.git", requirement: .upToNextMinor(from: "0.1.0")),
         // Keep this wrapper local: Xcode rejects PLzmaSDK unsafe build flags
