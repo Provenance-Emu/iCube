@@ -6056,3 +6056,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "One download brings all of these." = "One download brings all of these.";
 "%lld VARIANTS" = "%lld VARIANTS";
 "%lld variants" = "%lld variants";
+"Publisher" = "Publisher";
+"Genre" = "Genre";

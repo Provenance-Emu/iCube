@@ -7,6 +7,7 @@ import EmulatorContentClient
 import Foundation
 import PVCloudSync
 import PVSyncRules
+import PVSystems
 
 struct EmulationServerBackupTarget: Codable, Equatable {
   let server: EmulationServer
@@ -329,7 +330,7 @@ enum EmulationServerBackupSetup {
   }
 
   static func createItem(server: EmulationServer, token: String, libraryID: String, key: String) async throws -> Item {
-    let draft = ItemDraft(libraryId: libraryID, systemIdentifier: "com.provenance.gamecube", title: "iCube Backups")
+    let draft = ItemDraft(libraryId: libraryID, systemIdentifier: SystemIdentifier.GameCube.rawValue, title: "iCube Backups")
     return try await send(server: server, token: token, path: "items", body: JSONEncoder().encode(draft), key: key)
   }
 

@@ -3,6 +3,7 @@
 
 import CoreGraphics
 import Foundation
+import PVSystems
 import SkinKitBezels
 
 /// iCube's side of the shared TV bezels (SkinKit `docs/bezels.md`): a TV drawn around the game picture in
@@ -14,8 +15,8 @@ import SkinKitBezels
 /// screen; nothing extra is drawn on the GPU.
 enum ICubeBezels {
   /// `SystemIdentifier` raw values (PVSystems): the bundled TVs and The Bezel Project's table are keyed by them.
-  static let gameCubeSystemID = "com.provenance.gamecube"
-  static let wiiSystemID = "com.provenance.wii"
+  static let gameCubeSystemID = SystemIdentifier.GameCube.rawValue
+  static let wiiSystemID = SystemIdentifier.Wii.rawValue
 
   /// Before every stored choice's key, in the app's `snake_case` defaults style (`bezel_chosenBezel`, ...).
   static let settingsKeyPrefix = "bezel_"

@@ -25,6 +25,9 @@
 #import "TVWiiSystemUpdateViewController.h"
 #endif
 
+#include "Common/FileUtil.h"
+#import "FoundationStringUtil.h"
+
 @implementation TVLibraryBridge
 
 #ifdef DEBUG
@@ -232,6 +235,16 @@ static NSArray<TVGameItem*>* DOLScreenshotDemoGames(void) {
 + (void)refreshLocalGameAtPath:(NSString*)path
 {
   [[GameFileCacheManager sharedManager] refreshLocalGameAtPath:path];
+}
+
++ (NSString*)coverCacheDirectory
+{
+  return CppToFoundationString(File::GetUserPath(D_COVERCACHE_IDX));
+}
+
++ (void)reloadCovers
+{
+  [[GameFileCacheManager sharedManager] refreshAdditionalMetadata];
 }
 
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch {
