@@ -1,9 +1,10 @@
 import GameController
+import GamepadKit
+import XCTest
+@testable import iCube
 #if os(iOS)
 import UIKit
 #endif
-import XCTest
-@testable import iCube
 
 @MainActor
 final class QuickStateInputSamplingTests: XCTestCase {

@@ -1,12 +1,45 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 import GameController
+import GamepadKit
 import XCTest
 @testable import iCube
 
-/// The physical-profile adapter for pads the system exposes without an extended gamepad:
-/// the shared C++ mapping through `PhysicalProfileBridge`, and the synthesized elements.
+/// The physical-profile adapter for pads the system exposes without an extended gamepad: the
+/// core's C++ mapping through `PhysicalProfileBridge`, and iCube's GamepadKit configuration
+/// (`PhysicalProfileConfiguration.iCube`). The synthesized elements, the Select + Start tracker
+/// and the wrapper itself are tested in the package.
 final class PhysicalProfileMappingTests: XCTestCase {
+  // MARK: What the wrapper asks the core and the configuration
+
+  /// What the core binds for the same pad (`PhysicalProfile::ResolveForPad`): a Switch Online pad
+  /// and a remote by name alone, any other pad also by position.
+  private static func resolveBindings(buttonNames: [String], directionNames: [String], axisNames: [String] = [],
+                                      vendorName: String?, productCategory: String?) -> [String: GamepadInput] {
+    ICubePhysicalProfile.inputs(PhysicalProfileBridge.bindings(
+      forVendorName: vendorName, productCategory: productCategory, buttonNames: buttonNames,
+      directionNames: directionNames, axisNames: axisNames))
+  }
+
+  /// By name alone, whatever the pad.
+  private static func resolveBindings(elementNames: [String], vendorName: String?,
+                                      productCategory: String?) -> [String: GamepadInput] {
+    let n64 = PhysicalProfileBridge.isN64Pad(withVendorName: vendorName, productCategory: productCategory)
+    return ICubePhysicalProfile.inputs(PhysicalProfileBridge.bindings(forElementNames: elementNames, isN64Pad: n64))
+  }
+
+  private static func shouldWrap(hasExtendedGamepad: Bool, hasMicroGamepad: Bool, isMenuRemote: Bool,
+                                 isSwitchOnlinePad: Bool, bindings: [String: GamepadInput]) -> Bool {
+    PhysicalProfileConfiguration.iCube.wrapPolicy.shouldWrap(WrapCandidate(
+      family: isSwitchOnlinePad ? .snes : .generic, productCategory: nil, hasExtendedGamepad: hasExtendedGamepad,
+      hasMicroGamepad: hasMicroGamepad, isRemote: isMenuRemote, bindings: bindings))
+  }
+
+  /// nil: the app's ordinary routes (Options when the pad has it, as the N64 pad's ZR).
+  private static func pauseTrigger(for bindings: [String: GamepadInput], isSnesPad: Bool) -> PauseTrigger? {
+    PhysicalProfileConfiguration.iCube.pausePolicy.trigger(forBindings: bindings, family: isSnesPad ? .snes : .generic)
+  }
+
   // MARK: Mapping
 
   private func bindings(_ names: [String], n64: Bool = false) -> [String: String] {
@@ -108,7 +141,7 @@ final class PhysicalProfileMappingTests: XCTestCase {
       "Left Trigger", "Right Trigger", "Button X", "Button Y", "Button Menu", "Button Options", "Button Home",
     ]
     for value in bindings(names, n64: true).values {
-      XCTAssertNotNil(SynthesizedInput(rawValue: value), "bridge returned '\(value)', which the Swift side does not know")
+      XCTAssertNotNil(GamepadInput(coreName: value), "bridge returned '\(value)', which the Swift side does not know")
     }
   }
 
@@ -126,7 +159,7 @@ final class PhysicalProfileMappingTests: XCTestCase {
   }
 
   func testSynthesizedGamepadReportsStickClicksOnlyWhenThePadHasThem() {
-    let gamepad = SynthesizedGamepad()
+    let gamepad = SynthesizedExtendedGamepad()
     XCTAssertNil(gamepad.leftThumbstickButton)
     XCTAssertNil(gamepad.rightThumbstickButton)
     gamepad.hasLeftThumbstickButton = true
@@ -134,14 +167,14 @@ final class PhysicalProfileMappingTests: XCTestCase {
     XCTAssertNil(gamepad.rightThumbstickButton)
     gamepad.hasRightThumbstickButton = true
     XCTAssertTrue(gamepad.rightThumbstickButton === gamepad.button(for: .rightThumbstickButton))
-    XCTAssertFalse(SynthesizedInput.leftThumbstickButton.isDirection)
+    XCTAssertFalse(GamepadInput.leftThumbstickButton.isDirection)
   }
 
   // MARK: Generic HID pads
 
   private func generic(buttons: [String], directions: [String], axes: [String] = [],
-                       category: String = "HID") -> [String: SynthesizedInput] {
-    PhysicalProfileController.resolveBindings(
+                       category: String = "HID") -> [String: GamepadInput] {
+    Self.resolveBindings(
       buttonNames: buttons, directionNames: directions, axisNames: axes, vendorName: nil, productCategory: category)
   }
 
@@ -244,7 +277,7 @@ final class PhysicalProfileMappingTests: XCTestCase {
     XCTAssertEqual(result["ZL"], .leftTrigger)
     XCTAssertEqual(result["ZR"], .rightTrigger)
 
-    let n64 = PhysicalProfileController.resolveBindings(
+    let n64 = Self.resolveBindings(
       buttonNames: ["A", "L", "R", "ZR"], directionNames: ["Direction Pad"], vendorName: "N64 Controller",
       productCategory: "HID")
     XCTAssertEqual(n64["L"], .leftTrigger)
@@ -290,9 +323,9 @@ final class PhysicalProfileMappingTests: XCTestCase {
 
   func testGenericPadWithNoMicroGamepadIsWrappedAndPausesFromOptions() {
     let result = generic(buttons: (1 ... 12).map { "Button \($0)" }, directions: ["Hat Switch"])
-    XCTAssertTrue(PhysicalProfileController.shouldWrap(
+    XCTAssertTrue(Self.shouldWrap(
       hasExtendedGamepad: false, hasMicroGamepad: false, isMenuRemote: false, isSwitchOnlinePad: false, bindings: result))
-    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: result, isSnesPad: false), .standard)
+    XCTAssertEqual(Self.pauseTrigger(for: result, isSnesPad: false), nil)
   }
 
   func testEveryGenericBridgeOutputIsASynthesizedInput() {
@@ -301,7 +334,7 @@ final class PhysicalProfileMappingTests: XCTestCase {
       directionNames: ["Hat Switch", "Stick 1", "Stick 2"], axisNames: [])
     XCTAssertEqual(raw.count, 15)
     for value in raw.values {
-      XCTAssertNotNil(SynthesizedInput(rawValue: value), "bridge returned '\(value)', which the Swift side does not know")
+      XCTAssertNotNil(GamepadInput(coreName: value), "bridge returned '\(value)', which the Swift side does not know")
     }
   }
 
@@ -376,8 +409,8 @@ final class PhysicalProfileMappingTests: XCTestCase {
     "Button Menu", "Button Options", "Direction Pad",
   ]
 
-  private func snesBindings() -> [String: SynthesizedInput] {
-    PhysicalProfileController.resolveBindings(
+  private func snesBindings() -> [String: GamepadInput] {
+    Self.resolveBindings(
       elementNames: snesElementNames, vendorName: "SNES Controller", productCategory: "Switch SNES Controller")
   }
 
@@ -411,7 +444,7 @@ final class PhysicalProfileMappingTests: XCTestCase {
   }
 
   func testSnesPadIsWrappedDespiteItsMicroGamepad() {
-    XCTAssertTrue(PhysicalProfileController.shouldWrap(
+    XCTAssertTrue(Self.shouldWrap(
       hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: false, isSwitchOnlinePad: true,
       bindings: snesBindings()))
   }
@@ -419,183 +452,164 @@ final class PhysicalProfileMappingTests: XCTestCase {
   func testWrapGateKeepsEveryOtherShapeAsItWas() {
     let bindings = snesBindings()
     // N64 pad on tvOS 17: no extended or micro gamepad.
-    XCTAssertTrue(PhysicalProfileController.shouldWrap(
+    XCTAssertTrue(Self.shouldWrap(
       hasExtendedGamepad: false, hasMicroGamepad: false, isMenuRemote: false, isSwitchOnlinePad: true, bindings: bindings))
     // Siri Remote: micro only, a remote. Its profile has a direction pad and Button A, so the
     // bindings alone would pass; a wrapper would turn it into a player.
-    let remote = PhysicalProfileController.resolveBindings(
+    let remote = Self.resolveBindings(
       elementNames: ["Direction Pad", "Button A", "Button X", "Button Menu"], vendorName: "Remote",
       productCategory: "Siri Remote (2nd Generation)")
     XCTAssertFalse(remote.isEmpty)
-    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+    XCTAssertFalse(Self.shouldWrap(
       hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: true, isSwitchOnlinePad: false, bindings: remote))
-    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+    XCTAssertFalse(Self.shouldWrap(
       hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: true, isSwitchOnlinePad: true, bindings: remote),
       "a remote is never wrapped")
     // Another micro-gamepad pad that is not a Switch Online pad keeps the system's profiles.
-    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+    XCTAssertFalse(Self.shouldWrap(
       hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: false, isSwitchOnlinePad: false, bindings: bindings))
     // An extended gamepad is never wrapped.
-    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+    XCTAssertFalse(Self.shouldWrap(
       hasExtendedGamepad: true, hasMicroGamepad: true, isMenuRemote: false, isSwitchOnlinePad: true, bindings: bindings))
     // Nothing usable to synthesize from.
-    XCTAssertFalse(PhysicalProfileController.shouldWrap(
+    XCTAssertFalse(Self.shouldWrap(
       hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: false, isSwitchOnlinePad: true, bindings: [:]))
   }
 
   // MARK: Pause trigger
 
   func testSnesPadPausesFromSelectAndStart() {
-    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: snesBindings(), isSnesPad: true), .selectStartChord)
+    XCTAssertEqual(Self.pauseTrigger(for: snesBindings(), isSnesPad: true), .selectStart)
   }
 
   func testN64PadKeepsItsPauseRoutes() {
     let withHome = bindings(["A", "B", "Start", "ZR", "Home", "Direction Pad"], n64: true)
-      .compactMapValues { SynthesizedInput(rawValue: $0) }
-    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: withHome, isSnesPad: false), .home)
+      .compactMapValues { GamepadInput(coreName: $0) }
+    XCTAssertEqual(Self.pauseTrigger(for: withHome, isSnesPad: false), .home)
     // Whether Apple's N64 description has Home is unconfirmed; without it ZR (Options) still
     // pauses on its own, never through a chord.
     let withoutHome = bindings(["A", "B", "Start", "ZR", "Direction Pad"], n64: true)
-      .compactMapValues { SynthesizedInput(rawValue: $0) }
-    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: withoutHome, isSnesPad: false), .standard)
+      .compactMapValues { GamepadInput(coreName: $0) }
+    XCTAssertEqual(Self.pauseTrigger(for: withoutHome, isSnesPad: false), nil)
   }
 
   func testChordNeedsBothStartAndSelect() {
     var startOnly = snesBindings()
     startOnly["Button Options"] = nil
-    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: startOnly, isSnesPad: true), .start,
+    XCTAssertEqual(Self.pauseTrigger(for: startOnly, isSnesPad: true), .button(.menu),
                    "no Select: Start is the fallback, never a chord")
-    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: snesBindings(), isSnesPad: false), .standard,
+    XCTAssertEqual(Self.pauseTrigger(for: snesBindings(), isSnesPad: false), nil,
                    "the chord is for the SNES family; another pad keeps Options alone")
   }
 
   /// A pad with no Home, no Options and no chord still pauses, from Start.
   func testPadWithNothingElsePausesFromStart() {
-    let bare = bindings(["A", "B", "Start", "Direction Pad"], n64: true).compactMapValues { SynthesizedInput(rawValue: $0) }
-    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: bare, isSnesPad: false), .start)
-    let noStart = bindings(["A", "B", "Direction Pad"], n64: true).compactMapValues { SynthesizedInput(rawValue: $0) }
-    XCTAssertEqual(PhysicalProfileController.pauseTrigger(for: noStart, isSnesPad: false), .standard)
+    let bare = bindings(["A", "B", "Start", "Direction Pad"], n64: true).compactMapValues { GamepadInput(coreName: $0) }
+    XCTAssertEqual(Self.pauseTrigger(for: bare, isSnesPad: false), .button(.menu))
+    let noStart = bindings(["A", "B", "Direction Pad"], n64: true).compactMapValues { GamepadInput(coreName: $0) }
+    XCTAssertEqual(Self.pauseTrigger(for: noStart, isSnesPad: false), nil)
   }
 
-  // MARK: Select + Start chord
+  // MARK: The package against the core
 
-  func testChordFiresOnceWhenBothAreHeldInEitherOrder() {
-    var chord = SelectStartChord()
-    XCTAssertFalse(chord.update(.options, pressed: true), "Select alone")
-    XCTAssertTrue(chord.update(.menu, pressed: true), "then Start")
-    XCTAssertFalse(chord.update(.menu, pressed: true), "a repeated value while held")
-    XCTAssertFalse(chord.update(.options, pressed: true))
+  private let padFixtures: [(vendor: String?, category: String, buttons: [String], directions: [String], axes: [String])] = [
+    ("SNES Controller", "Switch SNES Controller",
+     ["Button A", "Button B", "Button X", "Button Y", "Left Shoulder", "Right Shoulder", "Button Menu", "Button Options"],
+     ["Direction Pad"], []),
+    ("N64 Controller", "HID",
+     ["A", "B", "Z", "L", "R", "ZR", "Start", "Home", "C-Up", "C-Down", "C-Left", "C-Right"], ["Direction Pad", "Joystick"], []),
+    (nil, "HID", (1 ... 12).map { "Button \($0)" }, ["Hat Switch"], []),
+    (nil, "HID", ["Button A", "Button B", "L3", "Button R3", "Select", "Start"], ["Direction Pad", "Left Thumbstick"],
+     ["Left Trigger", "Right Trigger"]),
+    ("8BitDo Pad", "HID", ["Generic Button 1", "Generic Button 2", "Generic Button 10"], ["Pad A", "Pad B"], []),
+  ]
 
-    var reversed = SelectStartChord()
-    XCTAssertFalse(reversed.update(.menu, pressed: true), "Start alone")
-    XCTAssertTrue(reversed.update(.options, pressed: true), "then Select")
-  }
-
-  func testChordNeverFiresOnOneButton() {
-    var chord = SelectStartChord()
-    for _ in 0 ..< 3 {
-      XCTAssertFalse(chord.update(.menu, pressed: true))
-      XCTAssertFalse(chord.update(.menu, pressed: false))
-      XCTAssertFalse(chord.update(.options, pressed: true))
-      XCTAssertFalse(chord.update(.options, pressed: false))
+  /// The wrapper takes its bindings from the core (`bindingsResolver`), so the package's own
+  /// GameCube table is never what binds a pad here. It is still a second copy of the C++ table
+  /// that Provenance and iFly's tests run against; this fails when the two drift.
+  func testThePackagesGameCubeTableMatchesTheCoresTable() {
+    let mapping = PhysicalProfileConfiguration.iCube.mapping
+    for pad in padFixtures {
+      let core = Self.resolveBindings(buttonNames: pad.buttons, directionNames: pad.directions, axisNames: pad.axes,
+                                      vendorName: pad.vendor, productCategory: pad.category)
+      let family = mapping.family(vendorName: pad.vendor, productCategory: pad.category)
+      let package = mapping.resolveBindings(
+        pad: family, elementNames: pad.buttons + pad.directions + pad.axes, buttonNames: pad.buttons,
+        directionNames: pad.directions, axisNames: pad.axes)
+      XCTAssertEqual(package, core, "\(pad.vendor ?? "unnamed") \(pad.category)")
     }
   }
 
-  func testChordRearmsOnlyAfterBothAreReleased() {
-    var chord = SelectStartChord()
-    _ = chord.update(.options, pressed: true)
-    XCTAssertTrue(chord.update(.menu, pressed: true))
-    XCTAssertFalse(chord.update(.menu, pressed: false))
-    XCTAssertFalse(chord.update(.menu, pressed: true), "Select never let go")
-    XCTAssertFalse(chord.update(.menu, pressed: false))
-    XCTAssertFalse(chord.update(.options, pressed: false))
-    XCTAssertFalse(chord.selectHeld)
-    XCTAssertFalse(chord.startHeld)
-    _ = chord.update(.menu, pressed: true)
-    XCTAssertTrue(chord.update(.options, pressed: true), "a new chord after a full release")
+  /// The configuration keys the wrap rule and the pause chord on the package's pad family; the
+  /// core's own tests are `isSwitchOnlinePad` and `isSnesPad`.
+  func testThePackagesPadFamilyMatchesTheCoresPadTests() {
+    let mapping = PhysicalProfileConfiguration.iCube.mapping
+    let pads: [(String?, String?)] = [
+      ("SNES Controller", "Switch SNES Controller"), (nil, "Super Famicom Controller"), ("N64 Controller", "HID"),
+      ("Pro Controller", "Switch Pro Controller"), ("Remote", "Siri Remote (2nd Generation)"), (nil, "HID"), (nil, nil),
+    ]
+    for (vendor, category) in pads {
+      let family = mapping.family(vendorName: vendor, productCategory: category)
+      XCTAssertEqual(family.isSwitchOnline,
+                     PhysicalProfileBridge.isSwitchOnlinePad(withVendorName: vendor, productCategory: category),
+                     "\(vendor ?? "nil") / \(category ?? "nil")")
+      XCTAssertEqual(family == .snes, PhysicalProfileBridge.isSnesPad(withVendorName: vendor, productCategory: category),
+                     "\(vendor ?? "nil") / \(category ?? "nil")")
+    }
   }
 
-  func testChordIgnoresOtherInputs() {
-    var chord = SelectStartChord()
-    XCTAssertFalse(chord.update(.buttonA, pressed: true))
-    XCTAssertFalse(chord.update(.home, pressed: true))
-    XCTAssertFalse(chord.update(.menu, pressed: true))
-    XCTAssertTrue(chord.update(.options, pressed: true))
+  func testEveryPackageInputHasACoreNameAndBack() {
+    for input in GamepadInput.allCases {
+      XCTAssertEqual(GamepadInput(coreName: input.coreName), input)
+    }
+    XCTAssertNil(GamepadInput(coreName: "buttonA"), "the core speaks MFi input names, not the package's case names")
   }
 
-  // MARK: Synthesized elements
+  // MARK: iCube's configuration
 
-  func testButtonUpdateFiresPressedThenValueHandlers() {
-    let button = SynthesizedButtonInput()
-    var events: [String] = []
-    button.pressedChangedHandler = { _, value, pressed in events.append("pressed \(pressed) \(value)") }
-    button.valueChangedHandler = { _, value, pressed in events.append("value \(pressed) \(value)") }
-
-    button.update(value: 1, pressed: true)
-    XCTAssertTrue(button.isPressed)
-    XCTAssertEqual(button.value, 1)
-    XCTAssertEqual(events, ["pressed true 1.0", "value true 1.0"])
-
-    events.removeAll()
-    button.update(value: 1, pressed: true)
-    XCTAssertTrue(events.isEmpty, "no change, no callbacks")
-
-    button.update(value: 0, pressed: false)
-    XCTAssertFalse(button.isPressed)
-    XCTAssertEqual(events, ["pressed false 0.0", "value false 0.0"])
+  func testConfigurationKeepsTheBehaviourTheAppRoutesDependOn() {
+    let configuration = PhysicalProfileConfiguration.iCube
+    XCTAssertFalse(configuration.holdsBackPauseInputs, "Start and Select still reach the game")
+    XCTAssertEqual(configuration.optionsExposure, .whenBoundAndNotPauseTrigger, "Select alone never pauses")
+    XCTAssertEqual(configuration.legacyPausedHandler, .homeOnly)
+    XCTAssertEqual(configuration.buttonHandlerOrder, .pressedThenValue)
+    XCTAssertEqual(configuration.playerIndexStorage, .base)
+    XCTAssertEqual(configuration.systemGestureDisabledInputs, Set(GamepadInput.allCases))
+    XCTAssertNotNil(configuration.bindingsResolver, "bindings come from the core")
+    XCTAssertNotNil(configuration.padName, "so does the pad's name")
   }
 
-  func testDirectionPadUpdateSetsAxesAndDigitalDirections() {
-    let pad = SynthesizedDirectionPad()
-    var reported: (Float, Float)?
-    pad.valueChangedHandler = { _, x, y in reported = (x, y) }
-
-    pad.update(x: -1, y: 0.75)
-    XCTAssertEqual(pad.xAxis.value, -1)
-    XCTAssertEqual(pad.yAxis.value, 0.75)
-    XCTAssertTrue(pad.left.isPressed)
-    XCTAssertTrue(pad.up.isPressed)
-    XCTAssertFalse(pad.right.isPressed)
-    XCTAssertFalse(pad.down.isPressed)
-    XCTAssertEqual(reported?.0, -1)
-    XCTAssertEqual(reported?.1, 0.75)
-
-    pad.update(x: 0.2, y: -0.2)
-    XCTAssertFalse(pad.left.isPressed, "below the digital threshold")
-    XCTAssertFalse(pad.down.isPressed)
+  /// `TVControllerMappingBridge` and the core look a wrapper's device up by its real pad.
+  func testTheBridgeResolvesAWrapperBackToItsRealPad() {
+    let raw = ProfileOnlyPad()
+    let wrapper = PhysicalProfileController(wrapping: raw)
+    XCTAssertTrue(PhysicalProfileBridge.baseController(wrapper) === raw)
+    XCTAssertTrue(PhysicalProfileBridge.baseController(raw) === raw)
   }
 
-  func testOptionalButtonsAreReportedOnlyWhenThePadHasThem() {
-    let gamepad = SynthesizedGamepad()
-    XCTAssertNil(gamepad.buttonOptions)
-    XCTAssertNil(gamepad.buttonHome)
-    XCTAssertNil(gamepad.leftThumbstickButton)
-    gamepad.hasOptions = true
-    gamepad.hasHome = true
-    XCTAssertNotNil(gamepad.buttonOptions)
-    XCTAssertNotNil(gamepad.buttonHome)
+  func testPauseReasonsKeepTheirLogNames() {
+    XCTAssertNil(ICubePhysicalProfile.pauseReason(for: .home), "Home pauses through buttonHome")
+    XCTAssertEqual(ICubePhysicalProfile.pauseReason(for: .selectStart), "synthesized.selectStartChord")
+    XCTAssertEqual(ICubePhysicalProfile.pauseReason(for: .button(.menu)), "synthesized.start")
+  }
+}
+
+/// A pad with a physical profile and nothing else, as the system reports an N64 pad on tvOS 17.
+/// (A bare `GCController()` has no profile the core can read.)
+private final class ProfileOnlyPad: GCController {
+  private final class Profile: GCPhysicalInputProfile {
+    let a = SynthesizedButtonInput()
+    let dpad = SynthesizedDirectionPad()
+    override var elements: [String: GCControllerElement] { ["A": a, "Direction Pad": dpad] }
+    override var buttons: [String: GCControllerButtonInput] { ["A": a] }
+    override var dpads: [String: GCControllerDirectionPad] { ["Direction Pad": dpad] }
+    override var axes: [String: GCControllerAxisInput] { [:] }
   }
 
-  func testGamepadElementsResolveByInputAndNotifyWholeGamepadObservers() {
-    let gamepad = SynthesizedGamepad()
-    var changed: [GCControllerElement] = []
-    gamepad.valueChangedHandler = { _, element in changed.append(element) }
-
-    XCTAssertTrue(gamepad.button(for: .buttonA) === gamepad.buttonA)
-    XCTAssertTrue(gamepad.button(for: .menu) === gamepad.buttonMenu)
-    XCTAssertTrue(gamepad.pad(for: .rightThumbstick) === gamepad.rightThumbstick)
-    XCTAssertNil(gamepad.button(for: .dpad))
-    XCTAssertNil(gamepad.pad(for: .rightStickUp))
-
-    gamepad.synthesizedButtonA.update(value: 1, pressed: true)
-    gamepad.notify(gamepad.buttonA)
-    XCTAssertTrue(changed.first === gamepad.buttonA)
-  }
-
-  func testSynthesizedInputClassification() {
-    XCTAssertTrue(SynthesizedInput.rightStickUp.isCButton)
-    XCTAssertFalse(SynthesizedInput.rightThumbstick.isCButton)
-    XCTAssertTrue(SynthesizedInput.dpad.isDirection)
-    XCTAssertFalse(SynthesizedInput.buttonA.isDirection)
-  }
+  private let profile = Profile()
+  override var extendedGamepad: GCExtendedGamepad? { nil }
+  override var microGamepad: GCMicroGamepad? { nil }
+  override var physicalInputProfile: GCPhysicalInputProfile { profile }
+  override var vendorName: String? { "N64 Controller" }
+  override var productCategory: String { "Nintendo N64" }
 }

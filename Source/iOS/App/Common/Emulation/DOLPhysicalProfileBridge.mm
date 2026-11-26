@@ -65,8 +65,19 @@ NSDictionary<NSString*, NSString*>* ToDictionary(const PP::Bindings& bindings)
 
 + (GCController*)baseController:(GCController*)controller
 {
-  if ([controller conformsToProtocol:@protocol(DOLPhysicalBaseController)])
-    return [(id<DOLPhysicalBaseController>)controller dol_baseController];
+  // GamepadKit's wrapper is a Swift class from a package with no Objective-C header; it exports
+  // this class name and its `base` (the real controller) to the runtime for this lookup.
+  static Class wrapper_class = Nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    wrapper_class = NSClassFromString(@"GPKPhysicalProfileController");
+  });
+  if (wrapper_class != Nil && [controller isKindOfClass:wrapper_class])
+  {
+    GCController* base = [controller valueForKey:@"base"];
+    if (base != nil)
+      return base;
+  }
   return controller;
 }
 
