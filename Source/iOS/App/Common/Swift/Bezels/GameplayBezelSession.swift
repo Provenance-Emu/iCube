@@ -14,7 +14,7 @@ import SkinKitBezelsUI
 final class GameplayBezelSession: ObservableObject, BezelSwitcherSession {
   /// The TV to draw, when the screen's state also allows one (`ICubeBezels.showsTV`). `nil` is the picture alone.
   @Published private(set) var bezel: TVBezel?
-  /// `Resolution.isAutomatic` of `bezel`: nobody chose this TV, so it shows in landscape only.
+  /// `Resolution.isAutomatic` of `bezel`: nobody chose this TV.
   @Published private(set) var choiceIsAutomatic = true
   /// The TV on screen has not drawn its artwork yet.
   @Published private(set) var isBezelLoading = false

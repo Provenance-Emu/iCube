@@ -473,7 +473,7 @@ struct EmulationScreen: View {
   /// Where the game surface and a TV's artwork go, in the emulation surface's coordinates.
   private struct BezelStage {
     /// The TV and where its artwork goes; `nil` while the switcher previews the picture alone.
-    var artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?)?
+    var artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?, shape: TVBezelPictureShape)?
     /// Where the game picture shows.
     var picture: CGRect
     /// The frame of the surface the core draws into: `picture`, or larger while it keeps an older shape.
@@ -495,7 +495,7 @@ struct EmulationScreen: View {
       // The TV is laid out on the whole screen, like a skin; the surface's coordinates start inside the safe area.
       let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
       return BezelStage(
-        artwork: (bezel, layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top), layout.placement, layout.canvas),
+        artwork: (bezel, layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top), layout.placement, layout.canvas, layout.shape),
         picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
     }
     guard bezelDrawnAspect != nil || bezelSwitcherIsUp else { return nil }
@@ -509,8 +509,8 @@ struct EmulationScreen: View {
     return BezelStage(artwork: nil, picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
   }
 
-  private func bezelArtwork(_ artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?)) -> some View {
-    TVBezelArtworkView(bezel: artwork.bezel, canvas: artwork.canvas) { loaded in bezels.artworkLoaded(loaded, id: artwork.bezel.id) }
+  private func bezelArtwork(_ artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?, shape: TVBezelPictureShape)) -> some View {
+    TVBezelArtworkView(bezel: artwork.bezel, canvas: artwork.canvas, shape: artwork.shape) { loaded in bezels.artworkLoaded(loaded, id: artwork.bezel.id) }
       .frame(width: artwork.frame.width, height: artwork.frame.height)
       .position(x: artwork.frame.midX, y: artwork.frame.midY)
       // One TV's artwork never lingers in the next TV's frame.
@@ -1274,7 +1274,7 @@ struct EmulationScreen: View {
         refreshOverscanApplicable()
         renderHostOnExternalDisplay = EmulationCoordinator.shared().isExternalDisplayConnected
       }
-      // The strip closes itself when a TV can no longer show (portrait, a skin, an external display).
+      // The strip closes itself when a TV can no longer show (a skin, an external display).
       .onChange(of: bezelScreenState(canvas: bezelCanvas), initial: true) { _, state in bezels.screenState = state }
       .onDisappear { iosDidDisappear() }
       .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in

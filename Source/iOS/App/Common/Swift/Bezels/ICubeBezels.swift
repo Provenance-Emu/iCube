@@ -121,7 +121,9 @@ enum ICubeBezels {
       controls: controls(state),
       layoutSupportsTV: !state.onExternalDisplay,
       choiceIsAutomatic: choiceIsAutomatic,
-      editingLayout: state.editingLayout)
+      editingLayout: state.editingLayout,
+      // The TV is a plain image laid out over the whole screen (`layout`), which draws a portrait room.
+      supportsPortrait: true)
   }
 
   static func showsTV(_ state: ScreenState, choiceIsAutomatic: Bool) -> Bool {

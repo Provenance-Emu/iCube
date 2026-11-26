@@ -35,7 +35,8 @@ final class GameplayBezelTests: XCTestCase {
   func test_placementInputs_readTheScreen() {
     let inputs = ICubeBezels.placementInputs(state(touch: true, editing: true), choiceIsAutomatic: true)
     XCTAssertEqual(inputs, GameplayBezelPlacement.Inputs(isAppleTV: false, isLandscape: true, controls: .generated,
-                                                         layoutSupportsTV: true, choiceIsAutomatic: true, editingLayout: true))
+                                                         layoutSupportsTV: true, choiceIsAutomatic: true, editingLayout: true,
+                                                         supportsPortrait: true))
     XCTAssertFalse(ICubeBezels.placementInputs(state(canvas: GameplayBezelTests.portrait), choiceIsAutomatic: false).isLandscape)
     XCTAssertFalse(ICubeBezels.placementInputs(state(external: true), choiceIsAutomatic: false).layoutSupportsTV)
     // A square window is not landscape: the automatic TV needs room beside the picture.
@@ -55,10 +56,14 @@ final class GameplayBezelTests: XCTestCase {
     XCTAssertFalse(ICubeBezels.offersSwitcher(appleTV))
   }
 
-  func test_noTV_withASkin_inPortrait_onAnExternalDisplay_orWhileEditing() {
+  func test_portrait_showsATV_asLandscapeDoes() {
+    XCTAssertTrue(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, controller: true), choiceIsAutomatic: true))
+    XCTAssertTrue(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, touch: true), choiceIsAutomatic: true))
+    XCTAssertFalse(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, touch: true, skin: true), choiceIsAutomatic: false))
+  }
+
+  func test_noTV_withASkin_onAnExternalDisplay_orWhileEditing() {
     XCTAssertFalse(ICubeBezels.showsTV(state(touch: true, skin: true), choiceIsAutomatic: true))
-    XCTAssertFalse(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, controller: true), choiceIsAutomatic: true))
-    XCTAssertFalse(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, touch: true), choiceIsAutomatic: true))
     XCTAssertFalse(ICubeBezels.showsTV(state(controller: true, external: true), choiceIsAutomatic: true))
     XCTAssertFalse(ICubeBezels.showsTV(state(touch: true, editing: true), choiceIsAutomatic: true))
   }
@@ -66,9 +71,8 @@ final class GameplayBezelTests: XCTestCase {
   func test_switcher_isOfferedWhereAChosenTVCouldShow() {
     XCTAssertTrue(ICubeBezels.offersSwitcher(state(touch: true)))
     XCTAssertTrue(ICubeBezels.offersSwitcher(state(controller: true)))
-    // In portrait a chosen TV shows once a controller has hidden the on-screen controls.
     XCTAssertTrue(ICubeBezels.offersSwitcher(state(canvas: GameplayBezelTests.portrait, controller: true)))
-    XCTAssertFalse(ICubeBezels.offersSwitcher(state(canvas: GameplayBezelTests.portrait, touch: true)))
+    XCTAssertTrue(ICubeBezels.offersSwitcher(state(canvas: GameplayBezelTests.portrait, touch: true)))
     XCTAssertFalse(ICubeBezels.offersSwitcher(state(touch: true, skin: true)))
     XCTAssertFalse(ICubeBezels.offersSwitcher(state(controller: true, external: true)))
   }
