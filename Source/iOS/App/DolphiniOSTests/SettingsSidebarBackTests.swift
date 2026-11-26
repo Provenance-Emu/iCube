@@ -24,6 +24,7 @@ final class SettingsSidebarBackTests: XCTestCase {
   func test_leafAtRoot_ignoresTheOpeningPress() {
     XCTAssertEqual(SettingsSidebarBack.action(paneDepth: 0, honorsPress: false), .ignore)
   }
+
   func test_rootPaneCannotDismissWhenSidebarDoesNotHaveFocus() {
     XCTAssertEqual(SettingsSidebarBack.action(paneDepth: 0, honorsPress: true, sidebarFocused: false), .focusSidebar)
   }
@@ -31,5 +32,4 @@ final class SettingsSidebarBackTests: XCTestCase {
   func test_sidebarFocusIsRequiredToLeaveAfterPaneBack() {
     XCTAssertEqual(SettingsSidebarBack.action(paneDepth: 0, honorsPress: true, sidebarFocused: true), .leaveSettings)
   }
-
 }

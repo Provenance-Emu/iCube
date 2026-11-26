@@ -24,7 +24,7 @@ final class TouchOverlayArtTests: XCTestCase {
     let key = "touch_overlay_style"
     let saved = UserDefaults.standard.object(forKey: key)
     defer { UserDefaults.standard.set(saved, forKey: key) }
-    UserDefaults.standard.set(2, forKey: key)  // the old "Wii" override
+    UserDefaults.standard.set(2, forKey: key) // the old "Wii" override
     XCTAssertEqual(TouchOverlayArt.variant(for: .gameCube), .gameCube)
   }
 }

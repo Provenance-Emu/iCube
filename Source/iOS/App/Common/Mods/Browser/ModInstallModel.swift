@@ -120,7 +120,7 @@ final class ModInstallModel: ObservableObject {
   }
 
   /// Extracts an archive next to itself (or files a bare download under the same folder) and deletes the archive.
-  nonisolated private static func unpack(_ archive: URL, in directory: URL) throws -> URL {
+  private nonisolated static func unpack(_ archive: URL, in directory: URL) throws -> URL {
     let fm = FileManager.default
     let extracted = directory.appendingPathComponent("extracted", isDirectory: true)
     try? fm.removeItem(at: extracted)
@@ -175,7 +175,7 @@ final class ModInstallModel: ObservableObject {
       let stem = (codesFile.lastPathComponent as NSString).deletingPathExtension
       if let mismatch = Self.regionWarning(packID: stem, ownedID: game.gameID) { parts.append(mismatch) }
       self.log.append(parts.joined(separator: " "))
-      if !result.added.isEmpty && !DOLConfigBridge.mainEnableCheats() { self.offerCheats = true }
+      if !result.added.isEmpty, !DOLConfigBridge.mainEnableCheats() { self.offerCheats = true }
     }
   }
 

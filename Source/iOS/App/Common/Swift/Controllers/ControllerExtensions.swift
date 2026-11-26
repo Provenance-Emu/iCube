@@ -535,7 +535,7 @@ func installExtraInputHandlers(_ c: GCController) {
   // Start press. Those pads pause from Options/Home (installPauseMenuHandlers); keep the handler set
   // for them, doing nothing, so the system does not take the press.
   DeprecatedAPIShims.setPausedHandler({ controller in
-    guard controller.extendedGamepad == nil && controller.microGamepad == nil else { return }
+    guard controller.extendedGamepad == nil, controller.microGamepad == nil else { return }
     presentPauseMenu("controllerPausedHandler")
   }, on: c)
 

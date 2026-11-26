@@ -13,11 +13,11 @@ enum AnalogStickKey {
 
 /// Slider limits, defined once for the builder and the tests.
 enum AnalogStickLimits {
-  static let gain: ClosedRange<Double> = 0.1...3.0
+  static let gain: ClosedRange<Double> = 0.1 ... 3.0
   static let gainStep = 0.05
-  static let deadzone: ClosedRange<Double> = 0.0...0.49
+  static let deadzone: ClosedRange<Double> = 0.0 ... 0.49
   static let deadzoneStep = 0.01
-  static let smoothing: ClosedRange<Double> = 0.0...0.9
+  static let smoothing: ClosedRange<Double> = 0.0 ... 0.9
   static let smoothingStep = 0.05
 }
 

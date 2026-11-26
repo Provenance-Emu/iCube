@@ -11,6 +11,7 @@ final class EnhancedMotionModelBuilderTests: XCTestCase {
   private func model(_ state: EnhancedMotionState = EnhancedMotionState()) -> MenuModel {
     EnhancedMotionModelBuilder.make(state: state) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout EnhancedMotionState) -> Void) -> EnhancedMotionState {
     var s = EnhancedMotionState()
     edit(&s)
@@ -31,7 +32,11 @@ final class EnhancedMotionModelBuilderTests: XCTestCase {
 
   func test_defaultState_containsTheNunchukRow() {
     XCTAssertNotNil(model().item(id: "nunchuk-imu"))
-    XCTAssertEqual(EnhancedMotionState(), state { $0.horizontalMotionMode = .roll; $0.wiimoteIMU = true; $0.full6DOF = true; $0.nunchukIMU = false })
+    XCTAssertEqual(EnhancedMotionState(), state { $0.horizontalMotionMode = .roll
+      $0.wiimoteIMU = true
+      $0.full6DOF = true
+      $0.nunchukIMU = false
+    })
   }
 
   func test_everyRow_hasADescription() {
@@ -46,7 +51,9 @@ final class EnhancedMotionModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       for value in [true, false] {
         changes = []
         binding.wrappedValue = value
@@ -56,9 +63,14 @@ final class EnhancedMotionModelBuilderTests: XCTestCase {
   }
 
   func test_toggles_reflectTheSnapshot() {
-    let m = model(state { $0.wiimoteIMU = false; $0.full6DOF = true; $0.nunchukIMU = true })
+    let m = model(state { $0.wiimoteIMU = false
+      $0.full6DOF = true
+      $0.nunchukIMU = true
+    })
     for (id, expected) in [("wiimote-imu", false), ("six-dof", true), ("nunchuk-imu", true)] {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       XCTAssertEqual(binding.wrappedValue, expected, id)
     }
   }

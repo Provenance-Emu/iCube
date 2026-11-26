@@ -464,7 +464,7 @@ final class PhysicalProfileMappingTests: XCTestCase {
       hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: true, isSwitchOnlinePad: false, bindings: remote))
     XCTAssertFalse(Self.shouldWrap(
       hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: true, isSwitchOnlinePad: true, bindings: remote),
-      "a remote is never wrapped")
+    "a remote is never wrapped")
     // Another micro-gamepad pad that is not a Switch Online pad keeps the system's profiles.
     XCTAssertFalse(Self.shouldWrap(
       hasExtendedGamepad: false, hasMicroGamepad: true, isMenuRemote: false, isSwitchOnlinePad: false, bindings: bindings))

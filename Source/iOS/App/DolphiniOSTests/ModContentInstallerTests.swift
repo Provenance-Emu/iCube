@@ -217,11 +217,11 @@ final class ModDownloadPolicyTests: XCTestCase {
   }
 
   func testNotEnoughSpaceReportsTheNeed() {
-    XCTAssertEqual(ModDownloadPolicy.verdict(fileSize: 1_000, availableBytes: 2_999), .insufficientSpace(needed: 3_000, available: 2_999))
+    XCTAssertEqual(ModDownloadPolicy.verdict(fileSize: 1000, availableBytes: 2999), .insufficientSpace(needed: 3000, available: 2999))
   }
 
   func testUnknownFreeSpaceDoesNotBlock() {
-    XCTAssertEqual(ModDownloadPolicy.verdict(fileSize: 1_000, availableBytes: nil), .allowed)
+    XCTAssertEqual(ModDownloadPolicy.verdict(fileSize: 1000, availableBytes: nil), .allowed)
   }
 
   func testMD5MatchesAKnownDigest() throws {

@@ -8,7 +8,6 @@ import XCTest
 /// The Siri Remote pointer: `GyroPointerIntegrator` (pure) and `RemotePointerBinding` (bind,
 /// unbind, recenter and the per-sample writes, through a recording writer).
 final class GyroPointerIntegratorTests: XCTestCase {
-
   private func integrate(
     _ integrator: inout GyroPointerIntegrator, h: Double = 0, v: Double = 0, dt: TimeInterval = 0.01,
     sensitivity: Double = 1, invertX: Bool = false, invertY: Bool = false
@@ -90,7 +89,6 @@ final class GyroPointerIntegratorTests: XCTestCase {
 
 @MainActor
 final class RemotePointerBindingTests: XCTestCase {
-
   private final class RecordingWriter: RemotePointerWriting {
     var calls: [String] = []
     var lastIR: [TCButtonType: Float] = [:]

@@ -1,18 +1,18 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import Foundation
+import PVHelp
+import PVWebServer
+import QuartzCore
 import SwiftUI
 import UIKit
-import QuartzCore
-import PVWebServer
-import PVHelp
 #if os(iOS)
-import SafariServices
 import AudioToolbox
+import SafariServices
 #endif
 #if os(iOS)
 #endif
-import Foundation
 
 // MARK: - Controllers (Settings → Controllers)
 

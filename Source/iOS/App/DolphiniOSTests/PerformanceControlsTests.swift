@@ -120,7 +120,9 @@ final class PerformanceControlsTests: XCTestCase {
     var read = PerformanceControlsState()
     var queued: [() -> Void] = []
     var readCount = 0
-    let controller = PerformanceControlsController(read: { readCount += 1; return read }, apply: { _ in }, scheduleRefresh: { queued.append($0) })
+    let controller = PerformanceControlsController(read: { readCount += 1
+      return read
+    }, apply: { _ in }, scheduleRefresh: { queued.append($0) })
     controller.apply(.adaptiveClock(true))
     controller.apply(.adaptiveClock(false))
     let countBeforeStaleCallback = readCount
@@ -140,7 +142,9 @@ final class PerformanceControlsTests: XCTestCase {
     read.viOverride = .auto
     var queued: [() -> Void] = []
     var readCount = 0
-    let controller = PerformanceControlsController(read: { readCount += 1; return read }, apply: { _ in }, scheduleRefresh: { queued.append($0) })
+    let controller = PerformanceControlsController(read: { readCount += 1
+      return read
+    }, apply: { _ in }, scheduleRefresh: { queued.append($0) })
     controller.apply(.adaptiveClock(false))
     controller.stopRefreshing()
     let countBeforeCloseCallback = readCount
@@ -162,7 +166,9 @@ final class PerformanceControlsTests: XCTestCase {
     var queued: [() -> Void] = []
     var readCount = 0
     var controller: PerformanceControlsController? = PerformanceControlsController(
-      read: { readCount += 1; return PerformanceControlsState() }, apply: { _ in },
+      read: { readCount += 1
+        return PerformanceControlsState()
+      }, apply: { _ in },
       sessionIdentifier: { session }, scheduleRefresh: { queued.append($0) })
     controller?.apply(.adaptiveClock(true))
     session = 12
@@ -218,7 +224,7 @@ final class PerformanceControlsTests: XCTestCase {
     skipSelection.wrappedValue = AnyHashable(PerformanceVISkipMode.auto)
     XCTAssertEqual(changes.last, .viSkipMode(.auto))
     guard case .stepper(let percent)? = model.item(id: "performance-cpu-percent")?.role else { return XCTFail("CPU needs a bounded adjustment") }
-    XCTAssertEqual(percent.range, 1...400)
+    XCTAssertEqual(percent.range, 1 ... 400)
     XCTAssertFalse(model.item(id: "performance-cpu-percent")!.isEnabled)
     XCTAssertEqual(model.allItems.filter { $0.id.hasPrefix("performance-hud-") }.count, 7)
   }

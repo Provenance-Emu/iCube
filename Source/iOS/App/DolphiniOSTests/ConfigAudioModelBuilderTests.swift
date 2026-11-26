@@ -11,6 +11,7 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
   private func model(_ state: ConfigAudioState = ConfigAudioState()) -> MenuModel {
     ConfigAudioModelBuilder.make(state: state) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout ConfigAudioState) -> Void) -> ConfigAudioState {
     var s = ConfigAudioState()
     edit(&s)
@@ -96,9 +97,13 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
     #if os(iOS)
     expected.append(("obey-mute-switch", { .obeyMuteSwitch($0) }))
     #endif
-    let m = model(state { $0.backend = "AVAudioEngine"; $0.surround = true })
+    let m = model(state { $0.backend = "AVAudioEngine"
+      $0.surround = true
+    })
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       for value in [true, false] {
         changes = []
         binding.wrappedValue = value
@@ -119,9 +124,14 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
       ("crush-bits", 4 ... 16, 1, 8, .effect(.crushBits(8))),
       ("crush-downsample", 1 ... 16, 1, 4, .effect(.crushDownsample(4))),
     ]
-    let m = model(state { $0.effects.echoEnabled = true; $0.effects.eqEnabled = true; $0.effects.crushEnabled = true })
+    let m = model(state { $0.effects.echoEnabled = true
+      $0.effects.eqEnabled = true
+      $0.effects.crushEnabled = true
+    })
     for (id, range, step, value, change) in expected {
-      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper"); continue }
+      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper")
+        continue
+      }
       XCTAssertEqual(stepper.range, range, id)
       XCTAssertEqual(stepper.step, step, id)
       changes = []
@@ -131,7 +141,14 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
   }
 
   func test_steppers_formatTheirValue() {
-    let m = model(state { $0.volume = 85; $0.bufferMs = 80; $0.effects.echoMs = 250; $0.effects.echoFeedback = 0.35; $0.effects.eqLowDb = 6; $0.effects.crushBits = 12; $0.effects.crushDownsample = 3 })
+    let m = model(state { $0.volume = 85
+      $0.bufferMs = 80
+      $0.effects.echoMs = 250
+      $0.effects.echoFeedback = 0.35
+      $0.effects.eqLowDb = 6
+      $0.effects.crushBits = 12
+      $0.effects.crushDownsample = 3
+    })
     XCTAssertEqual(m.item(id: "volume")?.currentValueTitle, "85%")
     XCTAssertEqual(m.item(id: "buffer")?.currentValueTitle, "80 ms")
     XCTAssertEqual(m.item(id: "echo-time")?.currentValueTitle, "250 ms")
@@ -146,18 +163,28 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
     for id in ["surround-quality", "spatial", "head-tracking", "echo-time", "echo-feedback", "eq-low", "eq-mid", "eq-high", "crush-bits", "crush-downsample"] {
       XCTAssertEqual(off.item(id: id)?.isEnabled, false, id)
     }
-    let on = model(state { $0.backend = "AVAudioEngine"; $0.surround = true; $0.effects.echoEnabled = true; $0.effects.eqEnabled = true; $0.effects.crushEnabled = true })
+    let on = model(state { $0.backend = "AVAudioEngine"
+      $0.surround = true
+      $0.effects.echoEnabled = true
+      $0.effects.eqEnabled = true
+      $0.effects.crushEnabled = true
+    })
     for id in ["surround-quality", "spatial", "head-tracking", "echo-time", "echo-feedback", "eq-low", "eq-mid", "eq-high", "crush-bits", "crush-downsample"] {
       XCTAssertEqual(on.item(id: id)?.isEnabled, true, id)
     }
   }
 
   func test_spatialRows_needTheAVAudioEngineBackend() {
-    let core = model(state { $0.backend = "CoreAudio"; $0.surround = true })
+    let core = model(state { $0.backend = "CoreAudio"
+      $0.surround = true
+    })
     XCTAssertEqual(core.item(id: "surround-quality")?.isEnabled, true)
     XCTAssertEqual(core.item(id: "spatial")?.isEnabled, false)
     XCTAssertEqual(core.item(id: "head-tracking")?.isEnabled, false)
-    let noTracking = model(state { $0.backend = "AVAudioEngine"; $0.surround = true; $0.spatial = false })
+    let noTracking = model(state { $0.backend = "AVAudioEngine"
+      $0.surround = true
+      $0.spatial = false
+    })
     XCTAssertEqual(noTracking.item(id: "spatial")?.isEnabled, true)
     XCTAssertEqual(noTracking.item(id: "head-tracking")?.isEnabled, false)
   }
@@ -173,7 +200,9 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
   }
 
   func test_surroundQuality_isAPicker_overTheFourQualities() {
-    let m = model(state { $0.surround = true; $0.surroundQuality = 3 })
+    let m = model(state { $0.surround = true
+      $0.surroundQuality = 3
+    })
     guard case .picker(let options, let selection)? = m.item(id: "surround-quality")?.role else { return XCTFail("not a picker") }
     XCTAssertEqual(options.map(\.0), ["Lowest", "Low", "High", "Highest"])
     XCTAssertEqual(selection.wrappedValue.base as? Int, 3)
@@ -190,9 +219,13 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
   }
 
   func test_backendOptions_insertAnUnlistedCurrentBackendFirst() {
-    let unlisted = state { $0.backends = ["CoreAudio"]; $0.backend = "" }.backendOptions
+    let unlisted = state { $0.backends = ["CoreAudio"]
+      $0.backend = ""
+    }.backendOptions
     XCTAssertEqual(unlisted.map(\.1), ["", "CoreAudio"])
-    let listed = state { $0.backends = ["", "CoreAudio"]; $0.backend = "CoreAudio" }.backendOptions
+    let listed = state { $0.backends = ["", "CoreAudio"]
+      $0.backend = "CoreAudio"
+    }.backendOptions
     XCTAssertEqual(listed.map(\.1), ["", "CoreAudio"])
   }
 
@@ -220,19 +253,25 @@ final class ConfigAudioModelBuilderTests: XCTestCase {
     XCTAssertEqual(ConfigAudioState.microphoneAccess(supported: true, permission: 1), .denied)
     XCTAssertEqual(ConfigAudioState.microphoneAccess(supported: true, permission: 2), .granted)
 
-    let ask = model(state { $0.live.microphoneSupported = true; $0.live.microphonePermission = 0 })
+    let ask = model(state { $0.live.microphoneSupported = true
+      $0.live.microphonePermission = 0
+    })
     guard case .action(let run)? = ask.item(id: "microphone-request")?.role else { return XCTFail("not an action") }
     changes = []
     run()
     XCTAssertEqual(changes, [.requestMicrophoneAccess])
 
-    let denied = model(state { $0.live.microphoneSupported = true; $0.live.microphonePermission = 1 })
+    let denied = model(state { $0.live.microphoneSupported = true
+      $0.live.microphonePermission = 1
+    })
     guard case .action(let open)? = denied.item(id: "microphone-settings")?.role else { return XCTFail("not an action") }
     changes = []
     open()
     XCTAssertEqual(changes, [.openSystemSettings])
 
-    let granted = model(state { $0.live.microphoneSupported = true; $0.live.microphonePermission = 2 })
+    let granted = model(state { $0.live.microphoneSupported = true
+      $0.live.microphonePermission = 2
+    })
     XCTAssertEqual(granted.section(containing: "microphone-granted")?.id, "microphone")
     XCTAssertEqual(granted.item(id: "microphone-granted")?.isEnabled, false)
   }

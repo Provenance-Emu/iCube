@@ -21,7 +21,9 @@ final class SkinModelTests: XCTestCase {
 
   func testKeepsEveryInputAndPerItemEdges() throws {
     let items = try XCTUnwrap(SkinInfo.load(directory: fixture).representation(device: .iphone, orientation: .portrait)).items
-    let multi = try XCTUnwrap(items.first { if case .buttons(let n) = $0.inputs { return n.count == 2 }; return false })
+    let multi = try XCTUnwrap(items.first { if case .buttons(let n) = $0.inputs { return n.count == 2 }
+      return false
+    })
     XCTAssertEqual(multi.inputs, .buttons(["x", "y"]))
     let a = try XCTUnwrap(items.first { $0.inputs == .buttons(["a"]) })
     XCTAssertEqual(a.extendedEdges.left, 20, "item edges override the representation's")

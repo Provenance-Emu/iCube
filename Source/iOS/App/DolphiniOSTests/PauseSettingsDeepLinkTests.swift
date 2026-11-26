@@ -62,10 +62,14 @@ final class PauseSettingsDeepLinkTests: XCTestCase {
     let menu = model()
     for (tile, link) in PauseMenuModelBuilder.settingsLinks {
       opened = []
-      guard let item = menu.item(id: tile) else { XCTFail("no tile \(tile)"); continue }
+      guard let item = menu.item(id: tile) else { XCTFail("no tile \(tile)")
+        continue
+      }
       item.activateInPlace()
       XCTAssertEqual(opened, [], "\(tile): a tap opened Settings")
-      guard case .action(let run)? = item.effectiveLongPress else { XCTFail("\(tile): long-press is not an action"); continue }
+      guard case .action(let run)? = item.effectiveLongPress else { XCTFail("\(tile): long-press is not an action")
+        continue
+      }
       run()
       XCTAssertEqual(opened, [link], tile)
     }

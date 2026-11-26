@@ -10,7 +10,6 @@ import XCTest
 /// Each is a `MenuScreen` over a pure builder, so Back works from a pad (B) and the Siri Remote
 /// (Menu), and one pick is one action.
 final class PlayerScreenLeavesTests: XCTestCase {
-
   private static let xbox = "MFi/0/Xbox Wireless Controller"
 
   // MARK: Device (decision 9)

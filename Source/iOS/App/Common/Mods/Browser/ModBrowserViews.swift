@@ -140,7 +140,7 @@ final class ModListModel: ObservableObject {
   }
 
   func loadIfNeeded() async {
-    if mods.isEmpty && !isLoading && errorMessage == nil { await reload() }
+    if mods.isEmpty, !isLoading, errorMessage == nil { await reload() }
     if categories.isEmpty, let loaded = try? await GameBananaClient.shared.categories(gameID: entry.bananaID) {
       categories = loaded.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
@@ -157,7 +157,7 @@ final class ModListModel: ObservableObject {
   }
 
   func loadMore() async {
-    if !isLoading && !isComplete { await loadNextPage() }
+    if !isLoading, !isComplete { await loadNextPage() }
   }
 
   private func loadNextPage() async {
@@ -208,7 +208,10 @@ struct ModListView: View {
             .onAppear { if mod.id == model.mods.last?.id { Task { await model.loadMore() } } }
         }
         if model.isLoading {
-          HStack { Spacer(); ProgressView(); Spacer() }
+          HStack { Spacer()
+            ProgressView()
+            Spacer()
+          }
         }
         if let message = model.errorMessage {
           Text(message).foregroundColor(.secondary)

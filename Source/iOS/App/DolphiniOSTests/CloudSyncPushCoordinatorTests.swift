@@ -44,6 +44,7 @@ private actor PushTestProvider: SyncProvider {
     downloads += 1
     return payloads[metadata.relativePath] ?? Data()
   }
+
   func fetchRemoteSnapshot() async throws -> RemoteSyncSnapshot {
     fetches += 1
     if holdFirstFetch && fetches == 1 {
@@ -55,6 +56,7 @@ private actor PushTestProvider: SyncProvider {
     }
     return remote
   }
+
   func writeTombstone(_ tombstone: SyncTombstone) async throws {}
   func purgeExpiredTombstones(olderThan cutoff: Date) async throws {}
   func purgeAllData() async throws {}
@@ -77,9 +79,9 @@ final class CloudSyncPushCoordinatorTests: XCTestCase {
     let provider = PushTestProvider(holdFirstFetch: holdFirstFetch)
     let gate = SyncLocalIOGate()
     let coordinator = CloudSyncCoordinator(network: StaticNetworkState.unconstrained, enabled: true,
-      scanner: UserDataScanner(rootDirectory: root), provider: provider,
-      index: SyncIndexStore(fileURL: root.appendingPathComponent("index.json")),
-      trash: SyncTrash(rootURL: root.appendingPathComponent("Trash")), localIOGate: gate)
+                                           scanner: UserDataScanner(rootDirectory: root), provider: provider,
+                                           index: SyncIndexStore(fileURL: root.appendingPathComponent("index.json")),
+                                           trash: SyncTrash(rootURL: root.appendingPathComponent("Trash")), localIOGate: gate)
     let enabledKey = "icube.cloudSync.enabled"
     let savedEnabled = UserDefaults.standard.object(forKey: enabledKey)
     addTeardownBlock {
@@ -93,7 +95,7 @@ final class CloudSyncPushCoordinatorTests: XCTestCase {
 
   private func remoteFile(_ path: String, _ bytes: Data) -> SyncableFileMetadata {
     SyncableFileMetadata(relativePath: path, lastModified: Date(timeIntervalSince1970: 1_700_000_000),
-      fileSize: Int64(bytes.count), checksum: SyncChecksum.sha256Hex(bytes), fileType: .config)
+                         fileSize: Int64(bytes.count), checksum: SyncChecksum.sha256Hex(bytes), fileType: .config)
   }
 
   private func contents(_ f: Fixture, _ path: String) -> Data? {

@@ -169,7 +169,7 @@ actor GameBananaClient {
       await previous?.value
       try Task.checkCancellation()
       let (data, response) = try await transport.data(from: url, userAgent: userAgent)
-      guard (200..<300).contains(response.statusCode) else { throw GameBananaClientError.status(response.statusCode) }
+      guard (200 ..< 300).contains(response.statusCode) else { throw GameBananaClientError.status(response.statusCode) }
       // A rejected query is an HTTP 200 whose body is `{"_sErrorCode": ...}`; lenient page decoding
       // would otherwise turn it into an empty list.
       if let apiError = try? JSONDecoder().decode(GameBananaAPIError.self, from: data) { throw apiError }

@@ -30,9 +30,20 @@ public final class ImportStaging: NSObject {
     private let lock = NSLock()
     private var paths = Set<String>()
 
-    func insert(_ path: String) { lock.lock(); paths.insert(path); lock.unlock() }
-    func remove(_ path: String) { lock.lock(); paths.remove(path); lock.unlock() }
-    func snapshot() -> Set<String> { lock.lock(); defer { lock.unlock() }; return paths }
+    func insert(_ path: String) { lock.lock()
+      paths.insert(path)
+      lock.unlock()
+    }
+
+    func remove(_ path: String) { lock.lock()
+      paths.remove(path)
+      lock.unlock()
+    }
+
+    func snapshot() -> Set<String> { lock.lock()
+      defer { lock.unlock() }
+      return paths
+    }
   }
 
   private static func size(ofPath path: String) -> Int64? {
@@ -380,8 +391,8 @@ public extension ImportFileManager {
 
     if outcome.extractedArchives > 0 {
       postSnackbar(ZipImportHelper.snackbarText(importedCount: outcome.importedGames,
-                                               skippedCount: outcome.skippedGames,
-                                               archivesProcessed: outcome.extractedArchives))
+                                                skippedCount: outcome.skippedGames,
+                                                archivesProcessed: outcome.extractedArchives))
     } else if outcome.importedGames > 0 {
       postSnackbar(outcome.importedGames == 1 ? "Imported 1 game" : "Imported \(outcome.importedGames) games")
     } else if outcome.skippedGames > 0 {
@@ -391,7 +402,7 @@ public extension ImportFileManager {
     if outcome.stopped {
       let notStarted = outcome.notStarted
       postSnackbar(notStarted == 1 ? L("Import stopped. 1 file was not imported.")
-                                   : String(format: L("Import stopped. %d files were not imported."), notStarted))
+        : String(format: L("Import stopped. %d files were not imported."), notStarted))
     }
 
     if !outcome.errors.isEmpty {

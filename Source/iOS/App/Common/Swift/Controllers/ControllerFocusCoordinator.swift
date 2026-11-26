@@ -43,7 +43,7 @@ final class ControllerFocusCoordinator: ObservableObject {
   /// the main actor, so they cannot touch `activeScope` directly. This is
   /// written only from `push`/`pop` (both main-actor) and read as a plain
   /// value, which is why the unchecked annotation is sound here.
-  nonisolated(unsafe) private static var activeScopeMirror: UUID?
+  private nonisolated(unsafe) static var activeScopeMirror: UUID?
 
   /// Main-actor-free scope check for raw controller handlers.
   nonisolated static func isActiveScope(_ id: UUID) -> Bool {

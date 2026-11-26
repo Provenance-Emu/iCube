@@ -35,7 +35,7 @@ struct DSUDebugHUD: View {
           }
           .buttonStyle(.bordered)
           #if !os(tvOS)
-            .controlSize(.mini)
+          .controlSize(.mini)
           #endif
         }
       }

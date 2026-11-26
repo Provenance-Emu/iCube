@@ -54,10 +54,15 @@ final class NearbyLibraryMirror {
     isPresent: @escaping @MainActor (String, Entry) -> Bool = { _, _ in false },
     schedule: @escaping Scheduler = NearbyLibraryMirror.scheduleAfterDelay
   ) {
-    self.catalog = catalog; self.copy = copy; self.cancel = cancel
-    self.isTrusted = isTrusted; self.isDiscovered = isDiscovered
-    self.isActive = isActive; self.isEmulating = isEmulating
-    self.isPresent = isPresent; self.schedule = schedule
+    self.catalog = catalog
+    self.copy = copy
+    self.cancel = cancel
+    self.isTrusted = isTrusted
+    self.isDiscovered = isDiscovered
+    self.isActive = isActive
+    self.isEmulating = isEmulating
+    self.isPresent = isPresent
+    self.schedule = schedule
   }
 
   func setEnabled(_ enabled: Bool, for peerID: String) {
@@ -110,7 +115,8 @@ final class NearbyLibraryMirror {
     }
     guard !peers.isEmpty, !stopped, task == nil else { return }
     if case .failed = state { return }
-    cancelTimer?(); cancelTimer = nil
+    cancelTimer?()
+    cancelTimer = nil
     let token = epoch
     taskEpoch = token
     // Publish checking synchronously, avoiding an up-to-date state during a queued pass.
@@ -124,7 +130,8 @@ final class NearbyLibraryMirror {
   }
 
   private func invalidate() {
-    cancelTimer?(); cancelTimer = nil
+    cancelTimer?()
+    cancelTimer = nil
     if task != nil, taskEpoch == epoch {
       epoch &+= 1
       task?.cancel()
@@ -163,7 +170,9 @@ final class NearbyLibraryMirror {
   }
 
   private func finished(token: UInt64) {
-    task = nil; taskEpoch = nil; currentPeer = nil
+    task = nil
+    taskEpoch = nil
+    currentPeer = nil
     if token != epoch {
       // Keep the old task until it exits: even an uncooperative cancellation
       // cannot overlap its physical copy with a replacement task.

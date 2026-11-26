@@ -10,10 +10,10 @@ import WidgetKit
 /// Called from `LibrarySnapshotWriter`, already off the main thread; only the quick-actions
 /// update needs to hop back to it (`UIApplication.shared.shortcutItems`).
 enum EcosystemSurfaceRefresher {
-    static func refresh(with snapshot: LibrarySnapshot) async {
-        SpotlightSnapshotIndexer.indexSnapshotGames(snapshot)
-        await MainActor.run { QuickActionsUpdater.update(with: snapshot) }
-        WidgetCenter.shared.reloadTimelines(ofKind: RecentGamesWidgetKind.identifier)
-    }
+  static func refresh(with snapshot: LibrarySnapshot) async {
+    SpotlightSnapshotIndexer.indexSnapshotGames(snapshot)
+    await MainActor.run { QuickActionsUpdater.update(with: snapshot) }
+    WidgetCenter.shared.reloadTimelines(ofKind: RecentGamesWidgetKind.identifier)
+  }
 }
 #endif

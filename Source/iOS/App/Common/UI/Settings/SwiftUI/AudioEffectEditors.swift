@@ -18,6 +18,7 @@ struct AudioEffectsSheet: View {
 }
 
 // MARK: - Audio Unit plug-in chain (iOS, AVAudioEngine backend)
+
 #if os(iOS)
 import AVFoundation
 
@@ -27,7 +28,11 @@ struct FXChainEditor: View {
   @State private var showAddSheet = false
   @State private var availableCount: Int = 0
 
-  struct FXItem: Identifiable, Equatable { let id = UUID(); let name: String; var bypass: Bool; let index: Int }
+  struct FXItem: Identifiable, Equatable { let id = UUID()
+    let name: String
+    var bypass: Bool
+    let index: Int
+  }
 
   var body: some View {
     Group {
@@ -75,28 +80,35 @@ struct FXChainEditor: View {
   private func isEngineActive() -> Bool { AudioFXBridge.isEngineActive() }
 
   private func refresh() {
-    effects = AudioFXBridge.currentEffects().enumerated().map { (i, d) in
+    effects = AudioFXBridge.currentEffects().enumerated().map { i, d in
       FXItem(name: (d["name"] as? String) ?? "Effect", bypass: (d["bypass"] as? Bool) ?? false, index: i)
     }
     availableCount = AudioFXBridge.availableEffects().count
   }
+
   private func add(_ name: String) {
     if !AudioFXBridge.addEffect(withName: name) {
       NSLog("[FX] Add failed for %@ (engineActive=%d)", name, Int32(AudioFXBridge.isEngineActive() ? 1 : 0))
     }
     refresh()
   }
+
   private func remove(at offsets: IndexSet) {
     for o in offsets.sorted(by: >) { AudioFXBridge.removeEffect(at: UInt(o)) }
     refresh()
   }
+
   private func move(from src: IndexSet, to dst: Int) {
     guard let from = src.first else { return }
     let to = dst > from ? dst - 1 : dst
     AudioFXBridge.moveEffect(from: UInt(from), to: UInt(to))
     refresh()
   }
-  private func setBypass(_ idx: Int, _ v: Bool) { AudioFXBridge.setEffectAt(UInt(idx), bypassed: v); refresh() }
+
+  private func setBypass(_ idx: Int, _ v: Bool) { AudioFXBridge.setEffectAt(UInt(idx), bypassed: v)
+    refresh()
+  }
+
   private func showUI(_ idx: Int) {
     AudioFXBridge.requestEffectViewController(at: UInt(idx)) { vc in
       if let vc = vc { showingAU = vc }
@@ -106,7 +118,7 @@ struct FXChainEditor: View {
   private struct UIViewControllerWrapper: UIViewControllerRepresentable {
     let controller: UIViewController
     func makeUIViewController(context: Context) -> UIViewController { controller }
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) { }
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
   }
 
   private struct AUAddSheet: View {
@@ -120,7 +132,9 @@ struct FXChainEditor: View {
           HStack { TextField(L("Search Effects"), text: $search).textFieldStyle(.roundedBorder) }
             .padding()
           List(filtered()) { item in
-            Button(action: { onPick(item.identifier); dismiss() }, label: {
+            Button(action: { onPick(item.identifier)
+              dismiss()
+            }, label: {
               VStack(alignment: .leading) {
                 Text(item.name)
                 Text(item.identifier).font(.footnote).foregroundStyle(.secondary)
@@ -133,18 +147,24 @@ struct FXChainEditor: View {
         .onAppear { reload() }
       }
     }
+
     private func reload() {
       rows = AudioFXBridge.availableEffects().compactMap { dict -> FXRow? in
         guard let name = dict["name"] as? String, let id = dict["identifier"] as? String else { return nil }
         return FXRow(name: name, identifier: id)
       }
     }
+
     private func filtered() -> [FXRow] {
       let q = search.trimmingCharacters(in: .whitespacesAndNewlines)
       if q.isEmpty { return rows }
       return rows.filter { $0.name.localizedCaseInsensitiveContains(q) || $0.identifier.localizedCaseInsensitiveContains(q) }
     }
-    struct FXRow: Identifiable { let id = UUID(); let name: String; let identifier: String }
+
+    struct FXRow: Identifiable { let id = UUID()
+      let name: String
+      let identifier: String
+    }
   }
 }
 #endif

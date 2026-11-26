@@ -29,10 +29,10 @@ final class ImportStagingTrackedCopyTests: XCTestCase {
 
   private func makeFile(_ name: String, megabytes: Int) throws -> String {
     let path = root.appendingPathComponent(name).path
-    let chunk = Data((0..<(1024 * 1024)).map { UInt8(truncatingIfNeeded: $0 &* 7) })
+    let chunk = Data((0 ..< (1024 * 1024)).map { UInt8(truncatingIfNeeded: $0 &* 7) })
     FileManager.default.createFile(atPath: path, contents: nil)
     let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
-    for _ in 0..<megabytes { handle.write(chunk) }
+    for _ in 0 ..< megabytes { handle.write(chunk) }
     try handle.close()
     return path
   }

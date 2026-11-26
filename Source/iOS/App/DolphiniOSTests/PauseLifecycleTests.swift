@@ -27,8 +27,14 @@ final class PauseLifecycleTests: XCTestCase {
     var core: PauseArbiter.Core {
       PauseArbiter.Core(
         isRunning: { self.running }, isPaused: { self.paused },
-        pause: { self.bumpSync(); self.pauseCalls += 1; self.paused = true },
-        resume: { self.bumpSync(); self.resumeCalls += 1; self.paused = false },
+        pause: { self.bumpSync()
+          self.pauseCalls += 1
+          self.paused = true
+        },
+        resume: { self.bumpSync()
+          self.resumeCalls += 1
+          self.paused = false
+        },
         pauseAsync: {
           self.generation += 1
           let issued = self.generation
@@ -41,16 +47,20 @@ final class PauseLifecycleTests: XCTestCase {
           self.generation += 1
           let issued = self.generation
           self.hostJobs.append {
-            if issued == self.generation, self.paused { self.resumeCalls += 1; self.paused = false }
+            if issued == self.generation, self.paused { self.resumeCalls += 1
+              self.paused = false
+            }
             self.settled = max(self.settled, issued)
           }
         },
         hasQueuedRequest: { self.settled < self.generation })
     }
+
     private func bumpSync() {
       generation += 1
       settled = generation
     }
+
     func runHost() {
       let jobs = hostJobs
       hostJobs = []
@@ -361,7 +371,7 @@ final class PauseLifecycleTests: XCTestCase {
   func test_externalPauseAfterResumeLanded_staysPausedAcrossAppSwitch() {
     switchAwayAndBack()
     XCTAssertFalse(fake.paused)
-    fake.paused = true  // the debug API pauses the core directly
+    fake.paused = true // the debug API pauses the core directly
     switchAwayAndBack()
     XCTAssertTrue(fake.paused, "a landed resume must not let the arbiter take over a foreign pause")
     XCTAssertEqual(fake.resumeCalls, 1)

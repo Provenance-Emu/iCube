@@ -11,6 +11,7 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
   private func model(_ state: GraphicsEnhancementsState = GraphicsEnhancementsState()) -> MenuModel {
     GraphicsEnhancementsModelBuilder.make(state: state) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout GraphicsEnhancementsState) -> Void) -> GraphicsEnhancementsState {
     var s = GraphicsEnhancementsState()
     edit(&s)
@@ -48,7 +49,9 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
 
   func test_metalFXRow_stacksOnEveryScale() {
     for scale in [EfbScaleChoice.auto.rawValue, EfbScaleChoice.native.rawValue, 2, 3, 6] {
-      let item = model(state { $0.metalFXSupported = true; $0.efbScale = scale }).item(id: "metalfx-upscale")
+      let item = model(state { $0.metalFXSupported = true
+        $0.efbScale = scale
+      }).item(id: "metalfx-upscale")
       XCTAssertEqual(item?.isEnabled, true, "scale \(scale)")
     }
   }
@@ -99,7 +102,9 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
   }
 
   func test_efbScale_storedAboveMax_keepsItsRealLabel() {
-    let m = model(state { $0.efbMaxScale = 4; $0.efbScale = 6 })
+    let m = model(state { $0.efbMaxScale = 4
+      $0.efbScale = 6
+    })
     guard case .cycle(let options, _)? = m.item(id: "efb-scale")?.role else { return XCTFail("cycle") }
     XCTAssertEqual(options.map { $0.0 }.suffix(3), ["4x", "5x", "6x"])
     XCTAssertEqual(m.item(id: "efb-scale")?.currentValueTitle, "6x")
@@ -167,7 +172,9 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       changes = []
       binding.wrappedValue = true
       XCTAssertEqual(changes, [change(true)], id)
@@ -183,7 +190,9 @@ final class GraphicsEnhancementsModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, value, change) in expected {
-      guard case .cycle(_, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle"); continue }
+      guard case .cycle(_, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle")
+        continue
+      }
       changes = []
       selection.wrappedValue = AnyHashable(value)
       XCTAssertEqual(changes, [change], id)

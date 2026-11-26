@@ -58,15 +58,21 @@ final class DebugEventBus: @unchecked Sendable {
 
   func publish(_ kind: String, _ fields: [String: Any]) {
     let text = Self.encode(kind: kind, fields: fields)
-    lock.lock(); let targets = Array(sockets.values); lock.unlock()
+    lock.lock()
+    let targets = Array(sockets.values)
+    lock.unlock()
     targets.forEach { $0.send(text: text) }
   }
 
   func attach(_ socket: WebSocketConnection) {
-    lock.lock(); sockets[ObjectIdentifier(socket)] = socket; lock.unlock()
+    lock.lock()
+    sockets[ObjectIdentifier(socket)] = socket
+    lock.unlock()
     socket.onClose = { [weak self, weak socket] in
       guard let self, let socket else { return }
-      self.lock.lock(); self.sockets[ObjectIdentifier(socket)] = nil; self.lock.unlock()
+      self.lock.lock()
+      self.sockets[ObjectIdentifier(socket)] = nil
+      self.lock.unlock()
     }
     // Only the newly attached socket gets the initial snapshot — not a
     // broadcast to every socket already attached.

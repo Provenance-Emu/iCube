@@ -81,9 +81,9 @@ final class TopBarSnapshotTests: XCTestCase {
     let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
 
     for (orientation, size) in [("portrait", Self.portrait), ("landscape", Self.landscape),
-                              ("ipad-portrait", CGSize(width: 1024, height: 1366)),
-                              ("ipad-landscape", CGSize(width: 1366, height: 1024)),
-                              ("split", CGSize(width: 320, height: 800))] {
+                                ("ipad-portrait", CGSize(width: 1024, height: 1366)),
+                                ("ipad-landscape", CGSize(width: 1366, height: 1024)),
+                                ("split", CGSize(width: 320, height: 800))] {
       for (state, on) in [("idle", false), ("toggled", true)] {
         let image = render(Harness(togglesOn: on, compactHeight: size == Self.landscape), size: size, scene: scene)
         try XCTUnwrap(image.pngData()).write(to: outputDir.appendingPathComponent("top-bar-\(orientation)-\(state).png"))

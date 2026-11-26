@@ -1,9 +1,9 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-@testable import iCube
 import Foundation
 import XCTest
+@testable import iCube
 
 final class SyncLocalIOGateTests: XCTestCase {
   func testBootClosesAdmissionUntilEmulationEnds() {
@@ -61,7 +61,9 @@ final class SyncLocalIOGateTests: XCTestCase {
     let gate = SyncLocalIOGate()
     gate.beginEmulation()
     let done = DispatchSemaphore(value: 0)
-    DispatchQueue.global().async { gate.waitForLocalIO(); done.signal() }
+    DispatchQueue.global().async { gate.waitForLocalIO()
+      done.signal()
+    }
     XCTAssertEqual(done.wait(timeout: .now() + 2), .success)
     gate.endEmulation()
     XCTAssertTrue(gate.beginLocalIO())

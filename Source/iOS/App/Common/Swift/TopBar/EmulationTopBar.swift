@@ -234,13 +234,18 @@ struct EmulationTopBar: View {
     VStack(alignment: .leading, spacing: 0) {
       sectionHeader(L("Audio"))
       PopoverRow(title: L("Mute"), systemImage: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", isChecked: isMuted) {
-        act { isMuted = runtime.toggleMute(); volume = Double(runtime.readVolume()) }
+        act { isMuted = runtime.toggleMute()
+          volume = Double(runtime.readVolume())
+        }
       }
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
         Text(L("Volume")).icubeText(.body)
         Slider(value: Binding(get: { volume }, set: { value in
-          act { volume = value; runtime.setVolume(Int(value)); isMuted = value <= 0 }
-        }), in: 0...100, step: 1)
+          act { volume = value
+            runtime.setVolume(Int(value))
+            isMuted = value <= 0
+          }
+        }), in: 0 ... 100, step: 1)
           .accessibilityLabel(L("Volume"))
           .accessibilityValue("\(Int(volume))%")
           .frame(minHeight: TopBarLayout.minimumTarget)

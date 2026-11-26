@@ -52,7 +52,7 @@ enum TouchOverlayIRGeometry {
   /// math nor gyro mode (`TCDeviceMotion.handleIRCursorMapping`'s hardcoded 2.66/2.0) exposed a
   /// user-facing control for this before, so there's no existing convention to match here beyond
   /// "1.0 must mean unchanged".
-  static let dragGainRange: ClosedRange<CGFloat> = 0.25...4.0
+  static let dragGainRange: ClosedRange<CGFloat> = 0.25 ... 4.0
 
   /// Clamps a raw `UserDefaults` double (which reads `0` for an unregistered/never-set key) to
   /// `dragGainRange`, folding non-finite or non-positive values to the neutral `1.0` -- the same
@@ -109,7 +109,7 @@ enum TouchOverlayIRGeometry {
     // bounds-aware `hardMax` narrows it further. Duplicated as a plain constant, not referenced
     // directly, because that store is `@MainActor`-isolated and this is pure, actor-independent
     // geometry (like the rest of this file) that the unit tests call synchronously.
-    let genericRange: ClosedRange<CGFloat> = 0.5...2.0
+    let genericRange: ClosedRange<CGFloat> = 0.5 ... 2.0
     guard baseExtent > 0, boundsExtent > 0 else {
       return min(max(scale, genericRange.lowerBound), genericRange.upperBound)
     }

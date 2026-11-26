@@ -289,11 +289,12 @@ struct MenuScreen: View {
   /// A long-press picker up over the tiles. Rows are frozen underneath: the nested `MenuScreen`
   /// claims the controller scope on iOS; on tvOS the tiles are disabled while the picker is up.
   private struct LongPressPicker: Identifiable {
-    let id: String   // the item id
+    let id: String // the item id
     let title: String
     let options: [(String, AnyHashable)]
     let selection: Binding<AnyHashable>
   }
+
   @State private var longPressPicker: LongPressPicker?
   #if os(tvOS)
   @State private var tvChoiceDismissalPending = false
@@ -488,7 +489,6 @@ struct MenuScreen: View {
       }
     }
     .accessibilityValue([value, item.isModified ? L("Changed from default") : nil].compactMap { $0 }.joined(separator: ", "))
-
   }
   #endif
 
@@ -557,13 +557,13 @@ struct MenuScreen: View {
     guard item.isEnabled, !item.activateInPlace() else { return }
     switch item.role {
     case .action, .destructive, .toggle, .picker, .cycle:
-      break   // `activateInPlace` ran it.
+      break // `activateInPlace` ran it.
     case .navigation(let makeChild):
       pushedChild = PushedMenu(model: makeChild())
     case .destination(let destinationView):
       pushedDestination = PushedDestination(view: destinationView)
     case .stepper:
-      break   // A does nothing here; left/right adjust.
+      break // A does nothing here; left/right adjust.
     case .custom:
       item.onCustomActivate?()
     }
@@ -662,28 +662,28 @@ struct MenuScreen: View {
   private var tilesBody: some View {
     let columns = style.columns
     return ScrollViewReader { proxy in
-        ScrollView {
-          VStack(alignment: .leading, spacing: 16) {
-            ForEach(model.sections) { section in
-              if let header = section.header {
-                Text(header).font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
-              }
-              LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: 12) {
-                ForEach(section.items) { item in tile(item, focused: focusedID == item.id) }
-              }
+      ScrollView {
+        VStack(alignment: .leading, spacing: 16) {
+          ForEach(model.sections) { section in
+            if let header = section.header {
+              Text(header).font(.subheadline.weight(.semibold)).foregroundStyle(.white.opacity(0.7))
+            }
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: columns), spacing: 12) {
+              ForEach(section.items) { item in tile(item, focused: focusedID == item.id) }
             }
           }
-          .padding(16)
         }
-        // Inset, not a sibling: the last row scrolls clear of the shelf instead of sitting under it.
-        .safeAreaInset(edge: .bottom, spacing: 12) {
-          InfoShelf(text: focusedItem?.description, value: focusedItem?.currentValueTitle)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-        }
-        .onChange(of: focusedID) { _, id in
-          if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
-        }
+        .padding(16)
+      }
+      // Inset, not a sibling: the last row scrolls clear of the shelf instead of sitting under it.
+      .safeAreaInset(edge: .bottom, spacing: 12) {
+        InfoShelf(text: focusedItem?.description, value: focusedItem?.currentValueTitle)
+          .padding(.horizontal, 16)
+          .padding(.bottom, 12)
+      }
+      .onChange(of: focusedID) { _, id in
+        if let id { withAnimation { proxy.scrollTo(id, anchor: .center) } }
+      }
     }
   }
 
@@ -1087,14 +1087,14 @@ struct MenuScreen: View {
     if let header = section.header {
       Section(header: Text(header), footer: footerView(section)) {
         ForEach(section.items) { item in
-      tvRow(item).accessibilityIdentifier("menu.row.\(item.id)")
-    }
+          tvRow(item).accessibilityIdentifier("menu.row.\(item.id)")
+        }
       }
     } else {
       Section(footer: footerView(section)) {
         ForEach(section.items) { item in
-      tvRow(item).accessibilityIdentifier("menu.row.\(item.id)")
-    }
+          tvRow(item).accessibilityIdentifier("menu.row.\(item.id)")
+        }
       }
     }
   }
@@ -1152,8 +1152,8 @@ struct MenuScreen: View {
       Button { performActivate(item) } label: {
         rowLabel(item, value: nil, valueStyle: .neutral, isDestructive: true)
       }
-        .disabled(!item.isEnabled)
-        .focused($tvFocusedID, equals: item.id)
+      .disabled(!item.isEnabled)
+      .focused($tvFocusedID, equals: item.id)
     }
   }
 

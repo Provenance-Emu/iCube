@@ -3,8 +3,8 @@
 
 #if os(iOS)
 import CoreHaptics
-import GameController
 import Foundation
+import GameController
 
 /// The Test Rumble pulse: buzzes every connected controller and the device, then toasts what fired.
 enum RumbleTest {
@@ -42,7 +42,7 @@ enum RumbleTest {
       } catch {}
     }
     let message: String
-    if controllersTestedCount > 0 && deviceTested {
+    if controllersTestedCount > 0, deviceTested {
       message = String(format: L("Tested %d controller(s) + device rumble"), controllersTestedCount)
     } else if controllersTestedCount > 0 {
       message = String(format: L("Tested %d controller(s) rumble"), controllersTestedCount)

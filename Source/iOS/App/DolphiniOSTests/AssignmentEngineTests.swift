@@ -38,7 +38,6 @@ private func state(
 }
 
 final class AssignmentEngineTests: XCTestCase {
-
   // MARK: Touchscreen fallback
 
   func test_noControllers_emptyPad1_bindsTouchscreenToPad1() {

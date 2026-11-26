@@ -32,6 +32,7 @@ private actor SafetySyncProvider: SyncProvider {
     uploadedData[metadata.relativePath] = data
     if mode == .uploadFailure { throw SyncProviderError.uploadFailed("Expected failure") }
   }
+
   func download(metadata: SyncableFileMetadata) async throws -> Data {
     downloads += 1
     if mode == .downloadFailure { throw SyncProviderError.downloadFailed("Expected failure") }
@@ -41,11 +42,16 @@ private actor SafetySyncProvider: SyncProvider {
     if mode == .suspended { return await withCheckedContinuation { payloadWaiter = $0 } }
     return payload
   }
+
   func waitUntilDownloading() async {
     if downloading { return }
     await withCheckedContinuation { startWaiter = $0 }
   }
-  func finishDownload() { payloadWaiter?.resume(returning: payload); payloadWaiter = nil }
+
+  func finishDownload() { payloadWaiter?.resume(returning: payload)
+    payloadWaiter = nil
+  }
+
   func setPayload(_ data: Data) { payload = data }
   func downloadCount() -> Int { downloads }
   func uploads() -> [String] { uploadedPaths }
@@ -61,10 +67,12 @@ private actor SafetySyncProvider: SyncProvider {
     }
     return remoteSnapshot
   }
+
   func finishSnapshot(_ metadata: SyncableFileMetadata) {
     snapshotWaiter?.resume(returning: RemoteSyncSnapshot(files: [metadata]))
     snapshotWaiter = nil
   }
+
   func writeTombstone(_ tombstone: SyncTombstone) async throws {}
   func purgeExpiredTombstones(olderThan cutoff: Date) async throws {}
   func purgeAllData() async throws {}
@@ -77,13 +85,20 @@ private final class CommitBarrierFileManager: FileManager, @unchecked Sendable {
   private let stateLock = NSLock()
   private var armed = false
   private var pauseLeaf = "Profiles"
-  func arm(atLeaf leaf: String = "Profiles") { stateLock.lock(); armed = true; pauseLeaf = leaf; stateLock.unlock() }
+  func arm(atLeaf leaf: String = "Profiles") { stateLock.lock()
+    armed = true
+    pauseLeaf = leaf
+    stateLock.unlock()
+  }
+
   override func fileExists(atPath path: String) -> Bool {
     stateLock.lock()
     let pause = armed && URL(fileURLWithPath: path).lastPathComponent == pauseLeaf
     if pause { armed = false }
     stateLock.unlock()
-    if pause { entered.signal(); _ = release.wait(timeout: .now() + 5) }
+    if pause { entered.signal()
+      _ = release.wait(timeout: .now() + 5)
+    }
     return super.fileExists(atPath: path)
   }
 }
@@ -110,7 +125,7 @@ final class CloudSyncSafetyTests: XCTestCase {
     let localDate = Date(timeIntervalSince1970: 1_700_000_000)
     try FileManager.default.setAttributes([.modificationDate: localDate], ofItemAtPath: file.path)
     let local = SyncableFileMetadata(relativePath: path, lastModified: localDate,
-                                    fileSize: Int64(original.count), checksum: SyncChecksum.sha256Hex(original), fileType: path.lowercased().hasPrefix("config/") ? .config : .saveState)
+                                     fileSize: Int64(original.count), checksum: SyncChecksum.sha256Hex(original), fileType: path.lowercased().hasPrefix("config/") ? .config : .saveState)
     var remote = local
     remote.lastModified = localDate.addingTimeInterval(-2) // The user's explicit remote choice may be older.
     remote.fileSize = 6
@@ -121,8 +136,8 @@ final class CloudSyncSafetyTests: XCTestCase {
     let trash = SyncTrash(rootURL: root.appendingPathComponent("Trash"))
     let gate = SyncLocalIOGate()
     let coordinator = CloudSyncCoordinator(network: StaticNetworkState.unconstrained, enabled: true,
-      scanner: UserDataScanner(rootDirectory: root), provider: provider, index: index,
-      trash: trash, localIOGate: gate, pendingConflicts: [conflict])
+                                           scanner: UserDataScanner(rootDirectory: root), provider: provider, index: index,
+                                           trash: trash, localIOGate: gate, pendingConflicts: [conflict])
     let enabledKey = "icube.cloudSync.enabled"
     let savedEnabled = UserDefaults.standard.object(forKey: enabledKey)
     addTeardownBlock {
@@ -147,15 +162,15 @@ final class CloudSyncSafetyTests: XCTestCase {
 
   private func shardMetadata(path: String, bytes: Data, type: SyncableFileType = .gameProfile) -> SyncableFileMetadata {
     SyncableFileMetadata(relativePath: path, lastModified: Date(), fileSize: Int64(bytes.count),
-      checksum: SyncChecksum.sha256Hex(bytes), fileType: type)
+                         checksum: SyncChecksum.sha256Hex(bytes), fileType: type)
   }
 
   func testInitialScannerLeaseDrainsBeforeCoreBootCanOpenFiles() async throws {
     let f = try fixture(.success)
     let barrier = CommitBarrierFileManager()
     let coordinator = CloudSyncCoordinator(network: StaticNetworkState.unconstrained, enabled: true,
-      scanner: UserDataScanner(rootDirectory: f.root, fileManager: barrier), provider: f.provider,
-      index: f.index, trash: f.trash, localIOGate: f.gate)
+                                           scanner: UserDataScanner(rootDirectory: f.root, fileManager: barrier), provider: f.provider,
+                                           index: f.index, trash: f.trash, localIOGate: f.gate)
     addTeardownBlock { await coordinator.handle(.enabledChanged(false)) }
     barrier.arm(atLeaf: f.root.lastPathComponent)
     await coordinator.syncNow()
@@ -163,7 +178,9 @@ final class CloudSyncSafetyTests: XCTestCase {
     XCTAssertEqual(entered, .success)
     let generation = f.gate.beginEmulation()
     let drained = DispatchSemaphore(value: 0)
-    DispatchQueue.global().async { f.gate.waitForLocalIO(); drained.signal() }
+    DispatchQueue.global().async { f.gate.waitForLocalIO()
+      drained.signal()
+    }
     XCTAssertEqual(drained.wait(timeout: .now() + 0.05), .timedOut)
     barrier.release.signal()
     let didDrain = await Task.detached { drained.wait(timeout: .now() + 3) }.value
@@ -187,8 +204,8 @@ final class CloudSyncSafetyTests: XCTestCase {
     await f.provider.setSnapshot(RemoteSyncSnapshot(files: [shardMetadata(path: path, bytes: remote)]))
     let barrier = CommitBarrierFileManager()
     let coordinator = CloudSyncCoordinator(network: StaticNetworkState.unconstrained, enabled: true,
-      scanner: UserDataScanner(rootDirectory: f.root, fileManager: barrier), provider: f.provider,
-      index: f.index, trash: f.trash, localIOGate: f.gate)
+                                           scanner: UserDataScanner(rootDirectory: f.root, fileManager: barrier), provider: f.provider,
+                                           index: f.index, trash: f.trash, localIOGate: f.gate)
     addTeardownBlock { await coordinator.handle(.enabledChanged(false)) }
     await coordinator.syncNow()
     await f.provider.waitUntilDownloading()
@@ -229,7 +246,7 @@ final class CloudSyncSafetyTests: XCTestCase {
     await f.provider.setPayload(bytes)
     await f.provider.setSnapshot(RemoteSyncSnapshot(files: [shardMetadata(path: path, bytes: bytes)]))
     let notification = expectation(forNotification: CloudSyncCoordinator.documentDidChangeNotification,
-      object: f.coordinator) { note in note.userInfo?[CloudSyncCoordinator.relativePathKey] as? String == path }
+                                   object: f.coordinator) { note in note.userInfo?[CloudSyncCoordinator.relativePathKey] as? String == path }
     await f.coordinator.syncNow()
     await f.coordinator.waitForCurrentSyncCompletion()
     await fulfillment(of: [notification], timeout: 1)
@@ -361,8 +378,8 @@ final class CloudSyncSafetyTests: XCTestCase {
       checksum: SyncChecksum.sha256Hex(bytes), fileType: .gameProfile)]))
     let barrier = CommitBarrierFileManager()
     let coordinator = CloudSyncCoordinator(network: StaticNetworkState.unconstrained, enabled: true,
-      scanner: UserDataScanner(rootDirectory: f.root, fileManager: barrier), provider: f.provider,
-      index: f.index, trash: f.trash, localIOGate: f.gate)
+                                           scanner: UserDataScanner(rootDirectory: f.root, fileManager: barrier), provider: f.provider,
+                                           index: f.index, trash: f.trash, localIOGate: f.gate)
     addTeardownBlock { await coordinator.handle(.enabledChanged(false)) }
     await coordinator.syncNow()
     await f.provider.waitUntilDownloading()
@@ -379,7 +396,7 @@ final class CloudSyncSafetyTests: XCTestCase {
     }
     XCTAssertEqual(writerStarted.wait(timeout: .now() + 1), .success)
     XCTAssertEqual(writerFinished.wait(timeout: .now() + 0.05), .timedOut,
-      "Local store writes must wait for the scanner document commit")
+                   "Local store writes must wait for the scanner document commit")
     barrier.release.signal()
     await coordinator.waitForCurrentSyncCompletion()
     XCTAssertEqual(writerFinished.wait(timeout: .now() + 1), .success)
@@ -396,7 +413,7 @@ final class CloudSyncSafetyTests: XCTestCase {
     let remoteBytes = try remote.encoded()
     await f.provider.setPayload(remoteBytes)
     let metadata = SyncableFileMetadata(relativePath: "Profiles/library_state.json", lastModified: Date(),
-      fileSize: Int64(remoteBytes.count), checksum: SyncChecksum.sha256Hex(remoteBytes), fileType: .libraryState)
+                                        fileSize: Int64(remoteBytes.count), checksum: SyncChecksum.sha256Hex(remoteBytes), fileType: .libraryState)
     await f.provider.setSnapshot(RemoteSyncSnapshot(files: [metadata]))
     await f.coordinator.syncNow()
     await f.provider.waitUntilDownloading()
@@ -417,7 +434,7 @@ final class CloudSyncSafetyTests: XCTestCase {
     let malformed = Data("malformed".utf8)
     await f.provider.setPayload(malformed)
     let metadata = SyncableFileMetadata(relativePath: "Profiles/library_state.json", lastModified: Date().addingTimeInterval(300),
-      fileSize: Int64(malformed.count), checksum: SyncChecksum.sha256Hex(malformed), fileType: .libraryState)
+                                        fileSize: Int64(malformed.count), checksum: SyncChecksum.sha256Hex(malformed), fileType: .libraryState)
     await f.provider.setSnapshot(RemoteSyncSnapshot(files: [metadata]))
     await f.coordinator.syncNow()
     await f.coordinator.waitForCurrentSyncCompletion()
@@ -433,12 +450,12 @@ final class CloudSyncSafetyTests: XCTestCase {
     let remote = try LibraryStateDocument(games: ["REMOTE": .init(launches: ["remote": 1])]).encoded()
     await f.provider.setPayload(remote)
     let metadata = SyncableFileMetadata(relativePath: "Profiles/library_state.json", lastModified: Date(),
-      fileSize: Int64(remote.count), checksum: SyncChecksum.sha256Hex(remote), fileType: .libraryState)
+                                        fileSize: Int64(remote.count), checksum: SyncChecksum.sha256Hex(remote), fileType: .libraryState)
     await f.provider.setSnapshot(RemoteSyncSnapshot(files: [metadata]))
     let notification = expectation(forNotification: CloudSyncCoordinator.documentDidChangeNotification,
-      object: f.coordinator) { note in
-        note.userInfo?[CloudSyncCoordinator.fileTypeKey] as? String == SyncableFileType.libraryState.rawValue
-      }
+                                   object: f.coordinator) { note in
+      note.userInfo?[CloudSyncCoordinator.fileTypeKey] as? String == SyncableFileType.libraryState.rawValue
+    }
     await f.coordinator.syncNow()
     await f.coordinator.waitForCurrentSyncCompletion()
     await fulfillment(of: [notification], timeout: 1)
@@ -488,7 +505,7 @@ final class CloudSyncSafetyTests: XCTestCase {
       let metadata = f.conflict.metadata
       await f.index.record(path: path, checksum: metadata.checksum, lastModified: metadata.lastModified)
       await f.provider.setSnapshot(RemoteSyncSnapshot(tombstones: [SyncTombstone(relativePath: path,
-        checksum: metadata.checksum, deletedAt: Date())]))
+                                                                                 checksum: metadata.checksum, deletedAt: Date())]))
       await f.coordinator.syncNow()
       await f.coordinator.waitForCurrentSyncCompletion()
       XCTAssertTrue(FileManager.default.fileExists(atPath: f.file.path), path)
@@ -537,7 +554,7 @@ final class CloudSyncSafetyTests: XCTestCase {
   func testFailedUploadsAndDownloadsRetainConflicts() async throws {
     for mode in [SafetySyncProvider.Mode.uploadFailure, .downloadFailure] {
       let f = try fixture(mode)
-        let result = await f.coordinator.resolve(f.conflict, as: mode == .uploadFailure ? .useLocal : .useRemote)
+      let result = await f.coordinator.resolve(f.conflict, as: mode == .uploadFailure ? .useLocal : .useRemote)
       XCTAssertTrue(result.message?.contains("Expected failure") == true)
       XCTAssertEqual(f.coordinator.pendingConflicts.map(\.id), [f.conflict.id])
       XCTAssertEqual(try Data(contentsOf: f.file), Data("original".utf8))
@@ -661,8 +678,8 @@ final class CloudSyncSafetyTests: XCTestCase {
     let f = try fixture(.success)
     try FileManager.default.removeItem(at: f.file)
     let deletion = SyncConflict(id: f.conflict.id, kind: .deletedRemotelyChangedLocally,
-      metadata: f.conflict.metadata, localVersion: f.conflict.localVersion,
-      remoteVersion: f.conflict.remoteVersion)
+                                metadata: f.conflict.metadata, localVersion: f.conflict.localVersion,
+                                remoteVersion: f.conflict.remoteVersion)
     await f.coordinator.resolve(deletion, as: .useRemote)
     XCTAssertEqual(f.coordinator.pendingConflicts.map(\.id), [f.conflict.id])
   }
@@ -695,9 +712,9 @@ final class CloudSyncSafetyTests: XCTestCase {
   func testRescanRefreshesRemoteVersionForAnExistingConflictPath() throws {
     let f = try fixture(.success)
     let newer = SyncConflict.FileVersion(modifiedDate: f.conflict.remoteVersion.modifiedDate.addingTimeInterval(10),
-      size: 20, checksum: "newer-remote-checksum")
+                                         size: 20, checksum: "newer-remote-checksum")
     let refreshed = SyncConflict(metadata: f.conflict.metadata,
-      localVersion: f.conflict.localVersion, remoteVersion: newer)
+                                 localVersion: f.conflict.localVersion, remoteVersion: newer)
     f.coordinator.recordConflict(refreshed)
     XCTAssertEqual(f.coordinator.pendingConflicts.count, 1)
     XCTAssertEqual(f.coordinator.pendingConflicts.first?.remoteVersion, newer)

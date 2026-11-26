@@ -15,8 +15,8 @@
 // To reach it from a Mac over USB, forward the port with libimobiledevice:
 //     iproxy 8723 8723   # then curl http://127.0.0.1:8723/api/perf/live
 
-import Foundation
 import CryptoKit
+import Foundation
 import Network
 import os
 
@@ -441,8 +441,8 @@ final class NativeWebServer: @unchecked Sendable {
   private func routeRequest(on connection: NWConnection, request: HTTPRequest, body: Data) {
     // One gate, before any route runs, so a new endpoint cannot forget to check.
     if let (status, message) = authFailure(for: request,
-                                          remoteAddress: remoteAddress(connection),
-                                          isLoopback: isLoopback(connection)) {
+                                           remoteAddress: remoteAddress(connection),
+                                           isLoopback: isLoopback(connection)) {
       sendResponse(on: connection, status: status, statusText: Self.statusText(status),
                    body: "{\"ok\":false,\"error\":\"\(message)\"}",
                    contentType: "application/json")

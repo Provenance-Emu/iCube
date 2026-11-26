@@ -35,7 +35,7 @@ final class LivePerformanceSession: ObservableObject {
       Task { @MainActor [weak self] in if self?.isPresented == true { self?.rebuild() } }
     }
     observers.append(NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification,
-      object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.close() } })
+                                                            object: nil, queue: .main) { [weak self] _ in Task { @MainActor in self?.close() } })
   }
 
   func attach(owner: UUID, gameSession: @escaping () -> String?, canOpen: @escaping () -> Bool,
@@ -52,7 +52,10 @@ final class LivePerformanceSession: ObservableObject {
     guard self.owner == owner else { return }
     close()
     self.owner = nil
-    gameSession = { nil }; canOpen = { false }; onPause = {}; onControllerUnavailable = {}
+    gameSession = { nil }
+    canOpen = { false }
+    onPause = {}
+    onControllerUnavailable = {}
   }
 
   /// Caller routes a coalesced short Menu press; this class deliberately never polls Menu.
@@ -102,7 +105,8 @@ final class LivePerformanceSession: ObservableObject {
   static func hasGameplayController() -> Bool {
     // The manager's list: a wrapped pad (the Switch Online SNES pad) has an extended gamepad there.
     ControllerManager.shared.controllers.contains { $0.extendedGamepad != nil ||
-      ($0.microGamepad == nil && !$0.physicalInputProfile.buttons.isEmpty) }
+      ($0.microGamepad == nil && !$0.physicalInputProfile.buttons.isEmpty)
+    }
   }
 
   private func startPolling() {
@@ -116,26 +120,37 @@ final class LivePerformanceSession: ObservableObject {
     let connected = GCController.controllers()
     pending.reap(connected: connected)
     guard isPresented else {
-      if pending.isEmpty { timer?.invalidate(); timer = nil }
+      if pending.isEmpty { timer?.invalidate()
+        timer = nil
+      }
       return
     }
     ownership.reconcile(session: gameSession())
-    guard ownership.isPresented, UIApplication.shared.applicationState == .active else { close(); return }
+    guard ownership.isPresented, UIApplication.shared.applicationState == .active else { close()
+      return
+    }
     // The host must adopt its disconnect pause synchronously before the overlay relinquishes ownership.
     guard Self.hasGameplayController() else {
       ownership.transitionToPause(claim: onControllerUnavailable)
       close()
       return
     }
-    guard canOpen() else { close(); return }
-    guard let remote, connected.contains(where: { $0 === remote }) else {
-      lease?.forceReleaseForDisconnect(); lease = nil; close(); return
+    guard canOpen() else { close()
+      return
     }
-    guard let micro = remote.microGamepad else { close(); return }
+    guard let remote, connected.contains(where: { $0 === remote }) else {
+      lease?.forceReleaseForDisconnect()
+      lease = nil
+      close()
+      return
+    }
+    guard let micro = remote.microGamepad else { close()
+      return
+    }
     if openingNeutral {
       let buttonsNeutral = remote.physicalInputProfile.buttons.values.allSatisfy { !$0.isPressed && $0.value < 0.05 }
       let axesNeutral = remote.physicalInputProfile.axes.values.allSatisfy { abs($0.value) < 0.2 }
-      guard buttonsNeutral && axesNeutral else { return }
+      guard buttonsNeutral, axesNeutral else { return }
       openingNeutral = false
     }
     let actions = input.poll(horizontal: micro.dpad.xAxis.value, vertical: micro.dpad.yAxis.value,
@@ -159,10 +174,11 @@ final class LivePerformanceSession: ObservableObject {
     navigation.cancelChoices()
     if let remote, let lease {
       pending.retain(controller: remote, request: { lease.requestRelease() },
-        poll: { lease.pollRelease() }, disconnect: { lease.forceReleaseForDisconnect() })
+                     poll: { lease.pollRelease() }, disconnect: { lease.forceReleaseForDisconnect() })
       startPolling()
     }
-    remote = nil; lease = nil
+    remote = nil
+    lease = nil
   }
 
   private func rebuild() {
@@ -192,7 +208,7 @@ final class LivePerformanceSession: ObservableObject {
         rebuild()
       } else {
         navigation.openChoices(for: item.id, count: choices.options.count,
-          selected: choices.options.firstIndex(where: { $0.1 == choices.selection.wrappedValue }) ?? 0)
+                               selected: choices.options.firstIndex(where: { $0.1 == choices.selection.wrappedValue }) ?? 0)
       }
     } else {
       _ = item.activateInPlace()

@@ -72,7 +72,7 @@ enum EmulationServerMetadataSync {
     return KeychainService.getPassword(for: target.credentialKey)
   }
 
-  nonisolated private static func uploadCover(_ data: Data) -> Data? {
+  private nonisolated static func uploadCover(_ data: Data) -> Data? {
     for size in [coverPixelSize, RemoteCovers.maximumPixelSize] {
       if let cover = RemoteCovers.thumbnail(data, maximumPixelSize: size), cover.count <= maximumCoverBytes {
         return cover

@@ -1,5 +1,5 @@
-import SwiftUI
 import PVHelp
+import SwiftUI
 
 /// The pause-menu "Save States" screen (`PauseMenuView`'s `showFilmstripSheet`).
 ///
@@ -272,7 +272,7 @@ struct SaveStateFilmstripView: View {
         guard TVEmulationBridge.currentGameID() == gameID,
               TVEmulationBridge.currentSessionIdentifier() == session else { return }
         let outcome = await QuickSaveActions.loadSelected(state,
-          expectedSession: .init(gameID: gameID, identifier: session))
+                                                          expectedSession: .init(gameID: gameID, identifier: session))
         guard !Task.isCancelled, TVEmulationBridge.currentGameID() == gameID,
               TVEmulationBridge.currentSessionIdentifier() == session else { return }
         if !outcome.message.isEmpty { EmulationToast.post(outcome.message) }

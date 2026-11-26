@@ -9,15 +9,15 @@ import WidgetKit
 /// tapped (`ResumeLastGameIntent`), so the control needs no timeline and no refresh.
 @available(iOS 18.0, *)
 struct ResumeLastGameControl: ControlWidget {
-    static let kind = "com.joemattiello.icube.ResumeLastGameControl"
+  static let kind = "com.joemattiello.icube.ResumeLastGameControl"
 
-    var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: Self.kind) {
-            ControlWidgetButton(action: ResumeLastGameIntent()) {
-                Label("Resume Last Game", systemImage: "gamecontroller.fill")
-            }
-        }
-        .displayName("Resume Last Game")
-        .description("Opens iCube and resumes the game you played most recently.")
+  var body: some ControlWidgetConfiguration {
+    StaticControlConfiguration(kind: Self.kind) {
+      ControlWidgetButton(action: ResumeLastGameIntent()) {
+        Label("Resume Last Game", systemImage: "gamecontroller.fill")
+      }
     }
+    .displayName("Resume Last Game")
+    .description("Opens iCube and resumes the game you played most recently.")
+  }
 }

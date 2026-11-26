@@ -11,7 +11,6 @@ enum TopBarDestination: Equatable {
   case editLayout, saveStates
 }
 
-
 /// The visible action order is shared by the toolbar and its layout regressions.
 enum TopBarControl: String, CaseIterable {
   case pause, save, load, saves, fastForward, audio, controller, display, shaders, options, hide

@@ -14,7 +14,7 @@ final class QuickActionsUpdaterTests: XCTestCase {
 
   func testShortcutItemsUsesUpToThreeMostRecentGamesInOrder() {
     let now = Date()
-    let recents = (0..<5).map { i in
+    let recents = (0 ..< 5).map { i in
       fixtureGame("G\(i)AE01", title: "Game \(i)", lastPlayed: now.addingTimeInterval(TimeInterval(-i)))
     }
     let snapshot = LibrarySnapshot(

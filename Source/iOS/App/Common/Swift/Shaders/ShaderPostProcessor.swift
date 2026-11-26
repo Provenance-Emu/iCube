@@ -43,6 +43,7 @@ import MetalKit
   private func clearError() {
     DispatchQueue.main.async { self.lastError = nil }
   }
+
   #if DEBUG
   private var debugChecker: MTLTexture?
   #endif
@@ -471,6 +472,7 @@ import MetalKit
   }
 
   // MARK: - Preset-scoped parameter access (D16)
+
   //
   // The three methods below let the pause-menu quick picker's parameter editor
   // work for ANY preset the user just tapped, not only the one that happens to be

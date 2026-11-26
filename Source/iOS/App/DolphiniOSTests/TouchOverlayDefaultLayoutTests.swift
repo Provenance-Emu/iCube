@@ -31,7 +31,9 @@ final class TouchOverlayDefaultLayoutTests: XCTestCase {
   }
 
   private static func isIRSurface(_ layout: TouchOverlayGroupLayout) -> Bool {
-    layout.controls.contains { if case .irSurface = $0.kind { return true }; return false }
+    layout.controls.contains { if case .irSurface = $0.kind { return true }
+      return false
+    }
   }
 
   /// Absolute frame of a control: group box origin + the control's local frame.

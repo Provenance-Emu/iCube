@@ -12,9 +12,9 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
     // dolphinios://gameInfo | open | requestGame | handoff   (sibling apps, see EcosystemBridge)
     // Also accept legacy: dsu://192.168.1.23:26760
     if handlePlayLink(url) { return true }
-#if os(iOS)
+    #if os(iOS)
     if handleControllerLink(url) { return true }
-#endif
+    #endif
     if handleDSULink(url) { return true }
     if handleEcosystemLink(url) { return true }
     return false
@@ -40,7 +40,7 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
     return true
   }
 
-#if os(iOS)
+  #if os(iOS)
   /// Starts the one-tap phone controller session. A property so a test can stand in for the UI.
   var beginPhoneControllerSession: @MainActor () -> Void = { PhoneControllerSession.begin() }
 
@@ -51,7 +51,7 @@ final class URLRouterService: NSObject, UIApplicationDelegate {
     Task { @MainActor in begin() }
     return true
   }
-#endif
+  #endif
 
   private func handleDSULink(_ url: URL) -> Bool {
     if url.scheme?.lowercased() == "dolphinios" {
