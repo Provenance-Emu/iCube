@@ -35,7 +35,6 @@ struct GraphicsHacksView: View {
     s.useComputeEfbXfb = DOLConfigBridge.gfxUseComputeEfbXfb()
     s.useComputeVertexDecode = DOLConfigBridge.gfxUseComputeVertexDecode()
     s.noMipmapping = DOLConfigBridge.gfxHackNoMipmapping()
-    s.gpuEfbPeekResolve = DOLConfigBridge.gfxHackGpuEfbPeekResolve()
     s.viDecimateInterlace = DOLConfigBridge.gfxHackViDecimateInterlace()
     state = s
   }
@@ -62,7 +61,6 @@ struct GraphicsHacksView: View {
     case .useComputeEfbXfb(let v): state.useComputeEfbXfb = v; DOLConfigBridge.setGfxUseComputeEfbXfb(v)
     case .useComputeVertexDecode(let v): state.useComputeVertexDecode = v; DOLConfigBridge.setGfxUseComputeVertexDecode(v)
     case .noMipmapping(let v): state.noMipmapping = v; DOLConfigBridge.setGfxHackNoMipmapping(v)
-    case .gpuEfbPeekResolve(let v): state.gpuEfbPeekResolve = v; DOLConfigBridge.setGfxHackGpuEfbPeekResolve(v)
     case .viDecimateInterlace(let v): state.viDecimateInterlace = v; DOLConfigBridge.setGfxHackViDecimateInterlace(v)
     }
   }

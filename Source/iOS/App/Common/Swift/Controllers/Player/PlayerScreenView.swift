@@ -26,7 +26,7 @@ struct PlayerScreenView: View {
     MenuScreen(
       // `displayState`, not `state`: the first render (and tvOS's default focus) must not see the
       // empty snapshot that `start()` has not replaced yet.
-      model: PlayerScreenModelBuilder.make(state: viewModel.displayState, actions: viewModel.actions, platform: .current),
+      model: viewModel.menuModel(platform: .current),
       style: .list,
       onBack: {
         // While a capture is armed, B / Menu must reach the capture (so `Button B` stays bindable);
