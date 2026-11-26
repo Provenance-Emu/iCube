@@ -3,6 +3,7 @@
 
 import Foundation
 import PVContinuity
+import PVRemoteLibrary
 
 /// Drives the browsing half of nearby library sharing: authenticate, list the
 /// peer's games, and copy one.
@@ -47,6 +48,7 @@ final class ContinuityLibraryBrowseController: ObservableObject {
     private let pairingClient: ContinuityPairingClient
     private let fileProvider: any ContinuityFileProviding
     private let didPair: @MainActor (ContinuityPairingClient.PairingHandle) async -> Void
+  private let covers: RemoteCoverCache
   private var serverLibrary: (any RemoteGameCatalog)?
   private var serverEntries: [ContinuityLibraryEntry] = []
   private var serverEntryKeys = Set<String>()
@@ -60,6 +62,7 @@ final class ContinuityLibraryBrowseController: ObservableObject {
         identity: ContinuityPeerIdentity,
         transport: any ContinuityTransport = ICubeContinuityTransport(),
         fileProvider: any ContinuityFileProviding = ICubeContinuityFileProvider(currentGameFilePath: { nil }),
+    covers: RemoteCoverCache = RemoteCovers.shared,
         didPair: @escaping @MainActor (ContinuityPairingClient.PairingHandle) async -> Void = {
             await ContinuityManager.shared.rememberPairedHost($0)
         }
@@ -69,6 +72,7 @@ final class ContinuityLibraryBrowseController: ObservableObject {
         self.client = ContinuityLibraryClient(identity: identity, transport: bound)
         self.pairingClient = ContinuityPairingClient(identity: identity, transport: bound)
         self.fileProvider = fileProvider
+    self.covers = covers
         self.didPair = didPair
     }
 
@@ -261,19 +265,23 @@ final class ContinuityLibraryBrowseController: ObservableObject {
         if operationID == id { operation = nil }
     }
 
-    /// Fetches one cover, once. A missing cover is a placeholder, never an
-    /// error the user sees.
-    func loadArtwork(for entry: ContinuityLibraryEntry) async {
-        guard entry.hasArtwork, artwork[entry.key] == nil else { return }
-        if let serverLibrary {
-            artwork[entry.key] = await serverLibrary.artwork(for: entry)
-            return
-        }
-        guard let baseURL else { return }
-        if let data = await client.artwork(from: baseURL, key: entry.key) {
-            artwork[entry.key] = data
-        }
+  /// Fetches one cover, once. A missing cover is a placeholder, never an
+  /// error the user sees. The shared cover cache keeps it on disk, for a
+  /// server and for a nearby device alike.
+  func loadArtwork(for entry: ContinuityLibraryEntry) async {
+    guard entry.hasArtwork, artwork[entry.key] == nil, let source = librarySource else { return }
+    let game = LibraryGame(entry: entry, source: source.info.id)
+    if let data = await covers.cover(for: game, from: source) {
+      artwork[entry.key] = data
     }
+  }
+
+  /// The library being browsed, as the shared library model sees it.
+  private var librarySource: (any SharedLibrarySource)? {
+    if let serverLibrary { return RemoteCatalogSource(catalog: serverLibrary) }
+    guard let baseURL, let expectedPeerID else { return nil }
+    return NearbyPeerSource(peerID: expectedPeerID, client: client, baseURL: baseURL)
+  }
 
     /// A catalog does not contain content hashes. Mirrors must fetch a current,
     /// ROM-only manifest before considering a prior verified receipt reusable.
@@ -316,9 +324,8 @@ final class ContinuityLibraryBrowseController: ObservableObject {
       }
       let urls: [URL]
       if let temporaryFolder {
-        guard let server = library as? EmulationServerLibrary else { throw ContinuityError.cancelled }
         urls = try await ContinuityTransferGate.shared.withPermit {
-          try await server.copyTemporarily(entry, into: temporaryFolder) { progress in
+          try await library.copyTemporarily(entry, into: temporaryFolder) { progress in
             Task { @MainActor in report(progress) }
           }
         }
