@@ -895,10 +895,10 @@ let project = Project(
         // Externals/RomMClient, kept only until the server repo published it as a product.
         .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("f779275a927e5140ac8da3e95fef00073b3421fd")),
         .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.5")),
-        .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.1")),
+        .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.2")),
         // Shared with Provenance and iFly; 0.x: a minor may break. Resolves to prebuilt frameworks.
-        .remote(url: "https://github.com/Provenance-Emu/PVRemoteLibrary.git", requirement: .upToNextMinor(from: "0.3.1")),
-        .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.4")),
+        .remote(url: "https://github.com/Provenance-Emu/PVRemoteLibrary.git", requirement: .upToNextMinor(from: "0.3.3")),
+        .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.5")),
         .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.2")),
         // Shared with Provenance and iFly; iCube's choices are in
         // Common/Swift/Controllers/PhysicalProfile/ICubePhysicalProfile.swift.
@@ -917,14 +917,14 @@ let project = Project(
         .local(path: "../PLzmaShim"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
-        .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.1.1")),
+        .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.1.2")),
         // Streaming patch engine shared with iFly and Provenance. Change it in that repo, tag a
         // release, then bump the version here; there is no local copy to edit.
-        .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.2")),
+        .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.3")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         // 0.8.0 is the first release that resolves to prebuilt frameworks (ZIPFoundation comes
         // with it, from Provenance-Emu/PVDependencies).
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.8.0")),
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.8.1")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
