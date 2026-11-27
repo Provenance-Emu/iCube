@@ -233,7 +233,7 @@ archive_and_upload() {
     run mkdir -p "$ARCHIVES_DIR" "$export_path"
 
     log "Archiving ${platform}…"
-    run xcodebuild archive \
+    run lockf -k -t 10800 /tmp/provenance-emu-release-signing.lock xcodebuild archive \
         -workspace "$WORKSPACE" \
         -scheme "$SCHEME" \
         -configuration "$CONFIGURATION" \
@@ -251,7 +251,7 @@ archive_and_upload() {
         "$archive/Products/Applications/$binary"
 
     log "Uploading $platform to App Store Connect…"
-    run xcodebuild -exportArchive \
+    run lockf -k -t 10800 /tmp/provenance-emu-release-signing.lock xcodebuild -exportArchive \
         -archivePath "$archive" \
         -exportPath "$export_path" \
         -exportOptionsPlist "$EXPORT_OPTIONS" \
