@@ -23,8 +23,31 @@ final class GameplayBezelSession: ObservableObject, BezelSwitcherSession {
     didSet { if bezelPreview != oldValue { resolve() } }
   }
 
+  let renderer = GameplayBezelRenderer()
+  @Published private(set) var droppedForSession = false
+
+  var supportsRoomLight: Bool {
+    GameplayBezelRenderer.supportsRoomLight && screenState.canvas.width > screenState.canvas.height
+      && !droppedForSession && bezel?.image == nil && bezel?.lightsRoom == true
+  }
+
+  @Published private(set) var wantsRoomLight = false
+
+  var lightsRoom: Bool { supportsRoomLight && wantsRoomLight }
+
+  func showScene(_ request: GameplayBezelRenderer.Request?) {
+    renderer.didDrop = { [weak self] in
+      self?.droppedForSession = true
+      self?.isBezelLoading = false
+    }
+    if request != nil { DOLShaderPostProcessor.shared.useBezelRenderer(renderer) }
+    if renderer.update(request, didLoad: { [weak self] in self?.isBezelLoading = false }), request != nil {
+      isBezelLoading = true
+    }
+  }
+
   /// What the screen last reported, for `canShowBezel`.
-  var screenState = ICubeBezels.ScreenState()
+  @Published var screenState = ICubeBezels.ScreenState()
 
   private var gameKey: String?
   private var isWii = false
@@ -59,6 +82,7 @@ final class GameplayBezelSession: ObservableObject, BezelSwitcherSession {
   }
 
   private func resolve() {
+    wantsRoomLight = BezelChoice.lightsRoom(preview: bezelPreview)
     let resolved = BezelChoice.resolve(gameID: gameKey, systemID: bezelSystemID, systemSuitsTV: bezelSystemSuitsTV,
                                        preview: bezelPreview)
     let next = resolved.bezel.flatMap { unreadable.contains($0.id) ? nil : $0 }

@@ -2,7 +2,7 @@ import Foundation
 import Metal
 import MetalKit
 
-@objc final class DOLShaderPostProcessor: NSObject {
+@objc(DOLShaderPostProcessor) final class DOLShaderPostProcessor: NSObject {
   @objc static let shared = DOLShaderPostProcessor()
   override private init() {
     super.init()
@@ -15,6 +15,21 @@ import MetalKit
   private var cachedPresetPath: String?
   /// The game picture cut out of the core's frame, when the frame is larger than the picture. Video thread only.
   private var pictureTexture: MTLTexture?
+  private weak var bezelRenderer: GameplayBezelRenderer?
+
+  @MainActor
+  func useBezelRenderer(_ renderer: GameplayBezelRenderer) {
+    stateLock.withLock { bezelRenderer = renderer }
+  }
+
+  @objc var wantsPostProcessing: Bool {
+    UserDefaults.standard.bool(forKey: "shader_enabled") || stateLock.withLock { bezelRenderer?.isReady ?? false }
+  }
+
+  @objc var bezelPictureInViewport: CGRect {
+    stateLock.withLock { bezelRenderer?.pictureInViewport ?? .null }
+  }
+
   private var needsReload: Bool = false
   /// `library`, `cachedPresetPath` and `needsReload` are written by the video thread in
   /// `renderSource` and read or flagged from the main thread by the pickers. Two threads
@@ -283,6 +298,8 @@ import MetalKit
 
   @objc func renderSource(_ source: MTLTexture, commandBuffer cb: MTLCommandBuffer, drawable: CAMetalDrawable) {
     guard let device else { return }
+    let bezel = stateLock.withLock { bezelRenderer }
+    let bezelRequested = bezel?.isRequested == true
     stateLock.withLock {
       configureLocked(device)
       if needsReload {
@@ -341,7 +358,16 @@ import MetalKit
     }
     #endif
 
-    guard filter.hasShader else {
+    if bezelRequested, let bezel, bezel.isReady {
+      let picture = ShaderPictureGeometry.pictureRect(reported: TVEmulationBridge.currentPictureRectInFrame(), textureSize: srcSize)
+      let game = picture.flatMap { pictureSource(from: source, rect: $0, device: device, commandBuffer: cb) } ?? source
+      let flip = UserDefaults.standard.bool(forKey: "shader_flip_vertical")
+      if bezel.render(game: game, target: dst, pictureFilter: filter.hasShader ? filter : nil, commandBuffer: cb, flip: flip) {
+        return
+      }
+    }
+
+    guard filter.hasShader, !bezelRequested else {
       if let blit = cb.makeBlitCommandEncoder() {
         // print("[Shaders] Swift: no active shader; blit copy")
         blit.copy(from: source, sourceSlice: 0, sourceLevel: 0, sourceOrigin: .init(x: 0, y: 0, z: 0), sourceSize: .init(width: source.width, height: source.height, depth: 1), to: dst, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init(x: 0, y: 0, z: 0))

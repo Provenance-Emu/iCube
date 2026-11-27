@@ -294,6 +294,8 @@ struct EmulationScreen: View {
   /// keeps this shape until the game runs again (`ICubeBezels.surfaceFrame`).
   @State private var bezelDrawnAspect: CGFloat?
 
+  @Environment(\.displayScale) private var displayScale
+  @AppStorage("shader_enabled") private var bezelHasPictureFilter = false
   @AppStorage(ICubeBezels.seatKey) private var bezelSeat = TVBezelSeat.back.rawValue
 
   // iOS top overlay
@@ -472,8 +474,9 @@ struct EmulationScreen: View {
 
   /// Where the game surface and a TV's artwork go, in the emulation surface's coordinates.
   private struct BezelStage {
+    var scene: GameplayBezelRenderer.Request? = nil
     /// The TV and where its artwork goes; `nil` while the switcher previews the picture alone.
-    var artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?)?
+    var artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?, shape: TVBezelPictureShape)?
     /// Where the game picture shows.
     var picture: CGRect
     /// The frame of the surface the core draws into: `picture`, or larger while it keeps an older shape.
@@ -489,14 +492,30 @@ struct EmulationScreen: View {
                         height: proxy.size.height + insets.top + insets.bottom)
     let state = bezelScreenState(canvas: canvas)
     let pictureAspect = gameAR
-    if let bezel = bezels.bezel, ICubeBezels.showsTV(state, choiceIsAutomatic: bezels.choiceIsAutomatic),
-       let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1),
-                                       seat: TVBezelSeat(rawValue: bezelSeat) ?? .back) {
-      // The TV is laid out on the whole screen, like a skin; the surface's coordinates start inside the safe area.
-      let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
-      return BezelStage(
-        artwork: (bezel, layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top), layout.placement, layout.canvas),
-        picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
+    if let bezel = bezels.bezel, !bezels.droppedForSession,
+       ICubeBezels.showsTV(state, choiceIsAutomatic: bezels.choiceIsAutomatic) {
+      let seat = TVBezelSeat(rawValue: bezelSeat) ?? .back
+      if canvas.width > canvas.height, bezel.image == nil {
+        let bounds = CGRect(x: -insets.leading, y: -insets.top, width: canvas.width, height: canvas.height)
+        let sceneCanvas = bezel.presetID == nil ? TVBezelCanvas.size(display: canvas, seat: seat) : TVBezelArtwork.canvas
+        let frame = ICubeBezels.aspectFit(aspect: sceneCanvas.width / sceneCanvas.height, in: CGRect(origin: .zero, size: canvas))
+        let viewport = CGRect(x: frame.minX / canvas.width, y: frame.minY / canvas.height,
+                              width: frame.width / canvas.width, height: frame.height / canvas.height)
+        let scene = GameplayBezelRenderer.Request(
+          bezel: bezel, canvas: sceneCanvas, viewport: viewport, surfaceAspect: canvas.width / canvas.height,
+          pixelWidth: frame.width * displayScale, shape: TVBezelPictureShape(aspect: CGSize(width: pictureAspect, height: 1)),
+          lightsRoom: bezels.lightsRoom, flatGlass: bezelHasPictureFilter)
+        return BezelStage(scene: scene, artwork: nil, picture: bounds, surface: bounds)
+      }
+      if let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1),
+                                       seat: seat) {
+        // The surface's coordinates start inside the safe area.
+        let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
+        let art = layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
+        return BezelStage(
+          artwork: (bezel, art, layout.placement, layout.canvas, layout.shape),
+          picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
+      }
     }
     guard bezelDrawnAspect != nil || bezelSwitcherIsUp else { return nil }
     // Fit the old picture into the same bounds the unadorned surface would use.
@@ -509,8 +528,8 @@ struct EmulationScreen: View {
     return BezelStage(artwork: nil, picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
   }
 
-  private func bezelArtwork(_ artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?)) -> some View {
-    TVBezelArtworkView(bezel: artwork.bezel, canvas: artwork.canvas) { loaded in bezels.artworkLoaded(loaded, id: artwork.bezel.id) }
+  private func bezelArtwork(_ artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?, shape: TVBezelPictureShape)) -> some View {
+    TVBezelArtworkView(bezel: artwork.bezel, canvas: artwork.canvas, shape: artwork.shape) { loaded in bezels.artworkLoaded(loaded, id: artwork.bezel.id) }
       .frame(width: artwork.frame.width, height: artwork.frame.height)
       .position(x: artwork.frame.midX, y: artwork.frame.midY)
       // One TV's artwork never lingers in the next TV's frame.
@@ -766,6 +785,9 @@ struct EmulationScreen: View {
           .position(x: picture.midX, y: picture.midY)
         if let art = stage?.artwork, art.placement == .abovePicture { bezelArtwork(art) }
       }
+      .onChange(of: proxy.size, initial: true) { _, size in bezels.screenState = bezelScreenState(canvas: size) }
+      .onChange(of: stage?.scene, initial: true) { _, request in bezels.showScene(request) }
+      .onDisappear { bezels.showScene(nil) }
     }
     .ignoresSafeArea()
   }
@@ -842,7 +864,6 @@ struct EmulationScreen: View {
     }
     .onChange(of: showNoControllerNotice) { postOverlayVisibility() }
     .onAppear {
-      bezels.screenState = bezelScreenState(canvas: .zero)
       refreshBezelGame()
       attachLivePerformance()
       log.debug("[INPUT] tvOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
@@ -1069,6 +1090,8 @@ struct EmulationScreen: View {
           .position(x: picture.midX, y: picture.midY)
         if let art = stage?.artwork, art.placement == .abovePicture { bezelArtwork(art) }
       }
+      .onChange(of: stage?.scene, initial: true) { _, request in bezels.showScene(request) }
+      .onDisappear { bezels.showScene(nil) }
     }
     .onChange(of: UIDevice.current.orientation) {
       TVEmulationBridge.resizeSurfaceNow()

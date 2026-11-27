@@ -444,7 +444,7 @@ public final class FilterChain {
 
   public var drawableSize: CGSize = .zero {
     didSet {
-      resize()
+      if oldValue != drawableSize { resize() }
     }
   }
 
@@ -604,12 +604,15 @@ public final class FilterChain {
   /// - Parameter background: drawn unfiltered over the whole drawable before the final pass. The caller passes
   ///   the full frame when `sourceTexture` is only the picture cut out of it, so what the frame holds beside
   ///   the picture (its bars, and any on-screen messages or counters the core drew there) is kept.
+  @discardableResult
   public func render(sourceTexture: MTLTexture,
                      commandBuffer: MTLCommandBuffer,
                      renderPassDescriptor rpd: MTLRenderPassDescriptor,
                      flipVertically: Bool = false,
-                     background: MTLTexture? = nil) {
+                     background: MTLTexture? = nil,
+                     requiresShader: Bool = false) -> Bool {
     renderOffscreenPasses(sourceTexture: sourceTexture, commandBuffer: commandBuffer)
+    guard !requiresShader || shaderFrameReady else { return false }
     if let rce = commandBuffer.makeRenderCommandEncoder(descriptor: rpd) {
       if let background {
         renderBackground(background, renderCommandEncoder: rce, flipVertically: flipVertically)
@@ -648,7 +651,9 @@ public final class FilterChain {
       }
       renderFinalPass(withCommandEncoder: rce, flipVertically: flipVertically)
       rce.endEncoding()
+      return true
     }
+    return false
   }
 
   private func renderBackground(_ texture: MTLTexture, renderCommandEncoder rce: MTLRenderCommandEncoder,
@@ -1103,7 +1108,7 @@ public final class FilterChain {
     fallbackTexture = nil
   }
 
-  public func setCompiledShader(_ container: CompiledShaderContainer) throws {
+  public func setCompiledShader(_ container: CompiledShaderContainer, textures: [String: MTLTexture] = [:]) throws {
     freeShaderResources()
 
     _ = CACurrentMediaTime()
@@ -1313,7 +1318,7 @@ public final class FilterChain {
 //        let end = CACurrentMediaTime() - start
 //        os_log("Shader load completed in %{xcode:interval}f seconds", log: .default, type: .debug, end)
 
-    loadLuts(container)
+    loadLuts(container, textures: textures)
     hasShader = true
     renderTargetsNeedResize = true
     historyNeedsInit = true
@@ -1332,7 +1337,7 @@ public final class FilterChain {
     }
   }
 
-  private func loadLuts(_ cc: CompiledShaderContainer) {
+  private func loadLuts(_ cc: CompiledShaderContainer, textures: [String: MTLTexture]) {
     let opts: [MTKTextureLoader.Option: Any] = [
       .generateMipmaps: false,
       .allocateMipmaps: false,
@@ -1344,6 +1349,11 @@ public final class FilterChain {
 
     var i = 0
     for lut in images {
+      if let texture = textures[lut.name] {
+        initTexture(&luts[i], withTexture: texture)
+        i += 1
+        continue
+      }
       let t: MTLTexture
       do {
         let data = try cc.getLUTByName(lut.name)

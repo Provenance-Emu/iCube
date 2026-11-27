@@ -1,6 +1,7 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import Metal
 import SkinKitBezelsUI
 import XCTest
 
@@ -17,6 +18,32 @@ final class GameplayBezelTests: XCTestCase {
                      controller: Bool = false, external: Bool = false, editing: Bool = false) -> ICubeBezels.ScreenState {
     ICubeBezels.ScreenState(canvas: canvas, touchControlsShown: touch, skinShown: skin, controllerConnected: controller,
                             onExternalDisplay: external, editingLayout: editing)
+  }
+
+  private func sceneRequest(lightsRoom: Bool) throws -> GameplayBezelRenderer.Request {
+    let bezel = try XCTUnwrap(TVBezelCatalog.bundled.first { $0.lightsRoom })
+    return .init(bezel: bezel, canvas: TVBezelArtwork.canvas, viewport: CGRect(x: 0, y: 0, width: 1, height: 1),
+                 surfaceAspect: 16.0 / 9.0, pixelWidth: 640, shape: .standard, lightsRoom: lightsRoom, flatGlass: true)
+  }
+
+  func testMissingBezelPresetLeavesNoScene() throws {
+    let request = try sceneRequest(lightsRoom: true)
+    XCTAssertNil(GameplayBezelRenderer.load(request, findPreset: { _ in nil }))
+  }
+
+  func testRoomLightFallsBackToPackagedReflectionsWhenAmbientIsMissing() throws {
+    try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "Metal is unavailable")
+    let loaded = GameplayBezelRenderer.load(try sceneRequest(lightsRoom: true)) { id in
+      id == TVBezelShader.ambientID ? nil : GameplayBezelRenderer.presetURL(id)
+    }
+    XCTAssertEqual(loaded?.scene.presetID, TVBezelShader.bezelOnlyID)
+  }
+
+  func testPackagedRoomLightPresetLoadsWithSkinKitBorder() throws {
+    try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "Metal is unavailable")
+    let loaded = GameplayBezelRenderer.load(try sceneRequest(lightsRoom: true))
+    XCTAssertEqual(loaded?.scene.presetID, TVBezelShader.ambientID)
+    XCTAssertNotNil(loaded?.scene.borderPNG)
   }
 
   // MARK: - Placement
