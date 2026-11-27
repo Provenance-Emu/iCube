@@ -124,7 +124,7 @@ struct ClamshellDockSettingsRows: View {
           )
         }
         Text("Keeps the app above the controller in portrait. Automatic applies to recognized clamshell controllers.")
-          .font(.footnote)
+          .icubeText(.detail)
           .foregroundStyle(.secondary)
       }
       .onAppear { controllerNames = ClamshellDockPreferences.controllerNames }
@@ -132,7 +132,7 @@ struct ClamshellDockSettingsRows: View {
         .merge(with: NotificationCenter.default.publisher(for: .GCControllerDidDisconnect))
         .receive(on: DispatchQueue.main)) { _ in
           controllerNames = ClamshellDockPreferences.controllerNames
-        }
+      }
     }
   }
 }
