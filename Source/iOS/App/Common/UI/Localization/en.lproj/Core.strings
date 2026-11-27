@@ -6060,3 +6060,5 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The cover could not be loaded." = "The cover could not be loaded.";
 "Publisher" = "Publisher";
 "Genre" = "Genre";
+"Physical Cases" = "Physical Cases";
+"Controller Covers Screen" = "Controller Covers Screen";

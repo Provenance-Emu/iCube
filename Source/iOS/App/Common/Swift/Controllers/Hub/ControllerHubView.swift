@@ -87,6 +87,17 @@ struct ControllerHubView: View {
     ])
     model.sections.insert(remote, at: max(0, model.sections.count - 1))
     #endif
+    #if os(iOS) && !targetEnvironment(macCatalyst)
+    if page == .root, UIDevice.current.userInterfaceIdiom == .phone {
+      let dock = MenuSection(id: "clamshell-dock", header: L("Physical Cases"), items: [
+        MenuItem(id: "clamshell-clearance", title: L("Controller Covers Screen"),
+                 role: .custom(AnyView(VStack(alignment: .leading, spacing: 12) {
+                   ClamshellDockSettingsRows()
+                 }))),
+      ])
+      model.sections.insert(dock, at: max(0, model.sections.count - 1))
+    }
+    #endif
     return model
   }
 }
