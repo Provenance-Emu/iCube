@@ -12,7 +12,7 @@ import SwiftUI
 /// The pause menu is a full-screen cover, so the strip cannot live inside it: the menu's Bezels item closes the cover
 /// (the game stays paused on the screen's own claim) and the screen shows this in its place.
 struct GameplayBezelStrip: View {
-  let session: GameplayBezelSession
+  @ObservedObject var session: GameplayBezelSession
   /// Keep or Cancel: back to the pause menu.
   let onClose: () -> Void
   /// "More…": the full list, in the strip's place.
@@ -31,12 +31,12 @@ struct GameplayBezelStrip: View {
       Spacer(minLength: 0)
       #if os(tvOS)
       BezelSwitcherHost(session: session, commands: nil, showsControllerHints: false,
-                        supportsRoomLight: false, onClose: onClose, onMore: onMore)
+                        supportsRoomLight: session.supportsRoomLight, onClose: onClose, onMore: onMore)
       #else
       BezelSwitcherHost(session: session,
                         commands: pad.commands.eraseToAnyPublisher(),
                         showsControllerHints: !ControllerManager.shared.controllers.isEmpty,
-                        supportsRoomLight: false,
+                        supportsRoomLight: session.supportsRoomLight,
                         onClose: onClose,
                         onMore: onMore)
       #endif

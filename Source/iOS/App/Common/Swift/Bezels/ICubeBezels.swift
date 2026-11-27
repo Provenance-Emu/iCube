@@ -11,8 +11,7 @@ import SkinKitBezels
 ///
 /// SkinKit owns the rules, the bundled TVs, the player's own bezels and the views. What is here is what only
 /// iCube knows: where things are stored, which system is running, and how the emulation screen's state maps
-/// onto the package's placement rule. iCube shows a TV the plain way, as an image with the picture in its
-/// screen; nothing extra is drawn on the GPU.
+/// onto the package's placement rule.
 enum ICubeBezels {
   /// `SystemIdentifier` raw values (PVSystems): the bundled TVs and The Bezel Project's table are keyed by them.
   static let gameCubeSystemID = SystemIdentifier.GameCube.rawValue
@@ -71,7 +70,8 @@ enum ICubeBezels {
       systems: {
         [BezelEnvironment.System(id: gameCubeSystemID, name: "GameCube"),
          BezelEnvironment.System(id: wiiSystemID, name: "Wii")]
-      })
+      },
+      hasShaderPreset: { GameplayBezelRenderer.presetURL($0) != nil })
     BezelLog.handler = { level, message in
       switch level {
       case .info: log.info("\(message)")

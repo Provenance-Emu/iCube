@@ -40,6 +40,7 @@
 #include "Core/TimePlayed.h"
 #include "DiscIO/VolumeDisc.h"
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
+#include "VideoCommon/AsyncRequests.h"
 #include "VideoCommon/FrameDumper.h"
 #include "VideoCommon/FramebufferManager.h"
 #include "VideoCommon/PostProcessing.h"
@@ -779,6 +780,23 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
   }
 }
 
++ (void)redrawPausedFrame
+{
+  if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive)
+    return;
+  DOLHostQueueRunAsync(^{
+    auto& system = Core::System::GetInstance();
+    if (Core::GetState(system) != Core::State::Paused)
+      return;
+    Core::RunOnCPUThread(system, [] {
+      AsyncRequests::GetInstance()->PushEvent([] {
+        if (g_presenter && Core::GetState(Core::System::GetInstance()) == Core::State::Paused)
+          g_presenter->Present();
+      });
+    });
+  });
+}
+
 + (void)reloadShadersNow
 {
   if (g_framebuffer_manager)
@@ -939,6 +957,10 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
   const CGFloat h = view.bounds.size.height;
   if (w <= 0 || h <= 0)
     return CGRectZero;
+  const CGRect bezel = [DOLShaderPostProcessor shared].bezelPictureInViewport;
+  if (!CGRectIsNull(bezel))
+    return CGRectMake(bezel.origin.x * w, bezel.origin.y * h, bezel.size.width * w,
+                      bezel.size.height * h);
   const CGFloat ar = (CGFloat)[self currentDrawAspectRatio];
   // Aspect-fit the video inside view.bounds
   CGFloat contentW = w;

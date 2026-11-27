@@ -177,6 +177,7 @@ typedef NS_ENUM(NSInteger, TVDiscChangeResult) {
 
 // Display / Orientation
 + (void)resizeSurfaceNow;
++ (void)redrawPausedFrame;
 + (void)reloadShadersNow;
 // Speed / Fast-forward
 // Toggle temporary throttler disable (turbo). Returns the new state.

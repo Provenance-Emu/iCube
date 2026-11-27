@@ -32,11 +32,21 @@
 
 @interface DOLShaderPostProcessor : NSObject
 + (instancetype)shared;
+- (BOOL)wantsPostProcessing;
 - (void)configureWithDevice:(id<MTLDevice>)device;
 - (void)renderSource:(id<MTLTexture>)source
        commandBuffer:(id<MTLCommandBuffer>)cb
             drawable:(id<CAMetalDrawable>)drawable;
 @end
+
+// This backend also builds for hosts that do not link the iCube app.
+static DOLShaderPostProcessor* GetPostProcessor()
+{
+  static Class processor = NSClassFromString(@"DOLShaderPostProcessor");
+  if ([processor respondsToSelector:@selector(shared)])
+    return [processor shared];
+  return nil;
+}
 
 Metal::Gfx::Gfx(MRCOwned<CAMetalLayer*> layer) : m_layer(std::move(layer))
 {
@@ -565,16 +575,9 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
     // composite into the drawable at present time (see PresentBackbuffer). Without this,
     // the chain would sample the live drawable it is about to write into, producing a
     // broken/hazarded image. This is the invasive routing the 2509 rebase dropped.
-    bool use_post = false;
-    @try
-    {
-      use_post = [[NSUserDefaults standardUserDefaults] boolForKey:@"shader_enabled"];
-    }
-    @catch (...)
-    {
-      use_post = false;
-    }
-    if (use_post)
+    DOLShaderPostProcessor* processor = GetPostProcessor();
+    if ([processor respondsToSelector:@selector(wantsPostProcessing)] &&
+        [processor wantsPostProcessing])
     {
       id<MTLTexture> draw_tex = [m_drawable texture];
       MTLTextureDescriptor* desc =
@@ -595,7 +598,7 @@ bool Metal::Gfx::BindBackbuffer(const ClearColor& clear_color)
         s_offscreen = [g_device newTextureWithDescriptor:desc];
         [s_offscreen setLabel:@"Dolphin Offscreen Color for PostProcess"];
       }
-      m_backbuffer->UpdateBackbufferTexture(s_offscreen);
+      m_backbuffer->UpdateBackbufferTexture(s_offscreen ?: [m_drawable texture]);
     }
     else
     {
@@ -635,127 +638,32 @@ void Metal::Gfx::PresentBackbuffer()
     g_state_tracker->EndRenderPass();
     if (m_drawable)
     {
-      bool use_shader_post = false;
-      @try
+      id<MTLCommandBuffer> cb = g_state_tracker->GetRenderCmdBuf();
+      id<MTLTexture> source = [m_backbuffer->PassDesc() colorAttachments][0].texture;
+      id<MTLTexture> dst = [m_drawable texture];
+      // The bound attachment records the routing decision for this frame, even when
+      // a picker changes the request between BindBackbuffer and PresentBackbuffer.
+      if (cb && source && dst && source != dst)
       {
-        use_shader_post = [[NSUserDefaults standardUserDefaults] boolForKey:@"shader_enabled"];
-      }
-      @catch (...)
-      {
-        use_shader_post = false;
-      }
-
-      if (use_shader_post)
-      {
-        id<MTLCommandBuffer> cb = g_state_tracker->GetRenderCmdBuf();
-        id<MTLTexture> source = [m_backbuffer->PassDesc() colorAttachments][0].texture;
-        id<MTLTexture> dst = [m_drawable texture];
-
-        static id<MTLTexture> s_post_src = nil;
-        if (source && cb)
+        DOLShaderPostProcessor* processor = GetPostProcessor();
+        if ([processor respondsToSelector:@selector(configureWithDevice:)] &&
+            [processor respondsToSelector:@selector(renderSource:commandBuffer:drawable:)])
         {
-          if (s_post_src == nil || s_post_src.width != source.width ||
-              s_post_src.height != source.height || s_post_src.pixelFormat != source.pixelFormat)
-          {
-            MTLTextureDescriptor* desc =
-                [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:source.pixelFormat
-                                                                   width:source.width
-                                                                  height:source.height
-                                                               mipmapped:NO];
-            desc.storageMode = MTLStorageModePrivate;
-            desc.usage = MTLTextureUsageShaderRead;
-            s_post_src = [g_device newTextureWithDescriptor:desc];
-            [s_post_src setLabel:@"Dolphin Post Source Blit"];
-          }
-
-          id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-          if (blit)
-          {
-            [blit copyFromTexture:source
-                      sourceSlice:0
-                      sourceLevel:0
-                     sourceOrigin:MTLOriginMake(0, 0, 0)
-                       sourceSize:MTLSizeMake(source.width, source.height, 1)
-                        toTexture:s_post_src
-                 destinationSlice:0
-                 destinationLevel:0
-                destinationOrigin:MTLOriginMake(0, 0, 0)];
-            [blit endEncoding];
-          }
-
-          Class shader_class = NSClassFromString(@"DOLShaderPostProcessor");
-          if (!shader_class)
-          {
-            NSString* module =
-                [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleName"];
-            if (module && [module isKindOfClass:[NSString class]])
-            {
-              NSString* qualified =
-                  [NSString stringWithFormat:@"%@.%@", module, @"DOLShaderPostProcessor"];
-              shader_class = NSClassFromString(qualified);
-            }
-          }
-
-          if (shader_class && [shader_class respondsToSelector:@selector(shared)])
-          {
-            id mgr =
-                ((id (*)(id, SEL))[shader_class methodForSelector:@selector(shared)])(
-                    shader_class, @selector(shared));
-            if (mgr && [mgr respondsToSelector:@selector(configureWithDevice:)])
-              ((void (*)(id, SEL, id))[mgr methodForSelector:@selector(configureWithDevice:)])(
-                  mgr, @selector(configureWithDevice:), g_device);
-            if (mgr && [mgr respondsToSelector:@selector(renderSource:commandBuffer:drawable:)])
-            {
-              ((void (*)(id, SEL, id, id, id))[
-                  mgr methodForSelector:@selector(renderSource:commandBuffer:drawable:)])(
-                  mgr, @selector(renderSource:commandBuffer:drawable:), s_post_src, cb, m_drawable);
-            }
-          }
-          else if (dst && s_post_src)
-          {
-            id<MTLBlitCommandEncoder> fallback_blit = [cb blitCommandEncoder];
-            if (fallback_blit)
-            {
-              [fallback_blit copyFromTexture:s_post_src
-                                 sourceSlice:0
-                                 sourceLevel:0
-                                sourceOrigin:MTLOriginMake(0, 0, 0)
-                                  sourceSize:MTLSizeMake(s_post_src.width, s_post_src.height, 1)
-                                   toTexture:dst
-                            destinationSlice:0
-                            destinationLevel:0
-                           destinationOrigin:MTLOriginMake(0, 0, 0)];
-              [fallback_blit endEncoding];
-            }
-          }
+          [processor configureWithDevice:g_device];
+          [processor renderSource:source commandBuffer:cb drawable:m_drawable];
         }
-      }
-      else
-      {
-        // Toggle-off race guard: BindBackbuffer rendered this frame into the offscreen
-        // target (shaders were on at bind), but they were turned off before present.
-        // The drawable was never drawn into, so composite the offscreen image across now,
-        // otherwise the frame would present blank. When shaders were off at bind too, the
-        // drawable is the bound color attachment (source == dst) and this is a no-op.
-        id<MTLCommandBuffer> cb = g_state_tracker->GetRenderCmdBuf();
-        id<MTLTexture> source = [m_backbuffer->PassDesc() colorAttachments][0].texture;
-        id<MTLTexture> dst = [m_drawable texture];
-        if (cb && source && dst && source != dst)
+        else if (id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder])
         {
-          id<MTLBlitCommandEncoder> blit = [cb blitCommandEncoder];
-          if (blit)
-          {
-            [blit copyFromTexture:source
-                      sourceSlice:0
-                      sourceLevel:0
-                     sourceOrigin:MTLOriginMake(0, 0, 0)
-                       sourceSize:MTLSizeMake(source.width, source.height, 1)
-                        toTexture:dst
-                 destinationSlice:0
-                 destinationLevel:0
-                destinationOrigin:MTLOriginMake(0, 0, 0)];
-            [blit endEncoding];
-          }
+          [blit copyFromTexture:source
+                    sourceSlice:0
+                    sourceLevel:0
+                   sourceOrigin:MTLOriginMake(0, 0, 0)
+                     sourceSize:MTLSizeMake(source.width, source.height, 1)
+                      toTexture:dst
+               destinationSlice:0
+               destinationLevel:0
+              destinationOrigin:MTLOriginMake(0, 0, 0)];
+          [blit endEncoding];
         }
       }
 
