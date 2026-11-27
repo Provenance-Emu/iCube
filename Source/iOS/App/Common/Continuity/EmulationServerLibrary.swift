@@ -402,6 +402,10 @@ actor EmulationServerLibrary {
       guard !overflow else { throw ServerError.invalidContent }
       return total
     }
+    // Download and verification both stage files on the app's temporary volume.
+    let staging = FileManager.default.temporaryDirectory
+    let capacity = (try? staging.resourceValues(forKeys: [.volumeAvailableCapacityKey]))?.volumeAvailableCapacity
+    try Self.checkDownloadSpace(bytes: totalBytes, available: capacity.map(Int64.init))
     let requests = try downloads.map { file in
       let route = try request(file.route)
       return GameFileRequest(url: route.url, headers: route.headers, expectedSize: file.size)
@@ -428,6 +432,12 @@ actor EmulationServerLibrary {
       await transferFetcher.release(job)
       throw error
     }
+  }
+
+  static func checkDownloadSpace(bytes: Int64, available: Int64?) throws {
+    let reserve: Int64 = 256 * 1024 * 1024
+    guard let available, bytes > max(0, available) - reserve else { return }
+    throw ServerError.insufficientSpace(bytes: bytes, available: available)
   }
 
   private static func pullProgress(received: Int64, downloads: [Download], totalBytes: Int64) -> PullProgress {
@@ -681,10 +691,15 @@ actor EmulationServerLibrary {
 
   enum ServerError: LocalizedError {
     case unsupported, invalidContent, accessDenied, editUnavailable, editConflict
+    case insufficientSpace(bytes: Int64, available: Int64)
 
     var errorDescription: String? {
       switch self {
       case .unsupported: return L("This Emulation Server version is unsupported.")
+      case let .insufficientSpace(bytes, available):
+        let required = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        let free = ByteCountFormatter.string(fromByteCount: available, countStyle: .file)
+        return String(format: L("Not enough free space to download this game (%@ required, %@ available)."), required, free)
       case .invalidContent: return L("The server did not provide valid game files.")
       case .accessDenied: return L("The server denied access. Check your access token and library permissions.")
       case .editUnavailable: return L("The server cannot save edits to this game. It may need an update.")
