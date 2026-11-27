@@ -472,11 +472,21 @@ struct EmulationScreen: View {
   }
   #endif
 
+  /// A TV's artwork and where it goes, with what `TVBezelArtworkView` needs to draw it as the layout placed it.
+  private struct BezelArtwork {
+    var bezel: TVBezel
+    var frame: CGRect
+    var placement: TVBezelLayout.Placement
+    var canvas: CGSize?
+    var shape: TVBezelPictureShape
+    var topInset: CGFloat
+  }
+
   /// Where the game surface and a TV's artwork go, in the emulation surface's coordinates.
   private struct BezelStage {
     var scene: GameplayBezelRenderer.Request? = nil
     /// The TV and where its artwork goes; `nil` while the switcher previews the picture alone.
-    var artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?, shape: TVBezelPictureShape)?
+    var artwork: BezelArtwork?
     /// Where the game picture shows.
     var picture: CGRect
     /// The frame of the surface the core draws into: `picture`, or larger while it keeps an older shape.
@@ -508,12 +518,13 @@ struct EmulationScreen: View {
         return BezelStage(scene: scene, artwork: nil, picture: bounds, surface: bounds)
       }
       if let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1),
-                                         seat: seat) {
+                                         seat: seat, safeAreaTop: insets.top) {
         // The surface's coordinates start inside the safe area.
         let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
-        let art = layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
         return BezelStage(
-          artwork: (bezel, art, layout.placement, layout.canvas, layout.shape),
+          artwork: BezelArtwork(bezel: bezel, frame: layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top),
+                                placement: layout.placement, canvas: layout.canvas, shape: layout.shape,
+                                topInset: layout.canvasTopInset),
           picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
       }
     }
@@ -528,12 +539,14 @@ struct EmulationScreen: View {
     return BezelStage(artwork: nil, picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
   }
 
-  private func bezelArtwork(_ artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?, shape: TVBezelPictureShape)) -> some View {
-    TVBezelArtworkView(bezel: artwork.bezel, canvas: artwork.canvas, shape: artwork.shape) { loaded in bezels.artworkLoaded(loaded, id: artwork.bezel.id) }
-      .frame(width: artwork.frame.width, height: artwork.frame.height)
-      .position(x: artwork.frame.midX, y: artwork.frame.midY)
-      // One TV's artwork never lingers in the next TV's frame.
-      .id(artwork.bezel.id)
+  private func bezelArtwork(_ artwork: BezelArtwork) -> some View {
+    TVBezelArtworkView(bezel: artwork.bezel, canvas: artwork.canvas, shape: artwork.shape, topInset: artwork.topInset) { loaded in
+      bezels.artworkLoaded(loaded, id: artwork.bezel.id)
+    }
+    .frame(width: artwork.frame.width, height: artwork.frame.height)
+    .position(x: artwork.frame.midX, y: artwork.frame.midY)
+    // One TV's artwork never lingers in the next TV's frame.
+    .id(artwork.bezel.id)
   }
 
   /// The TV switcher's strip or its "More…" list is up over the paused game.
@@ -1297,7 +1310,7 @@ struct EmulationScreen: View {
         refreshOverscanApplicable()
         renderHostOnExternalDisplay = EmulationCoordinator.shared().isExternalDisplayConnected
       }
-      // The strip closes itself when a TV can no longer show (portrait, a skin, an external display).
+      // The strip closes itself when a TV can no longer show (a skin, an external display).
       .onChange(of: bezelScreenState(canvas: bezelCanvas), initial: true) { _, state in bezels.screenState = state }
       .onDisappear { iosDidDisappear() }
       .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in

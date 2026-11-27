@@ -93,7 +93,12 @@ struct GameplayBezelLibrarySheet: View {
   var body: some View {
     NavigationStack {
       TVBezelPickerView(
-        selection: Binding(get: { chosenBezel }, set: { chosenBezel = $0 ?? ExternalDisplayBezelRules.automaticBezelID }),
+        // Over a running game the TV picked is the TV that shows: the game's own TV goes, as it does for Keep
+        // in the strip.
+        selection: Binding(get: { chosenBezel }, set: { choice in
+          BezelChoice.chooseForEveryGame(choice ?? ExternalDisplayBezelRules.automaticBezelID, playing: game?.gameID,
+                                         systemID: game?.systemID, systemSuitsTV: true)
+        }),
         offersSystemAutomatic: true,
         game: game)
         .safeAreaInset(edge: .bottom) { seatPicker }

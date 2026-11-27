@@ -13,6 +13,17 @@ import XCTest
 /// The Emulation Server copy on a background fetcher: every file asked for at once, the plan kept
 /// so a relaunch can finish the game without browsing, and failures kept or dropped as they should.
 final class EmulationServerBackgroundDownloadTests: XCTestCase {
+  func testDownloadSpaceLeavesRoomForTheSystem() throws {
+    let reserve: Int64 = 256 * 1024 * 1024
+    XCTAssertNoThrow(try EmulationServerLibrary.checkDownloadSpace(bytes: 1024, available: nil))
+    XCTAssertNoThrow(try EmulationServerLibrary.checkDownloadSpace(bytes: 1024, available: reserve + 1024))
+    XCTAssertThrowsError(try EmulationServerLibrary.checkDownloadSpace(bytes: 1024, available: reserve + 1023)) {
+      guard case EmulationServerLibrary.ServerError.insufficientSpace(bytes: 1024, available: let available) = $0, available == reserve + 1023 else {
+        return XCTFail("Unexpected error: \($0)")
+      }
+    }
+  }
+
   private func makeLibrary(fetcher: RecordingFetcher, transport: TwoDiscTransport = TwoDiscTransport())
     throws -> (EmulationServerLibrary, EmulationServer) {
     let server = try EmulationServer(address: "http://bg-\(UUID().uuidString).invalid")

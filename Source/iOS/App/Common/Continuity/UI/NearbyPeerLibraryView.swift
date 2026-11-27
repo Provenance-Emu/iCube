@@ -534,10 +534,7 @@ struct NearbyPeerLibraryView: View {
       defer { if !handedOff { try? FileManager.default.removeItem(at: folder) } }
       await controller.copy(entry, temporaryFolder: folder)
       guard transferID == id, !Task.isCancelled, case .copied = controller.phase else { return }
-      guard let url = controller.copiedFileURL, let game = DiscImageBridge.gameItem(forPath: url.path) else {
-        transferError = L("The downloaded game couldn't be opened.")
-        return
-      }
+      guard let game = openCopiedGame() else { return }
       handedOff = true
       onPlay(game, nil)
     }
@@ -572,22 +569,31 @@ struct NearbyPeerLibraryView: View {
         copyingSaves = false
       }
       guard transferID == id, !Task.isCancelled else { return }
-      if localGame(for: entry) == nil {
+      let game: TVGameItem
+      if let existing = localGame(for: entry) {
+        game = existing
+      } else {
         await controller.copy(entry)
-        guard !Task.isCancelled, case .copied = controller.phase,
-              let path = controller.copiedFileURL?.path,
-              let game = DiscImageBridge.gameItem(forPath: path) else { return }
-        downloaded[entry.key] = game
+        guard transferID == id, !Task.isCancelled, case .copied = controller.phase,
+              let copied = openCopiedGame() else { return }
+        downloaded[entry.key] = copied
+        game = copied
       }
-      guard !Task.isCancelled else { return }
-      if let game = localGame(for: entry) {
-        if runWhenReady {
-          onPlay(game, nil)
-        } else {
-          sheet = .boot(game)
-        }
+      if runWhenReady {
+        onPlay(game, nil)
+      } else {
+        sheet = .boot(game)
       }
     }
+  }
+
+  private func openCopiedGame() -> TVGameItem? {
+    guard let url = controller.copiedFileURL,
+          let game = DiscImageBridge.gameItem(forPath: url.path) else {
+      transferError = L("The downloaded game couldn't be opened.")
+      return nil
+    }
+    return game
   }
 
   // MARK: - Formatting

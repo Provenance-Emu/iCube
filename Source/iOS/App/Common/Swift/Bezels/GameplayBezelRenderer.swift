@@ -41,6 +41,7 @@ final class GameplayBezelRenderer: @unchecked Sendable {
   init(loader: @escaping @Sendable (Request) -> Loaded? = { GameplayBezelRenderer.load($0) }) {
     self.loader = loader
   }
+
   private var picture: CGRect?
   private var tube: MTLTexture?
 
