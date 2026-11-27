@@ -508,7 +508,7 @@ struct EmulationScreen: View {
         return BezelStage(scene: scene, artwork: nil, picture: bounds, surface: bounds)
       }
       if let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1),
-                                       seat: seat) {
+                                         seat: seat) {
         // The surface's coordinates start inside the safe area.
         let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
         let art = layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top)

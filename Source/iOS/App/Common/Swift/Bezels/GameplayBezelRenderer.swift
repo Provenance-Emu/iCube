@@ -78,7 +78,7 @@ final class GameplayBezelRenderer: @unchecked Sendable {
     guard let scene = TVBezelScene.make(bezel: request.bezel, lightsRoom: request.lightsRoom, flatGlass: request.flatGlass,
                                         scenePixelWidth: request.pixelWidth, key: key, canvas: request.canvas,
                                         shape: request.shape, hasPreset: { findPreset($0) != nil }),
-          let url = findPreset(scene.presetID), let device = MTLCreateSystemDefaultDevice() else { return nil }
+      let url = findPreset(scene.presetID), let device = MTLCreateSystemDefaultDevice() else { return nil }
     do {
       let container = try ZipCompiledShaderContainer.Decoder(url: url)
       defer { container.removeExtractedFiles() }
@@ -142,7 +142,7 @@ final class GameplayBezelRenderer: @unchecked Sendable {
       first.outputRect = gameRect
       first.setSourceRect(CGRect(origin: .zero, size: gameSize), aspect: gameSize)
       let drewTube = first.render(sourceTexture: game, commandBuffer: commandBuffer, renderPassDescriptor: Self.pass(tube),
-                                 flipVertically: flip)
+                                  flipVertically: flip)
       guard drewTube else { return false }
       chain.setOutputPixelFormat(target.pixelFormat)
       chain.drawableSize = size

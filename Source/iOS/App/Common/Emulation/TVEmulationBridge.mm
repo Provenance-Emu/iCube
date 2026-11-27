@@ -959,7 +959,8 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
     return CGRectZero;
   const CGRect bezel = [DOLShaderPostProcessor shared].bezelPictureInViewport;
   if (!CGRectIsNull(bezel))
-    return CGRectMake(bezel.origin.x * w, bezel.origin.y * h, bezel.size.width * w, bezel.size.height * h);
+    return CGRectMake(bezel.origin.x * w, bezel.origin.y * h, bezel.size.width * w,
+                      bezel.size.height * h);
   const CGFloat ar = (CGFloat)[self currentDrawAspectRatio];
   // Aspect-fit the video inside view.bounds
   CGFloat contentW = w;
