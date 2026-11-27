@@ -25,6 +25,9 @@ final class GameplayBezelSession: ObservableObject, BezelSwitcherSession {
 
   let renderer = GameplayBezelRenderer()
   @Published private(set) var droppedForSession = false
+  /// TVs whose Metal scene could not be loaded or drawn this session. The screen shows them the plain way, as an
+  /// image, where they have one; a shader-only TV shows the picture alone.
+  @Published private(set) var sceneUnavailable: Set<String> = []
 
   var supportsRoomLight: Bool {
     GameplayBezelRenderer.supportsRoomLight && screenState.canvas.width > screenState.canvas.height
@@ -38,6 +41,10 @@ final class GameplayBezelSession: ObservableObject, BezelSwitcherSession {
   func showScene(_ request: GameplayBezelRenderer.Request?) {
     renderer.didDrop = { [weak self] in
       self?.droppedForSession = true
+      self?.isBezelLoading = false
+    }
+    renderer.didFail = { [weak self] id in
+      self?.sceneUnavailable.insert(id)
       self?.isBezelLoading = false
     }
     if request != nil { DOLShaderPostProcessor.shared.useBezelRenderer(renderer) }

@@ -46,6 +46,35 @@ final class GameplayBezelTests: XCTestCase {
     XCTAssertNotNil(loaded?.scene.borderPNG)
   }
 
+  /// A scene that cannot be loaded must not stay "requested": that kept the screen filter off and the TV's
+  /// image away for as long as the same TV was chosen.
+  @MainActor
+  func testASceneThatFailsToLoadStopsBeingRequestedAndIsReported() throws {
+    let request = try sceneRequest(lightsRoom: false)
+    let renderer = GameplayBezelRenderer(loader: { _ in nil })
+    let failed = expectation(description: "the session is told")
+    var failedID: String?
+    renderer.didFail = { id in
+      failedID = id
+      failed.fulfill()
+    }
+    var didLoad = false
+    XCTAssertTrue(renderer.update(request, didLoad: { didLoad = true }))
+    XCTAssertTrue(renderer.isRequested)
+    wait(for: [failed], timeout: 5)
+    XCTAssertEqual(failedID, request.bezel.id)
+    XCTAssertFalse(didLoad)
+    XCTAssertFalse(renderer.isRequested)
+    XCTAssertFalse(renderer.isReady)
+    // The same request again is not loaded again on every layout pass.
+    XCTAssertFalse(renderer.update(request, didLoad: {}))
+    XCTAssertFalse(renderer.isRequested)
+    // Asking for nothing and then for the TV again is a new try.
+    XCTAssertTrue(renderer.update(nil, didLoad: {}))
+    XCTAssertTrue(renderer.update(request, didLoad: {}))
+    XCTAssertTrue(renderer.isRequested)
+  }
+
   // MARK: - Placement
 
   func test_controls_followWhatIsOnScreen() {

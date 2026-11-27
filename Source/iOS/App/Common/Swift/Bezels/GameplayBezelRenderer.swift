@@ -18,12 +18,29 @@ final class GameplayBezelRenderer: @unchecked Sendable {
     let flatGlass: Bool
   }
 
+  /// A scene ready to draw: SkinKit's description of it, its filter chain and a plain chain for the tube.
+  typealias Loaded = (scene: TVBezelScene, chain: FilterChain, plain: FilterChain)
+
+  /// How many frames in a row may fail to encode before the scene is given up. A chain that is still preparing
+  /// its next frame fails for a frame or two; a second of failures is not that.
+  static let encodeFailureLimit = 60
+
   private static let loadQueue = DispatchQueue(label: "iCube.TVBezel.load", qos: .userInitiated)
   private let lock = NSLock()
+  private let loader: @Sendable (Request) -> Loaded?
   private var generation = 0
   private var request: Request?
-  private var loaded: (scene: TVBezelScene, chain: FilterChain, plain: FilterChain)?
+  private var loaded: Loaded?
   private var dropped = false
+  /// `request` could not be loaded or drawn. It stays the request, so the same one is not loaded again on every
+  /// layout pass, but it no longer counts as requested: the screen filter and the image path take over.
+  private var requestFailed = false
+  private var encodeFailures = 0
+
+  /// - Parameter loader: builds a request's scene; tests replace it.
+  init(loader: @escaping @Sendable (Request) -> Loaded? = { GameplayBezelRenderer.load($0) }) {
+    self.loader = loader
+  }
   private var picture: CGRect?
   private var tube: MTLTexture?
 
@@ -36,7 +53,7 @@ final class GameplayBezelRenderer: @unchecked Sendable {
 
   static let supportsRoomLight = MTLCreateSystemDefaultDevice() != nil && presetURL(TVBezelShader.ambientID) != nil
 
-  var isRequested: Bool { lock.withLock { request != nil && !dropped } }
+  var isRequested: Bool { lock.withLock { request != nil && !dropped && !requestFailed } }
   var isReady: Bool { lock.withLock { loaded != nil } }
   var pictureInViewport: CGRect? { lock.withLock { picture } }
 
@@ -49,6 +66,8 @@ final class GameplayBezelRenderer: @unchecked Sendable {
       loaded = nil
       tube = nil
       picture = nil
+      requestFailed = false
+      encodeFailures = 0
       return generation
     }
     guard let token else { return false }
@@ -56,15 +75,21 @@ final class GameplayBezelRenderer: @unchecked Sendable {
     guard let next else { return true }
     Self.loadQueue.async { [weak self] in
       guard let self, self.lock.withLock({ self.generation == token && !self.dropped }) else { return }
-      let loaded = Self.load(next)
+      let loaded = self.loader(next)
       DispatchQueue.main.async {
         let accepted = self.lock.withLock {
           guard self.generation == token, !self.dropped else { return false }
           self.loaded = loaded
+          // A scene that did not load must not keep the screen filter off or the image path away.
+          self.requestFailed = loaded == nil
           return true
         }
         guard accepted else { return }
-        didLoad()
+        if loaded == nil {
+          self.didFail?(next.bezel.id)
+        } else {
+          didLoad()
+        }
         TVEmulationBridge.redrawPausedFrame()
       }
     }
@@ -115,11 +140,13 @@ final class GameplayBezelRenderer: @unchecked Sendable {
       guard !viewport.isEmpty else { return false }
       var encoded = false
       defer {
-        if !encoded {
-          loaded = nil
-          tube = nil
+        if encoded {
+          encodeFailures = 0
+        } else {
+          // One frame that could not be encoded is retried on the next: the scene stays loaded.
           picture = nil
-          NSLog("[Bezels] Could not encode the TV scene; showing the game picture")
+          encodeFailures += 1
+          if encodeFailures >= Self.encodeFailureLimit { giveUpLocked(request) }
         }
       }
       let width = max(1, Int((scene.tubeRect.width / scene.canvas.width * viewport.width).rounded()))
@@ -175,15 +202,40 @@ final class GameplayBezelRenderer: @unchecked Sendable {
     return pass
   }
 
+  /// Call with `lock` held, on the video thread: the scene cannot be drawn. The request stops counting as
+  /// requested and the session is told, so the screen falls back to the TV as an image.
+  private func giveUpLocked(_ request: Request) {
+    loaded = nil
+    tube = nil
+    picture = nil
+    requestFailed = true
+    encodeFailures = 0
+    let token = generation
+    let bezelID = request.bezel.id
+    NSLog("[Bezels] Could not encode the TV scene for %d frames; falling back", Self.encodeFailureLimit)
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.lock.withLock({ self.generation == token && self.requestFailed }) else { return }
+      self.didFail?(bezelID)
+      TVEmulationBridge.redrawPausedFrame()
+    }
+  }
+
   @MainActor var didDrop: (() -> Void)?
+  /// The scene of the TV with this id could not be loaded or drawn. The GPU is not at fault (that is `didDrop`),
+  /// so only this TV's scene is given up: the session shows it as an image instead.
+  @MainActor var didFail: ((String) -> Void)?
 
   @MainActor
   private func dropAfterGPUFailure(_ action: TVFrameFailure.Action) {
+    // Command buffers in flight when the app leaves the foreground time out as a matter of course: that is not
+    // a GPU that cannot draw the TV, so it does not cost the player the TV for the rest of the game. A real
+    // failure shows again on the first frames after the app returns, and is latched then.
     guard action == .accessRevoked || UIApplication.shared.applicationState == .active else { return }
     let didChange = lock.withLock {
       guard !dropped else { return false }
       dropped = true
       request = nil
+      requestFailed = false
       loaded = nil
       tube = nil
       picture = nil

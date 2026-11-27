@@ -495,7 +495,7 @@ struct EmulationScreen: View {
     if let bezel = bezels.bezel, !bezels.droppedForSession,
        ICubeBezels.showsTV(state, choiceIsAutomatic: bezels.choiceIsAutomatic) {
       let seat = TVBezelSeat(rawValue: bezelSeat) ?? .back
-      if canvas.width > canvas.height, bezel.image == nil {
+      if canvas.width > canvas.height, bezel.image == nil, !bezels.sceneUnavailable.contains(bezel.id) {
         let bounds = CGRect(x: -insets.leading, y: -insets.top, width: canvas.width, height: canvas.height)
         let sceneCanvas = bezel.presetID == nil ? TVBezelCanvas.size(display: canvas, seat: seat) : TVBezelArtwork.canvas
         let frame = ICubeBezels.aspectFit(aspect: sceneCanvas.width / sceneCanvas.height, in: CGRect(origin: .zero, size: canvas))
