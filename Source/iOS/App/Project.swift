@@ -902,7 +902,7 @@ let project = Project(
         .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.2")),
         // Shared with Provenance and iFly; iCube's choices are in
         // Common/Swift/Controllers/PhysicalProfile/ICubePhysicalProfile.swift.
-        .remote(url: "https://github.com/Provenance-Emu/GamepadKit.git", requirement: .upToNextMinor(from: "0.3.1")),
+        .remote(url: "https://github.com/Provenance-Emu/GamepadKit.git", requirement: .upToNextMinor(from: "0.3.2")),
         .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.2")),
         // SystemIdentifier and per-system metadata, and game metadata + artwork lookup keyed on it.
         // Shared with Provenance and iFly; both resolve to prebuilt frameworks. PVLookup ships no
