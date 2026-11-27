@@ -41,9 +41,11 @@ enum ICubeBezels {
 
   /// `bezel` laid out as a plain image over `container`. A built-in TV's room is drawn for the container's shape
   /// from `seat`, so it covers the screen on a phone and a tablet alike; draw its artwork on `TVBezelLayout.canvas`.
+  /// `safeAreaTop` is the screen's top inset: in portrait the TV hangs from the top and is placed below a notch
+  /// or Dynamic Island.
   static func layout(bezel: TVBezel, container: CGSize, pictureAspect: CGSize,
-                     seat: TVBezelSeat = ICubeBezels.seat()) -> TVBezelLayout? {
-    TVBezelLayout(bezel: bezel, container: container, pictureAspect: pictureAspect, seat: seat)
+                     seat: TVBezelSeat = ICubeBezels.seat(), safeAreaTop: CGFloat = 0) -> TVBezelLayout? {
+    TVBezelLayout(bezel: bezel, container: container, pictureAspect: pictureAspect, seat: seat, safeAreaTop: safeAreaTop)
   }
 
   private static let log = ICubeLog.logger("Bezels")
@@ -121,7 +123,9 @@ enum ICubeBezels {
       controls: controls(state),
       layoutSupportsTV: !state.onExternalDisplay,
       choiceIsAutomatic: choiceIsAutomatic,
-      editingLayout: state.editingLayout)
+      editingLayout: state.editingLayout,
+      // The TV is a plain image laid out over the whole screen (`layout`), which draws a portrait room.
+      supportsPortrait: true)
   }
 
   static func showsTV(_ state: ScreenState, choiceIsAutomatic: Bool) -> Bool {
