@@ -924,7 +924,7 @@ let project = Project(
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
         // 0.8.0 is the first release that resolves to prebuilt frameworks (ZIPFoundation comes
         // with it, from Provenance-Emu/PVDependencies).
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .revision("816fbbe85cbcc5784c6f83eb298955fbd0e707b9")),  // TEMPORARY: Provenance-Emu/SkinKit#170; back to a version once it is released
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.10.0")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),
