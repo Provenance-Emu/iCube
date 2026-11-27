@@ -106,6 +106,35 @@ final class EmulationServerLibraryTests: XCTestCase {
     }
   }
 
+  func testTemporaryAndPermanentCopiesOpenTheSameDisc() async throws {
+    let bytes = try XCTUnwrap(Data(base64Encoded: Self.archiveFixture))
+    let server = try EmulationServer(address: "http://archive-\(UUID().uuidString).invalid")
+    let library = EmulationServerLibrary(server: server, token: "generated-token", transport: ArchiveTransport(bytes: bytes))
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
+    let permanentFolder = try server.folder(for: entry)
+    let temporaryFolder = TemporaryServerGame.makeFolder()
+    defer {
+      try? FileManager.default.removeItem(at: temporaryFolder)
+      try? FileManager.default.removeItem(at: permanentFolder)
+    }
+
+    let temporary = try await library.copyTemporarily(entry, into: temporaryFolder) { _ in }
+    XCTAssertFalse(FileManager.default.fileExists(atPath: permanentFolder.path))
+    let permanent = try await library.copy(entry) { _ in }
+    XCTAssertEqual(temporary.map(\.lastPathComponent), permanent.map(\.lastPathComponent))
+
+    let temporaryPath = try XCTUnwrap(temporary.first).path
+    let permanentPath = try XCTUnwrap(permanent.first).path
+    try await MainActor.run {
+      let temporaryGame = try XCTUnwrap(DiscImageBridge.gameItem(forPath: temporaryPath))
+      let permanentGame = try XCTUnwrap(DiscImageBridge.gameItem(forPath: permanentPath))
+      XCTAssertEqual(temporaryGame.gameID, permanentGame.gameID)
+      XCTAssertEqual(temporaryGame.discNumber, 0)
+      XCTAssertEqual(temporaryGame.discNumber, permanentGame.discNumber)
+    }
+  }
+
   func testCorruptAndEscapingSevenZipDownloadsDoNotPublishGames() async throws {
     // Generated ../escape.txt archive, also exercised by ZipImportHelperTests.
     let hostile = try XCTUnwrap(Data(base64Encoded: "N3q8ryccAARJoG80CAAAAAAAAABSAAAAAAAAAF59QUdlc2NhcGVkCgEEBgABCQgABwsBAAEBAAwIAAgKAeN2/M4AAAUBER0ALgAuAC8AZQBzAGMAYQBwAGUALgB0AHgAdAAAABQKAQAAmOf7FlLdARUGAQAggKSBAAA="))
