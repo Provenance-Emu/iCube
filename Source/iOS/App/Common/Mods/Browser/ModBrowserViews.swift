@@ -54,6 +54,7 @@ struct ModBrowserRoot: View {
     .task {
       ModDownloadManager.shared.sweepStaleDownloads()
       ModDownloadManager.background.activate()
+      ModInstallCenter.shared.resumeInterruptedDownloads(ownedGame: { ownedGame(for: $0) }, handler: handler)
     }
     .alert(L("Mod Browser"), isPresented: Binding(get: { presenter.notice != nil }, set: { if !$0 { presenter.notice = nil } })) {
       Button(L("OK"), role: .cancel) {}

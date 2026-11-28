@@ -32,7 +32,7 @@ final class ModInstallCenter: ObservableObject {
   /// The model for `file`: the live one if a download or an install of it is under way, else a new
   /// one that first restores what the ledger remembers.
   func model(for file: GameBananaFile, modName: String, entry: ModGameTable.Entry?, ownedGame: ModLibraryGame?,
-             handler: any ModInstallHandling) -> ModInstallModel {
+             handler: any ModInstallHandling, restores: Bool = true) -> ModInstallModel {
     if let model = models[file.id] { return model }
     let model = ModInstallModel(file: file, modName: modName, bananaGameID: entry?.bananaID,
                                 titleCode: entry?.gameIDs.first.map { String($0.prefix(3)) },
@@ -40,8 +40,23 @@ final class ModInstallCenter: ObservableObject {
     models[file.id] = model
     // A row elsewhere shows this file's status, so its changes are the centre's changes.
     subscriptions[file.id] = model.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
-    Task { await model.restoreIfNeeded() }
+    if restores { Task { await model.restoreIfNeeded() } }
     return model
+  }
+
+  /// Reconnects every download the ledger still lists as under way, so "Your Downloads" shows its
+  /// progress and it gets unpacked when it ends, without the user opening each file. Called when
+  /// the browser opens. A transfer that did not survive is dropped from the list.
+  func resumeInterruptedDownloads(ownedGame: (ModGameTable.Entry) -> ModLibraryGame?, handler: any ModInstallHandling) {
+    for record in ledger.records where record.stage == .downloading && models[record.fileID] == nil {
+      let entry = record.bananaGameID.flatMap { ModGameTable.bundled.entry(forBananaID: $0) }
+      let model = self.model(for: record.file, modName: record.modName, entry: entry,
+                             ownedGame: entry.flatMap(ownedGame), handler: handler, restores: false)
+      Task {
+        await model.restoreIfNeeded()
+        if !model.isWorthKeeping { self.release(model) }
+      }
+    }
   }
 
   /// Where `fileID` stands, from its live model if there is one, else from the ledger.
