@@ -18,13 +18,11 @@
   },
   {
     "op": "assert",
-    "label": "Your Games",
-    "type": "staticText"
+    "identifier": "networkPlay.filter.all"
   },
   {
     "op": "assert",
-    "label": "Nearby Rooms",
-    "type": "staticText"
+    "label": "No games in your library yet"
   },
   {
     "op": "capture",
@@ -33,12 +31,24 @@
   },
   {
     "op": "tap",
-    "identifier": "networkPlay.settings"
+    "identifier": "networkPlay.tab.rooms"
   },
   {
     "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "value": "0"
+    "label": "Room discovery unavailable"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-ipad-rooms",
+    "ax": true
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.tab.settings"
+  },
+  {
+    "op": "assert",
+    "label": "Connection settings unavailable"
   },
   {
     "op": "capture",
@@ -47,12 +57,15 @@
   },
   {
     "op": "tap",
-    "identifier": "networkPlay.unverifiedToggle"
+    "identifier": "networkPlay.tab.games"
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.filter.favorites"
   },
   {
     "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "value": "1"
+    "identifier": "networkPlay.filter.all"
   },
   {
     "op": "tap",
@@ -60,44 +73,7 @@
   },
   {
     "op": "assert",
-    "label": "Unverified",
-    "type": "button"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.game",
-    "exists": false
-  },
-  {
-    "op": "tap",
-    "identifier": "networkPlay.settings"
-  },
-  {
-    "op": "tap",
-    "identifier": "networkPlay.unverifiedToggle"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "value": "0"
-  },
-  {
-    "op": "tap",
-    "identifier": "networkPlay.back"
-  },
-  {
-    "op": "assert",
-    "label": "Unverified",
-    "type": "button",
-    "exists": false
-  },
-  {
-    "op": "tap",
-    "identifier": "networkPlay.back"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.settings",
+    "identifier": "networkPlay.tab.games",
     "exists": false
   }
 ]

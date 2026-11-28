@@ -45,6 +45,7 @@ struct TVLibraryRail: View {
   var nearbyPeers: [TVLibraryRailPeer] = []
   let isSelecting: Bool
   let onToggleSelect: () -> Void
+  let onNetworkPlay: () -> Void
   let onSettings: () -> Void
   /// A right press left focus on a rail row. The library disables its content while the rail holds focus (the
   /// expanded rail lies over the cards, and up or down would otherwise slip into them), so it moves focus into
@@ -65,6 +66,7 @@ struct TVLibraryRail: View {
     case all
     case platform(LibraryPlatformCategory)
     case nearby(String)
+    case networkPlay
     case select
     case importGames
     case view
@@ -109,6 +111,7 @@ struct TVLibraryRail: View {
         }
       }
       Spacer(minLength: ICubeDesign.Spacing.l.rawValue)
+      libraryRow(icon: .symbol("network"), title: L("Network Play"), item: .networkPlay, selected: false, action: onNetworkPlay)
       libraryRow(
         icon: .symbol(isSelecting ? "checkmark.circle.fill" : "checkmark.circle"),
         title: isSelecting ? L("Done") : L("Select"),

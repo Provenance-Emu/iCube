@@ -4,7 +4,7 @@ import UIKit
 import XCTest
 
 /// Standalone iOS UI test against the real library context-menu route. Uses the existing DEBUG
-/// screenshot catalogue only for artwork; these synthetic entries are never treated as local ROMs.
+/// screenshot catalogue only for artwork: its entries have no file, so the games list leaves them out.
 final class NetworkPlayContextAuditTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -22,17 +22,16 @@ final class NetworkPlayContextAuditTests: XCTestCase {
     XCUIDevice.shared.orientation = .landscapeLeft
     let landscape = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in app.frame.width > app.frame.height }, object: nil)
     XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 10), .completed)
-    XCTAssertTrue(app.staticTexts["Nearby Rooms"].isHittable)
+    XCTAssertTrue(app.buttons["networkPlay.tab.rooms"].isHittable)
     XCTAssertTrue(app.textFields["networkPlay.search"].isHittable)
-    XCTAssertTrue(app.staticTexts["No games to recommend yet"].isHittable)
+    XCTAssertTrue(app.staticTexts["No games in your library yet"].isHittable)
     capture(app, name: "network-play-ipad-landscape")
-    app.buttons["networkPlay.settings"].tap()
-    XCTAssertTrue(app.switches["networkPlay.unverifiedToggle"].isHittable)
-    XCTAssertEqual(app.switches["networkPlay.unverifiedToggle"].value as? String, "0")
+    app.buttons["networkPlay.tab.settings"].tap()
+    XCTAssertTrue(app.staticTexts["Connection settings unavailable"].isHittable)
     capture(app, name: "network-play-ipad-landscape-settings")
   }
 
-  func testGameContextOpensThatGamesEvidenceDetails() throws {
+  func testGameContextOpensThatGamesDetails() throws {
     continueAfterFailure = false
     let app = XCUIApplication(bundleIdentifier: "com.joemattiello.iCube-debug")
     app.launchArguments = ["-onboarding_seen_v1", "YES", "-SCREENSHOT_MODE", "1", "-ICubeAppearance", "dark"]
@@ -45,15 +44,13 @@ final class NetworkPlayContextAuditTests: XCTestCase {
     action.tap()
     XCTAssertTrue(app.staticTexts["Host unavailable"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["Cube Quest"].exists)
-    XCTAssertTrue(app.staticTexts["Documented multiplayer"].exists)
-    XCTAssertTrue(app.staticTexts["Test evidence"].exists)
     XCTAssertFalse(app.buttons["Host"].exists)
     let capture = XCTAttachment(screenshot: app.screenshot())
     capture.name = "network-play-game-details"
     capture.lifetime = .keepAlways
     add(capture)
     app.buttons["networkPlay.back"].tap()
-    XCTAssertTrue(app.staticTexts["No games to recommend yet"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["No games in your library yet"].waitForExistence(timeout: 5))
   }
 
   private func capture(_ app: XCUIApplication, name: String) {

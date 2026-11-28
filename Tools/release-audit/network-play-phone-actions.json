@@ -18,9 +18,11 @@
   },
   {
     "op": "assert",
-    "label": "Unverified",
-    "type": "button",
-    "exists": false
+    "identifier": "networkPlay.filter.all"
+  },
+  {
+    "op": "assert",
+    "label": "No games in your library yet"
   },
   {
     "op": "capture",
@@ -29,40 +31,7 @@
   },
   {
     "op": "tap",
-    "identifier": "networkPlay.settings"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "value": "0"
-  },
-  {
-    "op": "capture",
-    "name": "network-play-phone-settings",
-    "ax": true
-  },
-  {
-    "op": "tap",
-    "identifier": "networkPlay.unverifiedToggle"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "value": "1"
-  },
-  {
-    "op": "tap",
-    "identifier": "networkPlay.back"
-  },
-  {
-    "op": "assert",
-    "label": "Unverified",
-    "type": "button"
-  },
-  {
-    "op": "tap",
-    "label": "Nearby Rooms",
-    "type": "button"
+    "identifier": "networkPlay.tab.rooms"
   },
   {
     "op": "assert",
@@ -74,29 +43,29 @@
     "ax": true
   },
   {
-    "op": "launch",
-    "arguments": [
-      "-onboarding_seen_v1",
-      "YES",
-      "-ICubeAppearance",
-      "dark",
-      "-ICubeNetworkPlayPreview",
-      "-SCREENSHOT_MODE",
-      "1"
-    ]
-  },
-  {
     "op": "tap",
-    "identifier": "networkPlay.settings"
+    "identifier": "networkPlay.tab.settings"
   },
   {
     "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "value": "1"
+    "label": "Connection settings unavailable"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-phone-settings",
+    "ax": true
   },
   {
     "op": "tap",
-    "identifier": "networkPlay.unverifiedToggle"
+    "identifier": "networkPlay.tab.games"
+  },
+  {
+    "op": "tap",
+    "identifier": "networkPlay.filter.favorites"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.filter.all"
   },
   {
     "op": "tap",
@@ -104,17 +73,7 @@
   },
   {
     "op": "assert",
-    "label": "Unverified",
-    "type": "button",
-    "exists": false
-  },
-  {
-    "op": "tap",
-    "identifier": "networkPlay.back"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.settings",
+    "identifier": "networkPlay.tab.games",
     "exists": false
   }
 ]
