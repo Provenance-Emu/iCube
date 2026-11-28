@@ -73,6 +73,7 @@ private:
   std::optional<std::size_t> m_ancast_index;
 
   // Copy sections to internal buffers
+  void PadForAlignedSections();
   bool Initialize(std::span<const u8> buffer);
 
   bool LoadAncastIntoMemory(Core::System& system) const;

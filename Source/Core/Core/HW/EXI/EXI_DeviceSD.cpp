@@ -624,13 +624,14 @@ void CEXISD::WriteForBlockWrite(u8 byte)
     // Do nothing
     break;
   case BlockState::Token:
-    if (byte == START_MULTI_BLOCK)
+    // A single block starts with one token and each block of a multiple write with another.
+    if (byte == (state == State::SingleBlockWrite ? START_BLOCK : START_MULTI_BLOCK))
     {
       block_position = 0;
       block_crc = 0;
       block_state = BlockState::Block;
     }
-    else if (byte == END_BLOCK)
+    else if (byte == END_BLOCK && state == State::MultipleBlockWrite)
     {
       state = State::ReadyForCommand;
       block_state = BlockState::Nothing;

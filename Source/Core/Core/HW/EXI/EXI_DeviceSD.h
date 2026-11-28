@@ -159,9 +159,9 @@ private:
   // § 7.3.3
   static constexpr u8 START_BLOCK = 0xfe, START_MULTI_BLOCK = 0xfc, END_BLOCK = 0xfd;
   // The spec has the first 3 bits of the data responses marked with an x, and doesn't explain why
-  static constexpr u8 DATA_RESPONSE_ACCEPTED = 0b0'010'0;
-  static constexpr u8 DATA_RESPONSE_BAD_CRC = 0b0'101'0;
-  static constexpr u8 DATA_RESPONSE_WRITE_ERROR = 0b0'110'0;
+  static constexpr u8 DATA_RESPONSE_ACCEPTED = 0b0'010'1;
+  static constexpr u8 DATA_RESPONSE_BAD_CRC = 0b0'101'1;
+  static constexpr u8 DATA_RESPONSE_WRITE_ERROR = 0b0'110'1;
   // "Same error bits" as in R2, but I guess that only refers to meaning, not the actual bit values
   static constexpr u8 DATA_ERROR_ERROR = 0x01;
   static constexpr u8 DATA_ERROR_CONTROLLER = 0x02;
