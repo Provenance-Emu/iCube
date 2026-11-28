@@ -169,7 +169,20 @@ final class BackgroundGameDownloader: NSObject, GameFileFetching, @unchecked Sen
 
   func storedBytes(for job: BackgroundDownloadJob) async -> Int64 {
     await reconciled()
-    return journal.arrivedBytes(forJob: job.key)
+    let records = journal.records(forJob: job.key)
+    // A transfer the system kept running across a relaunch has reported nothing to this process
+    // yet, so the task's own count is asked as well.
+    let transferred: [String: Int64] = lock.withLock {
+      var bytes: [String: Int64] = [:]
+      for record in records {
+        guard let task = tasks[record.id] else { continue }
+        bytes[record.id] = max(written[record.id] ?? 0, task.countOfBytesReceived)
+      }
+      return bytes
+    }
+    return BackgroundDownloadPolicy.storedBytes(
+      records: records, arrived: journal.arrivedSizes(forJob: job.key), transferred: transferred,
+      resumable: journal.resumableBytes(forJob: job.key))
   }
 
   func release(_ job: BackgroundDownloadJob) async {

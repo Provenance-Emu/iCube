@@ -224,6 +224,36 @@ enum BackgroundDownloadPolicy {
     }
   }
 
+  /// Bytes of a job's files that are on this device now, whatever state each file is in: a file
+  /// that arrived, the part of a running transfer that has come in, and the part a stopped
+  /// transfer left behind for its resume data. All of it has already been taken out of the free
+  /// space, so a space check must not ask for it again.
+  static func storedBytes(records: [BackgroundDownloadRecord], arrived: [String: Int64],
+                          transferred: [String: Int64], resumable: [String: Int64]) -> Int64 {
+    records.reduce(Int64(0)) { total, record in
+      let bytes = record.state == .arrived
+        ? arrived[record.id] ?? 0
+        : max(transferred[record.id] ?? 0, resumable[record.id] ?? 0)
+      let capped = record.expectedSize.map { min(bytes, $0) } ?? bytes
+      return total + max(0, capped)
+    }
+  }
+
+  /// How much of the file a transfer's resume data says is already on disk. Nil when the data
+  /// cannot be read; the system writes it as a property list, plain or keyed-archived.
+  static func resumeDataBytes(_ data: Data) -> Int64? {
+    let key = "NSURLSessionResumeBytesReceived"
+    if let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+       let bytes = plist[key] as? NSNumber {
+      return bytes.int64Value
+    }
+    guard let unarchiver = try? NSKeyedUnarchiver(forReadingFrom: data) else { return nil }
+    unarchiver.requiresSecureCoding = false
+    defer { unarchiver.finishDecoding() }
+    let root = unarchiver.decodeObject(forKey: NSKeyedArchiveRootObjectKey) as? [String: Any]
+    return (root?[key] as? NSNumber)?.int64Value
+  }
+
   /// Bytes received for a set of files: a finished file counts in full.
   static func receivedBytes(ids: [String], records: [String: BackgroundDownloadRecord],
                             written: [String: Int64]) -> Int64 {
@@ -290,12 +320,23 @@ final class BackgroundDownloadJournal: @unchecked Sendable {
     try? marked.setResourceValues(excluded)
   }
 
-  /// Bytes of a job's files that have already arrived and are still in the folder.
-  func arrivedBytes(forJob key: String) -> Int64 {
-    records(forJob: key).filter { $0.state == .arrived }.reduce(Int64(0)) { total, record in
-      let size = (try? arrivedFile(id: record.id).resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
-      return total + Int64(size)
+  /// The size on disk of each of a job's files that has arrived, by record id.
+  func arrivedSizes(forJob key: String) -> [String: Int64] {
+    var sizes: [String: Int64] = [:]
+    for record in records(forJob: key) where record.state == .arrived {
+      let size = (try? arrivedFile(id: record.id).resourceValues(forKeys: [.fileSizeKey]))?.fileSize
+      sizes[record.id] = size.map(Int64.init)
     }
+    return sizes
+  }
+
+  /// What each of a job's stopped transfers left on disk, by record id, from its resume data.
+  func resumableBytes(forJob key: String) -> [String: Int64] {
+    var bytes: [String: Int64] = [:]
+    for record in records(forJob: key) where record.state != .arrived {
+      bytes[record.id] = resumeData(id: record.id).flatMap(BackgroundDownloadPolicy.resumeDataBytes)
+    }
+    return bytes
   }
 
   var records: [BackgroundDownloadRecord] { lock.withLock { contents.records } }

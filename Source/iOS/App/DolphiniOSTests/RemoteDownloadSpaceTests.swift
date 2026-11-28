@@ -75,15 +75,70 @@ final class RemoteDownloadSpaceTests: XCTestCase {
     XCTAssertNoThrow(try BackgroundDownloadJournal.shared.prepareFolder())
   }
 
-  func testArrivedBytesCountOnlyFilesThatAreHere() throws {
+  // MARK: - What is already on disk
+
+  private let job = BackgroundDownloadJob(kind: .emulationServer, sourceID: "ecs:http://server.local:8473", gameKey: "item:1", title: "Game")
+
+  private func record(_ id: String, _ state: BackgroundDownloadRecord.State, size: Int64?) -> BackgroundDownloadRecord {
+    BackgroundDownloadRecord(id: id, job: job, url: URL(string: "http://server.local:8473/api/v1/files/\(id)/content")!,
+                             expectedSize: size, state: state, updatedAt: Date())
+  }
+
+  /// A 4 GiB game with 3 GiB already down and 2 GiB free: 1 GiB is still to come, so it fits.
+  /// Counting only finished files asked for all 4 GiB again and refused it.
+  func testAPartialDownloadIsNotCountedAgainstTheSpaceItUses() {
+    let disc = [Space.File(bytes: 4 * gigabyte, isArchive: false)]
+    let running = [record("r", .running, size: 4 * gigabyte)]
+    let stopped = [record("r", .failed(.network), size: 4 * gigabyte)]
+
+    let live = BackgroundDownloadPolicy.storedBytes(records: running, arrived: [:], transferred: ["r": 3 * gigabyte], resumable: [:])
+    let resumable = BackgroundDownloadPolicy.storedBytes(records: stopped, arrived: [:], transferred: [:], resumable: ["r": 3 * gigabyte])
+    for stored in [live, resumable] {
+      XCTAssertEqual(stored, 3 * gigabyte)
+      let needed = Space.neededBytes(files: disc, storedBytes: stored)
+      XCTAssertEqual(needed, gigabyte)
+      XCTAssertNoThrow(try Library.checkDownloadSpace(bytes: needed, available: 2 * gigabyte))
+    }
+    XCTAssertThrowsError(try Library.checkDownloadSpace(bytes: Space.neededBytes(files: disc, storedBytes: 0), available: 2 * gigabyte),
+                         "The same game from nothing does not fit")
+  }
+
+  func testStoredBytesAddUpEveryStateAndNeverExceedAFile() {
+    let records = [record("here", .arrived, size: 300), record("coming", .running, size: 500),
+                   record("stopped", .failed(.cancelled), size: 400), record("lost", .failed(.server), size: 900),
+                   record("unsized", .running, size: nil)]
+    let stored = BackgroundDownloadPolicy.storedBytes(
+      records: records, arrived: ["here": 300, "coming": 999],
+      transferred: ["coming": 120, "stopped": 10, "unsized": 7], resumable: ["stopped": 250, "coming": 80, "here": 999])
+    XCTAssertEqual(stored, 300 + 120 + 250 + 0 + 7)
+    XCTAssertEqual(BackgroundDownloadPolicy.storedBytes(records: [record("r", .running, size: 100)], arrived: [:],
+                                                        transferred: ["r": 5000], resumable: [:]), 100)
+  }
+
+  func testResumeDataSaysHowMuchIsOnDisk() throws {
+    let contents: [String: Any] = ["NSURLSessionResumeBytesReceived": NSNumber(value: 3 * gigabyte), "NSURLSessionResumeInfoVersion": 2]
+    let plain = try PropertyListSerialization.data(fromPropertyList: contents, format: .binary, options: 0)
+    XCTAssertEqual(BackgroundDownloadPolicy.resumeDataBytes(plain), 3 * gigabyte)
+    let archived = try NSKeyedArchiver.archivedData(withRootObject: contents as NSDictionary, requiringSecureCoding: false)
+    XCTAssertEqual(BackgroundDownloadPolicy.resumeDataBytes(archived), 3 * gigabyte)
+    XCTAssertNil(BackgroundDownloadPolicy.resumeDataBytes(Data("not a plist".utf8)))
+    XCTAssertNil(BackgroundDownloadPolicy.resumeDataBytes(try PropertyListSerialization.data(fromPropertyList: ["x": 1], format: .xml, options: 0)))
+  }
+
+  func testTheJournalReportsArrivedFilesAndResumeData() throws {
     let journal = BackgroundDownloadJournal(folder: root.appendingPathComponent("journal", isDirectory: true))
-    let job = BackgroundDownloadJob(kind: .emulationServer, sourceID: "ecs:http://server.local:8473", gameKey: "item:1", title: "Game")
-    let url = URL(string: "http://server.local:8473/api/v1/files/a/content")!
-    journal.save(BackgroundDownloadRecord(id: "here", job: job, url: url, expectedSize: 300, state: .arrived, updatedAt: Date()))
-    journal.save(BackgroundDownloadRecord(id: "coming", job: job, url: url.appendingPathComponent("b"), expectedSize: 500,
-                                          state: .running, updatedAt: Date()))
+    journal.save(record("here", .arrived, size: 300))
+    journal.save(record("stopped", .failed(.network), size: 500))
+    journal.save(record("fresh", .running, size: 500))
     try Data(repeating: 1, count: 300).write(to: journal.arrivedFile(id: "here"))
-    XCTAssertEqual(journal.arrivedBytes(forJob: job.key), 300)
+    let resume: [String: Any] = ["NSURLSessionResumeBytesReceived": 200]
+    journal.setResumeData(try PropertyListSerialization.data(fromPropertyList: resume, format: .xml, options: 0), id: "stopped")
+
+    XCTAssertEqual(journal.arrivedSizes(forJob: job.key), ["here": 300])
+    XCTAssertEqual(journal.resumableBytes(forJob: job.key), ["stopped": 200])
+    XCTAssertEqual(BackgroundDownloadPolicy.storedBytes(
+      records: journal.records(forJob: job.key), arrived: journal.arrivedSizes(forJob: job.key), transferred: [:],
+      resumable: journal.resumableBytes(forJob: job.key)), 500)
   }
 
   // MARK: - The decision
