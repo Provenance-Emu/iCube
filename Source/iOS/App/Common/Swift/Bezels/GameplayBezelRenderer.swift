@@ -16,6 +16,15 @@ final class GameplayBezelRenderer: @unchecked Sendable {
     let shape: TVBezelPictureShape
     let lightsRoom: Bool
     let flatGlass: Bool
+    /// The picture covers the whole tube ("Stretch to Window"); otherwise it is fitted to its own shape.
+    var stretchesPicture = false
+
+    /// Whether the scene loaded for `self` can stay on screen while `next`'s loads: the same TV in the same
+    /// place, drawn another way (a tube of another shape, the room light). The picture changing shape then
+    /// swaps one TV for the next, with no frame of the bare picture in between.
+    func keepsScene(until next: Request) -> Bool {
+      bezel.id == next.bezel.id && canvas == next.canvas && viewport == next.viewport && surfaceAspect == next.surfaceAspect
+    }
   }
 
   /// A scene ready to draw: SkinKit's description of it, its filter chain and a plain chain for the tube.
@@ -63,10 +72,13 @@ final class GameplayBezelRenderer: @unchecked Sendable {
     let token = lock.withLock { () -> Int? in
       guard request != next, !dropped else { return nil }
       generation += 1
+      let keepsScene = next.flatMap { request?.keepsScene(until: $0) } ?? false
       request = next
-      loaded = nil
-      tube = nil
-      picture = nil
+      if !keepsScene {
+        loaded = nil
+        tube = nil
+        picture = nil
+      }
       requestFailed = false
       encodeFailures = 0
       return generation
@@ -163,7 +175,7 @@ final class GameplayBezelRenderer: @unchecked Sendable {
       let tubeSize = CGSize(width: width, height: height)
       let gameSize = CGSize(width: game.width, height: game.height)
       let bounds = CGRect(origin: .zero, size: tubeSize)
-      let gameRect = ICubeBezels.aspectFit(aspect: gameSize.width / gameSize.height, in: bounds).integral.intersection(bounds)
+      let gameRect = ICubeBezels.gameRect(gameSize: gameSize, tube: tubeSize, stretches: request.stretchesPicture)
       let first = pictureFilter ?? plain
       first.setOutputPixelFormat(tube.pixelFormat)
       first.drawableSize = tubeSize

@@ -18,12 +18,22 @@ extension EmulationScreen {
     }
   }
 
+  /// Follows the picture's shape while the game runs: `scheduleARPoll` reads it once, often before a Wii game
+  /// has turned widescreen (`ICubeBezels.pictureAspect`).
+  func refreshPictureAspect() {
+    guard TVEmulationBridge.isRunning(),
+          let aspect = ICubeBezels.pictureAspect(current: stableAR, reported: CGFloat(TVEmulationBridge.currentDrawAspectRatio()))
+    else { return }
+    stableAR = aspect
+    TVEmulationBridge.resizeSurfaceNow()
+  }
+
   func scheduleARPoll() {
     arPollTask?.cancel()
     arPollTask = Task { @MainActor in
       for _ in 0 ..< 20 {
         let ar = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
-        if ar.isFinite && ar > 0.4 && ar < 3.5 {
+        if ar.isFinite && ICubeBezels.pictureAspectRange.contains(ar) {
           stableAR = ar
           TVEmulationBridge.resizeSurfaceNow()
           break

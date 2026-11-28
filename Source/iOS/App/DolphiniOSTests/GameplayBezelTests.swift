@@ -224,6 +224,82 @@ final class GameplayBezelTests: XCTestCase {
     XCTAssertNil(ICubeBezels.gameKey(running: "", library: ""))
   }
 
+  // MARK: - The picture's shape
+
+  /// A Wii game turns widescreen after the screen first read its aspect: the TV must follow, or the 16:9 picture
+  /// is letterboxed in a 4:3 tube.
+  func test_pictureAspect_followsTheGameWhenItsShapeChanges() {
+    XCTAssertEqual(ICubeBezels.pictureAspect(current: nil, reported: 4.0 / 3.0), 4.0 / 3.0)
+    XCTAssertEqual(ICubeBezels.pictureAspect(current: 4.0 / 3.0, reported: 16.0 / 9.0), 16.0 / 9.0)
+    XCTAssertEqual(ICubeBezels.pictureAspect(current: 16.0 / 9.0, reported: 4.0 / 3.0), 4.0 / 3.0)
+  }
+
+  func test_pictureAspect_keepsTheSameShape_andIgnoresWhatIsNotOne() {
+    XCTAssertNil(ICubeBezels.pictureAspect(current: 4.0 / 3.0, reported: 4.0 / 3.0))
+    // The surface's own rounding is not a new shape.
+    XCTAssertNil(ICubeBezels.pictureAspect(current: 16.0 / 9.0, reported: 16.0 / 9.0 + 0.005))
+    for bad in [CGFloat.nan, .infinity, 0, -1, 0.1, 9] {
+      XCTAssertNil(ICubeBezels.pictureAspect(current: 4.0 / 3.0, reported: bad), "\(bad)")
+      XCTAssertNil(ICubeBezels.pictureAspect(current: nil, reported: bad), "\(bad)")
+    }
+  }
+
+  /// The shapes Dolphin reports for a widescreen Wii game and for a GameCube game, in the phone's landscape
+  /// screen: the wide picture fills a wide tube edge to edge, and the 4:3 one keeps the TV's 4:3 tube.
+  func test_aWidescreenPictureFillsTheTube_andA4to3PictureKeepsItsOwn() throws {
+    let bezel = try XCTUnwrap(TVBezelCatalog.bundled.first { $0.image == nil && $0.presetID == nil })
+    let wideAspect = CGSize(width: 16, height: 9)
+    let wide = try XCTUnwrap(ICubeBezels.layout(bezel: bezel, container: Self.landscape, pictureAspect: wideAspect, seat: .back))
+    XCTAssertEqual(wide.shape, .wide)
+    assertRect(wide.pictureFrame, wide.screenFrame, accuracy: 1)
+
+    let standardAspect = CGSize(width: 4, height: 3)
+    let standard = try XCTUnwrap(ICubeBezels.layout(bezel: bezel, container: Self.landscape, pictureAspect: standardAspect, seat: .back))
+    XCTAssertEqual(standard.shape, .standard)
+    assertRect(standard.pictureFrame, standard.screenFrame, accuracy: 1)
+    // The wide tube is the 4:3 one made wider, not a shorter one: the picture is larger, with less wall beside it.
+    XCTAssertEqual(wide.screenFrame.height, standard.screenFrame.height, accuracy: 1)
+    XCTAssertGreaterThan(wide.screenFrame.width, standard.screenFrame.width * 1.3)
+
+    // What went wrong: the wide picture laid out with the stale 4:3 aspect has bars above and below it.
+    let stale = ICubeBezels.gameRect(gameSize: CGSize(width: 1600, height: 900), tube: standard.screenFrame.size, stretches: false)
+    XCTAssertLessThan(stale.height, standard.screenFrame.height * 0.8)
+  }
+
+  func test_gameRect_fitsThePicture_orCoversTheTubeWhenStretched() {
+    let tube = CGSize(width: 1600, height: 900)
+    XCTAssertEqual(ICubeBezels.gameRect(gameSize: CGSize(width: 1920, height: 1080), tube: tube, stretches: false),
+                   CGRect(origin: .zero, size: tube))
+    XCTAssertEqual(ICubeBezels.gameRect(gameSize: CGSize(width: 640, height: 480), tube: tube, stretches: false),
+                   CGRect(x: 200, y: 0, width: 1200, height: 900))
+    // "Stretch to Window": a phone's 19.5:9 frame covers the 16:9 tube with no bars.
+    XCTAssertEqual(ICubeBezels.gameRect(gameSize: CGSize(width: 1950, height: 900), tube: tube, stretches: true),
+                   CGRect(origin: .zero, size: tube))
+    XCTAssertEqual(ICubeBezels.gameRect(gameSize: .zero, tube: tube, stretches: false), CGRect(origin: .zero, size: tube))
+  }
+
+  func test_stretchesPicture_onlyForStretchToWindow() {
+    XCTAssertTrue(ICubeBezels.stretchesPicture(aspectMode: AspectRatio.stretch.aspectRaw))
+    for mode in [AspectRatio.auto, ._4_3, ._16_9] {
+      XCTAssertFalse(ICubeBezels.stretchesPicture(aspectMode: mode.aspectRaw))
+    }
+  }
+
+  /// The picture changing shape keeps the TV on screen until the one with the other tube is ready; another TV,
+  /// or the same one somewhere else, does not.
+  func test_keepsScene_whileTheSameTVLoadsAnotherTube() throws {
+    let standard = try sceneRequest(lightsRoom: false)
+    func request(bezel: TVBezel? = nil, viewport: CGRect? = nil, shape: TVBezelPictureShape = .wide) -> GameplayBezelRenderer.Request {
+      .init(bezel: bezel ?? standard.bezel, canvas: standard.canvas, viewport: viewport ?? standard.viewport,
+            surfaceAspect: standard.surfaceAspect, pixelWidth: standard.pixelWidth, shape: shape, lightsRoom: false, flatGlass: true)
+    }
+    XCTAssertTrue(standard.keepsScene(until: request()))
+    XCTAssertNotEqual(standard, request())
+    let other = try XCTUnwrap(TVBezelCatalog.bundled.first { $0.id != standard.bezel.id })
+    XCTAssertFalse(standard.keepsScene(until: request(bezel: other)))
+    XCTAssertFalse(standard.keepsScene(until: request(viewport: CGRect(x: 0.1, y: 0, width: 0.8, height: 1))))
+  }
+
   // MARK: - Surface frame
 
   func test_aspectFit_centresThePicture() {
@@ -261,8 +337,8 @@ final class GameplayBezelTests: XCTestCase {
     assertRect(ICubeBezels.aspectFit(aspect: 4.0 / 3.0, in: surface), picture)
   }
 
-  private func assertRect(_ rect: CGRect, _ expected: CGRect, file: StaticString = #filePath, line: UInt = #line) {
-    let accuracy: CGFloat = 0.001
+  private func assertRect(_ rect: CGRect, _ expected: CGRect, accuracy: CGFloat = 0.001,
+                          file: StaticString = #filePath, line: UInt = #line) {
     XCTAssertEqual(rect.minX, expected.minX, accuracy: accuracy, file: file, line: line)
     XCTAssertEqual(rect.minY, expected.minY, accuracy: accuracy, file: file, line: line)
     XCTAssertEqual(rect.width, expected.width, accuracy: accuracy, file: file, line: line)
