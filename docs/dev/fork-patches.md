@@ -290,3 +290,18 @@ are not inventoried here.
 `GFX_HACK_NEON_TEXTURE_DECODE`, `GFX_HACK_VI_DECIMATE_INTERLACE`,
 `GFX_HACK_VI_SKIP_MODE`, `GFX_USE_COMPUTE_EFBXFB`,
 `GFX_USE_COMPUTE_VERTEX_DECODE`.
+
+## GameCube SD card (2026-11-28)
+
+GameCube homebrew reads its files from an SD card on an SD Gecko style adapter, and upstream has
+no such device (its change is unmerged: dolphin-emu/dolphin#12680). iCube packs a homebrew
+title's folder into a FAT image for each launch (`Source/iOS/App/Common/Homebrew/HomebrewSDCard.swift`).
+
+| File | Lines +/- | Purpose | Merge guidance |
+|---|---|---|---|
+| `Core/HW/EXI/EXI_DeviceSD.{h,cpp}` | +780/-0 | New file, from upstream #12680: an SD card in SPI mode behind `EXIDeviceType::SD`, read from `Config::MAIN_GC_SD_CARD_PATH`. iCube's changes to it: one image path instead of three, no card without an image, DMA transfers (libogc2 uses them in slot B), a valid CSD version 1.0 register (`MakeCSD`, without command class 10 so libogc2 does not ask for a speed switch), CMD59, and a multi-block read that stops as soon as CMD12 has arrived. | Drop in favour of upstream's device if #12680 merges; keep `MAIN_GC_SD_CARD_PATH` or map it to upstream's slot B path. |
+| `Core/HW/EXI/EXI_Device.{h,cpp}` | +8/-1 | `EXIDeviceType::SD` (appended, so stored values keep their meaning), its name, and its `EXIDevice_Create` case. | Re-apply; check the enum's last value against upstream's. |
+| `Core/HW/EXI/EXI_Channel.cpp` | +6/-0 | `GetDevice(0)` returns device 0 when it is an SD card: a card is clocked with chip select released while it starts up. | Re-apply. |
+| `Core/Config/MainSettings.{h,cpp}` | +3/-0 | `MAIN_GC_SD_CARD_PATH` (`Core.GCSDCardPath`). | Re-apply. |
+| `Common/FatFsUtil.{h,cpp}` | +70/-15 | The Wii SD pack and unpack functions became `PackFolderToImage` / `UnpackImageToFolder` taking paths, a format and a size rule; the Wii entry points call them unchanged. New `PackFolderToGCSDImage`, `UnpackGCSDImageToFolder`, `GCSDImageSize` (FAT12/16/32 by size, a power of two from 64 MiB to 2 GiB). | Re-apply the split; the Wii behaviour must stay byte for byte. |
+| `Core/CMakeLists.txt` | +2/-0 | Lists the two new files. | Re-apply. |

@@ -42,8 +42,6 @@ final class HomebrewInstallModel: ObservableObject {
 
   @Published private(set) var phase: Phase = .idle
   @Published private(set) var state: HomebrewInstalledIndex.State
-  /// What to tell the user about running this title; it changes once the package is on disk.
-  @Published private(set) var compatibility: HomebrewCompatibility
   /// Set when a download needs the user's go-ahead because of its size.
   @Published var largeDownloadBytes: Int64?
 
@@ -67,9 +65,7 @@ final class HomebrewInstallModel: ObservableObject {
     self.cover = cover
     self.availableBytes = availableBytes
     self.workDirectory = ModDownloadManager.makeWorkDirectory(forKey: "homebrew-" + title.slug)
-    let index = HomebrewInstalledIndex.load(root: root)
-    self.state = index.state(of: title, root: root)
-    self.compatibility = Self.compatibility(of: title, index: index, root: root)
+    self.state = HomebrewInstalledIndex.load(root: root).state(of: title, root: root)
   }
 
   /// Installs in progress, by slug. An install outlives the screen that started it, so a screen
@@ -94,20 +90,7 @@ final class HomebrewInstallModel: ObservableObject {
 
   /// Re-reads the index: the library may have deleted the game since.
   func refreshState() {
-    let index = HomebrewInstalledIndex.load(root: root)
-    state = index.state(of: title, root: root)
-    compatibility = Self.compatibility(of: title, index: index, root: root)
-  }
-
-  /// Looks inside the installed package, when there is one, for files the program would read.
-  private static func compatibility(of title: HomebrewTitle, index: HomebrewInstalledIndex,
-                                    root: URL) -> HomebrewCompatibility {
-    var packagedDataFiles: Int?
-    if index.programURL(forSlug: title.slug, root: root) != nil {
-      let folder = root.appendingPathComponent(title.slug, isDirectory: true)
-      packagedDataFiles = HomebrewPackageLayout.dataFiles(in: folder).count
-    }
-    return HomebrewCompatibility.assess(title, packagedDataFiles: packagedDataFiles)
+    state = HomebrewInstalledIndex.load(root: root).state(of: title, root: root)
   }
 
   // MARK: - Starting and stopping

@@ -9,40 +9,30 @@ final class HomebrewCompatibilityTests: XCTestCase {
 
   private static let dolphin = ["GameCube", "Dolphin"]
 
-  func testGameOnItsOwnIsUntestedUnlessTheCatalogueListsDolphin() {
-    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("scogger"), packagedDataFiles: nil), .untested)
-    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("scogger"), packagedDataFiles: 0), .untested)
-    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("blockamok-remix", platforms: Self.dolphin), packagedDataFiles: 0),
-                   .listedForDolphin)
+  func testGameIsUntestedUnlessTheCatalogueListsDolphin() {
+    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("scogger")), .untested)
+    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("blockamok-remix", platforms: Self.dolphin)), .listedForDolphin)
   }
 
-  /// FruitY and Nicky Boum: games, so the category says nothing, but the package does.
-  func testPackagedDataFilesOutrankTheCatalogue() {
-    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("fruity"), packagedDataFiles: 4), .needsPackagedFiles)
-    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("nicky", platforms: Self.dolphin), packagedDataFiles: 64),
-                   .needsPackagedFiles)
-  }
-
-  /// Genesis Plus GX is listed for Dolphin and starts there, but its ROMs come from an SD card.
-  func testEmulatorsAndPlayersNeedAnSDCardEvenWhenListedForDolphin() {
+  /// Genesis Plus GX is listed for Dolphin and starts there; what the user needs to know is
+  /// where its ROMs go.
+  func testEmulatorsAndPlayersPointAtTheirFolder() {
     let emulator = Data.title("genesis-plus-gx", category: Data.emulators, platforms: Self.dolphin)
-    XCTAssertEqual(HomebrewCompatibility.assess(emulator, packagedDataFiles: nil), .needsSDCard)
-    XCTAssertEqual(HomebrewCompatibility.assess(emulator, packagedDataFiles: 0), .needsSDCard)
+    XCTAssertEqual(HomebrewCompatibility.assess(emulator), .usesFilesOnSDCard)
+    XCTAssertEqual(HomebrewCompatibility.usesFilesOnSDCard.note(for: emulator)?.contains("Software/Homebrew/genesis-plus-gx"), true)
   }
 
   func testConsoleToolsAreNamedBeforeAnythingElse() {
-    let depot = Data.title("dolphindepot", category: Data.utilities)
-    XCTAssertEqual(HomebrewCompatibility.assess(depot, packagedDataFiles: nil), .needsConsole)
-    let swiss = Data.title("swiss", category: Data.utilities, platforms: Self.dolphin)
-    XCTAssertEqual(HomebrewCompatibility.assess(swiss, packagedDataFiles: 1), .needsConsole)
+    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("dolphindepot", category: Data.utilities)), .needsConsole)
+    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("swiss", category: Data.utilities, platforms: Self.dolphin)), .needsConsole)
     // A controller tester is a utility too, and runs fine.
-    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("gc-controller-test", category: Data.utilities),
-                                                packagedDataFiles: 0), .untested)
+    XCTAssertEqual(HomebrewCompatibility.assess(Data.title("gc-controller-test", category: Data.utilities)), .untested)
   }
 
   func testOnlyUntestedHasNoNote() {
-    let all: [HomebrewCompatibility] = [.needsConsole, .needsPackagedFiles, .needsSDCard, .listedForDolphin]
-    XCTAssertEqual(Set(all.compactMap(\.note)).count, all.count)
-    XCTAssertNil(HomebrewCompatibility.untested.note)
+    let title = Data.title("quest")
+    let all: [HomebrewCompatibility] = [.needsConsole, .usesFilesOnSDCard, .listedForDolphin]
+    XCTAssertEqual(Set(all.compactMap { $0.note(for: title) }).count, all.count)
+    XCTAssertNil(HomebrewCompatibility.untested.note(for: title))
   }
 }

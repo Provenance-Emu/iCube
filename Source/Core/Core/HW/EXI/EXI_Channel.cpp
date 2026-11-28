@@ -224,6 +224,12 @@ IEXIDevice* CEXIChannel::GetDevice(const u8 chip_select)
 {
   switch (chip_select)
   {
+  case 0:
+    // An SD card is clocked with its chip select released while it starts up, and it has to
+    // see those bytes.
+    if (m_devices[0] && m_devices[0]->m_device_type == EXIDeviceType::SD)
+      return m_devices[0].get();
+    return nullptr;
   case 1:
     return m_devices[0].get();
   case 2:

@@ -83,14 +83,14 @@ final class HomebrewDecodingTests: XCTestCase {
     XCTAssertNil(try row("").coverPath)
   }
 
-  func testNeedsSDCardForEmulatorsAndMedia() throws {
+  func testEmulatorsAndMediaUseFilesOnTheSDCard() throws {
     func category(_ name: String) throws -> HomebrewTitle {
       try row(#", "categories": {"name": "\#(name)", "display_name": "X", "sort_order": 1}"#)
     }
-    XCTAssertTrue(try category("emulators").needsSDCard)
-    XCTAssertTrue(try category("media").needsSDCard)
-    XCTAssertFalse(try category("games").needsSDCard)
-    XCTAssertFalse(try row("").needsSDCard)
+    XCTAssertTrue(try category("emulators").usesFilesOnSDCard)
+    XCTAssertTrue(try category("media").usesFilesOnSDCard)
+    XCTAssertFalse(try category("games").usesFilesOnSDCard)
+    XCTAssertFalse(try row("").usesFilesOnSDCard)
   }
 
   func testListedForDolphinReadsThePlatformList() throws {

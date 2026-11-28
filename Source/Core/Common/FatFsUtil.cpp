@@ -485,10 +485,12 @@ static void SortFST(File::FSTEntry* root)
     SortFST(&child);
 }
 
-bool SyncSDFolderToSDImage(const std::function<bool()>& cancelled, bool deterministic)
+// Packs `source_dir` into a new FAT image at `image_path`. `choose_size` is given the space the
+// files need and returns the size of the image.
+static bool PackFolderToImage(const std::string& source_dir, const std::string& image_path,
+                              BYTE format, const std::function<u64(u64)>& choose_size,
+                              const std::function<bool()>& cancelled, bool deterministic)
 {
-  const std::string source_dir = File::GetUserPath(D_WIISDCARDSYNCFOLDER_IDX);
-  const std::string image_path = File::GetUserPath(F_WIISDCARDIMAGE_IDX);
   if (source_dir.empty() || image_path.empty())
     return false;
 
@@ -507,14 +509,7 @@ bool SyncSDFolderToSDImage(const std::function<bool()>& cancelled, bool determin
   if (!CheckIfFATCompatible(root))
     return false;
 
-  u64 size = Config::Get(Config::MAIN_WII_SD_CARD_FILESIZE);
-  if (size == 0)
-  {
-    size = GetSize(root);
-    // Allocate a reasonable amount of free space
-    size += std::clamp(size / 2, MebibytesToBytes(512), GibibytesToBytes(8));
-  }
-  size = AlignUp(size, MAX_CLUSTER_SIZE);
+  const u64 size = AlignUp(choose_size(GetSize(root)), MAX_CLUSTER_SIZE);
 
   std::lock_guard lk(s_fatfs_mutex);
   SDCardFatFsCallbacks callbacks;
@@ -545,7 +540,7 @@ bool SyncSDFolderToSDImage(const std::function<bool()>& cancelled, bool determin
   }
 
   MKFS_PARM options = {};
-  options.fmt = FM_FAT32 | FM_SFD;
+  options.fmt = format;
   options.n_fat = 0;    // Number of FATs: automatic
   options.align = 1;    // Alignment of the data region (in sectors)
   options.n_root = 0;   // Number of root directory entries: automatic (and unused for FAT32)
@@ -596,6 +591,40 @@ bool SyncSDFolderToSDImage(const std::function<bool()>& cancelled, bool determin
 
   INFO_LOG_FMT(COMMON, "Successfully packed folder {} to SD image at {}", source_dir, image_path);
   return true;
+}
+
+bool SyncSDFolderToSDImage(const std::function<bool()>& cancelled, bool deterministic)
+{
+  const auto choose_size = [](u64 content_size) {
+    u64 size = Config::Get(Config::MAIN_WII_SD_CARD_FILESIZE);
+    if (size == 0)
+    {
+      size = content_size;
+      // Allocate a reasonable amount of free space
+      size += std::clamp(size / 2, MebibytesToBytes(512), GibibytesToBytes(8));
+    }
+    return size;
+  };
+  return PackFolderToImage(File::GetUserPath(D_WIISDCARDSYNCFOLDER_IDX),
+                           File::GetUserPath(F_WIISDCARDIMAGE_IDX), FM_FAT32 | FM_SFD, choose_size,
+                           cancelled, deterministic);
+}
+
+u64 GCSDImageSize(u64 content_size)
+{
+  // The adapter reports a standard-capacity card, whose size is a power of two no larger than
+  // 2 GiB. Leave at least as much room again as the files take, for what the program saves.
+  u64 size = GC_SD_IMAGE_MIN_SIZE;
+  while (size < content_size * 2 && size < GC_SD_IMAGE_MAX_SIZE)
+    size *= 2;
+  return size;
+}
+
+bool PackFolderToGCSDImage(const std::string& folder, const std::string& image_path,
+                           const std::function<bool()>& cancelled)
+{
+  // FM_ANY: a small card is FAT16, as a real one is; FAT32 needs 65525 clusters.
+  return PackFolderToImage(folder, image_path, FM_ANY | FM_SFD, GCSDImageSize, cancelled, true);
 }
 
 static bool Unpack(const std::function<bool()>& cancelled, const std::string& path,
@@ -756,10 +785,10 @@ static bool Unpack(const std::function<bool()>& cancelled, const std::string& pa
   return true;
 }
 
-bool SyncSDImageToSDFolder(const std::function<bool()>& cancelled)
+// Replaces `target_dir` (which ends in a separator) with the contents of the image.
+static bool UnpackImageToFolder(const std::string& image_path, const std::string& target_dir,
+                                const std::function<bool()>& cancelled)
 {
-  const std::string image_path = File::GetUserPath(F_WIISDCARDIMAGE_IDX);
-  const std::string target_dir = File::GetUserPath(D_WIISDCARDSYNCFOLDER_IDX);
   if (image_path.empty() || target_dir.empty())
     return false;
 
@@ -833,6 +862,20 @@ bool SyncSDImageToSDFolder(const std::function<bool()>& cancelled)
 
   INFO_LOG_FMT(COMMON, "Successfully unpacked SD image {} to {}", image_path, target_dir);
   return true;
+}
+
+bool SyncSDImageToSDFolder(const std::function<bool()>& cancelled)
+{
+  return UnpackImageToFolder(File::GetUserPath(F_WIISDCARDIMAGE_IDX),
+                             File::GetUserPath(D_WIISDCARDSYNCFOLDER_IDX), cancelled);
+}
+
+bool UnpackGCSDImageToFolder(const std::string& image_path, const std::string& folder,
+                             const std::function<bool()>& cancelled)
+{
+  if (folder.empty())
+    return false;
+  return UnpackImageToFolder(image_path, folder.ends_with('/') ? folder : folder + '/', cancelled);
 }
 
 void RunInFatFsContext(FatFsCallbacks& callbacks, const std::function<void()>& function)

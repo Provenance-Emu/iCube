@@ -93,45 +93,6 @@ final class HomebrewPackageLayoutTests: XCTestCase {
     XCTAssertEqual(relative(HomebrewPackageLayout.program(in: scratch.root), to: scratch), "apps/a/default.dol")
   }
 
-  // MARK: - Data files
-
-  /// FruitY's package: the levels and sounds sit in a folder beside the program.
-  func testDataFilesBesideTheProgramAreListed() throws {
-    let scratch = try HomebrewScratch()
-    try scratch.file("apps/fruity/default.dol")
-    try scratch.file("apps/fruity/opening.bnr")
-    try scratch.file("apps/fruity/data/levels.bin")
-    try scratch.file("apps/fruity/data/gfx.rga")
-    XCTAssertEqual(HomebrewPackageLayout.dataFiles(in: scratch.root),
-                   ["apps/fruity/data/gfx.rga", "apps/fruity/data/levels.bin"])
-  }
-
-  /// Piero's Wiicross and StellaGC: files at the card's root, outside `apps/`.
-  func testDataFilesAtTheCardRootAreListed() throws {
-    let scratch = try HomebrewScratch()
-    try scratch.file("apps/stellagc/default.dol")
-    try scratch.file("aramfs.bz2")
-    try scratch.file("stella/stellarc")
-    XCTAssertEqual(HomebrewPackageLayout.dataFiles(in: scratch.root), ["aramfs.bz2", "stella/stellarc"])
-  }
-
-  func testProgramBannerAndDocumentsAreNotData() throws {
-    let scratch = try HomebrewScratch()
-    try scratch.file("apps/a/default.dol")
-    try scratch.file("apps/a/extra.ELF")
-    try scratch.file("apps/a/Opening.bnr")
-    try scratch.file("apps/a/README.md")
-    try scratch.file("apps/a/Readme")
-    try scratch.file("apps/a/LICENSE")
-    try scratch.file("apps/a/LICENCE.txt")
-    try scratch.file("apps/a/licenses/libogc.dat")
-    try scratch.file("apps/a/manual.pdf")
-    try scratch.file("__MACOSX/apps/a/._levels.bin")
-    try scratch.file("apps/a/.DS_Store")
-    XCTAssertEqual(HomebrewPackageLayout.dataFiles(in: scratch.root), [])
-    XCTAssertEqual(HomebrewPackageLayout.dataFiles(in: scratch.root.appendingPathComponent("missing")), [])
-  }
-
   func testSeveralProgramsOutsideAppsPicksFirstInPathOrder() throws {
     let scratch = try HomebrewScratch()
     try scratch.file("z/two.dol")

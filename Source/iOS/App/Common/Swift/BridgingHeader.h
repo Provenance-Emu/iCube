@@ -38,6 +38,7 @@
 #import "DOLDebugBridge.h"
 #import "DOLNFCCapability.h"
 #import "DOLPathsBridge.h"
+#import "DOLSDCardBridge.h"
 #import "DOLPerfBridge.h"
 #import "DOLPhysicalProfileBridge.h"
 #import "DOLSettingsKeyBridge.h"

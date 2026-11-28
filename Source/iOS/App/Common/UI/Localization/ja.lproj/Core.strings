@@ -5944,9 +5944,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The download is not the size Dolphin Depot lists, so it was discarded." = "ダウンロードのサイズがDolphin Depotの記載と異なるため、破棄しました。";
 "This package has no program iCube can start." = "このパッケージにはiCubeで起動できるプログラムがありません。";
 "iCube cannot start the program in this package." = "iCubeはこのパッケージのプログラムを起動できません。";
-"This program looks for files on an SD card, which iCube does not provide yet." = "このプログラムはSDカード上のファイルを探しますが、iCubeはまだSDカードに対応していません。";
+"This program loads your files from its SD card. In iCube the card is the title's own folder, Software/Homebrew/%@: put your files there." = "このプログラムはSDカードからファイルを読み込みます。iCubeではタイトル自身のフォルダ Software/Homebrew/%@ がそのカードになります。ファイルはそこに置いてください。";
 "This is a tool for a real GameCube and its accessories. It has nothing to work with in iCube and may not start." = "これは実機のゲームキューブと周辺機器のためのツールです。iCubeには対象となる機器がないため、起動しないことがあります。";
-"This package keeps its data on an SD card beside the program. iCube does not provide an SD card yet, so it will probably stop at a blank screen." = "このパッケージはプログラムと同じSDカードにデータを置きます。iCubeはまだSDカードを提供していないため、何も表示されないまま止まる可能性があります。";
 "Dolphin Depot lists this title as working in Dolphin." = "Dolphin DepotではこのタイトルがDolphinで動作すると記載されています。";
 "iCube cannot reach its Homebrew folder, so nothing can be installed." = "iCubeが自作ソフトのフォルダにアクセスできないため、インストールできません。";
 "Seat" = "Seat";

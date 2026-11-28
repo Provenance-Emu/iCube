@@ -74,8 +74,8 @@ struct HomebrewTitle: Hashable, Identifiable, Sendable {
 
   private static let dolphinPlatform = "Dolphin"
 
-  /// Emulators and media players look for their files on an SD card, which iCube does not provide.
-  var needsSDCard: Bool {
+  /// Emulators and media players load the user's own files from an SD card.
+  var usesFilesOnSDCard: Bool {
     guard let name = category?.name else { return false }
     return Self.sdCardCategories.contains(name)
   }

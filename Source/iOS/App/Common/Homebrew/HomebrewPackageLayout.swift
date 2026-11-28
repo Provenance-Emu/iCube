@@ -31,24 +31,6 @@ enum HomebrewPackageLayout {
     return programs.first?.url
   }
 
-  /// The files a package expects to read while it runs: everything that is not a program, its
-  /// banner or a document. On a console they sit on the SD card beside the program.
-  static func dataFiles(in root: URL) -> [String] {
-    files(in: root).filter { file in
-      guard let name = file.path.last?.lowercased() else { return false }
-      let fileExtension = (name as NSString).pathExtension
-      let stem = (name as NSString).deletingPathExtension
-      if programExtensions.contains(fileExtension) || name == bannerName { return false }
-      if documentExtensions.contains(fileExtension) || documentStems.contains(where: stem.hasPrefix) { return false }
-      return !file.path.dropLast().contains { documentFolders.contains($0.lowercased()) }
-    }.map { $0.path.joined(separator: "/") }
-  }
-
-  private static let bannerName = "opening.bnr"
-  private static let documentExtensions: Set<String> = ["txt", "md", "htm", "html", "pdf", "nfo", "rtf"]
-  private static let documentStems = ["readme", "license", "licence", "copying", "changelog", "credits", "authors"]
-  private static let documentFolders: Set<String> = ["licenses", "licences", "docs"]
-
   /// Every regular file of the package, in path order, with its path from the package root.
   private static func files(in root: URL) -> [(path: [String], url: URL)] {
     let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey]

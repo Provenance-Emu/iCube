@@ -235,24 +235,6 @@ final class HomebrewInstallModelTests: XCTestCase {
     XCTAssertEqual(call.fileName, "quest_10_dist.zip")
   }
 
-  /// Until the package is on disk nothing says it carries data; after, the note has to.
-  func testCompatibilityNoticesPackagedDataOnceInstalled() async {
-    let archive = TestZip.make([("apps/quest/default.dol", Data("DOL".utf8)),
-                                ("apps/quest/data/levels.bin", Data("levels".utf8))])
-    downloader.archive = archive
-    let model = model(title(archive: archive))
-    XCTAssertEqual(model.compatibility, .untested)
-    await run(model)
-    XCTAssertEqual(model.phase, .installed)
-    XCTAssertEqual(model.compatibility, .needsPackagedFiles)
-    XCTAssertTrue(scratch.exists("Homebrew/quest/apps/quest/data/levels.bin"))
-  }
-
-  func testCompatibilityStaysQuietForAProgramOnItsOwn() async {
-    let model = await install()
-    XCTAssertEqual(model.compatibility, .untested)
-  }
-
   /// Several builds in one package: the plain one is installed, and the others stay beside it.
   func testPackageWithSeveralBuildsInstallsThePlainOne() async throws {
     let archive = TestZip.make([("apps/quest-exp/default.dol", Data("experimental".utf8)),

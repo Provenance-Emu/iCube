@@ -129,7 +129,7 @@ private struct HomebrewDetailContent: View {
         }
         idleButtons
       }
-      if let note = model.compatibility.note {
+      if let note = HomebrewCompatibility.assess(title).note(for: title) {
         Text(note).icubeText(.detail).foregroundColor(ICubeDesign.color(.textSecondary))
       }
     }

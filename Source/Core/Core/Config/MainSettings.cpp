@@ -116,6 +116,8 @@ const Info<std::string>& GetInfoForGCIPath(ExpansionInterface::Slot slot)
       };
   return *infos[slot];
 }
+// The raw image the SD adapter (EXIDeviceType::SD) reads; empty means an empty adapter.
+const Info<std::string> MAIN_GC_SD_CARD_PATH{{System::Main, "Core", "GCSDCardPath"}, ""};
 const Info<std::string> MAIN_GCI_FOLDER_A_PATH_OVERRIDE{
     {System::Main, "Core", "GCIFolderAPathOverride"}, ""};
 const Info<std::string> MAIN_GCI_FOLDER_B_PATH_OVERRIDE{
