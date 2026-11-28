@@ -1,0 +1,109 @@
+/* Hand-written for iCube: the RAR/RAR5 reading subset of libarchive on Apple platforms
+ * (iOS, tvOS, macOS). Only what the bundled sources test is defined. */
+#ifndef ICUBE_LIBARCHIVE_CONFIG_H
+#define ICUBE_LIBARCHIVE_CONFIG_H
+
+#define __LIBARCHIVE_CONFIG_H_INCLUDED 1
+#define LIBARCHIVE_STATIC 1
+
+#define VERSION "3.8.11"
+#define PACKAGE_VERSION "3.8.11"
+#define LIBARCHIVE_VERSION_STRING "3.8.11"
+#define LIBARCHIVE_VERSION_NUMBER "3008011"
+#define BSDCPIO_VERSION_STRING "3.8.11"
+#define BSDTAR_VERSION_STRING "3.8.11"
+
+#define HAVE_CTYPE_H 1
+#define HAVE_ERRNO_H 1
+#define HAVE_FCNTL_H 1
+#define HAVE_INTTYPES_H 1
+#define HAVE_LIMITS_H 1
+#define HAVE_LOCALE_H 1
+#define HAVE_LANGINFO_H 1
+#define HAVE_STDARG_H 1
+#define HAVE_STDINT_H 1
+#define HAVE_STDLIB_H 1
+#define HAVE_STRING_H 1
+#define HAVE_STRINGS_H 1
+#define HAVE_SYS_PARAM_H 1
+#define HAVE_SYS_STAT_H 1
+#define HAVE_SYS_TIME_H 1
+#define HAVE_SYS_TYPES_H 1
+#define HAVE_TIME_H 1
+#define HAVE_UNISTD_H 1
+#define HAVE_WCHAR_H 1
+#define HAVE_WCTYPE_H 1
+#define HAVE_PTHREAD_H 1
+#define HAVE_PWD_H 1
+#define HAVE_GRP_H 1
+#define HAVE_ZLIB_H 1
+
+#define HAVE_DECL_INT32_MAX 1
+#define HAVE_DECL_INT32_MIN 1
+#define HAVE_DECL_INT64_MAX 1
+#define HAVE_DECL_INT64_MIN 1
+#define HAVE_DECL_INTMAX_MAX 1
+#define HAVE_DECL_INTMAX_MIN 1
+#define HAVE_DECL_SIZE_MAX 1
+#define HAVE_DECL_SSIZE_MAX 1
+#define HAVE_DECL_UINT32_MAX 1
+#define HAVE_DECL_UINT64_MAX 1
+#define HAVE_DECL_UINTMAX_MAX 1
+#define HAVE_DECL_STRERROR_R 1
+#define HAVE_INTMAX_T 1
+#define HAVE_UINTMAX_T 1
+#define HAVE_WCHAR_T 1
+#define SIZEOF_WCHAR_T 4
+#define SIZEOF_INT 4
+#define SIZEOF_LONG 8
+#define SIZEOF_LONG_LONG 8
+#define SIZEOF_SHORT 2
+
+#define HAVE_ARC4RANDOM_BUF 1
+#define HAVE_EILSEQ 1
+#define HAVE_FCNTL 1
+#define HAVE_FSTAT 1
+#define HAVE_GETPID 1
+#define HAVE_GMTIME_R 1
+#define HAVE_LOCALTIME_R 1
+#define HAVE_LSTAT 1
+#define HAVE_MBRTOWC 1
+#define HAVE_MEMMOVE 1
+#define HAVE_MEMSET 1
+#define HAVE_NL_LANGINFO 1
+#define HAVE_SETLOCALE 1
+#define HAVE_STRCHR 1
+#define HAVE_STRDUP 1
+#define HAVE_STRERROR 1
+#define HAVE_STRERROR_R 1
+#define HAVE_STRNLEN 1
+#define HAVE_STRRCHR 1
+#define HAVE_TIMEGM 1
+#define HAVE_TZSET 1
+#define HAVE_VPRINTF 1
+#define HAVE_WCRTOMB 1
+#define HAVE_WCSCMP 1
+#define HAVE_WCSCPY 1
+#define HAVE_WCSLEN 1
+#define HAVE_WCTOMB 1
+#define HAVE_WMEMCMP 1
+#define HAVE_WMEMCPY 1
+#define HAVE_WMEMMOVE 1
+
+#define HAVE_STRUCT_STAT_ST_BLKSIZE 1
+#define HAVE_STRUCT_STAT_ST_FLAGS 1
+#define HAVE_STRUCT_STAT_ST_BIRTHTIMESPEC_TV_NSEC 1
+#define HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC 1
+#define HAVE_STRUCT_TM_TM_GMTOFF 1
+#define HAVE_STRUCT_TM_TM_ZONE 1
+
+/* CommonCrypto, for the digests and AES that RAR's (unsupported here) encryption headers refer to. */
+#define ARCHIVE_CRYPTO_MD5_LIBSYSTEM 1
+#define ARCHIVE_CRYPTO_SHA1_LIBSYSTEM 1
+#define ARCHIVE_CRYPTO_SHA256_LIBSYSTEM 1
+#define ARCHIVE_CRYPTO_SHA384_LIBSYSTEM 1
+#define ARCHIVE_CRYPTO_SHA512_LIBSYSTEM 1
+
+#define __LIBARCHIVE_ENABLE_VISIBILITY 1
+
+#endif
