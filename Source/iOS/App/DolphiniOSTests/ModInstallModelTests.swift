@@ -11,8 +11,8 @@ final class ModInstallModelTests: XCTestCase {
     return try JSONDecoder().decode(GameBananaFile.self, from: Data(json.utf8))
   }
 
-  func testRarArchivesAreBlocked() throws {
-    XCTAssertNotNil(ModInstallModel.blockedReason(for: try file(name: "pack.RAR")))
+  func testRarArchivesAreAllowed() throws {
+    XCTAssertNil(ModInstallModel.blockedReason(for: try file(name: "pack.RAR")))
   }
 
   func testFilesWithoutALinkAreBlocked() throws {
@@ -29,8 +29,9 @@ final class ModInstallModelTests: XCTestCase {
   func testCleaningUpReopenedFilePreservesPatchAlreadyHandedOff() throws {
     let file = try file(name: "patch.xdelta")
     let handler = LiveModInstallHandler(presentPatches: { _, _ in })
-    let original = ModInstallModel(file: file, ownedGame: nil, handler: handler)
-    let reopened = ModInstallModel(file: file, ownedGame: nil, handler: handler)
+    let ledger = ModInstallLedger(fileURL: FileManager.default.temporaryDirectory.appendingPathComponent("ModModel-\(UUID().uuidString).json"))
+    let original = ModInstallModel(file: file, ownedGame: nil, handler: handler, ledger: ledger)
+    let reopened = ModInstallModel(file: file, ownedGame: nil, handler: handler, ledger: ledger)
     let fm = FileManager.default
     defer {
       try? fm.removeItem(at: original.workDirectory)

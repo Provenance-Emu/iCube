@@ -1,0 +1,85 @@
+// Copyright 2026 iCube Project
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+import Combine
+import Foundation
+
+/// Keeps a mod file's install model alive while no screen shows it, so a download keeps going and
+/// shows its progress again when the user comes back: after navigating away, and after closing
+/// the browser. What outlasts the launch is in `ModInstallLedger`.
+@MainActor
+final class ModInstallCenter: ObservableObject {
+  static let shared = ModInstallCenter()
+
+  /// The browser's memory of downloads, newest first, for the "Your Downloads" list.
+  @Published private(set) var records: [ModInstallRecord] = []
+
+  private let ledger: ModInstallLedger
+  private var models: [Int: ModInstallModel] = [:]
+  private var subscriptions: [Int: AnyCancellable] = [:]
+  private var ledgerObserver: NSObjectProtocol?
+
+  init(ledger: ModInstallLedger = .shared) {
+    self.ledger = ledger
+    records = ledger.records
+    ledgerObserver = NotificationCenter.default.addObserver(
+      forName: ModInstallLedger.didChangeNotification, object: ledger, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.reload() }
+    }
+  }
+
+  /// The model for `file`: the live one if a download or an install of it is under way, else a new
+  /// one that first restores what the ledger remembers.
+  func model(for file: GameBananaFile, modName: String, entry: ModGameTable.Entry?, ownedGame: ModLibraryGame?,
+             handler: any ModInstallHandling) -> ModInstallModel {
+    if let model = models[file.id] { return model }
+    let model = ModInstallModel(file: file, modName: modName, bananaGameID: entry?.bananaID,
+                                titleCode: entry?.gameIDs.first.map { String($0.prefix(3)) },
+                                ownedGame: ownedGame, handler: handler, ledger: ledger)
+    models[file.id] = model
+    // A row elsewhere shows this file's status, so its changes are the centre's changes.
+    subscriptions[file.id] = model.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+    Task { await model.restoreIfNeeded() }
+    return model
+  }
+
+  /// Where `fileID` stands, from its live model if there is one, else from the ledger.
+  func status(forFileID fileID: Int) -> ModInstallModel.Status {
+    if let model = models[fileID], model.status != .none { return model.status }
+    guard let record = records.first(where: { $0.fileID == fileID }) else { return .none }
+    switch record.stage {
+    case .downloading: return .preparing
+    case .downloaded: return .downloaded
+    case .installed: return .installed
+    }
+  }
+
+  /// A screen stopped showing `model`. It is dropped unless it still has work or a kept download.
+  func release(_ model: ModInstallModel) {
+    model.cleanUp()
+    guard !model.isWorthKeeping, models[model.file.id] === model else { return }
+    models[model.file.id] = nil
+    subscriptions[model.file.id] = nil
+  }
+
+  /// Forgets a file altogether: its download is deleted and it leaves "Your Downloads".
+  /// What it installed stays installed.
+  func forget(fileID: Int) {
+    if let model = models[fileID] {
+      guard !model.isInstalling else { return }
+      model.cancel()
+      model.discardDownload()
+      models[fileID] = nil
+      subscriptions[fileID] = nil
+    }
+    if let folder = ledger.record(forFileID: fileID)?.workFolder {
+      try? FileManager.default.removeItem(at: ModDownloadManager.downloadsDirectory.appendingPathComponent(folder, isDirectory: true))
+    }
+    ledger.remove(fileID: fileID)
+  }
+
+  private func reload() {
+    records = ledger.records
+  }
+}

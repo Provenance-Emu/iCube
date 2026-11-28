@@ -5,11 +5,24 @@ import Foundation
 
 /// Downloads mod archives, and homebrew packages, into `<User>/Cache/ModDownloads/<key>-<session>/`.
 ///
-/// A foreground session: the app has no background-session plumbing, and these downloads are
-/// something the user watches. A cancelled download keeps its resume data, so asking for the same
-/// file again continues where it stopped.
+/// `shared` is a foreground session, for downloads the user watches to the end (homebrew).
+/// `background` is a background session for mod files: the transfer keeps going while iCube is
+/// suspended and after the system ends it. A transfer names its key and destination in its
+/// `taskDescription`, so a relaunched app can either hand the still-running transfer back to
+/// whoever asks for that key again, or file a finished download where its owner will look.
+/// A cancelled download keeps its resume data, so asking for the same file again continues where
+/// it stopped.
 final class ModDownloadManager: NSObject, @unchecked Sendable {
   static let shared = ModDownloadManager()
+  static let background = ModDownloadManager(
+    backgroundIdentifier: (Bundle.main.bundleIdentifier ?? "org.dolphin-emu.dolphinios") + ".mod-downloads")
+
+  /// What a transfer's `taskDescription` holds.
+  private struct Label: Codable {
+    let key: String
+    /// The destination, below `downloadsDirectory`.
+    let path: String?
+  }
 
   private static let staleAge: TimeInterval = 7 * 24 * 60 * 60
   private static let idleTimeout: TimeInterval = 60
@@ -37,15 +50,106 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
     }
   }
 
+  private static let backgroundResourceTimeout: TimeInterval = 24 * 60 * 60
+
+  private let backgroundIdentifier: String?
   private let lock = NSLock()
   private var jobs: [Int: Job] = [:]
   private var resumeData: [String: Data] = [:]
+  /// Transfers the system kept running across a relaunch, by key, until someone asks for the key.
+  private var adoptable: [String: URLSessionDownloadTask] = [:]
+  private var isReconciled = false
+  private var reconcileWaiters: [CheckedContinuation<Void, Never>] = []
+  private var eventsCompletion: (() -> Void)?
   private lazy var session: URLSession = {
-    let configuration = URLSessionConfiguration.default
+    let configuration: URLSessionConfiguration
+    if let backgroundIdentifier {
+      configuration = .background(withIdentifier: backgroundIdentifier)
+      configuration.sessionSendsLaunchEvents = true
+      configuration.isDiscretionary = false
+      configuration.timeoutIntervalForResource = Self.backgroundResourceTimeout
+    } else {
+      configuration = .default
+      configuration.waitsForConnectivity = false
+    }
     configuration.timeoutIntervalForRequest = Self.idleTimeout
-    configuration.waitsForConnectivity = false
     return URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
   }()
+
+  init(backgroundIdentifier: String? = nil) {
+    self.backgroundIdentifier = backgroundIdentifier
+  }
+
+  // MARK: - Background session
+
+  /// Creates the session and collects the transfers the system kept for it. Call at launch, so
+  /// downloads that finished while the app was gone are filed before anyone looks for them.
+  /// Does nothing for a foreground manager; safe to call again.
+  func activate() {
+    guard backgroundIdentifier != nil else { return }
+    let isFirst = lock.withLock { () -> Bool in
+      defer { didActivate = true }
+      return !didActivate
+    }
+    guard isFirst else { return }
+    session.getAllTasks { [self] all in
+      let waiters: [CheckedContinuation<Void, Never>] = lock.withLock {
+        for case let task as URLSessionDownloadTask in all where task.state == .running || task.state == .suspended {
+          guard jobs[task.taskIdentifier] == nil, let label = Self.label(of: task) else { continue }
+          adoptable[label.key] = task
+        }
+        isReconciled = true
+        defer { reconcileWaiters = [] }
+        return reconcileWaiters
+      }
+      waiters.forEach { $0.resume() }
+    }
+  }
+
+  private var didActivate = false
+
+  /// The app delegate's `handleEventsForBackgroundURLSession`. Returns false for another session.
+  @discardableResult
+  func handleEvents(forSession identifier: String, completion: @escaping () -> Void) -> Bool {
+    guard let backgroundIdentifier, identifier == backgroundIdentifier else { return false }
+    lock.withLock { eventsCompletion = completion }
+    activate()
+    return true
+  }
+
+  /// Whether a transfer for `key` is under way: one this launch started, or one the system kept.
+  func isDownloading(key: String) async -> Bool {
+    await reconciled()
+    return lock.withLock { adoptable[key] != nil || jobs.values.contains { $0.key == key } }
+  }
+
+  private func reconciled() async {
+    guard backgroundIdentifier != nil else { return }
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      let ready = lock.withLock { () -> Bool in
+        if !isReconciled { reconcileWaiters.append(continuation) }
+        return isReconciled
+      }
+      if ready { continuation.resume() } else { activate() }
+    }
+  }
+
+  private static func label(of task: URLSessionTask) -> Label? {
+    task.taskDescription.flatMap { try? JSONDecoder().decode(Label.self, from: Data($0.utf8)) }
+  }
+
+  /// `destination` as a path below the downloads folder, or nil when it lies elsewhere.
+  private static func relativePath(of destination: URL) -> String? {
+    let root = downloadsDirectory.standardizedFileURL.path + "/"
+    let path = destination.standardizedFileURL.path
+    return path.hasPrefix(root) ? String(path.dropFirst(root.count)) : nil
+  }
+
+  /// Where a transfer nobody is waiting for said its file goes, if that is inside the downloads folder.
+  private static func orphanDestination(for label: Label) -> URL? {
+    guard let path = label.path, !path.isEmpty, !path.split(separator: "/").contains(".."), !path.hasPrefix("/") else { return nil }
+    return downloadsDirectory.appendingPathComponent(path)
+  }
 
   static var downloadsDirectory: URL {
     URL(fileURLWithPath: UserFolderUtil.getUserFolder(), isDirectory: true)
@@ -82,6 +186,7 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
     let destination = directory.appendingPathComponent(name)
     try? FileManager.default.removeItem(at: destination)
 
+    await reconciled()
     let job = Job(key: key, destination: destination, expectedBytes: expectedBytes, progress: progress)
     let task = startTask(for: job, source: source)
     return try await withTaskCancellationHandler {
@@ -115,15 +220,28 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
     }
   }
 
+  /// A transfer for the job: the one the system kept running for its key, else a new one.
   private func startTask(for job: Job, source: URL) -> URLSessionDownloadTask {
-    let saved = lock.withLock { resumeData.removeValue(forKey: job.key) }
+    let (kept, saved) = lock.withLock { (adoptable.removeValue(forKey: job.key), resumeData.removeValue(forKey: job.key)) }
+    if let kept, kept.state == .running || kept.state == .suspended {
+      lock.withLock { jobs[kept.taskIdentifier] = job }
+      return kept
+    }
     let task = saved.map { session.downloadTask(withResumeData: $0) } ?? session.downloadTask(with: source)
+    let label = Label(key: job.key, path: Self.relativePath(of: job.destination))
+    task.taskDescription = (try? JSONEncoder().encode(label)).flatMap { String(data: $0, encoding: .utf8) }
     lock.withLock { jobs[task.taskIdentifier] = job }
     return task
   }
 
-  private func finish(taskID: Int, error: Error?) {
-    guard let job = lock.withLock({ jobs.removeValue(forKey: taskID) }) else { return }
+  private func finish(task: URLSessionTask, error: Error?) {
+    let taskID = task.taskIdentifier
+    guard let job = lock.withLock({ jobs.removeValue(forKey: taskID) }) else {
+      if let key = Self.label(of: task)?.key {
+        lock.withLock { if adoptable[key]?.taskIdentifier == taskID { adoptable[key] = nil } }
+      }
+      return
+    }
     let result: Result<HomebrewDownload, Error>
     if let failure = job.failure ?? error {
       result = .failure((failure as? URLError)?.code == .cancelled ? CancellationError() : failure)
@@ -160,8 +278,19 @@ extension ModDownloadManager: URLSessionDownloadDelegate {
   }
 
   func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-    guard let job = lock.withLock({ jobs[downloadTask.taskIdentifier] }) else { return }
-    if let status = (downloadTask.response as? HTTPURLResponse)?.statusCode, !(200..<300).contains(status) {
+    let status = (downloadTask.response as? HTTPURLResponse)?.statusCode
+    guard let job = lock.withLock({ jobs[downloadTask.taskIdentifier] }) else {
+      // Nobody is waiting: the app was relaunched for this transfer. File the download where its
+      // owner will look for it when the user comes back.
+      if status.map({ (200..<300).contains($0) }) ?? true, let label = Self.label(of: downloadTask),
+         let destination = Self.orphanDestination(for: label) {
+        try? FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? FileManager.default.removeItem(at: destination)
+        try? FileManager.default.moveItem(at: location, to: destination)
+      }
+      return
+    }
+    if let status, !(200..<300).contains(status) {
       job.failure = ModDownloadError.status(status)
       return
     }
@@ -181,6 +310,14 @@ extension ModDownloadManager: URLSessionDownloadDelegate {
        let key = lock.withLock({ jobs[task.taskIdentifier]?.key }) {
       lock.withLock { resumeData[key] = data }
     }
-    finish(taskID: task.taskIdentifier, error: error)
+    finish(task: task, error: error)
+  }
+
+  func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+    let completion = lock.withLock { () -> (() -> Void)? in
+      defer { eventsCompletion = nil }
+      return eventsCompletion
+    }
+    if let completion { DispatchQueue.main.async(execute: completion) }
   }
 }

@@ -6,6 +6,8 @@ import SwiftUI
 enum ModBrowserRoute: Hashable {
   case game(ModGameTable.Entry)
   case mod(GameBananaModSummary, ModGameTable.Entry)
+  /// A file the browser remembers downloading, opened from "Your Downloads".
+  case file(ModInstallRecord)
 }
 
 /// The mod browser: a catalogue of GameBanana mods for the GC/Wii games iCube knows about.
@@ -42,10 +44,17 @@ struct ModBrowserRoot: View {
             ModListView(entry: entry, ownedGame: ownedGame(for: entry))
           case .mod(let summary, let entry):
             ModDetailView(summary: summary, entry: entry, ownedGame: ownedGame(for: entry), handler: handler)
+          case .file(let record):
+            let entry = record.bananaGameID.flatMap { ModGameTable.bundled.entry(forBananaID: $0) }
+            ModFileView(file: record.file, modName: record.modName, entry: entry,
+                        ownedGame: entry.flatMap { ownedGame(for: $0) }, handler: handler)
           }
         }
     }
-    .task { ModDownloadManager.shared.sweepStaleDownloads() }
+    .task {
+      ModDownloadManager.shared.sweepStaleDownloads()
+      ModDownloadManager.background.activate()
+    }
     .alert(L("Mod Browser"), isPresented: Binding(get: { presenter.notice != nil }, set: { if !$0 { presenter.notice = nil } })) {
       Button(L("OK"), role: .cancel) {}
     } message: {
@@ -74,6 +83,7 @@ struct ModBrowserAttribution: View {
 
 struct ModGameListView: View {
   let libraryGames: [ModLibraryGame]
+  @ObservedObject private var center = ModInstallCenter.shared
 
   private var ownedEntries: [ModGameTable.Entry] {
     ModGameTable.bundled.entries.filter { entry in
@@ -88,6 +98,15 @@ struct ModGameListView: View {
 
   var body: some View {
     List {
+      if !center.records.isEmpty {
+        Section {
+          ForEach(center.records) { downloadRow($0) }
+        } header: {
+          Text(L("Your Downloads"))
+        } footer: {
+          Text(L("Files you downloaded here. A download that is still running keeps going while you browse, and after you close the Mod Browser."))
+        }
+      }
       if !ownedEntries.isEmpty {
         Section(L("Your Games")) {
           ForEach(ownedEntries) { gameRow($0) }
@@ -98,6 +117,24 @@ struct ModGameListView: View {
       }
       Section { ModBrowserAttribution() }
       TVStorageNoteSection()
+    }
+  }
+
+  private func downloadRow(_ record: ModInstallRecord) -> some View {
+    let status = center.status(forFileID: record.fileID)
+    return NavigationLink(value: ModBrowserRoute.file(record)) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(record.modName).lineLimit(2)
+        Text(record.fileName).icubeText(.detail).foregroundColor(ICubeDesign.color(.textSecondary))
+        if let label = ModFileRow.statusText(status) {
+          Label(label, systemImage: ModFileRow.statusSymbol(status)).icubeText(.detail)
+        }
+      }
+    }
+    .contextMenu {
+      Button(role: .destructive) { center.forget(fileID: record.fileID) } label: {
+        Label(L("Remove from This List"), systemImage: "trash")
+      }
     }
   }
 
