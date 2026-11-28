@@ -141,7 +141,7 @@ enum ICubeBezels {
 
   /// The draw aspects (width / height) the core may report that are a picture's shape. Outside it the core has
   /// no surface yet, or a degenerate one.
-  static let pictureAspectRange: ClosedRange<CGFloat> = 0.4...3.5
+  static let pictureAspectRange: ClosedRange<CGFloat> = 0.4 ... 3.5
 
   /// The aspect to lay the picture out with once the core reports `reported`, or `nil` to keep `current`.
   ///

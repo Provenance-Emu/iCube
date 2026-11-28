@@ -1383,8 +1383,9 @@ struct EmulationScreen: View {
           controllerManager.clearDisconnectPause()
         }
         if !isPaused {
-          refreshPictureAspect()
           refreshBezelStretch()
+          // "Stretch to Window" reports the surface's own shape back: following it would only echo the layout.
+          if !bezelStretchesPicture { refreshPictureAspect() }
         }
         // The game is drawing again, so the surface can take the picture's own shape.
         if bezelDrawnAspect != nil, !bezelSwitcherIsUp, !isPaused { bezelDrawnAspect = nil }
