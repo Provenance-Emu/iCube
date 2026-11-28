@@ -3,6 +3,7 @@
 
 import Foundation
 import PVContinuity
+import PVRemoteLibrary
 import RomMClient
 import UIKit
 import XCTest
@@ -37,8 +38,7 @@ final class RemoteGameCatalogTests: XCTestCase {
   func testServerPagesAreFullSizeAndCountEveryLibrary() async throws {
     let transport = CatalogTransport(cover: Self.image(width: 20, height: 30))
     let server = try EmulationServer(address: "covers.local")
-    let library = EmulationServerLibrary(server: server, token: "fixture", transport: transport,
-                                         covers: RemoteCoverCache(folder: folder))
+    let library = EmulationServerLibrary(server: server, token: "fixture", transport: transport)
     let first = try await library.openCatalog(search: "")
     XCTAssertEqual(first.entries.map(\.key), ["source:wii1", "source:outside"])
     XCTAssertEqual(first.entries.map(\.hasArtwork), [true, false], "A cover path outside the API is not followed")
@@ -60,7 +60,7 @@ final class RemoteGameCatalogTests: XCTestCase {
   func testServerCountReadsOneRowPerLibrary() async throws {
     let transport = CatalogTransport(cover: Data())
     let library = EmulationServerLibrary(server: try EmulationServer(address: "count.local"), token: nil,
-                                         transport: transport, covers: RemoteCoverCache(folder: folder))
+                                         transport: transport)
     let count = try await library.gameCount()
     XCTAssertEqual(count, 12)
     let browses = await transport.queries(for: "/api/v1/browse")
@@ -70,34 +70,37 @@ final class RemoteGameCatalogTests: XCTestCase {
   func testServerCoverIsDownscaledKeptAndRevalidated() async throws {
     let transport = CatalogTransport(cover: Self.image(width: 1200, height: 1800))
     let server = try EmulationServer(address: "art.local")
-    let cache = RemoteCoverCache(folder: folder)
-    let library = EmulationServerLibrary(server: server, token: "fixture", transport: transport, covers: cache)
-    let opened = try await library.openCatalog(search: "")
-    let entry = try XCTUnwrap(opened.entries.first)
-    let fetched = await library.artwork(for: entry)
+    let cache = RemoteCoverCache(directory: folder)
+    let library = EmulationServerLibrary(server: server, token: "fixture", transport: transport)
+    let source = RemoteCatalogSource(catalog: library)
+    let opened = try await source.page(CatalogueQuery(), after: nil)
+    let game = try XCTUnwrap(opened.games.first)
+    let fetched = await cache.cover(for: game, from: source)
     let cover = try XCTUnwrap(fetched.flatMap(UIImage.init(data:)))
-    XCTAssertEqual(max(cover.size.width, cover.size.height) * cover.scale, CGFloat(RemoteCoverCache.maximumPixelSize))
-    _ = await library.artwork(for: entry)
+    XCTAssertEqual(max(cover.size.width, cover.size.height) * cover.scale, CGFloat(RemoteCovers.maximumPixelSize))
+    _ = await cache.cover(for: game, from: source)
     var requests = await transport.coverRequests
     XCTAssertEqual(requests.count, 1, "A cover this catalog already checked is read from disk")
     XCTAssertEqual(requests.first?.headers["Authorization"], "Bearer fixture")
     XCTAssertNil(requests.first?.headers["If-None-Match"])
 
     // A later visit asks the server whether the cover changed, and reuses the file when it has not.
-    let later = EmulationServerLibrary(server: server, token: "fixture", transport: transport, covers: cache)
-    let reopened = try await later.openCatalog(search: "")
-    let again = try XCTUnwrap(reopened.entries.first)
-    let reused = await later.artwork(for: again)
+    let later = RemoteCatalogSource(catalog: EmulationServerLibrary(server: server, token: "fixture", transport: transport))
+    let reopened = try await later.page(CatalogueQuery(), after: nil)
+    let again = try XCTUnwrap(reopened.games.first)
+    XCTAssertEqual(again.id, game.id, "The same game on the same server is the same cache entry")
+    let reused = await cache.cover(for: again, from: later)
     XCTAssertEqual(reused, fetched)
     requests = await transport.coverRequests
     XCTAssertEqual(requests.last?.headers["If-None-Match"], "\"v1\"")
 
     // Offline, the cover on disk is still shown.
     await transport.goOffline()
-    let offline = EmulationServerLibrary(server: server, token: "fixture", transport: OfflineCovers(base: transport), covers: cache)
-    let offlinePage = try await offline.openCatalog(search: "")
-    let cached = try XCTUnwrap(offlinePage.entries.first)
-    let shown = await offline.artwork(for: cached)
+    let offline = RemoteCatalogSource(catalog: EmulationServerLibrary(
+      server: server, token: "fixture", transport: OfflineCovers(base: transport)))
+    let offlinePage = try await offline.page(CatalogueQuery(), after: nil)
+    let cached = try XCTUnwrap(offlinePage.games.first)
+    let shown = await cache.cover(for: cached, from: offline)
     XCTAssertEqual(shown, fetched)
   }
 
@@ -106,7 +109,7 @@ final class RemoteGameCatalogTests: XCTestCase {
   func testEditsAreSentAgainstTheRevisionTheyWereReadAt() async throws {
     let transport = EditTransport()
     let library = EmulationServerLibrary(server: try EmulationServer(address: "edit.local"), token: "writer",
-                                         transport: transport, covers: RemoteCoverCache(folder: folder))
+                                         transport: transport)
     try await library.saveDetails(forKey: "source:wii1", title: "New Name", cover: Self.image(width: 4, height: 6))
     var writes = await transport.writes
     XCTAssertEqual(writes.map(\.method), ["PUT", "PUT"])
@@ -177,7 +180,7 @@ final class RemoteGameCatalogTests: XCTestCase {
     let address = try RomMAddress("https://romm.example")
     let client = try RomMClient(address: address, credential: .token("rmm_fixture"), transport: transport)
     let server = RomMServer(address: address)
-    let library = RomMLibrary(server: server, client: client, covers: RemoteCoverCache(folder: folder))
+    let library = RomMLibrary(server: server, client: client)
 
     let count = try await library.gameCount()
     XCTAssertEqual(count, 5, "GameCube and Wii only")
@@ -199,9 +202,12 @@ final class RemoteGameCatalogTests: XCTestCase {
     XCTAssertTrue(queries.allSatisfy { $0["limit"] == "100" && $0["search_term"] == "zelda" })
 
     let entry = try XCTUnwrap(first.entries.first)
-    let cover = await library.artwork(for: entry)
+    let cache = RemoteCoverCache(directory: folder)
+    let source = RemoteCatalogSource(catalog: library)
+    let game = LibraryGame(entry: entry, source: source.info.id)
+    let cover = await cache.cover(for: game, from: source)
     XCTAssertNotNil(cover.flatMap(UIImage.init(data:)))
-    _ = await library.artwork(for: entry)
+    _ = await cache.cover(for: game, from: source)
     let coverRequests = await transport.coverRequests
     XCTAssertEqual(coverRequests, 1, "RomM cover paths change with the cover, so a kept cover is current")
 

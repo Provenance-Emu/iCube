@@ -14,7 +14,8 @@ enum PausePerfHUDRoute {
                    closePause: () -> Void, openTouchOverlay: () -> Void) {
     switch platform {
     case .tvos: openSubmenu()
-    case .ios: closePause(); openTouchOverlay()
+    case .ios: closePause()
+      openTouchOverlay()
     }
   }
 }
@@ -51,12 +52,14 @@ internal struct PauseMenuView: View {
     /// grid (`SaveStateFilmstripView`) -- previously iOS-only.
     case filmstrip
   }
+
   private enum Pane: Equatable {
     case main, saves, cheats, controllers, discs, perfHUD
     /// The Audio tile's grid (volume, mute, output, effects), and one effect's parameter page under it.
     case audio
     case audioEffect(AudioEffectPage)
   }
+
   /// The quick-slot picker's slots, numbered as the UI shows them.
   static let saveSlots = 1 ... PauseMenuModelBuilder.slotCount
   @State private var pane: Pane = .main
@@ -575,9 +578,20 @@ internal struct PauseMenuView: View {
   }
 
   #if DEBUG
-  func debugPane(_ pane: String?) -> PauseMenuView { var copy = self; copy.debugInitialPane = pane; return copy }
-  func debugFocus(_ focus: String?) -> PauseMenuView { var copy = self; copy.debugInitialFocus = focus; return copy }
-  func debugLongPress(_ tileID: String?) -> PauseMenuView { var copy = self; copy.debugLongPressTileID = tileID; return copy }
+  func debugPane(_ pane: String?) -> PauseMenuView { var copy = self
+    copy.debugInitialPane = pane
+    return copy
+  }
+
+  func debugFocus(_ focus: String?) -> PauseMenuView { var copy = self
+    copy.debugInitialFocus = focus
+    return copy
+  }
+
+  func debugLongPress(_ tileID: String?) -> PauseMenuView { var copy = self
+    copy.debugLongPressTileID = tileID
+    return copy
+  }
 
   #endif
 
@@ -618,25 +632,35 @@ internal struct PauseMenuView: View {
     // The system dialog, as iFly's Quit and Hard Restart: the focus engine owns it, and Menu cancels it. Each action
     // clears its flag first: a flag still up when the action closes the menu holds the pause (`isPauseMenuChildPresented`).
     .confirmationDialog(L("Exit Game"), isPresented: $showExitDialog, titleVisibility: .visible) {
-      Button(L("Save & Quit")) { showExitDialog = false; saveAndQuit() }
-      Button(L("Quit"), role: .destructive) { showExitDialog = false; quitGame() }
+      Button(L("Save & Quit")) { showExitDialog = false
+        saveAndQuit()
+      }
+      Button(L("Quit"), role: .destructive) { showExitDialog = false
+        quitGame()
+      }
       Button(L("Cancel"), role: .cancel) {}
     } message: {
       Text(L("Do you want to quit the game? Unsaved progress will be lost."))
     }
     .confirmationDialog(L("Reset System"), isPresented: $showResetDialog, titleVisibility: .visible) {
-      Button(L("Reset"), role: .destructive) { showResetDialog = false; resetGame() }
+      Button(L("Reset"), role: .destructive) { showResetDialog = false
+        resetGame()
+      }
       Button(L("Cancel"), role: .cancel) {}
     } message: {
       Text(L("Restart the game as if the console's reset button was pressed? Unsaved progress will be lost."))
     }
     .confirmationDialog(L("Couldn't save before quitting"), isPresented: Binding(
       get: { quitSaveFailure != nil }, set: { if !$0 { quitSaveFailure = nil } }), titleVisibility: .visible) {
-      if let failure = quitSaveFailure {
-        Button(L("Retry")) { quitSaveFailure = nil; retryQuit(failure) }
-        Button(L("Quit Without Saving"), role: .destructive) { quitSaveFailure = nil; quitWithoutSaving() }
-        Button(L("Cancel"), role: .cancel) { quitSaveFailure = nil }
-      }
+        if let failure = quitSaveFailure {
+          Button(L("Retry")) { quitSaveFailure = nil
+            retryQuit(failure)
+          }
+          Button(L("Quit Without Saving"), role: .destructive) { quitSaveFailure = nil
+            quitWithoutSaving()
+          }
+          Button(L("Cancel"), role: .cancel) { quitSaveFailure = nil }
+        }
     } message: {
       Text(L("Retry the save or choose Quit Without Saving. Unsaved progress will be lost."))
     }
@@ -692,8 +716,12 @@ internal struct PauseMenuView: View {
           confirmOverlay(title: L("Couldn't save before quitting"),
                          message: L("Retry the save or choose Quit Without Saving. Unsaved progress will be lost."),
                          model: UserQuitFailureModelBuilder.make(cancel: { quitSaveFailure = nil },
-                           retry: { quitSaveFailure = nil; retryQuit(failure) },
-                           quitWithoutSaving: { quitSaveFailure = nil; self.quitWithoutSaving() }),
+                                                                 retry: { quitSaveFailure = nil
+                                                                   retryQuit(failure)
+                                                                 },
+                                                                 quitWithoutSaving: { quitSaveFailure = nil
+                                                                   self.quitWithoutSaving()
+                                                                 }),
                          onBack: { quitSaveFailure = nil })
         }
         EmulationToastOverlay(barHeight: 0, barVisible: false)
@@ -806,23 +834,29 @@ internal struct PauseMenuView: View {
 
   private var quickSaveActions: QuickSaveMenuActions {
     QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
-      session: .init(gameID: game.gameID, identifier: openingSaveSession ?? TVEmulationBridge.currentSessionIdentifier()),
-      isActive: { pauseToken != nil && openingSaveSession != nil && !quickStateActionInFlight },
-      dismiss: { onClose() }, handoff: .shared, openBrowser: {
-        if quickStateActionInFlight { openSharedSaveBrowser(); onReopenSaveBrowser?() }
-        else { openSharedSaveBrowser() }
-      },
-      onBusyChanged: { quickStateActionInFlight = $0 },
-      report: { EmulationToast.post($0.message) })
+                         session: .init(gameID: game.gameID, identifier: openingSaveSession ?? TVEmulationBridge.currentSessionIdentifier()),
+                         isActive: { pauseToken != nil && openingSaveSession != nil && !quickStateActionInFlight },
+                         dismiss: { onClose() }, handoff: .shared, openBrowser: {
+                           if quickStateActionInFlight { openSharedSaveBrowser()
+                             onReopenSaveBrowser?()
+                           } else { openSharedSaveBrowser() }
+                         },
+                         onBusyChanged: { quickStateActionInFlight = $0 },
+                         report: { EmulationToast.post($0.message) })
   }
 
   private var savesMenu: some View {
     Group {
       if platform == .ios || showSharedSaveBrowser {
         QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
-                            onDismiss: { pane = .main; showSharedSaveBrowser = false },
-                            onCommit: { pane = .main; showSharedSaveBrowser = false; onClose() })
-          .claimsController()
+                            onDismiss: { pane = .main
+                              showSharedSaveBrowser = false
+                            },
+                            onCommit: { pane = .main
+                              showSharedSaveBrowser = false
+                              onClose()
+                            })
+                            .claimsController()
       } else {
         tvHeroLayout {
           TVSaveSlotsPane(game: game, selectedSlot: $selectedSlot, initialFocus: debugSavesFocus,
@@ -833,9 +867,12 @@ internal struct PauseMenuView: View {
         .sheet(isPresented: $showFilmstripSheet) {
           QuickSavePickerView(gameID: game.gameID, mode: $quickSaveMode, selectedSlot: $selectedSlot,
                               onDismiss: { showFilmstripSheet = false },
-                              onCommit: { showFilmstripSheet = false; pane = .main; onClose() })
-            .pauseClaim("save-browser")
-            .claimsController()
+                              onCommit: { showFilmstripSheet = false
+                                pane = .main
+                                onClose()
+                              })
+                              .pauseClaim("save-browser")
+                              .claimsController()
         }
       }
     }
@@ -900,7 +937,9 @@ internal struct PauseMenuView: View {
         }),
       metalFX: Binding(
         get: { metalFXUpscale },
-        set: { DOLConfigBridge.setGfxMetalFXSpatialUpscale($0); metalFXUpscale = $0 }),
+        set: { DOLConfigBridge.setGfxMetalFXSpatialUpscale($0)
+          metalFXUpscale = $0
+        }),
       audioVolume: Binding(
         get: { AnyHashable(audioVolume) },
         set: { value in
@@ -958,7 +997,9 @@ internal struct PauseMenuView: View {
       showsBezels: onOpenBezels != nil)
     let quick = quickSaveActions
     let actions = PauseMenuActions(
-      resume: { PauseArbiter.shared.userResume(); onClose() },
+      resume: { PauseArbiter.shared.userResume()
+        onClose()
+      },
       quickSave: quick.save,
       quickLoad: quick.load,
       screenshot: {

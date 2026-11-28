@@ -21,124 +21,123 @@ import UIKit
 /// state, or a per-game INI. The only bytes it can produce are a disc image and
 /// a cover PNG.
 struct ICubeLibraryProvider: ContinuityLibraryProviding {
+  /// Cover art is re-encoded to PNG on demand, which is not free. Keep it
+  /// modest: a browsing peer asks for one cover per visible row, and a
+  /// gigantic source image would be resized by the peer anyway.
+  private static let artworkMaxDimension: CGFloat = 512
 
-    /// Cover art is re-encoded to PNG on demand, which is not free. Keep it
-    /// modest: a browsing peer asks for one cover per visible row, and a
-    /// gigantic source image would be resized by the peer anyway.
-    private static let artworkMaxDimension: CGFloat = 512
+  func allEntries() async -> [ContinuityLibraryEntry] {
+    // The whole walk runs on the main actor. `TVGameItem` is an ObjC object
+    // owned by the game-list cache and `coverImage` is lazily populated by
+    // it, so reading either off the main thread races the cache rather than
+    // merely being untidy.
+    await MainActor.run { Self.entries(from: TVLibraryBridge.currentGames()) }
+  }
 
-    func allEntries() async -> [ContinuityLibraryEntry] {
-        // The whole walk runs on the main actor. `TVGameItem` is an ObjC object
-        // owned by the game-list cache and `coverImage` is lazily populated by
-        // it, so reading either off the main thread races the cache rather than
-        // merely being untidy.
-        await MainActor.run { Self.entries(from: TVLibraryBridge.currentGames()) }
+  @MainActor
+  private static func entries(from items: [TVGameItem]) -> [ContinuityLibraryEntry] {
+    var entries: [ContinuityLibraryEntry] = []
+    var seen = Set<String>()
+    for item in items {
+      // A screenshot-mode placeholder has no backing GameFile. Offering
+      // one would advertise a title this device cannot actually send.
+      guard !item.isDemoItem else { continue }
+      let identity = GameIdentity(gameItem: item)
+      guard identity.hasAnyIdentifier else { continue }
+      // Two discs of the same title share a GameID but differ by
+      // `discNumber`, which `stableKey` includes — so a collision here
+      // means a genuinely duplicated library entry, and offering it twice
+      // would just make the browser show it twice.
+      guard seen.insert(identity.stableKey).inserted else { continue }
+      // Answer honestly rather than always true: the field exists so a
+      // browsing peer can draw a placeholder without firing a request per
+      // row to discover there is no cover. `coverImage` is nonnull in the
+      // header but the game-list cache can hand back a zero-sized
+      // placeholder for a title it has no art for, which `pngData(for:)`
+      // rejects — so ask the same question it will.
+      let hasArtwork = item.coverImage.size.width > 0 && item.coverImage.size.height > 0
+      entries.append(ContinuityLibraryEntry(
+        game: identity,
+        sizeBytes: Int64(item.fileSize),
+        hasArtwork: hasArtwork
+      ))
     }
+    return entries.sorted { $0.game.displayName.localizedCaseInsensitiveCompare($1.game.displayName) == .orderedAscending }
+  }
 
-    @MainActor
-    private static func entries(from items: [TVGameItem]) -> [ContinuityLibraryEntry] {
-        var entries: [ContinuityLibraryEntry] = []
-        var seen = Set<String>()
-        for item in items {
-            // A screenshot-mode placeholder has no backing GameFile. Offering
-            // one would advertise a title this device cannot actually send.
-            guard !item.isDemoItem else { continue }
-            let identity = GameIdentity(gameItem: item)
-            guard identity.hasAnyIdentifier else { continue }
-            // Two discs of the same title share a GameID but differ by
-            // `discNumber`, which `stableKey` includes — so a collision here
-            // means a genuinely duplicated library entry, and offering it twice
-            // would just make the browser show it twice.
-            guard seen.insert(identity.stableKey).inserted else { continue }
-            // Answer honestly rather than always true: the field exists so a
-            // browsing peer can draw a placeholder without firing a request per
-            // row to discover there is no cover. `coverImage` is nonnull in the
-            // header but the game-list cache can hand back a zero-sized
-            // placeholder for a title it has no art for, which `pngData(for:)`
-            // rejects — so ask the same question it will.
-            let hasArtwork = item.coverImage.size.width > 0 && item.coverImage.size.height > 0
-            entries.append(ContinuityLibraryEntry(
-                game: identity,
-                sizeBytes: Int64(item.fileSize),
-                hasArtwork: hasArtwork
-            ))
-        }
-        return entries.sorted { $0.game.displayName.localizedCaseInsensitiveCompare($1.game.displayName) == .orderedAscending }
+  /// Consulted live on every request, so flipping the switch in the library's
+  /// context menu takes effect on a peer's very next request.
+  func isExcludedFromSharing(key: String) async -> Bool {
+    guard let gameID = Self.gameID(forKey: key) else {
+      // A key with no GameID cannot be matched against the per-game
+      // store, and the safe reading of "cannot tell" is "do not share".
+      return true
     }
+    return await MainActor.run { GameProfiles.shared.isExcludedFromNearbySharing(gameID: gameID) }
+  }
 
-    /// Consulted live on every request, so flipping the switch in the library's
-    /// context menu takes effect on a peer's very next request.
-    func isExcludedFromSharing(key: String) async -> Bool {
-        guard let gameID = Self.gameID(forKey: key) else {
-            // A key with no GameID cannot be matched against the per-game
-            // store, and the safe reading of "cannot tell" is "do not share".
-            return true
-        }
-        return await MainActor.run { GameProfiles.shared.isExcludedFromNearbySharing(gameID: gameID) }
+  func artworkPNG(forKey key: String) async -> Data? {
+    let image = await MainActor.run { Self.item(forKey: key)?.coverImage }
+    return Self.pngData(for: image)
+  }
+
+  func gameFileDescriptor(forKey key: String) async -> FileDescriptor? {
+    let path: String? = await MainActor.run { Self.item(forKey: key)?.filePath }
+    guard let path else { return nil }
+    // A game imported in place from Files lives outside the User directory
+    // and has no relative form, so it cannot be offered: the receiving
+    // device would have nowhere to reproduce the path. Returning nil makes
+    // the route 404, which is honest; the alternative is a transfer that
+    // lands nowhere.
+    guard let relative = ContinuityPaths.relativePath(forAbsolutePath: path) else { return nil }
+    return ContinuityPaths.describe(relativePath: relative, kind: .gameFile)
+  }
+
+  func fileURL(for descriptor: FileDescriptor) async throws -> URL {
+    try ContinuityPaths.validatedURL(forRelativePath: descriptor.relativePath)
+  }
+
+  // MARK: - Helpers
+
+  /// The library entry behind a catalog key, or nil.
+  ///
+  /// Matched on `stableKey` rather than on GameID alone so that two discs of
+  /// one title, or two revisions, resolve to the entry that was actually
+  /// offered.
+  @MainActor
+  private static func item(forKey key: String) -> TVGameItem? {
+    for item in TVLibraryBridge.currentGames() where !item.isDemoItem {
+      if GameIdentity(gameItem: item).stableKey == key { return item }
     }
+    return nil
+  }
 
-    func artworkPNG(forKey key: String) async -> Data? {
-        let image = await MainActor.run { Self.item(forKey: key)?.coverImage }
-        return Self.pngData(for: image)
+  /// Recovers the six-character GameID from a `stableKey`.
+  ///
+  /// `GameIdentity.stableKey` is `id:<GameID>|d<disc>|r<rev>` whenever a
+  /// GameID exists, and iCube always has one for a disc it can read a header
+  /// from. Parsed rather than re-derived so the two cannot drift; a key of
+  /// any other shape returns nil and is treated as excluded.
+  static func gameID(forKey key: String) -> String? {
+    guard key.hasPrefix("id:") else { return nil }
+    let body = key.dropFirst("id:".count)
+    guard let separator = body.firstIndex(of: "|") else { return nil }
+    let gameID = String(body[body.startIndex ..< separator])
+    return gameID.isEmpty ? nil : gameID
+  }
+
+  /// PNG bytes for a cover, downscaled when it is larger than needed.
+  private static func pngData(for image: UIImage?) -> Data? {
+    guard let image, image.size.width > 0, image.size.height > 0 else { return nil }
+    let longest = max(image.size.width, image.size.height)
+    guard longest > artworkMaxDimension else { return image.pngData() }
+
+    let scale = artworkMaxDimension / longest
+    let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+    let renderer = UIGraphicsImageRenderer(size: target)
+    let resized = renderer.image { _ in
+      image.draw(in: CGRect(origin: .zero, size: target))
     }
-
-    func gameFileDescriptor(forKey key: String) async -> FileDescriptor? {
-        let path: String? = await MainActor.run { Self.item(forKey: key)?.filePath }
-        guard let path else { return nil }
-        // A game imported in place from Files lives outside the User directory
-        // and has no relative form, so it cannot be offered: the receiving
-        // device would have nowhere to reproduce the path. Returning nil makes
-        // the route 404, which is honest; the alternative is a transfer that
-        // lands nowhere.
-        guard let relative = ContinuityPaths.relativePath(forAbsolutePath: path) else { return nil }
-        return ContinuityPaths.describe(relativePath: relative, kind: .gameFile)
-    }
-
-    func fileURL(for descriptor: FileDescriptor) async throws -> URL {
-        try ContinuityPaths.validatedURL(forRelativePath: descriptor.relativePath)
-    }
-
-    // MARK: - Helpers
-
-    /// The library entry behind a catalog key, or nil.
-    ///
-    /// Matched on `stableKey` rather than on GameID alone so that two discs of
-    /// one title, or two revisions, resolve to the entry that was actually
-    /// offered.
-    @MainActor
-    private static func item(forKey key: String) -> TVGameItem? {
-        for item in TVLibraryBridge.currentGames() where !item.isDemoItem {
-            if GameIdentity(gameItem: item).stableKey == key { return item }
-        }
-        return nil
-    }
-
-    /// Recovers the six-character GameID from a `stableKey`.
-    ///
-    /// `GameIdentity.stableKey` is `id:<GameID>|d<disc>|r<rev>` whenever a
-    /// GameID exists, and iCube always has one for a disc it can read a header
-    /// from. Parsed rather than re-derived so the two cannot drift; a key of
-    /// any other shape returns nil and is treated as excluded.
-    static func gameID(forKey key: String) -> String? {
-        guard key.hasPrefix("id:") else { return nil }
-        let body = key.dropFirst("id:".count)
-        guard let separator = body.firstIndex(of: "|") else { return nil }
-        let gameID = String(body[body.startIndex..<separator])
-        return gameID.isEmpty ? nil : gameID
-    }
-
-    /// PNG bytes for a cover, downscaled when it is larger than needed.
-    private static func pngData(for image: UIImage?) -> Data? {
-        guard let image, image.size.width > 0, image.size.height > 0 else { return nil }
-        let longest = max(image.size.width, image.size.height)
-        guard longest > artworkMaxDimension else { return image.pngData() }
-
-        let scale = artworkMaxDimension / longest
-        let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: target)
-        let resized = renderer.image { _ in
-            image.draw(in: CGRect(origin: .zero, size: target))
-        }
-        return resized.pngData()
-    }
+    return resized.pngData()
+  }
 }

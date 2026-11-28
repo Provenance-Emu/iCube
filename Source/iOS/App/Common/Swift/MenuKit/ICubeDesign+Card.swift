@@ -38,7 +38,9 @@ extension ICubeDesign {
     /// The card surface: a lifted navy over the room's dark stops.
     static let uiSurface = UIColor { $0.userInterfaceStyle == .dark
       ? UIColor(red: 0x1C / 255, green: 0x27 / 255, blue: 0x48 / 255, alpha: 1)
-      : UIColor(red: 0xF5 / 255, green: 0xF7 / 255, blue: 0xFF / 255, alpha: 1) }
+      : UIColor(red: 0xF5 / 255, green: 0xF7 / 255, blue: 0xFF / 255, alpha: 1)
+    }
+
     static var surface: Color { Color(uiColor: uiSurface) }
     /// Text on a white pill.
     static let leadInk = UIColor(red: 0x0A / 255, green: 0x0F / 255, blue: 0x26 / 255, alpha: 1)

@@ -8,7 +8,10 @@ import XCTest
 
 /// The pause menu's Audio pane: Volume and Mute as the prominent row, then Output, Effects and the full settings.
 final class PauseAudioModelBuilderTests: XCTestCase {
-  private final class Box { var value: AnyHashable; init(_ v: AnyHashable) { value = v } }
+  private final class Box { var value: AnyHashable
+    init(_ v: AnyHashable) { value = v }
+  }
+
   private var opened: [AudioEffectPage] = []
   private var pages: [String] = []
 
@@ -21,7 +24,10 @@ final class PauseAudioModelBuilderTests: XCTestCase {
       surround: Binding(get: { surround.value as? Bool ?? false }, set: { surround.value = $0 }),
       effectEnabled: { page in
         Binding(get: { (effects.value as? [String: Bool])?[page.rawValue] ?? false },
-                set: { var d = effects.value as? [String: Bool] ?? [:]; d[page.rawValue] = $0; effects.value = d })
+                set: { var d = effects.value as? [String: Bool] ?? [:]
+                  d[page.rawValue] = $0
+                  effects.value = d
+                })
       },
       wiiSoundMode: Binding(get: { soundMode.value }, set: { soundMode.value = $0 }),
       wiiSpeakerVolume: Binding(get: { speaker.value }, set: { speaker.value = $0 }))

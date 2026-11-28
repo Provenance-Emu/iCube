@@ -15,13 +15,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface EmulationBootParameter : NSObject
 
-@property (nonatomic) EmulationBootType bootType;
-@property (nonatomic) NSString* path;
-@property (nonatomic) NSString* secondPath;
-@property (nonatomic) bool isNKit;
-@property (nonatomic) DiscIO::Region iplRegion;
+@property(nonatomic) EmulationBootType bootType;
+@property(nonatomic) NSString* path;
+@property(nonatomic) NSString* secondPath;
+@property(nonatomic) bool isNKit;
+@property(nonatomic) DiscIO::Region iplRegion;
 
-- (std::unique_ptr<BootParameters>) generateDolphinBootParameter;
+- (std::unique_ptr<BootParameters>)generateDolphinBootParameter;
 
 @end
 

@@ -13,6 +13,7 @@ struct QuickSavePickerOperations {
   var slotDestination: @MainActor (Int) -> URL? = { slot in
     TVEmulationBridge.stateFilePath(forSlot: slot).map { URL(fileURLWithPath: $0) }
   }
+
   var saveSlot: @MainActor (ClassicSlotSaveConsent) async -> QuickSaveActions.Outcome = { await QuickSaveActions.saveSlot($0) }
   var occupancy: (URL) -> QuickSaveDestinationOccupancy = { QuickSaveDestinationOccupancy.read($0) }
 
@@ -133,7 +134,9 @@ struct QuickSavePickerView: View {
       if openingSessionIdentifier == nil { openingSessionIdentifier = readSessionIdentifier() }
       if !QuickSavePickerModel.slots.contains(selectedSlot) { selectedSlot = 1 }
     }
-    .onDisappear { surfaceIsActive = false; overwriteRequest = nil }
+    .onDisappear { surfaceIsActive = false
+      overwriteRequest = nil
+    }
     .interactiveDismissDisabled(busy)
     .task(id: gameID) { await reload() }
     .onChange(of: mode) { _, _ in selection.reconcile(states: states) }
@@ -353,25 +356,25 @@ struct QuickSavePickerView: View {
 
   private var historyRetention: some View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xs.rawValue) {
-        Text(L("10 recent quick saves. Kept saves, classic slots and automatic resume stay separate."))
-          .icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
-        if let state = selectedState, state.isQuickSave {
-          Button(state.isKept ? L("Kept — remove keep") : L("Keep this save")) {
-            guard !busy else { return }
-            busy = true
-            Task { @MainActor in
-              defer { busy = false }
-              guard matchesCurrentSession(), let openingSessionIdentifier else { return }
-              let session = QuickSaveSurfaceSession(gameID: gameID, identifier: openingSessionIdentifier)
-              let outcome = await operations.setKept(state, !state.isKept, session)
-              report(outcome)
-              if outcome.isSuccess { await reload() }
-            }
+      Text(L("10 recent quick saves. Kept saves, classic slots and automatic resume stay separate."))
+        .icubeText(.detail).foregroundStyle(ICubeDesign.color(.textSecondary))
+      if let state = selectedState, state.isQuickSave {
+        Button(state.isKept ? L("Kept — remove keep") : L("Keep this save")) {
+          guard !busy else { return }
+          busy = true
+          Task { @MainActor in
+            defer { busy = false }
+            guard matchesCurrentSession(), let openingSessionIdentifier else { return }
+            let session = QuickSaveSurfaceSession(gameID: gameID, identifier: openingSessionIdentifier)
+            let outcome = await operations.setKept(state, !state.isKept, session)
+            report(outcome)
+            if outcome.isSuccess { await reload() }
           }
-          .buttonStyle(ICubeRowButtonStyle())
-          .frame(minHeight: TopBarLayout.minimumTarget)
-          .disabled(busy)
         }
+        .buttonStyle(ICubeRowButtonStyle())
+        .frame(minHeight: TopBarLayout.minimumTarget)
+        .disabled(busy)
+      }
     }
   }
 
@@ -410,9 +413,9 @@ struct QuickSavePickerView: View {
           busy = false
         }
         guard let outcome = await QuickSaveSurfaceActions.load(state, session: session,
-          isCurrent: { sessionIsCurrent($0.gameID, $0.identifier) && (onCommit != nil || surfaceIsActive) },
-          operation: { await operations.load($0, session) }) else { return }
-        if sessionIsCurrent(session.gameID, session.identifier), (onCommit != nil || surfaceIsActive), !outcome.message.isEmpty {
+                                                               isCurrent: { sessionIsCurrent($0.gameID, $0.identifier) && (onCommit != nil || surfaceIsActive) },
+                                                               operation: { await operations.load($0, session) }) else { return }
+        if sessionIsCurrent(session.gameID, session.identifier), onCommit != nil || surfaceIsActive, !outcome.message.isEmpty {
           EmulationToast.post(outcome.message)
         }
         if onCommit == nil && outcome.isSuccess && matchesCurrentSession() { onDismiss() }
@@ -455,21 +458,21 @@ struct QuickSavePickerView: View {
       let outcome: QuickSaveActions.Outcome
       if mode == .slots {
         guard let request, let result = await scan.save(request, confirmed: confirmed,
-          isCurrent: { $0 == session && sessionIsCurrent($0.gameID, $0.identifier) && (onCommit != nil || surfaceIsActive) },
-          destination: operations.slotDestination, occupancy: operations.occupancy,
-          operation: { request in
-            admitCommit()
-            return await operations.saveSlot(.init(request: request, allowsOverwrite: confirmed))
-          }) else { return }
+                                                        isCurrent: { $0 == session && sessionIsCurrent($0.gameID, $0.identifier) && (onCommit != nil || surfaceIsActive) },
+                                                        destination: operations.slotDestination, occupancy: operations.occupancy,
+                                                        operation: { request in
+                                                          admitCommit()
+                                                          return await operations.saveSlot(.init(request: request, allowsOverwrite: confirmed))
+                                                        }) else { return }
         outcome = result
       } else {
         admitCommit()
         outcome = await operations.save(mode, slot)
       }
-      if sessionIsCurrent(session.gameID, session.identifier), (onCommit != nil || surfaceIsActive), !outcome.message.isEmpty {
+      if sessionIsCurrent(session.gameID, session.identifier), onCommit != nil || surfaceIsActive, !outcome.message.isEmpty {
         EmulationToast.post(outcome.message)
       }
-      if onCommit == nil && outcome.isSuccess && matchesCurrentSession() { await reload() }
+      if onCommit == nil, outcome.isSuccess, matchesCurrentSession() { await reload() }
     }
   }
 
@@ -495,4 +498,3 @@ struct QuickSavePickerView: View {
     }
   }
 }
-

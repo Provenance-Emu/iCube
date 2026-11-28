@@ -17,6 +17,6 @@
 
 #define CppToFoundationString(x) CToFoundationString(x.c_str())
 
-#endif // __cplusplus
+#endif  // __cplusplus
 
-#endif // __OBJC__
+#endif  // __OBJC__

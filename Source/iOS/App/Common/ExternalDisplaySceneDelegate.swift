@@ -14,10 +14,10 @@ class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       guard let windowScene = scene as? UIWindowScene else { return }
       let window = UIWindow(windowScene: windowScene)
 
-#if os(tvOS)
+      #if os(tvOS)
       // tvOS has no wired external-display emulation path; show an empty placeholder.
       window.rootViewController = UIHostingController(rootView: Color.black)
-#else
+      #else
       // iOS / Mac Catalyst: instantiate the real external-display emulation VC from its storyboard.
       // The SwiftUI app-shell graft sets the scene config's storyboard to nil (AppDelegate), so the
       // storyboard no longer auto-loads — we load it explicitly here. Loading it wires the
@@ -31,7 +31,7 @@ class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       } else {
         window.rootViewController = UIHostingController(rootView: Color.black)
       }
-#endif
+      #endif
 
       if let tint = UIColor(named: "DolphinTint") {
         window.tintColor = tint
@@ -39,12 +39,12 @@ class ExternalDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
       self.window = window
       window.makeKeyAndVisible()
 
-#if !os(tvOS)
+      #if !os(tvOS)
       // UIKit may ignore overscanCompensation if set before the external window is on-screen.
       DispatchQueue.main.async {
         TVEmulationBridge.setOverscanFullscreenEnabled(TVEmulationBridge.overscanFullscreenEnabled())
       }
-#endif
+      #endif
     }
   }
 

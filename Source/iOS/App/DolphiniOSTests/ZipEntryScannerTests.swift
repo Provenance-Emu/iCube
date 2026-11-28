@@ -91,7 +91,7 @@ enum TestZipBuilder {
   static func zip64Directory(_ central: Data, entryCount: Int, centralDirectoryOffset: UInt64, tail: Zip64Tail = Zip64Tail(), comment: [UInt8] = []) -> Data {
     let recordOffset = centralDirectoryOffset + UInt64(central.count)
     var bytes = central
-    bytes.append(le32: 0x06064b50)
+    bytes.append(le32: 0x0606_4B50)
     bytes.append(le64: UInt64(zip64EndRecordSize - zip64EndRecordUncountedSize + tail.extensibleData.count))
     bytes.append(le16: versionMadeByUnix)
     bytes.append(le16: versionNeededZip64)
@@ -103,7 +103,7 @@ enum TestZipBuilder {
     bytes.append(le64: centralDirectoryOffset)
     bytes.append(tail.extensibleData)
     bytes.append(tail.uncountedBytes)
-    bytes.append(le32: 0x07064b50)
+    bytes.append(le32: 0x0706_4B50)
     bytes.append(le32: tail.locatorDisk)
     bytes.append(le64: tail.endRecordOffset ?? recordOffset)
     bytes.append(le32: tail.totalDisks)
@@ -115,7 +115,7 @@ enum TestZipBuilder {
   static func localRecord(_ entry: Entry) -> Data {
     var record = Data()
     let size = UInt32(entry.contents.count)
-    record.append(le32: 0x04034b50)
+    record.append(le32: 0x0403_4B50)
     record.append(le16: entry.zip64Fields ? versionNeededZip64 : versionNeeded)
     record.append(le16: 0)
     record.append(le16: 0)
@@ -137,7 +137,7 @@ enum TestZipBuilder {
     var record = Data()
     let size = UInt32(entry.contents.count)
     let extra = entry.zip64Fields ? zip64Extra([UInt64(size), UInt64(size), localHeaderOffset]) : Data()
-    record.append(le32: 0x02014b50)
+    record.append(le32: 0x0201_4B50)
     record.append(le16: versionMadeByUnix)
     record.append(le16: entry.zip64Fields ? versionNeededZip64 : versionNeeded)
     record.append(le16: 0)
@@ -161,7 +161,7 @@ enum TestZipBuilder {
 
   static func endRecord(entryCount: Int, centralDirectorySize: Int, centralDirectoryOffset: UInt32, comment: [UInt8] = [], disk: UInt16 = 0) -> Data {
     var record = Data()
-    record.append(le32: 0x06054b50)
+    record.append(le32: 0x0605_4B50)
     record.append(le16: disk)
     record.append(le16: disk)
     record.append(le16: UInt16(entryCount))
@@ -185,7 +185,7 @@ enum TestZipBuilder {
     var crc: UInt32 = 0xFFFF_FFFF
     for byte in data {
       crc ^= UInt32(byte)
-      for _ in 0..<8 { crc = (crc >> 1) ^ (0xEDB8_8320 & (0 &- (crc & 1))) }
+      for _ in 0 ..< 8 { crc = (crc >> 1) ^ (0xEDB8_8320 & (0 &- (crc & 1))) }
     }
     return ~crc
   }
@@ -197,11 +197,11 @@ private extension Data {
   }
 
   mutating func append(le32 value: UInt32) {
-    append(contentsOf: (0..<4).map { UInt8((value >> (8 * UInt32($0))) & 0xFF) })
+    append(contentsOf: (0 ..< 4).map { UInt8((value >> (8 * UInt32($0))) & 0xFF) })
   }
 
   mutating func append(le64 value: UInt64) {
-    append(contentsOf: (0..<8).map { UInt8((value >> (8 * UInt64($0))) & 0xFF) })
+    append(contentsOf: (0 ..< 8).map { UInt8((value >> (8 * UInt64($0))) & 0xFF) })
   }
 }
 
@@ -217,7 +217,7 @@ private struct DataByteSource: ZipByteSource {
 
   func read(at offset: UInt64, count: Int) throws -> Data {
     guard offset <= size, UInt64(count) <= size - offset else { throw ZipEntryScannerError.truncated }
-    return data.subdata(in: Int(offset)..<(Int(offset) + count))
+    return data.subdata(in: Int(offset) ..< (Int(offset) + count))
   }
 }
 
@@ -358,7 +358,7 @@ final class ZipEntryScannerTests: XCTestCase {
     assertRejects(data.prefix(data.count - 10), .truncated, "the end-of-central-directory record is cut short")
     assertRejects(data.prefix(data.count - 22), .notAZip, "the end-of-central-directory record is gone")
     var damaged = data
-    damaged.replaceSubrange((data.count - 22 + 16)..<(data.count - 22 + 20), with: [0xFF, 0x00, 0x00, 0x00])
+    damaged.replaceSubrange((data.count - 22 + 16) ..< (data.count - 22 + 20), with: [0xFF, 0x00, 0x00, 0x00])
     assertRejects(damaged, .inconsistentDirectory, "the central directory offset no longer meets the end record")
   }
 
@@ -545,13 +545,13 @@ final class ZipEntryScannerTests: XCTestCase {
 
   /// `zip -X -fz -r fz.zip Game` (Info-ZIP 3.0): a real writer's zip64 archive, offset 0xFFFFFFFF in the end record.
   private static let infoZipZip64Fixture = """
-    UEsDBC0AAAAAAIijQV0AAAAA//////////8FABQAR2FtZS8BABAAAAAAAAAAAAAAAAAAAAAAAFBLAwQtAAAAAACIo0FdAAAAAP//////////CwAUAEdhbWUvU2F2ZXMvAQAQAAAAAAAAAAAAAAAAAAAAAABQSwME
-    LQAAAAAAiKNBXd46ZlX//////////xAAFABHYW1lL1NhdmVzL2Euc2F2AQAQAAQAAAAAAAAABAAAAAAAAABzYXZlUEsDBC0AAAAAAIijQV1Kqonw//////////8OABQAR2FtZS9pbmZvLmpzb24BABAACwAAAAAA
-    AAALAAAAAAAAAHsiaWQiOiJ4In0KUEsBAh4DCgAAAAAAiKNBXQAAAAAAAAAA/////wUADAAAAAAAAAAQAO1BAAAAAEdhbWUvAQAIAAAAAAAAAAAAUEsBAh4DCgAAAAAAiKNBXQAAAAAAAAAA/////wsADAAAAAAA
-    AAAQAO1BNwAAAEdhbWUvU2F2ZXMvAQAIAAAAAAAAAAAAUEsBAh4DLQAAAAAAiKNBXd46ZlUEAAAA/////xAADAAAAAAAAQAAAKSBdAAAAEdhbWUvU2F2ZXMvYS5zYXYBAAgABAAAAAAAAABQSwECHgMtAAAAAACI
-    o0FdSqqJ8AsAAAD/////DgAMAAAAAAABAAAApIG6AAAAR2FtZS9pbmZvLmpzb24BAAgACwAAAAAAAABQSwYGLAAAAAAAAAAeAy0AAAAAAAAAAAAEAAAAAAAAAAQAAAAAAAAAFgEAAAAAAAAFAQAAAAAAAFBLBgcA
-    AAAAGwIAAAAAAAABAAAAUEsFBgAAAAAEAAQAFgEAAP////8AAA==
-    """
+  UEsDBC0AAAAAAIijQV0AAAAA//////////8FABQAR2FtZS8BABAAAAAAAAAAAAAAAAAAAAAAAFBLAwQtAAAAAACIo0FdAAAAAP//////////CwAUAEdhbWUvU2F2ZXMvAQAQAAAAAAAAAAAAAAAAAAAAAABQSwME
+  LQAAAAAAiKNBXd46ZlX//////////xAAFABHYW1lL1NhdmVzL2Euc2F2AQAQAAQAAAAAAAAABAAAAAAAAABzYXZlUEsDBC0AAAAAAIijQV1Kqonw//////////8OABQAR2FtZS9pbmZvLmpzb24BABAACwAAAAAA
+  AAALAAAAAAAAAHsiaWQiOiJ4In0KUEsBAh4DCgAAAAAAiKNBXQAAAAAAAAAA/////wUADAAAAAAAAAAQAO1BAAAAAEdhbWUvAQAIAAAAAAAAAAAAUEsBAh4DCgAAAAAAiKNBXQAAAAAAAAAA/////wsADAAAAAAA
+  AAAQAO1BNwAAAEdhbWUvU2F2ZXMvAQAIAAAAAAAAAAAAUEsBAh4DLQAAAAAAiKNBXd46ZlUEAAAA/////xAADAAAAAAAAQAAAKSBdAAAAEdhbWUvU2F2ZXMvYS5zYXYBAAgABAAAAAAAAABQSwECHgMtAAAAAACI
+  o0FdSqqJ8AsAAAD/////DgAMAAAAAAABAAAApIG6AAAAR2FtZS9pbmZvLmpzb24BAAgACwAAAAAAAABQSwYGLAAAAAAAAAAeAy0AAAAAAAAAAAAEAAAAAAAAAAQAAAAAAAAAFgEAAAAAAAAFAQAAAAAAAFBLBgcA
+  AAAAGwIAAAAAAAABAAAAUEsFBgAAAAAEAAQAFgEAAP////8AAA==
+  """
 
   func testAcceptsAnInfoZipZip64Archive() throws {
     let fixture = try XCTUnwrap(Data(base64Encoded: Self.infoZipZip64Fixture, options: .ignoreUnknownCharacters))

@@ -112,8 +112,8 @@ struct AddGamesView: View {
     HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
       Circle()
         .fill(server.status == .running
-              ? Color.green // design-lint: allow server status dot; no status colour token yet
-              : ICubeDesign.color(.textTertiary))
+          ? Color.green // design-lint: allow server status dot; no status colour token yet
+          : ICubeDesign.color(.textTertiary))
         .frame(width: Self.statusDot, height: Self.statusDot)
       Text(server.status == .running ? L("Running") : L("Starting…"))
         .icubeText(.detail)

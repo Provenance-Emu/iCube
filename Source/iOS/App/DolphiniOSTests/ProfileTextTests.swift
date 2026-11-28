@@ -193,6 +193,7 @@ final class ProfileTextTests: XCTestCase {
       expression.filter { $0 == "`" }.count % 2 == 0
         ? ExpressionCheck(status: .valid, message: "ok") : ExpressionCheck(status: .invalid, message: "Not saved: syntax")
     }
+
     func apply(_ text: String, to slot: PlayerSlot) -> Bool {
       guard !refuses else { return false }
       applied.append(text)

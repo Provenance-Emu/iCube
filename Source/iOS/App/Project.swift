@@ -229,6 +229,16 @@ let preScripts: [TargetScript] = [
         name: "Transfer Core Strings to Storyboard Strings",
         basedOnDependencyAnalysis: false
     ),
+    // Download (once; cached by sha256 in ~/Library/Caches/PVLookupDatabases) and verify the
+    // PVLookup databases pinned in databases.lock.json, before the resources phase copies
+    // Common/Resources/LookupDatabases into the app.
+    .pre(
+        script: """
+        /bin/bash "${SRCROOT}/Scripts/fetch-lookup-databases.sh" "${SRCROOT}/databases.lock.json" "${SRCROOT}/Common/Resources/LookupDatabases"
+        """,
+        name: "Fetch Lookup Databases",
+        basedOnDependencyAnalysis: false
+    ),
 ]
 
 // MARK: - Sentry dSYM upload (post-compile)
@@ -366,6 +376,9 @@ let iCube = Target.target(
         .folderReference(path: "../../../Data/Sys"),
         .folderReference(path: "Project/Assets/compiled_shaders"),
         .folderReference(path: "Common/Resources/WikiContent"),
+        // Lookup databases, fetched by the "Fetch Lookup Databases" phase (gitignored contents).
+        // LookupDatabaseSetup points PVLookup at this folder at launch.
+        .folderReference(path: "Common/Resources/LookupDatabases"),
     ],
     entitlements: nil, // per-config via CODE_SIGN_ENTITLEMENTS in appConfigs
     scripts: preScripts + [uploadDsymScript, macOutliveWindowScript],
@@ -386,7 +399,12 @@ let iCube = Target.target(
         .package(product: "PVContinuity"),
         .package(product: "EmulatorContentClient"),
         .package(product: "RomMClient"),
+        // One model of a game on a server, a RomM share or a nearby device, and the cover cache
+        // every remote library shares.
+        .package(product: "PVRemoteLibrary"),
         .package(product: "PVHelp"),
+        // Synthesized extended gamepad for pads the system exposes without one.
+        .package(product: "GamepadKit"),
         // Streaming IPS/BPS/UPS/PPF/xdelta3 patcher behind the disc patching flow.
         .package(product: "PVPatchEngine"),
         // WS-5 CloudKit sync. PVCloudSync depends on PVSyncRules (the shared
@@ -397,6 +415,10 @@ let iCube = Target.target(
         .package(product: "PVCloudSync"),
         .package(product: "PVLibraryMetadata"),
         .package(product: "PVLibrarySnapshot"),
+        // SystemIdentifier for GameCube and Wii, and the metadata/artwork lookup keyed on it
+        // (libretrodb by game ID). See databases.lock.json and the "Fetch Lookup Databases" phase.
+        .package(product: "PVSystems"),
+        .package(product: "PVLookup"),
         .package(product: "Zip"),
         // Shared skin models, catalog, installation and format 2 rendering.
         .package(product: "SkinKitCore", condition: .when([.ios, .catalyst])),
@@ -453,6 +475,8 @@ let iCube = Target.target(
             "INFOPLIST_FILE[sdk=appletv*]": "DolphiniOS/Info-TV.plist",
             "INFOPLIST_KEY_GCSupportsControllerUserInteraction": "YES",
             "INFOPLIST_KEY_GCSupportsGameMode": "YES",
+            // Xcode warns that Game Mode eligibility will require this key; GCSupportsGameMode is the older name.
+            "INFOPLIST_KEY_LSSupportsGameMode": "YES",
             "INFOPLIST_KEY_LSApplicationCategoryType": "public.app-category.entertainment",
             "INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace": "YES",
             "INFOPLIST_KEY_NSLocalNetworkUsageDescription": "iCube uses your local network to discover DSU controllers, to share your library with nearby devices, and to hand a game off to another device. Transfers between devices are not encrypted.",
@@ -605,11 +629,17 @@ let iCubeTests = Target.target(
         // `.target(name: "iCube")` alone doesn't make a package the app links importable here —
         // AppIntentsTests needs `LibrarySnapshot`/`LibrarySnapshotGame` fixtures directly.
         .package(product: "PVLibrarySnapshot"),
+        // RemoteLibrarySourceTests reads `LibraryGame` values and drives the shared cover cache.
+        .package(product: "PVRemoteLibrary"),
         .package(product: "PVHelp"),
+        .package(product: "GamepadKit"),
         // Cloud safety tests exercise the coordinator with real scanner/index types.
         .package(product: "PVCloudSync"),
         .package(product: "PVLibraryMetadata"),
         .package(product: "PVSyncRules"),
+        // GameLookupTests builds `ROMMetadata` values and checks `SystemIdentifier` mappings.
+        .package(product: "PVSystems"),
+        .package(product: "PVLookup"),
         // SkinLibraryTests zips the skin fixture with `Zip.zipFiles`.
         .package(product: "Zip"),
         // The skin tests decode catalog entries and drive the store installer directly.
@@ -864,11 +894,22 @@ let project = Project(
         // clients/romm-swift there). The RomM client used to be a vendored snapshot under
         // Externals/RomMClient, kept only until the server repo published it as a product.
         .remote(url: "https://github.com/Provenance-Emu/emulator-content-server.git", requirement: .revision("f779275a927e5140ac8da3e95fef00073b3421fd")),
-        .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.3")),
-        .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.0")),
-        .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.2")),
-        .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.0")),
-        .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVWebServer.git", requirement: .upToNextMajor(from: "1.3.5")),
+        .remote(url: "https://github.com/Provenance-Emu/PVContinuity.git", requirement: .upToNextMajor(from: "1.0.3")),
+        // Shared with Provenance and iFly; 0.x: a minor may break. Resolves to prebuilt frameworks.
+        .remote(url: "https://github.com/Provenance-Emu/PVRemoteLibrary.git", requirement: .upToNextMinor(from: "0.3.3")),
+        .remote(url: "https://github.com/Provenance-Emu/PVSyncRules.git", requirement: .upToNextMajor(from: "1.0.5")),
+        .remote(url: "https://github.com/Provenance-Emu/PVHelp.git", requirement: .upToNextMajor(from: "1.0.2")),
+        // Shared with Provenance and iFly; iCube's choices are in
+        // Common/Swift/Controllers/PhysicalProfile/ICubePhysicalProfile.swift.
+        .remote(url: "https://github.com/Provenance-Emu/GamepadKit.git", requirement: .upToNextMinor(from: "0.3.2")),
+        .remote(url: "https://github.com/Provenance-Emu/PVLibrarySnapshot.git", requirement: .upToNextMajor(from: "1.0.2")),
+        // SystemIdentifier and per-system metadata, and game metadata + artwork lookup keyed on it.
+        // Shared with Provenance and iFly; both resolve to prebuilt frameworks. PVLookup ships no
+        // database bytes: see databases.lock.json and the "Fetch Lookup Databases" phase. Its
+        // SQLite.swift and ZIPFoundation come from Provenance-Emu/PVDependencies, like SkinKit's.
+        .remote(url: "https://github.com/Provenance-Emu/PVSystems.git", requirement: .upToNextMajor(from: "1.0.3")),
+        .remote(url: "https://github.com/Provenance-Emu/PVLookup.git", requirement: .upToNextMajor(from: "1.1.0")),
         // Home screen game list widgets, shared with Provenance and iFly. 0.x: a minor may break.
         .remote(url: "https://github.com/Provenance-Emu/PVWidgets.git", requirement: .upToNextMinor(from: "0.1.0")),
         // Keep this wrapper local: Xcode rejects PLzmaSDK unsafe build flags
@@ -876,13 +917,14 @@ let project = Project(
         .local(path: "../PLzmaShim"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
-        .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.1.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.1.2")),
         // Streaming patch engine shared with iFly and Provenance. Change it in that repo, tag a
         // release, then bump the version here; there is no local copy to edit.
-        .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.0")),
+        .remote(url: "https://github.com/Provenance-Emu/PVPatchEngine.git", requirement: .upToNextMajor(from: "1.0.3")),
         .remote(url: "https://github.com/marmelroy/Zip.git", requirement: .upToNextMajor(from: "2.1.2")),
-        // 0.7.0 is the first release with the shared Skin Store browser and the bezel host APIs.
-        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.7.0")),
+        // 0.8.0 is the first release that resolves to prebuilt frameworks (ZIPFoundation comes
+        // with it, from Provenance-Emu/PVDependencies).
+        .remote(url: "https://github.com/Provenance-Emu/SkinKit.git", requirement: .upToNextMinor(from: "0.11.0")),
         .remote(url: "https://github.com/tsolomko/SWCompression.git", requirement: .upToNextMajor(from: "4.9.0")),
         .remote(url: "https://github.com/OatmealDome/UICollectionViewLeftAlignedLayout", requirement: .upToNextMajor(from: "1.0.0")),
         .remote(url: "https://github.com/rileytestut/AltKit.git", requirement: .upToNextMajor(from: "0.0.2")),

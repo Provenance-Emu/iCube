@@ -131,7 +131,7 @@ struct GameGridItem: View {
       #if DEBUG
       print("DEBUG: Comparing - base host: \(baseHost), port: \(basePort) vs url host: \(urlHost), port: \(urlPort)")
       #endif
-      guard urlHost == baseHost && urlPort == basePort else { continue }
+      guard urlHost == baseHost, urlPort == basePort else { continue }
 
       // Prefer the source with the longest base path prefix match
       let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"

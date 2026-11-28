@@ -21,9 +21,12 @@ struct ConfigGameCubeView: View {
 
   private func apply(_ change: ConfigGameCubeChange) {
     switch change {
-    case .loadMainMenu(let v): state.loadMainMenu = v; DOLConfigBridge.setMainSkipIPL(!v)
-    case .language(let v): state.language = v; DOLConfigBridge.setMainGCLanguage(v)
-    case .slotBMicrophone(let v): state.slotBMicrophone = v; DOLConfigBridge.setMainSlotBMicrophone(v)
+    case .loadMainMenu(let v): state.loadMainMenu = v
+      DOLConfigBridge.setMainSkipIPL(!v)
+    case .language(let v): state.language = v
+      DOLConfigBridge.setMainGCLanguage(v)
+    case .slotBMicrophone(let v): state.slotBMicrophone = v
+      DOLConfigBridge.setMainSlotBMicrophone(v)
     }
   }
 }

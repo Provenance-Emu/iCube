@@ -21,22 +21,27 @@ final class DebugRootModelBuilderTests: XCTestCase {
       XCTAssertNil(model.item(id: id), id)
     }
   }
+
   func testUserFolderCannotOpenBeforeItsPathIsAvailable() {
     XCTAssertEqual(model().item(id: "user-folder")?.isEnabled, false)
   }
+
   private var changes: [DebugRootChange] = []
   private func model(_ state: DebugRootState = DebugRootState()) -> MenuModel {
     DebugRootModelBuilder.make(state: state) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout DebugRootState) -> Void) -> DebugRootState {
     var s = DebugRootState()
     edit(&s)
     return s
   }
+
   private func isOn(_ item: MenuItem?) -> Bool? {
     guard case .toggle(let binding)? = item?.role else { return nil }
     return binding.wrappedValue
   }
+
   private func run(_ item: MenuItem?) {
     switch item?.role {
     case .action(let run)?, .destructive(let run)?: run()
@@ -78,7 +83,7 @@ final class DebugRootModelBuilderTests: XCTestCase {
     let expected = ["fastmem", "instant-replay",
                     "user-folder", "jit-status", "debugger-status", "jit-error", "jit-guide", "fastmem-available",
                     "launch-times", "reset-launch-times"] + debugOnlyDiagnostics + ["stall-metrics", "show-test-skins", "perf-bench",
-                    "wireframe", "console-logging", "logging-verbosity", "input-debug", "template-covers"]
+                                                                                    "wireframe", "console-logging", "logging-verbosity", "input-debug", "template-covers"]
     XCTAssertEqual(model().allItems.map(\.id), expected)
   }
 
@@ -87,7 +92,7 @@ final class DebugRootModelBuilderTests: XCTestCase {
                     "user-folder", "jit-status", "debugger-status", "txm-region", "jit-error", "retry-jit-authorization",
                     "enable-jit-stikdebug", "stikdebug-help", "jit-guide", "fastmem-available",
                     "launch-times", "reset-launch-times"] + debugOnlyDiagnostics + ["stall-metrics", "show-test-skins", "perf-bench", "bench-token", "forget-approved-devices",
-                    "wireframe", "console-logging", "logging-verbosity", "input-debug", "template-covers"]
+                                                                                    "wireframe", "console-logging", "logging-verbosity", "input-debug", "template-covers"]
     XCTAssertEqual(model(populated).allItems.map(\.id), expected)
   }
 
@@ -130,7 +135,9 @@ final class DebugRootModelBuilderTests: XCTestCase {
         var s = DebugRootState()
         for other in all { s[keyPath: other] = !value }
         s[keyPath: keyPath] = value
-        guard case .toggle(let binding)? = model(s).item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+        guard case .toggle(let binding)? = model(s).item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+          continue
+        }
         XCTAssertEqual(binding.wrappedValue, value, id)
         for other in rows where other.0 != id { XCTAssertEqual(isOn(model(s).item(id: other.0)), !value, "\(other.0) must not read \(id)") }
         changes = []
@@ -225,11 +232,17 @@ final class DebugRootModelBuilderTests: XCTestCase {
     ]
     for (id, offBadge, onBadge) in rows {
       var s = populated
-      s.hydrated.jitAcquired = true; s.hydrated.debuggerAttached = true; s.hydrated.txmAuthorized = true; s.hydrated.fastmemAvailable = true
+      s.hydrated.jitAcquired = true
+      s.hydrated.debuggerAttached = true
+      s.hydrated.txmAuthorized = true
+      s.hydrated.fastmemAvailable = true
       XCTAssertEqual(on.item(id: id)?.isEnabled, false, id)
       XCTAssertEqual(model(s).item(id: id)?.badge, onBadge, id)
       var d = populated
-      d.hydrated.jitAcquired = false; d.hydrated.debuggerAttached = false; d.hydrated.txmAuthorized = false; d.hydrated.fastmemAvailable = false
+      d.hydrated.jitAcquired = false
+      d.hydrated.debuggerAttached = false
+      d.hydrated.txmAuthorized = false
+      d.hydrated.fastmemAvailable = false
       XCTAssertEqual(model(d).item(id: id)?.badge, offBadge, id)
     }
     XCTAssertEqual(off.item(id: "launch-times")?.badge, "7")
@@ -274,8 +287,12 @@ final class DebugRootModelBuilderTests: XCTestCase {
     for (ios, supported, txm, installed, acquired, authorized, attached, shown, why) in rows {
       let s = state {
         $0.isIOS = ios
-        $0.hydrated.jitSupported = supported; $0.hydrated.deviceHasTxm = txm; $0.hydrated.stikDebugInstalled = installed
-        $0.hydrated.jitAcquired = acquired; $0.hydrated.txmAuthorized = authorized; $0.hydrated.debuggerAttached = attached
+        $0.hydrated.jitSupported = supported
+        $0.hydrated.deviceHasTxm = txm
+        $0.hydrated.stikDebugInstalled = installed
+        $0.hydrated.jitAcquired = acquired
+        $0.hydrated.txmAuthorized = authorized
+        $0.hydrated.debuggerAttached = attached
       }
       XCTAssertEqual(s.showsStikDebugEnable, shown, why)
       XCTAssertEqual(model(s).item(id: "enable-jit-stikdebug") != nil, shown, why)
@@ -292,13 +309,20 @@ final class DebugRootModelBuilderTests: XCTestCase {
     ]
     for (acquired, attached, authorized, shown, why) in rows {
       let s = state {
-        $0.hydrated.jitSupported = true; $0.hydrated.deviceHasTxm = true; $0.hydrated.stikDebugInstalled = true
-        $0.hydrated.jitAcquired = acquired; $0.hydrated.debuggerAttached = attached; $0.hydrated.txmAuthorized = authorized
+        $0.hydrated.jitSupported = true
+        $0.hydrated.deviceHasTxm = true
+        $0.hydrated.stikDebugInstalled = true
+        $0.hydrated.jitAcquired = acquired
+        $0.hydrated.debuggerAttached = attached
+        $0.hydrated.txmAuthorized = authorized
       }
       XCTAssertEqual(model(s).item(id: "stikdebug-help") != nil, shown, why)
     }
     // The help follows the enable row: with StikDebug missing neither shows, even with nothing attached.
-    let missing = state { $0.hydrated.jitSupported = true; $0.hydrated.deviceHasTxm = true; $0.hydrated.stikDebugInstalled = false }
+    let missing = state { $0.hydrated.jitSupported = true
+      $0.hydrated.deviceHasTxm = true
+      $0.hydrated.stikDebugInstalled = false
+    }
     XCTAssertNil(model(missing).item(id: "stikdebug-help"))
   }
 

@@ -10,6 +10,8 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSSupportsGameMode</key>
+	<true/>
 	<key>UIAppSupportsHDR</key>
 	<true/>
 	<key>CFBundleDocumentTypes</key>

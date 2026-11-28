@@ -3,8 +3,8 @@
 
 #import "TCManagerInterface.h"
 
-#import "InputCommon/ControllerInterface/iOS/StateManager.h"
 #import "DSUServerBridge.h"
+#import "InputCommon/ControllerInterface/iOS/StateManager.h"
 
 #include <atomic>
 #include <os/lock.h>
@@ -87,77 +87,173 @@ static void TCRefreshInputDefaults(void)
 // This class only exists because I don't want to rewrite the touchscreen controller classes
 // in Objective-C. If I did, then I could just call the C++ methods directly.
 
-+ (void)setButtonStateFor:(NSInteger)button controller:(NSInteger)controllerId state:(BOOL)state {
-  ciface::iOS::StateManager::GetInstance()->SetButtonPressed((int)controllerId, (ciface::iOS::ButtonType)button, state);
++ (void)setButtonStateFor:(NSInteger)button controller:(NSInteger)controllerId state:(BOOL)state
+{
+  ciface::iOS::StateManager::GetInstance()->SetButtonPressed(
+      (int)controllerId, (ciface::iOS::ButtonType)button, state);
   // Mirror D-Pad presses to DSU analog dpad fields so DSU clients receive them
   // GameCube D-Pad (Up=6,Down=7,Left=8,Right=9)
-  if (button == 6)  { [DSUServerBridge setDPadUpForController:controllerId state:state]; }
-  if (button == 7)  { [DSUServerBridge setDPadDownForController:controllerId state:state]; }
-  if (button == 8)  { [DSUServerBridge setDPadLeftForController:controllerId state:state]; }
-  if (button == 9)  { [DSUServerBridge setDPadRightForController:controllerId state:state]; }
+  if (button == 6)
+  {
+    [DSUServerBridge setDPadUpForController:controllerId state:state];
+  }
+  if (button == 7)
+  {
+    [DSUServerBridge setDPadDownForController:controllerId state:state];
+  }
+  if (button == 8)
+  {
+    [DSUServerBridge setDPadLeftForController:controllerId state:state];
+  }
+  if (button == 9)
+  {
+    [DSUServerBridge setDPadRightForController:controllerId state:state];
+  }
   // Wii Remote D-Pad (Up=107,Down=108,Left=109,Right=110)
-  if (button == 107) { [DSUServerBridge setDPadUpForController:controllerId state:state]; }
-  if (button == 108) { [DSUServerBridge setDPadDownForController:controllerId state:state]; }
-  if (button == 109) { [DSUServerBridge setDPadLeftForController:controllerId state:state]; }
-  if (button == 110) { [DSUServerBridge setDPadRightForController:controllerId state:state]; }
+  if (button == 107)
+  {
+    [DSUServerBridge setDPadUpForController:controllerId state:state];
+  }
+  if (button == 108)
+  {
+    [DSUServerBridge setDPadDownForController:controllerId state:state];
+  }
+  if (button == 109)
+  {
+    [DSUServerBridge setDPadLeftForController:controllerId state:state];
+  }
+  if (button == 110)
+  {
+    [DSUServerBridge setDPadRightForController:controllerId state:state];
+  }
   // Map only Wii face buttons to DSU shapes; GC mapping will be handled by profiles
   // Wii Remote: A->Cross(1), B->Circle(2), 1->Square(0), 2->Triangle(3)
-  if (button == 100) { [DSUServerBridge setButton:1 controller:controllerId state:state]; }
-  if (button == 101) { [DSUServerBridge setButton:2 controller:controllerId state:state]; }
-  if (button == 105) { [DSUServerBridge setButton:0 controller:controllerId state:state]; }
-  if (button == 106) { [DSUServerBridge setButton:3 controller:controllerId state:state]; }
+  if (button == 100)
+  {
+    [DSUServerBridge setButton:1 controller:controllerId state:state];
+  }
+  if (button == 101)
+  {
+    [DSUServerBridge setButton:2 controller:controllerId state:state];
+  }
+  if (button == 105)
+  {
+    [DSUServerBridge setButton:0 controller:controllerId state:state];
+  }
+  if (button == 106)
+  {
+    [DSUServerBridge setButton:3 controller:controllerId state:state];
+  }
   // Wii special: - / + / Home
-  if (button == 102) { [DSUServerBridge setShare:controllerId state:state]; }
-  if (button == 103) { [DSUServerBridge setOptions:controllerId state:state]; }
-  if (button == 104) { [DSUServerBridge setPS:controllerId state:state]; }
+  if (button == 102)
+  {
+    [DSUServerBridge setShare:controllerId state:state];
+  }
+  if (button == 103)
+  {
+    [DSUServerBridge setOptions:controllerId state:state];
+  }
+  if (button == 104)
+  {
+    [DSUServerBridge setPS:controllerId state:state];
+  }
   // Wii shoulders as convenience for classic/nunchuk in DSU receiver
-  if (button == 200) { [DSUServerBridge setShoulderL:controllerId state:state]; }
-  if (button == 201) { [DSUServerBridge setShoulderR:controllerId state:state]; }
-  // GC convenience: Start -> DSU PS for Start mapping via profile; do not map Z here to avoid double bindings
-  if (button == 2) { [DSUServerBridge setPS:controllerId state:state]; }
+  if (button == 200)
+  {
+    [DSUServerBridge setShoulderL:controllerId state:state];
+  }
+  if (button == 201)
+  {
+    [DSUServerBridge setShoulderR:controllerId state:state];
+  }
+  // GC convenience: Start -> DSU PS for Start mapping via profile; do not map Z here to avoid
+  // double bindings
+  if (button == 2)
+  {
+    [DSUServerBridge setPS:controllerId state:state];
+  }
   // GC face to DSU shapes for DSU profiles
-  if (button == 0) { [DSUServerBridge setButton:1 controller:controllerId state:state]; } // A -> Cross
-  if (button == 1) { [DSUServerBridge setButton:2 controller:controllerId state:state]; } // B -> Circle
-  if (button == 3) { [DSUServerBridge setButton:0 controller:controllerId state:state]; } // X -> Square
-  if (button == 4) { [DSUServerBridge setButton:3 controller:controllerId state:state]; } // Y -> Triangle
+  if (button == 0)
+  {
+    [DSUServerBridge setButton:1 controller:controllerId state:state];
+  }  // A -> Cross
+  if (button == 1)
+  {
+    [DSUServerBridge setButton:2 controller:controllerId state:state];
+  }  // B -> Circle
+  if (button == 3)
+  {
+    [DSUServerBridge setButton:0 controller:controllerId state:state];
+  }  // X -> Square
+  if (button == 4)
+  {
+    [DSUServerBridge setButton:3 controller:controllerId state:state];
+  }  // Y -> Triangle
   // GC Z -> DSU Touch Button
-  if (button == 5) { [DSUServerBridge setTouch:controllerId state:state]; }
+  if (button == 5)
+  {
+    [DSUServerBridge setTouch:controllerId state:state];
+  }
 }
 
 // Dolphin's own DSU client (DualShockUDPClient.cpp) is the reference for the DSU axis convention:
 //   accel (g -> m/s^2): Left = +x, Right = -x; Down = +y, Up = -y; Forward = +z, Backward = -z
-//   gyro (deg/s -> rad/s): PitchUp = +pitch, PitchDown = -pitch; RollRight = +roll, RollLeft = -roll;
+//   gyro (deg/s -> rad/s): PitchUp = +pitch, PitchDown = -pitch; RollRight = +roll, RollLeft =
+//   -roll;
 //                          YawRight = +yaw, YawLeft = -yaw
 // The core reads IMUAccelerometer as x = Left - Right, y = Backward - Forward, z = Up - Down and
-// IMUGyroscope as pitch = PitchDown - PitchUp, roll = RollLeft - RollRight, yaw = YawLeft - YawRight.
-// Inverting the client therefore gives, for the core's signed vector (cx, cy, cz) and rates:
-//   dsu x = cx / g, dsu y = -cz / g, dsu z = -cy / g, and every gyro component = -(core rate) in deg/s,
+// IMUGyroscope as pitch = PitchDown - PitchUp, roll = RollLeft - RollRight, yaw = YawLeft -
+// YawRight. Inverting the client therefore gives, for the core's signed vector (cx, cy, cz) and
+// rates:
+//   dsu x = cx / g, dsu y = -cz / g, dsu z = -cy / g, and every gyro component = -(core rate) in
+//   deg/s,
 // so a Dolphin DSU client reproduces exactly the remote motion the game sees.
 static const float kStandardGravity = 9.80665f;
 
-+ (TCDSUMotionComponent)dsuMotionComponentForAxis:(NSInteger)axis value:(float)value {
++ (TCDSUMotionComponent)dsuMotionComponentForAxis:(NSInteger)axis value:(float)value
+{
   const float degPerRad = 180.0f / (float)M_PI;
-  switch (axis) {
-    case 625: return (TCDSUMotionComponent){TCDSUMotionKindAccelerometer, 0, value / kStandardGravity};  // WIIMOTE_ACCEL_LEFT
-    case 628: return (TCDSUMotionComponent){TCDSUMotionKindAccelerometer, 2, -value / kStandardGravity}; // WIIMOTE_ACCEL_BACKWARD
-    case 629: return (TCDSUMotionComponent){TCDSUMotionKindAccelerometer, 1, -value / kStandardGravity}; // WIIMOTE_ACCEL_UP
-    case 632: return (TCDSUMotionComponent){TCDSUMotionKindGyro, 0, -value * degPerRad}; // WIIMOTE_GYRO_PITCH_DOWN
-    case 635: return (TCDSUMotionComponent){TCDSUMotionKindGyro, 1, -value * degPerRad}; // WIIMOTE_GYRO_YAW_LEFT
-    case 633: return (TCDSUMotionComponent){TCDSUMotionKindGyro, 2, -value * degPerRad}; // WIIMOTE_GYRO_ROLL_LEFT
-    default: return (TCDSUMotionComponent){TCDSUMotionKindNone, 0, 0.0f};
+  switch (axis)
+  {
+  case 625:
+    return (TCDSUMotionComponent){TCDSUMotionKindAccelerometer, 0,
+                                  value / kStandardGravity};  // WIIMOTE_ACCEL_LEFT
+  case 628:
+    return (TCDSUMotionComponent){TCDSUMotionKindAccelerometer, 2,
+                                  -value / kStandardGravity};  // WIIMOTE_ACCEL_BACKWARD
+  case 629:
+    return (TCDSUMotionComponent){TCDSUMotionKindAccelerometer, 1,
+                                  -value / kStandardGravity};  // WIIMOTE_ACCEL_UP
+  case 632:
+    return (TCDSUMotionComponent){TCDSUMotionKindGyro, 0,
+                                  -value * degPerRad};  // WIIMOTE_GYRO_PITCH_DOWN
+  case 635:
+    return (TCDSUMotionComponent){TCDSUMotionKindGyro, 1,
+                                  -value * degPerRad};  // WIIMOTE_GYRO_YAW_LEFT
+  case 633:
+    return (TCDSUMotionComponent){TCDSUMotionKindGyro, 2,
+                                  -value * degPerRad};  // WIIMOTE_GYRO_ROLL_LEFT
+  default:
+    return (TCDSUMotionComponent){TCDSUMotionKindNone, 0, 0.0f};
   }
 }
 
-+ (float)axisValueFor:(NSInteger)axis controller:(NSInteger)controllerId {
++ (float)axisValueFor:(NSInteger)axis controller:(NSInteger)controllerId
+{
   // StateManager::GetAxisValue uses std::map::at, which throws for an axis never written.
-  try {
-    return ciface::iOS::StateManager::GetInstance()->GetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis);
-  } catch (const std::out_of_range&) {
+  try
+  {
+    return ciface::iOS::StateManager::GetInstance()->GetAxisValue((int)controllerId,
+                                                                  (ciface::iOS::ButtonType)axis);
+  }
+  catch (const std::out_of_range&)
+  {
     return 0.f;
   }
 }
 
-+ (void)clearAllForController:(NSInteger)controllerId {
++ (void)clearAllForController:(NSInteger)controllerId
+{
   ciface::iOS::StateManager::GetInstance()->ClearController((int)controllerId);
   // Release every DSU mirror this class writes in setButtonStateFor:/setAxisValueFor:
   // too, so a torn-down overlay cannot leave a DSU client's view of the pad stuck
@@ -166,7 +262,8 @@ static const float kStandardGravity = 9.80665f;
   [DSUServerBridge setDPadDownForController:controllerId state:NO];
   [DSUServerBridge setDPadLeftForController:controllerId state:NO];
   [DSUServerBridge setDPadRightForController:controllerId state:NO];
-  for (NSInteger shape = 0; shape < 4; shape++) {
+  for (NSInteger shape = 0; shape < 4; shape++)
+  {
     [DSUServerBridge setButton:shape controller:controllerId state:NO];
   }
   [DSUServerBridge setShare:controllerId state:NO];
@@ -197,7 +294,10 @@ static float s_splitAxes[4][256] = {
 static float s_irX = 0.0f, s_irY = 0.0f;  // last DSU IR pointer, in [-1,1]
 static float s_dsuAccel[3] = {0.0f, 0.0f, 0.0f};
 static float s_dsuGyro[3] = {0.0f, 0.0f, 0.0f};  // pitch, yaw, roll
-static inline float clamp11(float v) { return v < -1.f ? -1.f : (v > 1.f ? 1.f : v); }
+static inline float clamp11(float v)
+{
+  return v < -1.f ? -1.f : (v > 1.f ? 1.f : v);
+}
 
 // Match TCJoystick: the negative half reports negative, the positive half positive.
 static inline float TCCombineSplitAxes(float negativeValue, float positiveValue)
@@ -207,7 +307,8 @@ static inline float TCCombineSplitAxes(float negativeValue, float positiveValue)
   return clamp11(positiveMag - negativeMag);
 }
 
-+ (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value {
++ (void)setAxisValueFor:(NSInteger)axis controller:(NSInteger)controllerId value:(float)value
+{
   // Apply DSU scaling parameters to analog axes before forwarding (cached; see
   // TCRefreshInputDefaults)
   const float gain = s_dsuGain.load(std::memory_order_relaxed);
@@ -220,29 +321,40 @@ static inline float TCCombineSplitAxes(float negativeValue, float positiveValue)
   // axis (deadzone, gain, EMA, and a +/-1 clamp that cut gravity from ~9.8 to 1 m/s^2).
   // `ai` is ONLY an array index, valid solely for axes below 256.
   int ci = (int)MAX(0, MIN(3, (int)controllerId));
-  const bool is_split_stick = ((axis >= 11 && axis <= 14) || (axis >= 16 && axis <= 19) || (axis >= 203 && axis <= 206));
-  const bool is_ir_axis = (axis >= 112 && axis <= 115); // Wii IR Up/Down/Left/Right
-  const bool is_imu_axis = ((axis >= 625 && axis <= 636) || (axis >= 900 && axis <= 905)); // Wiimote+Nunchuk IMU
+  const bool is_split_stick =
+      ((axis >= 11 && axis <= 14) || (axis >= 16 && axis <= 19) || (axis >= 203 && axis <= 206));
+  const bool is_ir_axis = (axis >= 112 && axis <= 115);  // Wii IR Up/Down/Left/Right
+  const bool is_imu_axis =
+      ((axis >= 625 && axis <= 636) || (axis >= 900 && axis <= 905));  // Wiimote+Nunchuk IMU
   const bool has_smoothing_cell = (axis >= 0 && axis < 256);
   int ai = has_smoothing_cell ? (int)axis : 0;
 
   // IMU axes carry m/s^2 and rad/s and go to the core raw, exactly as upstream DolphiniOS
   // forwarded them: no deadzone, no gain, no smoothing, no unit-range clamp.
   float v = value;
-  if (!is_imu_axis) {
+  if (!is_imu_axis)
+  {
     // Deadzone/gain only for standard analog axes; IR is already normalized by its writer.
-    if (!is_ir_axis) {
-      if (fabsf(v) < dead) v = 0.f; else {
+    if (!is_ir_axis)
+    {
+      if (fabsf(v) < dead)
+        v = 0.f;
+      else
+      {
         float sign = (v >= 0.f) ? 1.f : -1.f;
         float mag = (fabsf(v) - dead) / (1.f - dead);
         v = sign * mag;
       }
       v *= gain;
     }
-    if (v > 1.f) v = 1.f; if (v < -1.f) v = -1.f;
+    if (v > 1.f)
+      v = 1.f;
+    if (v < -1.f)
+      v = -1.f;
 
     // Smoothing (EMA). Disable for split-stick and IR axes.
-    const bool allow_smoothing = (alpha > 0.f) && has_smoothing_cell && !(is_split_stick || is_ir_axis);
+    const bool allow_smoothing =
+        (alpha > 0.f) && has_smoothing_cell && !(is_split_stick || is_ir_axis);
     if (has_smoothing_cell)
     {
       os_unfair_lock_lock(&s_axisStateLock);
@@ -258,7 +370,8 @@ static inline float TCCombineSplitAxes(float negativeValue, float positiveValue)
   // StateManager takes its own mutex per write, shared with the core's input poll. Left as is on
   // purpose: whether that contention matters is still to be measured (System Trace) before changing
   // it.
-  ciface::iOS::StateManager::GetInstance()->SetAxisValue((int)controllerId, (ciface::iOS::ButtonType)axis, v);
+  ciface::iOS::StateManager::GetInstance()->SetAxisValue((int)controllerId,
+                                                         (ciface::iOS::ButtonType)axis, v);
   // Also forward to DSU server if running
   if (![DSUServerBridge isRunning])
     return;

@@ -4711,6 +4711,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "D-Pad ↑" = "D-Pad ↑";
 "D-Pad →" = "D-Pad →";
 "D-Pad ↓" = "D-Pad ↓";
+"D-Pad ← (as stick)" = "D-Pad ← (as stick)";
+"D-Pad ↑ (as stick)" = "D-Pad ↑ (as stick)";
+"D-Pad → (as stick)" = "D-Pad → (as stick)";
+"D-Pad ↓ (as stick)" = "D-Pad ↓ (as stick)";
 "Home" = "Home";
 "Left Stick Click" = "Left Stick Click";
 "On-screen %@" = "On-screen %@";
@@ -5999,3 +6003,9 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "One download brings all of these." = "One download brings all of these.";
 "%lld VARIANTS" = "%lld VARIANTS";
 "%lld variants" = "%lld variants";
+"This library copies games straight into your library." = "このライブラリはゲームを直接ライブラリにコピーします。";
+"The cover could not be loaded." = "カバーを読み込めませんでした。";
+"Publisher" = "発売元";
+"Genre" = "ジャンル";
+
+"Not enough free space to download this game (%@ required, %@ available)." = "ゲームをダウンロードするための空き容量が不足しています（必要: %@、空き: %@）。";

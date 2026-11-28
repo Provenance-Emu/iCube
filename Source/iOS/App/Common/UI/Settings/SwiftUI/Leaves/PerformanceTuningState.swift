@@ -102,6 +102,7 @@ struct PerformanceTuningState: Equatable {
     if !jitAvailable && (engine == .jit64 || engine == .jitARM64) { return .cachedInterpreter }
     return engine
   }
+
   /// Optimisations apply only to the two Cached Interpreter engines.
   var showCIROpts: Bool { effectiveEngine == .cachedInterpreter }
   var showIROpts: Bool { effectiveEngine == .cachedInterpreterIR }

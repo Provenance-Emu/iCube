@@ -5,9 +5,9 @@
 
 #import <mach/mach.h>
 
-@interface FastmemManager()
+@interface FastmemManager ()
 
-@property (readwrite) bool fastmemAvailable;
+@property(readwrite) bool fastmemAvailable;
 
 @end
 
@@ -15,7 +15,8 @@
 
 const size_t DOLFastmemRegionSize = 0x400000000;
 
-+ (FastmemManager* _Nonnull)shared {
++ (FastmemManager* _Nonnull)shared
+{
   static FastmemManager* sharedInstance = nil;
   static dispatch_once_t onceToken;
 
@@ -26,18 +27,22 @@ const size_t DOLFastmemRegionSize = 0x400000000;
   return sharedInstance;
 }
 
-- (instancetype)init {
-  if (self = [super init]) {
+- (instancetype)init
+{
+  if (self = [super init])
+  {
     vm_address_t addr = 0;
-    kern_return_t retval = vm_allocate(mach_task_self(), &addr, DOLFastmemRegionSize, VM_FLAGS_ANYWHERE);
-    
+    kern_return_t retval =
+        vm_allocate(mach_task_self(), &addr, DOLFastmemRegionSize, VM_FLAGS_ANYWHERE);
+
     self.fastmemAvailable = retval == KERN_SUCCESS;
-    
-    if (self.fastmemAvailable) {
+
+    if (self.fastmemAvailable)
+    {
       vm_deallocate(mach_task_self(), addr, DOLFastmemRegionSize);
     }
   }
-  
+
   return self;
 }
 

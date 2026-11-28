@@ -44,7 +44,7 @@ final class QuickSavePickerModelTests: XCTestCase {
     let occupied = state("GALE01.s04", slot: 4)
     XCTAssertTrue(QuickSavePickerModel.needsOverwriteConfirmation(slot: 4, states: [occupied]))
     XCTAssertFalse(QuickSavePickerModel.needsOverwriteConfirmation(slot: 1, states: [occupied]))
-    XCTAssertEqual(QuickSavePickerModel.slots, Array(1...10))
+    XCTAssertEqual(QuickSavePickerModel.slots, Array(1 ... 10))
   }
 
   func testHistoryLatestBadgeMatchesQuickLoadIncludingLegacySlot() {

@@ -87,7 +87,7 @@ final class LibrarySectionsTests: XCTestCase {
     XCTAssertEqual(buckets.map(\.firstIndex), [0, 1, 2])
   }
 
-#if os(tvOS)
+  #if os(tvOS)
   func testHeaderSubtitleHomeHasNoCount() {
     XCTAssertEqual(TVLibraryView.libraryHeaderSubtitle(destination: .home, count: 12), L("My Library"))
   }
@@ -97,5 +97,5 @@ final class LibrarySectionsTests: XCTestCase {
     XCTAssertEqual(TVLibraryView.libraryHeaderSubtitle(destination: .platform(.gameCube), count: 3), "\(L("GameCube")) · 3")
     XCTAssertEqual(TVLibraryView.libraryHeaderSubtitle(destination: .platform(.wii), count: 0), "\(L("Wii")) · 0")
   }
-#endif
+  #endif
 }

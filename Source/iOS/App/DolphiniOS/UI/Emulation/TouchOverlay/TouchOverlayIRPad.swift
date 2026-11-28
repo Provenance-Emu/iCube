@@ -71,6 +71,7 @@ struct TouchOverlayIRPadView: UIViewRepresentable {
         forceReleaseAndCenter()
       }
     }
+
     var deviceId: Int = 0
     var excludedFrames: [CGRect] = []
     var dragGain: CGFloat = 1.0

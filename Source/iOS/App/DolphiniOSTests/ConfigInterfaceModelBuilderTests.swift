@@ -43,7 +43,9 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       for value in [true, false] {
         changes = []
         binding.wrappedValue = value
@@ -81,15 +83,22 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
 
   func test_toggleRows_showTheStateValue() {
     var s = ConfigInterfaceState()
-    s.useNamesDB = true; s.useCovers = true; s.showSubtitles = false; s.showPatchedSeparately = false
-    s.confirmOnStop = false; s.usePanicHandlers = false; s.osdMessages = false
+    s.useNamesDB = true
+    s.useCovers = true
+    s.showSubtitles = false
+    s.showPatchedSeparately = false
+    s.confirmOnStop = false
+    s.usePanicHandlers = false
+    s.osdMessages = false
     let m = model(s)
     let expected: [(String, Bool)] = [
       ("names-db", true), ("covers", true), ("show-subtitles", false), ("show-patched-separately", false),
       ("confirm-on-stop", false), ("panic-handlers", false), ("osd-messages", false),
     ]
     for (id, value) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       XCTAssertEqual(binding.wrappedValue, value, id)
     }
   }
@@ -110,7 +119,8 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
 
   func test_recordingDefaults_watermarkOn_cameraOff() {
     let s = ConfigInterfaceState()
-    XCTAssertTrue(s.recordingWatermark); XCTAssertFalse(s.recordingCamera)
+    XCTAssertTrue(s.recordingWatermark)
+    XCTAssertFalse(s.recordingCamera)
     XCTAssertTrue(ConfigInterfaceState.storedRecordingWatermark(nil))
     XCTAssertFalse(ConfigInterfaceState.storedRecordingWatermark(false))
     XCTAssertEqual(ConfigInterfaceDefaultsKey.recordingWatermark, "recording_watermark")
@@ -119,8 +129,12 @@ final class ConfigInterfaceModelBuilderTests: XCTestCase {
 
   func test_defaults_matchTheOldView() {
     let s = ConfigInterfaceState()
-    XCTAssertTrue(s.confirmOnStop); XCTAssertTrue(s.usePanicHandlers); XCTAssertTrue(s.osdMessages); XCTAssertTrue(s.showSubtitles)
-    XCTAssertFalse(s.useNamesDB); XCTAssertFalse(s.useCovers)
+    XCTAssertTrue(s.confirmOnStop)
+    XCTAssertTrue(s.usePanicHandlers)
+    XCTAssertTrue(s.osdMessages)
+    XCTAssertTrue(s.showSubtitles)
+    XCTAssertFalse(s.useNamesDB)
+    XCTAssertFalse(s.useCovers)
     XCTAssertEqual(s.backgroundStyle, .gradient)
   }
 

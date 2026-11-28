@@ -63,7 +63,6 @@ enum SentryBuildEnvironment: String {
   var tracksWatchdogTerminations: Bool {
     self != .development
   }
-
 }
 
 /// Drops breadcrumbs that flood the 100-entry buffer and push out the ones that explain a death.

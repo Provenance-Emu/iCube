@@ -18,8 +18,8 @@ NS_ASSUME_NONNULL_BEGIN
 + (BOOL)isScreenshotDemoMode;
 
 + (NSArray<TVGameItem*>*)currentGames;
-+ (void)rescanAndFetchMetadataWithCompletion:(void(^)(void))completion;
-+ (void)rescanLocalAndFetchMetadata:(void(^)(void))completion;
++ (void)rescanAndFetchMetadataWithCompletion:(void (^)(void))completion;
++ (void)rescanLocalAndFetchMetadata:(void (^)(void))completion;
 + (void)loadGameCubeMainMenu;
 + (void)performOnlineSystemUpdate;
 + (void)performOnlineSystemUpdateWithRegion:(NSString*)regionCode;
@@ -32,6 +32,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// Merge the provided absolute paths/URLs into the library cache and optionally fetch metadata.
 + (void)updateLibraryWithRemotePaths:(NSArray<NSString*>*)paths fetchMetadata:(BOOL)fetch;
 + (void)refreshLocalGameAtPath:(NSString*)path NS_SWIFT_NAME(refreshLocalGame(atPath:));
+
+/// Where the core keeps the covers it downloads from GameTDB, one `<GameTDB ID>.png` per title.
+/// A cover written there is picked up by the next `reloadCovers`.
++ (NSString*)coverCacheDirectory;
+/// Re-reads the covers of the games already in the library. No game is added or removed.
++ (void)reloadCovers;
 
 @end
 

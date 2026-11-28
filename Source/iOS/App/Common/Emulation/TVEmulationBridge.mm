@@ -6,45 +6,46 @@
 
 #import <UIKit/UIKit.h>
 
-#import "EmulationCoordinator.h"
 #import "EmulationBootParameter.h"
 #import "EmulationBootType.h"
-#import "iCube-Swift.h"
+#import "EmulationCoordinator.h"
 #import "HostQueue.h"
+#import "iCube-Swift.h"
 
 #import "TVControllerMappingBridge.h"
 
 // C++ Core host messaging
 #include <algorithm>
 #include <atomic>
-#include <mutex>
 #include <cerrno>
+#include <mutex>
 #include <sys/stat.h>
-#include "Core/HW/ProcessorInterface.h"
-#include "Core/HW/DVD/DVDInterface.h"
-#include "DiscIO/VolumeDisc.h"
-#include "Core/Host.h"
-#include "Core/Core.h"
-#include "Core/System.h"
-#include "Core/State.h"
-#include "Core/ConfigManager.h"
-#include "Core/TimePlayed.h"
-#include "Common/FileUtil.h"
-#include "Common/Version.h"
-#include "Common/HookableEvent.h"
-#include "Core/Config/MainSettings.h"
-#include "Core/Config/GraphicsSettings.h"
 #include "Common/Config/Config.h"
-#include "VideoCommon/Present.h"
-#include "VideoCommon/FramebufferManager.h"
-#include "VideoCommon/FrameDumper.h"
-#include "VideoCommon/PostProcessing.h"
-#include "WiimoteEmu/WiimoteEmu.h"
-#include "InputCommon/ControllerEmu/ControllerEmu.h"
+#include "Common/FileUtil.h"
+#include "Common/HookableEvent.h"
+#include "Common/Version.h"
+#include "Core/Config/GraphicsSettings.h"
+#include "Core/Config/MainSettings.h"
 #import "Core/Config/WiimoteSettings.h"
+#include "Core/ConfigManager.h"
+#include "Core/Core.h"
+#include "Core/HW/DVD/DVDInterface.h"
 #import "Core/HW/GCPad.h"
+#include "Core/HW/ProcessorInterface.h"
 #import "Core/HW/SI/SI_Device.h"
 #import "Core/HW/Wiimote.h"
+#include "Core/Host.h"
+#include "Core/State.h"
+#include "Core/System.h"
+#include "Core/TimePlayed.h"
+#include "DiscIO/VolumeDisc.h"
+#include "InputCommon/ControllerEmu/ControllerEmu.h"
+#include "VideoCommon/AsyncRequests.h"
+#include "VideoCommon/FrameDumper.h"
+#include "VideoCommon/FramebufferManager.h"
+#include "VideoCommon/PostProcessing.h"
+#include "VideoCommon/Present.h"
+#include "WiimoteEmu/WiimoteEmu.h"
 
 extern std::unique_ptr<VideoCommon::Presenter> g_presenter;
 extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
@@ -54,24 +55,30 @@ extern std::unique_ptr<FramebufferManager> g_framebuffer_manager;
 // running needs to re-apply the multiplier live without toggling isFastForwarding.
 static float g_fastForwardOriginalSpeed = 1.0f;
 static bool g_isFastForwarding = false;
-static NSString * const kFastForwardSpeedPercentDefaultsKey = @"fast_forward_speed_percent";
+static NSString* const kFastForwardSpeedPercentDefaultsKey = @"fast_forward_speed_percent";
 
 // Reads the configured fast-forward speed and applies it to the live config.
 // 0 = unlimited (throttler disabled). Uses -objectForKey: rather than
 // -integerForKey: so an explicit 0 (Unlimited) is distinguishable from the key
 // never having been set (which also reads back as 0 from -integerForKey:) —
 // otherwise Unlimited could never actually take effect.
-static void ApplyConfiguredFastForwardSpeed() {
-  NSNumber* stored = [[NSUserDefaults standardUserDefaults] objectForKey:kFastForwardSpeedPercentDefaultsKey];
-  NSInteger ffSpeedPercent = stored ? stored.integerValue : 300; // Default to 3x speed
-  if (ffSpeedPercent < 0) {
+static void ApplyConfiguredFastForwardSpeed()
+{
+  NSNumber* stored =
+      [[NSUserDefaults standardUserDefaults] objectForKey:kFastForwardSpeedPercentDefaultsKey];
+  NSInteger ffSpeedPercent = stored ? stored.integerValue : 300;  // Default to 3x speed
+  if (ffSpeedPercent < 0)
+  {
     ffSpeedPercent = 300;
   }
 
-  if (ffSpeedPercent == 0) {
+  if (ffSpeedPercent == 0)
+  {
     // Unlimited speed - use throttler disable
     Core::SetIsThrottlerTempDisabled(true);
-  } else {
+  }
+  else
+  {
     // Use configured speed multiplier
     Core::SetIsThrottlerTempDisabled(false);
     float speedMultiplier = (float)ffSpeedPercent / 100.0f;
@@ -80,12 +87,12 @@ static void ApplyConfiguredFastForwardSpeed() {
 }
 
 // Save-state operations need a running core. Core::IsRunning covers a user pause too: pausing only
-// sets the CPU stepping flag. While the core is Starting or Stopping, State::LoadAs/SaveAs run their
-// work inline on the calling thread instead of the CPU thread (State's load check accepts Starting,
-// SaveAs checks nothing), and the subsystems' DoState assert they are on the CPU thread — DVDThread
-// "Condition: Core::IsCPUThread()", Sentry ICUBE-9Y, reached from the Load State menu while a game
-// boots. Answering "No" to that dialog crashes the app; "Yes" serializes a core that isn't running.
-// Mirrors SaveStateService.resumeDefaultsKey (Swift owns the setting).
+// sets the CPU stepping flag. While the core is Starting or Stopping, State::LoadAs/SaveAs run
+// their work inline on the calling thread instead of the CPU thread (State's load check accepts
+// Starting, SaveAs checks nothing), and the subsystems' DoState assert they are on the CPU thread —
+// DVDThread "Condition: Core::IsCPUThread()", Sentry ICUBE-9Y, reached from the Load State menu
+// while a game boots. Answering "No" to that dialog crashes the app; "Yes" serializes a core that
+// isn't running. Mirrors SaveStateService.resumeDefaultsKey (Swift owns the setting).
 static NSString* const kResumeWhereLeftOffDefaultsKey = @"resume_where_left_off";
 
 static bool StateOperationAllowed(Core::System& system, const char* operation)
@@ -100,9 +107,11 @@ static bool StateOperationAllowed(Core::System& system, const char* operation)
 // Core transitions fire synchronously, before a new boot can reuse the same game ID. App-level
 // DidStart notifications run later on main and cannot safely distinguish a pending same-title save.
 static std::atomic<uint64_t> s_stateSessionIdentifier{1};
-static uint64_t CurrentStateSessionIdentifier() {
+static uint64_t CurrentStateSessionIdentifier()
+{
   static const auto hook = Core::AddOnStateChangedCallback([](Core::State state) {
-    if (state == Core::State::Starting || state == Core::State::Stopping || state == Core::State::Uninitialized)
+    if (state == Core::State::Starting || state == Core::State::Stopping ||
+        state == Core::State::Uninitialized)
       s_stateSessionIdentifier.fetch_add(1);
   });
   (void)hook;
@@ -111,7 +120,8 @@ static uint64_t CurrentStateSessionIdentifier() {
 
 // Accept direct StateSaves children only. Resolve the parent to honor configured root symlinks,
 // but reject a file symlink so a selected state cannot redirect reads/writes outside that root.
-static NSString* CheckedStateSavesPath(NSString* path) {
+static NSString* CheckedStateSavesPath(NSString* path)
+{
   if (path.length == 0 || !path.isAbsolutePath || [path.pathComponents containsObject:@".."])
     return nil;
   NSString* root = [NSString stringWithUTF8String:File::GetUserPath(D_STATESAVES_IDX).c_str()];
@@ -119,20 +129,23 @@ static NSString* CheckedStateSavesPath(NSString* path) {
   NSString* standardized = path.stringByStandardizingPath;
   NSString* parent = standardized.stringByDeletingLastPathComponent.stringByResolvingSymlinksInPath;
   if (root.length == 0 || ![parent isEqualToString:root] ||
-      [[NSFileManager defaultManager] destinationOfSymbolicLinkAtPath:standardized error:nil] != nil)
+      [[NSFileManager defaultManager] destinationOfSymbolicLinkAtPath:standardized
+                                                                error:nil] != nil)
     return nil;
   return [parent stringByAppendingPathComponent:standardized.lastPathComponent];
 }
 
 // A failed lookup is not absence. Reject symlinks/directories even when replacement was approved.
-static bool ClassicSlotDestinationPermitted(NSString* path, bool allowOverwrite) {
+static bool ClassicSlotDestinationPermitted(NSString* path, bool allowOverwrite)
+{
   struct stat info;
   if (lstat(path.fileSystemRepresentation, &info) == 0)
     return allowOverwrite && S_ISREG(info.st_mode);
   return errno == ENOENT;
 }
 
-static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
+static bool IsHistoryPathForGame(NSString* path, NSString* gameID)
+{
   NSString* name = path.lastPathComponent;
   NSRange marker = [name rangeOfString:@".quick-" options:NSBackwardsSearch];
   if (gameID.length == 0 || [gameID isEqualToString:@"."] || [gameID isEqualToString:@".."] ||
@@ -146,11 +159,11 @@ static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
 }
 
 @interface TVSaveStateSnapshot ()
-@property (nonatomic, readwrite, copy) NSString* filePath;
-@property (nonatomic, readwrite, copy) NSString* gameID;
-@property (nonatomic, readwrite) NSInteger playTimeSeconds;
-@property (nonatomic, readwrite, copy) NSDate* savedAt;
-@property (nonatomic, readwrite) uint64_t sessionIdentifier;
+@property(nonatomic, readwrite, copy) NSString* filePath;
+@property(nonatomic, readwrite, copy) NSString* gameID;
+@property(nonatomic, readwrite) NSInteger playTimeSeconds;
+@property(nonatomic, readwrite, copy) NSDate* savedAt;
+@property(nonatomic, readwrite) uint64_t sessionIdentifier;
 @end
 
 @implementation TVSaveStateSnapshot
@@ -158,16 +171,21 @@ static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
 
 @implementation TVEmulationBridge
 
-+ (void)runWithBootParameter:(EmulationBootParameter*)param {
++ (void)runWithBootParameter:(EmulationBootParameter*)param
+{
   [[EmulationCoordinator shared] runEmulationWithBootParameter:param];
 }
 
-+ (void)stop {
++ (void)stop
+{
   // Programmatic replacement/debug stops keep their stop-always behavior. User Quit uses the
   // result-bearing entrypoint below so a failed auto-save can be retried or explicitly discarded.
-  if ([[NSUserDefaults standardUserDefaults] boolForKey:kResumeWhereLeftOffDefaultsKey]) {
+  if ([[NSUserDefaults standardUserDefaults] boolForKey:kResumeWhereLeftOffDefaultsKey])
+  {
     NSString* autoPath = [self autoStateFilePath];
-    if (autoPath.length > 0 && StateOperationAllowed(Core::System::GetInstance(), "auto-state save")) {
+    if (autoPath.length > 0 &&
+        StateOperationAllowed(Core::System::GetInstance(), "auto-state save"))
+    {
       if (![self saveStateToPath:autoPath wait:YES])
         NSLog(@"[SaveState] Auto-state save failed during programmatic stop");
     }
@@ -175,12 +193,14 @@ static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
   [self stopWithoutSaving];
 }
 
-+ (void)stopWithoutSaving {
++ (void)stopWithoutSaving
+{
   [BootWatchdog clear];
   Host_Message(HostMessageID::WMUserStop);
 }
 
-+ (BOOL)stopWithoutSavingForUserExpectedSessionIdentifier:(uint64_t)session {
++ (BOOL)stopWithoutSavingForUserExpectedSessionIdentifier:(uint64_t)session
+{
   const Core::CPUThreadGuard guard(Core::System::GetInstance());
   if (session != CurrentStateSessionIdentifier())
     return NO;
@@ -188,19 +208,28 @@ static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
   return YES;
 }
 
-+ (BOOL)stopForUserWithSavedStatePath:(NSString*)savedStatePath {
++ (BOOL)stopForUserWithSavedStatePath:(NSString*)savedStatePath
+{
   return [self stopForUserWithSavedStatePath:savedStatePath expectedGameID:nil];
 }
 
-+ (BOOL)stopForUserWithSavedStatePath:(NSString*)savedStatePath expectedGameID:(NSString*)expectedGameID {
-  return [self stopForUserWithSavedStatePath:savedStatePath expectedGameID:expectedGameID expectedSessionIdentifier:CurrentStateSessionIdentifier()];
++ (BOOL)stopForUserWithSavedStatePath:(NSString*)savedStatePath
+                       expectedGameID:(NSString*)expectedGameID
+{
+  return [self stopForUserWithSavedStatePath:savedStatePath
+                              expectedGameID:expectedGameID
+                   expectedSessionIdentifier:CurrentStateSessionIdentifier()];
 }
 
-+ (uint64_t)currentSessionIdentifier {
++ (uint64_t)currentSessionIdentifier
+{
   return CurrentStateSessionIdentifier();
 }
 
-+ (BOOL)stopForUserWithSavedStatePath:(NSString*)savedStatePath expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session {
++ (BOOL)stopForUserWithSavedStatePath:(NSString*)savedStatePath
+                       expectedGameID:(NSString*)expectedGameID
+            expectedSessionIdentifier:(uint64_t)session
+{
   auto& system = Core::System::GetInstance();
   NSString* autoPath = nil;
   std::future<bool> completion;
@@ -209,18 +238,25 @@ static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
     if (session != CurrentStateSessionIdentifier() ||
         (expectedGameID.length > 0 && ![[self currentGameID] isEqualToString:expectedGameID]))
       return NO;
-    if ([[NSUserDefaults standardUserDefaults] boolForKey:kResumeWhereLeftOffDefaultsKey] && Core::IsRunning(system)) {
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:kResumeWhereLeftOffDefaultsKey] &&
+        Core::IsRunning(system))
+    {
       autoPath = [self autoStateFilePath];
       if (autoPath.length > 0 && savedStatePath.length == 0)
-        completion = State::SaveAsWithResult(system, std::string(autoPath.fileSystemRepresentation));
+        completion =
+            State::SaveAsWithResult(system, std::string(autoPath.fileSystemRepresentation));
     }
-  } // The CPU is free while the worker commits or a confirmed snapshot is copied.
+  }  // The CPU is free while the worker commits or a confirmed snapshot is copied.
   if (completion.valid() && !completion.get())
     return NO;
   NSString* temporary = nil;
-  if (autoPath.length > 0 && savedStatePath.length > 0 && ![savedStatePath isEqualToString:autoPath]) {
+  if (autoPath.length > 0 && savedStatePath.length > 0 &&
+      ![savedStatePath isEqualToString:autoPath])
+  {
     temporary = [autoPath stringByAppendingFormat:@".%@.tmp", NSUUID.UUID.UUIDString];
-    if (!File::CopyRegularFile(savedStatePath.fileSystemRepresentation, temporary.fileSystemRepresentation)) {
+    if (!File::CopyRegularFile(savedStatePath.fileSystemRepresentation,
+                               temporary.fileSystemRepresentation))
+    {
       if (File::Exists(temporary.fileSystemRepresentation))
         File::Delete(temporary.fileSystemRepresentation);
       return NO;
@@ -228,12 +264,15 @@ static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
   }
   const Core::CPUThreadGuard guard(system);
   if (session != CurrentStateSessionIdentifier() ||
-      (expectedGameID.length > 0 && ![[self currentGameID] isEqualToString:expectedGameID])) {
+      (expectedGameID.length > 0 && ![[self currentGameID] isEqualToString:expectedGameID]))
+  {
     if (temporary && File::Exists(temporary.fileSystemRepresentation))
       File::Delete(temporary.fileSystemRepresentation);
     return NO;
   }
-  if (temporary && !File::Rename(temporary.fileSystemRepresentation, autoPath.fileSystemRepresentation)) {
+  if (temporary &&
+      !File::Rename(temporary.fileSystemRepresentation, autoPath.fileSystemRepresentation))
+  {
     File::Delete(temporary.fileSystemRepresentation);
     return NO;
   }
@@ -241,62 +280,76 @@ static bool IsHistoryPathForGame(NSString* path, NSString* gameID) {
   return YES;
 }
 
-// Generation of the newest pause/resume request. An async job runs only if it is still the newest, so a
-// request made later (a claim's pause, a release's resume) supersedes one still waiting on a busy host queue.
+// Generation of the newest pause/resume request. An async job runs only if it is still the newest,
+// so a request made later (a claim's pause, a release's resume) supersedes one still waiting on a
+// busy host queue.
 //
-// The async entry points bump the generation lock-free: they run on main at resign/become-active and must
-// never wait behind a job that is inside SetState (which waits for the CPU thread, and for an alert main
-// has to answer). The mutex only orders a job's "compare, then SetState" against a SYNC pause/resume's
-// "bump, then SetState", and the sync path already waits on Core's own locks behind an in-flight SetState.
+// The async entry points bump the generation lock-free: they run on main at resign/become-active
+// and must never wait behind a job that is inside SetState (which waits for the CPU thread, and for
+// an alert main has to answer). The mutex only orders a job's "compare, then SetState" against a
+// SYNC pause/resume's "bump, then SetState", and the sync path already waits on Core's own locks
+// behind an in-flight SetState.
 static std::atomic<uint64_t> s_pauseRequestGeneration{0};
-// Newest generation whose request has been applied or dropped. Behind s_pauseRequestGeneration while an
-// async job is still waiting on the host queue (or inside its SetState).
+// Newest generation whose request has been applied or dropped. Behind s_pauseRequestGeneration
+// while an async job is still waiting on the host queue (or inside its SetState).
 static std::atomic<uint64_t> s_pauseSettledGeneration{0};
 static std::mutex s_pauseRequestMutex;
 
-static void SettlePauseGeneration(uint64_t generation) {
+static void SettlePauseGeneration(uint64_t generation)
+{
   uint64_t settled = s_pauseSettledGeneration.load();
-  while (settled < generation && !s_pauseSettledGeneration.compare_exchange_weak(settled, generation)) {
+  while (settled < generation &&
+         !s_pauseSettledGeneration.compare_exchange_weak(settled, generation))
+  {
   }
 }
 
-// The caller applies the request itself right after this returns, which supersedes every queued job.
-static void BumpPauseGenerationSync() {
+// The caller applies the request itself right after this returns, which supersedes every queued
+// job.
+static void BumpPauseGenerationSync()
+{
   std::lock_guard<std::mutex> lock(s_pauseRequestMutex);
   SettlePauseGeneration(s_pauseRequestGeneration.fetch_add(1) + 1);
 }
 
-static void RunPauseRequestAsync(Core::State from, Core::State to) {
+static void RunPauseRequestAsync(Core::State from, Core::State to)
+{
   const uint64_t generation = s_pauseRequestGeneration.fetch_add(1) + 1;
   DOLHostQueueRunAsync(^{
     std::lock_guard<std::mutex> lock(s_pauseRequestMutex);
     auto& system = Core::System::GetInstance();
-    if (generation == s_pauseRequestGeneration.load() && Core::GetState(system) == from) {
+    if (generation == s_pauseRequestGeneration.load() && Core::GetState(system) == from)
+    {
       Core::SetState(system, to);
     }
     SettlePauseGeneration(generation);
   });
 }
 
-+ (void)pause {
++ (void)pause
+{
   BumpPauseGenerationSync();
   Core::SetState(Core::System::GetInstance(), Core::State::Paused);
 }
 
-+ (void)resume {
++ (void)resume
+{
   BumpPauseGenerationSync();
   Core::SetState(Core::System::GetInstance(), Core::State::Running);
 }
 
-+ (void)pauseAsync {
++ (void)pauseAsync
+{
   RunPauseRequestAsync(Core::State::Running, Core::State::Paused);
 }
 
-+ (void)resumeAsync {
++ (void)resumeAsync
+{
   RunPauseRequestAsync(Core::State::Paused, Core::State::Running);
 }
 
-+ (void)resetSystem {
++ (void)resetSystem
+{
   auto& system = Core::System::GetInstance();
   // A game can be booted but Paused (e.g. from the pause menu), not just Running.
   // Guard on "no game booted at all" instead of "not currently Running", otherwise
@@ -308,23 +361,27 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   Core::SetState(system, Core::State::Running);
 }
 
-+ (BOOL)isPaused {
++ (BOOL)isPaused
+{
   return Core::GetState(Core::System::GetInstance()) == Core::State::Paused;
 }
 
-+ (TVDiscChangeResult)changeDiscAtPath:(NSString*)path {
++ (TVDiscChangeResult)changeDiscAtPath:(NSString*)path
+{
   // Never eject before validating: stale library entries and non-disc launchers must leave the
   // current disc untouched. The Swift picker filters first; this is the authoritative recheck.
   BOOL directory = NO;
   NSFileManager* files = NSFileManager.defaultManager;
   if (!path.isAbsolutePath || ![files fileExistsAtPath:path isDirectory:&directory] || directory ||
-      ![files isReadableFileAtPath:path]) {
+      ![files isReadableFileAtPath:path])
+  {
     return TVDiscChangeResultFileUnavailable;
   }
   const std::string disc_path(path.fileSystemRepresentation);
   const auto disc = DiscIO::CreateDisc(disc_path);
   if (!disc || (disc->GetVolumeType() != DiscIO::Platform::GameCubeDisc &&
-                disc->GetVolumeType() != DiscIO::Platform::WiiDisc)) {
+                disc->GetVolumeType() != DiscIO::Platform::WiiDisc))
+  {
     return TVDiscChangeResultInvalidDisc;
   }
 
@@ -350,47 +407,71 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   return TVDiscChangeResultScheduled;
 }
 
-+ (BOOL)hasQueuedPauseRequest {
++ (BOOL)hasQueuedPauseRequest
+{
   return s_pauseSettledGeneration.load() < s_pauseRequestGeneration.load();
 }
 
-+ (void)registerMainDisplayView:(UIView*)view {
++ (void)registerMainDisplayView:(UIView*)view
+{
   [[EmulationCoordinator shared] registerMainDisplayView:view];
 }
 
-+ (void)launchGameAtPath:(NSString*)path {
-  if (path.length == 0) return;
++ (void)launchGameAtPath:(NSString*)path
+{
+  if (path.length == 0)
+    return;
   EmulationBootParameter* p = [EmulationBootParameter new];
   p.bootType = EmulationBootTypeFile;
   p.path = path;
   NSString* lower = path.lowercaseString;
-  p.isNKit = [lower hasSuffix:@".nkit.iso"] || [lower hasSuffix:@".nkit.gcz"] || [lower hasSuffix:@".nkit"]; // best-effort
+  p.isNKit = [lower hasSuffix:@".nkit.iso"] || [lower hasSuffix:@".nkit.gcz"] ||
+             [lower hasSuffix:@".nkit"];  // best-effort
   [[EmulationCoordinator shared] runEmulationWithBootParameter:p];
 }
 
-+ (BOOL)isRunning {
++ (BOOL)isRunning
+{
   Core::State s = Core::GetState(Core::System::GetInstance());
   return s == Core::State::Running || s == Core::State::Paused || s == Core::State::Starting;
 }
 
-+ (BOOL)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait {
++ (BOOL)saveStateToSlot:(NSInteger)slot wait:(BOOL)wait
+{
   (void)wait;  // Success always means committed, including callers of the old wait:NO API.
   return [self saveStateSnapshotToSlot:slot] != nil;
 }
 
-+ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot {
++ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot
+{
   return [self saveStateSnapshotToSlot:slot expectedGameID:nil];
 }
 
-+ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(NSString*)expectedGameID {
-  return [self saveStateSnapshotToSlot:slot expectedGameID:expectedGameID expectedSessionIdentifier:CurrentStateSessionIdentifier()];
++ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot
+                                 expectedGameID:(NSString*)expectedGameID
+{
+  return [self saveStateSnapshotToSlot:slot
+                        expectedGameID:expectedGameID
+             expectedSessionIdentifier:CurrentStateSessionIdentifier()];
 }
 
-+ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session {
-  return [self saveStateSnapshotToSlot:slot expectedGameID:expectedGameID expectedSessionIdentifier:session expectedPath:nil allowOverwrite:YES];
++ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot
+                                 expectedGameID:(NSString*)expectedGameID
+                      expectedSessionIdentifier:(uint64_t)session
+{
+  return [self saveStateSnapshotToSlot:slot
+                        expectedGameID:expectedGameID
+             expectedSessionIdentifier:session
+                          expectedPath:nil
+                        allowOverwrite:YES];
 }
 
-+ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session expectedPath:(NSString*)expectedPath allowOverwrite:(BOOL)allowOverwrite {
++ (TVSaveStateSnapshot*)saveStateSnapshotToSlot:(NSInteger)slot
+                                 expectedGameID:(NSString*)expectedGameID
+                      expectedSessionIdentifier:(uint64_t)session
+                                   expectedPath:(NSString*)expectedPath
+                                 allowOverwrite:(BOOL)allowOverwrite
+{
   auto& system = Core::System::GetInstance();
   if (slot <= 0 || static_cast<uint64_t>(slot) > UINT32_MAX ||
       !StateOperationAllowed(system, "slot save"))
@@ -408,7 +489,8 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
     NSString* path = [self stateFilePathForSlot:slot];
     if (path.length == 0 || gameID.length == 0)
       return nil;
-    if (expectedPath && (![path isEqualToString:expectedPath] || !ClassicSlotDestinationPermitted(path, allowOverwrite)))
+    if (expectedPath && (![path isEqualToString:expectedPath] ||
+                         !ClassicSlotDestinationPermitted(path, allowOverwrite)))
       return nil;
     snapshot = [TVSaveStateSnapshot new];
     snapshot.filePath = path;
@@ -417,26 +499,30 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
     snapshot.sessionIdentifier = session;
     snapshot.playTimeSeconds = [self currentGamePlayTimeSeconds];
     completion = State::SaveAsWithResult(system, std::string(path.fileSystemRepresentation));
-  } // Metadata capture and serialization were atomic; waiting for disk never holds the CPU lock.
+  }  // Metadata capture and serialization were atomic; waiting for disk never holds the CPU lock.
   return completion.get() ? snapshot : nil;
 }
 
-+ (BOOL)isStateOperationAllowed {
++ (BOOL)isStateOperationAllowed
+{
   return Core::IsRunning(Core::System::GetInstance());
 }
 
-+ (TVSaveStateSnapshot*)saveStateSnapshotToPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session {
++ (TVSaveStateSnapshot*)saveStateSnapshotToPath:(NSString*)path
+                                 expectedGameID:(NSString*)expectedGameID
+                      expectedSessionIdentifier:(uint64_t)session
+{
   auto& system = Core::System::GetInstance();
   NSString* checkedPath = CheckedStateSavesPath(path);
   if (!checkedPath || !IsHistoryPathForGame(checkedPath, expectedGameID) ||
-      [DOLModdedBoot isCurrentBootModded] ||
-      !StateOperationAllowed(system, "history save"))
+      [DOLModdedBoot isCurrentBootModded] || !StateOperationAllowed(system, "history save"))
     return nil;
   TVSaveStateSnapshot* snapshot = nil;
   std::future<bool> completion;
   {
     const Core::CPUThreadGuard guard(system);
-    if (!StateOperationAllowed(system, "history save") || session != CurrentStateSessionIdentifier() ||
+    if (!StateOperationAllowed(system, "history save") ||
+        session != CurrentStateSessionIdentifier() ||
         ![[self currentGameID] isEqualToString:expectedGameID] ||
         [[NSFileManager defaultManager] fileExistsAtPath:checkedPath] ||
         ![CheckedStateSavesPath(checkedPath) isEqualToString:checkedPath])
@@ -452,7 +538,8 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   return completion.get() ? snapshot : nil;
 }
 
-+ (void)loadStateFromSlot:(NSInteger)slot {
++ (void)loadStateFromSlot:(NSInteger)slot
+{
   int s = (int)slot;
   Core::QueueHostJob([s](Core::System& system) {
     // Checked when the job runs, not when it is queued: the core may still be booting then.
@@ -461,12 +548,14 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   });
 }
 
-+ (NSString*)currentGameID {
++ (NSString*)currentGameID
+{
   const std::string game_id = SConfig::GetInstance().GetGameID();
   return [NSString stringWithUTF8String:game_id.c_str()];
 }
 
-+ (nullable NSString*)stateFilePathForSlot:(NSInteger)slot {
++ (nullable NSString*)stateFilePathForSlot:(NSInteger)slot
+{
   const std::string game_id = SConfig::GetInstance().GetGameID();
   if (game_id.empty())
     return nil;
@@ -476,7 +565,8 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   return [NSString stringWithFormat:@"%@%@.s%02ld", dir, gid, (long)slot];
 }
 
-+ (NSInteger)currentGamePlayTimeSeconds {
++ (NSInteger)currentGamePlayTimeSeconds
+{
   const std::string game_id = SConfig::GetInstance().GetGameID();
   if (game_id.empty())
     return 0;
@@ -484,7 +574,8 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   return static_cast<NSInteger>(ms.count() / 1000);
 }
 
-+ (nullable NSString*)autoStateFilePath {
++ (nullable NSString*)autoStateFilePath
+{
   // A modded disc shares its base game's ID, so it must neither load nor overwrite the vanilla
   // game's resume state (see ModdedBoot). nil skips both the save in `stop` and the load on boot.
   if ([DOLModdedBoot isCurrentBootModded])
@@ -497,17 +588,20 @@ static void RunPauseRequestAsync(Core::State from, Core::State to) {
   return [NSString stringWithFormat:@"%@%@.auto", dir, gid];
 }
 
-+ (BOOL)saveStateToPath:(NSString*)path wait:(BOOL)wait {
++ (BOOL)saveStateToPath:(NSString*)path wait:(BOOL)wait
+{
   (void)wait;
   if (path.length == 0 || !StateOperationAllowed(Core::System::GetInstance(), "path save"))
     return NO;
-  return State::SaveAsAndWait(Core::System::GetInstance(), std::string(path.fileSystemRepresentation));
+  return State::SaveAsAndWait(Core::System::GetInstance(),
+                              std::string(path.fileSystemRepresentation));
 }
 
 // The state session whose boot-time resume has been applied. 0 matches no session.
 static std::atomic<uint64_t> s_resumeSettledSession{0};
 
-+ (void)markResumeSettledAfterRequestedLoads {
++ (void)markResumeSettledAfterRequestedLoads
+{
   // Host jobs queued from one thread run in order, so this runs after a load requested just
   // before it, and State::LoadAs has finished by the time its job returns.
   Core::QueueHostJob([](Core::System& system) {
@@ -516,25 +610,29 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
   });
 }
 
-+ (BOOL)saveResumeStateKeepingGameRunning {
++ (BOOL)saveResumeStateKeepingGameRunning
+{
   auto& system = Core::System::GetInstance();
   // Checked before the CPU lock too: with no game, backgrounding the library must cost nothing.
-  if (![[NSUserDefaults standardUserDefaults] boolForKey:kResumeWhereLeftOffDefaultsKey] || !Core::IsRunning(system))
+  if (![[NSUserDefaults standardUserDefaults] boolForKey:kResumeWhereLeftOffDefaultsKey] ||
+      !Core::IsRunning(system))
     return NO;
   std::future<bool> completion;
   {
     const Core::CPUThreadGuard guard(system);
-    if (!Core::IsRunning(system) || s_resumeSettledSession.load() != CurrentStateSessionIdentifier())
+    if (!Core::IsRunning(system) ||
+        s_resumeSettledSession.load() != CurrentStateSessionIdentifier())
       return NO;
     NSString* autoPath = [self autoStateFilePath];
     if (autoPath.length == 0)
       return NO;
     completion = State::SaveAsWithResult(system, std::string(autoPath.fileSystemRepresentation));
-  } // The snapshot is captured; waiting for the disk never holds the CPU lock.
+  }  // The snapshot is captured; waiting for the disk never holds the CPU lock.
   return completion.get();
 }
 
-+ (void)loadStateFromPath:(NSString*)path {
++ (void)loadStateFromPath:(NSString*)path
+{
   if (path.length == 0)
     return;
   std::string p(path.UTF8String);
@@ -545,10 +643,14 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
   });
 }
 
-+ (BOOL)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session {
++ (BOOL)loadStateFromPath:(NSString*)path
+               expectedGameID:(NSString*)expectedGameID
+    expectedSessionIdentifier:(uint64_t)session
+{
   NSString* checkedPath = CheckedStateSavesPath(path);
   if (!checkedPath || expectedGameID.length == 0 || ![self isStateOperationAllowed] ||
-      session != CurrentStateSessionIdentifier() || ![[self currentGameID] isEqualToString:expectedGameID] ||
+      session != CurrentStateSessionIdentifier() ||
+      ![[self currentGameID] isEqualToString:expectedGameID] ||
       ![[NSFileManager defaultManager] fileExistsAtPath:checkedPath])
     return NO;
   std::string filename(checkedPath.fileSystemRepresentation);
@@ -558,7 +660,8 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
     if (!StateOperationAllowed(system, "checked path load"))
       return;
     const Core::CPUThreadGuard guard(system);
-    if (!StateOperationAllowed(system, "checked path load") || session != CurrentStateSessionIdentifier() ||
+    if (!StateOperationAllowed(system, "checked path load") ||
+        session != CurrentStateSessionIdentifier() ||
         SConfig::GetInstance().GetGameID() != expected)
       return;
     NSString* pathNow = [NSString stringWithUTF8String:filename.c_str()];
@@ -570,40 +673,54 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
   return YES;
 }
 
-+ (void)loadStateFromPath:(NSString*)path expectedGameID:(NSString*)expectedGameID expectedSessionIdentifier:(uint64_t)session completion:(void (^)(BOOL loaded))completion {
++ (void)loadStateFromPath:(NSString*)path
+               expectedGameID:(NSString*)expectedGameID
+    expectedSessionIdentifier:(uint64_t)session
+                   completion:(void (^)(BOOL loaded))completion
+{
   void (^callback)(BOOL) = [completion copy];
   auto finish = [callback](bool loaded) {
-    dispatch_async(dispatch_get_main_queue(), ^{ callback(loaded); });
+    dispatch_async(dispatch_get_main_queue(), ^{
+      callback(loaded);
+    });
   };
   NSString* checkedPath = CheckedStateSavesPath(path);
   if (!checkedPath || expectedGameID.length == 0 || ![self isStateOperationAllowed] ||
-      session != CurrentStateSessionIdentifier() || ![[self currentGameID] isEqualToString:expectedGameID] ||
-      ![[NSFileManager defaultManager] fileExistsAtPath:checkedPath]) {
+      session != CurrentStateSessionIdentifier() ||
+      ![[self currentGameID] isEqualToString:expectedGameID] ||
+      ![[NSFileManager defaultManager] fileExistsAtPath:checkedPath])
+  {
     finish(false);
     return;
   }
   std::string filename(checkedPath.fileSystemRepresentation);
   std::string expected(expectedGameID.UTF8String);
-  Core::QueueHostJob([filename, expected, session, finish](Core::System& system) {
-    bool loaded = false;
-    if (StateOperationAllowed(system, "completed path load")) {
-      {
-        const Core::CPUThreadGuard guard(system);
-        if (StateOperationAllowed(system, "completed path load") && session == CurrentStateSessionIdentifier() &&
-            SConfig::GetInstance().GetGameID() == expected) {
-          NSString* pathNow = [NSString stringWithUTF8String:filename.c_str()];
-          if ([CheckedStateSavesPath(pathNow) isEqualToString:pathNow] &&
-              [TVEmulationBridge stateFileIsCompatibleAtPath:pathNow])
-            loaded = State::LoadAsAndWait(system, filename);
+  Core::QueueHostJob(
+      [filename, expected, session, finish](Core::System& system) {
+        bool loaded = false;
+        if (StateOperationAllowed(system, "completed path load"))
+        {
+          {
+            const Core::CPUThreadGuard guard(system);
+            if (StateOperationAllowed(system, "completed path load") &&
+                session == CurrentStateSessionIdentifier() &&
+                SConfig::GetInstance().GetGameID() == expected)
+            {
+              NSString* pathNow = [NSString stringWithUTF8String:filename.c_str()];
+              if ([CheckedStateSavesPath(pathNow) isEqualToString:pathNow] &&
+                  [TVEmulationBridge stateFileIsCompatibleAtPath:pathNow])
+                loaded = State::LoadAsAndWait(system, filename);
+            }
+          }
         }
-      }
-    }
-    // Queue completion only after CPUThreadGuard restored the pre-load pause state.
-    finish(loaded);
-  }, true);
+        // Queue completion only after CPUThreadGuard restored the pre-load pause state.
+        finish(loaded);
+      },
+      true);
 }
 
-+ (BOOL)stateFileIsCompatibleAtPath:(NSString*)path {
++ (BOOL)stateFileIsCompatibleAtPath:(NSString*)path
+{
   if (path.length == 0)
     return NO;
   // 2603 made State::ReadHeader file-local. Only the two fixed-size header structs at the start
@@ -620,16 +737,18 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
       return NO;
   }
   // Match the loader's ACTUAL acceptance test (State.cpp ValidateHeaders): a state loads iff its
-  // version cookie decodes to the current STATE_VERSION. The old SCM-revision-string compare was far
-  // stricter than the loader — the rev string churns on every rebaseline build, so every prior save
-  // read as "Incompatible" even though it loads fine. COOKIE_BASE (0xBAADBABE) is the loader's fixed
-  // magic base (State.cpp, file-local), mirrored here since the bridge can't see the constant.
+  // version cookie decodes to the current STATE_VERSION. The old SCM-revision-string compare was
+  // far stricter than the loader — the rev string churns on every rebaseline build, so every prior
+  // save read as "Incompatible" even though it loads fine. COOKIE_BASE (0xBAADBABE) is the loader's
+  // fixed magic base (State.cpp, file-local), mirrored here since the bridge can't see the
+  // constant.
   static constexpr uint32_t kCookieBase = 0xBAADBABEu;
   const uint32_t loadedVersion = header.version_header.version_cookie - kCookieBase;
   return loadedVersion == State::GetVersion() ? YES : NO;
 }
 
-+ (void)captureScreenshotToPath:(NSString*)path {
++ (void)captureScreenshotToPath:(NSString*)path
+{
   if (path.length == 0)
     return;
   // Non-blocking request; FrameDumper writes the PNG on the next presented frame.
@@ -637,70 +756,105 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
     g_frame_dumper->SaveScreenshot(std::string(path.UTF8String));
 }
 
-+ (BOOL)isOverscanCompensationApplicable {
++ (BOOL)isOverscanCompensationApplicable
+{
   return [[EmulationCoordinator shared] isOverscanCompensationApplicable];
 }
 
-+ (BOOL)overscanFullscreenEnabled {
++ (BOOL)overscanFullscreenEnabled
+{
   return [[EmulationCoordinator shared] overscanFullscreenEnabled];
 }
 
-+ (void)setOverscanFullscreenEnabled:(BOOL)enabled {
++ (void)setOverscanFullscreenEnabled:(BOOL)enabled
+{
   [[EmulationCoordinator shared] setOverscanFullscreenEnabled:enabled];
 }
 
 // Display / Orientation helpers
-+ (void)resizeSurfaceNow {
-  if (g_presenter) {
++ (void)resizeSurfaceNow
+{
+  if (g_presenter)
+  {
     g_presenter->ResizeSurface();
   }
 }
 
-+ (void)reloadShadersNow {
-  if (g_framebuffer_manager) {
++ (void)redrawPausedFrame
+{
+  if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive)
+    return;
+  DOLHostQueueRunAsync(^{
+    auto& system = Core::System::GetInstance();
+    if (Core::GetState(system) != Core::State::Paused)
+      return;
+    Core::RunOnCPUThread(system, [] {
+      AsyncRequests::GetInstance()->PushEvent([] {
+        if (g_presenter && Core::GetState(Core::System::GetInstance()) == Core::State::Paused)
+          g_presenter->Present();
+      });
+    });
+  });
+}
+
++ (void)reloadShadersNow
+{
+  if (g_framebuffer_manager)
+  {
     g_framebuffer_manager->RecompileShaders();
   }
 }
 
-+ (NSInteger)internalResolution {
++ (NSInteger)internalResolution
+{
   return Config::Get(Config::GFX_EFB_SCALE);
 }
 
-+ (void)setInternalResolution:(NSInteger)scale {
++ (void)setInternalResolution:(NSInteger)scale
+{
   Config::SetCurrent(Config::GFX_EFB_SCALE, static_cast<int>(std::max<NSInteger>(scale, 0)));
 }
 
-+ (NSInteger)audioVolumePercent {
++ (NSInteger)audioVolumePercent
+{
   return Config::Get(Config::MAIN_AUDIO_VOLUME);
 }
 
-+ (void)setAudioVolumePercent:(NSInteger)percent {
-  Config::SetCurrent(Config::MAIN_AUDIO_VOLUME, static_cast<int>(std::clamp<NSInteger>(percent, 0, 100)));
++ (void)setAudioVolumePercent:(NSInteger)percent
+{
+  Config::SetCurrent(Config::MAIN_AUDIO_VOLUME,
+                     static_cast<int>(std::clamp<NSInteger>(percent, 0, 100)));
   ICubeUpdateAudioVolumeAsync();
 }
 
 // Fast-forward (configurable speed multiplier)
-+ (BOOL)toggleFastForward {
-  if (!g_isFastForwarding) {
++ (BOOL)toggleFastForward
+{
+  if (!g_isFastForwarding)
+  {
     // Store original speed and enable fast forward
     g_fastForwardOriginalSpeed = Config::Get(Config::MAIN_EMULATION_SPEED);
     ApplyConfiguredFastForwardSpeed();
 
     // Mute audio if configured
     if (!Config::Get(Config::MAIN_AUDIO_MUTED) &&
-        Config::Get(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT)) {
+        Config::Get(Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT))
+    {
       Config::SetCurrent(Config::MAIN_AUDIO_MUTED, true);
     }
 
     g_isFastForwarding = true;
-  } else {
+  }
+  else
+  {
     // Restore original speed and disable fast forward
     Core::SetIsThrottlerTempDisabled(false);
     Config::SetCurrent(Config::MAIN_EMULATION_SPEED, g_fastForwardOriginalSpeed);
 
     // Unmute audio if we muted it
     if (Config::Get(Config::MAIN_AUDIO_MUTED) &&
-        Config::GetActiveLayerForConfig(Config::MAIN_AUDIO_MUTED) == Config::LayerType::CurrentRun) {
+        Config::GetActiveLayerForConfig(Config::MAIN_AUDIO_MUTED) == Config::LayerType::CurrentRun)
+    {
       Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_AUDIO_MUTED);
     }
 
@@ -712,36 +866,55 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
   ICubeUpdateAudioVolumeAsync();
 
   dispatch_async(dispatch_get_main_queue(), ^{
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLFastForwardToggled" object:nil userInfo:@{ @"enabled": @(g_isFastForwarding) }];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLFastForwardToggled"
+                                                        object:nil
+                                                      userInfo:@{
+                                                        @"enabled" : @(g_isFastForwarding)
+                                                      }];
   });
   return g_isFastForwarding;
 }
 
-+ (BOOL)isFastForwardEnabled {
++ (BOOL)isFastForwardEnabled
+{
   // Check if current emulation speed is different from base speed or throttler is disabled
   float currentSpeed = Config::Get(Config::MAIN_EMULATION_SPEED);
   float baseSpeed = Config::GetBase(Config::MAIN_EMULATION_SPEED);
   return (currentSpeed != baseSpeed) || Core::GetIsThrottlerTempDisabled();
 }
 
-+ (void)setFastForwardSpeedPercent:(NSInteger)percent {
-  [[NSUserDefaults standardUserDefaults] setInteger:percent forKey:kFastForwardSpeedPercentDefaultsKey];
-  if (g_isFastForwarding) {
++ (void)setFastForwardSpeedPercent:(NSInteger)percent
+{
+  [[NSUserDefaults standardUserDefaults] setInteger:percent
+                                             forKey:kFastForwardSpeedPercentDefaultsKey];
+  if (g_isFastForwarding)
+  {
     ApplyConfiguredFastForwardSpeed();
   }
 }
 
-+ (BOOL)isCurrentSystemWii {
++ (BOOL)isCurrentSystemWii
+{
   return Core::System::GetInstance().IsWii();
 }
 
-+ (float)currentDrawAspectRatio {
++ (float)currentDrawAspectRatio
+{
   if (g_presenter)
     return (float)g_presenter->CalculateDrawAspectRatio();
   return 4.0f / 3.0f;
 }
 
-+ (void)setWiiIMUPointEnabled:(BOOL)enabled forWiimote:(NSInteger)wiimote {
++ (CGRect)currentPictureRectInFrame
+{
+  if (!g_presenter)
+    return CGRectNull;
+  const MathUtil::Rectangle<int>& rc = g_presenter->GetTargetRectangle();
+  return CGRectMake(rc.left, rc.top, rc.GetWidth(), rc.GetHeight());
+}
+
++ (void)setWiiIMUPointEnabled:(BOOL)enabled forWiimote:(NSInteger)wiimote
+{
   // Enable/disable Wiimote IMUPoint group to avoid fighting with touch IR.
   //
   // This used to be Core::RunOnCPUThread(..., wait_for_completion = true) and was
@@ -775,17 +948,25 @@ static std::atomic<uint64_t> s_resumeSettledSession{0};
     group->enabled.SetValue(enabled);
 }
 
-+ (CGRect)currentVideoContentRect {
++ (CGRect)currentVideoContentRect
+{
   UIView* view = [[EmulationCoordinator shared] mainDisplayView];
-  if (!view) return CGRectZero;
+  if (!view)
+    return CGRectZero;
   const CGFloat w = view.bounds.size.width;
   const CGFloat h = view.bounds.size.height;
-  if (w <= 0 || h <= 0) return CGRectZero;
+  if (w <= 0 || h <= 0)
+    return CGRectZero;
+  const CGRect bezel = [DOLShaderPostProcessor shared].bezelPictureInViewport;
+  if (!CGRectIsNull(bezel))
+    return CGRectMake(bezel.origin.x * w, bezel.origin.y * h, bezel.size.width * w,
+                      bezel.size.height * h);
   const CGFloat ar = (CGFloat)[self currentDrawAspectRatio];
   // Aspect-fit the video inside view.bounds
   CGFloat contentW = w;
   CGFloat contentH = w / ar;
-  if (contentH > h) {
+  if (contentH > h)
+  {
     contentH = h;
     contentW = h * ar;
   }

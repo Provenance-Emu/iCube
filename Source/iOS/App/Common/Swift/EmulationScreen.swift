@@ -297,6 +297,8 @@ struct EmulationScreen: View {
   /// keeps this shape until the game runs again (`ICubeBezels.surfaceFrame`).
   @State private var bezelDrawnAspect: CGFloat?
 
+  @Environment(\.displayScale) private var displayScale
+  @AppStorage("shader_enabled") private var bezelHasPictureFilter = false
   @AppStorage(ICubeBezels.seatKey) private var bezelSeat = TVBezelSeat.back.rawValue
 
   // iOS top overlay
@@ -474,10 +476,21 @@ struct EmulationScreen: View {
   }
   #endif
 
+  /// A TV's artwork and where it goes, with what `TVBezelArtworkView` needs to draw it as the layout placed it.
+  private struct BezelArtwork {
+    var bezel: TVBezel
+    var frame: CGRect
+    var placement: TVBezelLayout.Placement
+    var canvas: CGSize?
+    var shape: TVBezelPictureShape
+    var topInset: CGFloat
+  }
+
   /// Where the game surface and a TV's artwork go, in the emulation surface's coordinates.
   private struct BezelStage {
+    var scene: GameplayBezelRenderer.Request? = nil
     /// The TV and where its artwork goes; `nil` while the switcher previews the picture alone.
-    var artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?)?
+    var artwork: BezelArtwork?
     /// Where the game picture shows.
     var picture: CGRect
     /// The frame of the surface the core draws into: `picture`, or larger while it keeps an older shape.
@@ -493,14 +506,31 @@ struct EmulationScreen: View {
                         height: proxy.size.height + insets.top + insets.bottom)
     let state = bezelScreenState(canvas: canvas)
     let pictureAspect = gameAR
-    if let bezel = bezels.bezel, ICubeBezels.showsTV(state, choiceIsAutomatic: bezels.choiceIsAutomatic),
-       let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1),
-                                       seat: TVBezelSeat(rawValue: bezelSeat) ?? .back) {
-      // The TV is laid out on the whole screen, like a skin; the surface's coordinates start inside the safe area.
-      let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
-      return BezelStage(
-        artwork: (bezel, layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top), layout.placement, layout.canvas),
-        picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
+    if let bezel = bezels.bezel, !bezels.droppedForSession,
+       ICubeBezels.showsTV(state, choiceIsAutomatic: bezels.choiceIsAutomatic) {
+      let seat = TVBezelSeat(rawValue: bezelSeat) ?? .back
+      if canvas.width > canvas.height, bezel.image == nil, !bezels.sceneUnavailable.contains(bezel.id) {
+        let bounds = CGRect(x: -insets.leading, y: -insets.top, width: canvas.width, height: canvas.height)
+        let sceneCanvas = bezel.presetID == nil ? TVBezelCanvas.size(display: canvas, seat: seat) : TVBezelArtwork.canvas
+        let frame = ICubeBezels.aspectFit(aspect: sceneCanvas.width / sceneCanvas.height, in: CGRect(origin: .zero, size: canvas))
+        let viewport = CGRect(x: frame.minX / canvas.width, y: frame.minY / canvas.height,
+                              width: frame.width / canvas.width, height: frame.height / canvas.height)
+        let scene = GameplayBezelRenderer.Request(
+          bezel: bezel, canvas: sceneCanvas, viewport: viewport, surfaceAspect: canvas.width / canvas.height,
+          pixelWidth: frame.width * displayScale, shape: TVBezelPictureShape(aspect: CGSize(width: pictureAspect, height: 1)),
+          lightsRoom: bezels.lightsRoom, flatGlass: bezelHasPictureFilter)
+        return BezelStage(scene: scene, artwork: nil, picture: bounds, surface: bounds)
+      }
+      if let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1),
+                                         seat: seat, safeAreaTop: insets.top) {
+        // The surface's coordinates start inside the safe area.
+        let picture = layout.pictureFrame.offsetBy(dx: -insets.leading, dy: -insets.top)
+        return BezelStage(
+          artwork: BezelArtwork(bezel: bezel, frame: layout.artworkFrame.offsetBy(dx: -insets.leading, dy: -insets.top),
+                                placement: layout.placement, canvas: layout.canvas, shape: layout.shape,
+                                topInset: layout.canvasTopInset),
+          picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
+      }
     }
     guard bezelDrawnAspect != nil || bezelSwitcherIsUp else { return nil }
     // Fit the old picture into the same bounds the unadorned surface would use.
@@ -513,12 +543,14 @@ struct EmulationScreen: View {
     return BezelStage(artwork: nil, picture: picture, surface: ICubeBezels.surfaceFrame(showing: picture, drawnAspect: bezelDrawnAspect))
   }
 
-  private func bezelArtwork(_ artwork: (bezel: TVBezel, frame: CGRect, placement: TVBezelLayout.Placement, canvas: CGSize?)) -> some View {
-    TVBezelArtworkView(bezel: artwork.bezel, canvas: artwork.canvas) { loaded in bezels.artworkLoaded(loaded, id: artwork.bezel.id) }
-      .frame(width: artwork.frame.width, height: artwork.frame.height)
-      .position(x: artwork.frame.midX, y: artwork.frame.midY)
-      // One TV's artwork never lingers in the next TV's frame.
-      .id(artwork.bezel.id)
+  private func bezelArtwork(_ artwork: BezelArtwork) -> some View {
+    TVBezelArtworkView(bezel: artwork.bezel, canvas: artwork.canvas, shape: artwork.shape, topInset: artwork.topInset) { loaded in
+      bezels.artworkLoaded(loaded, id: artwork.bezel.id)
+    }
+    .frame(width: artwork.frame.width, height: artwork.frame.height)
+    .position(x: artwork.frame.midX, y: artwork.frame.midY)
+    // One TV's artwork never lingers in the next TV's frame.
+    .id(artwork.bezel.id)
   }
 
   /// The TV switcher's strip or its "More…" list is up over the paused game.
@@ -636,15 +668,15 @@ struct EmulationScreen: View {
 
   private var quickMenuSaveActions: QuickSaveMenuActions {
     QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
-      session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
-      isActive: { showQuickMenu && !showPauseMenu && !quickStateActionInFlight },
-      dismiss: { showQuickMenu = false }, handoff: .shared, openBrowser: {
-        // Acquire before the Quick Menu relinquishes its claim; Pause adopts it before showing the browser.
-        SaveStateService.capturePausePreview()
-        PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
-        pauseStartsInSaveBrowser = true
-        showPauseMenu = true
-      }, onBusyChanged: { quickStateActionInFlight = $0 }, report: { EmulationToast.post($0.message) })
+                         session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
+                         isActive: { showQuickMenu && !showPauseMenu && !quickStateActionInFlight },
+                         dismiss: { showQuickMenu = false }, handoff: .shared, openBrowser: {
+                           // Acquire before the Quick Menu relinquishes its claim; Pause adopts it before showing the browser.
+                           SaveStateService.capturePausePreview()
+                           PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
+                           pauseStartsInSaveBrowser = true
+                           showPauseMenu = true
+                         }, onBusyChanged: { quickStateActionInFlight = $0 }, report: { EmulationToast.post($0.message) })
   }
 
   private func pauseMenu(platform: PlatformKind) -> PauseMenuView {
@@ -774,6 +806,9 @@ struct EmulationScreen: View {
           .position(x: picture.midX, y: picture.midY)
         if let art = stage?.artwork, art.placement == .abovePicture { bezelArtwork(art) }
       }
+      .onChange(of: proxy.size, initial: true) { _, size in bezels.screenState = bezelScreenState(canvas: size) }
+      .onChange(of: stage?.scene, initial: true) { _, request in bezels.showScene(request) }
+      .onDisappear { bezels.showScene(nil) }
     }
     .ignoresSafeArea()
   }
@@ -850,7 +885,6 @@ struct EmulationScreen: View {
     }
     .onChange(of: showNoControllerNotice) { postOverlayVisibility() }
     .onAppear {
-      bezels.screenState = bezelScreenState(canvas: .zero)
       refreshBezelGame()
       attachLivePerformance()
       log.debug("[INPUT] tvOS EmulationScreen onAppear. input_debug=\(UserDefaults.standard.bool(forKey: "input_debug"))")
@@ -1079,6 +1113,8 @@ struct EmulationScreen: View {
           .position(x: picture.midX, y: picture.midY)
         if let art = stage?.artwork, art.placement == .abovePicture { bezelArtwork(art) }
       }
+      .onChange(of: stage?.scene, initial: true) { _, request in bezels.showScene(request) }
+      .onDisappear { bezels.showScene(nil) }
     }
     .onChange(of: UIDevice.current.orientation) {
       TVEmulationBridge.resizeSurfaceNow()
@@ -1235,46 +1271,46 @@ struct EmulationScreen: View {
 
   private var iosPresentedCanvas: some View {
     iosCanvas
-    // Single owner of the core's IMU pointer on the touchscreen Wii Remote: always OFF, whether the
-    // overlay is shown or hidden. The app drives that slot's IR itself (touch in drag/follow,
-    // device attitude in gyro mode) and keeps feeding the phone's motion into its IMU axes, so
-    // turning the core pointer ON while the overlay was hidden aimed the remote at the ceiling as
-    // soon as the phone was held upright: the hand vanished and never came back (there is no
-    // working Recenter on the touchscreen device). Only a slot bound to a physical motion
-    // controller owns the core pointer, and its profile sets it; this never touches that slot.
-    // This used to be toggled from four places (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode,
-    // the long-press handler, and setup).
-    .onChange(of: isTouchControlsActive) {
-      // No touchscreen Wii Remote: the overlay drives no pointer, so there is nothing to keep from
-      // fighting. `?? 0` used to flip Wii Remote 1's IMU pointer here even when a gyro pad owns it
-      // (controller hub decision 12).
-      guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
-      TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
-    }
+      // Single owner of the core's IMU pointer on the touchscreen Wii Remote: always OFF, whether the
+      // overlay is shown or hidden. The app drives that slot's IR itself (touch in drag/follow,
+      // device attitude in gyro mode) and keeps feeding the phone's motion into its IMU axes, so
+      // turning the core pointer ON while the overlay was hidden aimed the remote at the ceiling as
+      // soon as the phone was held upright: the hand vanished and never came back (there is no
+      // working Recenter on the touchscreen device). Only a slot bound to a physical motion
+      // controller owns the core pointer, and its profile sets it; this never touches that slot.
+      // This used to be toggled from four places (pad onAppear/onDisappear, TCWiiPad.setTouchIRMode,
+      // the long-press handler, and setup).
+      .onChange(of: isTouchControlsActive) {
+        // No touchscreen Wii Remote: the overlay drives no pointer, so there is nothing to keep from
+        // fighting. `?? 0` used to flip Wii Remote 1's IMU pointer here even when a gyro pad owns it
+        // (controller hub decision 12).
+        guard isWiiSystem, let touchSlot = controllerManager.touchscreenSlot(system: .wii) else { return }
+        TVEmulationBridge.setWiiIMUPointEnabled(false, forWiimote: touchSlot)
+      }
       .fullScreenCover(isPresented: $showPauseMenu, onDismiss: pauseCoverDismissed) {
         pauseMenu(platform: .ios)
       }
-    .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
-      if case .success(let urls) = result {
-        for url in urls {
-          let started = url.startAccessingSecurityScopedResource()
-          defer { if started { url.stopAccessingSecurityScopedResource() } }
-          let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
-          if slot > 0 { skyLastLoadedSlot = slot }
+      .fileImporter(isPresented: $showSkyImporter, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
+        if case .success(let urls) = result {
+          for url in urls {
+            let started = url.startAccessingSecurityScopedResource()
+            defer { if started { url.stopAccessingSecurityScopedResource() } }
+            let slot = DOLConfigBridge.skylanderLoad(fromPath: url.path)
+            if slot > 0 { skyLastLoadedSlot = slot }
+          }
         }
       }
-    }
-    .confirmationDialog("Clear Skylander Slot", isPresented: $showSkyClearPicker, titleVisibility: .visible) {
-      ForEach(1 ... 16, id: \.self) { slot in
-        Button("Slot \(slot)") { _ = DOLConfigBridge.skylanderRemove(atSlot: slot) }
-      }
-      if skyLastLoadedSlot > 0 {
-        Button("Clear Last Loaded (Slot \(skyLastLoadedSlot))", role: .destructive) {
-          _ = DOLConfigBridge.skylanderRemove(atSlot: skyLastLoadedSlot)
+      .confirmationDialog("Clear Skylander Slot", isPresented: $showSkyClearPicker, titleVisibility: .visible) {
+        ForEach(1 ... 16, id: \.self) { slot in
+          Button("Slot \(slot)") { _ = DOLConfigBridge.skylanderRemove(atSlot: slot) }
         }
+        if skyLastLoadedSlot > 0 {
+          Button("Clear Last Loaded (Slot \(skyLastLoadedSlot))", role: .destructive) {
+            _ = DOLConfigBridge.skylanderRemove(atSlot: skyLastLoadedSlot)
+          }
+        }
+        Button(L("Cancel"), role: .cancel) {}
       }
-      Button(L("Cancel"), role: .cancel) {}
-    }
   }
 
   private var iosLifecycleCanvas: some View {
@@ -1284,7 +1320,7 @@ struct EmulationScreen: View {
         refreshOverscanApplicable()
         renderHostOnExternalDisplay = EmulationCoordinator.shared().isExternalDisplayConnected
       }
-      // The strip closes itself when a TV can no longer show (portrait, a skin, an external display).
+      // The strip closes itself when a TV can no longer show (a skin, an external display).
       .onChange(of: bezelScreenState(canvas: bezelCanvas), initial: true) { _, state in bezels.screenState = state }
       .onDisappear { iosDidDisappear() }
       .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
@@ -1366,27 +1402,27 @@ struct EmulationScreen: View {
           pauseStartsInExitConfirm = false
           pauseStartsInControllers = false
         }
-      postOverlayVisibility()
-      isPaused = TVEmulationBridge.isPaused()
-      // The fullScreenCover transition perturbs the GeometryReader size and the Metal
-      // surface never resizes itself (updateUIViewController is empty), so without this
-      // the game could come back small, bottom-left, or half off screen until the next
-      // rotation.
-      if !visible { TVEmulationBridge.resizeSurfaceNow() }
-    }
-    .onChange(of: showQuickMenu) { postOverlayVisibility() }
+        postOverlayVisibility()
+        isPaused = TVEmulationBridge.isPaused()
+        // The fullScreenCover transition perturbs the GeometryReader size and the Metal
+        // surface never resizes itself (updateUIViewController is empty), so without this
+        // the game could come back small, bottom-left, or half off screen until the next
+        // rotation.
+        if !visible { TVEmulationBridge.resizeSurfaceNow() }
+      }
+      .onChange(of: showQuickMenu) { postOverlayVisibility() }
       .onChange(of: bezelSwitcherIsUp) { postOverlayVisibility() }
   }
 
   private var iosNavigationCanvas: some View {
     iosInputCanvas
-    // The library stack pushes this screen; hide its bar (iOS 26 renders leftover
-    // toolbar items as floating glass buttons that also swallow the top-edge tap).
-    .toolbar(.hidden, for: .navigationBar)
-    .navigationBarBackButtonHidden(true)
-    .statusBar(hidden: true)
-    .animation(TopBarStyle.transition, value: showTopBar)
-    .modifier(TopBarChildPresentationHold(visibility: $topBar, isPresented: topBarChildPresented))
+      // The library stack pushes this screen; hide its bar (iOS 26 renders leftover
+      // toolbar items as floating glass buttons that also swallow the top-edge tap).
+      .toolbar(.hidden, for: .navigationBar)
+      .navigationBarBackButtonHidden(true)
+      .statusBar(hidden: true)
+      .animation(TopBarStyle.transition, value: showTopBar)
+      .modifier(TopBarChildPresentationHold(visibility: $topBar, isPresented: topBarChildPresented))
   }
 
   private var iosScreen: some View {
@@ -1453,24 +1489,24 @@ struct EmulationScreen: View {
         Text("Do you want to stop the current game and return to the library?")
       }
       .alert(L("Couldn't save before quitting"), isPresented: Binding(
-      get: { quitSaveFailure != nil }, set: { if !$0 && !quitRequestInFlight { cancelTopBarQuitFailure() } })) {
-      if let failure = quitSaveFailure {
-        Button(L("Retry")) { retryTopBarQuit(failure) }
-        Button(L("Quit Without Saving"), role: .destructive) {
-          if TVEmulationBridge.stopWithoutSavingForUser(expectedSessionIdentifier: quitExpectedSessionIdentifier) {
-            finishQuitFromTopBar()
-          } else { cancelTopBarQuitFailure() }
-        }
-        Button(L("Cancel"), role: .cancel) { cancelTopBarQuitFailure() }
+        get: { quitSaveFailure != nil }, set: { if !$0, !quitRequestInFlight { cancelTopBarQuitFailure() } })) {
+          if let failure = quitSaveFailure {
+            Button(L("Retry")) { retryTopBarQuit(failure) }
+            Button(L("Quit Without Saving"), role: .destructive) {
+              if TVEmulationBridge.stopWithoutSavingForUser(expectedSessionIdentifier: quitExpectedSessionIdentifier) {
+                finishQuitFromTopBar()
+              } else { cancelTopBarQuitFailure() }
+            }
+            Button(L("Cancel"), role: .cancel) { cancelTopBarQuitFailure() }
+          }
+      } message: {
+        Text(L("Retry the save or choose Quit Without Saving. Unsaved progress will be lost."))
       }
-    } message: {
-      Text(L("Retry the save or choose Quit Without Saving. Unsaved progress will be lost."))
-    }
-    // Claim controller ownership for as long as the game is on screen. The
-    // library is only *covered*, not dismissed, so SwiftUI never sends it an
-    // onDisappear and its raw nav handlers would otherwise keep moving the grid
-    // (and could launch another game) underneath the running one.
-    .claimsController()
+      // Claim controller ownership for as long as the game is on screen. The
+      // library is only *covered*, not dismissed, so SwiftUI never sends it an
+      // onDisappear and its raw nav handlers would otherwise keep moving the grid
+      // (and could launch another game) underneath the running one.
+      .claimsController()
   }
 
   private func iosDidAppear() {
@@ -1981,10 +2017,10 @@ struct EmulationScreen: View {
 
   private func toolbarQuickActions() -> QuickSaveMenuActions {
     QuickSaveMenuActions(mode: { quickSaveMode }, slot: { selectedSlot },
-      session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
-      isActive: { UIApplication.shared.applicationState == .active && !showPauseMenu },
-      handoff: .shared, openBrowser: presentQuickSavePicker, onBusyChanged: { quickStateActionInFlight = $0 },
-      report: { EmulationToast.post($0.message) })
+                         session: .init(gameID: game.gameID, identifier: TVEmulationBridge.currentSessionIdentifier()),
+                         isActive: { UIApplication.shared.applicationState == .active && !showPauseMenu },
+                         handoff: .shared, openBrowser: presentQuickSavePicker, onBusyChanged: { quickStateActionInFlight = $0 },
+                         report: { EmulationToast.post($0.message) })
   }
 
   private func quickSaveFromTopBar() {
@@ -2192,6 +2228,7 @@ struct EmulationScreen: View {
   }
 
   // MARK: - HUD overlay/diagnostics toggle grid
+
   //
   // Replaces the stacked pile of overlay toggles (FPS/VPS/Speed/VBlank + perf graph
   // + overlay stats) with a scannable icon-over-label grid. Pure layout reorg —
@@ -2215,7 +2252,7 @@ struct EmulationScreen: View {
       .frame(maxWidth: .infinity)
       .padding(.vertical, 8)
       .foregroundColor(isOn.wrappedValue ? .white : .white.opacity(0.55))
-      .background((isOn.wrappedValue ? Color.blue.opacity(0.45) : Color.white.opacity(0.08)))
+      .background(isOn.wrappedValue ? Color.blue.opacity(0.45) : Color.white.opacity(0.08))
       .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
     .buttonStyle(.plain)
@@ -2243,7 +2280,7 @@ struct EmulationScreen: View {
   private func overlayToggleGrid() -> some View {
     let columns = [GridItem(.adaptive(minimum: 84), spacing: 8)]
     Toggle(L("Performance HUD"), isOn: Binding(get: { performanceControls.state.hud.isEnabled },
-      set: { performanceControls.apply(.hudEnabled($0)) }))
+                                               set: { performanceControls.apply(.hudEnabled($0)) }))
       .tint(.blue)
       .foregroundColor(.white)
     LazyVGrid(columns: columns, spacing: 8) {

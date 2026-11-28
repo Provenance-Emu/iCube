@@ -12,11 +12,17 @@ import SwiftUI
 /// The pause menu is a full-screen cover, so the strip cannot live inside it: the menu's Bezels item closes the cover
 /// (the game stays paused on the screen's own claim) and the screen shows this in its place.
 struct GameplayBezelStrip: View {
-  let session: GameplayBezelSession
+  @ObservedObject var session: GameplayBezelSession
   /// Keep or Cancel: back to the pause menu.
   let onClose: () -> Void
   /// "More…": the full list, in the strip's place.
   let onMore: () -> Void
+  /// How close the player sits to a built-in TV (`ICubeBezels.seat`), for the strip's Seat button.
+  @AppStorage(ICubeBezels.seatKey) private var seatRaw = TVBezelSeat.back.rawValue
+
+  private var seat: Binding<TVBezelSeat> {
+    Binding(get: { TVBezelSeat(rawValue: seatRaw) ?? .back }, set: { seatRaw = $0.rawValue })
+  }
 
   #if os(iOS)
   @State private var scopeID = UUID()
@@ -31,12 +37,14 @@ struct GameplayBezelStrip: View {
       Spacer(minLength: 0)
       #if os(tvOS)
       BezelSwitcherHost(session: session, commands: nil, showsControllerHints: false,
-                        supportsRoomLight: false, onClose: onClose, onMore: onMore)
+                        supportsRoomLight: session.supportsRoomLight, seat: seat, onClose: onClose,
+                        onMore: onMore)
       #else
       BezelSwitcherHost(session: session,
                         commands: pad.commands.eraseToAnyPublisher(),
                         showsControllerHints: !ControllerManager.shared.controllers.isEmpty,
-                        supportsRoomLight: false,
+                        supportsRoomLight: session.supportsRoomLight,
+                        seat: seat,
                         onClose: onClose,
                         onMore: onMore)
       #endif
@@ -93,7 +101,12 @@ struct GameplayBezelLibrarySheet: View {
   var body: some View {
     NavigationStack {
       TVBezelPickerView(
-        selection: Binding(get: { chosenBezel }, set: { chosenBezel = $0 ?? ExternalDisplayBezelRules.automaticBezelID }),
+        // Over a running game the TV picked is the TV that shows: the game's own TV goes, as it does for Keep
+        // in the strip.
+        selection: Binding(get: { chosenBezel }, set: { choice in
+          BezelChoice.chooseForEveryGame(choice ?? ExternalDisplayBezelRules.automaticBezelID, playing: game?.gameID,
+                                         systemID: game?.systemID, systemSuitsTV: true)
+        }),
         offersSystemAutomatic: true,
         game: game)
         .safeAreaInset(edge: .bottom) { seatPicker }

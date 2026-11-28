@@ -53,27 +53,27 @@ struct DolphinBlogView: View {
     }
     .navigationTitle("Dolphin Blog")
     #if !os(tvOS)
-      .navigationBarTitleDisplayMode(.large)
+    .navigationBarTitleDisplayMode(.large)
     #endif
-      .toolbar {
-        ToolbarItem(placement: .navigationBarTrailing) {
-          Button(action: {
-            Task { await refreshFeed() }
-          }) {
-            Image(systemName: refreshing ? "arrow.clockwise" : "arrow.clockwise")
-              .rotationEffect(.degrees(refreshing ? 360 : 0))
-              .animation(refreshing ? .linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: refreshing)
-          }
-          .disabled(refreshing)
+    .toolbar {
+      ToolbarItem(placement: .navigationBarTrailing) {
+        Button(action: {
+          Task { await refreshFeed() }
+        }) {
+          Image(systemName: refreshing ? "arrow.clockwise" : "arrow.clockwise")
+            .rotationEffect(.degrees(refreshing ? 360 : 0))
+            .animation(refreshing ? .linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: refreshing)
         }
+        .disabled(refreshing)
       }
-      .sheet(item: $selectedPost) { post in
-        // Its own pad scope, so B closes the post rather than popping the blog out from under it.
-        BlogPostDetailView(post: post).padBackNavigation()
-      }
-      .task {
-        await loadInitialFeed()
-      }
+    }
+    .sheet(item: $selectedPost) { post in
+      // Its own pad scope, so B closes the post rather than popping the blog out from under it.
+      BlogPostDetailView(post: post).padBackNavigation()
+    }
+    .task {
+      await loadInitialFeed()
+    }
   }
 
   private var headerView: some View {
@@ -601,22 +601,22 @@ struct BlogPostDetailView: View {
       )
       .navigationTitle("Blog Post")
       #if !os(tvOS)
-        .navigationBarTitleDisplayMode(.inline)
+      .navigationBarTitleDisplayMode(.inline)
       #endif
-        .toolbar {
-          ToolbarItem(placement: .navigationBarLeading) {
-            Button("Done") {
-              dismiss()
-            }
-          }
-
-          ToolbarItem(placement: .navigationBarTrailing) {
-            Button("Read Full Post") {
-              showingSafari = true
-            }
-            .foregroundColor(.blue)
+      .toolbar {
+        ToolbarItem(placement: .navigationBarLeading) {
+          Button("Done") {
+            dismiss()
           }
         }
+
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button("Read Full Post") {
+            showingSafari = true
+          }
+          .foregroundColor(.blue)
+        }
+      }
     }
     .sheet(isPresented: $showingSafari) {
       #if canImport(SafariServices)

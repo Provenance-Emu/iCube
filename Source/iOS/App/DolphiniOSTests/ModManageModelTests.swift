@@ -17,8 +17,15 @@ final class ModManageModelTests: XCTestCase {
   private final class Removals: @unchecked Sendable {
     private let lock = NSLock()
     private var paths: [String] = []
-    var removed: [String] { lock.lock(); defer { lock.unlock() }; return paths }
-    func record(_ more: [String]) { lock.lock(); paths += more; lock.unlock() }
+    var removed: [String] { lock.lock()
+      defer { lock.unlock() }
+      return paths
+    }
+
+    func record(_ more: [String]) { lock.lock()
+      paths += more
+      lock.unlock()
+    }
   }
 
   private func makeModel(removals: Removals, changes: @escaping () -> Void = {}) -> ModManageModel {

@@ -18,13 +18,13 @@ enum HTMLPlainText {
     while index < html.endIndex {
       let character = html[index]
       if character == "<", let close = html[index...].firstIndex(of: ">") {
-        let tag = String(html[html.index(after: index)..<close])
+        let tag = String(html[html.index(after: index) ..< close])
         handle(tag: tag, output: &output, skippingUntilClose: &skippingUntilClose)
         index = html.index(after: close)
       } else if skippingUntilClose != nil {
         index = html.index(after: index)
       } else if character == "&", let end = html[index...].prefix(12).firstIndex(of: ";"),
-                let decoded = decode(entity: String(html[html.index(after: index)..<end])) {
+                let decoded = decode(entity: String(html[html.index(after: index) ..< end])) {
         output.append(decoded)
         index = html.index(after: end)
       } else {
@@ -39,10 +39,10 @@ enum HTMLPlainText {
     let isClosing = rawTag.hasPrefix("/")
     let name = rawTag.drop { $0 == "/" }.prefix { !$0.isWhitespace && $0 != "/" }.lowercased()
     if let skipped = skippingUntilClose {
-      if isClosing && name == skipped { skippingUntilClose = nil }
+      if isClosing, name == skipped { skippingUntilClose = nil }
       return
     }
-    if !isClosing && (name == "script" || name == "style") {
+    if !isClosing, name == "script" || name == "style" {
       skippingUntilClose = name
     } else if name == "br" {
       output.append("\n")

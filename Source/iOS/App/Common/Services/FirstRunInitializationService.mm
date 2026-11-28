@@ -6,11 +6,11 @@
 #import "Common/FileUtil.h"
 #import "Common/IniFile.h"
 
+#include "Common/Config/Config.h"
 #import "Core/Config/MainSettings.h"
 #import "Core/HW/GCPad.h"
 #import "Core/HW/Wiimote.h"
-#import "Core/PowerPC/PowerPC.h" // for PowerPC::CPUCore enum
-#include "Common/Config/Config.h"
+#import "Core/PowerPC/PowerPC.h"  // for PowerPC::CPUCore enum
 
 #import "InputCommon/ControllerEmu/ControllerEmu.h"
 #import "InputCommon/InputConfig.h"
@@ -19,7 +19,8 @@
 
 @implementation FirstRunInitializationService
 
-- (void)importDefaultProfileForInputConfig:(InputConfig*)config {
+- (void)importDefaultProfileForInputConfig:(InputConfig*)config
+{
   ControllerEmu::EmulatedController* controller = config->GetController(0);
 
   const std::string builtInPath = config->GetSysProfileDirectoryPath() + "Touchscreen.ini";
@@ -34,10 +35,14 @@
   config->SaveConfig();
 }
 
-- (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(nullable NSDictionary<UIApplicationLaunchOptionsKey,id>*)launchOptions {
+- (BOOL)application:(UIApplication*)application
+    didFinishLaunchingWithOptions:
+        (nullable NSDictionary<UIApplicationLaunchOptionsKey, id>*)launchOptions
+{
   NSUserDefaults* userDefaults = NSUserDefaults.standardUserDefaults;
 
-  NSURL* defaultsPath = [[NSBundle mainBundle] URLForResource:@"DefaultPreferences" withExtension:@"plist"];
+  NSURL* defaultsPath = [[NSBundle mainBundle] URLForResource:@"DefaultPreferences"
+                                                withExtension:@"plist"];
   NSDictionary* defaultsDict = [NSDictionary dictionaryWithContentsOfURL:defaultsPath];
   [userDefaults registerDefaults:defaultsDict];
 
@@ -45,7 +50,8 @@
 
   [userDefaults setInteger:launchTimes + 1 forKey:@"launch_times"];
 
-  if (launchTimes == 0) {
+  if (launchTimes == 0)
+  {
 #if !TARGET_OS_TV
     // Player 1 and Wii Remote 1 start on the on-screen controls. tvOS has no touchscreen, so it
     // keeps the core defaults and the first pad is auto-assigned instead.
@@ -53,9 +59,12 @@
     [self importDefaultProfileForInputConfig:Wiimote::GetConfig()];
 #endif
 
-    if (Config::GetActiveLayerForConfig(Config::MAIN_GFX_BACKEND) == Config::LayerType::Base) {
+    if (Config::GetActiveLayerForConfig(Config::MAIN_GFX_BACKEND) == Config::LayerType::Base)
+    {
       Config::SetBase(Config::MAIN_GFX_BACKEND, "Metal");
-    } else {
+    }
+    else
+    {
       NSLog(@"[Config] Skipping Base default MAIN_GFX_BACKEND because higher layer is active");
     }
   }

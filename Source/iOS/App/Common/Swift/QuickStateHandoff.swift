@@ -17,6 +17,7 @@ final class QuickStateHandoff {
     var completed = false
     var sawNeutral = false
   }
+
   static let shared = QuickStateHandoff(arbiter: .shared, isCurrent: {
     TVEmulationBridge.currentGameID() == $0.gameID && TVEmulationBridge.currentSessionIdentifier() == $0.identifier
   })
@@ -30,7 +31,8 @@ final class QuickStateHandoff {
   var hasPendingOperation: Bool { !pending.isEmpty }
 
   init(arbiter: PauseArbiter, isCurrent: @escaping (QuickSaveSurfaceSession) -> Bool) {
-    self.arbiter = arbiter; self.isCurrent = isCurrent
+    self.arbiter = arbiter
+    self.isCurrent = isCurrent
   }
 
   @discardableResult
@@ -45,7 +47,9 @@ final class QuickStateHandoff {
 
   func complete(_ operation: Operation) {
     guard var state = pending[operation.id] else { return }
-    if !isCurrent(state.session) { discard(operation.id); return }
+    if !isCurrent(state.session) { discard(operation.id)
+      return
+    }
     state.completed = true
     state.sawNeutral = false // input during I/O never arms resume
     pending[operation.id] = state
@@ -57,7 +61,9 @@ final class QuickStateHandoff {
     let anotherOwnerIsPausing = arbiter.hasHolders(excluding: owned)
     for id in Array(pending.keys) {
       guard var state = pending[id] else { continue }
-      guard isCurrent(state.session) else { discard(id); continue }
+      guard isCurrent(state.session) else { discard(id)
+        continue
+      }
       guard state.completed else { continue }
       // Input used by another presentation or pause reason never carries across its dismissal.
       if anotherOwnerIsPausing || activationBlocked {
@@ -65,10 +71,13 @@ final class QuickStateHandoff {
         pending[id] = state
         continue
       }
-      if controlsNeutral ?? !active { state.sawNeutral = true; pending[id] = state }
-      else if active && state.sawNeutral { discard(id) }
+      if controlsNeutral ?? !active { state.sawNeutral = true
+        pending[id] = state
+      } else if active, state.sawNeutral { discard(id) }
     }
-    if pending.isEmpty { timer?.invalidate(); timer = nil }
+    if pending.isEmpty { timer?.invalidate()
+      timer = nil
+    }
   }
 
   private func discard(_ id: UUID) {
@@ -95,8 +104,8 @@ final class QuickStateHandoff {
         // Neither activation nor controller connection is input. Sample only in gameplay.
         let allowed = UIApplication.shared.applicationState == .active && !EmuEventVC.isPauseOverlayVisible()
         self.sampleInput(active: allowed && Self.gameplayInputActive(controllers: ControllerManager.shared.controllers),
-          controlsNeutral: allowed && Self.allControlsNeutral(),
-          activationBlocked: !allowed || Self.navigationControlsActive(controllers: ControllerManager.shared.controllers))
+                         controlsNeutral: allowed && Self.allControlsNeutral(),
+                         activationBlocked: !allowed || Self.navigationControlsActive(controllers: ControllerManager.shared.controllers))
       }
     }
   }
@@ -105,7 +114,7 @@ final class QuickStateHandoff {
   func noteGameplayInputBegan() {
     let allowed = UIApplication.shared.applicationState == .active && !EmuEventVC.isPauseOverlayVisible()
     sampleInput(active: allowed, controlsNeutral: false,
-      activationBlocked: !allowed || Self.navigationControlsActive(controllers: ControllerManager.shared.controllers))
+                activationBlocked: !allowed || Self.navigationControlsActive(controllers: ControllerManager.shared.controllers))
   }
 
   static func navigationControlsActive(controllers: [GCController]) -> Bool {
@@ -135,7 +144,7 @@ final class QuickStateHandoff {
     for controller in controllers {
       if let pad = controller.extendedGamepad {
         let buttons = [pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY,
-          pad.leftShoulder, pad.rightShoulder, pad.leftTrigger, pad.rightTrigger]
+                       pad.leftShoulder, pad.rightShoulder, pad.leftTrigger, pad.rightTrigger]
         if buttons.contains(where: { $0.isPressed }) || pad.leftThumbstickButton?.isPressed == true || pad.rightThumbstickButton?.isPressed == true { return true }
         for axis in [pad.dpad, pad.leftThumbstick, pad.rightThumbstick] {
           if abs(axis.xAxis.value) > 0.35 || abs(axis.yAxis.value) > 0.35 { return true }

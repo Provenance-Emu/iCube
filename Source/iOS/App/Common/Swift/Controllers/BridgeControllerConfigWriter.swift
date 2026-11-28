@@ -9,7 +9,6 @@ import Foundation
 /// The protocol's `port` parameters are 0-based; the bridges are all 1-based
 /// (`portOneBased` / `indexOneBased`), so every call here converts with `port + 1`.
 final class BridgeControllerConfigWriter: ControllerConfigWriting {
-
   // MARK: Port activation
 
   func setGCPortActive(_ active: Bool, port: Int) {

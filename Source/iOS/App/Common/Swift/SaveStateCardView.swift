@@ -1,6 +1,6 @@
+import PVHelp
 import SwiftUI
 import UIKit
-import PVHelp
 
 /// A single save-state thumbnail card. Renders identically wherever it is
 /// shown (the pause-menu grid in `SaveStateFilmstripView`, the cross-game
@@ -75,7 +75,6 @@ struct SaveStateCardView: View {
 
       VStack(alignment: .leading, spacing: 4) {
         titleText
-
 
         HStack(spacing: 8) {
           if state.isAuto {

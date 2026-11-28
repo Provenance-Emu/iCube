@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 import GameController
-import SwiftUI
 import simd
+import SwiftUI
 #if os(iOS)
 import CoreMotion
 #endif

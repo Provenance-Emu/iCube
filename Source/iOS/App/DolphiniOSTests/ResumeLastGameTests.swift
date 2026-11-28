@@ -36,7 +36,7 @@ final class ResumeLastGameTests: XCTestCase {
 
   func testNewestDateWinsEvenWhenTheListIsOutOfOrder() {
     let list = [
-      game("RSBE01", lastPlayed: now.addingTimeInterval(-3_600)),
+      game("RSBE01", lastPlayed: now.addingTimeInterval(-3600)),
       game("GALE01", lastPlayed: now),
       game("GM4E01", lastPlayed: now.addingTimeInterval(-60)),
     ]

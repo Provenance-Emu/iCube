@@ -15,8 +15,8 @@
 #include <optional>
 #include <type_traits>
 #include "Common/Config/Config.h"
-#include "Core/Config/MainSettings.h"
 #include "Core/Config/GraphicsSettings.h"
+#include "Core/Config/MainSettings.h"
 // Full definition of `AnisotropicFilteringMode` (GraphicsSettings.h only forward-declares
 // it) — needed to instantiate Layer::Get<AnisotropicFilteringMode> for the anisotropy key.
 #include "VideoCommon/VideoConfig.h"
@@ -57,24 +57,33 @@ typedef BOOL (^DOLResetBlock)(void);
 
 // MARK: - Value coercion helpers
 
-static BOOL CoerceBool(id v) {
-  if ([v isKindOfClass:[NSNumber class]]) return [v boolValue];
-  if ([v isKindOfClass:[NSString class]]) {
+static BOOL CoerceBool(id v)
+{
+  if ([v isKindOfClass:[NSNumber class]])
+    return [v boolValue];
+  if ([v isKindOfClass:[NSString class]])
+  {
     NSString* s = [(NSString*)v lowercaseString];
     return [s isEqualToString:@"true"] || [s isEqualToString:@"1"] || [s isEqualToString:@"yes"];
   }
   return NO;
 }
 
-static NSInteger CoerceInt(id v) {
-  if ([v isKindOfClass:[NSNumber class]]) return [v integerValue];
-  if ([v isKindOfClass:[NSString class]]) return [(NSString*)v integerValue];
+static NSInteger CoerceInt(id v)
+{
+  if ([v isKindOfClass:[NSNumber class]])
+    return [v integerValue];
+  if ([v isKindOfClass:[NSString class]])
+    return [(NSString*)v integerValue];
   return 0;
 }
 
-static NSString* CoerceString(id v) {
-  if ([v isKindOfClass:[NSString class]]) return v;
-  if ([v isKindOfClass:[NSNumber class]]) return [(NSNumber*)v stringValue];
+static NSString* CoerceString(id v)
+{
+  if ([v isKindOfClass:[NSString class]])
+    return v;
+  if ([v isKindOfClass:[NSNumber class]])
+    return [(NSNumber*)v stringValue];
   return @"";
 }
 
@@ -85,12 +94,18 @@ static NSString* CoerceString(id v) {
 // enum -> NSNumber of its underlying int (matching e.g. `(int)Config::Get(MAIN_CPU_CORE)`
 // above), std::string -> NSString.
 template <typename T>
-static id BoxConfigValue(const T& v) {
-  if constexpr (std::is_same_v<T, std::string>) {
+static id BoxConfigValue(const T& v)
+{
+  if constexpr (std::is_same_v<T, std::string>)
+  {
     return [NSString stringWithUTF8String:v.c_str()];
-  } else if constexpr (std::is_enum_v<T>) {
+  }
+  else if constexpr (std::is_enum_v<T>)
+  {
     return @(static_cast<int>(v));
-  } else {
+  }
+  else
+  {
     return @(v);
   }
 }
@@ -99,15 +114,21 @@ static id BoxConfigValue(const T& v) {
 // explicit entry for this key (Layer::Get<T> falls through to std::nullopt — this is
 // deliberately NOT the same as the key's default value), else the layer's raw value.
 template <typename T>
-static DOLLayerGetterBlock MakeLayerGetter(const Config::Info<T>& info) {
+static DOLLayerGetterBlock MakeLayerGetter(const Config::Info<T>& info)
+{
   const Config::Location location = info.GetLocation();
-  return ^id _Nullable(Config::LayerType layer) {
+  // clang-format off: RemoveSemicolon takes the `;` that ends a returned block literal.
+  return ^id _Nullable(Config::LayerType layer)
+  {
     std::shared_ptr<Config::Layer> layerPtr = Config::GetLayer(layer);
-    if (!layerPtr) return nil;
+    if (!layerPtr)
+      return nil;
     std::optional<T> value = layerPtr->Get<T>(location);
-    if (!value) return nil;
+    if (!value)
+      return nil;
     return BoxConfigValue<T>(*value);
   };
+  // clang-format on
 }
 
 // Deletes `location` from Base, PerGame (Config::LayerType::LocalGame), and CurrentRun,
@@ -116,15 +137,20 @@ static DOLLayerGetterBlock MakeLayerGetter(const Config::Info<T>& info) {
 // implementation serve every key regardless of its Info<T>. Does NOT fire
 // Config::OnConfigChanged() — callers resetting multiple keys (resetKeys:) must fire it once
 // for the whole batch after all deletions, not once per key.
-static DOLResetBlock MakeResetBlock(const Config::Location& location) {
-  return ^BOOL{
+static DOLResetBlock MakeResetBlock(const Config::Location& location)
+{
+  return ^BOOL {
     static constexpr Config::LayerType kResetLayers[] = {
-      Config::LayerType::Base, Config::LayerType::LocalGame, Config::LayerType::CurrentRun,
+        Config::LayerType::Base,
+        Config::LayerType::LocalGame,
+        Config::LayerType::CurrentRun,
     };
     BOOL changed = NO;
-    for (Config::LayerType lt : kResetLayers) {
+    for (Config::LayerType lt : kResetLayers)
+    {
       std::shared_ptr<Config::Layer> layerPtr = Config::GetLayer(lt);
-      if (layerPtr && layerPtr->DeleteKey(location)) changed = YES;
+      if (layerPtr && layerPtr->DeleteKey(location))
+        changed = YES;
     }
     return changed;
   };
@@ -136,16 +162,25 @@ static DOLResetBlock MakeResetBlock(const Config::Location& location) {
 // MakeLayerGetter(Config::GFX_ENHANCE_MAX_ANISOTROPY) would report the raw exponent, which
 // would silently disagree with `value` (the translated sample count from `snapshotAll`'s
 // getter) — so this key gets a dedicated layer getter that applies the same translation.
-static int AnisotropyExponentToSamples(int exponent) { return 1 << std::clamp(exponent, 0, 4); }
-static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter() {
+static int AnisotropyExponentToSamples(int exponent)
+{
+  return 1 << std::clamp(exponent, 0, 4);
+}
+static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter()
+{
   const Config::Location location = Config::GFX_ENHANCE_MAX_ANISOTROPY.GetLocation();
-  return ^id _Nullable(Config::LayerType layer) {
+  // clang-format off: RemoveSemicolon takes the `;` that ends a returned block literal.
+  return ^id _Nullable(Config::LayerType layer)
+  {
     std::shared_ptr<Config::Layer> layerPtr = Config::GetLayer(layer);
-    if (!layerPtr) return nil;
+    if (!layerPtr)
+      return nil;
     std::optional<AnisotropicFilteringMode> raw = layerPtr->Get<AnisotropicFilteringMode>(location);
-    if (!raw) return nil;
+    if (!raw)
+      return nil;
     return @(AnisotropyExponentToSamples(static_cast<int>(*raw)));
   };
+  // clang-format on
 }
 
 // MARK: - Key table
@@ -178,7 +213,8 @@ static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter() {
 // probe. Joe should sanity-check the boot-time set against the actual core
 // before trusting sweep deltas on borderline keys.
 
-+ (NSDictionary<NSString*, DOLSettingEntry*>*)table {
++ (NSDictionary<NSString*, DOLSettingEntry*>*)table
+{
   static NSDictionary<NSString*, DOLSettingEntry*>* table = nil;
   static dispatch_once_t once;
   dispatch_once(&once, ^{
@@ -186,165 +222,330 @@ static DOLLayerGetterBlock MakeAnisotropySamplesLayerGetter() {
 
     DOLSettingEntry* (^mk)(DOLSettingType, BOOL, DOLGetterBlock, DOLSetterBlock,
                            DOLLayerGetterBlock, DOLResetBlock) =
-      ^DOLSettingEntry*(DOLSettingType type, BOOL hot, DOLGetterBlock g, DOLSetterBlock s,
-                        DOLLayerGetterBlock lg, DOLResetBlock rb) {
-        DOLSettingEntry* e = [DOLSettingEntry new];
-        e.type = type;
-        e.hotSwappable = hot;
-        e.getter = g;
-        e.setter = s;
-        e.layerGetter = lg;
-        e.resetBlock = rb;
-        return e;
-      };
+        ^DOLSettingEntry*(DOLSettingType type, BOOL hot, DOLGetterBlock g, DOLSetterBlock s,
+                          DOLLayerGetterBlock lg, DOLResetBlock rb) {
+          DOLSettingEntry* e = [DOLSettingEntry new];
+          e.type = type;
+          e.hotSwappable = hot;
+          e.getter = g;
+          e.setter = s;
+          e.layerGetter = lg;
+          e.resetBlock = rb;
+          return e;
+        };
 
     // ---- Boot-time (hotSwappable = NO) ----
-    t[@"gfxBackend"] = mk(DOLSettingTypeString, NO,
-      ^id{ return [DOLConfigBridge gfxBackend]; },
-      ^(id v){ [DOLConfigBridge setGfxBackend:CoerceString(v)]; },
-      MakeLayerGetter(Config::MAIN_GFX_BACKEND), MakeResetBlock(Config::MAIN_GFX_BACKEND.GetLocation()));
+    t[@"gfxBackend"] = mk(
+        DOLSettingTypeString, NO,
+        ^id {
+          return [DOLConfigBridge gfxBackend];
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxBackend:CoerceString(v)];
+        },
+        MakeLayerGetter(Config::MAIN_GFX_BACKEND),
+        MakeResetBlock(Config::MAIN_GFX_BACKEND.GetLocation()));
 
-    t[@"mainCpuCore"] = mk(DOLSettingTypeInt, NO,
-      ^id{ return @([DOLConfigBridge mainCpuCore]); },
-      ^(id v){ [DOLConfigBridge setMainCpuCore:CoerceInt(v)]; },
-      MakeLayerGetter(Config::MAIN_CPU_CORE), MakeResetBlock(Config::MAIN_CPU_CORE.GetLocation()));
+    t[@"mainCpuCore"] = mk(
+        DOLSettingTypeInt, NO,
+        ^id {
+          return @([DOLConfigBridge mainCpuCore]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainCpuCore:CoerceInt(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CPU_CORE),
+        MakeResetBlock(Config::MAIN_CPU_CORE.GetLocation()));
 
-    t[@"mainMMU"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge mainMMU]); },
-      ^(id v){ [DOLConfigBridge setMainMMU:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_MMU), MakeResetBlock(Config::MAIN_MMU.GetLocation()));
+    t[@"mainMMU"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge mainMMU]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainMMU:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_MMU), MakeResetBlock(Config::MAIN_MMU.GetLocation()));
 
-    // iCube: CachedInterpreter link flags (boot-time; A/B over the debug API without touching the UI).
-    t[@"cirBlockLinking"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirBlockLinking]); },
-      ^(id v){ [DOLConfigBridge setCirBlockLinking:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_BLOCK_LINKING), MakeResetBlock(Config::MAIN_CIR_BLOCK_LINKING.GetLocation()));
+    // iCube: CachedInterpreter link flags (boot-time; A/B over the debug API without touching the
+    // UI).
+    t[@"cirBlockLinking"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirBlockLinking]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirBlockLinking:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_BLOCK_LINKING),
+        MakeResetBlock(Config::MAIN_CIR_BLOCK_LINKING.GetLocation()));
 
-    t[@"cirBlockLinkingValidate"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirBlockLinkingValidate]); },
-      ^(id v){ [DOLConfigBridge setCirBlockLinkingValidate:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE), MakeResetBlock(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE.GetLocation()));
+    t[@"cirBlockLinkingValidate"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirBlockLinkingValidate]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirBlockLinkingValidate:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE),
+        MakeResetBlock(Config::MAIN_CIR_BLOCK_LINKING_VALIDATE.GetLocation()));
 
     // iCube: FP / paired-single dispatch specialization. All default-OFF and
     // independently A/B-able by design, but they were unreachable from the bench,
     // so the one measurement that would justify turning them on could not be run.
     // Profiling NFS Underground put 18.7%% of dynamic dispatch in the GENERIC
     // 2-call FP+PS bucket these exist to eliminate.
-    t[@"cirSpecializedOps"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirSpecializedOps]); },
-      ^(id v){ [DOLConfigBridge setCirSpecializedOps:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_OPS), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_OPS.GetLocation()));
+    t[@"cirSpecializedOps"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirSpecializedOps]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirSpecializedOps:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_OPS),
+        MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_OPS.GetLocation()));
 
-    t[@"cirSpecializedOpsValidate"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirSpecializedOpsValidate]); },
-      ^(id v){ [DOLConfigBridge setCirSpecializedOpsValidate:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE.GetLocation()));
+    t[@"cirSpecializedOpsValidate"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirSpecializedOpsValidate]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirSpecializedOpsValidate:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE),
+        MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_OPS_VALIDATE.GetLocation()));
 
-    t[@"cirSpecializedFpLs"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirSpecializedFpLs]); },
-      ^(id v){ [DOLConfigBridge setCirSpecializedFpLs:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_FP_LS), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_FP_LS.GetLocation()));
+    t[@"cirSpecializedFpLs"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirSpecializedFpLs]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirSpecializedFpLs:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_FP_LS),
+        MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_FP_LS.GetLocation()));
 
-    t[@"cirSpecializedFpArith"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirSpecializedFpArith]); },
-      ^(id v){ [DOLConfigBridge setCirSpecializedFpArith:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_FP_ARITH), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_FP_ARITH.GetLocation()));
+    t[@"cirSpecializedFpArith"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirSpecializedFpArith]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirSpecializedFpArith:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_FP_ARITH),
+        MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_FP_ARITH.GetLocation()));
 
-    t[@"cirSpecializedPsq"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirSpecializedPsq]); },
-      ^(id v){ [DOLConfigBridge setCirSpecializedPsq:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_PSQ), MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_PSQ.GetLocation()));
+    t[@"cirSpecializedPsq"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirSpecializedPsq]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirSpecializedPsq:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_SPECIALIZED_PSQ),
+        MakeResetBlock(Config::MAIN_CIR_SPECIALIZED_PSQ.GetLocation()));
 
-    t[@"cirDynLinking"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirDynLinking]); },
-      ^(id v){ [DOLConfigBridge setCirDynLinking:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_DYN_LINKING), MakeResetBlock(Config::MAIN_CIR_DYN_LINKING.GetLocation()));
+    t[@"cirDynLinking"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirDynLinking]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirDynLinking:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_DYN_LINKING),
+        MakeResetBlock(Config::MAIN_CIR_DYN_LINKING.GetLocation()));
 
-    t[@"cirMemMicroOps"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirMemMicroOps]); },
-      ^(id v){ [DOLConfigBridge setCirMemMicroOps:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_MEM_MICROOPS), MakeResetBlock(Config::MAIN_CIR_MEM_MICROOPS.GetLocation()));
+    t[@"cirMemMicroOps"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirMemMicroOps]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirMemMicroOps:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_MEM_MICROOPS),
+        MakeResetBlock(Config::MAIN_CIR_MEM_MICROOPS.GetLocation()));
 
-    t[@"cirRecordChaining"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirRecordChaining]); },
-      ^(id v){ [DOLConfigBridge setCirRecordChaining:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_RECORD_CHAINING), MakeResetBlock(Config::MAIN_CIR_RECORD_CHAINING.GetLocation()));
+    t[@"cirRecordChaining"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirRecordChaining]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirRecordChaining:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_RECORD_CHAINING),
+        MakeResetBlock(Config::MAIN_CIR_RECORD_CHAINING.GetLocation()));
 
-    t[@"cirLongBlocks"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirLongBlocks]); },
-      ^(id v){ [DOLConfigBridge setCirLongBlocks:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_LONG_BLOCKS), MakeResetBlock(Config::MAIN_CIR_LONG_BLOCKS.GetLocation()));
+    t[@"cirLongBlocks"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirLongBlocks]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirLongBlocks:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_LONG_BLOCKS),
+        MakeResetBlock(Config::MAIN_CIR_LONG_BLOCKS.GetLocation()));
 
-    t[@"cirMicroPairs"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirMicroPairs]); },
-      ^(id v){ [DOLConfigBridge setCirMicroPairs:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_MICRO_PAIRS), MakeResetBlock(Config::MAIN_CIR_MICRO_PAIRS.GetLocation()));
+    t[@"cirMicroPairs"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirMicroPairs]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirMicroPairs:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_MICRO_PAIRS),
+        MakeResetBlock(Config::MAIN_CIR_MICRO_PAIRS.GetLocation()));
 
-        t[@"cirDynTargetCache"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirDynTargetCache]); },
-      ^(id v){ [DOLConfigBridge setCirDynTargetCache:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_DYN_TARGET_CACHE), MakeResetBlock(Config::MAIN_CIR_DYN_TARGET_CACHE.GetLocation()));
-    t[@"cirPicLoadstore"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @(Config::Get(Config::MAIN_CIR_PIC_LOADSTORE)); },
-      ^(id v){ Config::SetBaseOrCurrent(Config::MAIN_CIR_PIC_LOADSTORE, [v boolValue]); },
-      MakeLayerGetter(Config::MAIN_CIR_PIC_LOADSTORE), MakeResetBlock(Config::MAIN_CIR_PIC_LOADSTORE.GetLocation()));
+    t[@"cirDynTargetCache"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirDynTargetCache]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirDynTargetCache:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_DYN_TARGET_CACHE),
+        MakeResetBlock(Config::MAIN_CIR_DYN_TARGET_CACHE.GetLocation()));
+    t[@"cirPicLoadstore"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @(Config::Get(Config::MAIN_CIR_PIC_LOADSTORE));
+        },
+        ^(id v) {
+          Config::SetBaseOrCurrent(Config::MAIN_CIR_PIC_LOADSTORE, [v boolValue]);
+        },
+        MakeLayerGetter(Config::MAIN_CIR_PIC_LOADSTORE),
+        MakeResetBlock(Config::MAIN_CIR_PIC_LOADSTORE.GetLocation()));
 
-t[@"cirGatherPipeCopyFusion"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirGatherPipeCopyFusion]); },
-      ^(id v){ [DOLConfigBridge setCirGatherPipeCopyFusion:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_GP_COPY_FUSION), MakeResetBlock(Config::MAIN_CIR_GP_COPY_FUSION.GetLocation()));
+    t[@"cirGatherPipeCopyFusion"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirGatherPipeCopyFusion]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirGatherPipeCopyFusion:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_GP_COPY_FUSION),
+        MakeResetBlock(Config::MAIN_CIR_GP_COPY_FUSION.GetLocation()));
 
-    t[@"mainFastmem"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge mainFastmem]); },
-      ^(id v){ [DOLConfigBridge setMainFastmem:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_FASTMEM), MakeResetBlock(Config::MAIN_FASTMEM.GetLocation()));
+    t[@"mainFastmem"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge mainFastmem]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainFastmem:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_FASTMEM), MakeResetBlock(Config::MAIN_FASTMEM.GetLocation()));
 
-    t[@"mainCpuThread"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge mainCpuThread]); },
-      ^(id v){ [DOLConfigBridge setMainCpuThread:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CPU_THREAD), MakeResetBlock(Config::MAIN_CPU_THREAD.GetLocation()));
+    t[@"mainCpuThread"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge mainCpuThread]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainCpuThread:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CPU_THREAD),
+        MakeResetBlock(Config::MAIN_CPU_THREAD.GetLocation()));
 
-    t[@"mainDSPThread"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge mainDSPThread]); },
-      ^(id v){ [DOLConfigBridge setMainDSPThread:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_DSP_THREAD), MakeResetBlock(Config::MAIN_DSP_THREAD.GetLocation()));
+    t[@"mainDSPThread"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge mainDSPThread]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainDSPThread:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_DSP_THREAD),
+        MakeResetBlock(Config::MAIN_DSP_THREAD.GetLocation()));
 
-    t[@"mainAccurateCpuCache"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge mainAccurateCpuCache]); },
-      ^(id v){ [DOLConfigBridge setMainAccurateCpuCache:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_ACCURATE_CPU_CACHE), MakeResetBlock(Config::MAIN_ACCURATE_CPU_CACHE.GetLocation()));
+    t[@"mainAccurateCpuCache"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge mainAccurateCpuCache]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainAccurateCpuCache:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_ACCURATE_CPU_CACHE),
+        MakeResetBlock(Config::MAIN_ACCURATE_CPU_CACHE.GetLocation()));
 
-    t[@"mainRamOverrideEnable"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge mainRamOverrideEnable]); },
-      ^(id v){ [DOLConfigBridge setMainRamOverrideEnable:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_RAM_OVERRIDE_ENABLE), MakeResetBlock(Config::MAIN_RAM_OVERRIDE_ENABLE.GetLocation()));
+    t[@"mainRamOverrideEnable"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge mainRamOverrideEnable]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainRamOverrideEnable:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_RAM_OVERRIDE_ENABLE),
+        MakeResetBlock(Config::MAIN_RAM_OVERRIDE_ENABLE.GetLocation()));
 
-    t[@"gfxBackendMultithreading"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge gfxBackendMultithreading]); },
-      ^(id v){ [DOLConfigBridge setGfxBackendMultithreading:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_BACKEND_MULTITHREADING), MakeResetBlock(Config::GFX_BACKEND_MULTITHREADING.GetLocation()));
+    t[@"gfxBackendMultithreading"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge gfxBackendMultithreading]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxBackendMultithreading:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_BACKEND_MULTITHREADING),
+        MakeResetBlock(Config::GFX_BACKEND_MULTITHREADING.GetLocation()));
 
-    t[@"gfxShaderCache"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge gfxShaderCache]); },
-      ^(id v){ [DOLConfigBridge setGfxShaderCache:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_SHADER_CACHE), MakeResetBlock(Config::GFX_SHADER_CACHE.GetLocation()));
+    t[@"gfxShaderCache"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge gfxShaderCache]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxShaderCache:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_SHADER_CACHE),
+        MakeResetBlock(Config::GFX_SHADER_CACHE.GetLocation()));
 
-    t[@"gfxWaitForShadersBeforeStarting"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge gfxWaitForShadersBeforeStarting]); },
-      ^(id v){ [DOLConfigBridge setGfxWaitForShadersBeforeStarting:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING),
-      MakeResetBlock(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING.GetLocation()));
+    t[@"gfxWaitForShadersBeforeStarting"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge gfxWaitForShadersBeforeStarting]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxWaitForShadersBeforeStarting:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING),
+        MakeResetBlock(Config::GFX_WAIT_FOR_SHADERS_BEFORE_STARTING.GetLocation()));
 
     // ---- Hot-swappable (hotSwappable = YES) ----
-    t[@"gfxVSync"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxVSync]); },
-      ^(id v){ [DOLConfigBridge setGfxVSync:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_VSYNC), MakeResetBlock(Config::GFX_VSYNC.GetLocation()));
+    t[@"gfxVSync"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxVSync]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxVSync:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_VSYNC), MakeResetBlock(Config::GFX_VSYNC.GetLocation()));
 
-    t[@"mainEmulationSpeedPercent"] = mk(DOLSettingTypeInt, YES,
-      ^id{ return @([DOLConfigBridge mainEmulationSpeedPercent]); },
-      ^(id v){ [DOLConfigBridge setMainEmulationSpeedPercent:CoerceInt(v)]; },
-      MakeLayerGetter(Config::MAIN_EMULATION_SPEED), MakeResetBlock(Config::MAIN_EMULATION_SPEED.GetLocation()));
+    t[@"mainEmulationSpeedPercent"] = mk(
+        DOLSettingTypeInt, YES,
+        ^id {
+          return @([DOLConfigBridge mainEmulationSpeedPercent]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainEmulationSpeedPercent:CoerceInt(v)];
+        },
+        MakeLayerGetter(Config::MAIN_EMULATION_SPEED),
+        MakeResetBlock(Config::MAIN_EMULATION_SPEED.GetLocation()));
 
     // iCube: the emulated-CPU and VBI clock levers, plus the adaptive controller that
     // drives them. Exposed so the perf bench can A/B the single most impactful perf
@@ -352,39 +553,69 @@ t[@"cirGatherPipeCopyFusion"] = mk(DOLSettingTypeBool, NO,
     // renders 25fps" needed hand-toggling in Settings. CoreTimingManager::RefreshConfig
     // is registered as a config-changed callback (CoreTiming.cpp:108), so the four
     // Config-backed keys apply live.
-    t[@"mainOverclockEnable"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge mainOverclockEnable]); },
-      ^(id v){ [DOLConfigBridge setMainOverclockEnable:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_OVERCLOCK_ENABLE), MakeResetBlock(Config::MAIN_OVERCLOCK_ENABLE.GetLocation()));
+    t[@"mainOverclockEnable"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge mainOverclockEnable]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainOverclockEnable:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_OVERCLOCK_ENABLE),
+        MakeResetBlock(Config::MAIN_OVERCLOCK_ENABLE.GetLocation()));
 
-    t[@"mainOverclockPercent"] = mk(DOLSettingTypeInt, YES,
-      ^id{ return @([DOLConfigBridge mainOverclockPercent]); },
-      ^(id v){ [DOLConfigBridge setMainOverclockPercent:CoerceInt(v)]; },
-      MakeLayerGetter(Config::MAIN_OVERCLOCK), MakeResetBlock(Config::MAIN_OVERCLOCK.GetLocation()));
+    t[@"mainOverclockPercent"] = mk(
+        DOLSettingTypeInt, YES,
+        ^id {
+          return @([DOLConfigBridge mainOverclockPercent]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainOverclockPercent:CoerceInt(v)];
+        },
+        MakeLayerGetter(Config::MAIN_OVERCLOCK),
+        MakeResetBlock(Config::MAIN_OVERCLOCK.GetLocation()));
 
-    t[@"mainViOverclockEnable"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge mainViOverclockEnable]); },
-      ^(id v){ [DOLConfigBridge setMainViOverclockEnable:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_VI_OVERCLOCK_ENABLE), MakeResetBlock(Config::MAIN_VI_OVERCLOCK_ENABLE.GetLocation()));
+    t[@"mainViOverclockEnable"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge mainViOverclockEnable]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainViOverclockEnable:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_VI_OVERCLOCK_ENABLE),
+        MakeResetBlock(Config::MAIN_VI_OVERCLOCK_ENABLE.GetLocation()));
 
-    t[@"mainViOverclockPercent"] = mk(DOLSettingTypeInt, YES,
-      ^id{ return @([DOLConfigBridge mainViOverclockPercent]); },
-      ^(id v){ [DOLConfigBridge setMainViOverclockPercent:CoerceInt(v)]; },
-      MakeLayerGetter(Config::MAIN_VI_OVERCLOCK), MakeResetBlock(Config::MAIN_VI_OVERCLOCK.GetLocation()));
+    t[@"mainViOverclockPercent"] = mk(
+        DOLSettingTypeInt, YES,
+        ^id {
+          return @([DOLConfigBridge mainViOverclockPercent]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainViOverclockPercent:CoerceInt(v)];
+        },
+        MakeLayerGetter(Config::MAIN_VI_OVERCLOCK),
+        MakeResetBlock(Config::MAIN_VI_OVERCLOCK.GetLocation()));
 
     // NSUserDefaults-backed, not Config: the adaptive loop reads this key directly
     // (EmulationCoordinator.mm:748) and takes ownership of both clock levers while it
     // runs, so a sweep over the four keys above is only meaningful with this OFF.
     // It is read when the loop arms at boot, hence hotSwappable = NO. No layer getter:
     // there is no Config layer stack behind a UserDefault.
-    t[@"adaptiveClockEnable"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([[NSUserDefaults standardUserDefaults] boolForKey:@"adaptive_clock_enable"]); },
-      ^(id v){ [[NSUserDefaults standardUserDefaults] setBool:CoerceBool(v) forKey:@"adaptive_clock_enable"]; },
-      nil,
-      ^BOOL{
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"adaptive_clock_enable"];
-        return YES;
-      });
+    t[@"adaptiveClockEnable"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([[NSUserDefaults standardUserDefaults] boolForKey:@"adaptive_clock_enable"]);
+        },
+        ^(id v) {
+          [[NSUserDefaults standardUserDefaults] setBool:CoerceBool(v)
+                                                  forKey:@"adaptive_clock_enable"];
+        },
+        nil,
+        ^BOOL {
+          [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"adaptive_clock_enable"];
+          return YES;
+        });
 
     // NSUserDefaults-backed, read at boot into MAIN_CIR_PROFILE by EmulationCoordinator
     // (:1763) so CachedInterpreter::Init picks it up for the run. Its own comment already
@@ -392,195 +623,355 @@ t[@"cirGatherPipeCopyFusion"] = mk(DOLSettingTypeBool, NO,
     // is eating the CPU thread" on a title that will not hit full speed -- the report comes
     // back from GET /api/debug/hot-blocks. Boot-time: flipping it mid-run does nothing until
     // the game is rebooted, which is also when the counters reset.
-    t[@"cirProfile"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([[NSUserDefaults standardUserDefaults] boolForKey:@"icube.cirProfile"]); },
-      ^(id v){ [[NSUserDefaults standardUserDefaults] setBool:CoerceBool(v) forKey:@"icube.cirProfile"]; },
-      nil,
-      ^BOOL{
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"icube.cirProfile"];
-        return YES;
-      });
+    t[@"cirProfile"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([[NSUserDefaults standardUserDefaults] boolForKey:@"icube.cirProfile"]);
+        },
+        ^(id v) {
+          [[NSUserDefaults standardUserDefaults] setBool:CoerceBool(v) forKey:@"icube.cirProfile"];
+        },
+        nil,
+        ^BOOL {
+          [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"icube.cirProfile"];
+          return YES;
+        });
 
-    t[@"audioVolume"] = mk(DOLSettingTypeInt, YES,
-      ^id{ return @([DOLConfigBridge audioVolume]); },
-      ^(id v){ [DOLConfigBridge setAudioVolume:CoerceInt(v)]; },
-      MakeLayerGetter(Config::MAIN_AUDIO_VOLUME), MakeResetBlock(Config::MAIN_AUDIO_VOLUME.GetLocation()));
+    t[@"audioVolume"] = mk(
+        DOLSettingTypeInt, YES,
+        ^id {
+          return @([DOLConfigBridge audioVolume]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setAudioVolume:CoerceInt(v)];
+        },
+        MakeLayerGetter(Config::MAIN_AUDIO_VOLUME),
+        MakeResetBlock(Config::MAIN_AUDIO_VOLUME.GetLocation()));
 
-    t[@"gfxWidescreenHack"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxWidescreenHack]); },
-      ^(id v){ [DOLConfigBridge setGfxWidescreenHack:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_WIDESCREEN_HACK), MakeResetBlock(Config::GFX_WIDESCREEN_HACK.GetLocation()));
+    t[@"gfxWidescreenHack"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxWidescreenHack]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxWidescreenHack:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_WIDESCREEN_HACK),
+        MakeResetBlock(Config::GFX_WIDESCREEN_HACK.GetLocation()));
 
-    t[@"gfxMetalFXSpatialUpscale"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxMetalFXSpatialUpscale]); },
-      ^(id v){ [DOLConfigBridge setGfxMetalFXSpatialUpscale:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE),
-      MakeResetBlock(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE.GetLocation()));
+    t[@"gfxMetalFXSpatialUpscale"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxMetalFXSpatialUpscale]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxMetalFXSpatialUpscale:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE),
+        MakeResetBlock(Config::GFX_MTL_METALFX_SPATIAL_UPSCALE.GetLocation()));
 
-    t[@"gfxDisableFog"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxDisableFog]); },
-      ^(id v){ [DOLConfigBridge setGfxDisableFog:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_DISABLE_FOG), MakeResetBlock(Config::GFX_DISABLE_FOG.GetLocation()));
+    t[@"gfxDisableFog"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxDisableFog]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxDisableFog:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_DISABLE_FOG),
+        MakeResetBlock(Config::GFX_DISABLE_FOG.GetLocation()));
 
     // See MakeAnisotropySamplesLayerGetter's comment: the layer getter here reports the
     // translated sample count, matching this key's `value`/setter, not the raw exponent.
-    t[@"gfxEnhanceAnisotropySamples"] = mk(DOLSettingTypeInt, YES,
-      ^id{ return @([DOLConfigBridge gfxEnhanceAnisotropySamples]); },
-      ^(id v){ [DOLConfigBridge setGfxEnhanceAnisotropySamples:CoerceInt(v)]; },
-      MakeAnisotropySamplesLayerGetter(), MakeResetBlock(Config::GFX_ENHANCE_MAX_ANISOTROPY.GetLocation()));
+    t[@"gfxEnhanceAnisotropySamples"] = mk(
+        DOLSettingTypeInt, YES,
+        ^id {
+          return @([DOLConfigBridge gfxEnhanceAnisotropySamples]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxEnhanceAnisotropySamples:CoerceInt(v)];
+        },
+        MakeAnisotropySamplesLayerGetter(),
+        MakeResetBlock(Config::GFX_ENHANCE_MAX_ANISOTROPY.GetLocation()));
 
-    t[@"gfxShowFPS"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxShowFPS]); },
-      ^(id v){ [DOLConfigBridge setGfxShowFPS:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_SHOW_FPS), MakeResetBlock(Config::GFX_SHOW_FPS.GetLocation()));
+    t[@"gfxShowFPS"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxShowFPS]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxShowFPS:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_SHOW_FPS), MakeResetBlock(Config::GFX_SHOW_FPS.GetLocation()));
 
-    t[@"gfxHackSkipEfbCopyToRam"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxHackSkipEfbCopyToRam]); },
-      ^(id v){ [DOLConfigBridge setGfxHackSkipEfbCopyToRam:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM),
-      MakeResetBlock(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM.GetLocation()));
+    t[@"gfxHackSkipEfbCopyToRam"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxHackSkipEfbCopyToRam]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxHackSkipEfbCopyToRam:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM),
+        MakeResetBlock(Config::GFX_HACK_SKIP_EFB_COPY_TO_RAM.GetLocation()));
 
-    t[@"gfxHackSkipXfbCopyToRam"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxHackSkipXfbCopyToRam]); },
-      ^(id v){ [DOLConfigBridge setGfxHackSkipXfbCopyToRam:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM),
-      MakeResetBlock(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM.GetLocation()));
+    t[@"gfxHackSkipXfbCopyToRam"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxHackSkipXfbCopyToRam]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxHackSkipXfbCopyToRam:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM),
+        MakeResetBlock(Config::GFX_HACK_SKIP_XFB_COPY_TO_RAM.GetLocation()));
 
-    t[@"gfxCpuCull"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxCpuCull]); },
-      ^(id v){ [DOLConfigBridge setGfxCpuCull:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_CPU_CULL), MakeResetBlock(Config::GFX_CPU_CULL.GetLocation()));
+    t[@"gfxCpuCull"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxCpuCull]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxCpuCull:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_CPU_CULL), MakeResetBlock(Config::GFX_CPU_CULL.GetLocation()));
 
     // EFB internal-resolution scale applies live: changing it raises
     // CONFIG_CHANGE_BIT_TARGET_SIZE in VideoConfig.cpp's config-change diff, which the
     // backend picks up without a reboot -> hotSwappable = YES (moved here from the
     // boot-time section above).
-    t[@"gfxEfbScale"] = mk(DOLSettingTypeInt, YES,
-      ^id{ return @([DOLConfigBridge gfxEfbScale]); },
-      ^(id v){ [DOLConfigBridge setGfxEfbScale:CoerceInt(v)]; },
-      MakeLayerGetter(Config::GFX_EFB_SCALE), MakeResetBlock(Config::GFX_EFB_SCALE.GetLocation()));
+    t[@"gfxEfbScale"] = mk(
+        DOLSettingTypeInt, YES,
+        ^id {
+          return @([DOLConfigBridge gfxEfbScale]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxEfbScale:CoerceInt(v)];
+        },
+        MakeLayerGetter(Config::GFX_EFB_SCALE),
+        MakeResetBlock(Config::GFX_EFB_SCALE.GetLocation()));
 
-    t[@"gfxHackFastMath"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxHackFastMath]); },
-      ^(id v){ [DOLConfigBridge setGfxHackFastMath:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_HACK_FAST_MATH), MakeResetBlock(Config::GFX_HACK_FAST_MATH.GetLocation()));
+    t[@"gfxHackFastMath"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxHackFastMath]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxHackFastMath:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_HACK_FAST_MATH),
+        MakeResetBlock(Config::GFX_HACK_FAST_MATH.GetLocation()));
 
     // ---- Perf-default evaluation knobs (2026-09-26). All boot-time except the NEON texture
     // decoder, which VideoConfig::Refresh re-reads on every config change. ----
-    t[@"gfxShaderCompilationMode"] = mk(DOLSettingTypeInt, NO,
-      ^id{ return @([DOLConfigBridge gfxShaderCompilationMode]); },
-      ^(id v){ [DOLConfigBridge setGfxShaderCompilationMode:CoerceInt(v)]; },
-      MakeLayerGetter(Config::GFX_SHADER_COMPILATION_MODE),
-      MakeResetBlock(Config::GFX_SHADER_COMPILATION_MODE.GetLocation()));
+    t[@"gfxShaderCompilationMode"] = mk(
+        DOLSettingTypeInt, NO,
+        ^id {
+          return @([DOLConfigBridge gfxShaderCompilationMode]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxShaderCompilationMode:CoerceInt(v)];
+        },
+        MakeLayerGetter(Config::GFX_SHADER_COMPILATION_MODE),
+        MakeResetBlock(Config::GFX_SHADER_COMPILATION_MODE.GetLocation()));
 
     // Read once in CachedInterpreter::Init; the core comment records that the hints were
     // measured SLOWER (+33 % by removal), hence default false.
-    t[@"mainCachedInterpreterPrefetch"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge mainCachedInterpreterPrefetch]); },
-      ^(id v){ [DOLConfigBridge setMainCachedInterpreterPrefetch:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CACHED_INTERPRETER_PREFETCH),
-      MakeResetBlock(Config::MAIN_CACHED_INTERPRETER_PREFETCH.GetLocation()));
+    t[@"mainCachedInterpreterPrefetch"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge mainCachedInterpreterPrefetch]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setMainCachedInterpreterPrefetch:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CACHED_INTERPRETER_PREFETCH),
+        MakeResetBlock(Config::MAIN_CACHED_INTERPRETER_PREFETCH.GetLocation()));
 
     // Interpreter::RefreshNeonPairedConfig runs at boot.
-    t[@"cirPsNeon"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirPsNeon]); },
-      ^(id v){ [DOLConfigBridge setCirPsNeon:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_PS_NEON), MakeResetBlock(Config::MAIN_CIR_PS_NEON.GetLocation()));
+    t[@"cirPsNeon"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirPsNeon]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirPsNeon:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_PS_NEON),
+        MakeResetBlock(Config::MAIN_CIR_PS_NEON.GetLocation()));
 
-    t[@"cirPsNeonValidate"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirPsNeonValidate]); },
-      ^(id v){ [DOLConfigBridge setCirPsNeonValidate:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_PS_NEON_VALIDATE),
-      MakeResetBlock(Config::MAIN_CIR_PS_NEON_VALIDATE.GetLocation()));
+    t[@"cirPsNeonValidate"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirPsNeonValidate]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirPsNeonValidate:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_PS_NEON_VALIDATE),
+        MakeResetBlock(Config::MAIN_CIR_PS_NEON_VALIDATE.GetLocation()));
 
-    t[@"gfxHackNeonTextureDecode"] = mk(DOLSettingTypeBool, YES,
-      ^id{ return @([DOLConfigBridge gfxHackNeonTextureDecode]); },
-      ^(id v){ [DOLConfigBridge setGfxHackNeonTextureDecode:CoerceBool(v)]; },
-      MakeLayerGetter(Config::GFX_HACK_NEON_TEXTURE_DECODE),
-      MakeResetBlock(Config::GFX_HACK_NEON_TEXTURE_DECODE.GetLocation()));
+    t[@"gfxHackNeonTextureDecode"] = mk(
+        DOLSettingTypeBool, YES,
+        ^id {
+          return @([DOLConfigBridge gfxHackNeonTextureDecode]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setGfxHackNeonTextureDecode:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::GFX_HACK_NEON_TEXTURE_DECODE),
+        MakeResetBlock(Config::GFX_HACK_NEON_TEXTURE_DECODE.GetLocation()));
 
     // NSUserDefaults-backed, read when the jitless vertex loaders are created at boot
     // (EmulationCoordinator ICubeJitlessVertexLoaderType): 0 = Software, 1 = NEON, 2 = Compare.
-    t[@"vertexLoaderMode"] = mk(DOLSettingTypeInt, NO,
-      ^id{
-        NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
-        return @([d objectForKey:@"icube_vertex_loader_mode"] == nil ? 1 : [d integerForKey:@"icube_vertex_loader_mode"]);
-      },
-      ^(id v){ [[NSUserDefaults standardUserDefaults] setInteger:CoerceInt(v) forKey:@"icube_vertex_loader_mode"]; },
-      nil,
-      ^BOOL{
-        [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"icube_vertex_loader_mode"];
-        return YES;
-      });
+    t[@"vertexLoaderMode"] = mk(
+        DOLSettingTypeInt, NO,
+        ^id {
+          NSUserDefaults* d = [NSUserDefaults standardUserDefaults];
+          return @([d objectForKey:@"icube_vertex_loader_mode"] == nil ?
+                       1 :
+                       [d integerForKey:@"icube_vertex_loader_mode"]);
+        },
+        ^(id v) {
+          [[NSUserDefaults standardUserDefaults] setInteger:CoerceInt(v)
+                                                     forKey:@"icube_vertex_loader_mode"];
+        },
+        nil,
+        ^BOOL {
+          [[NSUserDefaults standardUserDefaults] removeObjectForKey:@"icube_vertex_loader_mode"];
+          return YES;
+        });
 
-    // ---- Remaining Cached Interpreter / IR optimization toggles (boot-time; CachedInterpreter::Init
-    // and the IR engine read them once). Added 2026-09-26 for the default-settings matrix. ----
-    t[@"cirMicroOpFusion"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirMicroOpFusion]); },
-      ^(id v){ [DOLConfigBridge setCirMicroOpFusion:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_MICROOP_FUSION), MakeResetBlock(Config::MAIN_CIR_MICROOP_FUSION.GetLocation()));
+    // ---- Remaining Cached Interpreter / IR optimization toggles (boot-time;
+    // CachedInterpreter::Init and the IR engine read them once). Added 2026-09-26 for the
+    // default-settings matrix. ----
+    t[@"cirMicroOpFusion"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirMicroOpFusion]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirMicroOpFusion:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_MICROOP_FUSION),
+        MakeResetBlock(Config::MAIN_CIR_MICROOP_FUSION.GetLocation()));
 
-    t[@"cirDeadFlagElim"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirDeadFlagElim]); },
-      ^(id v){ [DOLConfigBridge setCirDeadFlagElim:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_DEAD_FLAG_ELIM), MakeResetBlock(Config::MAIN_CIR_DEAD_FLAG_ELIM.GetLocation()));
+    t[@"cirDeadFlagElim"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirDeadFlagElim]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirDeadFlagElim:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_DEAD_FLAG_ELIM),
+        MakeResetBlock(Config::MAIN_CIR_DEAD_FLAG_ELIM.GetLocation()));
 
-    t[@"cirDeadFprfElim"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirDeadFprfElim]); },
-      ^(id v){ [DOLConfigBridge setCirDeadFprfElim:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_DEAD_FPRF_ELIM), MakeResetBlock(Config::MAIN_CIR_DEAD_FPRF_ELIM.GetLocation()));
+    t[@"cirDeadFprfElim"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirDeadFprfElim]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirDeadFprfElim:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_DEAD_FPRF_ELIM),
+        MakeResetBlock(Config::MAIN_CIR_DEAD_FPRF_ELIM.GetLocation()));
 
-    t[@"cirPsqFastPath"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirPsqFastPath]); },
-      ^(id v){ [DOLConfigBridge setCirPsqFastPath:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_PSQ_FASTPATH), MakeResetBlock(Config::MAIN_CIR_PSQ_FASTPATH.GetLocation()));
+    t[@"cirPsqFastPath"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirPsqFastPath]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirPsqFastPath:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_PSQ_FASTPATH),
+        MakeResetBlock(Config::MAIN_CIR_PSQ_FASTPATH.GetLocation()));
 
-    t[@"cirStoreLoopFF"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirStoreLoopFF]); },
-      ^(id v){ [DOLConfigBridge setCirStoreLoopFF:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_STORE_LOOP_FF), MakeResetBlock(Config::MAIN_CIR_STORE_LOOP_FF.GetLocation()));
+    t[@"cirStoreLoopFF"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirStoreLoopFF]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirStoreLoopFF:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_STORE_LOOP_FF),
+        MakeResetBlock(Config::MAIN_CIR_STORE_LOOP_FF.GetLocation()));
 
-    t[@"cirCacheLoopFF"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirCacheLoopFF]); },
-      ^(id v){ [DOLConfigBridge setCirCacheLoopFF:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_CACHE_LOOP_FF), MakeResetBlock(Config::MAIN_CIR_CACHE_LOOP_FF.GetLocation()));
+    t[@"cirCacheLoopFF"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirCacheLoopFF]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirCacheLoopFF:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_CACHE_LOOP_FF),
+        MakeResetBlock(Config::MAIN_CIR_CACHE_LOOP_FF.GetLocation()));
 
-    t[@"cirIrConstFusion"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirIrConstFusion]); },
-      ^(id v){ [DOLConfigBridge setCirIrConstFusion:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_IR_CONST_FUSION), MakeResetBlock(Config::MAIN_CIR_IR_CONST_FUSION.GetLocation()));
+    t[@"cirIrConstFusion"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirIrConstFusion]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirIrConstFusion:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_IR_CONST_FUSION),
+        MakeResetBlock(Config::MAIN_CIR_IR_CONST_FUSION.GetLocation()));
 
-    t[@"cirIrMicroOpFusion"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirIrMicroOpFusion]); },
-      ^(id v){ [DOLConfigBridge setCirIrMicroOpFusion:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_IR_MICROOP_FUSION), MakeResetBlock(Config::MAIN_CIR_IR_MICROOP_FUSION.GetLocation()));
+    t[@"cirIrMicroOpFusion"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirIrMicroOpFusion]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirIrMicroOpFusion:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_IR_MICROOP_FUSION),
+        MakeResetBlock(Config::MAIN_CIR_IR_MICROOP_FUSION.GetLocation()));
 
-    t[@"cirIrDeadFlagElim"] = mk(DOLSettingTypeBool, NO,
-      ^id{ return @([DOLConfigBridge cirIrDeadFlagElim]); },
-      ^(id v){ [DOLConfigBridge setCirIrDeadFlagElim:CoerceBool(v)]; },
-      MakeLayerGetter(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM), MakeResetBlock(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM.GetLocation()));
+    t[@"cirIrDeadFlagElim"] = mk(
+        DOLSettingTypeBool, NO,
+        ^id {
+          return @([DOLConfigBridge cirIrDeadFlagElim]);
+        },
+        ^(id v) {
+          [DOLConfigBridge setCirIrDeadFlagElim:CoerceBool(v)];
+        },
+        MakeLayerGetter(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM),
+        MakeResetBlock(Config::MAIN_CIR_IR_DEAD_FLAG_ELIM.GetLocation()));
 
     table = [t copy];
   });
   return table;
 }
 
-static NSString* TypeName(DOLSettingType type) {
-  switch (type) {
-    case DOLSettingTypeBool: return @"bool";
-    case DOLSettingTypeInt: return @"int";
-    case DOLSettingTypeFloat: return @"float";
-    case DOLSettingTypeString: return @"string";
+static NSString* TypeName(DOLSettingType type)
+{
+  switch (type)
+  {
+  case DOLSettingTypeBool:
+    return @"bool";
+  case DOLSettingTypeInt:
+    return @"int";
+  case DOLSettingTypeFloat:
+    return @"float";
+  case DOLSettingTypeString:
+    return @"string";
   }
   return @"string";
 }
 
 // MARK: - Public API
 
-+ (NSDictionary<NSString*, NSDictionary<NSString*, id>*>*)snapshotAll {
++ (NSDictionary<NSString*, NSDictionary<NSString*, id>*>*)snapshotAll
+{
   NSDictionary<NSString*, DOLSettingEntry*>* table = [self table];
   NSMutableDictionary<NSString*, NSDictionary<NSString*, id>*>* out =
-    [NSMutableDictionary dictionaryWithCapacity:table.count];
+      [NSMutableDictionary dictionaryWithCapacity:table.count];
   [table enumerateKeysAndObjectsUsingBlock:^(NSString* key, DOLSettingEntry* e, BOOL* stop) {
     out[key] = @{
       @"value" : e.getter(),
@@ -591,35 +982,42 @@ static NSString* TypeName(DOLSettingType type) {
   return out;
 }
 
-+ (NSArray<NSString*>*)bootTimeKeys {
++ (NSArray<NSString*>*)bootTimeKeys
+{
   NSDictionary<NSString*, DOLSettingEntry*>* table = [self table];
   NSMutableArray<NSString*>* keys = [NSMutableArray array];
   [table enumerateKeysAndObjectsUsingBlock:^(NSString* key, DOLSettingEntry* e, BOOL* stop) {
-    if (!e.hotSwappable) [keys addObject:key];
+    if (!e.hotSwappable)
+      [keys addObject:key];
   }];
   return [keys sortedArrayUsingSelector:@selector(compare:)];
 }
 
-+ (BOOL)isHotSwappable:(NSString*)key {
++ (BOOL)isHotSwappable:(NSString*)key
+{
   DOLSettingEntry* e = [self table][key];
   return e != nil && e.hotSwappable;
 }
 
-+ (BOOL)isKnownKey:(NSString*)key {
++ (BOOL)isKnownKey:(NSString*)key
+{
   return [self table][key] != nil;
 }
 
-+ (BOOL)setKey:(NSString*)key value:(id)value {
++ (BOOL)setKey:(NSString*)key value:(id)value
+{
   DOLSettingEntry* e = [self table][key];
-  if (e == nil || value == nil) return NO;
+  if (e == nil || value == nil)
+    return NO;
   e.setter(value);
   return YES;
 }
 
-+ (NSDictionary<NSString*, NSDictionary<NSString*, id>*>*)snapshotAllLayers {
++ (NSDictionary<NSString*, NSDictionary<NSString*, id>*>*)snapshotAllLayers
+{
   NSDictionary<NSString*, DOLSettingEntry*>* table = [self table];
   NSMutableDictionary<NSString*, NSDictionary<NSString*, id>*>* out =
-    [NSMutableDictionary dictionaryWithCapacity:table.count];
+      [NSMutableDictionary dictionaryWithCapacity:table.count];
   [table enumerateKeysAndObjectsUsingBlock:^(NSString* key, DOLSettingEntry* e, BOOL* stop) {
     // layerGetter is nil for keys with no Config layer stack behind them (the
     // UserDefaults-backed ones). Calling a nil block crashes, so ask once and
@@ -631,10 +1029,14 @@ static NSString* TypeName(DOLSettingType type) {
     id currentRunValue = lg ? lg(Config::LayerType::CurrentRun) : nil;
 
     NSMutableDictionary<NSString*, id>* layers = [NSMutableDictionary dictionaryWithCapacity:4];
-    if (baseValue != nil) layers[@"Base"] = baseValue;
-    if (globalGameValue != nil) layers[@"GlobalGame"] = globalGameValue;
-    if (perGameValue != nil) layers[@"PerGame"] = perGameValue;
-    if (currentRunValue != nil) layers[@"CurrentRun"] = currentRunValue;
+    if (baseValue != nil)
+      layers[@"Base"] = baseValue;
+    if (globalGameValue != nil)
+      layers[@"GlobalGame"] = globalGameValue;
+    if (perGameValue != nil)
+      layers[@"PerGame"] = perGameValue;
+    if (currentRunValue != nil)
+      layers[@"CurrentRun"] = currentRunValue;
 
     // Winning layer, in the same CurrentRun > LocalGame(PerGame) > GlobalGame > Base priority
     // as Config::SEARCH_ORDER (Common/Config/Enums.h) restricted to these four tracked layers
@@ -642,11 +1044,16 @@ static NSString* TypeName(DOLSettingType type) {
     // search order but are outside this API's tracked set and are never reported as the
     // winner here).
     NSString* layerName;
-    if (currentRunValue != nil) layerName = @"CurrentRun";
-    else if (perGameValue != nil) layerName = @"PerGame";
-    else if (globalGameValue != nil) layerName = @"GlobalGame";
-    else if (baseValue != nil) layerName = @"Base";
-    else layerName = @"Default";
+    if (currentRunValue != nil)
+      layerName = @"CurrentRun";
+    else if (perGameValue != nil)
+      layerName = @"PerGame";
+    else if (globalGameValue != nil)
+      layerName = @"GlobalGame";
+    else if (baseValue != nil)
+      layerName = @"Base";
+    else
+      layerName = @"Default";
 
     out[key] = @{
       @"value" : e.getter(),
@@ -657,23 +1064,29 @@ static NSString* TypeName(DOLSettingType type) {
   return out;
 }
 
-+ (BOOL)resetKeys:(NSArray<NSString*>*)keys {
++ (BOOL)resetKeys:(NSArray<NSString*>*)keys
+{
   NSDictionary<NSString*, DOLSettingEntry*>* table = [self table];
   NSArray<NSString*>* targetKeys = keys.count > 0 ? keys : table.allKeys;
 
   // Validate every key BEFORE deleting any — an unknown key anywhere in the list must
   // leave the config untouched rather than partially resetting.
-  for (NSString* key in targetKeys) {
-    if (table[key] == nil) return NO;
+  for (NSString* key in targetKeys)
+  {
+    if (table[key] == nil)
+      return NO;
   }
   BOOL anyChanged = NO;
-  for (NSString* key in targetKeys) {
-    if (table[key].resetBlock()) anyChanged = YES;
+  for (NSString* key in targetKeys)
+  {
+    if (table[key].resetBlock())
+      anyChanged = YES;
   }
   // Fire once for the whole batch, not once per key — OnConfigChanged() triggers listeners
   // (e.g. the graphics backend re-reading its whole config) that are wasteful and, for a
   // multi-key reset, observably incorrect to run N times for what is logically one change.
-  if (anyChanged) Config::OnConfigChanged();
+  if (anyChanged)
+    Config::OnConfigChanged();
   Config::Save();
   return YES;
 }

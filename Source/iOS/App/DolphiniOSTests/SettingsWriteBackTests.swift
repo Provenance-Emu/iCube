@@ -260,8 +260,6 @@ final class SettingsWriteBackTests: XCTestCase {
     // The game sets only OverclockEnable; the clock row still counts as overridden.
     XCTAssertEqual(DOLConfigBridge.overclockOverride(), .game)
     XCTAssertEqual(DOLConfigBridge.viOverclockOverride(), .none)
-
-
   }
 
   /// A jitless boot puts the Cached Interpreter on CurrentRun for the run. Changed from the pause menu,

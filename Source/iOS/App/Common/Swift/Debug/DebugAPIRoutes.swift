@@ -85,7 +85,7 @@ private func volatileKeys(_ keys: [String]) -> [String] {
 }
 
 /// Settings captured by the first POST /api/bench/preset benchmarkBase, for "restore". Server queue only.
-nonisolated(unsafe) private var presetRestoreSnapshot: PerfSnapshot?
+private nonisolated(unsafe) var presetRestoreSnapshot: PerfSnapshot?
 
 /// Parses a request body as a JSON object, or nil for a missing, empty, or
 /// non-object body — callers should turn a nil into a 400 with
@@ -194,11 +194,11 @@ final class DebugAPIRoutes {
       // sticks) and OFF for `merge` (tweaking a hot-swappable value mid-run is a legitimate thing to
       // do). See aGameIsLoaded() for why a write during a run can silently evaporate.
       let requireDurable = (dict["requireDurable"] as? Bool) ?? (mode == "replace")
-      if requireDurable && aGameIsLoaded() {
+      if requireDurable, aGameIsLoaded() {
         return ["ok": false, "status": 409,
                 "error": "a title is loaded, so writes land in the volatile CurrentRun layer and are "
-                       + "lost when it stops; POST /api/debug/stop first, or pass "
-                       + "{\"requireDurable\": false} to write anyway"]
+                  + "lost when it stops; POST /api/debug/stop first, or pass "
+                  + "{\"requireDurable\": false} to write anyway"]
       }
 
       // Validate first: unknown names, and values whose JSON type cannot represent the setting.
@@ -213,7 +213,7 @@ final class DebugAPIRoutes {
         let isBoolLiteral = num != nil && CFGetTypeID(num!) == CFBooleanGetTypeID()
         switch type {
         case "bool":
-          if !isBoolLiteral && num == nil { errors[k] = "expected bool" }
+          if !isBoolLiteral, num == nil { errors[k] = "expected bool" }
         case "int":
           if isBoolLiteral || num == nil || num!.doubleValue != num!.doubleValue.rounded() {
             errors[k] = "expected integer"
@@ -224,7 +224,7 @@ final class DebugAPIRoutes {
           if !(v is String) { errors[k] = "expected string" }
         }
       }
-      if atomic && !errors.isEmpty {
+      if atomic, !errors.isEmpty {
         return ["ok": false, "status": 400,
                 "error": "nothing applied (atomic); \(errors.count) invalid entr\(errors.count == 1 ? "y" : "ies")",
                 "data": ["errors": errors, "applied": 0] as [String: Any]]
@@ -234,7 +234,7 @@ final class DebugAPIRoutes {
       let applyList = values.filter { errors[$0.key] == nil }
       let outcome: (results: [String: Any], applied: Int, reboot: [String]) = DispatchQueue.main.sync {
         if mode == "replace" {
-          _ = DOLSettingsKeyBridge.resetKeys([])  // empty == all known keys
+          _ = DOLSettingsKeyBridge.resetKeys([]) // empty == all known keys
         }
         var results: [String: Any] = [:]
         var applied = 0
@@ -293,7 +293,7 @@ final class DebugAPIRoutes {
       let keys = dict["keys"] as? [String] ?? []
       let ok = DispatchQueue.main.sync { DOLSettingsKeyBridge.resetKeys(keys) }
       return ok ? ["ok": true, "data": ["reset": keys.isEmpty ? "all" : keys] as [String: Any]]
-                : ["ok": false, "status": 404, "error": "unknown key in list"]
+        : ["ok": false, "status": 404, "error": "unknown key in list"]
     }
 
     // GET /api/settings/snapshots — list saved snapshots (name/taken_at/game_id only).
@@ -344,21 +344,21 @@ final class DebugAPIRoutes {
         return ["ok": false, "status": 400, "error": "mode must be \"merge\" or \"replace\""]
       }
       // Restoring a snapshot must be durable or it is a lie — see aGameIsLoaded().
-      if ((dict["requireDurable"] as? Bool) ?? true) && aGameIsLoaded() {
+      if (dict["requireDurable"] as? Bool) ?? true, aGameIsLoaded() {
         return ["ok": false, "status": 409,
                 "error": "a title is loaded, so restored values land in the volatile CurrentRun layer "
-                       + "and revert when it stops (this is how a restore silently left the device on "
-                       + "the wrong CPU core); POST /api/debug/stop first, or pass "
-                       + "{\"requireDurable\": false}"]
+                  + "and revert when it stops (this is how a restore silently left the device on "
+                  + "the wrong CPU core); POST /api/debug/stop first, or pass "
+                  + "{\"requireDurable\": false}"]
       }
-      let parts = path.split(separator: "/").map(String.init)  // api settings snapshots <name> apply
+      let parts = path.split(separator: "/").map(String.init) // api settings snapshots <name> apply
       guard parts.count == 5, let saved = snapshots.load(name: parts[3]) else {
         return ["ok": false, "status": 404, "error": "snapshot not found"]
       }
       // A snapshot stores per-layer state; the resolved `value` is what we replay.
       var values: [String: Any] = [:]
       for (k, entry) in saved {
-        guard DOLSettingsKeyBridge.isKnownKey(k) else { continue }  // key retired since the snapshot
+        guard DOLSettingsKeyBridge.isKnownKey(k) else { continue } // key retired since the snapshot
         if let e = entry as? [String: Any], let v = e["value"], !(v is NSNull) { values[k] = v }
       }
       let outcome: (applied: Int, failed: Int, reboot: [String]) = DispatchQueue.main.sync {
@@ -388,7 +388,7 @@ final class DebugAPIRoutes {
 
     // GET /api/settings/snapshots/<A>/diff/<B> — diff two saved snapshots by name.
     server.addCustomHandler(forMethod: "GET", pathRegex: "/api/settings/snapshots/[^/]+/diff/[^/]+") { [snapshots] _, path, _, _ in
-      let parts = path.split(separator: "/").map(String.init)  // api settings snapshots A diff B
+      let parts = path.split(separator: "/").map(String.init) // api settings snapshots A diff B
       guard parts.count == 6, let a = snapshots.load(name: parts[3]), let b = snapshots.load(name: parts[5]) else {
         return ["ok": false, "status": 404, "error": "snapshot not found"]
       }
@@ -562,13 +562,13 @@ final class DebugAPIRoutes {
     // POST /api/debug/pause
     server.addCustomHandler(forMethod: "POST", path: "/api/debug/pause") { _, _, _, _ in
       DOLDebugBridge.pause() ? ["ok": true, "data": ["state": DOLDebugBridge.coreState()]]
-                             : ["ok": false, "status": 409, "error": "core not running"]
+        : ["ok": false, "status": 409, "error": "core not running"]
     }
 
     // POST /api/debug/resume
     server.addCustomHandler(forMethod: "POST", path: "/api/debug/resume") { _, _, _, _ in
       DOLDebugBridge.resume() ? ["ok": true, "data": ["state": DOLDebugBridge.coreState()]]
-                              : ["ok": false, "status": 409, "error": "core not running"]
+        : ["ok": false, "status": 409, "error": "core not running"]
     }
 
     // POST /api/debug/frame-advance  body {"n":N}, n required, 1...600
@@ -576,7 +576,7 @@ final class DebugAPIRoutes {
       guard let dict = parseBody(body) else {
         return ["ok": false, "status": 400, "error": bodyMustBeJSONObjectError]
       }
-      guard let n = asJSONInt(dict["n"]), (1...600).contains(n) else {
+      guard let n = asJSONInt(dict["n"]), (1 ... 600).contains(n) else {
         return ["ok": false, "status": 400, "error": "n must be an integer 1…600"]
       }
       guard DOLDebugBridge.coreState() == "paused" else {
@@ -607,7 +607,7 @@ final class DebugAPIRoutes {
         slot = 1
       }
       return DOLDebugBridge.saveStateSlot(slot) ? ["ok": true, "data": ["slot": slot]]
-                                                 : ["ok": false, "status": 409, "error": "core not running"]
+        : ["ok": false, "status": 409, "error": "core not running"]
     }
 
     // POST /api/bench/preset  body {"preset":"benchmarkBase"} -> adaptive clock OFF + 100 % CPU/VI clocks
@@ -650,7 +650,7 @@ final class DebugAPIRoutes {
         return ["ok": false, "status": 400, "error": "body must contain a string 'gameID'"]
       }
       let state = DOLDebugBridge.coreState()
-      if state != "uninitialized" && state != "unknown" {
+      if state != "uninitialized", state != "unknown" {
         return ["ok": false, "status": 409, "error": "a game is \(state); POST /api/debug/stop first"]
       }
       // "noJIT" (default true): answer the "Waiting for JIT" prompt with "Use No JIT Mode" so the
@@ -691,7 +691,7 @@ final class DebugAPIRoutes {
         return ["ok": false, "status": 400, "error": "body must contain an integer 'slot' or a string 'path'"]
       }
       return ok ? ["ok": true, "data": ["state": DOLDebugBridge.coreState()]]
-                : ["ok": false, "status": 409, "error": "core not running or state missing"]
+        : ["ok": false, "status": 409, "error": "core not running or state missing"]
     }
 
     // POST /api/debug/fifo-record  body {"frames":N=1...600, default 1} -> start a Dolphin FIFO
@@ -702,7 +702,7 @@ final class DebugAPIRoutes {
       }
       var frames = 1
       if let raw = dict["frames"] {
-        guard let n = asJSONInt(raw), (1...600).contains(n) else {
+        guard let n = asJSONInt(raw), (1 ... 600).contains(n) else {
           return ["ok": false, "status": 400, "error": "frames must be an integer 1...600"]
         }
         frames = n

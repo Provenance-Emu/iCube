@@ -1,8 +1,8 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import XCTest
 import simd
+import XCTest
 
 @testable import iCube
 
@@ -10,7 +10,6 @@ import simd
 /// tester reads follows the controller's raw reading through the core's mapping. Pure, as
 /// `ControllerHubModelBuilderTests`.
 final class MotionTestModelBuilderTests: XCTestCase {
-
   private func flags(
     rotationRate: Bool = true, gravityAndUser: Bool = false, attitude: Bool = false, manual: Bool = false, active: Bool = false
   ) -> MotionSensorFlags {

@@ -65,13 +65,13 @@ public enum SaveStateService {
   static func saveSlotSnapshotAsync(_ consent: ClassicSlotSaveConsent) async -> SaveStateCompletedSnapshot? {
     await withCheckedContinuation { continuation in
       classicSaveExecutor.enqueue(consent,
-        currentSession: { .init(gameID: TVEmulationBridge.currentGameID(), identifier: TVEmulationBridge.currentSessionIdentifier()) },
-        destination: { TVEmulationBridge.stateFilePath(forSlot: $0).map { URL(fileURLWithPath: $0) } },
-        write: { consent in
-          let request = consent.request
-          return performSaveSlot(request.slot, title: nil, gameTitle: nil,
-            expectedGameID: request.session.gameID, expectedSessionIdentifier: request.session.identifier, consent: consent)
-        }, completion: { continuation.resume(returning: $0) })
+                                  currentSession: { .init(gameID: TVEmulationBridge.currentGameID(), identifier: TVEmulationBridge.currentSessionIdentifier()) },
+                                  destination: { TVEmulationBridge.stateFilePath(forSlot: $0).map { URL(fileURLWithPath: $0) } },
+                                  write: { consent in
+                                    let request = consent.request
+                                    return performSaveSlot(request.slot, title: nil, gameTitle: nil,
+                                                           expectedGameID: request.session.gameID, expectedSessionIdentifier: request.session.identifier, consent: consent)
+                                  }, completion: { continuation.resume(returning: $0) })
     }
   }
 
@@ -99,7 +99,8 @@ public enum SaveStateService {
     return await withCheckedContinuation { continuation in
       saveQueue.async {
         guard let store = historyStore(gameID: expectedGameID, session: expectedSessionIdentifier) else {
-          continuation.resume(returning: .init()); return
+          continuation.resume(returning: .init())
+          return
         }
         let result = store.save(gameID: expectedGameID, sessionIdentifier: expectedSessionIdentifier, gameTitle: gameTitle)
         if let snapshot = result.snapshot {
@@ -129,7 +130,7 @@ public enum SaveStateService {
       guard let snapshot = TVEmulationBridge.saveStateSnapshot(toPath: url.path, expectedGameID: gameID,
                                                                expectedSessionIdentifier: session) else { return nil }
       return SaveStateCompletedSnapshot(filePath: snapshot.filePath, gameID: snapshot.gameID,
-        playTimeSeconds: snapshot.playTimeSeconds, savedAt: snapshot.savedAt, sessionIdentifier: snapshot.sessionIdentifier)
+                                        playTimeSeconds: snapshot.playTimeSeconds, savedAt: snapshot.savedAt, sessionIdentifier: snapshot.sessionIdentifier)
     }, isCurrentSession: {
       TVEmulationBridge.currentGameID() == gameID && TVEmulationBridge.currentSessionIdentifier() == session &&
         TVEmulationBridge.isStateOperationAllowed()
@@ -172,7 +173,7 @@ public enum SaveStateService {
     let snapshot: TVSaveStateSnapshot?
     if let consent {
       snapshot = TVEmulationBridge.saveStateSnapshot(toSlot: slot, expectedGameID: expectedGameID,
-        expectedSessionIdentifier: session, expectedPath: consent.request.path.path, allowOverwrite: consent.allowsOverwrite)
+                                                     expectedSessionIdentifier: session, expectedPath: consent.request.path.path, allowOverwrite: consent.allowsOverwrite)
     } else {
       // Intentional compatibility/non-UI callers retain their existing explicit overwrite contract.
       snapshot = TVEmulationBridge.saveStateSnapshot(toSlot: slot, expectedGameID: expectedGameID, expectedSessionIdentifier: session)

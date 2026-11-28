@@ -11,6 +11,7 @@ final class ConfigAdvancedModelBuilderTests: XCTestCase {
   private func model(_ state: ConfigAdvancedState = ConfigAdvancedState()) -> MenuModel {
     ConfigAdvancedModelBuilder.make(state: state) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout ConfigAdvancedState) -> Void) -> ConfigAdvancedState {
     var s = ConfigAdvancedState()
     edit(&s)
@@ -37,7 +38,9 @@ final class ConfigAdvancedModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       for value in [true, false] {
         changes = []
         binding.wrappedValue = value
@@ -53,7 +56,9 @@ final class ConfigAdvancedModelBuilderTests: XCTestCase {
       ("mem2", 64 ... 128, 100, .mem2MB(100)),
     ]
     for (id, range, value, change) in expected {
-      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper"); continue }
+      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper")
+        continue
+      }
       XCTAssertEqual(stepper.range, range, id)
       changes = []
       stepper.value.wrappedValue = value
@@ -62,7 +67,9 @@ final class ConfigAdvancedModelBuilderTests: XCTestCase {
   }
 
   func test_memorySteppers_showTheirMegabytes() {
-    let m = model(state { $0.mem1MB = 48; $0.mem2MB = 96 })
+    let m = model(state { $0.mem1MB = 48
+      $0.mem2MB = 96
+    })
     XCTAssertEqual(m.item(id: "mem1")?.currentValueTitle, "48 MB")
     XCTAssertEqual(m.item(id: "mem2")?.currentValueTitle, "96 MB")
   }

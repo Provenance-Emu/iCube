@@ -88,6 +88,7 @@ final class DSUAdvertTests: XCTestCase {
     let sixtyThree = String(repeating: "x", count: 63)
     XCTAssertEqual(DSUServerBridge.bonjourServiceName(forDeviceName: sixtyThree), sixtyThree)
   }
+
   // MARK: Discovery rows (the TV re-reads a phone's record when it changes)
 
   private func row(_ name: String = "Joe's iPhone", address: String = "192.168.1.20", controller: Bool?) -> DSUDiscoveredServer {

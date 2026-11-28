@@ -78,6 +78,7 @@ final class ProfileTextEditorModel {
   var text = "" {
     didSet { if text != oldValue { relint() } }
   }
+
   /// The cursor (UTF-16 offset): what the completion strip completes.
   var cursor = 0
   private(set) var diagnostics: [ProfileDiagnostic] = []

@@ -161,7 +161,7 @@ extension ModDownloadManager: URLSessionDownloadDelegate {
 
   func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
     guard let job = lock.withLock({ jobs[downloadTask.taskIdentifier] }) else { return }
-    if let status = (downloadTask.response as? HTTPURLResponse)?.statusCode, !(200..<300).contains(status) {
+    if let status = (downloadTask.response as? HTTPURLResponse)?.statusCode, !(200 ..< 300).contains(status) {
       job.failure = ModDownloadError.status(status)
       return
     }

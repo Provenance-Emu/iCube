@@ -3,8 +3,8 @@
 
 #include "HostQueue.h"
 
-#include <dispatch/dispatch.h>
 #include <Foundation/Foundation.h>
+#include <dispatch/dispatch.h>
 
 #include "Common/Assert.h"
 #include "Common/Event.h"
@@ -23,7 +23,8 @@ static bool IsOnHostQueue()
 dispatch_queue_t DOLHostQueueGetUnderlyingQueue()
 {
   dispatch_once(&s_host_queue_once, ^{
-    s_host_queue = dispatch_queue_create("me.oatmealdome.DolphiniOS.host-queue", DISPATCH_QUEUE_SERIAL);
+    s_host_queue =
+        dispatch_queue_create("me.oatmealdome.DolphiniOS.host-queue", DISPATCH_QUEUE_SERIAL);
     dispatch_queue_set_specific(s_host_queue, s_host_queue_key, s_host_queue_key, nullptr);
   });
 

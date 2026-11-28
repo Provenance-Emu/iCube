@@ -81,9 +81,10 @@ struct TVLivePerformanceOverlay: View {
     let selected = session.rows.firstIndex { $0.id == session.navigation.selectedID } ?? 0
     return choiceWindow(count: session.rows.count, selected: selected).map { session.rows[$0] }
   }
+
   private func choiceWindow(count: Int, selected: Int) -> Range<Int> {
     let start = max(0, min(selected - 2, count - 6))
-    return start..<min(count, start + 6)
+    return start ..< min(count, start + 6)
   }
 }
 #endif

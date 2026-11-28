@@ -63,18 +63,28 @@ struct DebugRootView: View {
   private func apply(_ change: DebugRootChange) {
     let defaults = UserDefaults.standard
     switch change {
-    case .fastmem(let v): state.fastmem = v; DOLConfigBridge.setMainFastmem(v)
-    case .instantReplay(let v): state.instantReplay = v; defaults.set(v, forKey: DebugDefaultsKey.instantReplay)
-    case .stallMetrics(let v): state.stallMetrics = v; DOLConfigBridge.setStallMetrics(v)
-    case .perfBench(let v): state.benchEnabled = v; defaults.set(v, forKey: DebugDefaultsKey.benchEnabled)
-    case .wireframe(let v): state.wireframe = v; DOLConfigBridge.setGfxWireframe(v)
-    case .consoleLogging(let v): state.loggingEnabled = v; defaults.set(v, forKey: DebugDefaultsKey.loggingEnabled)
-    case .loggingVerbosity(let v): state.loggingVerbosity = v; defaults.set(v, forKey: DebugDefaultsKey.loggingVerbosity)
-    case .inputDebug(let v): state.inputDebug = v; defaults.set(v, forKey: DebugDefaultsKey.inputDebug)
-    case .templateCovers(let v): state.disableArtwork = v; defaults.set(v, forKey: DebugDefaultsKey.disableArtwork)
+    case .fastmem(let v): state.fastmem = v
+      DOLConfigBridge.setMainFastmem(v)
+    case .instantReplay(let v): state.instantReplay = v
+      defaults.set(v, forKey: DebugDefaultsKey.instantReplay)
+    case .stallMetrics(let v): state.stallMetrics = v
+      DOLConfigBridge.setStallMetrics(v)
+    case .perfBench(let v): state.benchEnabled = v
+      defaults.set(v, forKey: DebugDefaultsKey.benchEnabled)
+    case .wireframe(let v): state.wireframe = v
+      DOLConfigBridge.setGfxWireframe(v)
+    case .consoleLogging(let v): state.loggingEnabled = v
+      defaults.set(v, forKey: DebugDefaultsKey.loggingEnabled)
+    case .loggingVerbosity(let v): state.loggingVerbosity = v
+      defaults.set(v, forKey: DebugDefaultsKey.loggingVerbosity)
+    case .inputDebug(let v): state.inputDebug = v
+      defaults.set(v, forKey: DebugDefaultsKey.inputDebug)
+    case .templateCovers(let v): state.disableArtwork = v
+      defaults.set(v, forKey: DebugDefaultsKey.disableArtwork)
     case .showTestSkins(let v): state.showTestSkins = v
       defaults.set(v, forKey: DebugDefaultsKey.showTestSkins)
-    case .resetLaunchTimes: state.launchTimes = 0; defaults.set(0, forKey: DebugDefaultsKey.launchTimes)
+    case .resetLaunchTimes: state.launchTimes = 0
+      defaults.set(0, forKey: DebugDefaultsKey.launchTimes)
     case .retryJitAuthorization:
       JitManager.shared().clearTXMHandshakeCookie()
       state.hydrated.txmHandshakeBlocked = false
@@ -135,9 +145,9 @@ struct DebugBenchTokenRow: View {
         .font(.caption.monospaced())
         .foregroundStyle(.secondary)
         .lineLimit(2)
-#if os(iOS)
+        #if os(iOS)
         .textSelection(.enabled)
-#endif
+        #endif
       Text(caption)
         .font(.caption)
         .foregroundStyle(.secondary)

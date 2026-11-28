@@ -125,7 +125,7 @@ struct WebUISettingsView: View {
     webURLDisplay = PVWebServer.shared.urlString ?? ""
     webDavDisplay = PVWebServer.shared.webDavURLString ?? ""
     #if os(iOS)
-    for _ in 0..<Polling.attempts {
+    for _ in 0 ..< Polling.attempts {
       if let url = PVWebServer.shared.urlString, !url.isEmpty {
         webURLDisplay = url
         webDavDisplay = PVWebServer.shared.webDavURLString ?? ""

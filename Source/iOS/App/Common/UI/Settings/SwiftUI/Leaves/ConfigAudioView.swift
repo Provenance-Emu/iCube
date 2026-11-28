@@ -74,17 +74,28 @@ enum ConfigAudioSync {
     switch change {
     case .backend(let raw):
       guard raw != state.backend else { return }
-      state.backend = raw; DOLConfigBridge.setAudioBackend(raw)
-    case .volume(let v): state.volume = v; DOLConfigBridge.setAudioVolume(v)
-    case .surround(let v): state.surround = v; DOLConfigBridge.setAudioSurround(v)
-    case .surroundQuality(let v): state.surroundQuality = v; DOLConfigBridge.setAudioSurroundQuality(v)
-    case .spatial(let v): state.spatial = v; DOLConfigBridge.setAudioSpatial(v)
-    case .headTracking(let v): state.headTracking = v; DOLConfigBridge.setAudioSpatialHeadTracking(v)
-    case .bufferMs(let v): state.bufferMs = v; DOLConfigBridge.setAudioBufferSizeMs(v)
-    case .fillGaps(let v): state.fillGaps = v; DOLConfigBridge.setAudioFillGaps(v)
-    case .preservePitch(let v): state.preservePitch = v; DOLConfigBridge.setAudioPreservePitch(v)
-    case .muteOnNoSpeedLimit(let v): state.muteOnNoSpeedLimit = v; DOLConfigBridge.setAudioMuteOnDisabledSpeedLimit(v)
-    case .obeyMuteSwitch(let v): state.obeyMuteSwitch = v; DOLConfigBridge.setAudioMuteSwitchObey(v)
+      state.backend = raw
+      DOLConfigBridge.setAudioBackend(raw)
+    case .volume(let v): state.volume = v
+      DOLConfigBridge.setAudioVolume(v)
+    case .surround(let v): state.surround = v
+      DOLConfigBridge.setAudioSurround(v)
+    case .surroundQuality(let v): state.surroundQuality = v
+      DOLConfigBridge.setAudioSurroundQuality(v)
+    case .spatial(let v): state.spatial = v
+      DOLConfigBridge.setAudioSpatial(v)
+    case .headTracking(let v): state.headTracking = v
+      DOLConfigBridge.setAudioSpatialHeadTracking(v)
+    case .bufferMs(let v): state.bufferMs = v
+      DOLConfigBridge.setAudioBufferSizeMs(v)
+    case .fillGaps(let v): state.fillGaps = v
+      DOLConfigBridge.setAudioFillGaps(v)
+    case .preservePitch(let v): state.preservePitch = v
+      DOLConfigBridge.setAudioPreservePitch(v)
+    case .muteOnNoSpeedLimit(let v): state.muteOnNoSpeedLimit = v
+      DOLConfigBridge.setAudioMuteOnDisabledSpeedLimit(v)
+    case .obeyMuteSwitch(let v): state.obeyMuteSwitch = v
+      DOLConfigBridge.setAudioMuteSwitchObey(v)
     case .effect(let fx): apply(fx, to: &state.effects)
     case .requestMicrophoneAccess:
       AudioFXBridge.requestMicrophonePermission { _ in }
@@ -99,16 +110,26 @@ enum ConfigAudioSync {
 
   static func apply(_ change: AudioEffectsChange, to fx: inout AudioEffectsState) {
     switch change {
-    case .echoEnabled(let v): fx.echoEnabled = v; DOLConfigBridge.setAudioFXDelayEnabled(v)
-    case .echoMs(let v): fx.echoMs = v; DOLConfigBridge.setAudioFXDelayMs(v)
-    case .echoFeedback(let v): fx.echoFeedback = v; DOLConfigBridge.setAudioFXDelayFeedback(v)
-    case .eqEnabled(let v): fx.eqEnabled = v; DOLConfigBridge.setAudioFXEQEnabled(v)
-    case .eqLowDb(let v): fx.eqLowDb = v; DOLConfigBridge.setAudioFXEQLowDb(v)
-    case .eqMidDb(let v): fx.eqMidDb = v; DOLConfigBridge.setAudioFXEQMidDb(v)
-    case .eqHighDb(let v): fx.eqHighDb = v; DOLConfigBridge.setAudioFXEQHighDb(v)
-    case .crushEnabled(let v): fx.crushEnabled = v; DOLConfigBridge.setAudioFXCrushEnabled(v)
-    case .crushBits(let v): fx.crushBits = v; DOLConfigBridge.setAudioFXCrushBits(v)
-    case .crushDownsample(let v): fx.crushDownsample = v; DOLConfigBridge.setAudioFXCrushDownsample(v)
+    case .echoEnabled(let v): fx.echoEnabled = v
+      DOLConfigBridge.setAudioFXDelayEnabled(v)
+    case .echoMs(let v): fx.echoMs = v
+      DOLConfigBridge.setAudioFXDelayMs(v)
+    case .echoFeedback(let v): fx.echoFeedback = v
+      DOLConfigBridge.setAudioFXDelayFeedback(v)
+    case .eqEnabled(let v): fx.eqEnabled = v
+      DOLConfigBridge.setAudioFXEQEnabled(v)
+    case .eqLowDb(let v): fx.eqLowDb = v
+      DOLConfigBridge.setAudioFXEQLowDb(v)
+    case .eqMidDb(let v): fx.eqMidDb = v
+      DOLConfigBridge.setAudioFXEQMidDb(v)
+    case .eqHighDb(let v): fx.eqHighDb = v
+      DOLConfigBridge.setAudioFXEQHighDb(v)
+    case .crushEnabled(let v): fx.crushEnabled = v
+      DOLConfigBridge.setAudioFXCrushEnabled(v)
+    case .crushBits(let v): fx.crushBits = v
+      DOLConfigBridge.setAudioFXCrushBits(v)
+    case .crushDownsample(let v): fx.crushDownsample = v
+      DOLConfigBridge.setAudioFXCrushDownsample(v)
     }
   }
 }

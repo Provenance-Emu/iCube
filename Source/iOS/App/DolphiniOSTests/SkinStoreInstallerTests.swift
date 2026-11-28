@@ -94,9 +94,9 @@ final class SkinStoreInstallerTests: XCTestCase {
   func testDownloadFailureSurfacesMessage() async throws {
     let installer = makeInstaller(downloader: FakeDownloader(error: URLSessionSkinStoreDownloader.HTTPStatusError(statusCode: 404)),
                                   record: record(), installStep: { _, _ in
-      XCTFail("install must not run after a failed download")
-      return self.installed()
-    })
+                                    XCTFail("install must not run after a failed download")
+                                    return self.installed()
+                                  })
     let skin = try entry()
     await installer.install(skin)
     XCTAssertEqual(installer.state(for: skin), .failed(message: SkinStoreMessages.describe(URLSessionSkinStoreDownloader.HTTPStatusError(statusCode: 404))))

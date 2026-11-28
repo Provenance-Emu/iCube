@@ -6,7 +6,6 @@ import XCTest
 /// The player screen's snapshot rules (which device a port has, whether it can capture, whether a
 /// pad is "Disconnected") and the Save As name rules (decisions 10 and 11).
 final class PlayerScreenStateTests: XCTestCase {
-
   private static let xbox = "MFi/0/Xbox Wireless Controller"
   private static let dsu = "DSUClient/0/Pad C"
 

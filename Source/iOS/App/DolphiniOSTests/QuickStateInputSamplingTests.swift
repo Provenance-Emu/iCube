@@ -1,9 +1,10 @@
 import GameController
+import GamepadKit
+import XCTest
+@testable import iCube
 #if os(iOS)
 import UIKit
 #endif
-import XCTest
-@testable import iCube
 
 @MainActor
 final class QuickStateInputSamplingTests: XCTestCase {
@@ -15,6 +16,7 @@ final class QuickStateInputSamplingTests: XCTestCase {
     override var buttons: [String: GCControllerButtonInput] { ["A": a, "Start": menu] }
     override var axes: [String: GCControllerAxisInput] { ["X": stick.xAxis, "Y": stick.yAxis] }
   }
+
   private final class ProfileOnlyController: GCController {
     let profile = Profile()
     override var extendedGamepad: GCExtendedGamepad? { nil }
@@ -49,7 +51,7 @@ final class QuickStateInputSamplingTests: XCTestCase {
     raw.profile.a.update(value: 1, pressed: true)
     XCTAssertTrue(QuickStateHandoff.navigationControlsActive(controllers: [normalized]))
     handoff.sampleInput(active: QuickStateHandoff.gameplayInputActive(controllers: [normalized]),
-      controlsNeutral: false, activationBlocked: QuickStateHandoff.navigationControlsActive(controllers: [normalized]))
+                        controlsNeutral: false, activationBlocked: QuickStateHandoff.navigationControlsActive(controllers: [normalized]))
     XCTAssertTrue(handoff.hasPendingOperation, "Normalized Menu must block A even after initial arming")
     raw.profile.a.update(value: 0, pressed: false)
     raw.profile.menu.update(value: 0, pressed: false)
@@ -99,7 +101,8 @@ final class QuickStateInputSamplingTests: XCTestCase {
       let host = EmulationScreen.TouchPadsContainer.HostView()
       let game = TouchOverlaySurface.SurfaceView(), action = TouchOverlaySurface.SurfaceView()
       action.gameplayHitTest = { _ in false }
-      host.addSubview(game); host.addSubview(action)
+      host.addSubview(game)
+      host.addSubview(action)
       let finger = NSObject(), other = NSObject()
       let gameplay = GameplayTouchContactObserver.BeganContact(id: ObjectIdentifier(finger), target: game, gameplay: true)
       let appAction = GameplayTouchContactObserver.BeganContact(id: ObjectIdentifier(other), target: action, gameplay: false)
@@ -113,7 +116,7 @@ final class QuickStateInputSamplingTests: XCTestCase {
         activations += 1
         XCTAssertTrue(GameplayTouchContacts.hasNonGameplayContacts, "Complete batch must exist before activation")
         handoff.sampleInput(active: true, controlsNeutral: false,
-          activationBlocked: GameplayTouchContacts.hasNonGameplayContacts)
+                            activationBlocked: GameplayTouchContacts.hasNonGameplayContacts)
       }
       host.gameplayContactObserver.recordContactsBegan(gameplayFirst ? [gameplay, appAction] : [appAction, gameplay])
       XCTAssertEqual(activations, 1, "One begin batch emits at most one gameplay activation")
@@ -125,7 +128,8 @@ final class QuickStateInputSamplingTests: XCTestCase {
   func testRemovingOneHostedSurfacePreservesOtherHeldContact() {
     let host = EmulationScreen.TouchPadsContainer.HostView()
     let first = TouchOverlaySurface.SurfaceView(), second = TouchOverlaySurface.SurfaceView()
-    host.addSubview(first); host.addSubview(second)
+    host.addSubview(first)
+    host.addSubview(second)
     let finger = NSObject(), other = NSObject()
     let one: Set<ObjectIdentifier> = [ObjectIdentifier(finger)]
     let two: Set<ObjectIdentifier> = [ObjectIdentifier(other)]

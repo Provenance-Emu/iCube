@@ -20,8 +20,12 @@ final class PauseArbiterTests: XCTestCase {
     var core: PauseArbiter.Core {
       PauseArbiter.Core(
         isRunning: { self.running }, isPaused: { self.paused },
-        pause: { self.pauseCalls += 1; if !self.refusePause { self.paused = true } },
-        resume: { self.resumeCalls += 1; self.paused = false })
+        pause: { self.pauseCalls += 1
+          if !self.refusePause { self.paused = true }
+        },
+        resume: { self.resumeCalls += 1
+          self.paused = false
+        })
     }
   }
 
@@ -78,8 +82,8 @@ final class PauseArbiterTests: XCTestCase {
 
   func test_releaseThenClaimInSameTurn_doesNotResume() {
     let root = arbiter.claim("menu")
-    arbiter.release(root)                 // SwiftUI onDisappear of the covered presenter
-    _ = arbiter.claim("shaders")          // the cover's onAppear, same transition
+    arbiter.release(root) // SwiftUI onDisappear of the covered presenter
+    _ = arbiter.claim("shaders") // the cover's onAppear, same transition
     runScheduled()
     XCTAssertEqual(fake.resumeCalls, 0, "the deferred resume must re-check the token count")
     XCTAssertTrue(fake.paused)
@@ -108,7 +112,7 @@ final class PauseArbiterTests: XCTestCase {
   }
 
   func test_externalPause_isNotResumedByArbiter() {
-    fake.paused = true                    // paused by the debug API, no token
+    fake.paused = true // paused by the debug API, no token
     let a = arbiter.claim("menu")
     XCTAssertEqual(fake.pauseCalls, 0, "already paused: nothing to do")
     arbiter.release(a)
@@ -198,7 +202,7 @@ final class PauseArbiterTests: XCTestCase {
     let a = arbiter.claim("menu")
     XCTAssertEqual(fake.pauseCalls, 1)
     XCTAssertFalse(fake.paused)
-    fake.refusePause = false              // the core reached Running
+    fake.refusePause = false // the core reached Running
     arbiter.emulationDidStart()
     XCTAssertTrue(fake.paused)
     XCTAssertEqual(fake.pauseCalls, 2)
@@ -209,7 +213,7 @@ final class PauseArbiterTests: XCTestCase {
 
   func test_claimWhileHeldButCoreRunning_rePauses() {
     let a = arbiter.claim("menu")
-    fake.paused = false                   // something outside resumed under us
+    fake.paused = false // something outside resumed under us
     _ = arbiter.claim("saves")
     XCTAssertEqual(fake.pauseCalls, 2, "every claim ensures a running core is paused")
     _ = a

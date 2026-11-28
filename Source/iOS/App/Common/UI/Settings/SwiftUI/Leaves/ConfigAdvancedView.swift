@@ -23,11 +23,16 @@ struct ConfigAdvancedView: View {
 
   private func apply(_ change: ConfigAdvancedChange) {
     switch change {
-    case .memOverride(let v): state.memOverride = v; DOLConfigBridge.setMainRamOverrideEnable(v)
-    case .mem1MB(let v): state.mem1MB = v; DOLConfigBridge.setMainMem1SizeMB(v)
-    case .mem2MB(let v): state.mem2MB = v; DOLConfigBridge.setMainMem2SizeMB(v)
-    case .rtcEnabled(let v): state.rtcEnabled = v; DOLConfigBridge.setMainCustomRtcEnable(v)
-    case .rtcDate(let v): state.rtcDate = v; DOLConfigBridge.setMainCustomRtcValue(Int(v.timeIntervalSince1970))
+    case .memOverride(let v): state.memOverride = v
+      DOLConfigBridge.setMainRamOverrideEnable(v)
+    case .mem1MB(let v): state.mem1MB = v
+      DOLConfigBridge.setMainMem1SizeMB(v)
+    case .mem2MB(let v): state.mem2MB = v
+      DOLConfigBridge.setMainMem2SizeMB(v)
+    case .rtcEnabled(let v): state.rtcEnabled = v
+      DOLConfigBridge.setMainCustomRtcEnable(v)
+    case .rtcDate(let v): state.rtcDate = v
+      DOLConfigBridge.setMainCustomRtcValue(Int(v.timeIntervalSince1970))
     }
   }
 }

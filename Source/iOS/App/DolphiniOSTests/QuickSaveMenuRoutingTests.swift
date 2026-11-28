@@ -29,41 +29,46 @@ final class QuickSaveMenuRoutingTests: XCTestCase {
     init() { states = [state(classic, slot: 4, time: 10), state(history, time: 20), state(automatic, time: 100, auto: true)] }
     func state(_ path: URL, slot: Int? = nil, time: TimeInterval, compatible: Bool = true, auto: Bool = false) -> SaveStateInfo {
       SaveStateInfo(gameID: "GALE01", displayName: path.lastPathComponent, slot: slot, createdAt: nil,
-        modifiedAt: Date(timeIntervalSince1970: time), sizeBytes: nil, versionHash: nil,
-        isCompatible: compatible, path: path, thumbnailURL: nil, isAuto: auto, isQuickSave: path == history)
+                    modifiedAt: Date(timeIntervalSince1970: time), sizeBytes: nil, versionHash: nil,
+                    isCompatible: compatible, path: path, thumbnailURL: nil, isAuto: auto, isQuickSave: path == history)
     }
+
     var environment: QuickSaveActions.LoadEnvironment {
       .init(session: { self.session }, isCurrent: { self.current && $0 == self.session }, allowed: { true },
-        isModded: { self.modded }, states: { _ in
-          if self.invalidateWhileScanning { self.current = false }
-          return self.states
-        }, slotPath: { _ in self.classic }, exists: { path in self.states.contains { $0.path == path } },
-        compatible: { path in self.states.first { $0.path == path }?.isCompatible == true },
-        request: { path, session in
-          guard self.current, session == self.session else { return false }
-          self.loaded.append(path); return true
-        })
+            isModded: { self.modded }, states: { _ in
+              if self.invalidateWhileScanning { self.current = false }
+              return self.states
+            }, slotPath: { _ in self.classic }, exists: { path in self.states.contains { $0.path == path } },
+            compatible: { path in self.states.first { $0.path == path }?.isCompatible == true },
+            request: { path, session in
+              guard self.current, session == self.session else { return false }
+              self.loaded.append(path)
+              return true
+            })
     }
+
     func controller() -> QuickSaveMenuActions {
       QuickSaveMenuActions(mode: { self.mode }, slot: { self.slot }, session: session,
-        isActive: { self.active }, runtime: .init(isCurrent: { self.current && $0 == self.session },
-          isModded: { self.modded }, saveHistory: { expected in
-            XCTAssertEqual(expected, self.session)
-            self.historyWrites += 1
-            if self.invalidateDuringHistorySave { self.current = false }
-            return .saved(self.history)
-          },
-          load: { await QuickSaveActions.load(mode: $0, slot: $1, expectedSession: $2, environment: self.environment) }),
-        dismiss: { self.dismissals += 1; self.active = false }, openBrowser: { self.browsers += 1 }, report: { self.outcomes.append($0) })
+                           isActive: { self.active }, runtime: .init(isCurrent: { self.current && $0 == self.session },
+                                                                     isModded: { self.modded }, saveHistory: { expected in
+                                                                       XCTAssertEqual(expected, self.session)
+                                                                       self.historyWrites += 1
+                                                                       if self.invalidateDuringHistorySave { self.current = false }
+                                                                       return .saved(self.history)
+                                                                     },
+                                                                     load: { await QuickSaveActions.load(mode: $0, slot: $1, expectedSession: $2, environment: self.environment) }),
+                           dismiss: { self.dismissals += 1
+                             self.active = false
+                           }, openBrowser: { self.browsers += 1 }, report: { self.outcomes.append($0) })
     }
   }
 
   private func model(quickMenu: Bool, fixture: Fixture, controller: QuickSaveMenuActions) -> MenuModel {
     let bindings = PauseMenuBindings(mute: .constant(false), fastForward: .constant(AnyHashable(-1)),
-      quickSlot: .constant(AnyHashable(fixture.slot)), shader: .constant(AnyHashable(0)), quickSaveMode: .constant(fixture.mode))
+                                     quickSlot: .constant(AnyHashable(fixture.slot)), shader: .constant(AnyHashable(0)), quickSaveMode: .constant(fixture.mode))
     let actions = QuickMenuHost.actions(quickActions: controller, openPerfOverlay: {})
     let state = PauseMenuState(quickSlot: fixture.slot, isMuted: false, activeCheatCount: 0,
-      shaderOptions: [], showsRecenterPointer: false, quickSaveMode: fixture.mode, isModded: fixture.modded)
+                               shaderOptions: [], showsRecenterPointer: false, quickSaveMode: fixture.mode, isModded: fixture.modded)
     if quickMenu { return QuickMenuModelBuilder.make(state: state, bindings: bindings, actions: actions) }
     return PauseMenuModelBuilder.primaryLayout(PauseMenuModelBuilder.make(state: state, bindings: bindings, actions: actions))
   }
@@ -207,7 +212,7 @@ final class QuickSaveMenuRoutingTests: XCTestCase {
     environment.session = { replacement }
     environment.isCurrent = { $0 == replacement }
     let outcome = await QuickSaveActions.load(mode: .history, slot: 4,
-      expectedSession: fixture.session, environment: environment)
+                                              expectedSession: fixture.session, environment: environment)
     XCTAssertEqual(outcome, .unavailable)
     XCTAssertTrue(fixture.loaded.isEmpty)
   }
@@ -229,7 +234,8 @@ final class QuickSaveMenuRoutingTests: XCTestCase {
       XCTAssertTrue(fixture.loaded.isEmpty)
       XCTAssertTrue(fixture.outcomes.isEmpty)
       XCTAssertEqual(fixture.browsers, 0)
-      fixture.current = true; fixture.active = false
+      fixture.current = true
+      fixture.active = false
       menu.item(id: "quick-save")?.activateInPlace()
       XCTAssertEqual(fixture.historyWrites, 0)
     }

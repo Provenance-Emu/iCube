@@ -9,8 +9,8 @@ NS_ASSUME_NONNULL_BEGIN
 typedef NS_ENUM(NSInteger, DOLConfigOverride) {
   /// The user's own value is in effect.
   DOLConfigOverrideNone = 0,
-  /// Set for this run by the app: the adaptive clock or an explicit runtime override (CurrentRun), or by
-  /// netplay, a movie or the command line.
+  /// Set for this run by the app: the adaptive clock or an explicit runtime override (CurrentRun),
+  /// or by netplay, a movie or the command line.
   DOLConfigOverrideAuto,
   /// Set by the running game's settings (GlobalGame / LocalGame INI).
   DOLConfigOverrideGame,
@@ -20,8 +20,8 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 @interface DOLConfigBridge : NSObject
 
 // Backend
-+ (NSString *)gfxBackend;
-+ (void)setGfxBackend:(NSString *)value;
++ (NSString*)gfxBackend;
++ (void)setGfxBackend:(NSString*)value;
 
 // VSync
 + (BOOL)gfxVSync;
@@ -142,7 +142,8 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (NSInteger)mainCpuCore;
 /// The user's own engine choice (Base). Settings show and snapshot this one.
 + (NSInteger)mainCpuCoreBase;
-/// Writes Base and saves, also while a game is loaded; outside a game it also drops a CurrentRun copy.
+/// Writes Base and saves, also while a game is loaded; outside a game it also drops a CurrentRun
+/// copy.
 + (void)setMainCpuCore:(NSInteger)core;
 /// Tests only: the CurrentRun engine a jitless boot sets for its run.
 + (void)setMainCpuCoreCurrentRunForTesting:(NSInteger)core;
@@ -165,81 +166,87 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (BOOL)mainCachedInterpreterPrefetch;
 + (void)setMainCachedInterpreterPrefetch:(BOOL)enabled;
 // Cached Interpreter perf A/B knobs (apply on next game launch)
-+ (BOOL)cirPicLoadStore;          // PIC direct-pointer load/store (default ON)
++ (BOOL)cirPicLoadStore;  // PIC direct-pointer load/store (default ON)
 + (void)setCirPicLoadStore:(BOOL)enabled;
-+ (BOOL)cirSpecializedOps;        // specialized hot-op dispatch (default ON, self-validating)
++ (BOOL)cirSpecializedOps;  // specialized hot-op dispatch (default ON, self-validating)
 + (void)setCirSpecializedOps:(BOOL)enabled;
-+ (BOOL)cirSpecializedOpsValidate; // specialized-ops self-validation (default OFF, correctness pass)
++ (BOOL)
+    cirSpecializedOpsValidate;  // specialized-ops self-validation (default OFF, correctness pass)
 + (void)setCirSpecializedOpsValidate:(BOOL)enabled;
-+ (BOOL)cirSpecializedFpLs;       // FP load/store specialization (default OFF, A/B-able)
++ (BOOL)cirSpecializedFpLs;  // FP load/store specialization (default OFF, A/B-able)
 + (void)setCirSpecializedFpLs:(BOOL)enabled;
-+ (BOOL)cirSpecializedFpArith;    // FP + paired-single ARITHMETIC dispatch specialization (default OFF, A/B-able)
++ (BOOL)cirSpecializedFpArith;  // FP + paired-single ARITHMETIC dispatch specialization (default
+                                // OFF, A/B-able)
 + (void)setCirSpecializedFpArith:(BOOL)enabled;
-+ (BOOL)cirSpecializedPsq;        // psq quantized load/store dispatch specialization (default OFF, A/B-able)
++ (BOOL)
+    cirSpecializedPsq;  // psq quantized load/store dispatch specialization (default OFF, A/B-able)
 + (void)setCirSpecializedPsq:(BOOL)enabled;
-+ (BOOL)cirMicroOpFusion;         // micro-op fusion (default OFF, experimental)
++ (BOOL)cirMicroOpFusion;  // micro-op fusion (default OFF, experimental)
 + (void)setCirMicroOpFusion:(BOOL)enabled;
-+ (BOOL)cirMicroOpFusionValidate; // micro-op-fusion self-validation (default OFF, correctness pass)
++ (BOOL)
+    cirMicroOpFusionValidate;  // micro-op-fusion self-validation (default OFF, correctness pass)
 + (void)setCirMicroOpFusionValidate:(BOOL)enabled;
-+ (BOOL)cirDeadFlagElim;          // dead CR-flag elimination (default OFF, experimental)
++ (BOOL)cirDeadFlagElim;  // dead CR-flag elimination (default OFF, experimental)
 + (void)setCirDeadFlagElim:(BOOL)enabled;
 + (BOOL)cirDeadFlagElimValidate;  // dead-flag-elim self-validation (default OFF, correctness pass)
 + (void)setCirDeadFlagElimValidate:(BOOL)enabled;
-+ (BOOL)cirDeadFprfElim;          // dead FP-result-flags (FPRF) elimination (default OFF, experimental)
++ (BOOL)cirDeadFprfElim;  // dead FP-result-flags (FPRF) elimination (default OFF, experimental)
 + (void)setCirDeadFprfElim:(BOOL)enabled;
 + (BOOL)cirDeadFprfElimValidate;  // dead-FPRF-elim self-validation (default OFF, correctness pass)
 + (void)setCirDeadFprfElimValidate:(BOOL)enabled;
-+ (BOOL)cirPsqFastPath;           // psq FLOAT fast-path (default OFF, experimental)
++ (BOOL)cirPsqFastPath;  // psq FLOAT fast-path (default OFF, experimental)
 + (void)setCirPsqFastPath:(BOOL)enabled;
-+ (BOOL)cirPsqFastPathValidate;   // psq-fast-path self-validation (default OFF, correctness pass)
++ (BOOL)cirPsqFastPathValidate;  // psq-fast-path self-validation (default OFF, correctness pass)
 + (void)setCirPsqFastPathValidate:(BOOL)enabled;
-+ (BOOL)cirStoreLoopFF;           // counted-store-loop (memset) fast-path (default OFF, experimental)
++ (BOOL)cirStoreLoopFF;  // counted-store-loop (memset) fast-path (default OFF, experimental)
 + (void)setCirStoreLoopFF:(BOOL)enabled;
-+ (BOOL)cirStoreLoopFFValidate;   // store-loop fast-path self-validation (default OFF, slow)
++ (BOOL)cirStoreLoopFFValidate;  // store-loop fast-path self-validation (default OFF, slow)
 + (void)setCirStoreLoopFFValidate:(BOOL)enabled;
-+ (BOOL)cirCacheLoopFF;           // cache-management loop (dcbf/dcbi/dcbst) fast-forward (default OFF)
++ (BOOL)cirCacheLoopFF;  // cache-management loop (dcbf/dcbi/dcbst) fast-forward (default OFF)
 + (void)setCirCacheLoopFF:(BOOL)enabled;
-+ (BOOL)cirCacheLoopFFValidate;   // cache-loop fast-forward self-validation (default OFF, slow)
++ (BOOL)cirCacheLoopFFValidate;  // cache-loop fast-forward self-validation (default OFF, slow)
 + (void)setCirCacheLoopFFValidate:(BOOL)enabled;
-+ (BOOL)cirIrConstFusion;         // IR engine: constant-address fusion pass (default OFF; IR core only)
++ (BOOL)cirIrConstFusion;  // IR engine: constant-address fusion pass (default OFF; IR core only)
 + (void)setCirIrConstFusion:(BOOL)enabled;
-+ (BOOL)cirIrConstFusionValidate; // IR const-fusion self-validation (default OFF, slow)
++ (BOOL)cirIrConstFusionValidate;  // IR const-fusion self-validation (default OFF, slow)
 + (void)setCirIrConstFusionValidate:(BOOL)enabled;
-+ (BOOL)cirPsNeon;                // NEON paired-single arithmetic fast-path (default OFF; both cores)
++ (BOOL)cirPsNeon;  // NEON paired-single arithmetic fast-path (default OFF; both cores)
 + (void)setCirPsNeon:(BOOL)enabled;
-+ (BOOL)cirPsNeonValidate;        // NEON paired-single self-validation (default OFF, slow)
++ (BOOL)cirPsNeonValidate;  // NEON paired-single self-validation (default OFF, slow)
 + (void)setCirPsNeonValidate:(BOOL)enabled;
-+ (BOOL)cirIrMicroOpFusion;       // IR engine: micro-op fusion pass (default OFF; IR core only)
++ (BOOL)cirIrMicroOpFusion;  // IR engine: micro-op fusion pass (default OFF; IR core only)
 + (void)setCirIrMicroOpFusion:(BOOL)enabled;
-+ (BOOL)cirIrMicroOpFusionValidate; // IR micro-op fusion self-validation (default OFF, slow)
++ (BOOL)cirIrMicroOpFusionValidate;  // IR micro-op fusion self-validation (default OFF, slow)
 + (void)setCirIrMicroOpFusionValidate:(BOOL)enabled;
-+ (BOOL)cirIrDeadFlagElim;        // IR engine: dead CR-flag elimination pass (default OFF; IR core only)
++ (BOOL)cirIrDeadFlagElim;  // IR engine: dead CR-flag elimination pass (default OFF; IR core only)
 + (void)setCirIrDeadFlagElim:(BOOL)enabled;
-+ (BOOL)cirIrDeadFlagElimValidate; // IR dead-flag elim self-validation (default OFF, slow)
++ (BOOL)cirIrDeadFlagElimValidate;  // IR dead-flag elim self-validation (default OFF, slow)
 + (void)setCirIrDeadFlagElimValidate:(BOOL)enabled;
-+ (BOOL)cirIrPicLoadStoreValidate;   // IR PIC load/store self-validation (default OFF, slow)
++ (BOOL)cirIrPicLoadStoreValidate;  // IR PIC load/store self-validation (default OFF, slow)
 + (void)setCirIrPicLoadStoreValidate:(BOOL)enabled;
-+ (BOOL)cirIrSpecializedOpsValidate; // IR specialized-ops self-validation (default OFF, slow)
++ (BOOL)cirIrSpecializedOpsValidate;  // IR specialized-ops self-validation (default OFF, slow)
 + (void)setCirIrSpecializedOpsValidate:(BOOL)enabled;
-+ (BOOL)cirBlockLinking;          // block linking (default OFF, experimental)
++ (BOOL)cirBlockLinking;  // block linking (default OFF, experimental)
 + (void)setCirBlockLinking:(BOOL)enabled;
 + (BOOL)cirBlockLinkingValidate;  // block-linking self-validation (default OFF, correctness pass)
 + (void)setCirBlockLinkingValidate:(BOOL)enabled;
-+ (BOOL)cirDynLinking;            // dynamic inline-cached links for blr/bctr/bcx-fallthrough (default ON)
++ (BOOL)cirDynLinking;  // dynamic inline-cached links for blr/bctr/bcx-fallthrough (default ON)
 + (void)setCirDynLinking:(BOOL)enabled;
-+ (BOOL)cirMemMicroOps;           // integer load/stores packed into fused micro-op runs (default ON)
++ (BOOL)cirMemMicroOps;  // integer load/stores packed into fused micro-op runs (default ON)
 + (void)setCirMemMicroOps:(BOOL)enabled;
-+ (BOOL)cirRecordChaining;        // tape records tail-call each other instead of returning to the executor (default ON)
++ (BOOL)cirRecordChaining;  // tape records tail-call each other instead of returning to the
+                            // executor (default ON)
 + (void)setCirRecordChaining:(BOOL)enabled;
-+ (BOOL)cirLongBlocks;            // blocks continue past not-taken branches and through b/bl (default ON)
++ (BOOL)cirLongBlocks;  // blocks continue past not-taken branches and through b/bl (default ON)
 + (void)setCirLongBlocks:(BOOL)enabled;
-+ (BOOL)cirMicroPairs;            // two adjacent micro-ops fused into one record (default ON)
++ (BOOL)cirMicroPairs;  // two adjacent micro-ops fused into one record (default ON)
 + (void)setCirMicroPairs:(BOOL)enabled;
 + (BOOL)cirDynTargetCache;
 + (void)setCirDynTargetCache:(BOOL)v;
-+ (BOOL)cirGatherPipeCopyFusion;  // lbz/stb runs into the write-gather pipe fused into one record (default ON)
++ (BOOL)cirGatherPipeCopyFusion;  // lbz/stb runs into the write-gather pipe fused into one record
+                                  // (default ON)
 + (void)setCirGatherPipeCopyFusion:(BOOL)enabled;
-+ (BOOL)stallMetrics;             // CPU-thread stall instrumentation (default ON, <0.5% overhead)
++ (BOOL)stallMetrics;  // CPU-thread stall instrumentation (default ON, <0.5% overhead)
 + (void)setStallMetrics:(BOOL)enabled;
 + (BOOL)mainOverclockEnable;
 + (void)setMainOverclockEnable:(BOOL)enabled;
@@ -279,9 +286,9 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (void)setMainOSDMessages:(BOOL)enabled;
 
 // Config > Audio
-+ (NSArray<NSString*> *)audioBackends;
-+ (NSString *)audioBackend;
-+ (void)setAudioBackend:(NSString *)backend;
++ (NSArray<NSString*>*)audioBackends;
++ (NSString*)audioBackend;
++ (void)setAudioBackend:(NSString*)backend;
 + (NSInteger)audioVolume;
 + (void)setAudioVolume:(NSInteger)percent;
 // Mixer timing (MAIN_AUDIO_BUFFER_SIZE / FILL_GAPS / PRESERVE_PITCH; the Mixer reads these live).
@@ -485,12 +492,10 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (void)setGfxHackSkipDuplicateXFBs:(BOOL)enabled;
 + (BOOL)gfxHackBboxEnable;
 + (void)setGfxHackBboxEnable:(BOOL)enabled;
-// iCube bbox latch: 0=Latched (perf default, 1-frame-stale snapshot), 1=Force Sync (exact, stalls CPU)
+// iCube bbox latch: 0=Latched (perf default, 1-frame-stale snapshot), 1=Force Sync (exact, stalls
+// CPU)
 + (NSInteger)gfxBboxSyncMode;
 + (void)setGfxBboxSyncMode:(NSInteger)mode;
-// iCube experimental: resolve EFB peek reads on the GPU instead of CPU readback
-+ (BOOL)gfxHackGpuEfbPeekResolve;
-+ (void)setGfxHackGpuEfbPeekResolve:(BOOL)enabled;
 + (BOOL)gfxBackendSupportsBoundingBox;
 + (NSInteger)gfxSafeTextureCacheColorSamples;
 + (void)setGfxSafeTextureCacheColorSamples:(NSInteger)samples;
@@ -593,7 +598,8 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 // keys added since are deleted, changed and deleted ones put back. Does not save.
 + (void)restoreBaseLayerSnapshot:(NSDictionary<NSString*, NSString*>*)snapshot
     NS_SWIFT_NAME(restoreBaseLayerSnapshot(_:));
-+ (void)resetPageToDefaults:(NSInteger)page NS_SWIFT_NAME(resetPage(toDefaults:)); // 0=config, 1=graphics, 2=controllers, 3=debug, 4=about
++ (void)resetPageToDefaults:(NSInteger)page
+    NS_SWIFT_NAME(resetPage(toDefaults:));  // 0=config, 1=graphics, 2=controllers, 3=debug, 4=about
 
 // Flush the in-memory Base config layer to disk. Most setters write Base via
 // SetBaseOrCurrent but do NOT Save() per-toggle, so settings only survive a relaunch
@@ -601,8 +607,8 @@ typedef NS_ENUM(NSInteger, DOLConfigOverride) {
 + (void)flushSettingsToDisk NS_SWIFT_NAME(flushSettingsToDisk());
 
 // Posted (coalesced, on the main thread) whenever Dolphin's Config changes — see
-// startConfigAutoSyncBridge. Single cross-language source of truth for the name (Swift imports it as
-// a Notification.Name); never spell the string inline. Observers re-read live Config.
+// startConfigAutoSyncBridge. Single cross-language source of truth for the name (Swift imports it
+// as a Notification.Name); never spell the string inline. Observers re-read live Config.
 extern NSNotificationName const DOLConfigChangedNotification;
 
 // Register the global Config-changed hook (settings-sync backbone): debounced auto-save of menu
@@ -632,7 +638,8 @@ extern NSNotificationName const DOLConfigChangedNotification;
 + (NSString*)dsuServersString;
 + (void)setDsuServersString:(NSString*)servers;
 // Parsed helpers for Swift UI
-+ (NSArray<NSDictionary<NSString*, id>*>*)dsuServersParsed; // keys: description, address, port(NSNumber)
++ (NSArray<NSDictionary<NSString*, id>*>*)
+    dsuServersParsed;  // keys: description, address, port(NSNumber)
 + (void)addDsuServer:(NSString*)desc address:(NSString*)address port:(NSInteger)port;
 + (void)removeDsuServerAtIndex:(NSInteger)index;
 // Debug metrics

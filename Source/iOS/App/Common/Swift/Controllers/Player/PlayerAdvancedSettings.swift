@@ -110,6 +110,7 @@ enum AdvancedSettingGroups {
     setting.owner == .wiimote && (setting.groupId == gyroscopeGroup || setting.groupId == accelerometerGroup)
       && setting.isToggle && motionAxisNames.contains(setting.coreName)
   }
+
   /// `WiimoteEmu::WiimoteGroup::IR`, the Wii Remote's pointer (`ControllerEmu::Cursor`).
   static let pointerGroup = 3
   /// `Cursor`'s height setting. `Dynamics.cpp` applies it negatively when SYSCONF's sensor bar is

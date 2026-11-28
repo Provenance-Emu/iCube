@@ -11,6 +11,7 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
   private func model(_ state: ConfigWiiState = ConfigWiiState()) -> MenuModel {
     ConfigWiiModelBuilder.make(state: state) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout ConfigWiiState) -> Void) -> ConfigWiiState {
     var s = ConfigWiiState()
     edit(&s)
@@ -25,6 +26,7 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     return []
     #endif
   }
+
   private var wiiSpeakSections: [String] {
     #if os(iOS)
     return ["wii-speak"]
@@ -54,7 +56,10 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     let off = model()
     XCTAssertEqual(off.item(id: "wii-speak-muted")?.isEnabled, false)
     XCTAssertEqual(off.item(id: "wii-speak-volume")?.isEnabled, false)
-    let on = state { $0.wiiSpeak = true; $0.wiiSpeakMuted = false; $0.wiiSpeakVolumeDb = -12 }
+    let on = state { $0.wiiSpeak = true
+      $0.wiiSpeakMuted = false
+      $0.wiiSpeakVolumeDb = -12
+    }
     let m = model(on)
     XCTAssertEqual(m.item(id: "wii-speak-muted")?.isEnabled, true)
     XCTAssertEqual(m.item(id: "wii-speak-volume")?.isEnabled, true)
@@ -65,7 +70,9 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     stepper.value.wrappedValue = 10
     XCTAssertEqual(changes, [.wiiSpeakVolumeDb(10)])
     for (id, change) in [("wii-speak", { ConfigWiiChange.wiiSpeak($0) }), ("wii-speak-muted", { ConfigWiiChange.wiiSpeakMuted($0) })] as [(String, (Bool) -> ConfigWiiChange)] {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail(id); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail(id)
+        continue
+      }
       changes = []
       binding.wrappedValue = false
       XCTAssertEqual(changes, [change(false)], id)
@@ -91,7 +98,9 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       for value in [true, false] {
         changes = []
         binding.wrappedValue = value
@@ -101,14 +110,25 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
   }
 
   func test_toggleRows_reflectTheState() {
-    let on = state { $0.pal60 = true; $0.screensaver = true; $0.wiimoteRumble = false; $0.touchpadIRFollowWithoutClick = true
-      $0.skylanderPortal = true; $0.keyboard = true; $0.wiilink = true; $0.sdCard = true; $0.sdWrites = true; $0.sdFolderSync = true }
+    let on = state { $0.pal60 = true
+      $0.screensaver = true
+      $0.wiimoteRumble = false
+      $0.touchpadIRFollowWithoutClick = true
+      $0.skylanderPortal = true
+      $0.keyboard = true
+      $0.wiilink = true
+      $0.sdCard = true
+      $0.sdWrites = true
+      $0.sdFolderSync = true
+    }
     let expected: [(String, Bool)] = [
       ("pal60", true), ("screensaver", true), ("rumble", false), ("touchpad-ir-follow", true),
       ("skylander-portal", true), ("usb-keyboard", true), ("wiilink", true), ("sd-card", true), ("sd-writes", true), ("sd-folder-sync", true),
     ]
     for (id, value) in expected {
-      guard case .toggle(let binding)? = model(on).item(id: id)?.role else { XCTFail(id); continue }
+      guard case .toggle(let binding)? = model(on).item(id: id)?.role else { XCTFail(id)
+        continue
+      }
       XCTAssertEqual(binding.wrappedValue, value, id)
     }
   }
@@ -123,7 +143,9 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, value, change) in expected {
-      guard case .cycle(_, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle"); continue }
+      guard case .cycle(_, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle")
+        continue
+      }
       changes = []
       selection.wrappedValue = value
       XCTAssertEqual(changes, [change], id)
@@ -137,7 +159,9 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, range, value, change) in expected {
-      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper"); continue }
+      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper")
+        continue
+      }
       XCTAssertEqual(stepper.range, range, id)
       XCTAssertEqual(stepper.step, 1, id)
       changes = []
@@ -147,7 +171,9 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
   }
 
   func test_steppers_showTheirValueAsAWholeNumber() {
-    let m = model(state { $0.sensorBarSensitivity = 3; $0.speakerVolume = 7 })
+    let m = model(state { $0.sensorBarSensitivity = 3
+      $0.speakerVolume = 7
+    })
     XCTAssertEqual(m.item(id: "sensor-bar-sensitivity")?.currentValueTitle, "3")
     XCTAssertEqual(m.item(id: "speaker-volume")?.currentValueTitle, "7")
   }
@@ -176,7 +202,9 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
       ("sound-mode", { $0.soundMode = 5 }, 5, 4),
     ]
     for (id, edit, value, count) in cases {
-      guard case .cycle(let options, _)? = model(state(edit)).item(id: id)?.role else { XCTFail(id); continue }
+      guard case .cycle(let options, _)? = model(state(edit)).item(id: id)?.role else { XCTFail(id)
+        continue
+      }
       XCTAssertEqual(options.count, count, id)
       XCTAssertEqual(options.last?.1.base as? Int, value, id)
       XCTAssertEqual(options.last?.0, "Error", id)
@@ -187,7 +215,9 @@ final class ConfigWiiModelBuilderTests: XCTestCase {
     for stored in [1, 2, 3, -1] {
       let item = model(state { $0.sensorBarPosition = stored }).item(id: "sensor-bar-position")
       XCTAssertEqual(item?.currentValueTitle, "Top", "\(stored)")
-      guard case .cycle(let options, _)? = item?.role else { XCTFail("not a cycle"); continue }
+      guard case .cycle(let options, _)? = item?.role else { XCTFail("not a cycle")
+        continue
+      }
       XCTAssertEqual(options.count, 2, "\(stored)")
     }
     XCTAssertEqual(model(state { $0.sensorBarPosition = 0 }).item(id: "sensor-bar-position")?.currentValueTitle, "Bottom")

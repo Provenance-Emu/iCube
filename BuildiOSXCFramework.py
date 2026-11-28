@@ -394,7 +394,6 @@ class DolphinBuilder:
             # "-freciprocal-math "
             "-fPIC "
             "-fpermissive "
-            "-fomit-frame-pointer "
             "-fno-trapping-math "
             "-fno-strict-aliasing "
             # "-fno-signed-zeros "

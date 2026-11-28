@@ -48,9 +48,9 @@ final class TVSaveSlotsPaneTests: XCTestCase {
   func testPrimaryPaneLoadItemDisablesEmptyIncompatibleAndBusyStatesWithoutActivation() {
     let valid = state(slot: 4, modified: 10)
     let incompatible = SaveStateInfo(gameID: valid.gameID, displayName: valid.displayName, slot: valid.slot,
-      createdAt: valid.createdAt, modifiedAt: valid.modifiedAt, sizeBytes: valid.sizeBytes,
-      versionHash: valid.versionHash, isCompatible: false, path: valid.path,
-      thumbnailURL: valid.thumbnailURL, isAuto: valid.isAuto)
+                                     createdAt: valid.createdAt, modifiedAt: valid.modifiedAt, sizeBytes: valid.sizeBytes,
+                                     versionHash: valid.versionHash, isCompatible: false, path: valid.path,
+                                     thumbnailURL: valid.thumbnailURL, isAuto: valid.isAuto)
     var loads = 0
     for (candidate, busy) in [(nil, false), (incompatible, false), (valid, true)] as [(SaveStateInfo?, Bool)] {
       let item = TVSaveSlotsPane.loadItem(state: candidate, busy: busy) { _ in loads += 1 }
@@ -80,7 +80,7 @@ final class TVSaveSlotsPaneTests: XCTestCase {
     let scan = QuickSavePickerScan()
     await scan.reload { [] }
     guard case .save(let request) = scan.prepareSave(slot: 4, session: session, destination: path,
-                                                    occupancy: QuickSaveDestinationOccupancy.read(path)) else {
+                                                     occupancy: QuickSaveDestinationOccupancy.read(path)) else {
       return XCTFail("The managed request must begin as an empty Save Here")
     }
     var writeTask: Task<Bool?, Never>?
@@ -88,7 +88,7 @@ final class TVSaveSlotsPaneTests: XCTestCase {
     let item = TVSaveSlotsPane.saveItem(request: request, requiresOverwrite: false, busy: false) { captured, confirmed in
       writeTask = Task {
         await scan.save(captured, confirmed: confirmed, isCurrent: { $0 == session },
-          destination: { _ in path }, occupancy: QuickSaveDestinationOccupancy.read) { _ in
+                        destination: { _ in path }, occupancy: QuickSaveDestinationOccupancy.read) { _ in
           writes += 1
           return true
         }
@@ -111,7 +111,7 @@ final class TVSaveSlotsPaneTests: XCTestCase {
     let scan = QuickSavePickerScan()
     await scan.reload { [] }
     guard case .confirm(let request) = scan.prepareSave(slot: 4, session: session, destination: path,
-                                                       occupancy: .occupied) else {
+                                                        occupancy: .occupied) else {
       return XCTFail("An occupied slot must begin with explicit Overwrite")
     }
     var writeTask: Task<Bool?, Never>?
@@ -122,7 +122,7 @@ final class TVSaveSlotsPaneTests: XCTestCase {
       managedRequiresOverwrite = false
       writeTask = Task {
         await scan.save(captured, confirmed: confirmed, isCurrent: { $0 == session },
-          destination: { _ in path }, occupancy: { _ in .occupied }) { written in
+                        destination: { _ in path }, occupancy: { _ in .occupied }) { written in
           XCTAssertEqual(written.session, session)
           XCTAssertEqual(written.slot, 4)
           XCTAssertEqual(written.path, path)

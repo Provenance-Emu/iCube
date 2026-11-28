@@ -2,7 +2,7 @@ import Foundation
 import Metal
 import MetalKit
 
-@objc final class DOLShaderPostProcessor: NSObject {
+@objc(DOLShaderPostProcessor) final class DOLShaderPostProcessor: NSObject {
   @objc static let shared = DOLShaderPostProcessor()
   override private init() {
     super.init()
@@ -13,7 +13,23 @@ import MetalKit
   private var filter: FilterChain?
   private var library: CompiledShaderContainer?
   private var cachedPresetPath: String?
-  private var lastDrawableSize: CGSize = .zero
+  /// The game picture cut out of the core's frame, when the frame is larger than the picture. Video thread only.
+  private var pictureTexture: MTLTexture?
+  private weak var bezelRenderer: GameplayBezelRenderer?
+
+  @MainActor
+  func useBezelRenderer(_ renderer: GameplayBezelRenderer) {
+    stateLock.withLock { bezelRenderer = renderer }
+  }
+
+  @objc var wantsPostProcessing: Bool {
+    UserDefaults.standard.bool(forKey: "shader_enabled") || stateLock.withLock { bezelRenderer?.isReady ?? false }
+  }
+
+  @objc var bezelPictureInViewport: CGRect {
+    stateLock.withLock { bezelRenderer?.pictureInViewport ?? .null }
+  }
+
   private var needsReload: Bool = false
   /// `library`, `cachedPresetPath` and `needsReload` are written by the video thread in
   /// `renderSource` and read or flagged from the main thread by the pickers. Two threads
@@ -42,6 +58,7 @@ import MetalKit
   private func clearError() {
     DispatchQueue.main.async { self.lastError = nil }
   }
+
   #if DEBUG
   private var debugChecker: MTLTexture?
   #endif
@@ -281,6 +298,8 @@ import MetalKit
 
   @objc func renderSource(_ source: MTLTexture, commandBuffer cb: MTLCommandBuffer, drawable: CAMetalDrawable) {
     guard let device else { return }
+    let bezel = stateLock.withLock { bezelRenderer }
+    let bezelRequested = bezel?.isRequested == true
     stateLock.withLock {
       configureLocked(device)
       if needsReload {
@@ -321,6 +340,7 @@ import MetalKit
       /* keep compiled shader active to render over checkerboard */
       filter.setOutputPixelFormat(dst.pixelFormat)
       filter.drawableSize = dstSize
+      filter.outputRect = nil
       let texSize = CGSize(width: tex.width, height: tex.height)
       filter.setSourceRect(CGRect(origin: .zero, size: texSize), aspect: texSize)
       let applied = UserDefaults.standard.bool(forKey: "shader_debug_checker_apply")
@@ -338,7 +358,16 @@ import MetalKit
     }
     #endif
 
-    guard filter.hasShader else {
+    if bezelRequested, let bezel, bezel.isReady {
+      let picture = ShaderPictureGeometry.pictureRect(reported: TVEmulationBridge.currentPictureRectInFrame(), textureSize: srcSize)
+      let game = picture.flatMap { pictureSource(from: source, rect: $0, device: device, commandBuffer: cb) } ?? source
+      let flip = UserDefaults.standard.bool(forKey: "shader_flip_vertical")
+      if bezel.render(game: game, target: dst, pictureFilter: filter.hasShader ? filter : nil, commandBuffer: cb, flip: flip) {
+        return
+      }
+    }
+
+    guard filter.hasShader, !bezelRequested else {
       if let blit = cb.makeBlitCommandEncoder() {
         // print("[Shaders] Swift: no active shader; blit copy")
         blit.copy(from: source, sourceSlice: 0, sourceLevel: 0, sourceOrigin: .init(x: 0, y: 0, z: 0), sourceSize: .init(width: source.width, height: source.height, depth: 1), to: dst, destinationSlice: 0, destinationLevel: 0, destinationOrigin: .init(x: 0, y: 0, z: 0))
@@ -347,9 +376,18 @@ import MetalKit
       return
     }
 
+    // The frame is the size of the view; filter the game picture alone, and draw it back where it was.
+    let picture = ShaderPictureGeometry.pictureRect(reported: TVEmulationBridge.currentPictureRectInFrame(), textureSize: srcSize)
+    let filterSource = picture.flatMap { self.pictureSource(from: source, rect: $0, device: device, commandBuffer: cb) } ?? source
+    let filterSourceSize = CGSize(width: filterSource.width, height: filterSource.height)
+    let cropped = filterSource !== source
+
     let rpd = MTLRenderPassDescriptor()
     rpd.colorAttachments[0].texture = dst
-    rpd.colorAttachments[0].loadAction = .dontCare
+    // Beside a cut-out picture the drawable shows the frame as the core drew it (see `background` below);
+    // the clear only covers a frame that cannot be drawn.
+    rpd.colorAttachments[0].loadAction = cropped ? .clear : .dontCare
+    rpd.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
     rpd.colorAttachments[0].storeAction = .store
 
     // Pre-copy is bandwidth-heavy; keep it opt-in via a setting, and allow debug override to disable
@@ -390,7 +428,8 @@ import MetalKit
     // Pipe sizes/pixelFormat into the filter
     filter.setOutputPixelFormat(dst.pixelFormat)
     filter.drawableSize = dstSize
-    filter.setSourceRect(CGRect(origin: .zero, size: srcSize), aspect: srcSize)
+    filter.outputRect = cropped ? picture : nil
+    filter.setSourceRect(CGRect(origin: .zero, size: filterSourceSize), aspect: filterSourceSize)
 
     #if DEBUG
     // Optional: show an intermediate pass
@@ -409,8 +448,33 @@ import MetalKit
     // Invoke the filter
     /// Default to no vertical flip to match OpenEmu orientation assumptions
     let flip = (UserDefaults.standard.object(forKey: "shader_flip_vertical") as? Bool) ?? false
-    filter.render(sourceTexture: source, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip)
-    // print("[Shaders] Swift: render end (flip=\(flip))")
+    // The core draws its messages and counters into the frame before the filters run; some sit in the bars.
+    filter.render(sourceTexture: filterSource, commandBuffer: cb, renderPassDescriptor: rpd, flipVertically: flip,
+                  background: cropped ? source : nil)
+  }
+
+  /// Copies `rect` of `source` into a texture of its own, which the filter chain takes as the whole picture.
+  /// `nil` when the texture cannot be made; the caller then filters the whole frame, as before.
+  private func pictureSource(from source: MTLTexture, rect: CGRect, device: MTLDevice,
+                             commandBuffer: MTLCommandBuffer) -> MTLTexture? {
+    let width = Int(rect.width)
+    let height = Int(rect.height)
+    if pictureTexture?.width != width || pictureTexture?.height != height
+      || pictureTexture?.pixelFormat != source.pixelFormat || pictureTexture?.device.registryID != device.registryID {
+      let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: source.pixelFormat, width: width,
+                                                                height: height, mipmapped: false)
+      descriptor.storageMode = .private
+      descriptor.usage = .shaderRead
+      pictureTexture = device.makeTexture(descriptor: descriptor)
+      pictureTexture?.label = "Screen filter picture"
+    }
+    guard let pictureTexture, let blit = commandBuffer.makeBlitCommandEncoder() else { return nil }
+    blit.copy(from: source, sourceSlice: 0, sourceLevel: 0,
+              sourceOrigin: MTLOrigin(x: Int(rect.minX), y: Int(rect.minY), z: 0),
+              sourceSize: MTLSize(width: width, height: height, depth: 1),
+              to: pictureTexture, destinationSlice: 0, destinationLevel: 0, destinationOrigin: MTLOrigin())
+    blit.endEncoding()
+    return pictureTexture
   }
 
   /// Expose compiled parameter metadata for UI
@@ -434,6 +498,7 @@ import MetalKit
   }
 
   // MARK: - Preset-scoped parameter access (D16)
+
   //
   // The three methods below let the pause-menu quick picker's parameter editor
   // work for ANY preset the user just tapped, not only the one that happens to be

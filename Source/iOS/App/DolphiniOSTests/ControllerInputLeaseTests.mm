@@ -1,7 +1,7 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
-#import <XCTest/XCTest.h>
 #import <GameController/GameController.h>
+#import <XCTest/XCTest.h>
 #import "../Common/Bridging/DOLControllerInputLease.h"
 #include "InputCommon/ControllerInterface/iOS/MFiController.h"
 
@@ -10,17 +10,32 @@
 @interface DOLGateMotionFixture : NSObject
 @end
 @implementation DOLGateMotionFixture
-- (BOOL)sensorsRequireManualActivation { return NO; }
-- (BOOL)hasRotationRate { return YES; }
-- (GCAcceleration)acceleration { return (GCAcceleration){0.25, 0.5, 1.0}; }
-- (GCRotationRate)rotationRate { return (GCRotationRate){1.0, 2.0, 3.0}; }
+- (BOOL)sensorsRequireManualActivation
+{
+  return NO;
+}
+- (BOOL)hasRotationRate
+{
+  return YES;
+}
+- (GCAcceleration)acceleration
+{
+  return (GCAcceleration){0.25, 0.5, 1.0};
+}
+- (GCRotationRate)rotationRate
+{
+  return (GCRotationRate){1.0, 2.0, 3.0};
+}
 @end
 
 @interface DOLGateProfileFixture : NSObject
 @property(nonatomic, strong) NSDictionary<NSString*, GCControllerElement*>* elements;
 @end
 @implementation DOLGateProfileFixture
-- (instancetype)capture { return self; }
+- (instancetype)capture
+{
+  return self;
+}
 @end
 
 @interface DOLGateControllerFixture : NSObject
@@ -30,10 +45,22 @@
 @property(nonatomic, strong) DOLGateMotionFixture* motion;
 @end
 @implementation DOLGateControllerFixture
-- (NSString*)vendorName { return @"Gate Test Controller"; }
-- (NSString*)productCategory { return @"Gate Test"; }
-- (GCGamepad*)gamepad { return nil; }
-- (GCDeviceHaptics*)haptics { return nil; }
+- (NSString*)vendorName
+{
+  return @"Gate Test Controller";
+}
+- (NSString*)productCategory
+{
+  return @"Gate Test";
+}
+- (GCGamepad*)gamepad
+{
+  return nil;
+}
+- (GCDeviceHaptics*)haptics
+{
+  return nil;
+}
 @end
 
 namespace
@@ -52,7 +79,7 @@ GCController* Identity(DOLGateControllerFixture* fixture)
 {
   return (GCController*)(id)fixture;
 }
-}
+}  // namespace
 
 @interface ControllerInputLeaseTests : XCTestCase
 @end
@@ -88,9 +115,9 @@ GCController* Identity(DOLGateControllerFixture* fixture)
   XCTAssertFalse([lease pollRelease]);
   [fixture.extendedGamepad.buttonA setValue:0];
   [fixture.extendedGamepad.leftTrigger setValue:0];
-  XCTAssertFalse([lease pollRelease]); // held axis alone still fences release
+  XCTAssertFalse([lease pollRelease]);  // held axis alone still fences release
   [fixture.extendedGamepad.leftThumbstick.xAxis setValue:0];
-  XCTAssertTrue([lease pollRelease]); // gravity/rotation never block physical neutral
+  XCTAssertTrue([lease pollRelease]);  // gravity/rotation never block physical neutral
   XCTAssertNotEqual(wrapper.FindInput("Accel Up")->GetState(), 0.0);
   MFiController::ReleaseId(remote);
   MFiController::ReleaseId(Identity(other));
@@ -106,7 +133,7 @@ GCController* Identity(DOLGateControllerFixture* fixture)
   [first requestRelease];
   XCTAssertFalse([first pollRelease]);
   [fixture.extendedGamepad.buttonA setValue:1];
-  second = nil; // dealloc must preserve the physical release fence
+  second = nil;  // dealloc must preserve the physical release fence
   wrapper.UpdateInput();
   XCTAssertEqual(wrapper.FindInput("Button A")->GetState(), 0.0);
   [fixture.extendedGamepad.buttonA setValue:0];
@@ -148,7 +175,7 @@ GCController* Identity(DOLGateControllerFixture* fixture)
   auto newLease = [[DOLControllerInputLease alloc] initWithController:controller];
   auto replacementGate = MFiController::GetInputGate(controller);
   MFiController newWrapper(controller);
-  [oldLease forceReleaseForDisconnect]; // stale repeated teardown must only affect its own gate
+  [oldLease forceReleaseForDisconnect];  // stale repeated teardown must only affect its own gate
   [oldLease requestRelease];
   XCTAssertTrue([oldLease pollRelease]);
   XCTAssertTrue(MFiController::GetInputGate(controller) == replacementGate);
@@ -171,9 +198,11 @@ GCController* Identity(DOLGateControllerFixture* fixture)
   auto fixture = ExtendedFixture();
   GCExtendedGamepad* inputs = fixture.extendedGamepad;
   fixture.extendedGamepad = nil;
-  fixture.physicalInputProfile.elements = @{@"Direction Pad": inputs.dpad,
-                                            @"Button A": inputs.buttonA,
-                                            @"Left Trigger": inputs.leftTrigger};
+  fixture.physicalInputProfile.elements = @{
+    @"Direction Pad" : inputs.dpad,
+    @"Button A" : inputs.buttonA,
+    @"Left Trigger" : inputs.leftTrigger
+  };
   GCController* controller = Identity(fixture);
   [inputs.buttonA setValue:1];
   MFiController wrapper(controller);

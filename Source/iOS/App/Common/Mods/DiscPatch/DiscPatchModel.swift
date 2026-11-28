@@ -209,9 +209,13 @@ final class DiscPatchModel: ObservableObject {
 
   private func fail(_ error: Error) {
     endBackgroundTask()
-    if error is CancellationError { state = .idle; return }
+    if error is CancellationError { state = .idle
+      return
+    }
     if let patchError = error as? DiscPatchError {
-      if case .cancelled = patchError { state = .idle; return }
+      if case .cancelled = patchError { state = .idle
+        return
+      }
       state = .failed(message: patchError.localizedDescription, canApplyAnyway: patchError.allowsApplyAnyway)
       return
     }

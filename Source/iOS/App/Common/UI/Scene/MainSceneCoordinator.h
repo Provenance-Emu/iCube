@@ -11,7 +11,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (MainSceneCoordinator*)shared;
 
-@property (nullable, weak) UIWindowScene* mainScene;
+@property(nullable, weak) UIWindowScene* mainScene;
 
 @end
 

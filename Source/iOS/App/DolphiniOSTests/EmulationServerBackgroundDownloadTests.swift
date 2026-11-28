@@ -4,6 +4,7 @@
 import CryptoKit
 import Foundation
 import PVContinuity
+import PVRemoteLibrary
 import RomMClient
 import XCTest
 
@@ -12,6 +13,17 @@ import XCTest
 /// The Emulation Server copy on a background fetcher: every file asked for at once, the plan kept
 /// so a relaunch can finish the game without browsing, and failures kept or dropped as they should.
 final class EmulationServerBackgroundDownloadTests: XCTestCase {
+  func testDownloadSpaceLeavesRoomForTheSystem() throws {
+    let reserve: Int64 = 256 * 1024 * 1024
+    XCTAssertNoThrow(try EmulationServerLibrary.checkDownloadSpace(bytes: 1024, available: nil))
+    XCTAssertNoThrow(try EmulationServerLibrary.checkDownloadSpace(bytes: 1024, available: reserve + 1024))
+    XCTAssertThrowsError(try EmulationServerLibrary.checkDownloadSpace(bytes: 1024, available: reserve + 1023)) {
+      guard case EmulationServerLibrary.ServerError.insufficientSpace(bytes: 1024, available: let available) = $0, available == reserve + 1023 else {
+        return XCTFail("Unexpected error: \($0)")
+      }
+    }
+  }
+
   private func makeLibrary(fetcher: RecordingFetcher, transport: TwoDiscTransport = TwoDiscTransport())
     throws -> (EmulationServerLibrary, EmulationServer) {
     let server = try EmulationServer(address: "http://bg-\(UUID().uuidString).invalid")
@@ -109,7 +121,7 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
       let fetcher = RecordingFetcher(failure: failure)
       let (library, _) = try makeLibrary(fetcher: fetcher)
       let page = try await library.catalog()
-    let entry = try XCTUnwrap(page.entries.first)
+      let entry = try XCTUnwrap(page.entries.first)
       do {
         _ = try await library.copy(entry) { _ in }
         XCTFail("Expected \(failure)")
@@ -347,7 +359,7 @@ private actor HeldCatalog: RemoteGameCatalog {
   func openCatalog(search: String) async throws -> RemoteCatalogPage { throw URLError(.unsupportedURL) }
   func continueCatalog() async throws -> RemoteCatalogPage { throw URLError(.unsupportedURL) }
   func gameCount() async throws -> Int { 0 }
-  func artwork(for entry: ContinuityLibraryEntry) async -> Data? { nil }
+  func artwork(for entry: ContinuityLibraryEntry, etag: String?) async throws -> ArtworkResult { .none }
 
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
     copies += 1
@@ -358,4 +370,5 @@ private actor HeldCatalog: RemoteGameCatalog {
 
   nonisolated func isAccessDenied(_ error: any Error) -> Bool { false }
   nonisolated var downloadSourceID: String { "held-catalog" }
+  nonisolated var sourceKind: LibrarySourceInfo.Kind { .contentServer }
 }
