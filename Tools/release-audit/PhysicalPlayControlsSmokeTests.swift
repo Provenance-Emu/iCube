@@ -32,7 +32,7 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
       for _ in 0..<2 {
         if app.buttons["pause.tile.exit"].exists { break }
         revealToolbarIfHidden()
-        let pause = app.buttons["play-toolbar.pause"].firstMatch
+        let pause = app.buttons["play-toolbar.menu"].firstMatch
         if pause.exists && pause.isHittable { pause.tap() }
       }
       let paused = app.buttons["pause.tile.exit"].firstMatch.waitForExistence(timeout: 5)
@@ -45,7 +45,7 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
 
   func testToolbarMuteRestoresVolumeAndHistoryUI() throws {
     try exposeToolbarFromExistingSession()
-    for (id, label) in [("pause", "Pause"), ("save", "Quick Save"), ("load", "Quick Load"),
+    for (id, label) in [("menu", "Game Menu"), ("save", "Quick Save"), ("load", "Quick Load"),
                         ("saves", "Save States"), ("audio", "Audio"), ("controller", "Controller"),
                         ("shaders", "Shaders")] {
       let control = app.buttons["play-toolbar.\(id)"].firstMatch
@@ -144,7 +144,7 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
     let audio = app.buttons["play-toolbar.audio"].firstMatch
     try XCTSkipUnless(audio.waitForExistence(timeout: 5),
                       "Wide toolbar unavailable (compact/accessibility layout); use its separate audit")
-    XCTAssertTrue(app.buttons["play-toolbar.pause"].firstMatch.waitForExistence(timeout: 5),
+    XCTAssertTrue(app.buttons["play-toolbar.menu"].firstMatch.waitForExistence(timeout: 5),
                   "Existing real-game toolbar required; no library launch fallback")
   }
 
@@ -176,9 +176,9 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
   private func dismissAudioPopoverIfPresent() -> Bool {
     let volume = app.sliders["Volume"].firstMatch
     guard volume.exists else { return true }
-    let pause = app.buttons["play-toolbar.pause"].firstMatch
+    let pause = app.buttons["play-toolbar.menu"].firstMatch
     guard app.alerts.count == 0, pause.exists, pause.isEnabled,
-          pause.label == "Pause", app.frame.contains(pause.frame),
+          pause.label == "Game Menu", app.frame.contains(pause.frame),
           pause.frame.width > 0, pause.frame.height > 0 else { return false }
     let center = CGPoint(x: pause.frame.midX, y: pause.frame.midY)
     let popover = app.popovers.firstMatch
@@ -197,7 +197,7 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
   private func leavePaused() throws {
     if !app.buttons["pause.tile.exit"].exists {
       revealToolbarIfHidden()
-      let pause = app.buttons["play-toolbar.pause"].firstMatch
+      let pause = app.buttons["play-toolbar.menu"].firstMatch
       assertTarget(pause)
       pause.tap()
     }
@@ -207,7 +207,7 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
   }
 
   private func revealToolbarIfHidden() {
-    guard !app.buttons["play-toolbar.pause"].exists, app.alerts.count == 0 else { return }
+    guard !app.buttons["play-toolbar.menu"].exists, app.alerts.count == 0 else { return }
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
       .withOffset(CGVector(dx: 0, dy: 20)).tap()
   }

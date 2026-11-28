@@ -31,7 +31,7 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
     }
     var launchedGame = false
     let emulationHUD = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "DSU:")).firstMatch
-    if !exit.exists && !app.buttons["play-toolbar.pause"].exists && !app.buttons["Pause"].exists && !app.buttons["Resume"].exists && !app.staticTexts["Paused"].exists && !emulationHUD.exists && !app.staticTexts["START"].exists {
+    if !exit.exists && !app.buttons["play-toolbar.menu"].exists && !app.buttons["Pause"].exists && !app.buttons["Resume"].exists && !app.staticTexts["Paused"].exists && !emulationHUD.exists && !app.staticTexts["START"].exists {
       let title = NSPredicate(format: "label CONTAINS[cd] %@", "Luigi")
       let card = app.buttons.matching(title).firstMatch
       if card.waitForExistence(timeout: 20), card.isHittable {
@@ -61,7 +61,7 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
       // Boot may finish after the toolbar's idle deadline. Reveal before
       // querying its Pause/Resume controls, rather than waiting for hidden UI.
       revealToolbarIfHidden()
-      let directPause = app.buttons["play-toolbar.pause"].firstMatch
+      let directPause = app.buttons["play-toolbar.menu"].firstMatch
       let pause = app.buttons["Pause"].firstMatch
       let resume = app.buttons["Resume"].firstMatch
       let playingOrPaused = NSPredicate { _, _ in directPause.exists || pause.exists || resume.exists || exit.exists || self.app.staticTexts["Paused"].exists }
@@ -124,7 +124,7 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
 
   private func revealToolbarIfHidden() {
     let more = app.buttons["More"].firstMatch
-    let directPause = app.buttons["play-toolbar.pause"].firstMatch
+    let directPause = app.buttons["play-toolbar.menu"].firstMatch
     guard !directPause.exists, !more.exists, app.alerts.count == 0 else { return }
     // EmulationScreen.topRevealStrip spans the game picture's top 80pt.
     // Reveal its toolbar without tapping the central Paused pill (Resume).
