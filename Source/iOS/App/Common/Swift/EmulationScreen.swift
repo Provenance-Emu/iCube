@@ -253,6 +253,9 @@ struct EmulationScreen: View {
   @State private var quickStateActionInFlight = false
   @State private var pauseStartsInSaveBrowser = false
   @State private var pauseStartsInPerformance = false
+  /// The quick menu's Shaders and Exit tiles hand over to the pause menu on that screen.
+  @State private var pauseStartsInShaders = false
+  @State private var pauseStartsInExitConfirm = false
   /// The pause menu opens on the Controllers hub (the no-controller notice's Controllers button).
   @State private var pauseStartsInControllers = false
   #if os(tvOS)
@@ -329,6 +332,7 @@ struct EmulationScreen: View {
   @State private var quitSavePauseToken: PauseArbiter.Token?
   @State private var showShaderSheet = false
   @State private var showShaderParams = false
+  @State private var showShaderOptions = false
   @State private var showFXSheet = false
   @State private var showControllerSettings = false
   // AR stabilization
@@ -603,7 +607,9 @@ struct EmulationScreen: View {
           showQuickMenu = false
           openPerformanceControls()
         }),
-        onOpenPauseMenu: {
+        onOpenPauseMenu: { handoff in
+          pauseStartsInShaders = handoff == .shaders
+          pauseStartsInExitConfirm = handoff == .exitConfirm
           // Runs before the quick menu releases its token: the pending claim keeps the core paused
           // across the handover, and `PauseMenuView.onAppear` adopts it. Not through the gesture
           // tracker, whose coalescing window would drop a press soon after the panel opened.
@@ -654,6 +660,8 @@ struct EmulationScreen: View {
     }
     menu.startsInSaveBrowser = pauseStartsInSaveBrowser
     menu.startsInPerformance = pauseStartsInPerformance
+    menu.startsInShaders = pauseStartsInShaders
+    menu.startsInExitConfirm = pauseStartsInExitConfirm
     menu.startsInControllers = pauseStartsInControllers
     // Offered only where a TV the player chose could show right now (landscape, no skin, this screen).
     if ICubeBezels.offersSwitcher(bezelScreenState(canvas: bezelCanvas)) { menu.onOpenBezels = openBezelStrip }
@@ -1017,6 +1025,8 @@ struct EmulationScreen: View {
       } else {
         pauseStartsInSaveBrowser = false
         pauseStartsInPerformance = false
+        pauseStartsInShaders = false
+        pauseStartsInExitConfirm = false
         attachLivePerformance()
       }
       postOverlayVisibility()
@@ -1352,6 +1362,8 @@ struct EmulationScreen: View {
         } else {
           pauseStartsInSaveBrowser = false
           pauseStartsInPerformance = false
+          pauseStartsInShaders = false
+          pauseStartsInExitConfirm = false
           pauseStartsInControllers = false
         }
       postOverlayVisibility()
@@ -1380,9 +1392,17 @@ struct EmulationScreen: View {
   private var iosScreen: some View {
     iosNavigationCanvas
       .sheet(isPresented: $showShaderSheet) {
+        // The game runs on behind this sheet, so the picker asks for a frame of its own to preview.
+        NavigationStack { ShaderQuickPickerView(capturesLiveFrame: true) }
+          .claimsController()
+      }
+      .sheet(isPresented: $showShaderOptions) {
         NavigationStack {
           ShaderSettingsView()
-            .navigationTitle(L("Shaders"))
+            .navigationTitle(L("Shader Options"))
+            .toolbar {
+              ToolbarItem(placement: .confirmationAction) { Button(L("Done")) { showShaderOptions = false } }
+            }
         }
       }
       .sheet(isPresented: $showShaderParams) {
@@ -1876,12 +1896,24 @@ struct EmulationScreen: View {
         return OnScreenControllerLive.options().map { TopBarOnScreenControllerOption(controller: $0, isSelected: $0 == current) }
       },
       onChooseOnScreenController: { OnScreenControllerLive.apply($0) },
+      readContextValues: topBarContextValues,
+      bezelsOffered: ICubeBezels.offersSwitcher(bezelScreenState(canvas: bezelCanvas)),
       onQuickSave: quickSaveFromTopBar,
       onQuickLoad: { quickLoadFromTopBar() })
       .disabled(quitRequestInFlight || quickStateActionInFlight)
       .overlay {
         if quitRequestInFlight { ProgressView(L("Saving…")) }
       }
+  }
+
+  /// What the bar cannot read by itself: the classic quick slot, what Player 1 plays on and the TV.
+  private func topBarContextValues() -> TopBarValues {
+    let player1 = player1DeviceOptions().first(where: \.isSelected)
+    var values = TopBarValues()
+    values.quickSlot = (quickSaveMode == .slots || ModdedBoot.isCurrentBootModded) ? selectedSlot : nil
+    values.controllerName = player1.map { $0.qualifier == nil ? L("Touch") : $0.name }
+    values.bezelName = bezels.bezel?.name
+    return values
   }
 
   /// The top bar's Player 1 section: the on-screen controls and every connected pad, the current one checked.
@@ -1897,7 +1929,8 @@ struct EmulationScreen: View {
 
   /// True while anything the bar opened (or the pause menu) is on screen; the bar must not hide under it.
   private var topBarChildPresented: Bool {
-    showPerfOverlay || showShaderSheet || showShaderParams || showFXSheet || showControllerSettings
+    showPerfOverlay || showShaderSheet || showShaderParams || showShaderOptions || showFXSheet || showControllerSettings
+      || showBezelLibrary
       || showQuickSavePicker || quickStateActionInFlight
       || showPauseMenu || showExitConfirm || quitSaveFailure != nil || quitRequestInFlight || showSkyImporter || showSkyClearPicker
   }
@@ -1906,14 +1939,16 @@ struct EmulationScreen: View {
     guard !quitRequestInFlight else { return }
     switch destination {
     case .exitConfirm:
-      UserStopRequest.handle(confirmOnStop: DOLConfigBridge.mainConfirmOnStop(),
-                             confirm: { showExitConfirm = true }, stop: quitFromTopBar)
+      // Exit is one tap on the bar now: always ask, whatever "Confirm on Stop" says.
+      showExitConfirm = true
     case .perfOverlay:
       refreshPerfOverlayState()
       showPerfOverlay = true
     case .audioEffects: showFXSheet = true
     case .shaders: showShaderSheet = true
     case .shaderParameters: showShaderParams = true
+    case .shaderOptions: showShaderOptions = true
+    case .bezels: showBezelLibrary = true
     case .controllerSettings:
       controllerSettingsToken = PauseArbiter.shared.claim("controller-settings")
       showControllerSettings = true

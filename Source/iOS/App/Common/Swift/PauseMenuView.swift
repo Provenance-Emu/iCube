@@ -31,11 +31,15 @@ internal struct PauseMenuView: View {
   var startsInPerformance = false
   /// Opens on the Controllers hub (tvOS: the no-controller notice's Controllers button).
   var startsInControllers = false
+  /// The quick menu's Shaders and Exit tiles: open on the shader picker, or on the exit confirmation.
+  var startsInShaders = false
+  var startsInExitConfirm = false
   /// Shows the TV switcher over the paused game. Set by the emulation screen only where a TV could show now; the
   /// screen closes this menu for it, since a cover hides the game the strip previews on. `nil` hides the item.
   var onOpenBezels: (() -> Void)? = nil
   @State private var initialPerformancePaneConsumed = false
   @State private var initialControllersPaneConsumed = false
+  @State private var initialQuickHandoffConsumed = false
   @State private var initialSaveBrowserConsumed = false
   @State private var showSharedSaveBrowser = false
   @State private var openingSaveSession: UInt64?
@@ -415,6 +419,15 @@ internal struct PauseMenuView: View {
       if startsInPerformance && !initialPerformancePaneConsumed {
         initialPerformancePaneConsumed = true
         pane = .perfHUD
+      }
+      if startsInShaders && !initialQuickHandoffConsumed {
+        initialQuickHandoffConsumed = true
+        showShaders = true
+      }
+      if startsInExitConfirm && !initialQuickHandoffConsumed {
+        initialQuickHandoffConsumed = true
+        // A one-press tile: always ask, whatever "Confirm on Stop" says.
+        showExitDialog = true
       }
       if startsInControllers && !initialControllersPaneConsumed {
         initialControllersPaneConsumed = true
@@ -1423,7 +1436,12 @@ enum QuickMenuHost {
         applyFastForward(state.select(value))
       }),
       quickSlot: Binding(get: { AnyHashable(selectedSlot.wrappedValue) }, set: { if let slot = $0 as? Int { selectedSlot.wrappedValue = slot } }),
-      shader: .constant(ShaderQuickApply.noneValue),
+      shader: Binding(
+        get: { AnyHashable(ShaderQuickApply.currentPath ?? "") },
+        set: { value in
+          let path = value as? String
+          ShaderQuickApply.apply(path: (path?.isEmpty ?? true) ? nil : path)
+        }),
       recording: Binding(get: { RecordingManager.shared.isRecording }, set: { RecordingToggle.set($0) }),
       perfHUD: Binding(get: { PerfHUDToggle.isOn }, set: { PerfHUDToggle.set($0) }), quickSaveMode: mode)
   }
@@ -1443,6 +1461,29 @@ enum QuickMenuHost {
       openSaveStates: {}, openCheats: {}, openControllers: {}, openShaders: {}, openContinuity: {}, openSettings: {},
       openPerfOverlay: openPerfOverlay,
       requestReset: {}, requestExit: {}, recenterPointer: {})
+  }
+
+  /// "None", the current preset and the recent ones: what the Shaders tile cycles.
+  static func shaderOptions() -> [(String, AnyHashable)] {
+    ShaderQuickApply.options(mru: UserDefaults.standard.stringArray(forKey: ShaderQuickApply.mruKey) ?? [], current: ShaderQuickApply.currentPath)
+  }
+
+  /// Dolphin's aspect setting, live: the quick menu's Scaling tile.
+  static func aspectBinding() -> Binding<AnyHashable> {
+    Binding(get: { AnyHashable(DOLConfigBridge.gfxAspectRatio()) },
+            set: { if let raw = $0 as? Int { DOLConfigBridge.setGfxAspectRatio(raw) } })
+  }
+
+  /// Fast-forward speed in percent while it is on (0 = unlimited); nil when off. For the play toolbar.
+  static func fastForwardPercent() -> Int? {
+    let state = fastForwardState()
+    return state.isEnabled ? state.percent : nil
+  }
+
+  /// nil turns fast forward off; a percent turns it on at that speed.
+  static func setFastForward(percent: Int?) {
+    var state = fastForwardState()
+    applyFastForward(state.select(percent.map { AnyHashable($0) } ?? PauseMenuModelBuilder.fastForwardOff))
   }
 
   private static func fastForwardState() -> PauseFastForwardState {
