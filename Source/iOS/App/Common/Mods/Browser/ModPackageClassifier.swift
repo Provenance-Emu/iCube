@@ -350,7 +350,7 @@ enum ModPackageClassifier {
                     archive.name)
     }
     if items.contains(where: { $0.components.contains { $0.lowercased() == "graphicmods" } }) {
-      return L("Graphics Mods are not supported yet.")
+      return L("This is a Dolphin Graphics Mod. iCube has no screen yet to switch graphics mods on for a game, so it cannot install one.")
     }
     if !programs.isEmpty {
       return String(format: L("This mod is a program for another operating system (%@), which iCube never runs."), programs[0])

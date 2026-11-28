@@ -440,6 +440,10 @@ struct ModFileView: View {
       if pack.groups.count > Self.maxListedOptions {
         Text(String(format: L("…and %d more"), pack.groups.count - Self.maxListedOptions)).icubeText(.detail)
       }
+      if pack.groups.contains(where: { $0.mapping == .mainExecutable }) {
+        Text(L("A replacement game program is for one region and revision of the game. It starts switched off: turn it on under Play with Mods only if it is for your copy."))
+          .icubeText(.detail)
+      }
       installButton(L("Install as a Mod Pack"), at: index)
     } header: {
       Text(L("Game Files"))

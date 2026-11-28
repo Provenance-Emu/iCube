@@ -86,9 +86,17 @@ final class ModInstallLedger: @unchecked Sendable {
 
   /// Changes the record of `id` in place. Does nothing when there is none.
   func update(fileID id: Int, _ change: (inout ModInstallRecord) -> Void) {
-    guard var record = record(forFileID: id) else { return }
-    change(&record)
-    save(record)
+    // One critical section: a save from another thread cannot land between the read and the write.
+    let changed: Bool = lock.withLock {
+      var all = load()
+      guard var record = all[id] else { return false }
+      change(&record)
+      record.updatedAt = now()
+      all[id] = record
+      store(all)
+      return true
+    }
+    if changed { announce() }
   }
 
   func remove(fileID id: Int) {

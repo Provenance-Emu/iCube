@@ -21,7 +21,13 @@ let package = Package(
             ],
             linkerSettings: [.linkedLibrary("z")]
         ),
-        .target(name: "RarArchive", dependencies: ["CLibArchiveRAR"]),
+        // The libarchive notice ships in the app bundle (RarArchive_RarArchive.bundle): its licence
+        // asks binary redistributions to reproduce it, and the app has no licences screen to list it on.
+        .target(
+            name: "RarArchive",
+            dependencies: ["CLibArchiveRAR"],
+            resources: [.copy("Resources/libarchive-LICENSE.txt")]
+        ),
         .testTarget(
             name: "RarArchiveTests",
             dependencies: ["RarArchive"],

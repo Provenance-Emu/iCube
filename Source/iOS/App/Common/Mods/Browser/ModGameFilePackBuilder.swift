@@ -66,7 +66,6 @@ enum ModGameFilePackBuilder {
     var options: [Option] = []
     var copies: [Copy] = []
     var claimed: Set<String> = []
-    var hasDefaultProgram = false
     let base = "\(filesFolderName)/\(packID)"
 
     for (index, group) in pack.groups.enumerated() where !group.files.isEmpty {
@@ -87,9 +86,9 @@ enum ModGameFilePackBuilder {
       case .mainExecutable:
         keys = []
         line = #"<file disc="main.dol" external="/\#(escaped(folder + "/" + group.files[0]))" />"#
-        // A program is built for one region and revision, so only the first is on by default.
-        isOn = !hasDefaultProgram
-        hasDefaultProgram = true
+        // A program is built for one region and revision of a game and nothing here can tell which,
+        // so it is never on by itself: the user switches it on under Play with Mods.
+        isOn = false
       }
       if isOn { claimed.formUnion(keys) }
       copies += group.files.map { Copy(source: relative($0, to: group.directory), destination: "\(folder)/\($0)") }

@@ -92,12 +92,13 @@ final class ModGameFilePackBuilderTests: XCTestCase {
     XCTAssertEqual(plan.copies.map(\.destination), ["icube-mods/gamebanana-383315/0/res/Object/Link.arc"])
   }
 
-  func testAProgramReplacesMainDolAndOnlyTheFirstIsOn() throws {
+  func testAProgramReplacesMainDolAndIsNeverOnByItself() throws {
     let plan = try plan([group("", ["widescreen_USA.dol"], .mainExecutable), group("PAL", ["widescreen_PAL.dol"], .mainExecutable)])
     let files = try elements(of: plan.xml).filter { $0.name == "file" }
     XCTAssertEqual(files.map { $0.attributes["disc"] }, ["main.dol", "main.dol"])
     XCTAssertEqual(files.first?.attributes["external"], "/icube-mods/gamebanana-383315/0/widescreen_USA.dol")
-    XCTAssertEqual(plan.options.map(\.isOnByDefault), [true, false])
+    // Nothing says which region or revision a program is for, so the user opts in.
+    XCTAssertEqual(plan.options.map(\.isOnByDefault), [false, false])
   }
 
   func testNamesAreEscapedAndKeptApart() throws {

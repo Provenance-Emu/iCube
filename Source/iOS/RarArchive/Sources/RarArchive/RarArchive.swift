@@ -6,6 +6,10 @@ import Foundation
 
 /// Reads RAR and RAR5 archives. Extraction only: nothing here can create one.
 ///
+/// Memory is bounded by the decoder: libarchive refuses a RAR5 dictionary above 64 MB
+/// (`archive_read_support_format_rar5.c`, "window_size is a sane value") and RAR 4 dictionaries
+/// stop at 4 MB, so a crafted header cannot ask for gigabytes.
+///
 /// Encrypted archives are refused, as are archives whose entries would be written outside the
 /// destination. Links, devices and other entries that are not plain files are never written.
 public enum RarArchive {
@@ -26,6 +30,11 @@ public enum RarArchive {
     case unsafePath(String)
     /// The archive unpacks to more than the caller allowed.
     case tooLarge(limit: Int64)
+  }
+
+  /// The libarchive licence text that ships with the app.
+  public static var licenseNoticeURL: URL? {
+    Bundle.module.url(forResource: "libarchive-LICENSE", withExtension: "txt")
   }
 
   private static let blockSize = 64 * 1024

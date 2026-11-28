@@ -31,6 +31,11 @@ final class RarArchiveTests: XCTestCase {
     return url
   }
 
+  func testTheLibarchiveNoticeShipsWithThePackage() throws {
+    let notice = try String(contentsOf: try XCTUnwrap(RarArchive.licenseNoticeURL), encoding: .utf8)
+    XCTAssertTrue(notice.contains("Redistributions in binary form must reproduce the above copyright"))
+  }
+
   func testRecognisesBothSignaturesAndNothingElse() throws {
     XCTAssertTrue(RarArchive.isRarFile(at: try fixture("test_read_format_rar")))
     XCTAssertTrue(RarArchive.isRarFile(at: try fixture("test_read_format_rar5_stored")))

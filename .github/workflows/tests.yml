@@ -132,6 +132,12 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
+      # The RAR reader is a local package with its own tests (libarchive's sample archives). They
+      # need no simulator, so they run here on the host before the slow part.
+      - name: Run RarArchive package tests
+        working-directory: Source/iOS/RarArchive
+        run: xcrun swift test
+
       - name: Install Tuist
         run: |
           set -euo pipefail
