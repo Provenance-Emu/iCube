@@ -6,6 +6,8 @@ import SwiftUI
 /// Where the pause menu opens when the quick menu hands over to it.
 enum QuickMenuHandoff: Equatable {
   case menu, shaders, exitConfirm
+  /// Not the pause menu: the TV switcher strip, over the paused game.
+  case bezels
 }
 
 /// The quick menu (spec §7): a two-row tile panel at the bottom of the screen over the dimmed game.
@@ -16,6 +18,8 @@ struct QuickMenuView: View {
   private static let scrimOpacity = 0.35
 
   @Binding var isPresented: Bool
+  /// A TV could be drawn around the picture right now, so the Bezels tile is offered.
+  let showsBezels: Bool
   let bindings: PauseMenuBindings
   let actions: PauseMenuActions
   /// Opens the full pause menu; `.shaders` and `.exitConfirm` open it on that screen.
@@ -23,9 +27,10 @@ struct QuickMenuView: View {
 
   @State private var token: PauseArbiter.Token?
 
-  init(isPresented: Binding<Bool>, bindings: PauseMenuBindings, actions: PauseMenuActions,
+  init(isPresented: Binding<Bool>, showsBezels: Bool = false, bindings: PauseMenuBindings, actions: PauseMenuActions,
        onOpenPauseMenu: @escaping (QuickMenuHandoff) -> Void) {
     _isPresented = isPresented
+    self.showsBezels = showsBezels
     self.bindings = bindings
     self.actions = actions
     self.onOpenPauseMenu = onOpenPauseMenu
@@ -35,13 +40,14 @@ struct QuickMenuView: View {
   private var state: PauseMenuState {
     PauseMenuState(quickSlot: bindings.quickSlot.wrappedValue as? Int ?? 1, isMuted: bindings.mute.wrappedValue,
                    activeCheatCount: 0, shaderOptions: QuickMenuHost.shaderOptions(), showsRecenterPointer: false,
-                   quickSaveMode: bindings.quickSaveMode.wrappedValue, isModded: ModdedBoot.isCurrentBootModded)
+                   quickSaveMode: bindings.quickSaveMode.wrappedValue, isModded: ModdedBoot.isCurrentBootModded, showsBezels: showsBezels)
   }
 
   private var model: MenuModel {
     var routed = actions
     routed.openShaders = { openPauseMenu(.shaders) }
     routed.requestExit = { openPauseMenu(.exitConfirm) }
+    routed.openBezels = { openPauseMenu(.bezels) }
     return QuickMenuModelBuilder.make(
       state: state, bindings: bindings, actions: routed,
       extras: QuickMenuExtras(aspect: QuickMenuHost.aspectBinding(), openMenu: { openPauseMenu(.menu) }))
@@ -95,6 +101,7 @@ struct QuickMenuAuditPreview: View {
       if isPresented {
         QuickMenuView(
           isPresented: $isPresented,
+          showsBezels: true,
           bindings: QuickMenuHost.bindings(selectedSlot: $slot, mode: $mode),
           actions: PauseMenuActions(
             resume: {}, quickSave: { lastAction = "quick-save" }, quickLoad: { lastAction = "quick-load" },

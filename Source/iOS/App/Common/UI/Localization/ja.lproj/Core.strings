@@ -6009,3 +6009,23 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Genre" = "ジャンル";
 
 "Not enough free space to download this game (%@ required, %@ available)." = "ゲームをダウンロードするための空き容量が不足しています（必要: %@、空き: %@）。";
+
+"Shader Options" = "シェーダーオプション";
+"Menu" = "メニュー";
+"Scaling" = "スケーリング";
+"How the picture fills the screen. Tap to cycle. Long-press to pick one." = "画面への映像の収め方。タップで切り替え、長押しで選択します。";
+"Everything else: saves, cheats, controllers, settings." = "その他すべて: セーブ、チート、コントローラー、設定。";
+"Handheld" = "携帯機";
+"Pixel Art" = "ピクセルアート";
+"My Shaders" = "マイシェーダー";
+"No shaders match." = "一致するシェーダーがありません。";
+"Search %d shaders" = "%d 個のシェーダーを検索";
+"Expanded" = "展開";
+"Collapsed" = "折りたたみ";
+"Game Menu" = "ゲームメニュー";
+"Sound on" = "サウンドオン";
+"Picture" = "映像";
+"Bezel" = "ベゼル";
+"All Options" = "すべてのオプション";
+"Choose Speed" = "速度を選択";
+"Stretch" = "引き伸ばし";

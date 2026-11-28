@@ -8,15 +8,19 @@ final class QuickMenuTests: XCTestCase {
   private var shaderOpens = 0
   private var aspect: AnyHashable = AnyHashable(0)
 
-  private func model(shaderOptions: [(String, AnyHashable)] = []) -> MenuModel {
+  private var bezelOpens = 0
+
+  private func model(shaderOptions: [(String, AnyHashable)] = [], showsBezels: Bool = false) -> MenuModel {
     let bindings = PauseMenuBindings(mute: .constant(false), fastForward: .constant(AnyHashable(-1)),
                                      quickSlot: .constant(AnyHashable(1)), shader: .constant(AnyHashable("")))
     let noop: () -> Void = {}
-    let actions = PauseMenuActions(resume: noop, quickSave: noop, quickLoad: noop, screenshot: noop, openSaveStates: noop,
+    var actions = PauseMenuActions(resume: noop, quickSave: noop, quickLoad: noop, screenshot: noop, openSaveStates: noop,
                                    openCheats: noop, openControllers: noop, openShaders: { self.shaderOpens += 1 }, openContinuity: noop,
                                    openSettings: noop, openPerfOverlay: noop, requestReset: noop,
                                    requestExit: { self.exitRequests += 1 }, recenterPointer: noop)
-    let state = PauseMenuState(quickSlot: 1, isMuted: false, activeCheatCount: 0, shaderOptions: shaderOptions, showsRecenterPointer: false)
+    actions.openBezels = { self.bezelOpens += 1 }
+    let state = PauseMenuState(quickSlot: 1, isMuted: false, activeCheatCount: 0, shaderOptions: shaderOptions, showsRecenterPointer: false,
+                               showsBezels: showsBezels)
     let extras = QuickMenuExtras(aspect: Binding(get: { self.aspect }, set: { self.aspect = $0 }), openMenu: { self.menuOpens += 1 })
     return QuickMenuModelBuilder.make(state: state, bindings: bindings, actions: actions, extras: extras)
   }
@@ -29,6 +33,17 @@ final class QuickMenuTests: XCTestCase {
     for section in sections {
       XCTAssertLessThanOrEqual(section.items.count, QuickMenuModelBuilder.columns, "each section is one row")
     }
+  }
+
+  func test_bezelsTile_isOfferedOnlyWhereATVCanShow_andStillFitsOneRow() {
+    XCTAssertNil(model().item(id: "bezels"))
+    let display = model(showsBezels: true).sections[1].items
+    XCTAssertEqual(display.map(\.id), ["perf-hud", "scaling", "shaders", "bezels", "menu", "exit"])
+    XCTAssertLessThanOrEqual(display.count, QuickMenuModelBuilder.columns)
+    guard case .action(let open) = model(showsBezels: true).item(id: "bezels")?.role else { return XCTFail("bezels is not an action") }
+    bezelOpens = 0
+    open()
+    XCTAssertEqual(bezelOpens, 1)
   }
 
   func test_nothingTheOldQuickMenuHadIsGone() {

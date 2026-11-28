@@ -353,7 +353,7 @@ internal struct PauseMenuView: View {
           #endif
           MenuScreen(model: perfHUDMenuModel, style: .list,
                      onBack: { closePerfHUDSubmenu() },
-                     tvHeader: ICubeLeafHeader(title: L("Performance"), subtitle: L("Pause Menu")),
+                     tvHeader: ICubeLeafHeader(title: L("Performance"), subtitle: L("Menu")),
                      tvClaimsFocus: true)
         }
         .frame(maxWidth: 1000)
@@ -429,8 +429,7 @@ internal struct PauseMenuView: View {
       }
       if startsInExitConfirm && !initialQuickHandoffConsumed {
         initialQuickHandoffConsumed = true
-        // A one-press tile: always ask, whatever "Confirm on Stop" says.
-        showExitDialog = true
+        requestExit()
       }
       if startsInControllers && !initialControllersPaneConsumed {
         initialControllersPaneConsumed = true

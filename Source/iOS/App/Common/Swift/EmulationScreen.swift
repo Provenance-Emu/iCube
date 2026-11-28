@@ -256,6 +256,8 @@ struct EmulationScreen: View {
   /// The quick menu's Shaders and Exit tiles hand over to the pause menu on that screen.
   @State private var pauseStartsInShaders = false
   @State private var pauseStartsInExitConfirm = false
+  /// The TV strip was opened from the quick menu, so closing it returns to the game.
+  @State private var bezelStripFromQuickMenu = false
   /// The pause menu opens on the Controllers hub (the no-controller notice's Controllers button).
   @State private var pauseStartsInControllers = false
   #if os(tvOS)
@@ -566,6 +568,7 @@ struct EmulationScreen: View {
   /// over the paused game in its place.
   private func openBezelStrip() {
     guard bezelStripToken == nil else { return }
+    bezelStripFromQuickMenu = false
     // Claimed before the menu lets go of its own, so the game never runs in between.
     bezelStripToken = PauseArbiter.shared.claim(ICubeBezels.pauseReason)
     if bezelDrawnAspect == nil, let size = EmulationCoordinator.shared().mainDisplayView()?.bounds.size,
@@ -588,6 +591,12 @@ struct EmulationScreen: View {
     guard showBezelStrip else { return }
     showBezelStrip = false
     bezels.bezelPreview = nil
+    if bezelStripFromQuickMenu {
+      // Opened over the running game from the quick menu: back to the game, not into the pause menu.
+      bezelStripFromQuickMenu = false
+      releaseBezelStripToken()
+      return
+    }
     PauseArbiter.shared.claimPending(PauseArbiter.Reason.pauseMenuRequest)
     showPauseMenu = true
     releaseBezelStripToken()
@@ -634,12 +643,20 @@ struct EmulationScreen: View {
     if showQuickMenu && !showPauseMenu {
       QuickMenuView(
         isPresented: $showQuickMenu,
+        showsBezels: ICubeBezels.offersSwitcher(bezelScreenState(canvas: bezelCanvas)),
         bindings: QuickMenuHost.bindings(selectedSlot: $selectedSlot, mode: $quickSaveMode),
         actions: QuickMenuHost.actions(quickActions: quickMenuSaveActions, openPerfOverlay: {
           showQuickMenu = false
           openPerformanceControls()
         }),
         onOpenPauseMenu: { handoff in
+          if handoff == .bezels {
+            // The quick menu is an overlay, not a cover: there is no dismissal to wait for.
+            openBezelStrip()
+            bezelStripFromQuickMenu = true
+            showBezelStrip = true
+            return
+          }
           pauseStartsInShaders = handoff == .shaders
           pauseStartsInExitConfirm = handoff == .exitConfirm
           // Runs before the quick menu releases its token: the pending claim keeps the core paused
@@ -1975,8 +1992,8 @@ struct EmulationScreen: View {
     guard !quitRequestInFlight else { return }
     switch destination {
     case .exitConfirm:
-      // Exit is one tap on the bar now: always ask, whatever "Confirm on Stop" says.
-      showExitConfirm = true
+      UserStopRequest.handle(confirmOnStop: DOLConfigBridge.mainConfirmOnStop(),
+                             confirm: { showExitConfirm = true }, stop: quitFromTopBar)
     case .perfOverlay:
       refreshPerfOverlayState()
       showPerfOverlay = true

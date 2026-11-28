@@ -13,11 +13,11 @@ struct QuickMenuExtras {
 
 /// The quick menu's tiles (spec §7): the pause menu's own items, looked up by id so the two menus cannot
 /// drift, in two rows. Play: speed, sound, quick saves, capture. Display: performance, scaling, shaders,
-/// then the two ways on: the full menu, and out of the game.
+/// bezels (where a TV can be drawn), then the two ways on: the full menu, and out of the game.
 enum QuickMenuModelBuilder {
   /// Ids taken from `PauseMenuModelBuilder.make`, in display order.
   static let playIDs = ["fast-forward", "mute", "quick-save", "quick-load", "screenshot", "record"]
-  static let displayIDs = ["perf-hud", scalingID, "shaders"]
+  static let displayIDs = ["perf-hud", scalingID, "shaders", "bezels"]
   static let scalingID = "scaling"
   static let menuID = "menu"
   static let exitID = "exit"

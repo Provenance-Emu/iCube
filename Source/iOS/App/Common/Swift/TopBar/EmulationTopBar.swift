@@ -535,10 +535,12 @@ struct EmulationTopBar: View {
 
 /// One bar button: a symbol, its title and what it is set to. A tap runs `tap`; holding it runs `hold`,
 /// which VoiceOver and Switch Control reach as a named action.
+///
+/// Not a `Button`: a long press stacked on a button still delivers the button's tap on release, and
+/// telling the two apart needs a flag that can outlive the press and swallow the next tap. The view's
+/// own tap and long-press gestures decide instead: a press that reaches `longPressDuration` is the hold
+/// and never also a tap.
 private struct TopBarButton: View {
-  /// A hold that ends off the button never delivers the tap that would clear the flag; clear it anyway.
-  private static let holdFlagLifetime: UInt64 = 1_000_000_000
-
   let symbol: String
   let title: String
   let caption: String?
@@ -549,7 +551,7 @@ private struct TopBarButton: View {
   let tap: () -> Void
   let hold: (() -> Void)?
 
-  @State private var holdFired = false
+  @State private var isPressed = false
 
   private var tint: Color {
     if destructive { return ICubeDesign.color(.destructive) }
@@ -557,39 +559,45 @@ private struct TopBarButton: View {
   }
 
   var body: some View {
-    Button {
-      // Releasing after a hold also ends the button's own press: that tap belongs to the hold.
-      if holdFired { holdFired = false } else { tap() }
-    } label: {
-      VStack(spacing: 1) {
-        Image(systemName: symbol).font(ICubeDesign.symbolFont(.rail))
-        Text(title).icubeText(.detail).lineLimit(1).minimumScaleFactor(0.8)
-        if let caption {
-          Text(caption).icubeText(.tag).lineLimit(1).minimumScaleFactor(0.7)
-            .foregroundStyle(ICubeDesign.color(selected ? .accent : .textSecondary))
-        }
+    VStack(spacing: 1) {
+      Image(systemName: symbol).font(ICubeDesign.symbolFont(.rail))
+      Text(title).icubeText(.detail).lineLimit(1).minimumScaleFactor(0.8)
+      if let caption {
+        Text(caption).icubeText(.tag).lineLimit(1).minimumScaleFactor(0.7)
+          .foregroundStyle(ICubeDesign.color(selected ? .accent : .textSecondary))
       }
-      .padding(.horizontal, 2)
-      .frame(minWidth: TopBarLayout.minimumTarget, maxWidth: .infinity, minHeight: TopBarLayout.controlHeight)
-      .foregroundStyle(tint)
-      .background(selected ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface).opacity(0),
-                  in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
-      .contentShape(Rectangle())
     }
-    .buttonStyle(.plain)
-    .simultaneousGesture(LongPressGesture(minimumDuration: TopBarLayout.longPressDuration).onEnded { _ in
-      guard let hold else { return }
-      holdFired = true
-      hold()
-      Task { @MainActor in
-        try? await Task.sleep(nanoseconds: Self.holdFlagLifetime)
-        holdFired = false
-      }
-    })
+    .padding(.horizontal, 2)
+    .frame(minWidth: TopBarLayout.minimumTarget, maxWidth: .infinity, minHeight: TopBarLayout.controlHeight)
+    .foregroundStyle(tint)
+    .background(selected || isPressed ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface).opacity(0),
+                in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
+    .opacity(isPressed ? 0.7 : 1)
+    .contentShape(Rectangle())
+    .onTapGesture { tap() }
+    .modifier(HoldGesture(hold: hold, isPressed: $isPressed))
+    .accessibilityElement(children: .ignore)
+    .accessibilityAddTraits(.isButton)
     .accessibilityLabel(accessibility)
     .accessibilityValue(caption ?? "")
     .accessibilityAddTraits(selected ? .isSelected : [])
+    .accessibilityAction { tap() }
     .modifier(HoldAccessibilityAction(title: holdTitle, action: hold))
+  }
+}
+
+/// The long press of a bar button that has a second action; a button without one keeps only its tap.
+private struct HoldGesture: ViewModifier {
+  let hold: (() -> Void)?
+  @Binding var isPressed: Bool
+
+  func body(content: Content) -> some View {
+    if let hold {
+      content.onLongPressGesture(minimumDuration: TopBarLayout.longPressDuration, perform: hold,
+                                 onPressingChanged: { isPressed = $0 })
+    } else {
+      content
+    }
   }
 }
 
