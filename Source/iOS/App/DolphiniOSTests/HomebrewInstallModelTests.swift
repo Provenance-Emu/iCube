@@ -235,6 +235,37 @@ final class HomebrewInstallModelTests: XCTestCase {
     XCTAssertEqual(call.fileName, "quest_10_dist.zip")
   }
 
+  /// Until the package is on disk nothing says it carries data; after, the note has to.
+  func testCompatibilityNoticesPackagedDataOnceInstalled() async {
+    let archive = TestZip.make([("apps/quest/default.dol", Data("DOL".utf8)),
+                                ("apps/quest/data/levels.bin", Data("levels".utf8))])
+    downloader.archive = archive
+    let model = model(title(archive: archive))
+    XCTAssertEqual(model.compatibility, .untested)
+    await run(model)
+    XCTAssertEqual(model.phase, .installed)
+    XCTAssertEqual(model.compatibility, .needsPackagedFiles)
+    XCTAssertTrue(scratch.exists("Homebrew/quest/apps/quest/data/levels.bin"))
+  }
+
+  func testCompatibilityStaysQuietForAProgramOnItsOwn() async {
+    let model = await install()
+    XCTAssertEqual(model.compatibility, .untested)
+  }
+
+  /// Several builds in one package: the plain one is installed, and the others stay beside it.
+  func testPackageWithSeveralBuildsInstallsThePlainOne() async throws {
+    let archive = TestZip.make([("apps/quest-exp/default.dol", Data("experimental".utf8)),
+                                ("apps/quest/default.dol", Data("plain".utf8))])
+    downloader.archive = archive
+    let model = model(title(archive: archive))
+    await run(model)
+    XCTAssertEqual(model.phase, .installed)
+    let program = try XCTUnwrap(model.programURL)
+    XCTAssertEqual(try String(contentsOf: program, encoding: .utf8), "plain")
+    XCTAssertEqual(HomebrewInstalledIndex.load(root: root).titles["quest"]?.programPath, "quest/apps/quest/quest.dol")
+  }
+
   func testMatchingMD5EtagInstalls() async {
     let archive = Self.package()
     downloader.archive = archive
