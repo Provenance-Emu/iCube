@@ -216,7 +216,7 @@ struct ModFileView: View {
     self.modName = modName
     self.ownedGame = ownedGame
     _model = StateObject(wrappedValue: ModInstallCenter.shared.model(for: file, modName: modName, entry: entry,
-                                                                    ownedGame: ownedGame, handler: handler))
+                                                                     ownedGame: ownedGame, handler: handler))
   }
 
   var body: some View {

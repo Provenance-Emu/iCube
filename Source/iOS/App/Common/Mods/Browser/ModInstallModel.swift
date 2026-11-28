@@ -69,10 +69,10 @@ final class ModInstallModel: ObservableObject {
   /// Set by `downloadAgain`: the next `start()` replaces the unpacked download.
   private var replacesDownload = false
 
-  nonisolated private static let extractedFolderName = "extracted"
+  private nonisolated static let extractedFolderName = "extracted"
   private static let titleCodeLength = 3
-  nonisolated private static let maxNestedArchives = 8
-  nonisolated private static let maxNestedArchiveBytes: Int64 = 512 * 1024 * 1024
+  private nonisolated static let maxNestedArchives = 8
+  private nonisolated static let maxNestedArchiveBytes: Int64 = 512 * 1024 * 1024
 
   init(file: GameBananaFile, modName: String = "", bananaGameID: Int? = nil, titleCode: String? = nil,
        ownedGame: ModLibraryGame?, handler: any ModInstallHandling,
@@ -404,7 +404,7 @@ final class ModInstallModel: ObservableObject {
     let stem = (codesFile.lastPathComponent as NSString).deletingPathExtension
     if let mismatch = Self.regionWarning(packID: stem, ownedID: game.gameID) { parts.append(mismatch) }
     record(parts.joined(separator: " "))
-    if !result.added.isEmpty && !DOLConfigBridge.mainEnableCheats() { offerCheats = true }
+    if !result.added.isEmpty, !DOLConfigBridge.mainEnableCheats() { offerCheats = true }
   }
 
   /// Installs the pack in `root` on its own, for a caller that holds a pack folder and no classification.

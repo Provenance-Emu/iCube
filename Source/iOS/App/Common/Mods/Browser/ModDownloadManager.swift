@@ -295,7 +295,7 @@ extension ModDownloadManager: URLSessionDownloadDelegate {
     guard let job = lock.withLock({ jobs[downloadTask.taskIdentifier] }) else {
       // Nobody is waiting: the app was relaunched for this transfer. File the download where its
       // owner will look for it when the user comes back.
-      if status.map({ (200..<300).contains($0) }) ?? true, let label = Self.label(of: downloadTask),
+      if status.map({ (200 ..< 300).contains($0) }) ?? true, let label = Self.label(of: downloadTask),
          let destination = Self.orphanDestination(for: label) {
         try? FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? FileManager.default.removeItem(at: destination)
@@ -303,7 +303,7 @@ extension ModDownloadManager: URLSessionDownloadDelegate {
       }
       return
     }
-    if let status, !(200..<300).contains(status) {
+    if let status, !(200 ..< 300).contains(status) {
       job.failure = ModDownloadError.status(status)
       return
     }
