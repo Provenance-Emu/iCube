@@ -24,6 +24,7 @@ extension Notification.Name {
 final class BackgroundGameDownloader: NSObject, GameFileFetching, @unchecked Sendable {
   static let identifier = (Bundle.main.bundleIdentifier ?? "org.dolphin-emu.dolphinios") + ".game-downloads"
   static let shared = BackgroundGameDownloader(identifier: identifier, journal: .shared)
+  private static let log = ICubeLog.logger("RemoteDownloads")
 
   private typealias Waiter = CheckedContinuation<URL, any Error>
 
@@ -140,6 +141,13 @@ final class BackgroundGameDownloader: NSObject, GameFileFetching, @unchecked Sen
   func fetch(_ files: [GameFileRequest], for job: BackgroundDownloadJob, plan: Data?,
              progress: @escaping @Sendable (Int64) -> Void) async throws -> [URL] {
     await reconciled()
+    do {
+      try journal.prepareFolder()
+    } catch {
+      // Nothing that arrives could be kept: say so now, not after the whole game has come down.
+      Self.log.error("No folder for downloads: \(error.localizedDescription, privacy: .public)")
+      throw BackgroundDownloadError(failure: BackgroundDownloadPolicy.judgeStoreError(error))
+    }
     if let plan { journal.setPlan(plan, forJob: job.key) }
     let ids = files.map { start($0, for: job) }
     let token = UUID()
@@ -157,6 +165,24 @@ final class BackgroundGameDownloader: NSObject, GameFileFetching, @unchecked Sen
     } onCancel: {
       self.cancel(ids)
     }
+  }
+
+  func storedBytes(for job: BackgroundDownloadJob) async -> Int64 {
+    await reconciled()
+    let records = journal.records(forJob: job.key)
+    // A transfer the system kept running across a relaunch has reported nothing to this process
+    // yet, so the task's own count is asked as well.
+    let transferred: [String: Int64] = lock.withLock {
+      var bytes: [String: Int64] = [:]
+      for record in records {
+        guard let task = tasks[record.id] else { continue }
+        bytes[record.id] = max(written[record.id] ?? 0, task.countOfBytesReceived)
+      }
+      return bytes
+    }
+    return BackgroundDownloadPolicy.storedBytes(
+      records: records, arrived: journal.arrivedSizes(forJob: job.key), transferred: transferred,
+      resumable: journal.resumableBytes(forJob: job.key))
   }
 
   func release(_ job: BackgroundDownloadJob) async {
@@ -315,7 +341,8 @@ extension BackgroundGameDownloader: URLSessionDownloadDelegate {
       journal.setResumeData(nil, id: id)
       journal.update(id: id, state: .arrived)
     } catch {
-      journal.update(id: id, state: .failed(.storage))
+      Self.log.error("Could not keep a finished download: \(error.localizedDescription, privacy: .public)")
+      journal.update(id: id, state: .failed(BackgroundDownloadPolicy.judgeStoreError(error)))
     }
   }
 

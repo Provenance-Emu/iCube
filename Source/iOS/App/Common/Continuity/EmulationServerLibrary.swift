@@ -159,6 +159,8 @@ actor EmulationServerLibrary {
   private let ownedSession: URLSession?
   /// Game files: the shared background downloader, or the transport when one is given.
   private let fetcher: any GameFileFetching
+  /// Free space where games are kept; nil when it cannot be measured.
+  private let availableBytes: @Sendable () -> Int64?
   private var games: [String: Game] = [:]
   /// Server-relative cover path for each entry that has one.
   private var coverPaths: [String: String] = [:]
@@ -168,8 +170,10 @@ actor EmulationServerLibrary {
   private var pendingCursor: CatalogCursor?
 
   init(server: EmulationServer, token: String?, transport: (any ContinuityTransport)? = nil,
-       fetcher: (any GameFileFetching)? = nil) {
+       fetcher: (any GameFileFetching)? = nil,
+       availableBytes: @escaping @Sendable () -> Int64? = RemoteDownloadSpace.availableBytesForGames) {
     self.server = server
+    self.availableBytes = availableBytes
     self.token = token
     if let transport {
       self.transport = transport
@@ -402,10 +406,13 @@ actor EmulationServerLibrary {
       guard !overflow else { throw ServerError.invalidContent }
       return total
     }
-    // Download and verification both stage files on the app's temporary volume.
-    let staging = FileManager.default.temporaryDirectory
-    let capacity = (try? staging.resourceValues(forKeys: [.volumeAvailableCapacityKey]))?.volumeAvailableCapacity
-    try Self.checkDownloadSpace(bytes: totalBytes, available: capacity.map(Int64.init))
+    // Before anything is fetched, while the sizes are known. Files an earlier launch already
+    // brought in are on disk, so what is free has paid for them: they are not counted again.
+    let files = downloads.map {
+      RemoteDownloadSpace.File(bytes: $0.size, isArchive: ($0.path as NSString).pathExtension.lowercased() == "7z")
+    }
+    let needed = RemoteDownloadSpace.neededBytes(files: files, storedBytes: await transferFetcher.storedBytes(for: job))
+    try Self.checkDownloadSpace(bytes: needed, available: availableBytes())
     let requests = try downloads.map { file in
       let route = try request(file.route)
       return GameFileRequest(url: route.url, headers: route.headers, expectedSize: file.size)

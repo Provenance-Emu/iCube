@@ -5899,7 +5899,8 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The server could not send this game." = "The server could not send this game.";
 "The server no longer has this game." = "The server no longer has this game.";
 "The server sent the download somewhere else, so it was stopped." = "The server sent the download somewhere else, so it was stopped.";
-"There is not enough space to keep this game." = "There is not enough space to keep this game.";
+"The downloaded game could not be saved on this device." = "The downloaded game could not be saved on this device.";
+"This device ran out of space while saving this game." = "This device ran out of space while saving this game.";
 "Allow pairing over local HTTP" = "ローカルHTTPでのペアリングを許可";
 "Download and Run" = "ダウンロードして起動";
 "Enable pairing over HTTP only on a trusted network." = "信頼できるネットワークでのみHTTP経由のペアリングを有効にしてください。";
