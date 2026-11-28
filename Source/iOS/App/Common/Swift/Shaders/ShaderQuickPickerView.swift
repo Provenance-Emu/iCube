@@ -11,11 +11,17 @@
 // there). `ShaderSettingsView`/`ShaderPickerView`/`ShaderParameterEditor` are untouched
 // and still serve Settings and the in-game FX sheet in `EmulationScreen`.
 //
+// Browsing — the list is `ShaderBrowserCatalog`'s: Favorites, Recently Used, then one
+// collapsible section per library folder, narrowed by a search field and by look chips
+// (CRT, LCD, Smoothing, ...). The rules are Provenance's `ShaderCatalog`, ported because
+// iCube does not link PVShaders.
+//
 // Thumbnails — cards now show REAL per-preset previews. Each card renders its
 // preset through `ShaderPreviewRenderer`, an isolated `FilterChain` on its own
 // `MTLCommandQueue` that never touches the live `DOLShaderPostProcessor`
-// singleton, against the last live game frame (`SaveStateService.pausePreviewURL`,
-// captured the moment the pause menu opened) as the common source image — so
+// singleton, against the last live game frame (`SaveStateService.currentPausePreview`:
+// captured the moment the pause menu opened, or asked for by this picker when the
+// play toolbar opens it over a running game) as the common source image — so
 // every card shows what that preset actually does to the current frame, not a
 // shared, un-shaded backdrop. Rendering is lazy (`.task(id:)` per card, so only
 // visible/near-visible cards in the `LazyVGrid` do any work), bounded to a
@@ -36,7 +42,17 @@ struct ShaderQuickPickerView: View {
   @Environment(\.dismiss) private var dismiss
   #endif
 
+  /// The game is still running behind the picker (opened from the play toolbar, not the pause menu):
+  /// ask for a frame now, since no pause captured one.
+  var capturesLiveFrame = false
+
   @State private var presets: [ShaderPreset] = []
+  @State private var catalog = ShaderBrowserCatalog(presets: [])
+  @State private var query = ""
+  @State private var looks: Set<ShaderLook> = []
+  /// Category sections the player opened. Favorites and Recently Used are always open, and so is
+  /// every section while a search or a look chip narrows the list.
+  @State private var expandedCategories: Set<String> = []
   @State private var isLoading = true
   @State private var enabled: Bool = UserDefaults.standard.bool(forKey: "shader_enabled")
   @State private var currentPath: String? = UserDefaults.standard.string(forKey: "shader_preset_path")
@@ -56,12 +72,10 @@ struct ShaderQuickPickerView: View {
   #else
   private static let columns = [GridItem(.adaptive(minimum: 148, maximum: 200), spacing: 14)]
   #endif
-  /// `SaveStateService.captureThumbnail`'s own freshness window for adopting the
-  /// pause preview into a save thumbnail. Reused here for the same reason: a PNG
-  /// left over in `NSTemporaryDirectory()` from a much older pause (or a
-  /// different game entirely, if the temp file survived an app-switch) shouldn't
-  /// be shown as "the current frame".
-  private static let pausePreviewFreshnessWindow: TimeInterval = 60
+  /// How long, and how often, the picker waits for the frame it asked for (`capturesLiveFrame`): the
+  /// core writes it on the next presented frame.
+  private static let liveFrameWait: TimeInterval = 1.0
+  private static let liveFramePoll: TimeInterval = 0.1
 
   #if os(tvOS)
   private static let stackSpacing: CGFloat = ICubeDesign.Spacing.l.rawValue
@@ -71,9 +85,9 @@ struct ShaderQuickPickerView: View {
 
   var body: some View {
     ScrollView {
-      // One VStack for both platforms: a brace opened inside an `#if` branch
+      // One stack for both platforms: a brace opened inside an `#if` branch
       // cannot be closed after its `#endif`, so only the contents differ.
-      VStack(alignment: .leading, spacing: Self.stackSpacing) {
+      LazyVStack(alignment: .leading, spacing: Self.stackSpacing) {
         #if os(tvOS)
         ICubeLeafHeader(title: L("Shaders"), subtitle: nil)
         #endif
@@ -98,16 +112,24 @@ struct ShaderQuickPickerView: View {
             .frame(maxWidth: .infinity)
             .padding(.top, 40)
         } else {
-          if !favoriteItems.isEmpty {
-            sectionHeader(L("Favorites"))
-            grid(favoriteItems, sectionKey: "favorites")
+          #if os(tvOS)
+          searchField
+          #endif
+          lookChips
+          if !isFiltering {
+            grid([PickerItem(nil)], sectionKey: Self.offSectionKey)
           }
-          if !recentItems.isEmpty {
-            sectionHeader(L("Recently Used"))
-            grid(recentItems, sectionKey: "recent")
+          let sections = visibleSections
+          if sections.isEmpty {
+            Text(L("No shaders match."))
+              .icubeText(.body)
+              .foregroundStyle(ICubeDesign.color(.textSecondary))
+              .frame(maxWidth: .infinity)
+              .padding(.top, ICubeDesign.Spacing.l.rawValue)
           }
-          sectionHeader(L("All Shaders"))
-          grid(allItems, sectionKey: "all")
+          ForEach(sections) { section in
+            sectionView(section)
+          }
         }
       }
       #if os(tvOS)
@@ -122,13 +144,15 @@ struct ShaderQuickPickerView: View {
     #endif
     #if !os(tvOS)
     .navigationBarTitleDisplayMode(.inline)
+    .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                prompt: Text(String(format: L("Search %d shaders"), presets.count)))
     .toolbar {
       ToolbarItem(placement: .navigationBarTrailing) {
         Button(L("Close")) { dismiss() }
       }
     }
     #endif
-    .defaultFocus($focusedCardID, "all/" + (currentPath ?? PickerItem.noneID))
+    .defaultFocus($focusedCardID, defaultFocusID)
     .navigationDestination(item: $pushedParameterPath) { path in
       ShaderQuickParameterView(presetPath: path, presetName: displayName(forPresetPath: path))
     }
@@ -136,8 +160,13 @@ struct ShaderQuickPickerView: View {
       // Discovery recursively enumerates the whole bundle's resources — keep it
       // off the main actor so opening the sheet doesn't hitch the still-visible
       // (if paused) pause menu behind it.
-      presets = await Task.detached(priority: .userInitiated) { ShaderLibrary.discoverPresets() }.value
-      let fresh = Self.loadFreshPausePreview()
+      let openedAt = Date()
+      if capturesLiveFrame { SaveStateService.capturePausePreview() }
+      let found = await Task.detached(priority: .userInitiated) { ShaderLibrary.discoverPresets() }.value
+      presets = found
+      catalog = ShaderBrowserCatalog(presets: found.map { (ShaderLibrary.normalizedPath($0.id.path), $0.name) })
+      if let currentPath, let current = catalog.entry(path: currentPath) { expandedCategories.insert(current.category) }
+      let fresh = await loadGameFrame(requestedAt: capturesLiveFrame ? openedAt : nil)
       heroImage = fresh?.image
       if let fresh, let cg = fresh.image.cgImage {
         let downscaled = ShaderPreviewRenderer.downscaledCGImage(cg, maxWidth: ShaderPreviewRenderer.sourceDownscaleMaxWidth)
@@ -205,23 +234,32 @@ struct ShaderQuickPickerView: View {
     }
   }
 
-  private var allItems: [PickerItem] {
-    [PickerItem(nil)] + presets.map(PickerItem.init)
+  static let offSectionKey = "off"
+
+  private var isFiltering: Bool { ShaderBrowserCatalog.isFiltering(query: query, looks: looks) }
+
+  private var visibleSections: [ShaderBrowserSection] {
+    catalog.sections(query: query, looks: looks, favorites: favorites, recents: mru)
   }
 
-  private var favoriteItems: [PickerItem] {
-    presets.filter { favorites.contains(ShaderLibrary.normalizedPath($0.id.path)) }.map(PickerItem.init)
+  private var presetsByPath: [String: ShaderPreset] {
+    Dictionary(presets.map { (ShaderLibrary.normalizedPath($0.id.path), $0) }, uniquingKeysWith: { first, _ in first })
   }
 
-  private var recentItems: [PickerItem] {
-    presets
-      .filter { mru.contains(ShaderLibrary.normalizedPath($0.id.path)) && !favorites.contains(ShaderLibrary.normalizedPath($0.id.path)) }
-      .sorted { a, b in
-        let ma = mru.firstIndex(of: ShaderLibrary.normalizedPath(a.id.path)) ?? Int.max
-        let mb = mru.firstIndex(of: ShaderLibrary.normalizedPath(b.id.path)) ?? Int.max
-        return ma < mb
-      }
-      .map(PickerItem.init)
+  /// The selected preset's card in its category, or the None card.
+  private var defaultFocusID: String {
+    guard let currentPath, let entry = catalog.entry(path: currentPath) else { return "\(Self.offSectionKey)/\(PickerItem.noneID)" }
+    return "\(ShaderBrowserCatalog.categorySectionPrefix)\(entry.category)/\(currentPath)"
+  }
+
+  private func isExpanded(_ section: ShaderBrowserSection) -> Bool {
+    guard !isFiltering, section.id.hasPrefix(ShaderBrowserCatalog.categorySectionPrefix) else { return true }
+    return expandedCategories.contains(String(section.id.dropFirst(ShaderBrowserCatalog.categorySectionPrefix.count)))
+  }
+
+  private func toggleExpanded(_ section: ShaderBrowserSection) {
+    let category = String(section.id.dropFirst(ShaderBrowserCatalog.categorySectionPrefix.count))
+    if expandedCategories.contains(category) { expandedCategories.remove(category) } else { expandedCategories.insert(category) }
   }
 
   private func displayName(forPresetPath path: String) -> String {
@@ -375,26 +413,119 @@ struct ShaderQuickPickerView: View {
     }
   }
 
-  /// Loads `SaveStateService.pausePreviewURL` (image + its modification time,
-  /// the latter doubling as `ShaderPreviewCacheKey.sourceMTime`) if it was
-  /// captured recently enough to plausibly be THIS pause (not a leftover from a
-  /// much older session, or a different game, since the file lives in
-  /// `NSTemporaryDirectory()` and isn't scoped per-game). Mirrors
-  /// `SaveStateService.adoptPausePreviewIfFresh`'s own 60-second window.
-  private static func loadFreshPausePreview() -> (image: UIImage, mtime: TimeInterval)? {
-    let url = SaveStateService.pausePreviewURL
-    guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
-          let modified = attrs[.modificationDate] as? Date,
-          Date().timeIntervalSince(modified) < pausePreviewFreshnessWindow,
-          let image = UIImage(contentsOfFile: url.path)
-    else { return nil }
-    return (image, modified.timeIntervalSinceReferenceDate)
+  /// The game's frame for the previews: the one the pause captured, or (`requestedAt`) the one this
+  /// picker just asked for, waited on briefly because the core writes it on its next presented frame.
+  /// Its modification time doubles as `ShaderPreviewCacheKey.sourceMTime`. A frame of an earlier game
+  /// is never used (`SaveStateService.currentPausePreview`); how long ago this game was paused does not matter.
+  private func loadGameFrame(requestedAt: Date?) async -> (image: UIImage, mtime: TimeInterval)? {
+    if let requestedAt {
+      let deadline = Date().addingTimeInterval(Self.liveFrameWait)
+      while Date() < deadline, !Task.isCancelled {
+        if let preview = SaveStateService.currentPausePreview(), preview.modified >= requestedAt.addingTimeInterval(-1) { break }
+        try? await Task.sleep(nanoseconds: UInt64(Self.liveFramePoll * 1_000_000_000))
+      }
+    }
+    guard let preview = SaveStateService.currentPausePreview(), let image = UIImage(contentsOfFile: preview.url.path) else { return nil }
+    return (image, preview.modified.timeIntervalSinceReferenceDate)
+  }
+
+  // MARK: - Search and filters
+
+  #if os(tvOS)
+  private var searchField: some View {
+    TextField(String(format: L("Search %d shaders"), presets.count), text: $query)
+      .focused($focusedCardID, equals: "SEARCH")
+  }
+  #endif
+
+  /// Look chips narrow the list across folders (CRT, LCD, Smoothing, ...); several chips must all match.
+  @ViewBuilder
+  private var lookChips: some View {
+    let available = catalog.availableLooks
+    if !available.isEmpty {
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+          ForEach(available) { look in
+            let isOn = looks.contains(look)
+            Button {
+              if isOn { looks.remove(look) } else { looks.insert(look) }
+            } label: {
+              Text(look.title)
+                .icubeText(.detail)
+                .fontWeight(.semibold)
+                .foregroundStyle(isOn ? ICubeDesign.color(.accent) : ICubeDesign.color(.textPrimary))
+                #if !os(tvOS)
+                .padding(.horizontal, ICubeDesign.Spacing.s.rawValue)
+                .frame(minHeight: 36)
+                .background(isOn ? ICubeDesign.color(.selectedFill) : Color.white.opacity(0.1), in: Capsule())
+                .overlay(Capsule().stroke(focusedCardID == "LOOK#" + look.rawValue ? Color.white.opacity(0.6) : .clear, lineWidth: 2))
+                #endif
+            }
+            #if os(tvOS)
+            .buttonStyle(ICubeRowButtonStyle())
+            #else
+            .buttonStyle(.plain)
+            #endif
+            .focused($focusedCardID, equals: "LOOK#" + look.rawValue)
+            .accessibilityAddTraits(isOn ? .isSelected : [])
+          }
+        }
+        #if os(tvOS)
+        .padding(.vertical, ICubeDesign.Spacing.s.rawValue)
+        #else
+        .padding(.horizontal, 16)
+        #endif
+      }
+      #if os(tvOS)
+      .scrollClipDisabled()
+      #endif
+    }
+  }
+
+  @ViewBuilder
+  private func sectionView(_ section: ShaderBrowserSection) -> some View {
+    let isCategory = section.id.hasPrefix(ShaderBrowserCatalog.categorySectionPrefix)
+    let expanded = isExpanded(section)
+    if isCategory && !isFiltering {
+      Button { toggleExpanded(section) } label: {
+        HStack(spacing: ICubeDesign.Spacing.xs.rawValue) {
+          sectionHeaderText(section.title)
+          Text("\(section.entries.count)")
+            .icubeText(.detail)
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+          Spacer(minLength: 0)
+          Image(systemName: expanded ? "chevron.down" : "chevron.right")
+            .font(ICubeDesign.symbolFont(.rail))
+            .foregroundStyle(ICubeDesign.color(.textSecondary))
+        }
+        #if !os(tvOS)
+        .padding(.horizontal, 16)
+        .frame(minHeight: 44)
+        .contentShape(Rectangle())
+        .background(focusedCardID == "HEADER#" + section.id ? Color.white.opacity(0.12) : .clear)
+        #endif
+      }
+      #if os(tvOS)
+      .buttonStyle(ICubeRowButtonStyle())
+      #else
+      .buttonStyle(.plain)
+      #endif
+      .focused($focusedCardID, equals: "HEADER#" + section.id)
+      .accessibilityLabel(section.title)
+      .accessibilityValue(expanded ? L("Expanded") : L("Collapsed"))
+    } else {
+      sectionHeader(section.title)
+    }
+    if expanded {
+      let lookup = presetsByPath
+      grid(section.entries.compactMap { lookup[$0.path] }.map(PickerItem.init), sectionKey: section.id)
+    }
   }
 
   // MARK: - Grid
 
   @ViewBuilder
-  private func sectionHeader(_ title: String) -> some View {
+  private func sectionHeaderText(_ title: String) -> some View {
     #if os(tvOS)
     Text(title)
       .icubeText(.section)
@@ -404,12 +535,20 @@ struct ShaderQuickPickerView: View {
       .font(.system(size: 13, weight: .semibold))
       .foregroundColor(.white.opacity(0.6))
       .textCase(.uppercase)
-      .padding(.horizontal, 16)
+    #endif
+  }
+
+  @ViewBuilder
+  private func sectionHeader(_ title: String) -> some View {
+    #if os(tvOS)
+    sectionHeaderText(title)
+    #else
+    sectionHeaderText(title).padding(.horizontal, 16)
     #endif
   }
 
   /// `sectionKey` scopes the focus ids: the same preset appears in Favorites, Recent AND
-  /// All Shaders, and duplicate `@FocusState` values across mounted views are undefined.
+  /// its category, and duplicate `@FocusState` values across mounted views are undefined.
   private func grid(_ items: [PickerItem], sectionKey: String) -> some View {
     #if os(tvOS)
     let gridSpacing = ICubeDesign.Spacing.l.rawValue

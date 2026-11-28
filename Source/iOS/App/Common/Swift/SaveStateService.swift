@@ -210,6 +210,20 @@ public enum SaveStateService {
     TVEmulationBridge.captureScreenshot(toPath: pausePreviewURL.path)
   }
 
+  /// The pause preview's file and when it was written, when it is a frame of the game now running
+  /// (`ShaderPreviewFrame.isCurrent`); nil for a leftover of an earlier game, or before any capture.
+  public static func currentPausePreview() -> (url: URL, modified: Date)? {
+    previewSessionLock.lock()
+    let captureSession = previewSessionIdentifier
+    previewSessionLock.unlock()
+    let url = pausePreviewURL
+    let modified = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+    guard let modified, ShaderPreviewFrame.isCurrent(
+      captureSession: captureSession, runningSession: TVEmulationBridge.currentSessionIdentifier(), fileExists: true)
+    else { return nil }
+    return (url, modified)
+  }
+
   /// Produce a thumbnail next to the state file. Adopts the fresh pause preview
   /// (covers saves made while paused), then requests a live capture that overwrites
   /// it with the current frame when emulation is still running. Both are best-effort;
