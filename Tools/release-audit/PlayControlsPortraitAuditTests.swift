@@ -9,7 +9,7 @@ final class PlayControlsPortraitAuditTests: XCTestCase {
 
   func testPortraitToolbarTargetsAndDirectPause() throws {
     try start()
-    for id in ["pause", "save", "load", "saves", "options", "hide"] {
+    for id in ["menu", "save", "load", "saves", "display", "options", "exit"] {
       let button = app.buttons["play-toolbar.\(id)"].firstMatch
       XCTAssertTrue(button.waitForExistence(timeout: 5), id)
       assertVisibleTarget(button)
@@ -20,7 +20,7 @@ final class PlayControlsPortraitAuditTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(height, 44)
     XCTAssertLessThanOrEqual(height, 80)
     record("portrait-toolbar")
-    app.buttons["play-toolbar.pause"].tap()
+    app.buttons["play-toolbar.menu"].tap()
     XCTAssertTrue(app.staticTexts["play-preview.last-action"].waitForExistence(timeout: 3))
     waitForMarker("destination.pauseMenu")
     record("direct-pause-destination")

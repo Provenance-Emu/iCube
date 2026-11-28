@@ -183,7 +183,7 @@ final class LivePerformanceSession: ObservableObject {
 
   private func rebuild() {
     rows = PerformanceControlsModelBuilder.build(state: controls.state, apply: { [weak self] in self?.controls.apply($0) }).allItems
-    rows.append(MenuItem(id: "live-performance-pause", title: L("Pause Menu"), icon: "pause.fill", role: .action { [weak self] in
+    rows.append(MenuItem(id: "live-performance-pause", title: L("Menu"), icon: "line.3.horizontal", role: .action { [weak self] in
       guard let self else { return }
       self.ownership.transitionToPause(claim: self.onPause)
       self.close()

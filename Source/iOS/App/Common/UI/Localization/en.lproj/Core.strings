@@ -6048,3 +6048,23 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Physical Cases" = "Physical Cases";
 "Controller Covers Screen" = "Controller Covers Screen";
 "Not enough free space to download this game (%@ required, %@ available)." = "Not enough free space to download this game (%@ required, %@ available).";
+
+"Shader Options" = "Shader Options";
+"Menu" = "Menu";
+"Scaling" = "Scaling";
+"How the picture fills the screen. Tap to cycle. Long-press to pick one." = "How the picture fills the screen. Tap to cycle. Long-press to pick one.";
+"Everything else: saves, cheats, controllers, settings." = "Everything else: saves, cheats, controllers, settings.";
+"Handheld" = "Handheld";
+"Pixel Art" = "Pixel Art";
+"My Shaders" = "My Shaders";
+"No shaders match." = "No shaders match.";
+"Search %d shaders" = "Search %d shaders";
+"Expanded" = "Expanded";
+"Collapsed" = "Collapsed";
+"Game Menu" = "Game Menu";
+"Sound on" = "Sound on";
+"Picture" = "Picture";
+"Bezel" = "Bezel";
+"All Options" = "All Options";
+"Choose Speed" = "Choose Speed";
+"Stretch" = "Stretch";
