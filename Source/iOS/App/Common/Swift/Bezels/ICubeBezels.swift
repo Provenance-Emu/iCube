@@ -137,6 +137,37 @@ enum ICubeBezels {
     GameplayBezelPlacement.offersSwitcher(placementInputs(state, choiceIsAutomatic: false))
   }
 
+  // MARK: - The picture's shape
+
+  /// The draw aspects (width / height) the core may report that are a picture's shape. Outside it the core has
+  /// no surface yet, or a degenerate one.
+  static let pictureAspectRange: ClosedRange<CGFloat> = 0.4 ... 3.5
+
+  /// The aspect to lay the picture out with once the core reports `reported`, or `nil` to keep `current`.
+  ///
+  /// A game can change its picture's shape long after it starts: a Wii game turns widescreen once it has read
+  /// the console's setting, the widescreen heuristic makes up its mind, the player changes Aspect Ratio in the
+  /// pause menu. A TV is drawn with a tube for the picture's shape (`TVBezelPictureShape`), so a stale aspect
+  /// leaves a 16:9 picture letterboxed in a 4:3 tube, with black bars where the glass should reflect it.
+  /// Differences within `aspectTolerance` are the same shape: they are the surface's own rounding.
+  static func pictureAspect(current: CGFloat?, reported: CGFloat) -> CGFloat? {
+    guard reported.isFinite, pictureAspectRange.contains(reported) else { return nil }
+    guard let current, current > 0 else { return reported }
+    return abs(reported - current) > aspectTolerance * current ? reported : nil
+  }
+
+  /// Whether the picture is stretched over the whole tube, whatever its shape: Aspect Ratio is "Stretch to
+  /// Window", and behind the glass of a TV the tube is the window.
+  /// - Parameter aspectMode: `DOLConfigBridge.gfxAspectRatio()`.
+  static func stretchesPicture(aspectMode: Int) -> Bool { aspectMode == AspectRatio.stretch.aspectRaw }
+
+  /// Where the game goes in a tube of `tube` pixels: fitted to its own shape, or over all of it when stretched.
+  static func gameRect(gameSize: CGSize, tube: CGSize, stretches: Bool) -> CGRect {
+    let bounds = CGRect(origin: .zero, size: tube)
+    guard !stretches, gameSize.width > 0, gameSize.height > 0 else { return bounds }
+    return aspectFit(aspect: gameSize.width / gameSize.height, in: bounds).integral.intersection(bounds)
+  }
+
   // MARK: - Where the game surface goes
 
   /// The largest rect of `aspect` (width / height) that fits `rect`, centred in it.

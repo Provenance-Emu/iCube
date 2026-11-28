@@ -293,6 +293,8 @@ struct EmulationScreen: View {
   /// The shape the game surface had when the strip opened. The core draws nothing while paused, so the surface
   /// keeps this shape until the game runs again (`ICubeBezels.surfaceFrame`).
   @State private var bezelDrawnAspect: CGFloat?
+  /// Aspect Ratio is "Stretch to Window": inside a TV the picture covers the whole tube.
+  @State private var bezelStretchesPicture = false
 
   @Environment(\.displayScale) private var displayScale
   @AppStorage("shader_enabled") private var bezelHasPictureFilter = false
@@ -514,7 +516,7 @@ struct EmulationScreen: View {
         let scene = GameplayBezelRenderer.Request(
           bezel: bezel, canvas: sceneCanvas, viewport: viewport, surfaceAspect: canvas.width / canvas.height,
           pixelWidth: frame.width * displayScale, shape: TVBezelPictureShape(aspect: CGSize(width: pictureAspect, height: 1)),
-          lightsRoom: bezels.lightsRoom, flatGlass: bezelHasPictureFilter)
+          lightsRoom: bezels.lightsRoom, flatGlass: bezelHasPictureFilter, stretchesPicture: bezelStretchesPicture)
         return BezelStage(scene: scene, artwork: nil, picture: bounds, surface: bounds)
       }
       if let layout = ICubeBezels.layout(bezel: bezel, container: canvas, pictureAspect: CGSize(width: pictureAspect, height: 1),
@@ -547,6 +549,11 @@ struct EmulationScreen: View {
     .position(x: artwork.frame.midX, y: artwork.frame.midY)
     // One TV's artwork never lingers in the next TV's frame.
     .id(artwork.bezel.id)
+  }
+
+  private func refreshBezelStretch() {
+    let stretches = ICubeBezels.stretchesPicture(aspectMode: DOLConfigBridge.gfxAspectRatio())
+    if stretches != bezelStretchesPicture { bezelStretchesPicture = stretches }
   }
 
   /// The TV switcher's strip or its "More…" list is up over the paused game.
@@ -965,6 +972,7 @@ struct EmulationScreen: View {
         if !isPaused {
           let aspect = CGFloat(TVEmulationBridge.currentDrawAspectRatio())
           if aspect.isFinite, aspect > 0 { tvPictureAspect = aspect }
+          refreshBezelStretch()
           if bezelStripToken == nil { bezelDrawnAspect = nil }
         }
         if bezelStripToken == nil { checkNoControllerNotice() }
@@ -1373,6 +1381,11 @@ struct EmulationScreen: View {
         // Clear a stale disconnect banner if the game resumed via any other path.
         if controllerManager.disconnectPause != nil && !TVEmulationBridge.isPaused() {
           controllerManager.clearDisconnectPause()
+        }
+        if !isPaused {
+          refreshBezelStretch()
+          // "Stretch to Window" reports the surface's own shape back: following it would only echo the layout.
+          if !bezelStretchesPicture { refreshPictureAspect() }
         }
         // The game is drawing again, so the surface can take the picture's own shape.
         if bezelDrawnAspect != nil, !bezelSwitcherIsUp, !isPaused { bezelDrawnAspect = nil }
