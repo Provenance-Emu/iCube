@@ -69,7 +69,9 @@ final class GameplayBezelTests: XCTestCase {
     // The same request again is not loaded again on every layout pass.
     XCTAssertFalse(renderer.update(request, didLoad: {}))
     XCTAssertFalse(renderer.isRequested)
-    // Asking for nothing and then for the TV again is a new try.
+    // Asking for nothing and then for the TV again is a new try. Its load fails too, possibly after this test
+    // has returned: nobody is listening by then.
+    renderer.didFail = nil
     XCTAssertTrue(renderer.update(nil, didLoad: {}))
     XCTAssertTrue(renderer.update(request, didLoad: {}))
     XCTAssertTrue(renderer.isRequested)
