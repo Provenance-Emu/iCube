@@ -241,7 +241,7 @@ final class HomebrewInstallModel: ObservableObject {
     try? FileManager.default.removeItem(at: extracted)
     try ZipImportHelper.extractArchive(at: archive, to: extracted)
     try? FileManager.default.removeItem(at: archive)
-    guard let program = HomebrewPackageLayout.program(in: extracted) else { throw HomebrewInstallError.noProgram }
+    guard let program = HomebrewPackageLayout.program(in: extracted, slug: slug) else { throw HomebrewInstallError.noProgram }
     return try HomebrewPackageLayout.rename(program, slug: slug)
   }
 

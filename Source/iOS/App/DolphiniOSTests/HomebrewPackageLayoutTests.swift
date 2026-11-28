@@ -71,6 +71,28 @@ final class HomebrewPackageLayoutTests: XCTestCase {
     XCTAssertEqual(relative(HomebrewPackageLayout.program(in: scratch.root), to: scratch), "apps/a/default.dol")
   }
 
+  /// Cube64's package: in plain path order `cube64-Rice-exp` comes before `cube64-Rice`.
+  func testSeveralBuildsPicksThePlainOneNotAVariant() throws {
+    let scratch = try HomebrewScratch()
+    for build in ["cube64-Rice", "cube64-Rice-exp", "cube64-glN64", "cube64-glN64-exp"] {
+      try scratch.file("apps/\(build)/default.dol")
+      try scratch.file("apps/\(build)/opening.bnr")
+    }
+    XCTAssertEqual(relative(HomebrewPackageLayout.program(in: scratch.root, slug: "cube64"), to: scratch),
+                   "apps/cube64-Rice/default.dol")
+  }
+
+  func testFolderNamedAfterTheTitleWins() throws {
+    let scratch = try HomebrewScratch()
+    try scratch.file("apps/a/default.dol")
+    try scratch.file("apps/quest-loader/default.dol")
+    try scratch.file("apps/Quest/boot.dol")
+    try scratch.file("apps/Quest/default.dol")
+    XCTAssertEqual(relative(HomebrewPackageLayout.program(in: scratch.root, slug: "quest"), to: scratch),
+                   "apps/Quest/default.dol")
+    XCTAssertEqual(relative(HomebrewPackageLayout.program(in: scratch.root), to: scratch), "apps/a/default.dol")
+  }
+
   func testSeveralProgramsOutsideAppsPicksFirstInPathOrder() throws {
     let scratch = try HomebrewScratch()
     try scratch.file("z/two.dol")

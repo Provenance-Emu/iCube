@@ -18,20 +18,34 @@
 
 DolReader::DolReader(std::vector<u8> buffer) : BootExecutableReader(std::move(buffer))
 {
+  PadForAlignedSections();
   m_is_valid = Initialize(m_bytes);
 }
 
 DolReader::DolReader(File::IOFile file) : BootExecutableReader(std::move(file))
 {
+  PadForAlignedSections();
   m_is_valid = Initialize(m_bytes);
 }
 
 DolReader::DolReader(const std::string& filename) : BootExecutableReader(filename)
 {
+  PadForAlignedSections();
   m_is_valid = Initialize(m_bytes);
 }
 
 DolReader::~DolReader() = default;
+
+// Initialize() rounds every section up to 32 bytes, as an apploader does, and rejects a file
+// that ends before the rounded size. Tools for homebrew write the last section at its exact
+// size (SuDokuL, CleanRip and 240p Test Suite end that way), and a loader on a console reads
+// what is there; so do the same and let the last few bytes of such a section be zero.
+void DolReader::PadForAlignedSections()
+{
+  constexpr std::size_t SECTION_ALIGNMENT = 32;
+  if (!m_bytes.empty() && m_bytes.size() <= UINT32_MAX - SECTION_ALIGNMENT)
+    m_bytes.resize(m_bytes.size() + SECTION_ALIGNMENT - 1);
+}
 
 bool DolReader::Initialize(std::span<const u8> buffer)
 {

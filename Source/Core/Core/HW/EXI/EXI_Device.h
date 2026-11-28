@@ -41,6 +41,8 @@ enum class EXIDeviceType : int
   EthernetBuiltIn,
   ModemTapServer,
   EthernetIPC,
+  // An SD card on an SD Gecko style adapter, read from Config::MAIN_GC_SD_CARD_PATH.
+  SD,
   None = 0xFF
 };
 
@@ -87,7 +89,7 @@ std::unique_ptr<IEXIDevice> EXIDevice_Create(Core::System& system, EXIDeviceType
 
 template <>
 struct fmt::formatter<ExpansionInterface::EXIDeviceType>
-    : EnumFormatter<ExpansionInterface::EXIDeviceType::EthernetIPC>
+    : EnumFormatter<ExpansionInterface::EXIDeviceType::SD>
 {
   static constexpr array_type names = {
       _trans("Dummy"),
@@ -106,6 +108,7 @@ struct fmt::formatter<ExpansionInterface::EXIDeviceType>
       _trans("Broadband Adapter (HLE)"),
       _trans("Modem Adapter (tapserver)"),
       _trans("Broadband Adapter (IPC)"),
+      _trans("SD Adapter"),
   };
 
   constexpr formatter() : EnumFormatter(names) {}

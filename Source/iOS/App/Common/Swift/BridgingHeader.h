@@ -40,6 +40,7 @@
 #import "DOLPathsBridge.h"
 #import "DOLPerfBridge.h"
 #import "DOLPhysicalProfileBridge.h"
+#import "DOLSDCardBridge.h"
 #import "DOLSettingsKeyBridge.h"
 #import "DSUPingBridge.h"
 #import "DSUServerBridge.h"

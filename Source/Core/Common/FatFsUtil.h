@@ -4,6 +4,7 @@
 #pragma once
 
 #include <functional>
+#include <string>
 
 #include "Common/Common.h"
 #include "Common/CommonTypes.h"
@@ -15,6 +16,18 @@ static constexpr auto SD_UNPACK_TEXT = _trans("Unpack SD Card Now");
 
 bool SyncSDFolderToSDImage(const std::function<bool()>& cancelled, bool deterministic);
 bool SyncSDImageToSDFolder(const std::function<bool()>& cancelled);
+
+// The card behind the GameCube SD adapter (ExpansionInterface::EXIDeviceType::SD): a FAT image
+// of one folder, which is the card's root.
+constexpr u64 GC_SD_IMAGE_MIN_SIZE = 64ull * 1024 * 1024;
+constexpr u64 GC_SD_IMAGE_MAX_SIZE = 2048ull * 1024 * 1024;
+// The image size for files that need `content_size` bytes: a power of two between the two above.
+u64 GCSDImageSize(u64 content_size);
+bool PackFolderToGCSDImage(const std::string& folder, const std::string& image_path,
+                           const std::function<bool()>& cancelled);
+// Replaces `folder` with what the image holds. A failure leaves the folder as it was.
+bool UnpackGCSDImageToFolder(const std::string& image_path, const std::string& folder,
+                             const std::function<bool()>& cancelled);
 
 class FatFsCallbacks
 {

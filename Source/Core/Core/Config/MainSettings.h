@@ -91,6 +91,8 @@ const Info<std::string>& GetInfoForAGPCartPath(ExpansionInterface::Slot slot);
 extern const Info<std::string> MAIN_GCI_FOLDER_A_PATH;
 extern const Info<std::string> MAIN_GCI_FOLDER_B_PATH;
 const Info<std::string>& GetInfoForGCIPath(ExpansionInterface::Slot slot);
+extern const Info<std::string> MAIN_GC_SD_CARD_PATH;
+extern const Info<std::string> MAIN_GC_EXECUTABLE_PATH_ARGUMENT;
 extern const Info<std::string> MAIN_GCI_FOLDER_A_PATH_OVERRIDE;
 extern const Info<std::string> MAIN_GCI_FOLDER_B_PATH_OVERRIDE;
 const Info<std::string>& GetInfoForGCIPathOverride(ExpansionInterface::Slot slot);

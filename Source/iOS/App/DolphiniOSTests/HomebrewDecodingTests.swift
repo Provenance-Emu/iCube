@@ -83,14 +83,25 @@ final class HomebrewDecodingTests: XCTestCase {
     XCTAssertNil(try row("").coverPath)
   }
 
-  func testNeedsSDCardForEmulatorsAndMedia() throws {
+  func testEmulatorsAndMediaUseFilesOnTheSDCard() throws {
     func category(_ name: String) throws -> HomebrewTitle {
       try row(#", "categories": {"name": "\#(name)", "display_name": "X", "sort_order": 1}"#)
     }
-    XCTAssertTrue(try category("emulators").needsSDCard)
-    XCTAssertTrue(try category("media").needsSDCard)
-    XCTAssertFalse(try category("games").needsSDCard)
-    XCTAssertFalse(try row("").needsSDCard)
+    XCTAssertTrue(try category("emulators").usesFilesOnSDCard)
+    XCTAssertTrue(try category("media").usesFilesOnSDCard)
+    XCTAssertFalse(try category("games").usesFilesOnSDCard)
+    XCTAssertFalse(try row("").usesFilesOnSDCard)
+  }
+
+  func testListedForDolphinReadsThePlatformList() throws {
+    func platforms(_ names: [(String, String)]) throws -> HomebrewTitle {
+      let rows = names.map { #"{"platforms": {"id": "1", "name": "\#($0.0)", "display_name": "\#($0.1)"}}"# }
+      return try row(#", "app_platforms": [\#(rows.joined(separator: ","))]"#)
+    }
+    XCTAssertTrue(try platforms([("gamecube", "GameCube"), ("dolphin", "Dolphin")]).listedForDolphin)
+    XCTAssertFalse(try platforms([("gamecube", "GameCube"), ("panasonic_q", "Panasonic Q")]).listedForDolphin)
+    XCTAssertFalse(try titleNamed("block-quest").listedForDolphin)
+    XCTAssertFalse(try row("").listedForDolphin)
   }
 
   func testCategoriesAreDistinctAndOrdered() throws {

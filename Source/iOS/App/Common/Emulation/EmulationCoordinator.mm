@@ -2248,6 +2248,10 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
       renderSurfaceScale = [self currentRenderSurfaceScale];
   });
 
+  // An installed homebrew program reads its package from an SD card. Packed here, off the main
+  // queue; a boot that is superseded below drops it again.
+  [DOLHomebrewSDCard prepareForProgramAtPath:bootParameter.path];
+
   __block BOOL supersededBoot = NO;
   DOLHostQueueRunSync(^{
     if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
@@ -2435,6 +2439,7 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
       // Publish the run identity only once this boot still owns admission after layout.
       [DOLModdedBoot beginBootAtPath:bootParameter.path];
       auto local_boot = std::move(boot);
+      [DOLHomebrewSDCard insertWithIsWii:local_boot && IsWiiBoot(*local_boot)];
       // Initialize controller backends before boot so devices are available
       UICommon::InitControllers(wsi);
       // Which ports play and what Player 1 / Wii Remote 1 fall back to is the Swift boot pass's
@@ -2464,7 +2469,10 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   });
 
   if (supersededBoot)
+  {
+    [DOLHomebrewSDCard finish];
     return;
+  }
 
   // Wait for state changes instead of polling
   dispatch_semaphore_t stateSemaphore = dispatch_semaphore_create(0);
@@ -2536,6 +2544,14 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification
                                                       object:self
                                                     userInfo:nil];
+
+  if ([DOLHomebrewSDCard hasCard])
+  {
+    // The core writes the card image until it has shut down; what the program saved is copied
+    // back to its folder only then.
+    DOLWaitForCoreUninitialized(5.0);
+    [DOLHomebrewSDCard finish];
+  }
 
   _mainDisplayView = nil;
 }

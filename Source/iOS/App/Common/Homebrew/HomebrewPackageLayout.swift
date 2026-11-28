@@ -11,32 +11,44 @@ enum HomebrewPackageLayout {
   private static let macArchiveFolder = "__MACOSX"
 
   /// The program to start, or nil when the package has none. Only regular files count.
-  static func program(in root: URL) -> URL? {
-    let base = root.resolvingSymlinksInPath()
-    let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey]
-    // Hidden files include the `._name` sidecars a Mac's zip adds; `__MACOSX` holds more of them.
-    guard let walker = FileManager.default.enumerator(at: base, includingPropertiesForKeys: keys,
-                                                      options: [.skipsHiddenFiles]) else { return nil }
-    var programs: [(path: [String], url: URL)] = []
-    for case let url as URL in walker {
-      guard programExtensions.contains(url.pathExtension.lowercased()),
-            let values = try? url.resourceValues(forKeys: Set(keys)),
-            values.isRegularFile == true, values.isSymbolicLink != true else { continue }
-      let path = Array(url.pathComponents.dropFirst(base.pathComponents.count))
-      if !path.isEmpty, !path.contains(where: { $0.caseInsensitiveCompare(macArchiveFolder) == .orderedSame }) {
-        programs.append((path, url))
-      }
-    }
-    programs.sort { $0.path.joined(separator: "/") < $1.path.joined(separator: "/") }
+  ///
+  /// A package with several is an SD card holding several builds of one title (Cube64 ships
+  /// `apps/cube64-Rice`, `apps/cube64-Rice-exp` and two more). The folder named after the title
+  /// wins, then the shortest folder name, which is the plain build rather than a variant of it.
+  static func program(in root: URL, slug: String? = nil) -> URL? {
+    let programs = files(in: root).filter { programExtensions.contains($0.url.pathExtension.lowercased()) }
     if programs.count <= 1 { return programs.first?.url }
     for name in preferredNames {
-      if let match = programs.first(where: {
+      let matches = programs.filter {
         $0.path.count == 3 && $0.path[0].lowercased() == "apps" && $0.path[2].lowercased() == name
-      }) {
-        return match.url
       }
+      if let own = matches.first(where: { $0.path[1].caseInsensitiveCompare(slug ?? "") == .orderedSame }) {
+        return own.url
+      }
+      // `min` keeps the first of equals, and `programs` is in path order.
+      if let plainest = matches.min(by: { $0.path[1].count < $1.path[1].count }) { return plainest.url }
     }
     return programs.first?.url
+  }
+
+  /// Every regular file of the package, in path order, with its path from the package root.
+  private static func files(in root: URL) -> [(path: [String], url: URL)] {
+    let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey]
+    // Hidden files include the `._name` sidecars a Mac's zip adds; `__MACOSX` holds more of them.
+    guard let walker = FileManager.default.enumerator(at: root.resolvingSymlinksInPath(), includingPropertiesForKeys: keys,
+                                                      options: [.skipsHiddenFiles]) else { return [] }
+    var found: [(path: [String], url: URL)] = []
+    for case let url as URL in walker {
+      guard let values = try? url.resourceValues(forKeys: Set(keys)),
+            values.isRegularFile == true, values.isSymbolicLink != true else { continue }
+      // Counted from the walker's own depth: it may spell the root differently from the caller
+      // (`/private/var` for `/var`), and a path cut by the caller's length is then one folder out.
+      let path = Array(url.pathComponents.suffix(walker.level))
+      if !path.isEmpty, !path.contains(where: { $0.caseInsensitiveCompare(macArchiveFolder) == .orderedSame }) {
+        found.append((path, url))
+      }
+    }
+    return found.sorted { $0.path.joined(separator: "/") < $1.path.joined(separator: "/") }
   }
 
   /// Renames the program to `<slug>.<extension>` where it is and returns the new URL.

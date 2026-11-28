@@ -15,11 +15,12 @@ enum HomebrewTestData {
 
   static func title(_ slug: String, name: String? = nil, author: String = "", summary: String = "",
                     category: HomebrewCategory? = games, downloads: Int = 0, updated: TimeInterval? = nil,
-                    latest: HomebrewVersion? = version(), screenshots: [String] = []) -> HomebrewTitle {
+                    latest: HomebrewVersion? = version(), screenshots: [String] = [],
+                    platforms: [String] = []) -> HomebrewTitle {
     HomebrewTitle(slug: slug, name: name ?? slug, author: author, summary: summary, details: "", category: category,
                   bannerPath: nil, heroPath: nil, screenshotPaths: screenshots, downloads: downloads, likes: 0,
                   updatedAt: updated.map(Date.init(timeIntervalSince1970:)), latest: latest, licence: nil, links: [],
-                  hardware: [], platforms: [])
+                  hardware: [], platforms: platforms)
   }
 }
 

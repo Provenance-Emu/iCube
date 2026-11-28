@@ -129,9 +129,8 @@ private struct HomebrewDetailContent: View {
         }
         idleButtons
       }
-      if title.needsSDCard {
-        Text(L("This program looks for files on an SD card, which iCube does not provide yet."))
-          .icubeText(.detail).foregroundColor(ICubeDesign.color(.textSecondary))
+      if let note = HomebrewCompatibility.assess(title).note(for: title) {
+        Text(note).icubeText(.detail).foregroundColor(ICubeDesign.color(.textSecondary))
       }
     }
   }

@@ -5987,7 +5987,9 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "The download is not the size Dolphin Depot lists, so it was discarded." = "The download is not the size Dolphin Depot lists, so it was discarded.";
 "This package has no program iCube can start." = "This package has no program iCube can start.";
 "iCube cannot start the program in this package." = "iCube cannot start the program in this package.";
-"This program looks for files on an SD card, which iCube does not provide yet." = "This program looks for files on an SD card, which iCube does not provide yet.";
+"This program loads your files from its SD card. In iCube the card is the title's own folder, Software/Homebrew/%@: put your files there." = "This program loads your files from its SD card. In iCube the card is the title's own folder, Software/Homebrew/%@: put your files there.";
+"This is a tool for a real GameCube and its accessories. It has nothing to work with in iCube and may not start." = "This is a tool for a real GameCube and its accessories. It has nothing to work with in iCube and may not start.";
+"Dolphin Depot lists this title as working in Dolphin." = "Dolphin Depot lists this title as working in Dolphin.";
 "iCube cannot reach its Homebrew folder, so nothing can be installed." = "iCube cannot reach its Homebrew folder, so nothing can be installed.";
 "Seat" = "Seat";
 "Middle" = "Middle";
