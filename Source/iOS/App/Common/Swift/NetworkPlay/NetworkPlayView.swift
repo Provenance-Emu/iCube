@@ -29,7 +29,7 @@ struct NetworkPlayView: View {
       }
     }
   }
-  private enum FocusTarget: Hashable { case tab(Tab), search }
+  private enum FocusTarget: Hashable { case tab(Tab), search, filter(NetworkPlayLibrary.Filter) }
   @FocusState private var focus: FocusTarget?
 
   private var visibleGames: [NetworkPlayLibrary.Game] {
@@ -117,6 +117,7 @@ struct NetworkPlayView: View {
       }
     }
     #if os(tvOS)
+    .defaultFocus($focus, .tab(tab))
     .focusSection()
     #endif
   }
@@ -133,10 +134,13 @@ struct NetworkPlayView: View {
       HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
         ForEach(NetworkPlayLibrary.Filter.allCases, id: \.self) { value in
           chip(value.title, selected: filter == value) { filter = value }
+            .focused($focus, equals: .filter(value))
             .accessibilityIdentifier("networkPlay.filter.\(value.rawValue)")
         }
       }
       #if os(tvOS)
+      // Entering the row lands on the chosen filter, not on whichever chip is nearest.
+      .defaultFocus($focus, .filter(filter))
       .focusSection()
       #endif
       if games.isEmpty {
@@ -255,37 +259,43 @@ struct NetworkPlayView: View {
   }
 }
 
-/// The games search field. On Apple TV the system field draws its own white focus plate, so the field is drawn
-/// plain inside the standard row surface and focus ring.
+/// The games search field. On Apple TV a text field draws the system's white focus plate, so the row is a
+/// standard button there and typing happens in the system's text entry.
 private struct NetworkPlaySearchField: View {
   @Binding var text: String
-  @FocusState private var focused: Bool
+  #if os(tvOS)
+  @State private var entering = false
+  @State private var draft = ""
+  #endif
 
   var body: some View {
-    let shape = RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue, style: .continuous)
+    #if os(tvOS)
+    Button {
+      draft = text
+      entering = true
+    } label: {
+      Label(text.isEmpty ? L("Search games or systems") : text, systemImage: "magnifyingglass")
+        .icubeText(.body)
+        .foregroundStyle(ICubeDesign.color(text.isEmpty ? .textSecondary : .textPrimary))
+    }
+    .buttonStyle(ICubeRowButtonStyle())
+    .accessibilityIdentifier("networkPlay.search")
+    .alert(L("Search games or systems"), isPresented: $entering) {
+      TextField(L("Search games or systems"), text: $draft)
+      Button(L("Search")) { text = draft }
+      Button(L("Clear"), role: .destructive) { text = "" }
+      Button(L("Cancel"), role: .cancel) {}
+    }
+    #else
     HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
       Image(systemName: "magnifyingglass").foregroundStyle(ICubeDesign.color(.textSecondary))
       TextField(L("Search games or systems"), text: $text,
                 prompt: Text(L("Search games or systems")).foregroundStyle(ICubeDesign.color(.textSecondary)))
-        .textFieldStyle(.plain)
-        .focused($focused)
-        .focusEffectDisabled()
         .accessibilityIdentifier("networkPlay.search")
     }
     .icubeText(.body)
     .padding(ICubeDesign.Spacing.s.rawValue)
-    .background(shape.fill(ICubeDesign.color(focused ? .selectedFill : .rowSurface)))
-    .overlay(shape.stroke(ICubeDesign.color(.hairline), lineWidth: ICubeDesign.Line.hairline.rawValue))
-    .overlay(shape.stroke(ICubeDesign.focusGradient, lineWidth: Self.ringWidth(focused)))
-    .animation(ICubeDesign.Motion.focusSpring, value: focused)
-  }
-
-  /// The focus ring is an Apple TV affordance; a touch keyboard already shows where typing goes.
-  private static func ringWidth(_ focused: Bool) -> CGFloat {
-    #if os(tvOS)
-    focused ? ICubeDesign.Line.focus.rawValue : 0
-    #else
-    0
+    .background(ICubeDesign.Card.surface, in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.small.rawValue))
     #endif
   }
 }
