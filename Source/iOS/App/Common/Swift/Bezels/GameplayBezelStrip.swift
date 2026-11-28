@@ -17,6 +17,12 @@ struct GameplayBezelStrip: View {
   let onClose: () -> Void
   /// "More…": the full list, in the strip's place.
   let onMore: () -> Void
+  /// How close the player sits to a built-in TV (`ICubeBezels.seat`), for the strip's Seat button.
+  @AppStorage(ICubeBezels.seatKey) private var seatRaw = TVBezelSeat.back.rawValue
+
+  private var seat: Binding<TVBezelSeat> {
+    Binding(get: { TVBezelSeat(rawValue: seatRaw) ?? .back }, set: { seatRaw = $0.rawValue })
+  }
 
   #if os(iOS)
   @State private var scopeID = UUID()
@@ -31,12 +37,14 @@ struct GameplayBezelStrip: View {
       Spacer(minLength: 0)
       #if os(tvOS)
       BezelSwitcherHost(session: session, commands: nil, showsControllerHints: false,
-                        supportsRoomLight: session.supportsRoomLight, onClose: onClose, onMore: onMore)
+                        supportsRoomLight: session.supportsRoomLight, seat: seat, onClose: onClose,
+                        onMore: onMore)
       #else
       BezelSwitcherHost(session: session,
                         commands: pad.commands.eraseToAnyPublisher(),
                         showsControllerHints: !ControllerManager.shared.controllers.isEmpty,
                         supportsRoomLight: session.supportsRoomLight,
+                        seat: seat,
                         onClose: onClose,
                         onMore: onMore)
       #endif
