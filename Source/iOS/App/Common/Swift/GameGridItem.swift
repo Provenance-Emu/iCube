@@ -645,7 +645,7 @@ struct GameGridItem: View {
         if focused { focusedFilePath = item.filePath } else if focusedFilePath == item.filePath { focusedFilePath = nil }
       }
     }
-    .overlay(selectionOverlay)
+    .overlay(alignment: .top) { selectionOverlay }
     .onTapGesture { handlePrimaryAction() }
     // Native tvOS context menus own long Select. A competing long-press
     // gesture also selected the game while the menu was opening.
