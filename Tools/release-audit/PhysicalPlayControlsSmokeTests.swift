@@ -26,14 +26,14 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
       // Complete all cleanup attempts before assertions: XCTest may interrupt
       // control flow at a failure when continueAfterFailure is false.
       let done = app.buttons["quick-save-picker.done"].firstMatch
-      if done.exists && done.isHittable { done.tap() }
+      if done.exists, done.isHittable { done.tap() }
       let audioRestored = restoreOriginalVolumeIfNeeded()
       let audioDismissed = dismissAudioPopoverIfPresent()
-      for _ in 0..<2 {
+      for _ in 0 ..< 2 {
         if app.buttons["pause.tile.exit"].exists { break }
         revealToolbarIfHidden()
         let pause = app.buttons["play-toolbar.menu"].firstMatch
-        if pause.exists && pause.isHittable { pause.tap() }
+        if pause.exists, pause.isHittable { pause.tap() }
       }
       let paused = app.buttons["pause.tile.exit"].firstMatch.waitForExistence(timeout: 5)
       record("99-dev-final-state")
@@ -81,9 +81,9 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
   func testOneNewHistorySaveAndExplicitLoadSameCard() throws {
     let environment = ProcessInfo.processInfo.environment
     try XCTSkipUnless(environment["ICUBE_HISTORY_SAVE_PREFLIGHT"] == "enabled",
-      "Operator must verify DEV Confirm on Stop=true, history mode, fewer than ten unkept history saves, and authorize exactly one new save/load")
+                      "Operator must verify DEV Confirm on Stop=true, history mode, fewer than ten unkept history saves, and authorize exactly one new save/load")
     let inventoryData = try XCTUnwrap(environment["ICUBE_HISTORY_EXISTING_BASENAMES"]?.data(using: .utf8),
-      "Supply complete DEV history basename inventory, including kept saves, as a JSON array")
+                                      "Supply complete DEV history basename inventory, including kept saves, as a JSON array")
     let existing = Set(try JSONDecoder().decode([String].self, from: inventoryData))
     try exposeToolbarFromExistingSession()
     app.buttons["play-toolbar.saves"].firstMatch.tap()
@@ -162,7 +162,7 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
       if audio.waitForExistence(timeout: 5) && audio.isHittable { audio.tap() }
     }
     guard volume.waitForExistence(timeout: 5), volume.isHittable else { return false }
-    for _ in 0..<3 {
+    for _ in 0 ..< 3 {
       if readVolumePercent(volume) == original { return true }
       volume.adjust(toNormalizedSliderPosition: CGFloat(original) / 100)
       if waitUntil { self.readVolumePercent(volume) == original } { return true }
@@ -177,7 +177,7 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
     let volume = app.sliders["Volume"].firstMatch
     guard volume.exists else { return true }
     let pause = app.buttons["play-toolbar.menu"].firstMatch
-    guard app.alerts.count == 0, pause.exists, pause.isEnabled,
+    guard app.alerts.isEmpty, pause.exists, pause.isEnabled,
           pause.label == "Game Menu", app.frame.contains(pause.frame),
           pause.frame.width > 0, pause.frame.height > 0 else { return false }
     let center = CGPoint(x: pause.frame.midX, y: pause.frame.midY)
@@ -207,7 +207,7 @@ final class PhysicalPlayControlsSmokeTests: XCTestCase {
   }
 
   private func revealToolbarIfHidden() {
-    guard !app.buttons["play-toolbar.menu"].exists, app.alerts.count == 0 else { return }
+    guard !app.buttons["play-toolbar.menu"].exists, app.alerts.isEmpty else { return }
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
       .withOffset(CGVector(dx: 0, dy: 20)).tap()
   }

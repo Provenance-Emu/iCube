@@ -251,13 +251,20 @@ struct EmulationTopBar: View {
     VStack(alignment: .leading, spacing: 0) {
       sectionHeader(L("Audio"))
       PopoverRow(title: L("Mute"), systemImage: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", isChecked: isMuted) {
-        act { isMuted = runtime.toggleMute(); volume = Double(runtime.readVolume()); refreshValues() }
+        act { isMuted = runtime.toggleMute()
+          volume = Double(runtime.readVolume())
+          refreshValues()
+        }
       }
       VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xxs.rawValue) {
         Text(L("Volume")).icubeText(.body)
         Slider(value: Binding(get: { volume }, set: { value in
-          act { volume = value; runtime.setVolume(Int(value)); isMuted = value <= 0; refreshValues() }
-        }), in: 0...100, step: 1)
+          act { volume = value
+            runtime.setVolume(Int(value))
+            isMuted = value <= 0
+            refreshValues()
+          }
+        }), in: 0 ... 100, step: 1)
           .accessibilityLabel(L("Volume"))
           .accessibilityValue("\(Int(volume))%")
           .frame(minHeight: TopBarLayout.minimumTarget)
@@ -322,7 +329,9 @@ struct EmulationTopBar: View {
       PopoverChoiceRow(
         title: L("Scaling"), options: TopBarValues.aspectOptions.map { ($0.title, $0.raw) }, selection: values.aspectRaw
       ) { raw in
-        act { runtime.setAspect(raw); refreshValues() }
+        act { runtime.setAspect(raw)
+          refreshValues()
+        }
       }
       if bezelsOffered {
         PopoverRow(title: L("Bezel"), systemImage: "tv", value: values.bezelName ?? L("None"), showsChevron: true) {
@@ -380,7 +389,9 @@ struct EmulationTopBar: View {
         closeThenOpen(.shaders)
       }
       PopoverRow(title: L("Fast Forward"), systemImage: "forward.fill", isChecked: fastForwardEnabled) {
-        act { fastForwardEnabled = runtime.toggleFastForward(); refreshValues() }
+        act { fastForwardEnabled = runtime.toggleFastForward()
+          refreshValues()
+        }
       }
       PopoverRow(title: L("Speed"), systemImage: "gauge.with.needle", value: TopBarValues.speedTitle(percent: values.fastForwardPercent),
                  showsChevron: true) {

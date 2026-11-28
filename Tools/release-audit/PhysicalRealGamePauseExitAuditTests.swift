@@ -31,7 +31,7 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
     }
     var launchedGame = false
     let emulationHUD = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "DSU:")).firstMatch
-    if !exit.exists && !app.buttons["play-toolbar.menu"].exists && !app.buttons["Pause"].exists && !app.buttons["Resume"].exists && !app.staticTexts["Paused"].exists && !emulationHUD.exists && !app.staticTexts["START"].exists {
+    if !exit.exists, !app.buttons["play-toolbar.menu"].exists, !app.buttons["Pause"].exists, !app.buttons["Resume"].exists, !app.staticTexts["Paused"].exists, !emulationHUD.exists, !app.staticTexts["START"].exists {
       let title = NSPredicate(format: "label CONTAINS[cd] %@", "Luigi")
       let card = app.buttons.matching(title).firstMatch
       if card.waitForExistence(timeout: 20), card.isHittable {
@@ -74,7 +74,7 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
         directPause.tap()
         XCTAssertTrue(exit.waitForExistence(timeout: 10), "Direct Pause must open the pause menu")
         record("04-direct-pause")
-      } else if pause.exists && pause.isHittable { pause.tap() }
+      } else if pause.exists, pause.isHittable { pause.tap() }
       if !exit.exists {
         revealToolbarIfHidden()
         let more = app.buttons["More"].firstMatch
@@ -91,7 +91,7 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
 
     XCTAssertTrue(exit.waitForExistence(timeout: 10), "Pause menu Exit tile is missing")
     record("05-real-game-pause-menu")
-    for iteration in 1...2 {
+    for iteration in 1 ... 2 {
       XCTAssertTrue(exit.isHittable, "Pause menu Exit tile must accept touch")
       exit.tap()
       XCTAssertTrue(app.staticTexts["Exit Game"].firstMatch.waitForExistence(timeout: 5))
@@ -125,7 +125,7 @@ final class PhysicalRealGamePauseExitAuditTests: XCTestCase {
   private func revealToolbarIfHidden() {
     let more = app.buttons["More"].firstMatch
     let directPause = app.buttons["play-toolbar.menu"].firstMatch
-    guard !directPause.exists, !more.exists, app.alerts.count == 0 else { return }
+    guard !directPause.exists, !more.exists, app.alerts.isEmpty else { return }
     // EmulationScreen.topRevealStrip spans the game picture's top 80pt.
     // Reveal its toolbar without tapping the central Paused pill (Resume).
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0))
