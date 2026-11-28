@@ -14,6 +14,8 @@ struct TVRootView: View {
       #endif
     } else if args.contains("-ICubePlayControlsPreview") {
       PlayControlsAuditPreview()
+    } else if args.contains("-ICubeQuickMenuPreview") {
+      QuickMenuAuditPreview()
     } else if args.contains("-ICubePausePreview") {
       PauseMenuView(selectedSlot: .constant(1), onClose: {}, platform: Self.previewPlatform,
                     game: PauseMenuView.previewGame())

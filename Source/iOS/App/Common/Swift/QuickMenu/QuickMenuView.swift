@@ -78,3 +78,32 @@ struct QuickMenuView: View {
     .onDisappear { releaseClaim() }
   }
 }
+
+#if DEBUG
+/// `-ICubeQuickMenuPreview`: the quick menu over a stand-in room, for simulator screenshots. Its tiles
+/// that need a running game do nothing.
+struct QuickMenuAuditPreview: View {
+  @State private var isPresented = true
+  @State private var slot = 1
+  @State private var mode = QuickSaveMode.history
+  @State private var lastAction = "Ready"
+
+  var body: some View {
+    ZStack {
+      ICubeRoom(style: .gradient)
+      Text(lastAction).icubeText(.detail).accessibilityIdentifier("quick-preview.last-action")
+      if isPresented {
+        QuickMenuView(
+          isPresented: $isPresented,
+          bindings: QuickMenuHost.bindings(selectedSlot: $slot, mode: $mode),
+          actions: PauseMenuActions(
+            resume: {}, quickSave: { lastAction = "quick-save" }, quickLoad: { lastAction = "quick-load" },
+            screenshot: { lastAction = "screenshot" }, openSaveStates: {}, openCheats: {}, openControllers: {},
+            openShaders: {}, openContinuity: {}, openSettings: {}, openPerfOverlay: { lastAction = "performance" },
+            requestReset: {}, requestExit: {}, recenterPointer: {}),
+          onOpenPauseMenu: { lastAction = "handoff.\($0)" })
+      }
+    }
+  }
+}
+#endif

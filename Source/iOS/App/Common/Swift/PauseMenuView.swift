@@ -446,6 +446,7 @@ internal struct PauseMenuView: View {
         case "controllers": pane = .controllers
         case "reset": showResetDialog = true
         case "exit": showExitDialog = true
+        case "shaders": showShaders = true
         case "discs": pane = .discs
         case "audio": pane = .audio
         case "continuity": showContinuitySheet = true
