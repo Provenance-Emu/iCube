@@ -480,6 +480,33 @@ bool CBoot::Load_BS2(Core::System& system, const std::string& boot_rom_filename)
   return true;
 }
 
+// A libogc program that takes arguments marks itself with "_arg" after the branch at its entry
+// point and keeps a `struct __argv` behind the mark. A loader on a console fills that in, with
+// the program's own path as the first argument; the program finds its files from it. `path` is
+// that argument. The text goes above the arena, where the program's start-up code leaves memory
+// alone until it has copied the arguments.
+static void SetExecutablePathArgument(Core::System& system, u32 entry_point,
+                                      const std::string& path)
+{
+  constexpr u32 ARGV_MAGIC = 0x5f617267;  // "_arg"
+  constexpr u32 COMMAND_LINE_ADDRESS = 0x817f8000;
+  constexpr size_t COMMAND_LINE_MAX_LENGTH = 0x400;
+  constexpr u32 MARK_OFFSET = 4;
+  constexpr u32 ARGV_OFFSET = 8;
+
+  auto& memory = system.GetMemory();
+  if (path.empty() || path.size() >= COMMAND_LINE_MAX_LENGTH)
+    return;
+  if (memory.Read_U32(entry_point + MARK_OFFSET) != ARGV_MAGIC)
+    return;
+
+  memory.CopyToEmu(COMMAND_LINE_ADDRESS, path.c_str(), path.size() + 1);
+  const u32 argv = entry_point + ARGV_OFFSET;
+  memory.Write_U32(ARGV_MAGIC, argv);                             // argvMagic
+  memory.Write_U32(COMMAND_LINE_ADDRESS, argv + 4);               // commandLine
+  memory.Write_U32(static_cast<u32>(path.size() + 1), argv + 8);  // length
+}
+
 static void SetDefaultDisc(DVD::DVDInterface& dvd_interface)
 {
   const std::string default_iso = Config::Get(Config::MAIN_DEFAULT_ISO);
@@ -584,6 +611,12 @@ bool CBoot::BootUp(Core::System& system, const Core::CPUThreadGuard& guard,
       {
         PanicAlertFmtT("Failed to load the executable to memory.");
         return false;
+      }
+
+      if (!system.IsWii())
+      {
+        SetExecutablePathArgument(system, executable.reader->GetEntryPoint(),
+                                  Config::Get(Config::MAIN_GC_EXECUTABLE_PATH_ARGUMENT));
       }
 
       AchievementManager::GetInstance().LoadGame(nullptr);

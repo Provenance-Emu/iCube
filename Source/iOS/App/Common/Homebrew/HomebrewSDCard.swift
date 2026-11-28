@@ -13,22 +13,26 @@ import Foundation
 /// folder (an emulator's ROMs, a player's music) are on the card at the next launch.
 ///
 /// A loader on a console tells the program where it was started from, and the program looks for
-/// its files relative to that (FruitY opens `data/levels.bin`). The emulator starts a program
-/// without that, which leaves it at the card's root, so the card also shows the program's own
-/// folder (`apps/<name>/`) at the root.
+/// its files from that. The core passes the program its path on the card for programs that build
+/// their paths from it (FruitY), with no device name, because slot B is `cardb:` to one libfat and
+/// `sdb:` to another. A path without a device does not move the program's working folder off the
+/// card's root, so the card also shows what is in the program's own folder (`apps/<name>/`)
+/// there. Older programs have their folder's place on the card built in instead (FruitY reads
+/// `/fruity/data`, from before packages lived under `apps/`), so that folder is at the root under
+/// its own name too.
 @objc(DOLHomebrewSDCard)
 final class HomebrewSDCard: NSObject {
   /// The emulator core's side of the work. Tests pass their own.
   struct Core {
     var pack: (_ folder: URL, _ image: URL) -> Bool
     var unpack: (_ image: URL, _ folder: URL) -> Bool
-    var insert: (_ image: URL) -> Void
+    var insert: (_ image: URL, _ programPath: String) -> Void
     var remove: () -> Void
 
     static let live = Core(
       pack: { DOLSDCardPackFolder($0.path, $1.path) },
       unpack: { DOLSDCardUnpackImage($0.path, $1.path) },
-      insert: { DOLSDCardInsertForThisRun($0.path) },
+      insert: { DOLSDCardInsertForThisRun($0.path, $1) },
       remove: { DOLSDCardRemoveForThisRun() })
   }
 
@@ -36,6 +40,8 @@ final class HomebrewSDCard: NSObject {
     let folder: URL
     /// The program's folder inside `folder`, as path components; empty when it is the folder.
     let programDirectory: [String]
+    /// The program's path on the card, which it is given as its first argument.
+    let programPath: String
     let image: URL
     let packed: Date?
     var inserted = false
@@ -103,31 +109,55 @@ final class HomebrewSDCard: NSObject {
       return
     }
     lock.withLock {
-      card = Card(folder: folder, programDirectory: programDirectory, image: image, packed: Self.modified(image))
+      card = Card(folder: folder, programDirectory: programDirectory, programPath: "/" + inside.joined(separator: "/"),
+                  image: image, packed: Self.modified(image))
     }
   }
 
-  /// Lays the card out at `staging`: the title's folder, plus what is in the program's own folder
-  /// again at the root, where nothing of that name is there already. The program file itself is
-  /// not repeated. On APFS the copies share their blocks with the originals.
+  /// Lays the card out at `staging`: the title's folder, plus the program's own folder twice more
+  /// at the root, once as its contents and once under its name. Nothing already at the root is
+  /// replaced, and the program file itself is not repeated. On APFS the copies share their blocks
+  /// with the originals; a program folder too big to pack three times is left as it is.
   static func stage(_ folder: URL, programDirectory: [String], program: String?, at staging: URL) throws {
     let fm = FileManager.default
     try fm.copyItem(at: folder, to: staging)
-    guard !programDirectory.isEmpty else { return }
+    guard let name = programDirectory.last else { return }
     let own = programDirectory.reduce(staging) { $0.appendingPathComponent($1, isDirectory: true) }
-    for name in try fm.contentsOfDirectory(atPath: own.path) where name != program {
-      let atRoot = staging.appendingPathComponent(name)
+    guard size(of: own) <= mirrorLimitBytes else { return }
+    let items = try fm.contentsOfDirectory(atPath: own.path).filter { $0 != program }
+    let named = staging.appendingPathComponent(name, isDirectory: true)
+    let makesNamedFolder = programDirectory.count > 1 && !fm.fileExists(atPath: named.path)
+    for item in items {
+      let atRoot = staging.appendingPathComponent(item)
       if !fm.fileExists(atPath: atRoot.path) {
-        try fm.copyItem(at: own.appendingPathComponent(name), to: atRoot)
+        try fm.copyItem(at: own.appendingPathComponent(item), to: atRoot)
       }
     }
+    if makesNamedFolder {
+      try fm.createDirectory(at: named, withIntermediateDirectories: true)
+      for item in items {
+        try fm.copyItem(at: own.appendingPathComponent(item), to: named.appendingPathComponent(item))
+      }
+    }
+  }
+
+  /// A program folder larger than this is packed once only.
+  static let mirrorLimitBytes: Int64 = 64 * 1024 * 1024
+
+  private static func size(of folder: URL) -> Int64 {
+    guard let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.fileSizeKey]) else { return 0 }
+    var total: Int64 = 0
+    for case let file as URL in walker {
+      total += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+    }
+    return total
   }
 
   /// Puts the prepared card in slot B. A Wii program has the Wii's own SD card instead.
   func insert(isWii: Bool) {
     lock.withLock {
       guard !isWii, var prepared = card else { return }
-      core.insert(prepared.image)
+      core.insert(prepared.image, prepared.programPath)
       prepared.inserted = true
       card = prepared
     }
@@ -167,7 +197,8 @@ final class HomebrewSDCard: NSObject {
   }
 
   /// Copies every file of `card` that is new or different into `folder`, and returns where each
-  /// went. A file at the card's root that came from the program's own folder goes back there.
+  /// went. A file that the card shows a second time (see `stage`) goes back to the program's own
+  /// folder, where it came from.
   /// Nothing is deleted: a file the program removed from its card stays in the folder, so a bad
   /// run cannot lose the user's files.
   @discardableResult
@@ -184,7 +215,9 @@ final class HomebrewSDCard: NSObject {
       guard relative.allSatisfy(HomebrewName.isSafe) else { continue }
       let destination = relative.reduce(folder) { $0.appendingPathComponent($1) }
       if fm.contentsEqual(atPath: source.path, andPath: destination.path) { continue }
-      let inProgramFolder = programDirectory + relative
+      // Under the folder's name at the root, or straight at the root.
+      let underName = programDirectory.count > 1 && relative.count > 1 && relative.first == programDirectory.last
+      let inProgramFolder = programDirectory + (underName ? Array(relative.dropFirst()) : relative)
       let original = inProgramFolder.reduce(folder) { $0.appendingPathComponent($1) }
       if programDirectory.isEmpty || fm.fileExists(atPath: destination.path) || !fm.fileExists(atPath: original.path) {
         direct[relative.joined(separator: "/")] = source

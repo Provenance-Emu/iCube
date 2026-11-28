@@ -42,7 +42,7 @@ final class HomebrewSDCardTests: XCTestCase {
         }
         return true
       },
-      insert: { [unowned self] image in inserted.append(image.lastPathComponent) },
+      insert: { [unowned self] image, programPath in inserted.append(image.lastPathComponent + " " + programPath) },
       remove: { [unowned self] in removals += 1 }), workDirectory: work)
   }
 
@@ -103,7 +103,7 @@ final class HomebrewSDCardTests: XCTestCase {
     XCTAssertFalse(scratch.exists("work/fruity.card"))
     XCTAssertTrue(inserted.isEmpty)
     sd.insert(isWii: false)
-    XCTAssertEqual(inserted, ["fruity.img"])
+    XCTAssertEqual(inserted, ["fruity.img /apps/fruity/fruity.dol"])
     sd.finish()
     XCTAssertFalse(sd.hasCard)
     XCTAssertEqual(removals, 1)
@@ -162,7 +162,8 @@ final class HomebrewSDCardTests: XCTestCase {
     let sd = card()
     sd.prepare(programPath: try program(), homebrewRoot: root)
     XCTAssertEqual(packedFiles, ["apps/fruity/data/levels.bin", "apps/fruity/fruity.dol", "apps/fruity/opening.bnr",
-                                 "data/levels.bin", "opening.bnr", "readme.txt"])
+                                 "data/levels.bin", "fruity/data/levels.bin", "fruity/opening.bnr",
+                                 "opening.bnr", "readme.txt"])
     // The title's folder itself is as it was.
     XCTAssertFalse(scratch.exists("Software/Homebrew/fruity/data"))
   }
@@ -174,6 +175,19 @@ final class HomebrewSDCardTests: XCTestCase {
     _ = try program()
     try HomebrewSDCard.stage(folder, programDirectory: ["apps", "fruity"], program: "fruity.dol", at: staging)
     XCTAssertEqual(try String(contentsOf: staging.appendingPathComponent("data/levels.bin"), encoding: .utf8), "the user's own levels")
+    XCTAssertEqual(try String(contentsOf: staging.appendingPathComponent("fruity/data/levels.bin"), encoding: .utf8), "levels")
+  }
+
+  /// Cube64's package already has `wii64/` at the root; a folder named like the program's is the
+  /// package's own and is left alone.
+  func testFolderOfTheProgramsNameAtTheRootIsKept() throws {
+    try scratch.file("fruity/fruity/notes.txt", "the package's own", in: root)
+    let folder = root.appendingPathComponent("fruity", isDirectory: true)
+    let staging = scratch.root.appendingPathComponent("staging", isDirectory: true)
+    _ = try program()
+    try HomebrewSDCard.stage(folder, programDirectory: ["apps", "fruity"], program: "fruity.dol", at: staging)
+    XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: staging.appendingPathComponent("fruity").path), ["notes.txt"])
+    XCTAssertTrue(FileManager.default.fileExists(atPath: staging.appendingPathComponent("data/levels.bin").path))
   }
 
   func testProgramAtTheFolderRootIsPackedAsItIs() throws {
@@ -192,6 +206,7 @@ final class HomebrewSDCardTests: XCTestCase {
     sd.insert(isWii: false)
     // `data/levels.bin` at the root is the program folder's own file, shown there by the card.
     cardContents = ["apps/fruity/fruity.dol": "DOL", "apps/fruity/data/levels.bin": "levels", "data/levels.bin": "levels",
+                    "fruity/data/levels.bin": "levels",
                     "apps/fruity/save.bin": "progress", "config.ini": "volume=3"]
     try touchImage("fruity.img")
     sd.finish()
@@ -199,6 +214,7 @@ final class HomebrewSDCardTests: XCTestCase {
     XCTAssertEqual(try String(contentsOf: root.appendingPathComponent("fruity/config.ini"), encoding: .utf8), "volume=3")
     XCTAssertFalse(scratch.exists("work/fruity.unpacked"))
     XCTAssertFalse(scratch.exists("Software/Homebrew/fruity/data"))
+    XCTAssertFalse(scratch.exists("Software/Homebrew/fruity/fruity"))
   }
 
   func testUntouchedCardIsNotUnpacked() throws {
@@ -221,9 +237,14 @@ final class HomebrewSDCardTests: XCTestCase {
     try scratch.file("scores.dat", "new", in: cardFolder)
     try scratch.file("data/levels.bin", "levels", in: cardFolder)
     try scratch.file("settings.ini", "fresh", in: cardFolder)
+    // The folder again under its own name: one file as it was, one the program rewrote there.
+    try scratch.file("quest/scores.dat", "old", in: cardFolder)
+    try scratch.file("quest/data/levels.bin", "edited levels", in: cardFolder)
 
     XCTAssertEqual(HomebrewSDCard.copyChanges(from: cardFolder, into: folder, programDirectory: ["apps", "quest"]),
-                   ["apps/quest/scores.dat", "settings.ini"])
+                   ["apps/quest/data/levels.bin", "apps/quest/scores.dat", "settings.ini"])
+    XCTAssertEqual(try String(contentsOf: folder.appendingPathComponent("apps/quest/data/levels.bin"), encoding: .utf8), "edited levels")
+    XCTAssertFalse(scratch.exists("title/quest"))
     XCTAssertEqual(try String(contentsOf: folder.appendingPathComponent("apps/quest/scores.dat"), encoding: .utf8), "new")
     XCTAssertFalse(scratch.exists("title/scores.dat"))
     XCTAssertFalse(scratch.exists("title/data"))

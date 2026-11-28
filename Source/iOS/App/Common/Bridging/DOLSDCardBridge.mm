@@ -23,9 +23,10 @@ extern "C" bool DOLSDCardUnpackImage(const char* imagePath, const char* folder)
   return Common::UnpackGCSDImageToFolder(imagePath, folder, NeverCancelled);
 }
 
-extern "C" void DOLSDCardInsertForThisRun(const char* imagePath)
+extern "C" void DOLSDCardInsertForThisRun(const char* imagePath, const char* programPath)
 {
   Config::SetCurrent(Config::MAIN_GC_SD_CARD_PATH, std::string(imagePath));
+  Config::SetCurrent(Config::MAIN_GC_EXECUTABLE_PATH_ARGUMENT, std::string(programPath));
   Config::SetCurrent(Config::MAIN_SLOT_B, ExpansionInterface::EXIDeviceType::SD);
 }
 
@@ -35,4 +36,5 @@ extern "C" void DOLSDCardRemoveForThisRun(void)
     return;
   Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_SLOT_B);
   Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_GC_SD_CARD_PATH);
+  Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_GC_EXECUTABLE_PATH_ARGUMENT);
 }

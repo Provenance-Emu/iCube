@@ -73,22 +73,22 @@ std::array<u8, 16> CEXISD::MakeCSD(u64 size)
   constexpr u32 ccc = 0x1b5;
 
   std::array<u8, 16> csd = {
-      0x00,                                                 // CSD_STRUCTURE 0, reserved
-      0x26,                                                 // TAAC: 1.5 ms
-      0x00,                                                 // NSAC
-      0x32,                                                 // TRAN_SPEED: 25 Mbit/s
-      static_cast<u8>(ccc >> 4),                            // CCC, high 8 bits
-      static_cast<u8>((ccc << 4) | block_len),              // CCC low 4 bits, READ_BL_LEN
-      static_cast<u8>(0x80 | (c_size >> 10)),               // READ_BL_PARTIAL, C_SIZE high 2 bits
-      static_cast<u8>(c_size >> 2),                         // C_SIZE
-      static_cast<u8>((c_size << 6) | 0x3f),                // C_SIZE low 2 bits, VDD_R_CURR
-      static_cast<u8>(0xfc | (c_size_mult >> 1)),           // VDD_W_CURR, C_SIZE_MULT high 2 bits
-      static_cast<u8>((c_size_mult << 7) | 0x7f),           // C_SIZE_MULT low bit, ERASE_BLK_EN,
-                                                            // SECTOR_SIZE
-      0x80,                                                 // SECTOR_SIZE low bit, WP_GRP_SIZE
-      static_cast<u8>(0x04 | (block_len >> 2)),             // R2W_FACTOR 1, WRITE_BL_LEN high 2 bits
-      static_cast<u8>(block_len << 6),                      // WRITE_BL_LEN low 2 bits
-      0x00,                                                 // file format: hard disk like
+      0x00,                                        // CSD_STRUCTURE 0, reserved
+      0x26,                                        // TAAC: 1.5 ms
+      0x00,                                        // NSAC
+      0x32,                                        // TRAN_SPEED: 25 Mbit/s
+      static_cast<u8>(ccc >> 4),                   // CCC, high 8 bits
+      static_cast<u8>((ccc << 4) | block_len),     // CCC low 4 bits, READ_BL_LEN
+      static_cast<u8>(0x80 | (c_size >> 10)),      // READ_BL_PARTIAL, C_SIZE high 2 bits
+      static_cast<u8>(c_size >> 2),                // C_SIZE
+      static_cast<u8>((c_size << 6) | 0x3f),       // C_SIZE low 2 bits, VDD_R_CURR
+      static_cast<u8>(0xfc | (c_size_mult >> 1)),  // VDD_W_CURR, C_SIZE_MULT high 2 bits
+      static_cast<u8>((c_size_mult << 7) | 0x7f),  // C_SIZE_MULT low bit, ERASE_BLK_EN,
+                                                   // SECTOR_SIZE
+      0x80,                                        // SECTOR_SIZE low bit, WP_GRP_SIZE
+      static_cast<u8>(0x04 | (block_len >> 2)),    // R2W_FACTOR 1, WRITE_BL_LEN high 2 bits
+      static_cast<u8>(block_len << 6),             // WRITE_BL_LEN low 2 bits
+      0x00,                                        // file format: hard disk like
       0x00,
   };
   csd[15] = static_cast<u8>((HashCrc7(csd.data(), 15) << 1) | 1);

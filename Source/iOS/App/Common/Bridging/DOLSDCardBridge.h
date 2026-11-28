@@ -18,9 +18,10 @@ bool DOLSDCardPackFolder(const char* folder, const char* imagePath);
 // Unpacks the image into `folder`, replacing whatever is there.
 bool DOLSDCardUnpackImage(const char* imagePath, const char* folder);
 
-// Puts the adapter and this image in slot B for the run about to boot. Nothing is saved to the
-// user's settings.
-void DOLSDCardInsertForThisRun(const char* imagePath);
+// Puts the adapter and this image in slot B for the run about to boot, and tells the program
+// where on the card it was started from (`programPath`, such as "/apps/name/name.dol"), as a
+// loader on a console does. Nothing is saved to the user's settings.
+void DOLSDCardInsertForThisRun(const char* imagePath, const char* programPath);
 
 // Takes it out again, so the next boot has the user's own slot B.
 void DOLSDCardRemoveForThisRun(void);

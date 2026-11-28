@@ -118,6 +118,10 @@ const Info<std::string>& GetInfoForGCIPath(ExpansionInterface::Slot slot)
 }
 // The raw image the SD adapter (EXIDeviceType::SD) reads; empty means an empty adapter.
 const Info<std::string> MAIN_GC_SD_CARD_PATH{{System::Main, "Core", "GCSDCardPath"}, ""};
+// The path a GameCube executable is told it was started from (its first argument), as a loader
+// on a console would give it; empty means no arguments.
+const Info<std::string> MAIN_GC_EXECUTABLE_PATH_ARGUMENT{
+    {System::Main, "Core", "GCExecutablePathArgument"}, ""};
 const Info<std::string> MAIN_GCI_FOLDER_A_PATH_OVERRIDE{
     {System::Main, "Core", "GCIFolderAPathOverride"}, ""};
 const Info<std::string> MAIN_GCI_FOLDER_B_PATH_OVERRIDE{
