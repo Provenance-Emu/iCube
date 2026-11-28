@@ -104,5 +104,4 @@ final class TopBarHandoffTests: XCTestCase {
     XCTAssertEqual(EmulationToastOverlay.topOffset(barHeight: 108, barVisible: false), EmulationToastOverlay.restingTopOffset)
     XCTAssertEqual(EmulationToastOverlay.topOffset(barHeight: 0, barVisible: true), EmulationToastOverlay.restingTopOffset)
   }
-
 }

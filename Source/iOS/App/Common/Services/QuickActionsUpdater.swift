@@ -10,25 +10,25 @@ import UIKit
 /// Group snapshot, not a stale in-memory list. Routed through `MainDisplaySceneDelegate`'s
 /// existing `handleShortcut` switch.
 enum QuickActionsUpdater {
-    static let shortcutType = "com.joemattiello.icube.play"
-    static let maxItems = 3
+  static let shortcutType = "com.joemattiello.icube.play"
+  static let maxItems = 3
 
-    /// Pure: up to three most recent games, in the snapshot's existing recency order.
-    static func shortcutItems(from snapshot: LibrarySnapshot) -> [UIApplicationShortcutItem] {
-        snapshot.recentlyPlayed.prefix(maxItems).map { game in
-            UIApplicationShortcutItem(
-                type: shortcutType,
-                localizedTitle: game.title,
-                localizedSubtitle: game.icubePlatform.displayName,
-                icon: UIApplicationShortcutIcon(systemImageName: "gamecontroller"),
-                userInfo: ["id": game.id as NSString]
-            )
-        }
+  /// Pure: up to three most recent games, in the snapshot's existing recency order.
+  static func shortcutItems(from snapshot: LibrarySnapshot) -> [UIApplicationShortcutItem] {
+    snapshot.recentlyPlayed.prefix(maxItems).map { game in
+      UIApplicationShortcutItem(
+        type: shortcutType,
+        localizedTitle: game.title,
+        localizedSubtitle: game.icubePlatform.displayName,
+        icon: UIApplicationShortcutIcon(systemImageName: "gamecontroller"),
+        userInfo: ["id": game.id as NSString]
+      )
     }
+  }
 
-    @MainActor
-    static func update(with snapshot: LibrarySnapshot) {
-        UIApplication.shared.shortcutItems = shortcutItems(from: snapshot)
-    }
+  @MainActor
+  static func update(with snapshot: LibrarySnapshot) {
+    UIApplication.shared.shortcutItems = shortcutItems(from: snapshot)
+  }
 }
 #endif

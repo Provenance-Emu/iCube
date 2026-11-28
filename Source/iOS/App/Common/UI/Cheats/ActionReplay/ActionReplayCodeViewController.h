@@ -11,8 +11,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface ActionReplayCodeViewController : UITableViewController
 
-@property (nonatomic) std::string gameId;
-@property (nonatomic) u16 revision;
+@property(nonatomic) std::string gameId;
+@property(nonatomic) u16 revision;
 
 - (void)setGameIdString:(NSString*)value;
 - (void)setRevisionNumber:(NSNumber*)value;

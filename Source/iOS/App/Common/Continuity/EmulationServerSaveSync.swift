@@ -137,7 +137,7 @@ actor EmulationServerSaveSyncWorker {
           // Another device changed this save first, so the server kept theirs live and parked this copy.
           outcome.conflicts.append(Conflict(path: path, local: file.checksum, remote: live[path]?.sha256))
         }
-        // Otherwise unrelated uploads kept getting in first; the next pass sends it.
+      // Otherwise unrelated uploads kept getting in first; the next pass sends it.
       case .download:
         guard let remote, Self.isSave(path) else { continue }
         let (bytes, answer) = try await transport.data(for: client.contentRequest(assetId: remote.id, localBytes: 0, etag: nil))

@@ -9,31 +9,31 @@ import AppIntents
 /// Pins the three launch intents to Siri/Shortcuts with ready-made phrases, so they show up
 /// without the user having to build a Shortcut manually.
 struct iCubeShortcuts: AppShortcutsProvider {
-    static var appShortcuts: [AppShortcut] {
-        AppShortcut(
-            intent: LaunchGameIntent(),
-            phrases: ["Play \(\.$game) in \(.applicationName)"],
-            shortTitle: "Play Game",
-            systemImageName: "gamecontroller.fill"
-        )
-        AppShortcut(
-            intent: ContinueLastGameIntent(),
-            phrases: ["Continue my game in \(.applicationName)", "Continue playing in \(.applicationName)"],
-            shortTitle: "Continue",
-            systemImageName: "play.fill"
-        )
-        AppShortcut(
-            intent: PlayRandomGameIntent(),
-            phrases: ["Play a random game in \(.applicationName)"],
-            shortTitle: "Random Game",
-            systemImageName: "shuffle"
-        )
-        AppShortcut(
-            intent: UseAsWiiRemoteIntent(),
-            phrases: ["Use my phone as a Wii Remote in \(.applicationName)"],
-            shortTitle: "Wii Remote",
-            systemImageName: "tv"
-        )
-    }
+  static var appShortcuts: [AppShortcut] {
+    AppShortcut(
+      intent: LaunchGameIntent(),
+      phrases: ["Play \(\.$game) in \(.applicationName)"],
+      shortTitle: "Play Game",
+      systemImageName: "gamecontroller.fill"
+    )
+    AppShortcut(
+      intent: ContinueLastGameIntent(),
+      phrases: ["Continue my game in \(.applicationName)", "Continue playing in \(.applicationName)"],
+      shortTitle: "Continue",
+      systemImageName: "play.fill"
+    )
+    AppShortcut(
+      intent: PlayRandomGameIntent(),
+      phrases: ["Play a random game in \(.applicationName)"],
+      shortTitle: "Random Game",
+      systemImageName: "shuffle"
+    )
+    AppShortcut(
+      intent: UseAsWiiRemoteIntent(),
+      phrases: ["Use my phone as a Wii Remote in \(.applicationName)"],
+      shortTitle: "Wii Remote",
+      systemImageName: "tv"
+    )
+  }
 }
 #endif

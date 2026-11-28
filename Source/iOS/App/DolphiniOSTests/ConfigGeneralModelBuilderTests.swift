@@ -11,15 +11,18 @@ final class ConfigGeneralModelBuilderTests: XCTestCase {
   private func model(_ state: ConfigGeneralState = ConfigGeneralState()) -> MenuModel {
     ConfigGeneralModelBuilder.make(state: state) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout ConfigGeneralState) -> Void) -> ConfigGeneralState {
     var s = ConfigGeneralState()
     edit(&s)
     return s
   }
+
   private func labels(_ id: String, _ m: MenuModel) -> [String] {
     guard case .cycle(let options, _)? = m.item(id: id)?.role else { return [] }
     return options.map(\.0)
   }
+
   private func values(_ id: String, _ m: MenuModel) -> [Int] {
     guard case .cycle(let options, _)? = m.item(id: id)?.role else { return [] }
     return options.compactMap { $0.1.base as? Int }
@@ -72,7 +75,9 @@ final class ConfigGeneralModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       for value in [true, false] {
         changes = []
         binding.wrappedValue = value
@@ -89,7 +94,9 @@ final class ConfigGeneralModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, value, change) in expected {
-      guard case .cycle(_, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle"); continue }
+      guard case .cycle(_, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle")
+        continue
+      }
       changes = []
       selection.wrappedValue = value
       XCTAssertEqual(changes, [change], id)
@@ -97,7 +104,10 @@ final class ConfigGeneralModelBuilderTests: XCTestCase {
   }
 
   func test_toggleRows_showTheStateValue() {
-    let m = model(state { $0.dualCore = true; $0.cheats = true; $0.resumeWhereLeftOff = true })
+    let m = model(state { $0.dualCore = true
+      $0.cheats = true
+      $0.resumeWhereLeftOff = true
+    })
     for id in ["dual-core", "cheats", "resume-where-left-off"] { XCTAssertEqual(m.item(id: id)?.currentValueTitle, "On", id) }
     for id in ["dsp-thread", "override-region", "auto-disc-change", "fast-disc-speed"] { XCTAssertEqual(m.item(id: id)?.currentValueTitle, "Off", id) }
   }

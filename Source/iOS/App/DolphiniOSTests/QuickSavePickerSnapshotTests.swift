@@ -18,8 +18,8 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
 
     static var fixtures: [SaveStateInfo] {
       let entries: [(String, String, Int?, Bool, Bool)] = [("Quick save", "GALE01.quick-A2CC29A2-38BC-41B6-B37C-7624990EAE90.s01", nil, false, true),
-       ("Slot 4", "GALE01.s04", 4, false, false),
-       ("Automatic resume", "GALE01.auto", nil, true, false)]
+                                                           ("Slot 4", "GALE01.s04", 4, false, false),
+                                                           ("Automatic resume", "GALE01.auto", nil, true, false)]
       return entries.enumerated().map { index, item in
         SaveStateInfo(gameID: "GALE01", displayName: item.0, slot: item.2, createdAt: nil,
                       modifiedAt: Date(timeIntervalSince1970: 1_792_500_000 - Double(index) * 600),
@@ -46,11 +46,19 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
 
     var body: some View {
       QuickSavePickerView(gameID: "GALE01", mode: $mode, selectedSlot: $slot, onDismiss: {},
-        operations: QuickSavePickerOperations(save: { _, _ in XCTFail("Rendering must not save"); return .saveFailed },
-                                            load: { _, _ in XCTFail("Rendering must not load"); return .unavailable },
-                                            setKept: { _, _, _ in XCTFail("Rendering must not pin"); return .keepFailed },
-                                            saveSlot: { _ in XCTFail("Rendering must not save a classic slot"); return .saveFailed }),
-        provider: FixtureProvider(), isModded: { false }, onFooterFrameChange: onFooter, onContentFrameChange: onContent)
+                          operations: QuickSavePickerOperations(save: { _, _ in XCTFail("Rendering must not save")
+                                                                  return .saveFailed
+                                                                },
+                                                                load: { _, _ in XCTFail("Rendering must not load")
+                                                                  return .unavailable
+                                                                },
+                                                                setKept: { _, _, _ in XCTFail("Rendering must not pin")
+                                                                  return .keepFailed
+                                                                },
+                                                                saveSlot: { _ in XCTFail("Rendering must not save a classic slot")
+                                                                  return .saveFailed
+                                                                }),
+                          provider: FixtureProvider(), isModded: { false }, onFooterFrameChange: onFooter, onContentFrameChange: onContent)
     }
   }
 
@@ -62,8 +70,10 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
       for mode in [QuickSaveMode.history, .slots] {
         var footer: CGRect = .zero
         var observedFrames: [CGRect] = []
-        _ = render(Harness(mode: mode, onFooter: { observedFrames.append($0); footer = $0 }), size: size, scene: scene,
-                   layoutReady: { footer.height > 0 })
+        _ = render(Harness(mode: mode, onFooter: { observedFrames.append($0)
+          footer = $0
+        }), size: size, scene: scene,
+        layoutReady: { footer.height > 0 })
         XCTAssertGreaterThanOrEqual(footer.height, 44, "Footer lifecycle samples: \(observedFrames)")
         XCTAssertGreaterThanOrEqual(footer.minX, 0)
         XCTAssertLessThanOrEqual(footer.maxX, size.width)
@@ -131,8 +141,10 @@ final class QuickSavePickerSnapshotTests: XCTestCase {
     let size = CGSize(width: 852, height: 393)
     var footer: CGRect = .zero
     var observedFrames: [CGRect] = []
-    _ = render(Harness(mode: .slots, onFooter: { observedFrames.append($0); footer = $0 }).dynamicTypeSize(.accessibility3), size: size, scene: scene,
-               layoutReady: { footer.height > 0 })
+    _ = render(Harness(mode: .slots, onFooter: { observedFrames.append($0)
+      footer = $0
+    }).dynamicTypeSize(.accessibility3), size: size, scene: scene,
+    layoutReady: { footer.height > 0 })
     XCTAssertGreaterThanOrEqual(footer.height, 88, "Footer lifecycle samples: \(observedFrames)")
     XCTAssertGreaterThanOrEqual(footer.minX, 0)
     XCTAssertLessThanOrEqual(footer.maxX, size.width)

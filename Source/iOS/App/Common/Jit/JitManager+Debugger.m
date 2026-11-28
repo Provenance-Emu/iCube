@@ -16,11 +16,13 @@ extern int csops(pid_t pid, unsigned int ops, void* useraddr, size_t usersize);
 
 @implementation JitManager (Debugger)
 
-- (bool)checkIfProcessIsDebugged {
+- (bool)checkIfProcessIsDebugged
+{
   int flags = 0;
   // NOTE: sizeof(flags) != 0 was a parenthesis bug — evaluated to 1, not 4,
   // causing csops to read only 1 byte and leave the rest uninitialized.
-  if (csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags)) != 0) {
+  if (csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags)) != 0)
+  {
     return false;
   }
 
@@ -35,9 +37,11 @@ extern int csops(pid_t pid, unsigned int ops, void* useraddr, size_t usersize);
 // App Store / TestFlight installs, which are jitless. Used to drive jitSupported
 // at runtime so JIT UI shows exactly when JIT is achievable, regardless of build
 // configuration.
-- (bool)checkIfProcessIsJitCapable {
+- (bool)checkIfProcessIsJitCapable
+{
   int flags = 0;
-  if (csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags)) != 0) {
+  if (csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags)) != 0)
+  {
     return false;
   }
 
@@ -49,12 +53,14 @@ extern int csops(pid_t pid, unsigned int ops, void* useraddr, size_t usersize);
 // enabler once poked us" from "a broker is listening right now". Used for the iOS 26
 // TXM handshake decision: StikDebug launches the app, runs its script (which waits
 // for brk #0x69), and only detaches after answering it.
-- (bool)checkIfDebuggerAttachedNow {
+- (bool)checkIfDebuggerAttachedNow
+{
   int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
   struct kinfo_proc info;
   size_t size = sizeof(info);
   memset(&info, 0, sizeof(info));
-  if (sysctl(mib, 4, &info, &size, NULL, 0) != 0) {
+  if (sysctl(mib, 4, &info, &size, NULL, 0) != 0)
+  {
     return false;
   }
   return (info.kp_proc.p_flag & P_TRACED) != 0;
@@ -66,7 +72,8 @@ extern int csops(pid_t pid, unsigned int ops, void* useraddr, size_t usersize);
 //                         (routes os_log to the Xcode console; StikDebug never sets it)
 // On a TXM device the brk #0x69 handshake is only answered by a StikDebug broker; LLDB
 // intercepts it and raises EXC_BREAKPOINT instead.
-- (bool)checkIfRunningUnderXcode {
+- (bool)checkIfRunningUnderXcode
+{
   NSDictionary* environment = [[NSProcessInfo processInfo] environment];
   return environment[@"XCODE"] != nil || environment[@"OS_ACTIVITY_DT_MODE"] != nil;
 }
@@ -104,12 +111,12 @@ static const NSInteger kFirstTXMDeviceVersion = 14 * kDeviceVersionMajorScale + 
 static const NSInteger kFirstIPadTXMDeviceVersion = 14 * kDeviceVersionMajorScale + 5;
 #endif
 
-- (NSString*)hardwareIdentifier {
+- (NSString*)hardwareIdentifier
+{
   struct utsname systemInfo;
   uname(&systemInfo);
 
-  return [NSString stringWithCString:systemInfo.machine
-                            encoding:NSUTF8StringEncoding] ?: @"";
+  return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding] ?: @"";
 }
 
 // "iPhone14,2" -> 140002, i.e. major * kDeviceVersionMajorScale + minor, so the
@@ -121,24 +128,29 @@ static const NSInteger kFirstIPadTXMDeviceVersion = 14 * kDeviceVersionMajorScal
 // this: iPad14,10 and iPad14,11 (iPad Air M2, 2024) would read as 14.1 < the 14.5
 // iPad cutoff and be reported as non-TXM — a false negative, which is the
 // dangerous direction (see the note above checkIfDeviceUsesTXM).
-- (nullable NSNumber*)deviceVersionFromIdentifier:(NSString*)identifier
-                                          pattern:(NSString*)pattern {
+- (nullable NSNumber*)deviceVersionFromIdentifier:(NSString*)identifier pattern:(NSString*)pattern
+{
   NSError* error = nil;
-  NSRegularExpression* regex =
-      [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:&error];
-  if (!regex) {
+  NSRegularExpression* regex = [NSRegularExpression regularExpressionWithPattern:pattern
+                                                                         options:0
+                                                                           error:&error];
+  if (!regex)
+  {
     return nil;
   }
 
-  NSTextCheckingResult* match =
-      [regex firstMatchInString:identifier options:0 range:NSMakeRange(0, identifier.length)];
-  if (!match || match.numberOfRanges < 3) {
+  NSTextCheckingResult* match = [regex firstMatchInString:identifier
+                                                  options:0
+                                                    range:NSMakeRange(0, identifier.length)];
+  if (!match || match.numberOfRanges < 3)
+  {
     return nil;
   }
 
   NSRange majorRange = [match rangeAtIndex:1];
   NSRange minorRange = [match rangeAtIndex:2];
-  if (majorRange.location == NSNotFound || minorRange.location == NSNotFound) {
+  if (majorRange.location == NSNotFound || minorRange.location == NSNotFound)
+  {
     return nil;
   }
 
@@ -148,17 +160,20 @@ static const NSInteger kFirstIPadTXMDeviceVersion = 14 * kDeviceVersionMajorScal
   return @(majorString.integerValue * kDeviceVersionMajorScale + minorString.integerValue);
 }
 
-- (nullable NSNumber*)deviceVersionFromIdentifier:(NSString*)identifier {
-  NSNumber* iPhoneVersion =
-      [self deviceVersionFromIdentifier:identifier pattern:@"iPhone(\\d+),(\\d+)"];
-  if (iPhoneVersion) {
+- (nullable NSNumber*)deviceVersionFromIdentifier:(NSString*)identifier
+{
+  NSNumber* iPhoneVersion = [self deviceVersionFromIdentifier:identifier
+                                                      pattern:@"iPhone(\\d+),(\\d+)"];
+  if (iPhoneVersion)
+  {
     return iPhoneVersion;
   }
 
   return [self deviceVersionFromIdentifier:identifier pattern:@"iPad(\\d+),(\\d+)"];
 }
 
-- (bool)txmByDeviceModel {
+- (bool)txmByDeviceModel
+{
 #if TARGET_OS_TV
   // The model table only covers iPhone and iPad identifiers, and on a tvOS build
   // @available(iOS N, *) is unconditionally true — which would mark every Apple TV
@@ -168,18 +183,22 @@ static const NSInteger kFirstIPadTXMDeviceVersion = 14 * kDeviceVersionMajorScal
 #else
   NSString* identifier = [self hardwareIdentifier];
 
-  if (@available(iOS 27.0, *)) {
+  if (@available(iOS 27.0, *))
+  {
     // Every device that reaches iOS 27 uses TXM except these two iPad Pro models.
     return ![identifier isEqualToString:@"iPad8,11"] && ![identifier isEqualToString:@"iPad8,12"];
   }
 
-  if (@available(iOS 26.0, *)) {
+  if (@available(iOS 26.0, *))
+  {
     NSNumber* deviceVersion = [self deviceVersionFromIdentifier:identifier];
-    if (!deviceVersion) {
+    if (!deviceVersion)
+    {
       return false;
     }
 
-    if ([identifier hasPrefix:@"iPad"]) {
+    if ([identifier hasPrefix:@"iPad"])
+    {
       return deviceVersion.integerValue >= kFirstIPadTXMDeviceVersion;
     }
 
@@ -196,51 +215,64 @@ static const NSInteger kFirstIPadTXMDeviceVersion = 14 * kDeviceVersionMajorScal
 // but it returns false whenever the directory listing fails — including, most
 // likely, under the app sandbox — which is why it can no longer stand alone.
 
-- (nullable NSString*)filePathAtPath:(NSString*)path withLength:(NSUInteger)length {
-    NSError *error = nil;
-    NSArray<NSString *> *items = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:path error:&error];
-    if (!items) { return nil; }
-
-    for (NSString *entry in items) {
-        if (entry.length == length) {
-            return [path stringByAppendingPathComponent:entry];
-        }
-    }
+- (nullable NSString*)filePathAtPath:(NSString*)path withLength:(NSUInteger)length
+{
+  NSError* error = nil;
+  NSArray<NSString*>* items = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:path
+                                                                                  error:&error];
+  if (!items)
+  {
     return nil;
+  }
+
+  for (NSString* entry in items)
+  {
+    if (entry.length == length)
+    {
+      return [path stringByAppendingPathComponent:entry];
+    }
+  }
+  return nil;
 }
 
-- (bool)txmByPrebootProbe {
-    // Primary: /System/Volumes/Preboot/<36>/boot/<96>/usr/.../Ap,TrustedExecutionMonitor.img4
-    NSString* bootUUID = [self filePathAtPath:@"/System/Volumes/Preboot" withLength:36];
-    if (bootUUID) {
-        NSString* bootDir = [bootUUID stringByAppendingPathComponent:@"boot"];
-        NSString* ninetySixCharPath = [self filePathAtPath:bootDir withLength:96];
-        if (ninetySixCharPath) {
-            NSString* img = [ninetySixCharPath stringByAppendingPathComponent:
-                             @"usr/standalone/firmware/FUD/Ap,TrustedExecutionMonitor.img4"];
-            return access(img.fileSystemRepresentation, F_OK) == 0;
-        }
+- (bool)txmByPrebootProbe
+{
+  // Primary: /System/Volumes/Preboot/<36>/boot/<96>/usr/.../Ap,TrustedExecutionMonitor.img4
+  NSString* bootUUID = [self filePathAtPath:@"/System/Volumes/Preboot" withLength:36];
+  if (bootUUID)
+  {
+    NSString* bootDir = [bootUUID stringByAppendingPathComponent:@"boot"];
+    NSString* ninetySixCharPath = [self filePathAtPath:bootDir withLength:96];
+    if (ninetySixCharPath)
+    {
+      NSString* img =
+          [ninetySixCharPath stringByAppendingPathComponent:
+                                 @"usr/standalone/firmware/FUD/Ap,TrustedExecutionMonitor.img4"];
+      return access(img.fileSystemRepresentation, F_OK) == 0;
     }
+  }
 
-    // Fallback: /private/preboot/<96>/usr/.../Ap,TrustedExecutionMonitor.img4
-    NSString* fallback = [self filePathAtPath:@"/private/preboot" withLength:96];
-    if (fallback) {
-        NSString* img = [fallback stringByAppendingPathComponent:
-                         @"usr/standalone/firmware/FUD/Ap,TrustedExecutionMonitor.img4"];
-        return access(img.fileSystemRepresentation, F_OK) == 0;
-    }
+  // Fallback: /private/preboot/<96>/usr/.../Ap,TrustedExecutionMonitor.img4
+  NSString* fallback = [self filePathAtPath:@"/private/preboot" withLength:96];
+  if (fallback)
+  {
+    NSString* img = [fallback stringByAppendingPathComponent:
+                                  @"usr/standalone/firmware/FUD/Ap,TrustedExecutionMonitor.img4"];
+    return access(img.fileSystemRepresentation, F_OK) == 0;
+  }
 
-    return false;
+  return false;
 }
 
-- (bool)checkIfDeviceUsesTXM {
-    const bool byModel = [self txmByDeviceModel];
-    const bool byProbe = [self txmByPrebootProbe];
+- (bool)checkIfDeviceUsesTXM
+{
+  const bool byModel = [self txmByDeviceModel];
+  const bool byProbe = [self txmByPrebootProbe];
 
-    NSLog(@"[JitManager] TXM detection: model=%d preboot=%d device=%@",
-          (int)byModel, (int)byProbe, [self hardwareIdentifier]);
+  NSLog(@"[JitManager] TXM detection: model=%d preboot=%d device=%@", (int)byModel, (int)byProbe,
+        [self hardwareIdentifier]);
 
-    return byModel || byProbe;
+  return byModel || byProbe;
 }
 
 @end

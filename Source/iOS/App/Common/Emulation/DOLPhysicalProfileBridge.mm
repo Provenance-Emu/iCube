@@ -6,16 +6,78 @@
 #include <string>
 #include <vector>
 
+#include "InputCommon/ControllerInterface/iOS/MFiController.h"
 #include "InputCommon/ControllerInterface/iOS/PhysicalProfileMapping.h"
 
 namespace PP = ciface::iOS::PhysicalProfile;
+
+namespace
+{
+std::string ToString(NSString* string)
+{
+  return std::string([string ?: @"" UTF8String]);
+}
+
+std::vector<std::string> ToVector(NSArray<NSString*>* names)
+{
+  std::vector<std::string> result;
+  for (NSString* name in names)
+    result.push_back(std::string([name UTF8String]));
+  return result;
+}
+
+// The value Swift's `SynthesizedInput` knows each input by.
+std::string SynthesizedName(PP::Input input)
+{
+  switch (input)
+  {
+  case PP::Input::DPad:
+    return "D-Pad";
+  case PP::Input::LeftStick:
+    return "L Stick";
+  case PP::Input::RightStick:
+    return "R Stick";
+  case PP::Input::LStickButton:
+    return "L Stick Button";
+  case PP::Input::RStickButton:
+    return "R Stick Button";
+  default:
+    return PP::InputName(input);
+  }
+}
+
+NSDictionary<NSString*, NSString*>* ToDictionary(const PP::Bindings& bindings)
+{
+  if (!PP::IsUsable(bindings))
+    return @{};
+
+  NSMutableDictionary<NSString*, NSString*>* result = [NSMutableDictionary dictionary];
+  for (const auto& [name, input] : bindings)
+  {
+    result[[NSString stringWithUTF8String:name.c_str()]] =
+        [NSString stringWithUTF8String:SynthesizedName(input).c_str()];
+  }
+  return result;
+}
+}  // namespace
 
 @implementation DOLPhysicalProfileBridge
 
 + (GCController*)baseController:(GCController*)controller
 {
-  if ([controller conformsToProtocol:@protocol(DOLPhysicalBaseController)])
-    return [(id<DOLPhysicalBaseController>)controller dol_baseController];
+  // GamepadKit's wrapper is a Swift class from a package with no Objective-C header; it exports
+  // this class name and its `base` (the real controller) to the runtime for this lookup.
+  static Class wrapper_class = Nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    wrapper_class = NSClassFromString(@"GPKPhysicalProfileController");
+  });
+  if (wrapper_class != Nil && [controller isKindOfClass:wrapper_class])
+  {
+    GCController* base = [controller valueForKey:@"base"];
+    if (base != nil)
+      return base;
+  }
   return controller;
 }
 
@@ -38,40 +100,66 @@ namespace PP = ciface::iOS::PhysicalProfile;
                                std::string([productCategory ?: @"" UTF8String]));
 }
 
++ (BOOL)isRemoteProductCategory:(NSString*)productCategory
+{
+  return PP::IsRemote(ToString(productCategory));
+}
+
 + (NSDictionary<NSString*, NSString*>*)bindingsForElementNames:(NSArray<NSString*>*)names
                                                       isN64Pad:(BOOL)isN64Pad
 {
-  std::vector<std::string> element_names;
-  for (NSString* name in names)
-    element_names.push_back(std::string([name UTF8String]));
+  return ToDictionary(PP::ResolveBindings(ToVector(names), isN64Pad));
+}
 
-  const PP::Bindings bindings = PP::ResolveBindings(element_names, isN64Pad);
-  if (!PP::IsUsable(bindings))
-    return @{};
++ (NSDictionary<NSString*, NSString*>*)bindingsForVendorName:(NSString*)vendorName
+                                             productCategory:(NSString*)productCategory
+                                                 buttonNames:(NSArray<NSString*>*)buttonNames
+                                              directionNames:(NSArray<NSString*>*)directionNames
+                                                   axisNames:(NSArray<NSString*>*)axisNames
+{
+  return ToDictionary(PP::ResolveForPad(ToString(vendorName), ToString(productCategory),
+                                        ToVector(buttonNames), ToVector(directionNames),
+                                        ToVector(axisNames)));
+}
 
-  NSMutableDictionary<NSString*, NSString*>* result = [NSMutableDictionary dictionary];
-  for (const auto& [name, input] : bindings)
-  {
-    std::string input_name;
-    switch (input)
-    {
-    case PP::Input::DPad:
-      input_name = "D-Pad";
-      break;
-    case PP::Input::LeftStick:
-      input_name = "L Stick";
-      break;
-    case PP::Input::RightStick:
-      input_name = "R Stick";
-      break;
-    default:
-      input_name = PP::InputName(input);
-      break;
-    }
-    result[[NSString stringWithUTF8String:name.c_str()]] =
-        [NSString stringWithUTF8String:input_name.c_str()];
-  }
++ (NSDictionary<NSString*, NSString*>*)bindingsForController:(GCController*)controller
+{
+  return ToDictionary(
+      ciface::iOS::MFiController::PhysicalBindingsFor([self baseController:controller]));
+}
+
++ (NSString*)preferredNameAmongAliases:(NSArray<NSString*>*)aliases
+{
+  return [NSString stringWithUTF8String:PP::PreferredName(ToVector(aliases)).c_str()];
+}
+
++ (float)triggerValueForAxisValue:(float)value restsAtMinusOne:(BOOL*)restsAtMinusOne
+{
+  bool rests = *restsAtMinusOne;
+  const float result = PP::TriggerValueFromAxis(value, rests);
+  *restsAtMinusOne = rests;
   return result;
+}
+
++ (CGPoint)dpadStickPositionForXSign:(NSInteger)xSign
+                        xHeldSeconds:(double)xHeldSeconds
+                               ySign:(NSInteger)ySign
+                        yHeldSeconds:(double)yHeldSeconds
+{
+  const PP::StickPosition position =
+      PP::DPadStickPosition((int)xSign, xHeldSeconds, (int)ySign, yHeldSeconds);
+  return CGPointMake(position.x, position.y);
+}
+
++ (NSString*)fallbackNameForProductCategory:(NSString*)productCategory
+{
+  return [NSString stringWithUTF8String:PP::FallbackName(ToString(productCategory)).c_str()];
+}
+
++ (NSString*)coreNameForController:(GCController*)controller
+{
+  const std::string name = ciface::iOS::MFiController::NameFor([self baseController:controller]);
+  return [NSString stringWithUTF8String:name.c_str()];
 }
 
 @end

@@ -14,7 +14,8 @@ typedef NS_ENUM(NSInteger, TCDSUMotionKind) {
   TCDSUMotionKindGyro,
 };
 
-typedef struct {
+typedef struct
+{
   TCDSUMotionKind kind;
   NSInteger index;
   float value;

@@ -280,7 +280,7 @@ final class PhoneControllerSessionTests: XCTestCase {
     XCTAssertFalse(DSUServerBridge.approvalRequired(), "nothing is applied until the screen appears")
     XCTAssertNil(PhoneControllerSession.Snapshot.load(from: .standard))
 
-    for _ in 0..<40 where presentation.isRequested { try await Task.sleep(for: .milliseconds(50)) }
+    for _ in 0 ..< 40 where presentation.isRequested { try await Task.sleep(for: .milliseconds(50)) }
     XCTAssertFalse(presentation.isRequested, "the refused request is dropped")
 
     PhoneControllerSession.begin(presentation: presentation)

@@ -97,7 +97,7 @@ final class SentryTraceSamplingPolicyTests: XCTestCase {
   private func rate(_ name: String, operation: String? = nil, active: Bool = true,
                     consent: Bool = true, debug: Bool = false) -> Double {
     SentryTraceSamplingPolicy.rate(name: name, operation: operation ?? name,
-                                  emulationActive: active, consentEnabled: consent, isDebug: debug)
+                                   emulationActive: active, consentEnabled: consent, isDebug: debug)
   }
 
   func testBootRemainsSampleableAfterWillStartClosesEmulationGate() {

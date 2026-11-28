@@ -20,7 +20,8 @@ final class WebSocketConnection: @unchecked Sendable {
   var onClose: (() -> Void)?
 
   init(connection: NWConnection, queue: DispatchQueue) {
-    self.connection = connection; self.queue = queue
+    self.connection = connection
+    self.queue = queue
   }
 
   /// Called from the completion of a `connection.send` (the 101 handshake
@@ -88,8 +89,12 @@ final class WebSocketConnection: @unchecked Sendable {
       // not `self.queue` -- hop over before touching `buffer`/`closed`.
       guard let self else { return }
       self.queue.async {
-        if let data { self.buffer.append(data); self.drain() }
-        if error != nil || isComplete { self.closeOnQueue(); return }
+        if let data { self.buffer.append(data)
+          self.drain()
+        }
+        if error != nil || isComplete { self.closeOnQueue()
+          return
+        }
         if !self.closed { self.receive() }
       }
     }
@@ -105,7 +110,8 @@ final class WebSocketConnection: @unchecked Sendable {
       case .ping:
         let pong = WebSocketFrame(fin: true, opcode: .pong, payload: frame.payload).encode()
         connection.send(content: pong, completion: .contentProcessed { _ in })
-      case .close: closeOnQueue(); return
+      case .close: closeOnQueue()
+        return
       default: break
       }
     }

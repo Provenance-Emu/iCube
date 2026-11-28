@@ -42,20 +42,33 @@ struct GraphicsGeneralView: View {
       state.backend = v
       DOLConfigBridge.setGfxBackend(v.backendKey)
       defaults.set(v.backendKey, forKey: GraphicsGeneralDefaultsKey.backend)
-    case .aspect(let v): state.aspect = v; DOLConfigBridge.setGfxAspectRatio(v.aspectRaw)
-    case .vSync(let v): state.vSync = v; DOLConfigBridge.setGfxVSync(v)
-    case .tripleBuffering(let v): state.tripleBuffering = v; defaults.set(v, forKey: GraphicsGeneralDefaultsKey.tripleBuffering)
-    case .forceScaleOneNonProMotion(let v): state.forceScaleOneNonProMotion = v; defaults.set(v, forKey: GraphicsGeneralDefaultsKey.forceScaleOne)
-    case .overscanFullscreen(let v): state.overscanFullscreen = v; TVEmulationBridge.setOverscanFullscreenEnabled(v)
-    case .asyncPresent(let v): state.asyncPresent = v; DOLConfigBridge.setGfxAsyncPresent(v)
+    case .aspect(let v): state.aspect = v
+      DOLConfigBridge.setGfxAspectRatio(v.aspectRaw)
+    case .vSync(let v): state.vSync = v
+      DOLConfigBridge.setGfxVSync(v)
+    case .tripleBuffering(let v): state.tripleBuffering = v
+      defaults.set(v, forKey: GraphicsGeneralDefaultsKey.tripleBuffering)
+    case .forceScaleOneNonProMotion(let v): state.forceScaleOneNonProMotion = v
+      defaults.set(v, forKey: GraphicsGeneralDefaultsKey.forceScaleOne)
+    case .overscanFullscreen(let v): state.overscanFullscreen = v
+      TVEmulationBridge.setOverscanFullscreenEnabled(v)
+    case .asyncPresent(let v): state.asyncPresent = v
+      DOLConfigBridge.setGfxAsyncPresent(v)
     // The scene delegate applies the cap where supported.
-    case .frameCap(let v): state.frameCap = v; defaults.set(v, forKey: GraphicsGeneralDefaultsKey.frameCap)
-    case .instantReplay(let v): state.instantReplay = v; defaults.set(v, forKey: GraphicsGeneralDefaultsKey.instantReplay)
-    case .saveClipsToPhotos(let v): state.saveClipsToPhotos = v; defaults.set(v, forKey: GraphicsGeneralDefaultsKey.saveToPhotos)
-    case .saveOnlyToPhotos(let v): state.saveOnlyToPhotos = v; defaults.set(v, forKey: GraphicsGeneralDefaultsKey.saveOnlyPhotos)
-    case .clipSeconds(let v): state.clipSeconds = v; defaults.set(v, forKey: GraphicsGeneralDefaultsKey.clipSeconds)
-    case .shaderType(let v): state.shaderType = v; DOLConfigBridge.setGfxShaderCompilationMode(v.modeRaw)
-    case .compileBeforeStart(let v): state.compileBeforeStart = v; DOLConfigBridge.setGfxWaitForShadersBeforeStarting(v)
+    case .frameCap(let v): state.frameCap = v
+      defaults.set(v, forKey: GraphicsGeneralDefaultsKey.frameCap)
+    case .instantReplay(let v): state.instantReplay = v
+      defaults.set(v, forKey: GraphicsGeneralDefaultsKey.instantReplay)
+    case .saveClipsToPhotos(let v): state.saveClipsToPhotos = v
+      defaults.set(v, forKey: GraphicsGeneralDefaultsKey.saveToPhotos)
+    case .saveOnlyToPhotos(let v): state.saveOnlyToPhotos = v
+      defaults.set(v, forKey: GraphicsGeneralDefaultsKey.saveOnlyPhotos)
+    case .clipSeconds(let v): state.clipSeconds = v
+      defaults.set(v, forKey: GraphicsGeneralDefaultsKey.clipSeconds)
+    case .shaderType(let v): state.shaderType = v
+      DOLConfigBridge.setGfxShaderCompilationMode(v.modeRaw)
+    case .compileBeforeStart(let v): state.compileBeforeStart = v
+      DOLConfigBridge.setGfxWaitForShadersBeforeStarting(v)
     }
   }
 }

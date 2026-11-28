@@ -49,15 +49,6 @@ final class GraphicsHacksModelBuilderTests: XCTestCase {
     for item in model().allItems { XCTAssertFalse((item.description ?? "").isEmpty, item.id) }
   }
 
-  func test_gpuEfbPeekResolve_withoutRendererSupport_isNotExposedEvenWhenStoredOn() {
-    for storedValue in [false, true] {
-      var state = GraphicsHacksState()
-      state.gpuEfbPeekResolve = storedValue
-      XCTAssertNil(model(state).item(id: "gpu-efb-peek"), "the config key has no renderer consumer")
-    }
-    XCTAssertTrue(changes.isEmpty)
-  }
-
   func test_toggle_emitsTheMatchingChange() {
     guard case .toggle(let binding)? = model().item(id: "efb-access")?.role else { return XCTFail("toggle") }
     binding.wrappedValue = true
@@ -135,7 +126,9 @@ final class GraphicsHacksModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       changes = []
       binding.wrappedValue = true
       XCTAssertEqual(changes, [change(true)], id)

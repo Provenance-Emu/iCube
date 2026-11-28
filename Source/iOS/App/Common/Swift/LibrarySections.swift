@@ -73,7 +73,7 @@ enum LibraryScrollIndex {
   /// The bucket for titles that do not start with a Latin letter.
   static let otherLabel = "#"
 
-  private static let latin: ClosedRange<Unicode.Scalar> = "a"..."z"
+  private static let latin: ClosedRange<Unicode.Scalar> = "a" ... "z"
 
   /// The bucket `title` files under. Case and accents are folded, so "Énigma" files under E.
   static func label(for title: String) -> String {

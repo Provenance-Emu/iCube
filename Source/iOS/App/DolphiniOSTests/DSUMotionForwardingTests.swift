@@ -49,8 +49,11 @@ final class DSUMotionForwardingTests: XCTestCase {
     var shuffled: [(TCButtonType, Float)] = []
     var lower = 0, upper = all.count - 1
     while lower <= upper {
-      shuffled.append(all[lower]); lower += 1
-      if lower <= upper { shuffled.append(all[upper]); upper -= 1 }
+      shuffled.append(all[lower])
+      lower += 1
+      if lower <= upper { shuffled.append(all[upper])
+        upper -= 1
+      }
     }
     XCTAssertEqual(forward.accel, backward.accel)
     XCTAssertEqual(forward.accel, apply(shuffled).accel)
@@ -64,7 +67,7 @@ final class DSUMotionForwardingTests: XCTestCase {
 
   func testOnlyOneHalfPerAxisIsForwarded() {
     // Each of the 12 IMU axis ids maps to a motion component or none; exactly 3 + 3 are signed.
-    let kinds = (625...636).map { TCManagerInterface.dsuMotionComponent(forAxis: $0, value: 1).kind }
+    let kinds = (625 ... 636).map { TCManagerInterface.dsuMotionComponent(forAxis: $0, value: 1).kind }
     XCTAssertEqual(kinds.filter { $0 == .accelerometer }.count, 3)
     XCTAssertEqual(kinds.filter { $0 == .gyro }.count, 3)
     // Ids outside the Wii Remote IMU range are not motion.
@@ -117,9 +120,9 @@ final class DSUMotionForwardingTests: XCTestCase {
     let x = pad.accel[0] * gravity
     let yDsu = pad.accel[1] * gravity
     let zDsu = pad.accel[2] * gravity
-    let coreX = half(x, 1) - half(x, -1)            // Left - Right
-    let coreZ = half(yDsu, -1) - half(yDsu, 1)      // Up - Down
-    let coreY = half(zDsu, -1) - half(zDsu, 1)      // Backward - Forward
+    let coreX = half(x, 1) - half(x, -1) // Left - Right
+    let coreZ = half(yDsu, -1) - half(yDsu, 1) // Up - Down
+    let coreY = half(zDsu, -1) - half(zDsu, 1) // Backward - Forward
     XCTAssertEqual(Double(coreX), accel.x, accuracy: 1e-3)
     XCTAssertEqual(Double(coreY), accel.y, accuracy: 1e-3)
     XCTAssertEqual(Double(coreZ), accel.z, accuracy: 1e-3)
@@ -128,8 +131,8 @@ final class DSUMotionForwardingTests: XCTestCase {
     let toRad = Float.pi / 180
     let pitch = pad.gyro[0] * toRad, yaw = pad.gyro[1] * toRad, roll = pad.gyro[2] * toRad
     let corePitch = half(pitch, -1) - half(pitch, 1) // PitchDown - PitchUp
-    let coreRoll = half(roll, -1) - half(roll, 1)    // RollLeft - RollRight
-    let coreYaw = half(yaw, -1) - half(yaw, 1)       // YawLeft - YawRight
+    let coreRoll = half(roll, -1) - half(roll, 1) // RollLeft - RollRight
+    let coreYaw = half(yaw, -1) - half(yaw, 1) // YawLeft - YawRight
     XCTAssertEqual(Double(corePitch), gyro.x, accuracy: 1e-4)
     XCTAssertEqual(Double(coreRoll), gyro.y, accuracy: 1e-4)
     XCTAssertEqual(Double(coreYaw), gyro.z, accuracy: 1e-4)

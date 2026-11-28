@@ -41,7 +41,7 @@ enum ConnectedAppsModelBuilder {
     return [MenuSection(id: "tags", header: L("NFC tags"),
                         footer: L("Long-press a game and choose Write to NFC Tag. Tapping the tag with your iPhone launches the game; a tag written by Provenance or iFly opens there instead."),
                         items: [
-      SettingsRow.action("scan-tag", L("Scan NFC Tag"), L("Read a game tag now and launch its game."), icon: "wave.3.right.circle", run: scanTag),
-    ])]
+                          SettingsRow.action("scan-tag", L("Scan NFC Tag"), L("Read a game tag now and launch its game."), icon: "wave.3.right.circle", run: scanTag),
+                        ])]
   }
 }

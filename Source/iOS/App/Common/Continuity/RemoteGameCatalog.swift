@@ -5,6 +5,7 @@ import CryptoKit
 import Foundation
 import ImageIO
 import PVContinuity
+import PVRemoteLibrary
 import UniformTypeIdentifiers
 
 /// One page of a server's games.
@@ -22,64 +23,49 @@ protocol RemoteGameCatalog: Actor {
   func continueCatalog() async throws -> RemoteCatalogPage
   /// The size of the whole catalog, without reading it.
   func gameCount() async throws -> Int
-  func artwork(for entry: ContinuityLibraryEntry) async -> Data?
+  /// The cover as the server has it now. `etag` is what the cover cache already holds, if anything;
+  /// a request that fails throws, so the cache can show its copy.
+  func artwork(for entry: ContinuityLibraryEntry, etag: String?) async throws -> ArtworkResult
+  /// Downloads the game into `folder` without adding it to the library. Only a server that can play a
+  /// game without keeping it does this.
+  func copyTemporarily(
+    _ entry: ContinuityLibraryEntry, into folder: URL, progress: @escaping @Sendable (PullProgress) -> Void
+  ) async throws -> [URL]
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL]
   /// The server refused the saved login, so the user has to connect again.
   nonisolated func isAccessDenied(_ error: any Error) -> Bool
   /// The server's id in the background download journal.
   nonisolated var downloadSourceID: String { get }
+  /// What kind of server this is, for the shared library model.
+  nonisolated var sourceKind: LibrarySourceInfo.Kind { get }
 }
 
-/// Covers from servers, downscaled and kept on disk so a grid redraws without the network. Each cover keeps
-/// the server's ETag: the next read sends it back and an unchanged cover costs no body.
-actor RemoteCoverCache {
-  static let shared = RemoteCoverCache(folder: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-    .appendingPathComponent("RemoteCovers", isDirectory: true))
-
-  struct Cover: Sendable {
-    let data: Data
-    let etag: String?
+extension RemoteGameCatalog {
+  func copyTemporarily(
+    _ entry: ContinuityLibraryEntry, into folder: URL, progress: @escaping @Sendable (PullProgress) -> Void
+  ) async throws -> [URL] {
+    throw RemoteSourceError.importsDirectly
   }
+}
 
+/// The covers of every remote library, downscaled and kept on disk by the shared cache (PVRemoteLibrary),
+/// so a grid redraws without the network. Each cover keeps its source's ETag: the next read sends it back
+/// and an unchanged cover costs no body.
+enum RemoteCovers {
   /// Longest side kept, in pixels: enough for a tvOS card at 2x.
-  static let maximumPixelSize = 640
+  static let maximumPixelSize = RemoteCoverCache.defaultMaxPixelSize
   private static let jpegQuality = 0.85
+  /// Where iCube's own cover cache kept its files before the shared one replaced it.
+  private static let legacyFolderName = "RemoteCovers"
 
-  private let folder: URL
+  static let shared: RemoteCoverCache = {
+    let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+    try? FileManager.default.removeItem(at: caches.appendingPathComponent(legacyFolderName, isDirectory: true))
+    return RemoteCoverCache(directory: caches.appendingPathComponent("RemoteLibraryCovers", isDirectory: true))
+  }()
 
-  init(folder: URL) {
-    self.folder = folder
-  }
-
-  func cover(for key: String) -> Cover? {
-    let base = file(for: key)
-    guard let data = try? Data(contentsOf: base.appendingPathExtension("img")), !data.isEmpty else { return nil }
-    let etag = (try? Data(contentsOf: base.appendingPathExtension("etag"))).flatMap { String(data: $0, encoding: .utf8) }
-    return Cover(data: data, etag: etag)
-  }
-
-  /// Stores the downscaled cover and returns it. Bytes that are not an image are not kept.
-  func store(_ original: Data, etag: String?, for key: String) -> Data? {
-    guard let data = Self.thumbnail(original) else { return nil }
-    let base = file(for: key)
-    let manager = FileManager.default
-    try? manager.createDirectory(at: folder, withIntermediateDirectories: true)
-    try? data.write(to: base.appendingPathExtension("img"), options: .atomic)
-    let tag = base.appendingPathExtension("etag")
-    if let etag, !etag.isEmpty {
-      try? Data(etag.utf8).write(to: tag, options: .atomic)
-    } else {
-      try? manager.removeItem(at: tag)
-    }
-    return data
-  }
-
-  private func file(for key: String) -> URL {
-    let name = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
-    return folder.appendingPathComponent(name)
-  }
-
-  static func thumbnail(_ data: Data, maximumPixelSize: Int = RemoteCoverCache.maximumPixelSize) -> Data? {
+  /// A cover no larger than `maximumPixelSize`, for writing a player's cover back to a server.
+  static func thumbnail(_ data: Data, maximumPixelSize: Int = RemoteCovers.maximumPixelSize) -> Data? {
     guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
     let options: [CFString: Any] = [
       kCGImageSourceCreateThumbnailFromImageAlways: true,

@@ -4,12 +4,12 @@
 #import <Foundation/Foundation.h>
 #if TARGET_OS_MACCATALYST
 #import <GameController/GCController.h>
-#import <GameController/GCExtendedGamepad.h>
-#import <GameController/GCMicroGamepad.h>
-#import <GameController/GCKeyboard.h>
 #import <GameController/GCDeviceHaptics.h>
-#import <GameController/GCDualShockGamepad.h>
 #import <GameController/GCDualSenseGamepad.h>
+#import <GameController/GCDualShockGamepad.h>
+#import <GameController/GCExtendedGamepad.h>
+#import <GameController/GCKeyboard.h>
+#import <GameController/GCMicroGamepad.h>
 #import <GameController/GCXboxGamepad.h>
 #else
 #import <GameController/GameController.h>
@@ -47,17 +47,20 @@ typedef NS_ENUM(NSInteger, DOLProfileKeyKind) {
 /// One key a port's controller reads from a profile's `[Profile]` section.
 NS_SWIFT_NAME(ProfileKeyInfo)
 @interface DOLProfileKey : NSObject
-@property (nonatomic, readonly, copy) NSString* name;
-@property (nonatomic, readonly) DOLProfileKeyKind kind;
+@property(nonatomic, readonly, copy) NSString* name;
+@property(nonatomic, readonly) DOLProfileKeyKind kind;
 /// The names a choice accepts; empty for the other kinds.
-@property (nonatomic, readonly, copy) NSArray<NSString*>* choices;
+@property(nonatomic, readonly, copy) NSArray<NSString*>* choices;
 @end
 
 @interface TVControllerMappingBridge : NSObject
 
-+ (NSString*)qualifiedNameForController:(GCController*)controller NS_SWIFT_NAME(qualifiedName(for:));
-+ (NSString*)defaultDeviceForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(defaultDevice(forGCPort:));
-+ (void)clearDefaultDeviceForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(clearDefaultDevice(forGCPort:));
++ (NSString*)qualifiedNameForController:(GCController*)controller
+    NS_SWIFT_NAME(qualifiedName(for:));
++ (NSString*)defaultDeviceForGCPort:(NSInteger)portOneBased
+    NS_SWIFT_NAME(defaultDevice(forGCPort:));
++ (void)clearDefaultDeviceForGCPort:(NSInteger)portOneBased
+    NS_SWIFT_NAME(clearDefaultDevice(forGCPort:));
 
 /// True when the GC pad slot's emulated controller has at least one non-empty
 /// control expression bound — i.e. it has a real mapping, not just an
@@ -68,7 +71,8 @@ NS_SWIFT_NAME(ProfileKeyInfo)
 + (BOOL)padHasAnyBinding:(NSInteger)portOneBased NS_SWIFT_NAME(padHasAnyBinding(forGCPort:));
 
 /// Wiimote counterpart of `padHasAnyBinding:`.
-+ (BOOL)wiimoteHasAnyBinding:(NSInteger)indexOneBased NS_SWIFT_NAME(wiimoteHasAnyBinding(forWiimote:));
++ (BOOL)wiimoteHasAnyBinding:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(wiimoteHasAnyBinding(forWiimote:));
 
 /// True when at least one control of the GC pad slot's mapping resolves to an
 /// input or output of the slot's current default device. A mapping loaded for
@@ -78,10 +82,12 @@ NS_SWIFT_NAME(ProfileKeyInfo)
 /// `setDefaultDevice:forGCPort:`, which re-resolves the references.
 /// `ControllerAssignmentService.assign` uses it to decide whether binding a
 /// device keeps the existing mapping or loads the device-default profile.
-+ (BOOL)padMappingBindsDevice:(NSInteger)portOneBased NS_SWIFT_NAME(padMappingBindsDevice(forGCPort:));
++ (BOOL)padMappingBindsDevice:(NSInteger)portOneBased
+    NS_SWIFT_NAME(padMappingBindsDevice(forGCPort:));
 
 /// Wiimote counterpart of `padMappingBindsDevice:`.
-+ (BOOL)wiimoteMappingBindsDevice:(NSInteger)indexOneBased NS_SWIFT_NAME(wiimoteMappingBindsDevice(forWiimote:));
++ (BOOL)wiimoteMappingBindsDevice:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(wiimoteMappingBindsDevice(forWiimote:));
 
 /// True when the Wii Remote slot's default device is an on-screen `iOS/<id>/Touchscreen`.
 + (BOOL)wiimoteUsesTouchscreen:(NSInteger)indexOneBased
@@ -110,8 +116,8 @@ NS_SWIFT_NAME(ProfileKeyInfo)
 /// device's IR axes (which the app writes from the remote's motion) whatever the slot's own device
 /// is. Persisted on purpose (bindings are INI expressions; there is no per-run layer): the app
 /// removes it with `unbindRemotePointerForWiimote:`. Leaves alone IR rows that already bind an
-/// input of their own (the user's pointer on a stick; the tvOS touchscreen's `Axis 112`, which reads
-/// the same axes). Saves only when it changed something, and returns whether it did.
+/// input of their own (the user's pointer on a stick; the tvOS touchscreen's `Axis 112`, which
+/// reads the same axes). Saves only when it changed something, and returns whether it did.
 + (BOOL)bindRemotePointerForWiimote:(NSInteger)indexOneBased
     NS_SWIFT_NAME(bindRemotePointer(forWiimote:));
 
@@ -128,7 +134,8 @@ NS_SWIFT_NAME(ProfileKeyInfo)
 /// Assign the iOS Touchscreen virtual device as the default device for a GC port. The Touchscreen
 /// profile is loaded when the port changes device or has no mapping; the port's device is the
 /// Touchscreen afterwards whatever that profile's `Device =` line names.
-+ (void)assignTouchscreenToGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
++ (void)assignTouchscreenToGCPort:(NSInteger)portOneBased
+    NS_SWIFT_NAME(assignTouchscreen(toGCPort:));
 
 /// Writes the live GameCube pad / Wii Remote mappings to GCPadNew.ini / WiimoteNew.ini.
 + (void)saveGCPadConfig;
@@ -141,8 +148,10 @@ NS_SWIFT_NAME(ProfileKeyInfo)
 + (void)setDefaultDevice:(NSString*)qualified forGCPort:(NSInteger)portOneBased;
 
 /// Get/set default device for Wiimote (1-based index)
-+ (NSString*)defaultDeviceForWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(defaultDevice(forWiimote:));
-+ (void)setDefaultDevice:(NSString*)qualified forWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(setDefaultDevice(_:forWiimote:));
++ (NSString*)defaultDeviceForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(defaultDevice(forWiimote:));
++ (void)setDefaultDevice:(NSString*)qualified
+              forWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(setDefaultDevice(_:forWiimote:));
 
 /// Input display: names and states for a qualified device
 + (NSArray<NSString*>*)inputsForQualifiedDevice:(NSString*)qualified;
@@ -166,7 +175,17 @@ NS_SWIFT_NAME(ProfileKeyInfo)
     NS_SWIFT_NAME(allProfiles(forGCPort:));
 + (NSArray<NSString*>*)allProfilesForWiimote:(NSInteger)indexOneBased
     NS_SWIFT_NAME(allProfiles(forWiimote:));
+/// Loads the profile into the slot. With `restore`, the slot keeps its device, and a profile that
+/// binds the Main Stick to the left stick is adapted to a pad that has only a D-pad
+/// (`mainStickFromDPadFallbackForProfile:inputNames:`).
 + (BOOL)loadProfile:(NSString*)name forGCPort:(NSInteger)portOneBased restoreDevice:(BOOL)restore;
+/// The profile keys rewritten when a GameCube profile is loaded for a device with these inputs, or
+/// none: on a pad with a D-pad and no left stick, a Main Stick bound to `L Stick` moves to the
+/// D-pad, and a `D-Pad/` key bound to that same D-pad input is cleared. `entries` is key -> value.
++ (NSDictionary<NSString*, NSString*>*)
+    mainStickFromDPadFallbackForProfile:(NSDictionary<NSString*, NSString*>*)entries
+                             inputNames:(NSArray<NSString*>*)inputNames
+    NS_SWIFT_NAME(mainStickFromDPadFallback(forProfile:inputNames:));
 + (BOOL)loadProfile:(NSString*)name forWiimote:(NSInteger)indexOneBased restoreDevice:(BOOL)restore;
 
 /// Profiles (saving). Writes the live pad/Wiimote config to
@@ -199,8 +218,10 @@ NS_SWIFT_NAME(ProfileKeyInfo)
 /// its settings, its controls and each control's `/Range`, and for a Wii Remote `Extension` and
 /// every extension's groups. A key missing from a profile takes its default; a key not in this
 /// list is ignored by the core.
-+ (NSArray<DOLProfileKey*>*)profileKeysForGCPort:(NSInteger)portOneBased NS_SWIFT_NAME(profileKeys(forGCPort:));
-+ (NSArray<DOLProfileKey*>*)profileKeysForWiimote:(NSInteger)indexOneBased NS_SWIFT_NAME(profileKeys(forWiimote:));
++ (NSArray<DOLProfileKey*>*)profileKeysForGCPort:(NSInteger)portOneBased
+    NS_SWIFT_NAME(profileKeys(forGCPort:));
++ (NSArray<DOLProfileKey*>*)profileKeysForWiimote:(NSInteger)indexOneBased
+    NS_SWIFT_NAME(profileKeys(forWiimote:));
 /// Loads `text` (a profile file's content) into the slot's live mapping and saves it, exactly as
 /// `loadProfile:` does with a file. With `restore`, the slot keeps its device whatever the text's
 /// `Device =` line names. NO when the slot has no controller or the text could not be read.
@@ -239,14 +260,29 @@ NS_SWIFT_NAME(ProfileKeyInfo)
 + (void)refreshDevices;
 
 /// Control group editing (Pad)
-+ (NSArray<NSString*>*)padControlNamesForGroup:(NSInteger)portOneBased group:(NSInteger)groupId NS_SWIFT_NAME(padControlNames(forGroup:group:));
-+ (NSArray<NSString*>*)padControlExpressionsForGroup:(NSInteger)portOneBased group:(NSInteger)groupId NS_SWIFT_NAME(padControlExpressions(forGroup:group:));
-+ (void)setPadControlExpressionForPort:(NSInteger)portOneBased group:(NSInteger)groupId index:(NSInteger)controlIndex expression:(NSString*)expression;
++ (NSArray<NSString*>*)padControlNamesForGroup:(NSInteger)portOneBased
+                                         group:(NSInteger)groupId
+    NS_SWIFT_NAME(padControlNames(forGroup:group:));
++ (NSArray<NSString*>*)padControlExpressionsForGroup:(NSInteger)portOneBased
+                                               group:(NSInteger)groupId
+    NS_SWIFT_NAME(padControlExpressions(forGroup:group:));
++ (void)setPadControlExpressionForPort:(NSInteger)portOneBased
+                                 group:(NSInteger)groupId
+                                 index:(NSInteger)controlIndex
+                            expression:(NSString*)expression;
 
 /// Control group editing (Wiimote)
-+ (NSArray<NSString*>*)wiimoteControlNamesForGroup:(NSInteger)indexOneBased group:(NSInteger)groupId NS_SWIFT_NAME(wiimoteControlNames(forGroup:group:));
-+ (NSArray<NSString*>*)wiimoteControlExpressionsForGroup:(NSInteger)indexOneBased group:(NSInteger)groupId NS_SWIFT_NAME(wiimoteControlExpressions(forGroup:group:));
-+ (void)setWiimoteControlExpressionForIndex:(NSInteger)indexOneBased group:(NSInteger)groupId index:(NSInteger)controlIndex expression:(NSString*)expression NS_SWIFT_NAME(setWiimoteControlExpressionFor(_:group:index:expression:));
++ (NSArray<NSString*>*)wiimoteControlNamesForGroup:(NSInteger)indexOneBased
+                                             group:(NSInteger)groupId
+    NS_SWIFT_NAME(wiimoteControlNames(forGroup:group:));
++ (NSArray<NSString*>*)wiimoteControlExpressionsForGroup:(NSInteger)indexOneBased
+                                                   group:(NSInteger)groupId
+    NS_SWIFT_NAME(wiimoteControlExpressions(forGroup:group:));
++ (void)setWiimoteControlExpressionForIndex:(NSInteger)indexOneBased
+                                      group:(NSInteger)groupId
+                                      index:(NSInteger)controlIndex
+                                 expression:(NSString*)expression
+    NS_SWIFT_NAME(setWiimoteControlExpressionFor(_:group:index:expression:));
 
 /// Control group editing (Wiimote extension: Nunchuk / Classic Controller).
 /// `groupId` is `WiimoteEmu::NunchukGroup` (`Nunchuk.h`) or
@@ -254,9 +290,20 @@ NS_SWIFT_NAME(ProfileKeyInfo)
 /// `Wiimote::GetNunchukGroup` / `Wiimote::GetClassicGroup`
 /// (`Core/HW/Wiimote.h`) rather than `Wiimote::GetWiimoteGroup` — the Wii
 /// Remote's own groups don't reach the attached extension's controls.
-+ (NSArray<NSString*>*)wiimoteExtensionControlNamesForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId NS_SWIFT_NAME(wiimoteExtensionControlNames(forIndex:kind:group:));
-+ (NSArray<NSString*>*)wiimoteExtensionControlExpressionsForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId NS_SWIFT_NAME(wiimoteExtensionControlExpressions(forIndex:kind:group:));
-+ (void)setWiimoteExtensionControlExpressionForIndex:(NSInteger)indexOneBased kind:(DOLWiimoteExtensionKind)kind group:(NSInteger)groupId index:(NSInteger)controlIndex expression:(NSString*)expression NS_SWIFT_NAME(setWiimoteExtensionControlExpressionFor(_:kind:group:index:expression:));
++ (NSArray<NSString*>*)wiimoteExtensionControlNamesForIndex:(NSInteger)indexOneBased
+                                                       kind:(DOLWiimoteExtensionKind)kind
+                                                      group:(NSInteger)groupId
+    NS_SWIFT_NAME(wiimoteExtensionControlNames(forIndex:kind:group:));
++ (NSArray<NSString*>*)wiimoteExtensionControlExpressionsForIndex:(NSInteger)indexOneBased
+                                                             kind:(DOLWiimoteExtensionKind)kind
+                                                            group:(NSInteger)groupId
+    NS_SWIFT_NAME(wiimoteExtensionControlExpressions(forIndex:kind:group:));
++ (void)setWiimoteExtensionControlExpressionForIndex:(NSInteger)indexOneBased
+                                                kind:(DOLWiimoteExtensionKind)kind
+                                               group:(NSInteger)groupId
+                                               index:(NSInteger)controlIndex
+                                          expression:(NSString*)expression
+    NS_SWIFT_NAME(setWiimoteExtensionControlExpressionFor(_:kind:group:index:expression:));
 
 @end
 

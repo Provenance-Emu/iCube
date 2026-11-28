@@ -10,6 +10,7 @@ final class CloudSyncModelBuilderTests: XCTestCase {
                       countsByType: [.saveState: 3], bytesByType: [.saveState: 2048], totalFiles: 3, formattedTotalSize: "2 KB",
                       errorFiles: 0, pendingConflicts: conflicts, recentEvents: [])
   }
+
   private func model(_ s: CloudSyncSnapshot) -> MenuModel {
     CloudSyncModelBuilder.make(s, conflicts: AnyView(EmptyView())) { self.changes.append($0) }
   }
@@ -17,16 +18,19 @@ final class CloudSyncModelBuilderTests: XCTestCase {
   func test_disabled_showsOnlyStatusAndScope() {
     XCTAssertEqual(model(snap(enabled: false)).sections.map(\.id), ["status", "scope"])
   }
+
   func test_unavailableReason_disablesSyncNow_andIsTheFooter() {
     let m = model(snap(reason: "No iCloud account"))
     XCTAssertEqual(m.item(id: "sync-now")?.isEnabled, false)
     XCTAssertEqual(m.sections[0].footer, "No iCloud account")
   }
+
   func test_conflicts_sectionAppearsWithCount() {
     let m = model(snap(conflicts: 2))
     XCTAssertTrue(m.sections.map(\.id).contains("conflicts"))
     XCTAssertEqual(m.item(id: "conflicts")?.badge, "2")
   }
+
   func test_toggle_syncNow_clear_emitChanges() {
     let m = model(snap())
     guard case .toggle(let b) = m.item(id: "enabled")?.role else { return XCTFail() }

@@ -11,11 +11,13 @@ final class GraphicsAdvancedModelBuilderTests: XCTestCase {
   private func model(_ state: GraphicsAdvancedState = GraphicsAdvancedState()) -> MenuModel {
     GraphicsAdvancedModelBuilder.make(state: state) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout GraphicsAdvancedState) -> Void) -> GraphicsAdvancedState {
     var s = GraphicsAdvancedState()
     edit(&s)
     return s
   }
+
   private func isOn(_ item: MenuItem?) -> Bool? {
     guard case .toggle(let binding)? = item?.role else { return nil }
     return binding.wrappedValue
@@ -72,7 +74,11 @@ final class GraphicsAdvancedModelBuilderTests: XCTestCase {
   }
 
   func test_everyRow_hasADescription() {
-    let warning = model(state { $0.hiresTextures = true; $0.prefetchTextures = true; $0.texturePackBytes = Int64(gib); $0.physicalMemory = 2 * gib })
+    let warning = model(state { $0.hiresTextures = true
+      $0.prefetchTextures = true
+      $0.texturePackBytes = Int64(gib)
+      $0.physicalMemory = 2 * gib
+    })
     for item in warning.allItems { XCTAssertFalse((item.description ?? "").isEmpty, item.id) }
   }
 
@@ -97,11 +103,15 @@ final class GraphicsAdvancedModelBuilderTests: XCTestCase {
   func test_everyToggleRow_readsAndEmitsItsOwnFlag() {
     var allOn = GraphicsAdvancedState()
     var allOff = GraphicsAdvancedState()
-    for flag in GraphicsAdvancedFlag.allCases { allOn[keyPath: flag.keyPath] = true; allOff[keyPath: flag.keyPath] = false }
+    for flag in GraphicsAdvancedFlag.allCases { allOn[keyPath: flag.keyPath] = true
+      allOff[keyPath: flag.keyPath] = false
+    }
     for (id, flag) in flagRows {
       XCTAssertEqual(isOn(model(allOn).item(id: id)), true, "\(id) reads \(flag)")
       XCTAssertEqual(isOn(model(allOff).item(id: id)), false, "\(id) reads only \(flag)")
-      guard case .toggle(let binding)? = model(allOff).item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = model(allOff).item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       for value in [true, false] {
         changes = []
         binding.wrappedValue = value
@@ -127,13 +137,18 @@ final class GraphicsAdvancedModelBuilderTests: XCTestCase {
   // MARK: Shader threads
 
   func test_threadSteppers_useOneToMaxThreads_andEmitTheirOwnChange() {
-    let m = model(state { $0.maxThreads = 5; $0.compilerThreads = 2; $0.precompilerThreads = 4 })
+    let m = model(state { $0.maxThreads = 5
+      $0.compilerThreads = 2
+      $0.precompilerThreads = 4
+    })
     let expected: [(String, Double, GraphicsAdvancedChange)] = [
       ("compiler-threads", 3, .compilerThreads(3)),
       ("precompiler-threads", 2, .precompilerThreads(2)),
     ]
     for (id, value, change) in expected {
-      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper"); continue }
+      guard case .stepper(let stepper)? = m.item(id: id)?.role else { XCTFail("\(id) is not a stepper")
+        continue
+      }
       XCTAssertEqual(stepper.range, 1 ... 5, id)
       XCTAssertEqual(stepper.step, 1, id)
       changes = []
@@ -159,13 +174,17 @@ final class GraphicsAdvancedModelBuilderTests: XCTestCase {
   // MARK: Metal tri-states
 
   func test_triStateCycles_listOffOnAuto_andEmitTheirOwnChange() {
-    let m = model(state { $0.usePresentDrawable = 2; $0.manuallyUploadBuffers = 0 })
+    let m = model(state { $0.usePresentDrawable = 2
+      $0.manuallyUploadBuffers = 0
+    })
     let expected: [(String, Int, GraphicsAdvancedChange, String)] = [
       ("use-present-drawable", 0, .presentDrawable(0), "Auto"),
       ("manually-upload-buffers", 1, .manuallyUploadBuffers(1), "Off"),
     ]
     for (id, raw, change, current) in expected {
-      guard case .cycle(let options, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle"); continue }
+      guard case .cycle(let options, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle")
+        continue
+      }
       XCTAssertEqual(options.map { $0.0 }, ["Off", "On", "Auto"], id)
       XCTAssertEqual(options.map { $0.1 }, [0, 1, 2].map { AnyHashable($0) }, id)
       XCTAssertEqual(m.item(id: id)?.currentValueTitle, current, id)
@@ -208,13 +227,21 @@ final class GraphicsAdvancedModelBuilderTests: XCTestCase {
       (true, true, 0, false),
     ]
     for c in cases {
-      let m = model(state { $0.hiresTextures = c.hires; $0.prefetchTextures = c.prefetch; $0.texturePackBytes = c.bytes; $0.physicalMemory = 8 * gib })
+      let m = model(state { $0.hiresTextures = c.hires
+        $0.prefetchTextures = c.prefetch
+        $0.texturePackBytes = c.bytes
+        $0.physicalMemory = 8 * gib
+      })
       XCTAssertEqual(m.item(id: "texture-pack-warning") != nil, c.shown, "\(c)")
     }
   }
 
   func test_warningRow_sitsRightAfterPrefetch_isInert_andNamesTheSize() {
-    let m = model(state { $0.hiresTextures = true; $0.prefetchTextures = true; $0.texturePackBytes = Int64(3 * gib); $0.physicalMemory = 8 * gib })
+    let m = model(state { $0.hiresTextures = true
+      $0.prefetchTextures = true
+      $0.texturePackBytes = Int64(3 * gib)
+      $0.physicalMemory = 8 * gib
+    })
     let ids = m.section(containing: "texture-pack-warning")?.items.map(\.id)
     XCTAssertEqual(ids, ["load-custom-textures", "prefetch-custom-textures", "texture-pack-warning", "disable-efb-copy-to-vram", "graphics-mods"])
     let item = m.item(id: "texture-pack-warning")
@@ -227,7 +254,11 @@ final class GraphicsAdvancedModelBuilderTests: XCTestCase {
 
   func test_warning_usesThePhysicalMemoryInTheState() {
     let packs = Int64(3 * gib)
-    let on = { (ram: UInt64) in self.state { $0.hiresTextures = true; $0.prefetchTextures = true; $0.texturePackBytes = packs; $0.physicalMemory = ram } }
+    let on = { (ram: UInt64) in self.state { $0.hiresTextures = true
+      $0.prefetchTextures = true
+      $0.texturePackBytes = packs
+      $0.physicalMemory = ram
+    } }
     XCTAssertTrue(on(8 * gib).showsTexturePackWarning)
     XCTAssertFalse(on(16 * gib).showsTexturePackWarning)
   }

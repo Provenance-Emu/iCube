@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #if os(iOS)
-import XCTest
 import Compression
 import ImageIO
 import UIKit
+import XCTest
 @testable import iCube
 
 final class SkinAssetRendererTests: XCTestCase {
@@ -102,7 +102,7 @@ final class SkinAssetRendererTests: XCTestCase {
 
   func testHugeRequestIsClampedPreservingAspect() throws {
     try writePDF(named: Self.pdfName, in: skinDirectory)
-    let image = try XCTUnwrap(SkinAssetRenderer.image(named: Self.pdfName, in: skinDirectory, size: CGSize(width: 10_000, height: 5_000), scale: 1))
+    let image = try XCTUnwrap(SkinAssetRenderer.image(named: Self.pdfName, in: skinDirectory, size: CGSize(width: 10000, height: 5000), scale: 1))
     let (width, height) = pixelSize(image)
     XCTAssertEqual(width, Self.pixelCap)
     XCTAssertEqual(height, Self.pixelCap / 2)
@@ -111,7 +111,7 @@ final class SkinAssetRendererTests: XCTestCase {
 
   func testCapAppliesToSizeTimesScale() throws {
     try writePDF(named: Self.pdfName, in: skinDirectory)
-    let image = try XCTUnwrap(SkinAssetRenderer.image(named: Self.pdfName, in: skinDirectory, size: CGSize(width: 2_000, height: 4_000), scale: 3))
+    let image = try XCTUnwrap(SkinAssetRenderer.image(named: Self.pdfName, in: skinDirectory, size: CGSize(width: 2000, height: 4000), scale: 3))
     let (width, height) = pixelSize(image)
     XCTAssertEqual(height, Self.pixelCap)
     XCTAssertEqual(width, Self.pixelCap / 2)
@@ -154,12 +154,12 @@ final class SkinAssetRendererTests: XCTestCase {
   /// it takes `side` x `side` x 4 bytes (1.6 GB). ImageIO reports the dimensions only when the data stream is plausible
   /// for them, so the stream has to be real.
   private func bombPNGData(side: Int) -> Data {
-    func bigEndian(_ value: UInt32) -> [UInt8] { (0..<4).map { UInt8((value >> UInt32(24 - 8 * $0)) & 0xFF) } }
+    func bigEndian(_ value: UInt32) -> [UInt8] { (0 ..< 4).map { UInt8((value >> UInt32(24 - 8 * $0)) & 0xFF) } }
     func crc32(_ bytes: [UInt8]) -> UInt32 {
       var crc: UInt32 = 0xFFFF_FFFF
       for byte in bytes {
         crc ^= UInt32(byte)
-        for _ in 0..<8 { crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB8_8320 : crc >> 1 }
+        for _ in 0 ..< 8 { crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB8_8320 : crc >> 1 }
       }
       return ~crc
     }
@@ -173,8 +173,8 @@ final class SkinAssetRendererTests: XCTestCase {
     var deflated = [UInt8](repeating: 0, count: 1 << 20)
     let count = compression_encode_buffer(&deflated, deflated.count, raw, raw.count, nil, COMPRESSION_ZLIB)
     XCTAssertGreaterThan(count, 0, "the deflated stream fits the buffer")
-    let adler = UInt32(raw.count % 65_521) << 16 | 1
-    let stream: [UInt8] = [0x78, 0x01] + deflated[0..<count] + bigEndian(adler)
+    let adler = UInt32(raw.count % 65521) << 16 | 1
+    let stream: [UInt8] = [0x78, 0x01] + deflated[0 ..< count] + bigEndian(adler)
 
     let header = bigEndian(UInt32(side)) + bigEndian(UInt32(side)) + [1, 0, 0, 0, 0]
     let signature: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
@@ -183,15 +183,15 @@ final class SkinAssetRendererTests: XCTestCase {
 
   func testHugeDeclaredRasterIsRefusedWithoutDecoding() throws {
     let url = skinDirectory.appendingPathComponent("bomb.png")
-    let data = bombPNGData(side: 20_000)
+    let data = bombPNGData(side: 20000)
     XCTAssertLessThan(data.count, 1 << 20, "the fixture is a small file")
     try data.write(to: url)
     // The fixture really does declare 400 million pixels (so a nil below means "refused", not "not an image").
     let source = try XCTUnwrap(CGImageSourceCreateWithURL(url as CFURL, nil))
     let properties = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
-    XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 20_000)
-    XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 20_000)
-    XCTAssertGreaterThan(20_000 * 20_000, SkinAssetRenderer.maxDeclaredPixelCount)
+    XCTAssertEqual(properties[kCGImagePropertyPixelWidth] as? Int, 20000)
+    XCTAssertEqual(properties[kCGImagePropertyPixelHeight] as? Int, 20000)
+    XCTAssertGreaterThan(20000 * 20000, SkinAssetRenderer.maxDeclaredPixelCount)
 
     XCTAssertNil(SkinAssetRenderer.image(named: "bomb.png", in: skinDirectory, size: CGSize(width: 100, height: 100), scale: 3))
   }
@@ -206,7 +206,7 @@ final class SkinAssetRendererTests: XCTestCase {
 
   func testRasterIsCappedAtTheMaximumPixelDimension() throws {
     try writePNG(named: Self.pngName, in: skinDirectory, pixels: 64)
-    let image = try XCTUnwrap(SkinAssetRenderer.image(named: Self.pngName, in: skinDirectory, size: CGSize(width: 90_000, height: 90_000), scale: 3))
+    let image = try XCTUnwrap(SkinAssetRenderer.image(named: Self.pngName, in: skinDirectory, size: CGSize(width: 90000, height: 90000), scale: 3))
     XCTAssertLessThanOrEqual(CGFloat(max(pixelSize(image).0, pixelSize(image).1)), SkinAssetRenderer.maxPixelDimension)
   }
 

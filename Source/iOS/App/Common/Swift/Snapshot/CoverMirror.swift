@@ -1,7 +1,8 @@
+import PVLibrarySnapshot
+
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 import UIKit
-import PVLibrarySnapshot
 
 struct CoverJob: @unchecked Sendable {
   let gameID: String

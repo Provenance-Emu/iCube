@@ -388,7 +388,7 @@ struct ShaderParameterEditor: View {
                 }
                 .buttonStyle(.bordered)
                 #if os(iOS)
-                  .controlSize(.small)
+                .controlSize(.small)
                 #endif
               }
               #if os(iOS)

@@ -68,48 +68,64 @@ struct PlayControlsAuditPreview: View {
 
   private var picker: some View {
     QuickSavePickerView(gameID: "GALE01", mode: $mode, selectedSlot: $selectedSlot,
-      onDismiss: { lastAction = "picker.done"; showPicker = false },
-      operations: QuickSavePickerOperations(
-        save: { mode, slot in lastAction = "picker.save.\(mode.rawValue).\(slot)"; return .cancelled },
-        load: { state, _ in lastAction = "picker.load.\(state.path.lastPathComponent)"; return .cancelled },
-        setKept: { state, kept, _ in lastAction = "picker.keep.\(kept).\(state.path.lastPathComponent)"; return .cancelled },
-        slotDestination: { URL(fileURLWithPath: String(format: "/read-only-fixture/GALE01.s%02d", $0)) },
-        saveSlot: { consent in lastAction = "picker.save.slots.\(consent.request.slot)"; return .cancelled },
-        occupancy: { $0.lastPathComponent == "GALE01.s04" ? .occupied : .empty }),
-      provider: PlayControlsFixtureProvider(), isModded: { false },
-      readSessionIdentifier: { 1 }, sessionIsCurrent: { _, _ in true })
+                        onDismiss: { lastAction = "picker.done"
+                          showPicker = false
+                        },
+                        operations: QuickSavePickerOperations(
+                          save: { mode, slot in lastAction = "picker.save.\(mode.rawValue).\(slot)"
+                            return .cancelled
+                          },
+                          load: { state, _ in lastAction = "picker.load.\(state.path.lastPathComponent)"
+                            return .cancelled
+                          },
+                          setKept: { state, kept, _ in lastAction = "picker.keep.\(kept).\(state.path.lastPathComponent)"
+                            return .cancelled
+                          },
+                          slotDestination: { URL(fileURLWithPath: String(format: "/read-only-fixture/GALE01.s%02d", $0)) },
+                          saveSlot: { consent in lastAction = "picker.save.slots.\(consent.request.slot)"
+                            return .cancelled
+                          },
+                          occupancy: { $0.lastPathComponent == "GALE01.s04" ? .occupied : .empty }),
+                        provider: PlayControlsFixtureProvider(), isModded: { false },
+                        readSessionIdentifier: { 1 }, sessionIsCurrent: { _, _ in true })
       .claimsController()
   }
 
   #if os(iOS)
   private var toolbar: some View {
     EmulationTopBar(visibility: $visibility, selectedSlot: $selectedSlot, isPaused: $paused,
-      fastForwardEnabled: $fastForward, isWii: true, onScreenControlsVisible: controlsVisible,
-      irModeRaw: pointerMode, overscanApplicable: true, overscanFullscreen: fullscreen,
-      childPresented: showPicker,
-      readToggles: { TopBarToggles(isMuted: muted, fastForwardEnabled: fastForward) },
-      open: { destination in
-        lastAction = "destination.\(destination)"
-        if destination == .saveStates { showPicker = true }
-      },
-      onToggleOnScreenControls: { controlsVisible.toggle() },
-      onSetPointerMode: { pointerMode = $0.rawValue },
-      onSetOverscanFullscreen: { fullscreen = $0 },
-      readPlayer1Devices: {
-        [TopBarDeviceOption(qualifier: nil, name: "On-Screen Controls", isSelected: true),
-         TopBarDeviceOption(qualifier: "fixture-pad", name: "Preview Controller", isSelected: false)]
-      },
-      onChoosePlayer1: { lastAction = "controller.\($0 ?? "touchscreen")" },
-      onQuickSave: { lastAction = "toolbar.save" }, onQuickLoad: { lastAction = "toolbar.load" },
-      runtime: TopBarRuntimeActions(
-        readVolume: { volume }, setVolume: { volume = $0 },
-        toggleMute: { muted.toggle(); return muted },
-        toggleFastForward: { fastForward.toggle(); return fastForward },
-        recenterPointer: { lastAction = "pointer.recenter" },
-        clearSkylanders: { lastAction = "skylanders.clear" },
-        saveReplay: { lastAction = "replay" },
-        captureScreenshot: { lastAction = "screenshot"; return .failed },
-        replayEnabled: { true }, portalEnabled: { true }, thermalEnabled: { false }))
+                    fastForwardEnabled: $fastForward, isWii: true, onScreenControlsVisible: controlsVisible,
+                    irModeRaw: pointerMode, overscanApplicable: true, overscanFullscreen: fullscreen,
+                    childPresented: showPicker,
+                    readToggles: { TopBarToggles(isMuted: muted, fastForwardEnabled: fastForward) },
+                    open: { destination in
+                      lastAction = "destination.\(destination)"
+                      if destination == .saveStates { showPicker = true }
+                    },
+                    onToggleOnScreenControls: { controlsVisible.toggle() },
+                    onSetPointerMode: { pointerMode = $0.rawValue },
+                    onSetOverscanFullscreen: { fullscreen = $0 },
+                    readPlayer1Devices: {
+                      [TopBarDeviceOption(qualifier: nil, name: "On-Screen Controls", isSelected: true),
+                       TopBarDeviceOption(qualifier: "fixture-pad", name: "Preview Controller", isSelected: false)]
+                    },
+                    onChoosePlayer1: { lastAction = "controller.\($0 ?? "touchscreen")" },
+                    onQuickSave: { lastAction = "toolbar.save" }, onQuickLoad: { lastAction = "toolbar.load" },
+                    runtime: TopBarRuntimeActions(
+                      readVolume: { volume }, setVolume: { volume = $0 },
+                      toggleMute: { muted.toggle()
+                        return muted
+                      },
+                      toggleFastForward: { fastForward.toggle()
+                        return fastForward
+                      },
+                      recenterPointer: { lastAction = "pointer.recenter" },
+                      clearSkylanders: { lastAction = "skylanders.clear" },
+                      saveReplay: { lastAction = "replay" },
+                      captureScreenshot: { lastAction = "screenshot"
+                        return .failed
+                      },
+                      replayEnabled: { true }, portalEnabled: { true }, thermalEnabled: { false }))
   }
 
   private func revealToolbar() {
@@ -125,6 +141,7 @@ private struct PlayControlsFixtureProvider: SaveStateProviding {
   func thumbnail(for state: SaveStateInfo) async -> UIImage? {
     state.slot == 4 ? nil : await UIImage(systemName: "gamecontroller")
   }
+
   func delete(state: SaveStateInfo) throws { throw CocoaError(.fileWriteNoPermission) }
   func rename(state: SaveStateInfo, to title: String) throws { throw CocoaError(.fileWriteNoPermission) }
 

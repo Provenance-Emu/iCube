@@ -6,7 +6,6 @@ import XCTest
 /// The stepped values a numeric setting's picker offers (a slider cannot be reached by a pad on iOS
 /// or focused on tvOS), their labels, and which groups Advanced lists.
 final class PlayerAdvancedSettingsTests: XCTestCase {
-
   private func setting(
     min: Double, max: Double, value: Double, defaultValue: Double, isInteger: Bool = false, suffix: String = "%"
   ) -> NumericSettingState {

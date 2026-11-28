@@ -5,6 +5,8 @@ import CryptoKit
 import EmulatorContentClient
 import Foundation
 import PVContinuity
+import PVRemoteLibrary
+import PVSystems
 
 struct EmulationServer: Codable, Equatable, Identifiable, Sendable {
   let origin: URL
@@ -141,7 +143,7 @@ actor EmulationServerLibrary {
   private static let pageSize = 100
   /// The server stores covers up to this size.
   private static let maximumCoverBytes = 8_000_000
-  private static let systemIDs = ["com.provenance.gamecube", "com.provenance.wii"]
+  private static let systemIDs = [SystemIdentifier.GameCube.rawValue, SystemIdentifier.Wii.rawValue]
 
   /// Never send a configured server's bearer token to a redirected URL.
   private final class NoRedirects: NSObject, URLSessionTaskDelegate, Sendable {
@@ -157,7 +159,6 @@ actor EmulationServerLibrary {
   private let ownedSession: URLSession?
   /// Game files: the shared background downloader, or the transport when one is given.
   private let fetcher: any GameFileFetching
-  private let covers: RemoteCoverCache
   /// Free space where games are kept; nil when it cannot be measured.
   private let availableBytes: @Sendable () -> Int64?
   private var games: [String: Game] = [:]
@@ -169,12 +170,11 @@ actor EmulationServerLibrary {
   private var pendingCursor: CatalogCursor?
 
   init(server: EmulationServer, token: String?, transport: (any ContinuityTransport)? = nil,
-       fetcher: (any GameFileFetching)? = nil, covers: RemoteCoverCache = .shared,
+       fetcher: (any GameFileFetching)? = nil,
        availableBytes: @escaping @Sendable () -> Int64? = RemoteDownloadSpace.availableBytesForGames) {
     self.server = server
     self.availableBytes = availableBytes
     self.token = token
-    self.covers = covers
     if let transport {
       self.transport = transport
       self.fetcher = fetcher ?? TransportGameFileFetcher(transport: transport)
@@ -305,19 +305,19 @@ actor EmulationServerLibrary {
                        total: uncounted == 0 ? remaining.counted : nil)
   }
 
-  /// The downscaled cover: from disk when the server says it is unchanged or cannot be reached.
-  func artwork(for entry: ContinuityLibraryEntry) async -> Data? {
-    guard let path = coverPaths[entry.key], var request = try? request(path: path) else { return nil }
-    let key = server.id + "\n" + path
-    let cached = await covers.cover(for: key)
-    if let cached, checkedCovers.contains(key) { return cached.data }
-    if let etag = cached?.etag { request.headers["If-None-Match"] = etag }
-    guard let response = try? await transport.request(request) else { return cached?.data }
-    checkedCovers.insert(key)
-    if response.status == 304, let cached { return cached.data }
-    guard response.status == 200, !response.body.isEmpty, response.body.count <= Self.maximumCoverBytes else { return nil }
-    let etag = response.headers.first { $0.key.caseInsensitiveCompare("ETag") == .orderedSame }?.value
-    return await covers.store(response.body, etag: etag, for: key)
+  /// The cover, or word that the one the cache holds is current. A cover this catalog has already checked
+  /// is not asked about again.
+  func artwork(for entry: ContinuityLibraryEntry, etag: String?) async throws -> ArtworkResult {
+    guard let path = coverPaths[entry.key] else { return .none }
+    var request = try request(path: path)
+    if etag != nil, checkedCovers.contains(path) { return .notModified }
+    if let etag { request.headers["If-None-Match"] = etag }
+    let response = try await transport.request(request)
+    checkedCovers.insert(path)
+    if response.status == 304, etag != nil { return .notModified }
+    guard response.status == 200, !response.body.isEmpty, response.body.count <= Self.maximumCoverBytes else { return .none }
+    let newETag = response.headers.first { $0.key.caseInsensitiveCompare("ETag") == .orderedSame }?.value
+    return .image(response.body, etag: newETag)
   }
 
   private func downloads(for game: Game) async throws -> [Download] {
@@ -406,14 +406,13 @@ actor EmulationServerLibrary {
       guard !overflow else { throw ServerError.invalidContent }
       return total
     }
-    // Before anything is fetched, while the sizes are known and nothing of this attempt is on disk.
+    // Before anything is fetched, while the sizes are known. Files an earlier launch already
+    // brought in are on disk, so what is free has paid for them: they are not counted again.
     let files = downloads.map {
       RemoteDownloadSpace.File(bytes: $0.size, isArchive: ($0.path as NSString).pathExtension.lowercased() == "7z")
     }
-    if let shortfall = RemoteDownloadSpace.shortfall(
-      files: files, storedBytes: await transferFetcher.storedBytes(for: job), availableBytes: availableBytes()) {
-      throw shortfall
-    }
+    let needed = RemoteDownloadSpace.neededBytes(files: files, storedBytes: await transferFetcher.storedBytes(for: job))
+    try Self.checkDownloadSpace(bytes: needed, available: availableBytes())
     let requests = try downloads.map { file in
       let route = try request(file.route)
       return GameFileRequest(url: route.url, headers: route.headers, expectedSize: file.size)
@@ -440,6 +439,12 @@ actor EmulationServerLibrary {
       await transferFetcher.release(job)
       throw error
     }
+  }
+
+  static func checkDownloadSpace(bytes: Int64, available: Int64?) throws {
+    let reserve: Int64 = 256 * 1024 * 1024
+    guard let available, bytes > max(0, available) - reserve else { return }
+    throw ServerError.insufficientSpace(bytes: bytes, available: available)
   }
 
   private static func pullProgress(received: Int64, downloads: [Download], totalBytes: Int64) -> PullProgress {
@@ -666,9 +671,9 @@ actor EmulationServerLibrary {
   }
 
   private static func platform(_ value: String?) -> String? {
-    switch value {
-    case "com.provenance.gamecube": return "gc"
-    case "com.provenance.wii": return "wii"
+    switch value.flatMap(SystemIdentifier.init(rawValue:)) {
+    case .GameCube: return "gc"
+    case .Wii: return "wii"
     default: return nil
     }
   }
@@ -693,10 +698,15 @@ actor EmulationServerLibrary {
 
   enum ServerError: LocalizedError {
     case unsupported, invalidContent, accessDenied, editUnavailable, editConflict
+    case insufficientSpace(bytes: Int64, available: Int64)
 
     var errorDescription: String? {
       switch self {
       case .unsupported: return L("This Emulation Server version is unsupported.")
+      case let .insufficientSpace(bytes, available):
+        let required = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        let free = ByteCountFormatter.string(fromByteCount: available, countStyle: .file)
+        return String(format: L("Not enough free space to download this game (%@ required, %@ available)."), required, free)
       case .invalidContent: return L("The server did not provide valid game files.")
       case .accessDenied: return L("The server denied access. Check your access token and library permissions.")
       case .editUnavailable: return L("The server cannot save edits to this game. It may need an update.")
@@ -728,6 +738,8 @@ extension EmulationServerLibrary: RemoteGameCatalog {
   }
 
   nonisolated var downloadSourceID: String { server.id }
+
+  nonisolated var sourceKind: LibrarySourceInfo.Kind { .contentServer }
 }
 
 extension EmulationServerLibrary {

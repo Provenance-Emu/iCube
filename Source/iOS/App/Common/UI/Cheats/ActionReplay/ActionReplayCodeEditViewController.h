@@ -3,7 +3,8 @@
 
 #import <UIKit/UIKit.h>
 
-namespace ActionReplay {
+namespace ActionReplay
+{
 class ARCode;
 }
 
@@ -13,12 +14,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface ActionReplayCodeEditViewController : UITableViewController
 
-@property (weak, nonatomic, nullable) id<ActionReplayCodeEditViewControllerDelegate> delegate;
+@property(weak, nonatomic, nullable) id<ActionReplayCodeEditViewControllerDelegate> delegate;
 
-@property (nonatomic) ActionReplay::ARCode* code;
+@property(nonatomic) ActionReplay::ARCode* code;
 
-@property (weak, nonatomic) IBOutlet UITextField* nameField;
-@property (weak, nonatomic) IBOutlet UITextView* codeView;
+@property(weak, nonatomic) IBOutlet UITextField* nameField;
+@property(weak, nonatomic) IBOutlet UITextView* codeView;
 
 @end
 

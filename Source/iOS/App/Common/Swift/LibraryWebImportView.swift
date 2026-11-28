@@ -1,8 +1,8 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import SwiftUI
 import PVWebServer
+import SwiftUI
 #if os(iOS)
 import UIKit
 #endif
@@ -27,16 +27,16 @@ struct LibraryWebImportView: View {
               Spacer()
               Text(ipAddress)
                 .foregroundStyle(.secondary)
-              #if !os(tvOS)
+                #if !os(tvOS)
                 .textSelection(.enabled)
-              #endif
+                #endif
             }
           }
         } footer: {
           Text(L("Drop GameCube and Wii files onto iCube from a computer or phone on the same Wi-Fi. Open the address in a browser, or in Finder choose Go › Connect to Server and enter the same address as Guest."))
         }
 
-#if os(iOS)
+        #if os(iOS)
         Section {
           Button(L("Learn More About Web Import")) {
             if let url = URL(string: "https://icube-emu.com/help/web-import") {
@@ -44,7 +44,7 @@ struct LibraryWebImportView: View {
             }
           }
         }
-#endif
+        #endif
       }
       .navigationTitle(L("Upload via Wi-Fi"))
       #if !os(tvOS)
@@ -85,11 +85,11 @@ struct LibraryWebImportView: View {
         Text(url)
           .font(.footnote)
           .foregroundStyle(.secondary)
-        #if !os(tvOS)
+          #if !os(tvOS)
           .textSelection(.enabled)
-        #endif
+          #endif
           .lineLimit(3)
-#if os(iOS)
+        #if os(iOS)
         // tvOS has no pasteboard and no browser to open the URL in, so it reads the
         // address off the screen instead — no action row there.
         HStack(spacing: 12) {
@@ -108,7 +108,7 @@ struct LibraryWebImportView: View {
             .buttonStyle(.bordered)
           }
         }
-#endif
+        #endif
       }
     }
     .padding(.vertical, 4)
@@ -120,7 +120,7 @@ struct LibraryWebImportView: View {
     ipAddress = PVWebServer.shared.ipAddress ?? ""
   }
 
-#if os(iOS)
+  #if os(iOS)
   private func copyToPasteboard(_ value: String) {
     UIPasteboard.general.string = value
     NotificationCenter.default.post(
@@ -129,5 +129,5 @@ struct LibraryWebImportView: View {
       userInfo: ["text": L("Copied to clipboard")]
     )
   }
-#endif
+  #endif
 }

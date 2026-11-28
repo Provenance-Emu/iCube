@@ -4,15 +4,15 @@
 #import "DolphinCoreService.h"
 #import "DOLConfigBridge.h"
 
-#import "Core/Config/UISettings.h"
-#import "Core/Config/MainSettings.h"
 #import "Core/Config/GraphicsSettings.h"
-#import "VideoCommon/VideoConfig.h" // Defines TriState enum (GraphicsSettings.h only forward-declares it)
+#import "Core/Config/MainSettings.h"
+#import "Core/Config/UISettings.h"
 #import "Core/Core.h"
 #import "Core/DolphinAnalytics.h"
 #import "Core/HW/GCPad.h"
 #import "Core/HW/Wiimote.h"
 #import "Core/System.h"
+#import "VideoCommon/VideoConfig.h"  // Defines TriState enum (GraphicsSettings.h only forward-declares it)
 #ifdef USE_RETRO_ACHIEVEMENTS
 #import "Core/AchievementManager.h"
 #endif
@@ -26,14 +26,14 @@
 
 #import "UICommon/UICommon.h"
 
-#import "Swift.h"
+#include "Common/Config/Config.h"
 #import "EmulationCoordinator.h"
 #import "FastmemManager.h"
 #import "FoundationStringUtil.h"
 #import "HostQueue.h"
 #import "LocalizationUtil.h"
 #import "MsgAlertManager.h"
-#include "Common/Config/Config.h"
+#import "Swift.h"
 
 #import "PGOFlush.h"
 #import "TVEmulationBridge.h"
@@ -43,7 +43,8 @@
 #include <thread>
 #include <unistd.h>
 
-namespace {
+namespace
+{
 /// How long termination waits for the core to stop before saving and exiting anyway.
 constexpr auto kTerminateStopTimeout = std::chrono::seconds(3);
 constexpr auto kTerminateStopPoll = std::chrono::milliseconds(5);
@@ -76,7 +77,7 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   if (!Config::GetLayer(Config::LayerType::Base)->Exists(info.GetLocation()))
     Config::SetBase(info, value);
 }
-}
+}  // namespace
 
 @implementation DolphinCoreService
 
@@ -151,7 +152,9 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   SetBaseIfUnspecified(Config::MAIN_WII_WIILINK_ENABLE, true);
 }
 
-- (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary<UIApplicationLaunchOptionsKey,id>*)launchOptions {
+- (BOOL)application:(UIApplication*)application
+    didFinishLaunchingWithOptions:(NSDictionary<UIApplicationLaunchOptionsKey, id>*)launchOptions
+{
   Core::DeclareAsHostThread();
 
   UICommon::SetUserDirectory(FoundationToCppString([UserFolderUtil getUserFolder]));
@@ -159,7 +162,8 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 
   // Ensure Logger.ini is present in user folder
   NSURL* loggerIniPath = [[NSBundle mainBundle] URLForResource:@"Logger" withExtension:@"ini"];
-  if (loggerIniPath) {
+  if (loggerIniPath)
+  {
     std::string loggerIniCppPath = FoundationToCppString([loggerIniPath path]);
     File::Copy(loggerIniCppPath, File::GetUserPath(F_LOGGERCONFIG_IDX));
   }
@@ -170,13 +174,15 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 
   // Configure libcurl to use bundled CA bundle for SSL
   NSString* caPath = [[NSBundle mainBundle] pathForResource:@"cacert" ofType:@"pem"];
-  if (caPath.length > 0) {
+  if (caPath.length > 0)
+  {
     setenv("CURL_CA_BUNDLE", [caPath UTF8String], 1);
   }
 
   // Apply UI overrides for console logging and verbosity before logging init
   BOOL logsEnabled = [[NSUserDefaults standardUserDefaults] boolForKey:@"logger_console_enabled"];
-  NSInteger verbosity = [[NSUserDefaults standardUserDefaults] integerForKey:@"logger_console_verbosity"];
+  NSInteger verbosity =
+      [[NSUserDefaults standardUserDefaults] integerForKey:@"logger_console_verbosity"];
   if (verbosity <= 0)
     verbosity = ICubeLoggerIniMigration.defaultVerbosity;
   {
@@ -213,7 +219,8 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 
   // Sweep what an interrupted disc patch left behind (expanded ISOs, half-written copies).
   [DOLDiscPatchSweep sweep];
-  // Single-play mod descriptors (Cache/ModRuns) outlive their game only if the app was killed mid-play.
+  // Single-play mod descriptors (Cache/ModRuns) outlive their game only if the app was killed
+  // mid-play.
   [DOLModDescriptorStore sweepRuns];
 
   [[MsgAlertManager shared] registerHandler];
@@ -227,7 +234,7 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // otherwise defaults false, so the catch-up clock never engaged out of the box. registerDefaults
   // does NOT override a user's explicit choice — only the never-set case — so this is safe for both
   // fresh and existing installs.
-  [[NSUserDefaults standardUserDefaults] registerDefaults:@{@"adaptive_clock_enable": @YES}];
+  [[NSUserDefaults standardUserDefaults] registerDefaults:@{@"adaptive_clock_enable" : @YES}];
 
   // One-time repair of settings older builds saved by mistake (SettingsRepair.swift). Before the
   // seeds below, so a key it deletes is seeded again where the launch has a value for it.
@@ -252,12 +259,16 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
 #ifdef USE_RETRO_ACHIEVEMENTS
   AchievementManager::GetInstance().Init(nullptr);
   // 2512: SetUpdateCallback became a HookableEvent; the hook must outlive registration.
-  static Common::EventHook s_raUpdateHook =
-      AchievementManager::GetInstance().update_event.Register([](const AchievementManager::UpdatedItems& items) {
-    if (items.failed_login_code != 0) {
-      [[NSNotificationCenter defaultCenter] postNotificationName:@"DOLRAFailedLogin" object:nil userInfo:@{ @"code": @(items.failed_login_code) }];
-    }
-  });
+  static Common::EventHook s_raUpdateHook = AchievementManager::GetInstance().update_event.Register(
+      [](const AchievementManager::UpdatedItems& items) {
+        if (items.failed_login_code != 0)
+        {
+          [[NSNotificationCenter defaultCenter]
+              postNotificationName:@"DOLRAFailedLogin"
+                            object:nil
+                          userInfo:@{@"code" : @(items.failed_login_code)}];
+        }
+      });
 #endif
 
   // PGO (Profile-Guided Optimization) profile capture. Only active when the linked core was
@@ -265,16 +276,20 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // build returns 0 from ICubePGOAvailable() and this whole block is skipped. Point the
   // instrumented runtime at <Software>/pgo/icube-%m.profraw — the Software folder is what the
   // in-app web server already serves for download, and %m gives a cross-run merged profile.
-  if (ICubePGOAvailable()) {
+  if (ICubePGOAvailable())
+  {
     NSString* pgoDir = [[UserFolderUtil getSoftwareFolder] stringByAppendingPathComponent:@"pgo"];
     NSError* dirErr = nil;
     [[NSFileManager defaultManager] createDirectoryAtPath:pgoDir
                               withIntermediateDirectories:YES
                                                attributes:nil
                                                     error:&dirErr];
-    if (dirErr) {
+    if (dirErr)
+    {
       NSLog(@"[PGO] failed to create profile dir %@: %@", pgoDir, dirErr);
-    } else {
+    }
+    else
+    {
       NSString* pgoPath = [pgoDir stringByAppendingPathComponent:@"icube-%m.profraw"];
       ICubePGOSetPath([pgoPath UTF8String]);
       NSLog(@"[PGO] instrumented core detected; profiles -> %@", pgoPath);
@@ -288,16 +303,18 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   return YES;
 }
 
-// Pause and resume on resign/become-active belong to PauseArbiter (MainDisplaySceneDelegate): a second
-// resume path here ran the game behind the pause menu or Settings after an app switch.
-- (void)applicationWillResignActive:(UIApplication*)application {
+// Pause and resume on resign/become-active belong to PauseArbiter (MainDisplaySceneDelegate): a
+// second resume path here ran the game behind the pause menu or Settings after an app switch.
+- (void)applicationWillResignActive:(UIApplication*)application
+{
   DOLHostQueueRunAsync(^{
     // Write out the configuration in case we don't get a chance later
     Config::Save();
   });
 }
 
-- (void)applicationDidEnterBackground:(UIApplication*)application {
+- (void)applicationDidEnterBackground:(UIApplication*)application
+{
   // Kill-safe PGO flush point. A long-running emulator force-killed by iOS while backgrounded
   // never runs willTerminate/atexit, so background is the reliable place to persist counters.
   // No-op on a non-instrumented (shipping) core.
@@ -327,7 +344,8 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   });
 }
 
-- (void)applicationWillTerminate:(UIApplication*)application {
+- (void)applicationWillTerminate:(UIApplication*)application
+{
   // Flush PGO counters before anything else (no-op on a shipping build).
   ICubePGOFlush();
 
@@ -342,7 +360,8 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   DOLHostQueueRunSync(^{
     auto& system = Core::System::GetInstance();
 
-    if (Core::IsRunning(system)) {
+    if (Core::IsRunning(system))
+    {
       // Stopping flushes memory cards and the save-state worker. iOS allows willTerminate only a
       // few seconds, so never wait past kTerminateStopTimeout: a core that cannot stop in time
       // loses nothing it would not lose to the system's own kill.

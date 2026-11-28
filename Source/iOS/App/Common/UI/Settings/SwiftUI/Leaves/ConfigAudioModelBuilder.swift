@@ -12,8 +12,8 @@ enum ConfigAudioModelBuilder {
   static func make(state: ConfigAudioState, apply: @escaping (ConfigAudioChange) -> Void) -> MenuModel {
     let output = MenuSection(id: "output", header: L("Output"), items: [
       SettingsRow.picker("backend", L("Audio Backend"), state.backendOptions, state.backend,
-                        L("CoreAudio drives the speaker directly with the lowest latency. AVAudioEngine adds spatial audio on headphones and Audio Unit plug-ins. Both play 5.1 on a six-channel route. Takes effect when a game starts."),
-                        set: { apply(.backend($0)) }),
+                         L("CoreAudio drives the speaker directly with the lowest latency. AVAudioEngine adds spatial audio on headphones and Audio Unit plug-ins. Both play 5.1 on a six-channel route. Takes effect when a game starts."),
+                         set: { apply(.backend($0)) }),
       SettingsRow.stepper("volume", L("Volume"), Double(state.volume), range: ConfigAudioLimits.volume, step: 1,
                           format: { "\(Int($0))%" },
                           L("Output level of the emulated console. The pause menu's Mute badge reflects this value."),

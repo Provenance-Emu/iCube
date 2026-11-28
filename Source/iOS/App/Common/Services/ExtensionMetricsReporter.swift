@@ -39,7 +39,7 @@ enum ExtensionMetricsReporter {
     let message: String
     let level: SentryLevel
     let fingerprint: [String]
-    switch report.decision(sampleRoll: Double.random(in: 0..<1), timingSampleRate: Self.timingSampleRate) {
+    switch report.decision(sampleRoll: Double.random(in: 0 ..< 1), timingSampleRate: Self.timingSampleRate) {
     case .skip:
       return
     case .failures:

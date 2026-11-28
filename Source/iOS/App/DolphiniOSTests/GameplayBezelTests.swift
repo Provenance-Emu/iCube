@@ -1,6 +1,7 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import Metal
 import SkinKitBezelsUI
 import XCTest
 
@@ -19,6 +20,61 @@ final class GameplayBezelTests: XCTestCase {
                             onExternalDisplay: external, editingLayout: editing)
   }
 
+  private func sceneRequest(lightsRoom: Bool) throws -> GameplayBezelRenderer.Request {
+    let bezel = try XCTUnwrap(TVBezelCatalog.bundled.first { $0.lightsRoom })
+    return .init(bezel: bezel, canvas: TVBezelArtwork.canvas, viewport: CGRect(x: 0, y: 0, width: 1, height: 1),
+                 surfaceAspect: 16.0 / 9.0, pixelWidth: 640, shape: .standard, lightsRoom: lightsRoom, flatGlass: true)
+  }
+
+  func testMissingBezelPresetLeavesNoScene() throws {
+    let request = try sceneRequest(lightsRoom: true)
+    XCTAssertNil(GameplayBezelRenderer.load(request, findPreset: { _ in nil }))
+  }
+
+  func testRoomLightFallsBackToPackagedReflectionsWhenAmbientIsMissing() throws {
+    try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "Metal is unavailable")
+    let loaded = GameplayBezelRenderer.load(try sceneRequest(lightsRoom: true)) { id in
+      id == TVBezelShader.ambientID ? nil : GameplayBezelRenderer.presetURL(id)
+    }
+    XCTAssertEqual(loaded?.scene.presetID, TVBezelShader.bezelOnlyID)
+  }
+
+  func testPackagedRoomLightPresetLoadsWithSkinKitBorder() throws {
+    try XCTSkipIf(MTLCreateSystemDefaultDevice() == nil, "Metal is unavailable")
+    let loaded = GameplayBezelRenderer.load(try sceneRequest(lightsRoom: true))
+    XCTAssertEqual(loaded?.scene.presetID, TVBezelShader.ambientID)
+    XCTAssertNotNil(loaded?.scene.borderPNG)
+  }
+
+  /// A scene that cannot be loaded must not stay "requested": that kept the screen filter off and the TV's
+  /// image away for as long as the same TV was chosen.
+  @MainActor
+  func testASceneThatFailsToLoadStopsBeingRequestedAndIsReported() throws {
+    let request = try sceneRequest(lightsRoom: false)
+    let renderer = GameplayBezelRenderer(loader: { _ in nil })
+    let failed = expectation(description: "the session is told")
+    var failedID: String?
+    renderer.didFail = { id in
+      failedID = id
+      failed.fulfill()
+    }
+    var didLoad = false
+    XCTAssertTrue(renderer.update(request, didLoad: { didLoad = true }))
+    XCTAssertTrue(renderer.isRequested)
+    wait(for: [failed], timeout: 5)
+    XCTAssertEqual(failedID, request.bezel.id)
+    XCTAssertFalse(didLoad)
+    XCTAssertFalse(renderer.isRequested)
+    XCTAssertFalse(renderer.isReady)
+    // The same request again is not loaded again on every layout pass.
+    XCTAssertFalse(renderer.update(request, didLoad: {}))
+    XCTAssertFalse(renderer.isRequested)
+    // Asking for nothing and then for the TV again is a new try.
+    XCTAssertTrue(renderer.update(nil, didLoad: {}))
+    XCTAssertTrue(renderer.update(request, didLoad: {}))
+    XCTAssertTrue(renderer.isRequested)
+  }
+
   // MARK: - Placement
 
   func test_controls_followWhatIsOnScreen() {
@@ -35,7 +91,8 @@ final class GameplayBezelTests: XCTestCase {
   func test_placementInputs_readTheScreen() {
     let inputs = ICubeBezels.placementInputs(state(touch: true, editing: true), choiceIsAutomatic: true)
     XCTAssertEqual(inputs, GameplayBezelPlacement.Inputs(isAppleTV: false, isLandscape: true, controls: .generated,
-                                                         layoutSupportsTV: true, choiceIsAutomatic: true, editingLayout: true))
+                                                         layoutSupportsTV: true, choiceIsAutomatic: true, editingLayout: true,
+                                                         supportsPortrait: true))
     XCTAssertFalse(ICubeBezels.placementInputs(state(canvas: GameplayBezelTests.portrait), choiceIsAutomatic: false).isLandscape)
     XCTAssertFalse(ICubeBezels.placementInputs(state(external: true), choiceIsAutomatic: false).layoutSupportsTV)
     // A square window is not landscape: the automatic TV needs room beside the picture.
@@ -55,10 +112,14 @@ final class GameplayBezelTests: XCTestCase {
     XCTAssertFalse(ICubeBezels.offersSwitcher(appleTV))
   }
 
-  func test_noTV_withASkin_inPortrait_onAnExternalDisplay_orWhileEditing() {
+  func test_portrait_showsATV_asLandscapeDoes() {
+    XCTAssertTrue(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, controller: true), choiceIsAutomatic: true))
+    XCTAssertTrue(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, touch: true), choiceIsAutomatic: true))
+    XCTAssertFalse(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, touch: true, skin: true), choiceIsAutomatic: false))
+  }
+
+  func test_noTV_withASkin_onAnExternalDisplay_orWhileEditing() {
     XCTAssertFalse(ICubeBezels.showsTV(state(touch: true, skin: true), choiceIsAutomatic: true))
-    XCTAssertFalse(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, controller: true), choiceIsAutomatic: true))
-    XCTAssertFalse(ICubeBezels.showsTV(state(canvas: GameplayBezelTests.portrait, touch: true), choiceIsAutomatic: true))
     XCTAssertFalse(ICubeBezels.showsTV(state(controller: true, external: true), choiceIsAutomatic: true))
     XCTAssertFalse(ICubeBezels.showsTV(state(touch: true, editing: true), choiceIsAutomatic: true))
   }
@@ -66,9 +127,8 @@ final class GameplayBezelTests: XCTestCase {
   func test_switcher_isOfferedWhereAChosenTVCouldShow() {
     XCTAssertTrue(ICubeBezels.offersSwitcher(state(touch: true)))
     XCTAssertTrue(ICubeBezels.offersSwitcher(state(controller: true)))
-    // In portrait a chosen TV shows once a controller has hidden the on-screen controls.
     XCTAssertTrue(ICubeBezels.offersSwitcher(state(canvas: GameplayBezelTests.portrait, controller: true)))
-    XCTAssertFalse(ICubeBezels.offersSwitcher(state(canvas: GameplayBezelTests.portrait, touch: true)))
+    XCTAssertTrue(ICubeBezels.offersSwitcher(state(canvas: GameplayBezelTests.portrait, touch: true)))
     XCTAssertFalse(ICubeBezels.offersSwitcher(state(touch: true, skin: true)))
     XCTAssertFalse(ICubeBezels.offersSwitcher(state(controller: true, external: true)))
   }

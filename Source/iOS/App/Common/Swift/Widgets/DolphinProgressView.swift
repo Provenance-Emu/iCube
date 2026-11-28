@@ -416,7 +416,7 @@ struct DolphinCircularSpinner_Previews: PreviewProvider {
     }
     .padding()
     #if !os(tvOS)
-      .background(Color(.systemBackground))
+    .background(Color(.systemBackground))
     #endif
   }
 }

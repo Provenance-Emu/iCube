@@ -66,7 +66,9 @@ final class RecordingManagerTests: XCTestCase {
     let recorder = FakeRecorder()
     recorder.startError = Boom()
     let m = manager(recorder)
-    do { try await m.start(); XCTFail("expected throw") } catch {}
+    do { try await m.start()
+      XCTFail("expected throw")
+    } catch {}
     XCTAssertFalse(m.isRecording)
   }
 
@@ -75,7 +77,9 @@ final class RecordingManagerTests: XCTestCase {
     let m = manager(recorder)
     try? await m.start()
     recorder.stopError = Boom()
-    do { _ = try await m.stop(); XCTFail("expected throw") } catch {}
+    do { _ = try await m.stop()
+      XCTFail("expected throw")
+    } catch {}
     XCTAssertFalse(m.isRecording)
     XCTAssertTrue(toasts.isEmpty)
   }
@@ -84,14 +88,18 @@ final class RecordingManagerTests: XCTestCase {
     let recorder = FakeRecorder()
     recorder.isAvailable = false
     let m = manager(recorder)
-    do { try await m.start(); XCTFail("expected throw") } catch { XCTAssertEqual(error as? RecordingError, .unavailable) }
+    do { try await m.start()
+      XCTFail("expected throw")
+    } catch { XCTAssertEqual(error as? RecordingError, .unavailable) }
     XCTAssertFalse(m.isRecording)
   }
 
   func test_secondStart_throwsAlreadyRecording() async throws {
     let m = manager(FakeRecorder())
     try await m.start()
-    do { try await m.start(); XCTFail("expected throw") } catch { XCTAssertEqual(error as? RecordingError, .alreadyRecording) }
+    do { try await m.start()
+      XCTFail("expected throw")
+    } catch { XCTAssertEqual(error as? RecordingError, .alreadyRecording) }
   }
 
   func test_secondStartWhileTheFirstIsInFlight_throwsAlreadyRecording() async throws {
@@ -140,7 +148,7 @@ final class RecordingManagerTests: XCTestCase {
 
   func test_fileName_format() {
     let utc = TimeZone(identifier: "UTC")!
-    let date = Date(timeIntervalSince1970: 86_400 + 3_661)
+    let date = Date(timeIntervalSince1970: 86400 + 3661)
     XCTAssertEqual(RecordingManager.fileName(gameID: "GALE01", date: date, timeZone: utc), "GALE01-1970-01-02_01-01-01.mp4")
     let url = RecordingManager.outputURL(gameID: "GALE01", date: date, userDirectory: directory, timeZone: utc)
     XCTAssertEqual(url, directory.appendingPathComponent("Recordings").appendingPathComponent("GALE01-1970-01-02_01-01-01.mp4"))

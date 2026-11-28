@@ -11,6 +11,7 @@ final class SettingsRootModelBuilderTests: XCTestCase {
     XCTAssertEqual(SettingsRootModelBuilder.debugLeaf(isStore: true, jitSupported: true), .jitOnly)
     XCTAssertEqual(SettingsRootModelBuilder.debugLeaf(isStore: false, jitSupported: false), .full)
   }
+
   func test_sections_inSpecOrder() {
     let sections = SettingsRootModelBuilder.sections(isIOS: true, achievements: true)
     XCTAssertEqual(sections.map(\.id), ["general", "graphics", "audio", "consoles", "controllers", "performance", "sync-network", "privacy", "about"])
@@ -36,7 +37,9 @@ final class SettingsRootModelBuilderTests: XCTestCase {
     XCTAssertEqual(model.allItems.map(\.id), sections.flatMap(\.entries).map(\.id))
     for item in model.allItems {
       XCTAssertTrue(item.showsChevron, item.id)
-      guard case .action = item.role else { XCTFail("\(item.id) should be an .action row"); continue }
+      guard case .action = item.role else { XCTFail("\(item.id) should be an .action row")
+        continue
+      }
     }
   }
 

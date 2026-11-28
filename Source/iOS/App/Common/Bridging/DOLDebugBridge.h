@@ -11,17 +11,17 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Current core state: "uninitialized" | "starting" | "running" | "paused" | "stopping".
 + (NSString*)coreState;
-/// Raw bytes of emulated RAM at a guest (0x8xxxxxxx / 0x9xxxxxxx / 0xCxxxxxxx / 0xDxxxxxxx) address,
-/// read straight from the host mapping without pausing the CPU, so it works while a panic alert has
-/// the CPU thread blocked. nil when no game is running or the range is not RAM.
+/// Raw bytes of emulated RAM at a guest (0x8xxxxxxx / 0x9xxxxxxx / 0xCxxxxxxx / 0xDxxxxxxx)
+/// address, read straight from the host mapping without pausing the CPU, so it works while a panic
+/// alert has the CPU thread blocked. nil when no game is running or the range is not RAM.
 + (nullable NSData*)readGuestMemory:(uint32_t)address length:(uint32_t)length;
 /// Memory arena mode plus a live alias matrix of the real guest RAM views (marker written through
 /// each region, looked for in the others). Works whenever a game is running.
 + (NSDictionary<NSString*, id>*)memArenaReport;
 /// Standalone arena self-test: for each Darwin mode, grab a segment of `totalSize`, create views of
 /// every (offset,size) pair like Memmap does (MEM1 24 MB @0, L1 256 KB, MEM2 64 MB), apply the same
-/// paging hints, write a distinct pattern through each view, read back through every view, then tear
-/// down. No game needed. Returns per-mode results.
+/// paging hints, write a distinct pattern through each view, read back through every view, then
+/// tear down. No game needed. Returns per-mode results.
 + (NSDictionary<NSString*, id>*)memArenaSelfTest;
 
 /// Pauses the running core. Returns NO if the core is not running.
@@ -61,13 +61,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// Interpreter FP self-test (Core/PowerPC/Interpreter/FPUSelfTest.h): fixed inputs through the
 /// FP primitives under three host FPCR modes, one hex line per result. Runs on the calling thread.
 + (NSString*)fpuSelfTest;
-/// Top-N guest hot blocks from the cached interpreter's block profiler (needs Main.Core.CIRProfile=true at boot).
+/// Top-N guest hot blocks from the cached interpreter's block profiler (needs
+/// Main.Core.CIRProfile=true at boot).
 + (NSString*)hotBlocksReport:(NSInteger)topN;
 
-/// Gather-pipe store self-test (CachedInterpreter.h, CIRSelfTest::RunGatherPipeSelfTest): drives the
-/// shipping fused-copy byte kernel and an independent transcription of GPFifoManager::Write8 over the
-/// same input on a scratch pipe and diffs FIFO bursts, per-store pipe pointer and GPR writes. Pure:
-/// touches no live emulation state, so it is safe to call with or without a game running.
+/// Gather-pipe store self-test (CachedInterpreter.h, CIRSelfTest::RunGatherPipeSelfTest): drives
+/// the shipping fused-copy byte kernel and an independent transcription of GPFifoManager::Write8
+/// over the same input on a scratch pipe and diffs FIFO bursts, per-store pipe pointer and GPR
+/// writes. Pure: touches no live emulation state, so it is safe to call with or without a game
+/// running.
 + (NSString*)gatherPipeSelfTest;
 
 /// A snapshot of render-relevant config/state.

@@ -9,45 +9,58 @@
 
 @implementation JitManager (AltServer)
 
-- (bool)checkAppInstalledByAltServer {
+- (bool)checkAppInstalledByAltServer
+{
   NSString* deviceId = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"ALTDeviceID"];
-  
-  if (!deviceId) {
+
+  if (!deviceId)
+  {
     return false;
   }
-  
+
   // If ALTDeviceID isn't our dummy value, then we can use AltServer to enable JIT.
   return ![deviceId isEqualToString:@"NotSet"];
 }
 
-- (void)beginAltServerAutoDiscover {
+- (void)beginAltServerAutoDiscover
+{
   [[ALTServerManager sharedManager] startDiscovering];
 }
 
-- (void)stopAltServerAutoDiscover {
+- (void)stopAltServerAutoDiscover
+{
   [[ALTServerManager sharedManager] stopDiscovering];
 }
 
-- (void)acquireJitByAltServer {
-  if (self.isAltServerAutoConnecting || ![self checkAppInstalledByAltServer]) {
+- (void)acquireJitByAltServer
+{
+  if (self.isAltServerAutoConnecting || ![self checkAppInstalledByAltServer])
+  {
     return;
   }
-  
+
   self.isAltServerAutoConnecting = true;
-  
+
   // TODO: Localization
-  [[ALTServerManager sharedManager] autoconnectWithCompletionHandler:^(ALTServerConnection *connection, NSError *error) {
-    if (error != nil) {
-      self.acquisitionError = [NSString stringWithFormat:@"Failed to connect to AltServer: %@", [error localizedDescription]];
+  [[ALTServerManager sharedManager] autoconnectWithCompletionHandler:^(
+                                        ALTServerConnection* connection, NSError* error) {
+    if (error != nil)
+    {
+      self.acquisitionError = [NSString
+          stringWithFormat:@"Failed to connect to AltServer: %@", [error localizedDescription]];
       self.isAltServerAutoConnecting = false;
-    } else {
+    }
+    else
+    {
       [connection enableUnsignedCodeExecutionWithCompletionHandler:^(bool success, NSError* error) {
-        if (!success) {
-          self.acquisitionError = [NSString stringWithFormat:@"AltServer failed to enable JIT: %@", [error localizedDescription]];
+        if (!success)
+        {
+          self.acquisitionError = [NSString
+              stringWithFormat:@"AltServer failed to enable JIT: %@", [error localizedDescription]];
         }
-        
+
         [connection disconnect];
-        
+
         self.isAltServerAutoConnecting = false;
       }];
     }
@@ -56,12 +69,15 @@
 
 // Hack: Private property
 
-- (bool)isAltServerAutoConnecting {
+- (bool)isAltServerAutoConnecting
+{
   return [objc_getAssociatedObject(self, @selector(isAltServerAutoConnecting)) boolValue];
 }
 
-- (void)setIsAltServerAutoConnecting:(bool)result {
-  objc_setAssociatedObject(self, @selector(isAltServerAutoConnecting), [NSNumber numberWithBool:result], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+- (void)setIsAltServerAutoConnecting:(bool)result
+{
+  objc_setAssociatedObject(self, @selector(isAltServerAutoConnecting),
+                           [NSNumber numberWithBool:result], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 @end

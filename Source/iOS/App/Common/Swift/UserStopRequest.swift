@@ -9,7 +9,9 @@ enum UserStopRequest {
   }
 
   static func saveAndQuit(save: () -> String?, quit: (String) -> Void, failed: () -> Void) {
-    guard let savedPath = save() else { failed(); return }
+    guard let savedPath = save() else { failed()
+      return
+    }
     quit(savedPath)
   }
 

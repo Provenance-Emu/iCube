@@ -4,8 +4,9 @@
 #import <Foundation/Foundation.h>
 
 #ifdef __cplusplus
-namespace UICommon {
-  class GameFileCache;
+namespace UICommon
+{
+class GameFileCache;
 }
 
 typedef UICommon::GameFileCache GameFileCache;
@@ -18,7 +19,8 @@ typedef void GameFileCache;
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface GameFileCacheManager : NSObject {
+@interface GameFileCacheManager : NSObject
+{
   GameFileCache* _cache;
 }
 
@@ -26,20 +28,26 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)rescan;
 - (void)rescanAndFetchMetadataWithCompletionHandler:(nullable void (^)(void))completion_handler;
-- (void)rescanLocalAndFetchMetadataWithCompletionHandler:(nullable void (^)(void))completion_handler;
+- (void)rescanLocalAndFetchMetadataWithCompletionHandler:
+    (nullable void (^)(void))completion_handler;
 
 - (NSArray<GameFilePtrWrapper*>*)getGames;
 - (NSArray<TVGameItem*>*)currentGames;
 
-/// Updates the cache by merging local scan paths with the provided extra absolute paths (file or URL strings).
+/// Updates the cache by merging local scan paths with the provided extra absolute paths (file or
+/// URL strings).
 - (void)updateWithExtraPaths:(NSArray<NSString*>*)extraPaths fetchMetadata:(BOOL)fetch;
 
 /// Rebuilds the cache entry at a local path whose contents were replaced in place.
 - (void)refreshLocalGameAtPath:(NSString*)path;
+/// Re-reads covers and banners for the games already listed, without scanning for games. Every
+/// entry stays, remote ones included.
+- (void)refreshAdditionalMetadata;
 
 /// Test hook: runs `block` on the serial cache queue behind any scan already queued, so a test can
 /// hold the queue busy the way a long rescan does.
-- (void)enqueueOnCacheQueueForTesting:(void (^)(void))block NS_SWIFT_NAME(enqueueOnCacheQueueForTesting(_:));
+- (void)enqueueOnCacheQueueForTesting:(void (^)(void))block
+    NS_SWIFT_NAME(enqueueOnCacheQueueForTesting(_:));
 
 @end
 

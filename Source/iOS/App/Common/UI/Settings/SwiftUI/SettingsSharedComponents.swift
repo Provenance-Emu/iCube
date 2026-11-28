@@ -1,22 +1,22 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import CoreHaptics
+import Foundation
+import PVHelp
+import PVWebServer
+import QuartzCore
 import SwiftUI
 import UIKit
-import CoreHaptics
-import QuartzCore
-import PVWebServer
-import PVHelp
 #if os(iOS)
-import SafariServices
 import AudioToolbox
+import SafariServices
 #endif
 #if canImport(GameController)
 import GameController
 #endif
 #if os(iOS)
 #endif
-import Foundation
 
 // Keeps a settings view bound to Dolphin's Config (the single source of truth): seeds it on appear
 // and re-reads on every Config change (Reset / game-INI / runtime). Replaces the copy-pasted
@@ -93,15 +93,16 @@ extension Binding where Value == Int {
 }
 
 // MARK: tvOS fallback for sliders
+
 internal struct TVIntStepper: View {
   @Binding var value: Int
   let range: ClosedRange<Int>
   let step: Int
-#if os(tvOS)
+  #if os(tvOS)
   @FocusState private var isFocused: Bool
-#endif
+  #endif
   var body: some View {
-#if os(tvOS)
+    #if os(tvOS)
     HStack(spacing: 16) {
       Image(systemName: "minus.circle")
       Text("\(value)")
@@ -127,17 +128,18 @@ internal struct TVIntStepper: View {
         break
       }
     }
-#else
+    #else
     HStack(spacing: 16) {
       Button("−") { value = max(range.lowerBound, value - step) }
       Text("\(value)")
       Button("+") { value = min(range.upperBound, value + step) }
     }
-#endif
+    #endif
   }
 }
 
 // MARK: Tooltip helper
+
 struct HelpButton: ToolbarContent {
   let helpKey: String
   func helpText() -> String {
@@ -148,6 +150,7 @@ struct HelpButton: ToolbarContent {
       .replacingOccurrences(of: "<dolphin_emphasis>", with: "")
       .replacingOccurrences(of: "</dolphin_emphasis>", with: "")
   }
+
   var body: some ToolbarContent {
     ToolbarItem(placement: .navigationBarTrailing) {
       HelpSheetButton(text: helpText())

@@ -9,12 +9,12 @@
 #ifndef IPHONEOS
 #define IPHONEOS 1
 #endif
-#import "../Common/Bridging/AudioVolumeRuntime.h"
 #include <array>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+#import "../Common/Bridging/AudioVolumeRuntime.h"
 #include "AudioCommon/CoreAudioSoundStream.h"
 #include "Common/Config/Config.h"
 #include "Core/Config/MainSettings.h"
@@ -42,10 +42,10 @@ struct AudioFixture
   {
     for (const auto layer : {Config::LayerType::Base, Config::LayerType::CurrentRun})
     {
-      for (const auto& location : {Config::MAIN_AUDIO_VOLUME.GetLocation(),
-                                   Config::MAIN_AUDIO_MUTED.GetLocation(),
-                                   Config::MAIN_EMULATION_SPEED.GetLocation(),
-                                   Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT.GetLocation()})
+      for (const auto& location :
+           {Config::MAIN_AUDIO_VOLUME.GetLocation(), Config::MAIN_AUDIO_MUTED.GetLocation(),
+            Config::MAIN_EMULATION_SPEED.GetLocation(),
+            Config::MAIN_AUDIO_MUTE_ON_DISABLED_SPEED_LIMIT.GetLocation()})
       {
         saved.push_back({layer, location, Config::GetLayer(layer)->Get<std::string>(location)});
       }
@@ -123,10 +123,12 @@ struct AudioFixture
   XCTestExpectation* finished = [self expectationWithDescription:@"audio host queue drained"];
   dispatch_async(dispatch_get_main_queue(), ^{
     DOLHostQueueRunAsync(^{
-      dispatch_async(dispatch_get_main_queue(), ^{ [finished fulfill]; });
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [finished fulfill];
+      });
     });
   });
-  [self waitForExpectations:@[finished] timeout:5];
+  [self waitForExpectations:@[ finished ] timeout:5];
 }
 
 - (void)assertOutputGain:(float)gain

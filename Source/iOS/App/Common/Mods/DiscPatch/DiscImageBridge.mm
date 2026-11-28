@@ -26,39 +26,43 @@ static constexpr unsigned int kWIARVZZstd = 5;
 /// The level Dolphin's convert dialog preselects for zstd.
 static constexpr int kRVZCompressionLevel = 5;
 
-static DOLDiscContainer ContainerForBlobType(DiscIO::BlobType type) {
-  switch (type) {
-    case DiscIO::BlobType::PLAIN:
-      return DOLDiscContainerPlain;
-    case DiscIO::BlobType::RVZ:
-      return DOLDiscContainerRVZ;
-    case DiscIO::BlobType::WIA:
-      return DOLDiscContainerWIA;
-    case DiscIO::BlobType::GCZ:
-      return DOLDiscContainerGCZ;
-    case DiscIO::BlobType::WBFS:
-      return DOLDiscContainerWBFS;
-    case DiscIO::BlobType::CISO:
-      return DOLDiscContainerCISO;
-    default:
-      return DOLDiscContainerOther;
+static DOLDiscContainer ContainerForBlobType(DiscIO::BlobType type)
+{
+  switch (type)
+  {
+  case DiscIO::BlobType::PLAIN:
+    return DOLDiscContainerPlain;
+  case DiscIO::BlobType::RVZ:
+    return DOLDiscContainerRVZ;
+  case DiscIO::BlobType::WIA:
+    return DOLDiscContainerWIA;
+  case DiscIO::BlobType::GCZ:
+    return DOLDiscContainerGCZ;
+  case DiscIO::BlobType::WBFS:
+    return DOLDiscContainerWBFS;
+  case DiscIO::BlobType::CISO:
+    return DOLDiscContainerCISO;
+  default:
+    return DOLDiscContainerOther;
   }
 }
 
-static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform) {
-  switch (platform) {
-    case DiscIO::Platform::GameCubeDisc:
-      return DOLDiscPlatformGameCube;
-    case DiscIO::Platform::Triforce:
-      return DOLDiscPlatformTriforce;
-    case DiscIO::Platform::WiiDisc:
-      return DOLDiscPlatformWii;
-    case DiscIO::Platform::WiiWAD:
-      return DOLDiscPlatformWiiWAD;
-    case DiscIO::Platform::ELFOrDOL:
-      return DOLDiscPlatformExecutable;
-    default:
-      return DOLDiscPlatformUnknown;
+static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform)
+{
+  switch (platform)
+  {
+  case DiscIO::Platform::GameCubeDisc:
+    return DOLDiscPlatformGameCube;
+  case DiscIO::Platform::Triforce:
+    return DOLDiscPlatformTriforce;
+  case DiscIO::Platform::WiiDisc:
+    return DOLDiscPlatformWii;
+  case DiscIO::Platform::WiiWAD:
+    return DOLDiscPlatformWiiWAD;
+  case DiscIO::Platform::ELFOrDOL:
+    return DOLDiscPlatformExecutable;
+  default:
+    return DOLDiscPlatformUnknown;
   }
 }
 
@@ -84,9 +88,11 @@ static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform) {
                            isNKit:(BOOL)isNKit
                         plainSize:(uint64_t)plainSize
                  plainSizeIsExact:(BOOL)plainSizeIsExact
-                         fileSize:(uint64_t)fileSize {
+                         fileSize:(uint64_t)fileSize
+{
   self = [super init];
-  if (self) {
+  if (self)
+  {
     _container = container;
     _platform = platform;
     _gameID = [gameID copy];
@@ -102,15 +108,18 @@ static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform) {
 
 @end
 
-@implementation DOLDiscConversionToken {
+@implementation DOLDiscConversionToken
+{
   std::atomic<bool> _cancelled;
 }
 
-- (BOOL)isCancelled {
+- (BOOL)isCancelled
+{
   return _cancelled.load();
 }
 
-- (void)cancel {
+- (void)cancel
+{
   _cancelled.store(true);
 }
 
@@ -118,8 +127,10 @@ static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform) {
 
 @implementation DiscImageBridge
 
-+ (nullable DOLDiscImageInfo*)inspectImageAtPath:(NSString*)path {
-  std::unique_ptr<DiscIO::BlobReader> reader = DiscIO::CreateBlobReader(std::string(path.UTF8String));
++ (nullable DOLDiscImageInfo*)inspectImageAtPath:(NSString*)path
+{
+  std::unique_ptr<DiscIO::BlobReader> reader =
+      DiscIO::CreateBlobReader(std::string(path.UTF8String));
   if (!reader)
     return nil;
   const uint64_t fileSize = reader->GetRawSize();
@@ -141,7 +152,8 @@ static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform) {
                fileSize:fileSize];
 }
 
-+ (nullable DOLDiscImageInfo*)infoForGameItem:(TVGameItem*)item {
++ (nullable DOLDiscImageInfo*)infoForGameItem:(TVGameItem*)item
+{
   const std::shared_ptr<const UICommon::GameFile> file = item.wrapper.gameFile;
   if (!file || !file->IsValid())
     return nil;
@@ -164,15 +176,18 @@ static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform) {
                  progress:(DOLDiscConversionProgress)progress
                     error:(NSError* _Nullable*)error
                   convert:(bool (^)(DiscIO::BlobReader*, const std::string&, const std::string&,
-                                    const DiscIO::CompressCB&))convert {
+                                    const DiscIO::CompressCB&))convert
+{
   const std::string source(sourcePath.UTF8String);
   const std::string destination(destinationPath.UTF8String);
   std::unique_ptr<DiscIO::BlobReader> reader = DiscIO::CreateBlobReader(source);
-  if (!reader) {
+  if (!reader)
+  {
     if (error)
-      *error = [NSError errorWithDomain:DOLDiscImageErrorDomain
-                                   code:1
-                               userInfo:@{NSLocalizedDescriptionKey : @"The disc image could not be opened."}];
+      *error = [NSError
+          errorWithDomain:DOLDiscImageErrorDomain
+                     code:1
+                 userInfo:@{NSLocalizedDescriptionKey : @"The disc image could not be opened."}];
     return NO;
   }
 
@@ -181,11 +196,14 @@ static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform) {
     return !token.isCancelled;
   };
   const bool ok = convert(reader.get(), source, destination, callback);
-  if (!ok) {
+  if (!ok)
+  {
     [[NSFileManager defaultManager] removeItemAtPath:destinationPath error:nil];
-    if (error) {
-      NSString* reason = token.isCancelled ? @"The conversion was cancelled."
-                                           : @"The disc image could not be converted. Check that the device has enough free space.";
+    if (error)
+    {
+      NSString* reason = token.isCancelled ? @"The conversion was cancelled." :
+                                             @"The disc image could not be converted. Check that "
+                                             @"the device has enough free space.";
       *error = [NSError errorWithDomain:DOLDiscImageErrorDomain
                                    code:token.isCancelled ? 2 : 3
                                userInfo:@{NSLocalizedDescriptionKey : reason}];
@@ -198,38 +216,43 @@ static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform) {
                         to:(NSString*)destinationPath
                      token:(DOLDiscConversionToken*)token
                   progress:(DOLDiscConversionProgress)progress
-                     error:(NSError* _Nullable*)error {
-  return [self runConversionFrom:sourcePath
-                              to:destinationPath
-                           token:token
-                        progress:progress
-                           error:error
-                         convert:^bool(DiscIO::BlobReader* reader, const std::string& source,
-                                       const std::string& destination, const DiscIO::CompressCB& callback) {
-                           return DiscIO::ConvertToPlain(reader, source, destination, callback);
-                         }];
+                     error:(NSError* _Nullable*)error
+{
+  return [self
+      runConversionFrom:sourcePath
+                     to:destinationPath
+                  token:token
+               progress:progress
+                  error:error
+                convert:^bool(DiscIO::BlobReader* reader, const std::string& source,
+                              const std::string& destination, const DiscIO::CompressCB& callback) {
+                  return DiscIO::ConvertToPlain(reader, source, destination, callback);
+                }];
 }
 
 + (BOOL)convertToRVZFrom:(NSString*)sourcePath
                       to:(NSString*)destinationPath
                    token:(DOLDiscConversionToken*)token
                 progress:(DOLDiscConversionProgress)progress
-                   error:(NSError* _Nullable*)error {
-  return [self runConversionFrom:sourcePath
-                              to:destinationPath
-                           token:token
-                        progress:progress
-                           error:error
-                         convert:^bool(DiscIO::BlobReader* reader, const std::string& source,
-                                       const std::string& destination, const DiscIO::CompressCB& callback) {
-                           return DiscIO::ConvertToWIAOrRVZ(
-                               reader, source, destination, true,
-                               static_cast<DiscIO::WIARVZCompressionType>(kWIARVZZstd), kRVZCompressionLevel,
-                               DiscIO::GCZ_RVZ_PREFERRED_BLOCK_SIZE, callback);
-                         }];
+                   error:(NSError* _Nullable*)error
+{
+  return [self
+      runConversionFrom:sourcePath
+                     to:destinationPath
+                  token:token
+               progress:progress
+                  error:error
+                convert:^bool(DiscIO::BlobReader* reader, const std::string& source,
+                              const std::string& destination, const DiscIO::CompressCB& callback) {
+                  return DiscIO::ConvertToWIAOrRVZ(
+                      reader, source, destination, true,
+                      static_cast<DiscIO::WIARVZCompressionType>(kWIARVZZstd), kRVZCompressionLevel,
+                      DiscIO::GCZ_RVZ_PREFERRED_BLOCK_SIZE, callback);
+                }];
 }
 
-+ (nullable TVGameItem*)gameItemForPath:(NSString*)path {
++ (nullable TVGameItem*)gameItemForPath:(NSString*)path
+{
   auto file = std::make_shared<const UICommon::GameFile>(std::string(path.UTF8String));
   if (!file->IsValid())
     return nil;

@@ -18,7 +18,7 @@ struct QuickSavePickerSelection: Equatable {
 }
 
 enum QuickSavePickerModel {
-  static let slots = Array(1...10)
+  static let slots = Array(1 ... 10)
 
   static func manualStates(_ states: [SaveStateInfo]) -> [SaveStateInfo] {
     states.filter { !$0.isAuto }.sorted(by: QuickSaveHistoryPolicy.newestFirst)

@@ -77,6 +77,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
   }
 
   // MARK: The sideways remote reproduces its xib frames at the design size (no safe area)
+
   //
   // GameCube, the upright remote and the Classic Controller are computed per screen instead;
   // their invariants live in TouchOverlayDefaultLayoutTests.
@@ -155,7 +156,9 @@ final class TouchOverlayLayoutTests: XCTestCase {
         // The IR surface's control has a `.zero` placeholder frame (it isn't a positioned button —
         // §2.1) and its group's `size` field is likewise unset for a `.fillInset` anchor (the real
         // size is computed dynamically from bounds), so skip it by CONTROL KIND, not anchor.
-        for layout in layouts where !layout.controls.contains(where: { if case .irSurface = $0.kind { return true }; return false }) {
+        for layout in layouts where !layout.controls.contains(where: { if case .irSurface = $0.kind { return true }
+          return false
+        }) {
           for control in layout.controls {
             XCTAssertTrue(CGRect(origin: .zero, size: layout.size).insetBy(dx: -0.5, dy: -0.5).contains(control.frame),
                           "\(kind) \(layout.group) \(control.id) leaves its group box")
@@ -548,7 +551,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertTrue(TouchOverlayIRGeometry.touchStartAllowed(at: CGPoint(x: 75, y: 75), excluding: otherFrames),
                   "empty overlay space between the two excluded frames")
     XCTAssertTrue(TouchOverlayIRGeometry.touchStartAllowed(at: CGPoint(x: 10, y: 10), excluding: []),
-                 "nothing to exclude")
+                  "nothing to exclude")
   }
 
   // MARK: Phase 3 — force-sensitive analog trigger pressure (task item 2)
@@ -556,13 +559,13 @@ final class TouchOverlayLayoutTests: XCTestCase {
   func testPressureValueFallsBackToOneWithoutForceSupport() {
     XCTAssertEqual(TouchOverlayInput.pressureValue(force: 0, maximumPossibleForce: 0), 1.0)
     XCTAssertEqual(TouchOverlayInput.pressureValue(force: 0, maximumPossibleForce: 4.0), 1.0,
-                  "no real sample yet (force == 0) reads as the initial full press, not near-zero")
+                   "no real sample yet (force == 0) reads as the initial full press, not near-zero")
   }
 
   func testPressureValueNormalizesAndClampsToOne() {
     XCTAssertEqual(TouchOverlayInput.pressureValue(force: 2.0, maximumPossibleForce: 4.0), 0.5, accuracy: 1e-6)
     XCTAssertEqual(TouchOverlayInput.pressureValue(force: 8.0, maximumPossibleForce: 4.0), 1.0,
-                  "over-max force clamps at 1.0 rather than exceeding it")
+                   "over-max force clamps at 1.0 rather than exceeding it")
   }
 
   // MARK: Phase 3 — overlay opacity (task item 1, C9)
@@ -632,7 +635,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertEqual(secondSmall.x, 0.6, accuracy: 1e-9)
     let thirdSmall = TouchOverlayIRGeometry.drag(start: .zero, current: CGPoint(x: 100, y: 0), oldX: secondSmall.x, oldY: secondSmall.y, in: smallRect, gain: 3.0)
     XCTAssertEqual(thirdSmall.x, 0.9, accuracy: 1e-9,
-                  "linear accumulation: 0.6 + 0.3 = 0.9; a bug that re-scales the accumulated total would clamp to 1.0 here instead")
+                   "linear accumulation: 0.6 + 0.3 = 0.9; a bug that re-scales the accumulated total would clamp to 1.0 here instead")
   }
 
   // MARK: Phase 3 — IR area fill-inset scale clamp (task item 1, C9)
@@ -734,7 +737,7 @@ final class TouchOverlayLayoutTests: XCTestCase {
     store.resetGroup(.wiiIRPad, padKind: .wiiRemote)
     XCTAssertNil(store.center(for: .wiiIRPad, padKind: .wiiRemote, orientation: .portrait, in: bounds))
     XCTAssertEqual(store.center(for: .wiiDpad, padKind: .wiiRemote, orientation: .portrait, in: bounds), CGPoint(x: 80, y: 160),
-                  "resetting the IR pad must not discard the rest of the layout")
+                   "resetting the IR pad must not discard the rest of the layout")
   }
 
   // MARK: Phase 3 — edit-mode mutual exclusion (task item 1, C9, design §9)
@@ -760,10 +763,10 @@ final class TouchOverlayLayoutTests: XCTestCase {
     XCTAssertTrue(TouchOverlayEditMode.irArea.showsChrome(for: .wiiIRPad))
     for group in TouchOverlayGroup.allCases where group != .wiiIRPad {
       XCTAssertFalse(TouchOverlayEditMode.irArea.showsChrome(for: group),
-                    "\(group) must not show layout-editor chrome while editing the IR area")
+                     "\(group) must not show layout-editor chrome while editing the IR area")
     }
     XCTAssertTrue(TouchOverlayEditMode.irArea.inputSuppressed,
-                 "every group's INPUT must still be suppressed in .irArea mode, even the ones with no chrome")
+                  "every group's INPUT must still be suppressed in .irArea mode, even the ones with no chrome")
   }
 
   func testEditModesAreMutuallyExclusiveByConstruction() {

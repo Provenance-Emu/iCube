@@ -5,21 +5,6 @@ import Foundation
 
 /// Decides, before a byte is fetched, whether a server game fits on this device.
 enum RemoteDownloadSpace {
-  /// Kept free beyond the game itself, for the journal, covers and whatever else writes meanwhile.
-  static let margin: Int64 = 256 * 1024 * 1024
-
-  /// A game that does not fit, with both numbers for the message.
-  struct Shortfall: LocalizedError, Equatable {
-    let needed: Int64
-    let available: Int64
-
-    var errorDescription: String? {
-      String(format: L("Not enough free space: this needs about %@ and %@ is available."),
-             ByteCountFormatter.string(fromByteCount: needed, countStyle: .file),
-             ByteCountFormatter.string(fromByteCount: available, countStyle: .file))
-    }
-  }
-
   /// One file of the game: its size on the server, and whether it is unpacked after it arrives.
   struct File: Equatable {
     var bytes: Int64
@@ -33,15 +18,7 @@ enum RemoteDownloadSpace {
   static func neededBytes(files: [File], storedBytes: Int64) -> Int64 {
     let download = files.reduce(Int64(0)) { $0.addingClamped(max(0, $1.bytes)) }
     let unpacked = files.filter(\.isArchive).reduce(Int64(0)) { $0.addingClamped(max(0, $1.bytes)) }
-    let remaining = max(0, download - max(0, storedBytes))
-    return remaining.addingClamped(unpacked).addingClamped(margin)
-  }
-
-  /// Nil when the game fits, or when the free space is unknown: a refusal needs a measurement.
-  static func shortfall(files: [File], storedBytes: Int64, availableBytes: Int64?) -> Shortfall? {
-    guard let availableBytes else { return nil }
-    let needed = neededBytes(files: files, storedBytes: storedBytes)
-    return availableBytes < needed ? Shortfall(needed: needed, available: availableBytes) : nil
+    return max(0, download - max(0, storedBytes)).addingClamped(unpacked)
   }
 
   /// The free space to trust out of the two the system reports. "Important usage" counts what the

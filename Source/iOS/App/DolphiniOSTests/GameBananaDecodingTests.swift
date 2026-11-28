@@ -65,7 +65,7 @@ final class GameBananaDecodingTests: XCTestCase {
     XCTAssertEqual(detail.summary.version, "")
     XCTAssertEqual(detail.downloadCount, 46278)
     let file = try XCTUnwrap(detail.files.first)
-    XCTAssertEqual(file.id, 476085)
+    XCTAssertEqual(file.id, 476_085)
     XCTAssertEqual(file.fileName, "super_smash_bros_melee_64_-_july_20.zip")
     XCTAssertEqual(file.size, 943_512_349)
     XCTAssertEqual(file.downloadURL?.absoluteString, "https://gamebanana.com/dl/476085")
@@ -181,7 +181,7 @@ final class GameBananaClientTests: XCTestCase {
     let transport = StubTransport()
     let client = GameBananaClient(transport: transport, userAgent: "iCube/1")
     try await withThrowingTaskGroup(of: Void.self) { group in
-      for gameID in 1...5 {
+      for gameID in 1 ... 5 {
         group.addTask { _ = try await client.mods(gameID: gameID) }
       }
       try await group.waitForAll()

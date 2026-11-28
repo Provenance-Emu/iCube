@@ -7,6 +7,7 @@ import EmulatorContentClient
 import Foundation
 import PVCloudSync
 import PVSyncRules
+import PVSystems
 
 struct EmulationServerBackupTarget: Codable, Equatable {
   let server: EmulationServer
@@ -57,6 +58,7 @@ final class EmulationServerBackups: ObservableObject {
     return EmulationServerSaveSyncWorker(indexDirectory: support.appendingPathComponent("EmulationServer", isDirectory: true),
                                          trash: SyncTrash(rootURL: support.appendingPathComponent("Trash", isDirectory: true)))
   }()
+
   /// The user's answers to conflicts, by server and path, applied by the next pass.
   private var resolutions: [String: [String: EmulationServerSaveSyncWorker.Choice]] = [:]
   private var task: Task<Void, Never>?
@@ -329,7 +331,7 @@ enum EmulationServerBackupSetup {
   }
 
   static func createItem(server: EmulationServer, token: String, libraryID: String, key: String) async throws -> Item {
-    let draft = ItemDraft(libraryId: libraryID, systemIdentifier: "com.provenance.gamecube", title: "iCube Backups")
+    let draft = ItemDraft(libraryId: libraryID, systemIdentifier: SystemIdentifier.GameCube.rawValue, title: "iCube Backups")
     return try await send(server: server, token: token, path: "items", body: JSONEncoder().encode(draft), key: key)
   }
 

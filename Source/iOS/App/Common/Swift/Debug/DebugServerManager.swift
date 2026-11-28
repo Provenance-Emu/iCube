@@ -14,8 +14,8 @@
 // iCube-Swift.h.
 
 import Foundation
-import Security
 import PVWebServer
+import Security
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -189,8 +189,8 @@ final class DebugServerManager: NSObject {
           // this path exists precisely because USB forwarding does not reach here.
           let lan = PVWebServer.shared.ipAddress.map { "http://\($0):\(Self.port)/" } ?? "(no LAN address yet)"
           NSLog("[DebugServer] listening on \(self.serverURL) and \(lan) "
-                + "(LAN reachable: Perf Test Bench is on in a non-DEBUG build; "
-                + "LAN requests need Authorization: Bearer <token> — see Settings > Debug)")
+            + "(LAN reachable: Perf Test Bench is on in a non-DEBUG build; "
+            + "LAN requests need Authorization: Bearer <token> — see Settings > Debug)")
         } else {
           NSLog("[DebugServer] listening on \(self.serverURL) (loopback only; iproxy to reach over USB)")
         }

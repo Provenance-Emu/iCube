@@ -10,6 +10,7 @@ struct QuickSaveHistoryPersistence {
     var cleanupFailed = false
     var cancelled = false
   }
+
   let root: URL
   var writeSnapshot: (URL) -> SaveStateCompletedSnapshot?
   var isCurrentSession: () -> Bool
@@ -33,8 +34,8 @@ struct QuickSaveHistoryPersistence {
       return Result(cancelled: true)
     }
     let metadata = SaveStateMetadata(title: "Quick Save", gameID: gameID, gameTitle: gameTitle,
-      savedAt: snapshot.savedAt, playTimeSeconds: Double(snapshot.playTimeSeconds),
-      isAuto: false, isQuickSave: true, isKept: false)
+                                     savedAt: snapshot.savedAt, playTimeSeconds: Double(snapshot.playTimeSeconds),
+                                     isAuto: false, isQuickSave: true, isKept: false)
     guard writeMetadata(metadata, url) else {
       _ = removeBundle(at: url)
       return Result()
@@ -80,9 +81,9 @@ struct QuickSaveHistoryPersistence {
     return entries.compactMap { url in
       guard let metadata = validatedMetadata(at: url, gameID: gameID) else { return nil }
       return SaveStateInfo(gameID: gameID, displayName: metadata.title, slot: nil,
-        createdAt: nil, modifiedAt: metadata.savedAt, sizeBytes: nil, versionHash: nil,
-        isCompatible: true, path: url, thumbnailURL: nil, isAuto: false,
-        playTimeSeconds: metadata.playTimeSeconds, isQuickSave: true, isKept: metadata.isKept == true)
+                           createdAt: nil, modifiedAt: metadata.savedAt, sizeBytes: nil, versionHash: nil,
+                           isCompatible: true, path: url, thumbnailURL: nil, isAuto: false,
+                           playTimeSeconds: metadata.playTimeSeconds, isQuickSave: true, isKept: metadata.isKept == true)
     }
   }
 

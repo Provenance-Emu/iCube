@@ -13,151 +13,149 @@ import SwiftUI
 /// button would collapse into one focusable element and the button would be
 /// unreachable. Activating the row is the copy action, and the row says so.
 struct ContinuityPeerLibraryView: View {
-    let peerName: String
-    let advertisement: ContinuityAdvertisement
+  let peerName: String
+  let advertisement: ContinuityAdvertisement
 
-    @StateObject private var controller = ContinuityLibraryBrowseController(
-        identity: ContinuityManager.shared.identity
-    )
-    @State private var pairingCode = ""
-    @State private var codeRejected = false
+  @StateObject private var controller = ContinuityLibraryBrowseController(
+    identity: ContinuityManager.shared.identity
+  )
+  @State private var pairingCode = ""
+  @State private var codeRejected = false
 
-    var body: some View {
-        List {
-            Section {
-                ContinuitySecurityNotice()
-            }
+  var body: some View {
+    List {
+      Section {
+        ContinuitySecurityNotice()
+      }
 
-            switch controller.phase {
-            case .idle, .loading:
-                Section {
-                    Text(L("Looking at what this device is sharing…"))
-                        .foregroundColor(.secondary)
-                    Button(L("Cancel"), role: .destructive) { controller.cancel() }
-                }
-
-            case .awaitingPairing:
-                Section(footer: codeRejected ? Text(L("That code didn't match. Check the other device and try again.")) : nil) {
-                    Text(String(format: L("Enter the 6-digit code shown on %@."), peerName))
-                    ContinuityPairingCodeField(code: $pairingCode, onSubmit: submit)
-                    Button(L("Pair")) { submit(pairingCode) }
-                        .disabled(!ContinuityPairingCodeField.isComplete(pairingCode))
-                    Button(L("Cancel"), role: .destructive) { controller.cancel() }
-                }
-
-            case .browsing(let entries):
-                if entries.isEmpty {
-                    Section {
-                        Text(L("This device isn't sharing any games right now."))
-                            .foregroundColor(.secondary)
-                    }
-                } else {
-                    Section(
-                        header: Text(L("Games")),
-                        footer: Text(L("Copying brings the game itself. The other device's saves stay on it."))
-                    ) {
-                        ForEach(entries) { entry in
-                            Button {
-                                Task { await controller.copy(entry) }
-                            } label: {
-                                ContinuityLibraryRow(
-                                    entry: entry,
-                                    artwork: controller.artwork[entry.key]
-                                )
-                            }
-                            .task { await controller.loadArtwork(for: entry) }
-                        }
-                    }
-                }
-
-            case .copying(let entry, let progress):
-                Section(header: Text(L("Copying"))) {
-                    Text(entry.game.displayName)
-                    if let progress {
-                        NearbyTransferProgress(bytes: progress.bytesTransferred, total: progress.totalBytes)
-                    } else {
-                        Text(L("Asking the other device…")).foregroundColor(.secondary)
-                    }
-                    Button(L("Cancel"), role: .destructive) { controller.cancel() }
-                }
-
-            case .copied(let entry):
-                Section {
-                    Text(String(format: L("%@ is now in your library."), entry.game.displayName))
-                    Button(L("Back To The List")) {
-                        Task { await controller.load(from: advertisement) }
-                    }
-                }
-
-            case .failed(let message):
-                Section(header: Text(L("Didn't Copy"))) {
-                    Text(message)
-                    Button(L("Try Again")) {
-                        Task { await controller.load(from: advertisement) }
-                    }
-                }
-            }
+      switch controller.phase {
+      case .idle, .loading:
+        Section {
+          Text(L("Looking at what this device is sharing…"))
+            .foregroundColor(.secondary)
+          Button(L("Cancel"), role: .destructive) { controller.cancel() }
         }
-        .navigationTitle(peerName)
-        .task { await controller.load(from: advertisement) }
-        .onDisappear { controller.cancel() }
-    }
 
-    /// The controller drops back to `.awaitingPairing` on a wrong code without
-    /// saying so; the footer is how the user finds out.
-    private func submit(_ code: String) {
-        guard ContinuityPairingCodeField.isComplete(code) else { return }
-        pairingCode = ""
-        Task {
-            await controller.submitPairingCode(code)
-            codeRejected = controller.phase == .awaitingPairing
+      case .awaitingPairing:
+        Section(footer: codeRejected ? Text(L("That code didn't match. Check the other device and try again.")) : nil) {
+          Text(String(format: L("Enter the 6-digit code shown on %@."), peerName))
+          ContinuityPairingCodeField(code: $pairingCode, onSubmit: submit)
+          Button(L("Pair")) { submit(pairingCode) }
+            .disabled(!ContinuityPairingCodeField.isComplete(pairingCode))
+          Button(L("Cancel"), role: .destructive) { controller.cancel() }
         }
+
+      case .browsing(let entries):
+        if entries.isEmpty {
+          Section {
+            Text(L("This device isn't sharing any games right now."))
+              .foregroundColor(.secondary)
+          }
+        } else {
+          Section(
+            header: Text(L("Games")),
+            footer: Text(L("Copying brings the game itself. The other device's saves stay on it."))
+          ) {
+            ForEach(entries) { entry in
+              Button {
+                Task { await controller.copy(entry) }
+              } label: {
+                ContinuityLibraryRow(
+                  entry: entry,
+                  artwork: controller.artwork[entry.key]
+                )
+              }
+              .task { await controller.loadArtwork(for: entry) }
+            }
+          }
+        }
+
+      case .copying(let entry, let progress):
+        Section(header: Text(L("Copying"))) {
+          Text(entry.game.displayName)
+          if let progress {
+            NearbyTransferProgress(bytes: progress.bytesTransferred, total: progress.totalBytes)
+          } else {
+            Text(L("Asking the other device…")).foregroundColor(.secondary)
+          }
+          Button(L("Cancel"), role: .destructive) { controller.cancel() }
+        }
+
+      case .copied(let entry):
+        Section {
+          Text(String(format: L("%@ is now in your library."), entry.game.displayName))
+          Button(L("Back To The List")) {
+            Task { await controller.load(from: advertisement) }
+          }
+        }
+
+      case .failed(let message):
+        Section(header: Text(L("Didn't Copy"))) {
+          Text(message)
+          Button(L("Try Again")) {
+            Task { await controller.load(from: advertisement) }
+          }
+        }
+      }
     }
+    .navigationTitle(peerName)
+    .task { await controller.load(from: advertisement) }
+    .onDisappear { controller.cancel() }
+  }
 
-
+  /// The controller drops back to `.awaitingPairing` on a wrong code without
+  /// saying so; the footer is how the user finds out.
+  private func submit(_ code: String) {
+    guard ContinuityPairingCodeField.isComplete(code) else { return }
+    pairingCode = ""
+    Task {
+      await controller.submitPairingCode(code)
+      codeRejected = controller.phase == .awaitingPairing
+    }
+  }
 }
 
 /// One shared title, as a single focusable unit.
 private struct ContinuityLibraryRow: View {
-    let entry: ContinuityLibraryEntry
-    let artwork: Data?
+  let entry: ContinuityLibraryEntry
+  let artwork: Data?
 
-    var body: some View {
-        HStack(spacing: 12) {
-            cover
-            VStack(alignment: .leading, spacing: 2) {
-                Text(entry.game.displayName)
-                Text(subtitle)
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            }
-        }
+  var body: some View {
+    HStack(spacing: 12) {
+      cover
+      VStack(alignment: .leading, spacing: 2) {
+        Text(entry.game.displayName)
+        Text(subtitle)
+          .font(.footnote)
+          .foregroundColor(.secondary)
+      }
     }
+  }
 
-    @ViewBuilder
-    private var cover: some View {
-        // A missing cover is a placeholder, never a blank gap and never an
-        // error: the host may simply have no art for that title.
-        if let artwork, let image = UIImage(data: artwork) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 44, height: 44)
-                .cornerRadius(4)
-                .accessibilityHidden(true)
-        } else {
-            Image(systemName: "opticaldisc")
-                .foregroundColor(.secondary)
-                .frame(width: 44, height: 44)
-                .accessibilityHidden(true)
-        }
+  @ViewBuilder
+  private var cover: some View {
+    // A missing cover is a placeholder, never a blank gap and never an
+    // error: the host may simply have no art for that title.
+    if let artwork, let image = UIImage(data: artwork) {
+      Image(uiImage: image)
+        .resizable()
+        .scaledToFit()
+        .frame(width: 44, height: 44)
+        .cornerRadius(4)
+        .accessibilityHidden(true)
+    } else {
+      Image(systemName: "opticaldisc")
+        .foregroundColor(.secondary)
+        .frame(width: 44, height: 44)
+        .accessibilityHidden(true)
     }
+  }
 
-    private var subtitle: String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        let size = formatter.string(fromByteCount: entry.sizeBytes)
-        guard let gameID = entry.game.gameID, !gameID.isEmpty else { return size }
-        return "\(gameID) · \(size)"
-    }
+  private var subtitle: String {
+    let formatter = ByteCountFormatter()
+    formatter.countStyle = .file
+    let size = formatter.string(fromByteCount: entry.sizeBytes)
+    guard let gameID = entry.game.gameID, !gameID.isEmpty else { return size }
+    return "\(gameID) · \(size)"
+  }
 }

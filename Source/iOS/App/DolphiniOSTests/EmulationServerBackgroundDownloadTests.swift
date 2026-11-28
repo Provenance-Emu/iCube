@@ -4,6 +4,7 @@
 import CryptoKit
 import Foundation
 import PVContinuity
+import PVRemoteLibrary
 import RomMClient
 import XCTest
 
@@ -12,6 +13,17 @@ import XCTest
 /// The Emulation Server copy on a background fetcher: every file asked for at once, the plan kept
 /// so a relaunch can finish the game without browsing, and failures kept or dropped as they should.
 final class EmulationServerBackgroundDownloadTests: XCTestCase {
+  func testDownloadSpaceLeavesRoomForTheSystem() throws {
+    let reserve: Int64 = 256 * 1024 * 1024
+    XCTAssertNoThrow(try EmulationServerLibrary.checkDownloadSpace(bytes: 1024, available: nil))
+    XCTAssertNoThrow(try EmulationServerLibrary.checkDownloadSpace(bytes: 1024, available: reserve + 1024))
+    XCTAssertThrowsError(try EmulationServerLibrary.checkDownloadSpace(bytes: 1024, available: reserve + 1023)) {
+      guard case EmulationServerLibrary.ServerError.insufficientSpace(bytes: 1024, available: let available) = $0, available == reserve + 1023 else {
+        return XCTFail("Unexpected error: \($0)")
+      }
+    }
+  }
+
   private func makeLibrary(fetcher: RecordingFetcher, transport: TwoDiscTransport = TwoDiscTransport(),
                            availableBytes: @escaping @Sendable () -> Int64? = { nil })
     throws -> (EmulationServerLibrary, EmulationServer) {
@@ -29,9 +41,9 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
     do {
       _ = try await library.copy(entry) { _ in }
       XCTFail("Two discs do not fit in a kilobyte")
-    } catch let shortfall as RemoteDownloadSpace.Shortfall {
-      XCTAssertEqual(shortfall.available, 1024)
-      XCTAssertEqual(shortfall.needed, 2 * 0x8000 + RemoteDownloadSpace.margin)
+    } catch EmulationServerLibrary.ServerError.insufficientSpace(let bytes, let available) {
+      XCTAssertEqual(available, 1024)
+      XCTAssertEqual(bytes, 2 * 0x8000)
     }
     let calls = await fetcher.calls
     XCTAssertTrue(calls.isEmpty, "The check runs before the download, not after it")
@@ -40,7 +52,7 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
   func testFilesThatAlreadyArrivedDoNotCountAgainstTheSpaceTheyUse() async throws {
     // Both discs came in on an earlier launch; what is free is less than the game.
     let fetcher = RecordingFetcher(storedBytes: 2 * 0x8000)
-    let (library, server) = try makeLibrary(fetcher: fetcher, availableBytes: { RemoteDownloadSpace.margin })
+    let (library, server) = try makeLibrary(fetcher: fetcher, availableBytes: { 256 * 1024 * 1024 })
     let page = try await library.catalog()
     let entry = try XCTUnwrap(page.entries.first)
     defer { if let folder = try? server.folder(for: entry) { try? FileManager.default.removeItem(at: folder) } }
@@ -140,7 +152,7 @@ final class EmulationServerBackgroundDownloadTests: XCTestCase {
       let fetcher = RecordingFetcher(failure: failure)
       let (library, _) = try makeLibrary(fetcher: fetcher)
       let page = try await library.catalog()
-    let entry = try XCTUnwrap(page.entries.first)
+      let entry = try XCTUnwrap(page.entries.first)
       do {
         _ = try await library.copy(entry) { _ in }
         XCTFail("Expected \(failure)")
@@ -384,7 +396,7 @@ private actor HeldCatalog: RemoteGameCatalog {
   func openCatalog(search: String) async throws -> RemoteCatalogPage { throw URLError(.unsupportedURL) }
   func continueCatalog() async throws -> RemoteCatalogPage { throw URLError(.unsupportedURL) }
   func gameCount() async throws -> Int { 0 }
-  func artwork(for entry: ContinuityLibraryEntry) async -> Data? { nil }
+  func artwork(for entry: ContinuityLibraryEntry, etag: String?) async throws -> ArtworkResult { .none }
 
   func copy(_ entry: ContinuityLibraryEntry, progress: @escaping @Sendable (PullProgress) -> Void) async throws -> [URL] {
     copies += 1
@@ -395,4 +407,5 @@ private actor HeldCatalog: RemoteGameCatalog {
 
   nonisolated func isAccessDenied(_ error: any Error) -> Bool { false }
   nonisolated var downloadSourceID: String { "held-catalog" }
+  nonisolated var sourceKind: LibrarySourceInfo.Kind { .contentServer }
 }

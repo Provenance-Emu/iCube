@@ -7,7 +7,8 @@
 
 @implementation DOLUIKitSwitch
 
-- (void)addValueChangedTarget:(nullable id)target action:(SEL)action {
+- (void)addValueChangedTarget:(nullable id)target action:(SEL)action
+{
   [self addTarget:target action:action forControlEvents:UIControlEventValueChanged];
 }
 

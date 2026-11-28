@@ -35,6 +35,7 @@ final class QuickSlotTests: XCTestCase {
     XCTAssertEqual(QuickSlot.Outcome.emptySlot(slot: 7).message, "No save in Slot 7")
     XCTAssertEqual(QuickSlot.Outcome.saveFailed(slot: 7).message, "Couldn't save to Slot 7")
   }
+
   func testSaveCompletionKeepsTheRequestedSlotAndGame() {
     let request = SaveStateUIRequest(slot: 7, gameID: "GALE01", sessionIdentifier: 10)
     XCTAssertEqual(request.slot, 7)
@@ -60,11 +61,10 @@ final class QuickSlotTests: XCTestCase {
   func testFirstTapSameTitleRestartBeforeScheduledWorkIsRejected() {
     let request = SaveStateUIRequest(slot: 3, gameID: "GALE01", sessionIdentifier: 10)
     XCTAssertFalse(request.accepts(completedGameID: nil, completedSessionIdentifier: nil,
-                                  currentGameID: "GALE01", currentSessionIdentifier: 11, activeID: request.id))
+                                   currentGameID: "GALE01", currentSessionIdentifier: 11, activeID: request.id))
     XCTAssertFalse(request.accepts(completedGameID: "GALE01", completedSessionIdentifier: 10,
-                                  currentGameID: "GALE01", currentSessionIdentifier: 11, activeID: request.id))
+                                   currentGameID: "GALE01", currentSessionIdentifier: 11, activeID: request.id))
     XCTAssertFalse(request.accepts(completedGameID: "GALE01", completedSessionIdentifier: 11,
-                                  currentGameID: "GALE01", currentSessionIdentifier: 10, activeID: request.id))
+                                   currentGameID: "GALE01", currentSessionIdentifier: 10, activeID: request.id))
   }
-
 }

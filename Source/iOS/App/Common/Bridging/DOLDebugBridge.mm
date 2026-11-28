@@ -7,38 +7,45 @@
 
 // C++ includes
 #include <atomic>
-#include <mutex>
 #include <deque>
+#include <mutex>
+#include <sys/mman.h>
 #include "Common/CommonPaths.h"
 #include "Common/Config/Config.h"
 #include "Common/Logging/LogManager.h"
+#include "Common/MemArena.h"
 #include "Common/Version.h"
 #include "Core/Config/GraphicsSettings.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
-#include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
 #include "Core/FifoPlayer/FifoDataFile.h"
 #include "Core/FifoPlayer/FifoRecorder.h"
-#include "Core/PowerPC/Interpreter/FPUSelfTest.h"
+#include "Core/HW/Memmap.h"
 #include "Core/Movie.h"
+#include "Core/PowerPC/CachedInterpreter/CachedInterpreter.h"
+#include "Core/PowerPC/Interpreter/FPUSelfTest.h"
 #include "Core/State.h"
 #include "Core/System.h"
-#include "Core/HW/Memmap.h"
-#include "Common/MemArena.h"
-#include <sys/mman.h>
-#include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/FrameDumper.h"
+#include "VideoCommon/VideoConfig.h"
 
 #import "HostQueue.h"
 
-static NSString* StateName(Core::State s) {
-  switch (s) {
-    case Core::State::Uninitialized: return @"uninitialized";
-    case Core::State::Starting: return @"starting";
-    case Core::State::Running: return @"running";
-    case Core::State::Paused: return @"paused";
-    case Core::State::Stopping: return @"stopping";
+static NSString* StateName(Core::State s)
+{
+  switch (s)
+  {
+  case Core::State::Uninitialized:
+    return @"uninitialized";
+  case Core::State::Starting:
+    return @"starting";
+  case Core::State::Running:
+    return @"running";
+  case Core::State::Paused:
+    return @"paused";
+  case Core::State::Stopping:
+    return @"stopping";
   }
   return @"unknown";
 }
@@ -47,7 +54,8 @@ static NSString* StateName(Core::State s) {
 // FILE_LISTENER + CONSOLE_LISTENER at init (Common/Logging/LogManager.cpp), and
 // LOG_WINDOW_LISTENER is otherwise only registered by DolphinQt's LogWidget, which iOS
 // doesn't build. (Verified via `grep -rn RegisterListener` across Source/Core + Source/iOS.)
-namespace {
+namespace
+{
 // Guards g_log_ring plus all three handler globals below. Every access only holds the lock
 // long enough to append to the ring or copy a block pointer in/out -- the block itself is
 // always invoked with the lock released, so a handler is free to call back into this bridge
@@ -58,14 +66,17 @@ void (^g_log_handler)(NSString*, NSString*) = nil;
 void (^g_state_handler)(NSString*) = nil;
 void (^g_config_handler)(void) = nil;
 
-class RingListener : public Common::Log::LogListener {
- public:
-  void Log(Common::Log::LogLevel level, const char* msg) override {
+class RingListener : public Common::Log::LogListener
+{
+public:
+  void Log(Common::Log::LogLevel level, const char* msg) override
+  {
     void (^handler)(NSString*, NSString*) = nil;
     {
       std::lock_guard<std::mutex> lk(g_handler_mutex);
       g_log_ring.emplace_back(msg);
-      if (g_log_ring.size() > 2000) g_log_ring.pop_front();
+      if (g_log_ring.size() > 2000)
+        g_log_ring.pop_front();
       // Forward only WARN/ERROR. LogLevel numbers LNOTICE=1, LERROR=2, LWARNING=3 (severity
       // does NOT increase monotonically with the enum value), so `level <= LWARNING` would
       // incorrectly also forward LNOTICE -- which is startup/OSReport spam, not a real
@@ -73,7 +84,8 @@ class RingListener : public Common::Log::LogListener {
       if (level == Common::Log::LogLevel::LERROR || level == Common::Log::LogLevel::LWARNING)
         handler = g_log_handler;
     }
-    if (handler) {
+    if (handler)
+    {
       NSString* levelName = level == Common::Log::LogLevel::LERROR ? @"ERROR" : @"WARN";
       handler(levelName, @(msg));
     }
@@ -83,18 +95,25 @@ class RingListener : public Common::Log::LogListener {
 
 @implementation DOLDebugBridge
 
-+ (NSString*)coreState { return StateName(Core::GetState(Core::System::GetInstance())); }
++ (NSString*)coreState
+{
+  return StateName(Core::GetState(Core::System::GetInstance()));
+}
 
-+ (BOOL)pause {
-  if (!Core::IsRunning(Core::System::GetInstance())) return NO;
++ (BOOL)pause
+{
+  if (!Core::IsRunning(Core::System::GetInstance()))
+    return NO;
   // Core::SetState ultimately reaches PauseAndLock, which is host-thread-only.
   DOLHostQueueRunSync(^{
     Core::SetState(Core::System::GetInstance(), Core::State::Paused);
   });
   return YES;
 }
-+ (BOOL)resume {
-  if (!Core::IsRunning(Core::System::GetInstance())) return NO;
++ (BOOL)resume
+{
+  if (!Core::IsRunning(Core::System::GetInstance()))
+    return NO;
   DOLHostQueueRunSync(^{
     Core::SetState(Core::System::GetInstance(), Core::State::Running);
   });
@@ -106,10 +125,13 @@ class RingListener : public Common::Log::LogListener {
 // A 30 fps game therefore moves frame_count by ~2 per step (device: 60 steps ->
 // +82 VI frames in NSMBW's cutscene). Presented-frame steps are what line up
 // with the oracle's per-present frame dumps, so this is the intended unit.
-+ (NSInteger)frameAdvance:(NSInteger)n timeoutSeconds:(double)timeout {
++ (NSInteger)frameAdvance:(NSInteger)n timeoutSeconds:(double)timeout
+{
   NSInteger done = 0;
-  for (NSInteger i = 0; i < n; i++) {
-    if (Core::GetState(Core::System::GetInstance()) != Core::State::Paused) break;
+  for (NSInteger i = 0; i < n; i++)
+  {
+    if (Core::GetState(Core::System::GetInstance()) != Core::State::Paused)
+      break;
     const uint64_t before = Core::System::GetInstance().GetMovie().GetCurrentFrame();
     // Core::DoFrameStep is `// NOTE: Host Thread` (Core.cpp) -- run it on the host queue and
     // wait for that single dispatch to finish. The "did the frame actually land" poll below
@@ -119,8 +141,10 @@ class RingListener : public Common::Log::LogListener {
     });
     NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     while (!(Core::GetState(Core::System::GetInstance()) == Core::State::Paused &&
-             Core::System::GetInstance().GetMovie().GetCurrentFrame() > before)) {
-      if ([deadline timeIntervalSinceNow] < 0) return done;
+             Core::System::GetInstance().GetMovie().GetCurrentFrame() > before))
+    {
+      if ([deadline timeIntervalSinceNow] < 0)
+        return done;
       [NSThread sleepForTimeInterval:0.002];
     }
     done++;
@@ -128,10 +152,15 @@ class RingListener : public Common::Log::LogListener {
   return done;
 }
 
-+ (uint64_t)frameCount { return Core::System::GetInstance().GetMovie().GetCurrentFrame(); }
++ (uint64_t)frameCount
+{
+  return Core::System::GetInstance().GetMovie().GetCurrentFrame();
+}
 
-+ (nullable NSData*)screenshotPNGWithTimeout:(double)timeout {
-  if (!Core::IsRunning(Core::System::GetInstance())) return nil;
++ (nullable NSData*)screenshotPNGWithTimeout:(double)timeout
+{
+  if (!Core::IsRunning(Core::System::GetInstance()))
+    return nil;
   // The PNG goes to a path of our own rather than <Screenshots>/<GameID>/. Building that path
   // meant reading SConfig's game ID, which the CPU thread rewrites when a Wii title launches
   // (ES.cpp, DVDThread.cpp), outside any CPU guard; the concatenation crashed on a bad string
@@ -149,7 +178,8 @@ class RingListener : public Common::Log::LogListener {
     Core::System& sys = Core::System::GetInstance();
     {
       const Core::CPUThreadGuard guard(sys);
-      if (!g_frame_dumper) return;
+      if (!g_frame_dumper)
+        return;
       g_frame_dumper->SaveScreenshot(path);
       requested = true;
     }
@@ -161,14 +191,19 @@ class RingListener : public Common::Log::LogListener {
     // caller's last frame-advance. Callers wanting frame N advance N-1 then
     // screenshot (scenario.py does this).
     wasPaused = Core::GetState(sys) == Core::State::Paused;
-    if (wasPaused) Core::DoFrameStep(sys);
+    if (wasPaused)
+      Core::DoFrameStep(sys);
   });
-  if (!requested) return nil;
-  if (wasPaused) {
+  if (!requested)
+    return nil;
+  if (wasPaused)
+  {
     // Wait for the step to land (CPU back in stepping => GetState == Paused).
     NSDate* stepDeadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
-    while (Core::GetState(Core::System::GetInstance()) != Core::State::Paused) {
-      if ([stepDeadline timeIntervalSinceNow] < 0) return nil;
+    while (Core::GetState(Core::System::GetInstance()) != Core::State::Paused)
+    {
+      if ([stepDeadline timeIntervalSinceNow] < 0)
+        return nil;
       [NSThread sleepForTimeInterval:0.002];
     }
     // FrameDumper::DumpCurrentFrame only copies the frame into a readback
@@ -183,11 +218,15 @@ class RingListener : public Common::Log::LogListener {
     // textures; take a second step instead so its Presenter flushes for us.
     DOLHostQueueRunSync(^{
       Core::System& sys = Core::System::GetInstance();
-      if (sys.IsDualCoreMode()) {
+      if (sys.IsDualCoreMode())
+      {
         Core::DoFrameStep(sys);
-      } else {
+      }
+      else
+      {
         const Core::CPUThreadGuard guard(sys);
-        if (g_frame_dumper) g_frame_dumper->FlushFrameDump();
+        if (g_frame_dumper)
+          g_frame_dumper->FlushFrameDump();
       }
     });
   }
@@ -198,11 +237,13 @@ class RingListener : public Common::Log::LogListener {
   NSString* ns = @(path.c_str());
   NSFileManager* fm = [NSFileManager defaultManager];
   NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
-  while ([deadline timeIntervalSinceNow] > 0) {
+  while ([deadline timeIntervalSinceNow] > 0)
+  {
     NSData* data = [NSData dataWithContentsOfFile:ns];
     const NSUInteger n = data.length;
     if (n >= sizeof(kPNGEnd) &&
-        memcmp((const uint8_t*)data.bytes + n - sizeof(kPNGEnd), kPNGEnd, sizeof(kPNGEnd)) == 0) {
+        memcmp((const uint8_t*)data.bytes + n - sizeof(kPNGEnd), kPNGEnd, sizeof(kPNGEnd)) == 0)
+    {
       [fm removeItemAtPath:ns error:nil];
       return data;
     }
@@ -212,43 +253,61 @@ class RingListener : public Common::Log::LogListener {
   return nil;
 }
 
-+ (nullable NSData*)readGuestMemory:(uint32_t)address length:(uint32_t)length {
++ (nullable NSData*)readGuestMemory:(uint32_t)address length:(uint32_t)length
+{
   auto& system = Core::System::GetInstance();
-  if (!Core::IsRunning(system) || length == 0 || length > 65536) return nil;
+  if (!Core::IsRunning(system) || length == 0 || length > 65536)
+    return nil;
   auto& memory = system.GetMemory();
   const u8* ptr = memory.GetPointerForRange(address, length);
-  if (ptr == nullptr) return nil;
+  if (ptr == nullptr)
+    return nil;
   return [NSData dataWithBytes:ptr length:length];
 }
 
-+ (NSDictionary<NSString*, id>*)memArenaReport {
++ (NSDictionary<NSString*, id>*)memArenaReport
+{
   auto& system = Core::System::GetInstance();
   NSMutableDictionary<NSString*, id>* out = [NSMutableDictionary dictionary];
   out[@"mode"] = @(Common::MemArena::DarwinModeName());
-  if (!Core::IsRunning(system)) {
+  if (!Core::IsRunning(system))
+  {
     out[@"running"] = @NO;
     return out;
   }
   auto& memory = system.GetMemory();
   out[@"running"] = @YES;
   out[@"fastmem_arena"] = @(memory.IsFastmemArenaInitialized());
-  struct View { const char* name; u8* ptr; };
-  std::vector<View> views = {{"MEM1", memory.GetRAM()}, {"MEM2", memory.GetEXRAM()},
-                             {"L1", memory.GetL1Cache()}, {"FakeVMEM", memory.GetFakeVMEM()}};
+  struct View
+  {
+    const char* name;
+    u8* ptr;
+  };
+  std::vector<View> views = {{"MEM1", memory.GetRAM()},
+                             {"MEM2", memory.GetEXRAM()},
+                             {"L1", memory.GetL1Cache()},
+                             {"FakeVMEM", memory.GetFakeVMEM()}};
   NSMutableArray* regions = [NSMutableArray array];
   NSMutableArray* aliases = [NSMutableArray array];
-  for (size_t i = 0; i < views.size(); ++i) {
-    if (!views[i].ptr) continue;
-    [regions addObject:@{@"name": @(views[i].name),
-                         @"host": [NSString stringWithFormat:@"%p", views[i].ptr]}];
+  for (size_t i = 0; i < views.size(); ++i)
+  {
+    if (!views[i].ptr)
+      continue;
+    [regions addObject:@{
+      @"name" : @(views[i].name),
+      @"host" : [NSString stringWithFormat:@"%p", views[i].ptr]
+    }];
     volatile u32* mine = reinterpret_cast<volatile u32*>(views[i].ptr);
     const u32 saved = *mine;
     const u32 marker = 0x1C0BE000u + static_cast<u32>(i) * 0x101u + 7u;
     *mine = marker;
-    for (size_t j = 0; j < views.size(); ++j) {
-      if (j == i || !views[j].ptr) continue;
+    for (size_t j = 0; j < views.size(); ++j)
+    {
+      if (j == i || !views[j].ptr)
+        continue;
       if (*reinterpret_cast<volatile u32*>(views[j].ptr) == marker)
-        [aliases addObject:[NSString stringWithFormat:@"%s aliases %s", views[i].name, views[j].name]];
+        [aliases
+            addObject:[NSString stringWithFormat:@"%s aliases %s", views[i].name, views[j].name]];
     }
     *mine = saved;
   }
@@ -257,52 +316,77 @@ class RingListener : public Common::Log::LogListener {
   return out;
 }
 
-+ (NSDictionary<NSString*, id>*)memArenaSelfTest {
++ (NSDictionary<NSString*, id>*)memArenaSelfTest
+{
   using DarwinMode = Common::MemArena::DarwinMode;
   const DarwinMode original = Common::MemArena::GetDarwinMode();
   // Same layout Memmap builds for a Wii title: MEM1 (24 MB) @0, L1 cache (256 KB), MEM2 (64 MB).
-  struct Region { const char* name; size_t offset; size_t size; };
+  struct Region
+  {
+    const char* name;
+    size_t offset;
+    size_t size;
+  };
   const size_t mem1 = 24 * 1024 * 1024, l1 = 256 * 1024, mem2 = 64 * 1024 * 1024;
-  const std::vector<Region> layout = {{"MEM1", 0, mem1}, {"L1", mem1, l1}, {"MEM2", mem1 + l1, mem2}};
+  const std::vector<Region> layout = {
+      {"MEM1", 0, mem1}, {"L1", mem1, l1}, {"MEM2", mem1 + l1, mem2}};
   const size_t total = mem1 + l1 + mem2;
   NSMutableDictionary<NSString*, id>* out = [NSMutableDictionary dictionary];
-  for (DarwinMode mode : {DarwinMode::MachEntry, DarwinMode::Remap, DarwinMode::Plain}) {
+  for (DarwinMode mode : {DarwinMode::MachEntry, DarwinMode::Remap, DarwinMode::Plain})
+  {
     Common::MemArena::SetDarwinMode(mode);
     NSMutableDictionary* r = [NSMutableDictionary dictionary];
     Common::MemArena arena;
     arena.GrabSHMSegment(total, "icube-selftest");
     std::vector<u8*> views;
     bool ok = true;
-    for (const Region& reg : layout) {
+    for (const Region& reg : layout)
+    {
       u8* v = static_cast<u8*>(arena.CreateView(reg.offset, reg.size));
       views.push_back(v);
-      if (!v) { ok = false; r[[NSString stringWithFormat:@"%s", reg.name]] = @"create-view-failed"; }
+      if (!v)
+      {
+        ok = false;
+        r[[NSString stringWithFormat:@"%s", reg.name]] = @"create-view-failed";
+      }
     }
-    if (ok) {
-      for (size_t i = 0; i < views.size(); ++i) {
+    if (ok)
+    {
+      for (size_t i = 0; i < views.size(); ++i)
+      {
         madvise(views[i], layout[i].size, MADV_WILLNEED);
         madvise(views[i], layout[i].size, MADV_RANDOM);
       }
       // Distinct pattern at the start, middle and end of every view.
-      auto slots = [](size_t size) { return std::vector<size_t>{0, (size / 2) & ~size_t{0x3FFF}, size - 0x4000}; };
+      auto slots = [](size_t size) {
+        return std::vector<size_t>{0, (size / 2) & ~size_t{0x3FFF}, size - 0x4000};
+      };
       for (size_t i = 0; i < views.size(); ++i)
         for (size_t off : slots(layout[i].size))
-          *reinterpret_cast<volatile u32*>(views[i] + off) = 0xA5000000u | (static_cast<u32>(i) << 16) | static_cast<u32>(off >> 14);
+          *reinterpret_cast<volatile u32*>(views[i] + off) =
+              0xA5000000u | (static_cast<u32>(i) << 16) | static_cast<u32>(off >> 14);
       NSMutableArray* aliases = [NSMutableArray array];
       NSMutableArray* bad = [NSMutableArray array];
-      for (size_t i = 0; i < views.size(); ++i) {
-        for (size_t off : slots(layout[i].size)) {
-          const u32 expect = 0xA5000000u | (static_cast<u32>(i) << 16) | static_cast<u32>(off >> 14);
+      for (size_t i = 0; i < views.size(); ++i)
+      {
+        for (size_t off : slots(layout[i].size))
+        {
+          const u32 expect =
+              0xA5000000u | (static_cast<u32>(i) << 16) | static_cast<u32>(off >> 14);
           const u32 got = *reinterpret_cast<volatile u32*>(views[i] + off);
           if (got != expect)
-            [bad addObject:[NSString stringWithFormat:@"%s+0x%zx got %08x want %08x", layout[i].name, off, got, expect]];
+            [bad addObject:[NSString stringWithFormat:@"%s+0x%zx got %08x want %08x",
+                                                      layout[i].name, off, got, expect]];
         }
         // Does another view show this view's start pattern at its own start?
-        for (size_t j = 0; j < views.size(); ++j) {
-          if (i == j) continue;
+        for (size_t j = 0; j < views.size(); ++j)
+        {
+          if (i == j)
+            continue;
           const u32 other = *reinterpret_cast<volatile u32*>(views[j]);
           if ((other & 0xFFFF0000u) == (0xA5000000u | (static_cast<u32>(i) << 16)))
-            [aliases addObject:[NSString stringWithFormat:@"%s shows %s's pattern", layout[j].name, layout[i].name]];
+            [aliases addObject:[NSString stringWithFormat:@"%s shows %s's pattern", layout[j].name,
+                                                          layout[i].name]];
         }
       }
       // Plain mode has no shared segment, so a base/view comparison only applies otherwise.
@@ -311,7 +395,9 @@ class RingListener : public Common::Log::LogListener {
       r[@"result"] = (bad.count == 0 && aliases.count == 0) ? @"pass" : @"FAIL";
       for (size_t i = 0; i < views.size(); ++i)
         arena.ReleaseView(views[i], layout[i].size);
-    } else {
+    }
+    else
+    {
       r[@"result"] = @"FAIL";
     }
     arena.ReleaseSHMSegment();
@@ -321,8 +407,10 @@ class RingListener : public Common::Log::LogListener {
   return out;
 }
 
-+ (BOOL)loadStateSlot:(NSInteger)slot {
-  if (!Core::IsRunning(Core::System::GetInstance())) return NO;
++ (BOOL)loadStateSlot:(NSInteger)slot
+{
+  if (!Core::IsRunning(Core::System::GetInstance()))
+    return NO;
   // State::Load reaches PauseAndLock -- host-thread-only, same as pause/resume above.
   DOLHostQueueRunSync(^{
     State::Load(Core::System::GetInstance(), (int)slot);
@@ -330,8 +418,10 @@ class RingListener : public Common::Log::LogListener {
   return YES;
 }
 
-+ (void)loadStateSlotAsync:(NSInteger)slot completion:(void (^)(BOOL ok))completion {
-  if (!Core::IsRunning(Core::System::GetInstance())) {
++ (void)loadStateSlotAsync:(NSInteger)slot completion:(void (^)(BOOL ok))completion
+{
+  if (!Core::IsRunning(Core::System::GetInstance()))
+  {
     completion(NO);
     return;
   }
@@ -340,15 +430,20 @@ class RingListener : public Common::Log::LogListener {
     completion(YES);
   });
 }
-+ (BOOL)loadStatePath:(NSString*)path {
-  if (!Core::IsRunning(Core::System::GetInstance()) || ![[NSFileManager defaultManager] fileExistsAtPath:path]) return NO;
++ (BOOL)loadStatePath:(NSString*)path
+{
+  if (!Core::IsRunning(Core::System::GetInstance()) ||
+      ![[NSFileManager defaultManager] fileExistsAtPath:path])
+    return NO;
   DOLHostQueueRunSync(^{
     State::LoadAs(Core::System::GetInstance(), path.UTF8String);
   });
   return YES;
 }
-+ (BOOL)saveStateSlot:(NSInteger)slot {
-  if (!Core::IsRunning(Core::System::GetInstance())) return NO;
++ (BOOL)saveStateSlot:(NSInteger)slot
+{
+  if (!Core::IsRunning(Core::System::GetInstance()))
+    return NO;
   DOLHostQueueRunSync(^{
     State::Save(Core::System::GetInstance(), (int)slot);  // 2603: Save is synchronous, no wait flag
   });
@@ -360,11 +455,14 @@ static std::atomic<int> s_fifoState{0};
 static NSString* s_fifoPath = nil;
 static NSInteger s_fifoFrames = 0;
 
-+ (BOOL)fifoRecordStart:(NSInteger)frames path:(NSString*)path {
++ (BOOL)fifoRecordStart:(NSInteger)frames path:(NSString*)path
+{
   auto& system = Core::System::GetInstance();
-  if (!Core::IsRunning(system) || frames < 1 || frames > 600 || path.length == 0) return NO;
+  if (!Core::IsRunning(system) || frames < 1 || frames > 600 || path.length == 0)
+    return NO;
   auto& recorder = system.GetFifoRecorder();
-  if (recorder.IsRecording() || s_fifoState == 1 || s_fifoState == 2) return NO;
+  if (recorder.IsRecording() || s_fifoState == 1 || s_fifoState == 2)
+    return NO;
   s_fifoPath = [path copy];
   s_fifoFrames = frames;
   s_fifoState = 1;
@@ -384,31 +482,40 @@ static NSInteger s_fifoFrames = 0;
   return YES;
 }
 
-+ (NSDictionary<NSString*, id>*)fifoRecordStatus {
++ (NSDictionary<NSString*, id>*)fifoRecordStatus
+{
   static NSString* const names[] = {@"idle", @"recording", @"saving", @"saved", @"save_failed"};
   const int state = s_fifoState.load();
-  NSMutableDictionary* d = [@{@"state": names[state], @"frames_requested": @(s_fifoFrames)} mutableCopy];
-  if (s_fifoPath) d[@"path"] = s_fifoPath;
-  if (state == 3) {
+  NSMutableDictionary* d =
+      [@{@"state" : names[state], @"frames_requested" : @(s_fifoFrames)} mutableCopy];
+  if (s_fifoPath)
+    d[@"path"] = s_fifoPath;
+  if (state == 3)
+  {
     if (FifoDataFile* file = Core::System::GetInstance().GetFifoRecorder().GetRecordedFile())
       d[@"frames_recorded"] = @(file->GetFrameCount());
   }
   return d;
 }
 
-+ (NSString*)fpuSelfTest {
++ (NSString*)fpuSelfTest
+{
   return [NSString stringWithUTF8String:PowerPC::RunFPUSelfTest().c_str()];
 }
 
-+ (NSString*)hotBlocksReport:(NSInteger)topN {
-  return [NSString stringWithUTF8String:CIRProfiler::BuildHotBlocksReport((u32)MAX(1, topN)).c_str()];
++ (NSString*)hotBlocksReport:(NSInteger)topN
+{
+  return
+      [NSString stringWithUTF8String:CIRProfiler::BuildHotBlocksReport((u32)MAX(1, topN)).c_str()];
 }
 
-+ (NSString*)gatherPipeSelfTest {
++ (NSString*)gatherPipeSelfTest
+{
   return [NSString stringWithUTF8String:CIRSelfTest::RunGatherPipeSelfTest().c_str()];
 }
 
-+ (NSDictionary<NSString*, id>*)renderState {
++ (NSDictionary<NSString*, id>*)renderState
+{
   const auto& c = g_ActiveConfig;
   // Ruling (final whole-branch review, item 6): config-sourced fields below are
   // renamed with a `_configured` suffix -- they report what Config says, NOT
@@ -436,7 +543,8 @@ static NSInteger s_fifoFrames = 0;
   };
 }
 
-+ (NSDictionary<NSString*, id>*)buildInfo {
++ (NSDictionary<NSString*, id>*)buildInfo
+{
   NSBundle* b = [NSBundle mainBundle];
   return @{
     @"scm_rev" : @(Common::GetScmRevStr().c_str()),
@@ -451,15 +559,18 @@ static NSInteger s_fifoFrames = 0;
   };
 }
 
-+ (NSArray<NSString*>*)logTail:(NSInteger)count {
++ (NSArray<NSString*>*)logTail:(NSInteger)count
+{
   std::lock_guard<std::mutex> lk(g_handler_mutex);
   NSMutableArray* out = [NSMutableArray array];
   size_t start = g_log_ring.size() > (size_t)count ? g_log_ring.size() - count : 0;
-  for (size_t i = start; i < g_log_ring.size(); i++) [out addObject:@(g_log_ring[i].c_str())];
+  for (size_t i = start; i < g_log_ring.size(); i++)
+    [out addObject:@(g_log_ring[i].c_str())];
   return out;
 }
 
-+ (void)setConfigChangedHandler:(void (^)(void))handler {
++ (void)setConfigChangedHandler:(void (^)(void))handler
+{
   {
     std::lock_guard<std::mutex> lk(g_handler_mutex);
     g_config_handler = handler;
@@ -474,21 +585,25 @@ static NSInteger s_fifoFrames = 0;
         std::lock_guard<std::mutex> lk(g_handler_mutex);
         handler = g_config_handler;
       }
-      if (handler) handler();
+      if (handler)
+        handler();
     });
   });
 }
-+ (void)setLogHandler:(void (^)(NSString*, NSString*))handler {
++ (void)setLogHandler:(void (^)(NSString*, NSString*))handler
+{
   static dispatch_once_t once;
   dispatch_once(&once, ^{
     auto* mgr = Common::Log::LogManager::GetInstance();
-    mgr->RegisterListener(Common::Log::LogListener::LOG_WINDOW_LISTENER, std::make_unique<RingListener>());
+    mgr->RegisterListener(Common::Log::LogListener::LOG_WINDOW_LISTENER,
+                          std::make_unique<RingListener>());
     mgr->EnableListener(Common::Log::LogListener::LOG_WINDOW_LISTENER, true);
   });
   std::lock_guard<std::mutex> lk(g_handler_mutex);
   g_log_handler = handler;
 }
-+ (void)setCoreStateHandler:(void (^)(NSString*))handler {
++ (void)setCoreStateHandler:(void (^)(NSString*))handler
+{
   {
     std::lock_guard<std::mutex> lk(g_handler_mutex);
     g_state_handler = handler;
@@ -504,7 +619,8 @@ static NSInteger s_fifoFrames = 0;
         std::lock_guard<std::mutex> lk(g_handler_mutex);
         handler = g_state_handler;
       }
-      if (handler) handler(StateName(s));
+      if (handler)
+        handler(StateName(s));
     });
   });
 }

@@ -8,13 +8,28 @@ struct TVSoftwarePropertiesView: View, Identifiable {
   let item: TVGameItem
   @Environment(\.dismiss) private var dismiss
   @State private var profilesVersion: Int = 0
+  /// Developer, publisher and release date from the shared lookup databases, when they know the game.
+  @State private var lookupInfo: GameLookupInfo?
 
   var body: some View {
-    #if os(iOS)
-    iosBody
-    #else
-    tvBody
-    #endif
+    Group {
+      #if os(iOS)
+      iosBody
+      #else
+      tvBody
+      #endif
+    }
+    .task(id: item.id) {
+      lookupInfo = await GameLookup.live.info(gameID: item.gameID, platform: item.platform)
+    }
+  }
+
+  /// The cards for what the lookup databases added; none when they do not know the game.
+  @ViewBuilder private var lookupCards: some View {
+    if let developer = lookupInfo?.developer { PropertyCard(title: L("Developer"), value: developer) }
+    if let publisher = lookupInfo?.publisher { PropertyCard(title: L("Publisher"), value: publisher) }
+    if let released = lookupInfo?.released { PropertyCard(title: L("Released"), value: released) }
+    if let genres = lookupInfo?.genres { PropertyCard(title: L("Genre"), value: genres) }
   }
 
   #if os(iOS)
@@ -61,6 +76,8 @@ struct TVSoftwarePropertiesView: View, Identifiable {
 
               PropertyCard(title: L("Manufacturer"), value: item.makerLong)
               PropertyCard(title: L("Region"), value: item.countryName)
+
+              lookupCards
 
               PropertyCard(title: L("Title ID (Hex)"), value: item.titleIDHex ?? "-")
               PropertyCard(title: L("GameTDB ID"), value: item.gametdbID)
@@ -230,6 +247,8 @@ struct TVSoftwarePropertiesView: View, Identifiable {
               // Publisher/Manufacturer and Region
               PropertyCard(title: L("Manufacturer"), value: item.makerLong)
               PropertyCard(title: L("Region"), value: item.countryName)
+
+              lookupCards
 
               // IDs
               PropertyCard(title: L("Title ID (Hex)"), value: item.titleIDHex ?? "-")

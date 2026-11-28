@@ -1,10 +1,10 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
-import XCTest
 import PVCloudSync
 import enum PVLibraryMetadata.LibraryMetadataDocument
 import PVSyncRules
+import XCTest
 @testable import iCube
 
 final class AppDocumentMergersTests: XCTestCase {
@@ -12,6 +12,7 @@ final class AppDocumentMergersTests: XCTestCase {
   private func bytes(_ object: [String: Any]) throws -> Data {
     try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
   }
+
   private func metadataMerger() throws -> any DocumentMerger {
     try XCTUnwrap(AppDocumentMergers.merger(relativePath: "Profiles/LibraryMetadata/" + identity.fileName, fileType: .gameProfile))
   }

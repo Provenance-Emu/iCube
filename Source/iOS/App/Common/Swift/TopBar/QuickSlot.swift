@@ -73,7 +73,7 @@ enum QuickSlot {
   @MainActor
   static func saveSnapshot(slot: Int, expectedGameID: String, expectedSessionIdentifier: UInt64) async -> SaveStateCompletedSnapshot? {
     await SaveStateService.saveSlotSnapshotAsync(slot, expectedGameID: expectedGameID,
-                                                expectedSessionIdentifier: expectedSessionIdentifier)
+                                                 expectedSessionIdentifier: expectedSessionIdentifier)
   }
 
   @MainActor
@@ -107,7 +107,7 @@ enum QuickSlot {
     pendingSave = request
     defer { if pendingSave?.id == request.id { pendingSave = nil } }
     let snapshot = await SaveStateService.saveSlotSnapshotAsync(request.slot, expectedGameID: request.gameID,
-                                                               expectedSessionIdentifier: request.sessionIdentifier)
+                                                                expectedSessionIdentifier: request.sessionIdentifier)
     guard request.accepts(completedGameID: snapshot?.gameID, completedSessionIdentifier: snapshot?.sessionIdentifier,
                           currentGameID: TVEmulationBridge.currentGameID(),
                           currentSessionIdentifier: TVEmulationBridge.currentSessionIdentifier(), activeID: pendingSave?.id) else { return }

@@ -18,12 +18,12 @@ import Foundation
 ///
 /// 8091 is above 1024, so the same list works on device, in the simulator and on a Mac.
 enum ICubeServerPorts {
-    static let home = 8091
-    static let fallback = 8190...8199
+  static let home = 8091
+  static let fallback = 8190 ... 8199
 
-    /// Ports tried in order.
-    static let candidates = [home] + Array(fallback)
+  /// Ports tried in order.
+  static let candidates = [home] + Array(fallback)
 
-    /// Every app's home ports. None of iCube's fallbacks may be one of these.
-    static let ecosystemHomePorts: Set<Int> = Set([80, 81, 8080, 8081, 8090, 8091]).union(8484...8515)
+  /// Every app's home ports. None of iCube's fallbacks may be one of these.
+  static let ecosystemHomePorts: Set<Int> = Set([80, 81, 8080, 8081, 8090, 8091]).union(8484 ... 8515)
 }

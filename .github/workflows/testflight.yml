@@ -19,8 +19,8 @@ on:
         required: true
         default: all
         type: choice
-        # `mac` is the Mac Catalyst build. It is opt-in: `all` and the nightly stay iOS + tvOS,
-        # because a cold Catalyst core build adds about 40 minutes.
+        # `mac` is the Mac Catalyst build. `all` and the nightly include it; a cold Catalyst
+        # core build adds about 40 minutes.
         options: [all, ios, tvos, mac]
       force:
         description: 'Upload even if develop has not moved since the last nightly'
@@ -52,7 +52,7 @@ jobs:
             ios)  M='["ios"]' ;;
             tvos) M='["tvos"]' ;;
             mac)  M='["mac"]' ;;
-            *)    M='["ios","tvos"]' ;;
+            *)    M='["ios","tvos","mac"]' ;;
           esac
           echo "matrix=$M" >> "$GITHUB_OUTPUT"
 
@@ -137,7 +137,12 @@ jobs:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(needs.plan.outputs.matrix) }}
-    timeout-minutes: 300
+    # The Mac leg is new to the nightly. Until it has a record of passing, its failure must
+    # not stop iOS and tvOS from shipping or the nightly marker from moving; a Mac-only run
+    # (platform: mac) still fails loudly.
+    continue-on-error: ${{ matrix.platform == 'mac' && inputs.platform != 'mac' }}
+    # Includes up to 180 min queued behind another app's release (the lockf wait below).
+    timeout-minutes: 480
     env:
       DEST: ${{ matrix.platform == 'tvos' && 'generic/platform=tvOS' || matrix.platform == 'mac' && 'generic/platform=macOS,variant=Mac Catalyst' || 'generic/platform=iOS' }}
       DOL_ARCHIVE_PLATFORM: ${{ matrix.platform }}
@@ -278,14 +283,19 @@ jobs:
             rm -f "$cer"
           done
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
-          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          # The search list and the default keychain are shared by every job of this user on
+          # the machine. Change them only while holding the release lock (see "Archive and
+          # upload"), so neither moves under another app's codesign.
           # A runner user that has never logged in has no default keychain at all
           # ("A default keychain could not be found"); give it the job keychain. Each job
           # recreates the keychain at the same path, so the default stays valid. A user with a
           # login keychain (the Studio's GUI-session runner) keeps its own default untouched.
-          if ! security default-keychain -d user >/dev/null 2>&1; then
-            security default-keychain -d user -s "$KEYCHAIN"
-          fi
+          lockf -k -t 10800 /tmp/provenance-emu-release-signing.lock sh -ec '
+            security list-keychains -d user -s "$1" $(security list-keychains -d user | tr -d "\"")
+            if ! security default-keychain -d user >/dev/null 2>&1; then
+              security default-keychain -d user -s "$1"
+            fi
+          ' sh "$KEYCHAIN"
           # Without -v this also lists rejected identities with the reason
           # (e.g. CSSMERR_TP_NOT_TRUSTED), which is what a failure needs.
           security find-identity -p codesigning "$KEYCHAIN"
@@ -333,7 +343,14 @@ jobs:
 
           python3 Tools/release-audit/check_device_core.py --platform "$DOL_ARCHIVE_PLATFORM"
           set -o pipefail
-          xcodebuild archive \
+          # One release at a time on a build machine. Provenance, iCube and iFly each sign from
+          # their own temporary keychain but share the build user's security session, and
+          # overlapping archives failed codesign with errSecInternalComponent twice on 2026-11-25
+          # (Provenance runs 45581755556 and 45588055170, iFly 45582857351); the same commits
+          # passed when run alone. lockf(1) waits for any other app's archive or export to
+          # finish. All three workflows use this lock file name.
+          SIGNING_LOCK=/tmp/provenance-emu-release-signing.lock
+          lockf -k -t 10800 "$SIGNING_LOCK" xcodebuild archive \
             -workspace Source/iOS/App/iCube.xcworkspace \
             -scheme "iCube (AppStore)" \
             -configuration "Release (AppStore)" \
@@ -355,7 +372,9 @@ jobs:
           # -allowProvisioningUpdates is required on export too, not just archive:
           # the API key authenticates but does not authorise xcodebuild to create
           # or download profiles, and a fresh runner has none installed.
-          xcodebuild -exportArchive \
+          # Same machine-wide lock as the archive (see there).
+          SIGNING_LOCK=/tmp/provenance-emu-release-signing.lock
+          lockf -k -t 10800 "$SIGNING_LOCK" xcodebuild -exportArchive \
             -archivePath "$ARCHIVE" \
             -exportPath "$RUNNER_TEMP/export" \
             -exportOptionsPlist ExportOptions/ExportOptions-AppStore.plist \
@@ -447,7 +466,13 @@ jobs:
       - name: Clean up keychain and signing material
         if: always()
         run: |
-          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          # Lock it at once: that touches only this keychain. Deleting it rewrites the shared
+          # search list, so that waits for the release lock. If another app is still releasing
+          # after 10 minutes, the locked file is left for the runner, which clears RUNNER_TEMP
+          # before its next job.
+          security lock-keychain "$KEYCHAIN" 2>/dev/null || true
+          lockf -k -t 600 /tmp/provenance-emu-release-signing.lock security delete-keychain "$KEYCHAIN" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/import.p12" "$RUNNER_TEMP"/AuthKey_*.p8 "$RUNNER_TEMP/testflight.log"
           rm -rf "$RUNNER_TEMP/export" "$RUNNER_TEMP"/iCube-*.xcarchive
 

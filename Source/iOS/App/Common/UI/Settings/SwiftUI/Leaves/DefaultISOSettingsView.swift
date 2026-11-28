@@ -24,6 +24,7 @@ struct DefaultISOSelectionState: Equatable {
   static var instructions: String {
     L("Choose a local GameCube or Wii disc from its library context menu. This disc is mounted when booting homebrew launchers or the Wii Menu.")
   }
+
   static var unavailableMessage: String {
     L("The selected Default ISO is missing or unreadable. Select its new location in the library or clear it in General settings.")
   }
@@ -41,8 +42,8 @@ enum DefaultISOSettingsModelBuilder {
                                      state.path, enabled: false))
     }
     rows.append(SettingsRow.destructive("clear-default-iso", L("Clear Default ISO"),
-                                         DefaultISOSelectionState.instructions, icon: "xmark.circle",
-                                         enabled: !state.path.isEmpty, run: clear))
+                                        DefaultISOSelectionState.instructions, icon: "xmark.circle",
+                                        enabled: !state.path.isEmpty, run: clear))
     #if os(tvOS)
     rows.append(SettingsRow.action("done", L("Done"), DefaultISOSelectionState.instructions, run: done))
     #endif

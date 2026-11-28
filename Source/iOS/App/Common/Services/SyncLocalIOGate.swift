@@ -37,7 +37,9 @@ final class SyncLocalIOGate: @unchecked Sendable {
   func ensureEmulation() -> UInt64 {
     condition.lock()
     defer { condition.unlock() }
-    if !emulating { generation &+= 1; emulating = true }
+    if !emulating { generation &+= 1
+      emulating = true
+    }
     return generation
   }
 

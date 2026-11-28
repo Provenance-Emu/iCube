@@ -1,9 +1,9 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import PVHelp
 import SwiftUI
 import UIKit
-import PVHelp
 
 /// Presents an in-app wiki page over whatever is currently on screen, for callers that can't
 /// easily host a SwiftUI `NavigationStack` themselves — in particular Objective-C++ alert code
@@ -39,9 +39,9 @@ final class HelpPresentationBridge: NSObject {
             }
           }
       })
-#if os(iOS)
+      #if os(iOS)
       host.modalPresentationStyle = .pageSheet
-#endif
+      #endif
       presenter.present(host, animated: true)
     }
   }

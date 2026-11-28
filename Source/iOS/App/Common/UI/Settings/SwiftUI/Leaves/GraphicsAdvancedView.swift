@@ -53,10 +53,14 @@ struct GraphicsAdvancedView: View {
     case .flag(let flag, let v):
       state[keyPath: flag.keyPath] = v
       write(flag, v)
-    case .compilerThreads(let v): state.compilerThreads = v; DOLConfigBridge.setGfxShaderCompilerThreads(v)
-    case .precompilerThreads(let v): state.precompilerThreads = v; DOLConfigBridge.setGfxShaderPrecompilerThreads(v)
-    case .presentDrawable(let v): state.usePresentDrawable = v; DOLConfigBridge.setGfxMtlUsePresentDrawable(v)
-    case .manuallyUploadBuffers(let v): state.manuallyUploadBuffers = v; DOLConfigBridge.setGfxMtlManuallyUploadBuffers(v)
+    case .compilerThreads(let v): state.compilerThreads = v
+      DOLConfigBridge.setGfxShaderCompilerThreads(v)
+    case .precompilerThreads(let v): state.precompilerThreads = v
+      DOLConfigBridge.setGfxShaderPrecompilerThreads(v)
+    case .presentDrawable(let v): state.usePresentDrawable = v
+      DOLConfigBridge.setGfxMtlUsePresentDrawable(v)
+    case .manuallyUploadBuffers(let v): state.manuallyUploadBuffers = v
+      DOLConfigBridge.setGfxMtlManuallyUploadBuffers(v)
     }
   }
 

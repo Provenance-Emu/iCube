@@ -115,6 +115,7 @@ final class AssignmentEngine {
     }
 
     // MARK: Wiimotes
+
     //
     // The old C++ auto-assign hardcoded `isWii:NO`, so during a Wii game it only
     // ever touched GC pad config and silently no-opped on Wiimote config — a

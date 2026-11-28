@@ -32,9 +32,9 @@ enum ShaderSettingsModelBuilder {
                   footer: L("Note: Some shaders can reduce performance. Heavier effects may cause slowdowns depending on your device."), items: main),
       MenuSection(id: "advanced", header: L("Advanced"),
                   footer: L("Compatibility options for specific devices or shaders. Most people never need these."), items: [
-        SettingsRow.toggle("flip", L("Flip vertically"), s.flipVertically, L("Flips the shader output for presets that render upside down."), icon: "arrow.up.and.down", set: { apply(.flipVertically($0)) }),
-        SettingsRow.toggle("precopy", L("Enable pre-copy (compat)"), s.preCopy, L("Copies the frame before the shader runs. Fixes a few presets on some devices."), icon: "doc.on.doc", set: { apply(.preCopy($0)) }),
-      ]),
+                    SettingsRow.toggle("flip", L("Flip vertically"), s.flipVertically, L("Flips the shader output for presets that render upside down."), icon: "arrow.up.and.down", set: { apply(.flipVertically($0)) }),
+                    SettingsRow.toggle("precopy", L("Enable pre-copy (compat)"), s.preCopy, L("Copies the frame before the shader runs. Fixes a few presets on some devices."), icon: "doc.on.doc", set: { apply(.preCopy($0)) }),
+                  ]),
     ]
     if s.isDebug {
       sections.append(MenuSection(id: "developer", header: L("Developer"), items: [

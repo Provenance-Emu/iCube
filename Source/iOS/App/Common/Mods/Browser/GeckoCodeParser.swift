@@ -62,7 +62,7 @@ enum GeckoCodeParser {
     var name = text.trimmingCharacters(in: .whitespaces)
     var creator = ""
     if name.hasSuffix("]"), let open = name.lastIndex(of: "[") {
-      creator = String(name[name.index(after: open)..<name.index(before: name.endIndex)])
+      creator = String(name[name.index(after: open) ..< name.index(before: name.endIndex)])
       name = String(name[..<open]).trimmingCharacters(in: .whitespaces)
     }
     return GeckoCodeEntry(name: name, creator: creator, notes: [], lines: [], isEnabled: false)

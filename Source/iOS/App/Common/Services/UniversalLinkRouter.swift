@@ -67,10 +67,10 @@ enum UniversalLinkRouter {
   /// ASCII letters, digits, `-` and `_`, 1 to `maxGameIDLength` characters. No `.`, `/`, whitespace or
   /// percent-decoded oddities.
   static func isValidGameID(_ id: String) -> Bool {
-    guard (1...maxGameIDLength).contains(id.unicodeScalars.count) else { return false }
+    guard (1 ... maxGameIDLength).contains(id.unicodeScalars.count) else { return false }
     return id.unicodeScalars.allSatisfy { scalar in
       switch scalar.value {
-      case 0x30...0x39, 0x41...0x5A, 0x61...0x7A, 0x2D, 0x5F: return true
+      case 0x30 ... 0x39, 0x41 ... 0x5A, 0x61 ... 0x7A, 0x2D, 0x5F: return true
       default: return false
       }
     }

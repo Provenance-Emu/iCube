@@ -2,7 +2,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-extern NSString * const DOLWiiOverlayLayoutChangedNotification;
+extern NSString* const DOLWiiOverlayLayoutChangedNotification;
 
 @interface DOLWiimoteBridge : NSObject
 + (BOOL)isClassicActiveForWiimote:(NSInteger)index;

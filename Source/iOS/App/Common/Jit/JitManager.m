@@ -18,19 +18,21 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
 
 @interface JitManager ()
 
-@property (readwrite, assign) bool acquiredJit;
-@property (readwrite, assign) bool deviceHasTxm;
-@property (readwrite, assign) bool jitSupported;
-@property (readwrite, assign) bool debuggerAttached;
-@property (readwrite, assign) bool txmAuthorized;
+@property(readwrite, assign) bool acquiredJit;
+@property(readwrite, assign) bool deviceHasTxm;
+@property(readwrite, assign) bool jitSupported;
+@property(readwrite, assign) bool debuggerAttached;
+@property(readwrite, assign) bool txmAuthorized;
 
 @end
 
-@implementation JitManager {
+@implementation JitManager
+{
   DOLJitType _jitType;
 }
 
-+ (JitManager*)shared {
++ (JitManager*)shared
+{
   static JitManager* sharedInstance = nil;
   static dispatch_once_t onceToken;
 
@@ -41,14 +43,16 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   return sharedInstance;
 }
 
-- (id)init {
-  if (self = [super init]) {
+- (id)init
+{
+  if (self = [super init])
+  {
 #if TARGET_OS_SIMULATOR
     _jitType = DOLJitTypeUnrestricted;
 #else
     _jitType = DOLJitTypeDebugger;
 #endif
-    
+
     self.acquiredJit = false;
 
     // JIT is supported iff the process is debuggable (carries get-task-allow): that
@@ -57,28 +61,34 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
     // sideload / jailbreak / TrollStore / dev builds are debuggable (flag present
     // → true), normal App Store / TestFlight installs are jitless (flag stripped).
     //
-    // Every configuration, the App Store one included: the same IPA can be re-signed with get-task-allow
-    // (sideload, LiveContainer, Xcode) and must get JIT then. A store install has no get-task-allow, so this is
-    // false there and every JIT surface (boot prompt, Debug leaf, StikDebug) stays hidden.
+    // Every configuration, the App Store one included: the same IPA can be re-signed with
+    // get-task-allow (sideload, LiveContainer, Xcode) and must get JIT then. A store install has no
+    // get-task-allow, so this is false there and every JIT surface (boot prompt, Debug leaf,
+    // StikDebug) stays hidden.
     self.jitSupported = [self checkIfProcessIsJitCapable];
-    
-    if (@available(iOS 26, tvOS 26, *)) {
+
+    if (@available(iOS 26, tvOS 26, *))
+    {
       self.deviceHasTxm = [self checkIfDeviceUsesTXM];
-    } else {
+    }
+    else
+    {
       // This is technically untrue on some devices, but it only matters on iOS 26 or above.
       self.deviceHasTxm = false;
     }
   }
-  
+
   return self;
 }
 
-- (void)recheckIfJitIsAcquired {
+- (void)recheckIfJitIsAcquired
+{
   // Without get-task-allow (an unmodified App Store / TestFlight install) JIT can never be
   // acquired, even with a debugger attached: Xcode sets CS_DEBUGGED on any attached process,
   // which would otherwise flip acquiredJit true and drive the boot path into the JIT/LuckTXM
   // handshake. Hard-stop here keeps such installs jitless and crash-free.
-  if (!self.jitSupported) {
+  if (!self.jitSupported)
+  {
     self.acquiredJit = false;
     return;
   }
@@ -87,28 +97,45 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   // detaches again once the TXM handshake is answered.
   self.debuggerAttached = [self checkIfDebuggerAttachedNow];
 
-  if (_jitType == DOLJitTypeDebugger) {
+  if (_jitType == DOLJitTypeDebugger)
+  {
     self.acquiredJit = [self checkIfProcessIsDebugged];
-    
-    if (self.deviceHasTxm && self.acquiredJit && !self.txmAuthorized) {
-      if ([self checkIfRunningUnderXcode]) {
+
+    if (self.deviceHasTxm && self.acquiredJit && !self.txmAuthorized)
+    {
+      if ([self checkIfRunningUnderXcode])
+      {
         // Xcode's LLDB answers the handshake when the repo's .lldbinit (the
         // dolphin_jit_lldb.py bless hook) is the scheme's LLDB Init File; without
         // it LLDB simply stops at the brk and the developer sees EXC_BREAKPOINT.
-        self.acquisitionError = @"Running under Xcode on an iOS 26 TXM device. The JIT region is authorized by the LLDB bless hook (dolphin_jit_lldb.py via the scheme's LLDB Init File) when a game boots.";
-      } else {
-        self.acquisitionError = self.debuggerAttached
-            ? @"A debugger is attached. On iOS 26 TXM devices the JIT region is authorized by the attached broker (StikDebug's script or an lldb running dolphin_jit_lldb.py) when a game boots; other debuggers fall back to Cached Interpreter."
-            : @"JIT was acquired but no debugger is attached now. On iOS 26 TXM devices, launch iCube through StikDebug (Enable JIT via StikDebug) or attach lldb with dolphin_jit_lldb.py so the JIT region can be authorized; otherwise games use the Cached Interpreter.";
+        self.acquisitionError = @"Running under Xcode on an iOS 26 TXM device. The JIT region is "
+                                @"authorized by the LLDB bless hook (dolphin_jit_lldb.py via the "
+                                @"scheme's LLDB Init File) when a game boots.";
+      }
+      else
+      {
+        self.acquisitionError =
+            self.debuggerAttached ?
+                @"A debugger is attached. On iOS 26 TXM devices the JIT region is authorized by "
+                @"the attached broker (StikDebug's script or an lldb running dolphin_jit_lldb.py) "
+                @"when a game boots; other debuggers fall back to Cached Interpreter." :
+                @"JIT was acquired but no debugger is attached now. On iOS 26 TXM devices, launch "
+                @"iCube through StikDebug (Enable JIT via StikDebug) or attach lldb with "
+                @"dolphin_jit_lldb.py so the JIT region can be authorized; otherwise games use the "
+                @"Cached Interpreter.";
       }
     }
-  } else if (_jitType == DOLJitTypeUnrestricted) {
+  }
+  else if (_jitType == DOLJitTypeUnrestricted)
+  {
     self.acquiredJit = true;
   }
 }
 
-- (bool)shouldAttemptTXMHandshake {
-  if (!self.deviceHasTxm || !self.acquiredJit) {
+- (bool)shouldAttemptTXMHandshake
+{
+  if (!self.deviceHasTxm || !self.acquiredJit)
+  {
     return false;
   }
 
@@ -116,17 +143,20 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   // (the SIGTRAP net in AllocateExecutableMemoryRegion_LuckTXM then turns an
   // unanswered brk into a clean interpreter fallback); "0" disables it outright.
   NSString* override = [[NSProcessInfo processInfo] environment][@"DOL_JIT_TXM"];
-  if ([override isEqualToString:@"1"]) {
+  if ([override isEqualToString:@"1"])
+  {
     return true;
   }
-  if ([override isEqualToString:@"0"]) {
+  if ([override isEqualToString:@"0"])
+  {
     return false;
   }
 
   // A previous launch issued the handshake and never got to clear the cookie, i.e. the brk
   // killed us. Whatever is attached is not a broker, so do not try again; the user gets the
   // Cached Interpreter, and "Enable JIT via StikDebug" re-arms it explicitly.
-  if (self.txmHandshakeBlocked) {
+  if (self.txmHandshakeBlocked)
+  {
     self.acquisitionError = @"A previous attempt to authorize the JIT region did not complete, so "
                              "JIT is off for safety. Use \"Enable JIT via StikDebug\" to retry.";
     return false;
@@ -141,27 +171,32 @@ typedef NS_ENUM(NSInteger, DOLJitType) {
   return [self checkIfDebuggerAttachedNow];
 }
 
-- (bool)txmHandshakeBlocked {
+- (bool)txmHandshakeBlocked
+{
   return [[NSUserDefaults standardUserDefaults] boolForKey:kTXMHandshakeInFlightKey];
 }
 
-- (void)beginTXMHandshake {
+- (void)beginTXMHandshake
+{
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   [defaults setBool:YES forKey:kTXMHandshakeInFlightKey];
   [defaults synchronize];  // must reach disk before the brk, which may never return
 }
 
-- (void)clearTXMHandshakeCookie {
+- (void)clearTXMHandshakeCookie
+{
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   [defaults removeObjectForKey:kTXMHandshakeInFlightKey];
   [defaults synchronize];
 }
 
-- (void)noteTXMHandshakeResult:(bool)authorized {
+- (void)noteTXMHandshakeResult:(bool)authorized
+{
   // We came back from the brk at all, so it was not fatal: retire the cookie either way.
   [self clearTXMHandshakeCookie];
   self.txmAuthorized = authorized;
-  if (authorized) {
+  if (authorized)
+  {
     self.acquisitionError = nil;
   }
 }

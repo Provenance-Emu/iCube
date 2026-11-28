@@ -129,14 +129,17 @@ extension EmulationScreen {
         super.init(frame: frame)
         addGestureRecognizer(gameplayContactObserver)
       }
+
       required init?(coder: NSCoder) {
         super.init(coder: coder)
         addGestureRecognizer(gameplayContactObserver)
       }
+
       override func willRemoveSubview(_ subview: UIView) {
         GameplayTouchContactObserver.cancelContacts(in: subview)
         super.willRemoveSubview(subview)
       }
+
       override func willMove(toSuperview newSuperview: UIView?) {
         if newSuperview == nil { gameplayContactObserver.cancelAllContacts() }
         super.willMove(toSuperview: newSuperview)

@@ -27,14 +27,14 @@ struct NearbyLibraryMirrorView: View {
       let formatter = ByteCountFormatter()
       formatter.countStyle = .file
       status.append(SettingsRow.caption("progress", String(format: L("%@ of %@"),
-        formatter.string(fromByteCount: progress.bytesTransferred), formatter.string(fromByteCount: progress.totalBytes))))
+                                                           formatter.string(fromByteCount: progress.bytesTransferred), formatter.string(fromByteCount: progress.totalBytes))))
     }
     if !mirror.enabledPeerIDs.isEmpty {
       status.append(SettingsRow.action("retry", L("Check Now"), L("Check paired nearby devices for games to copy."),
-                                      icon: "arrow.clockwise", run: mirror.retry))
+                                       icon: "arrow.clockwise", run: mirror.retry))
       status.append(SettingsRow.action("disable", L("Turn Off Automatic Copying"),
-                                      L("Stop automatic copying from every device. Existing local games are kept."),
-                                      icon: "stop.circle", run: mirror.disableAll))
+                                       L("Stop automatic copying from every device. Existing local games are kept."),
+                                       icon: "stop.circle", run: mirror.disableAll))
     }
     sections.append(MenuSection(id: "status", header: L("Status"), footer: ContinuityManager.transportSecurityNotice, items: status))
     return MenuModel(sections: sections)

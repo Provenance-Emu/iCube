@@ -78,13 +78,13 @@ enum TouchOverlayHitTester {
 
   private static func sector(forAngle angle: Double) -> Set<DPadDirection> {
     switch angle {
-    case 22.5..<67.5: return [.down, .right]
-    case 67.5..<112.5: return [.down]
-    case 112.5..<157.5: return [.down, .left]
-    case 157.5..<202.5: return [.left]
-    case 202.5..<247.5: return [.up, .left]
-    case 247.5..<292.5: return [.up]
-    case 292.5..<337.5: return [.up, .right]
+    case 22.5 ..< 67.5: return [.down, .right]
+    case 67.5 ..< 112.5: return [.down]
+    case 112.5 ..< 157.5: return [.down, .left]
+    case 157.5 ..< 202.5: return [.left]
+    case 202.5 ..< 247.5: return [.up, .left]
+    case 247.5 ..< 292.5: return [.up]
+    case 292.5 ..< 337.5: return [.up, .right]
     default: return [.right]
     }
   }

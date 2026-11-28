@@ -23,7 +23,7 @@ struct ConfigGeneralView: View {
     s.overrideRegion = DOLConfigBridge.mainOverrideRegionSettings()
     s.autoDiscChange = DOLConfigBridge.mainAutoDiscChange()
     s.defaultISO = DefaultISOSelectionState(path: DOLConfigBridge.defaultISOSelectionPath(),
-                                           available: DOLConfigBridge.defaultISOSelectionIsAvailable())
+                                            available: DOLConfigBridge.defaultISOSelectionIsAvailable())
     s.fastDiscSpeed = DOLConfigBridge.mainFastDiscSpeed()
     s.resumeWhereLeftOff = defaults.bool(forKey: ConfigGeneralDefaultsKey.resumeWhereLeftOff)
     s.speedLimitPercent = DOLConfigBridge.mainEmulationSpeedPercent()
@@ -42,16 +42,26 @@ struct ConfigGeneralView: View {
   private func apply(_ change: ConfigGeneralChange) {
     let defaults = UserDefaults.standard
     switch change {
-    case .dualCore(let v): state.dualCore = v; DOLConfigBridge.setMainCpuThread(v)
-    case .dspThread(let v): state.dspThread = v; DOLConfigBridge.setMainDSPThread(v)
-    case .cheats(let v): state.cheats = v; DOLConfigBridge.setMainEnableCheats(v)
-    case .overrideRegion(let v): state.overrideRegion = v; DOLConfigBridge.setMainOverrideRegionSettings(v)
-    case .autoDiscChange(let v): state.autoDiscChange = v; DOLConfigBridge.setMainAutoDiscChange(v)
-    case .fastDiscSpeed(let v): state.fastDiscSpeed = v; DOLConfigBridge.setMainFastDiscSpeed(v)
-    case .resumeWhereLeftOff(let v): state.resumeWhereLeftOff = v; defaults.set(v, forKey: ConfigGeneralDefaultsKey.resumeWhereLeftOff)
-    case .speedLimit(let v): state.speedLimitPercent = v; DOLConfigBridge.setMainEmulationSpeedPercent(v)
-    case .fastForwardSpeed(let v): state.fastForwardSpeedPercent = v; defaults.set(v, forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent)
-    case .fallbackRegion(let v): state.fallbackRegion = v; DOLConfigBridge.setMainFallbackRegion(v.rawValue)
+    case .dualCore(let v): state.dualCore = v
+      DOLConfigBridge.setMainCpuThread(v)
+    case .dspThread(let v): state.dspThread = v
+      DOLConfigBridge.setMainDSPThread(v)
+    case .cheats(let v): state.cheats = v
+      DOLConfigBridge.setMainEnableCheats(v)
+    case .overrideRegion(let v): state.overrideRegion = v
+      DOLConfigBridge.setMainOverrideRegionSettings(v)
+    case .autoDiscChange(let v): state.autoDiscChange = v
+      DOLConfigBridge.setMainAutoDiscChange(v)
+    case .fastDiscSpeed(let v): state.fastDiscSpeed = v
+      DOLConfigBridge.setMainFastDiscSpeed(v)
+    case .resumeWhereLeftOff(let v): state.resumeWhereLeftOff = v
+      defaults.set(v, forKey: ConfigGeneralDefaultsKey.resumeWhereLeftOff)
+    case .speedLimit(let v): state.speedLimitPercent = v
+      DOLConfigBridge.setMainEmulationSpeedPercent(v)
+    case .fastForwardSpeed(let v): state.fastForwardSpeedPercent = v
+      defaults.set(v, forKey: ConfigGeneralDefaultsKey.fastForwardSpeedPercent)
+    case .fallbackRegion(let v): state.fallbackRegion = v
+      DOLConfigBridge.setMainFallbackRegion(v.rawValue)
     }
   }
 }

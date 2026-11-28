@@ -60,15 +60,15 @@ struct DSUSettingsView: View {
             .disabled(isClientLocked),
           L("Receives input from a Cemuhook DSU server on your network (e.g. a phone's gyro). Add servers below as IP:Port."))
         Toggle(L("Show DSU Debug HUD"), isOn: Binding(get: {
-#if DEBUG
+          #if DEBUG
           true
-#else
+          #else
           UserDefaults.standard.bool(forKey: "ui_show_dsu_debug_hud")
-#endif
+          #endif
         }, set: { v in
-#if !DEBUG
+          #if !DEBUG
           UserDefaults.standard.set(v, forKey: "ui_show_dsu_debug_hud")
-#endif
+          #endif
         }))
         Toggle(L("Send DSU Gyro/Accel"), isOn: Binding(get: {
           let has = UserDefaults.standard.object(forKey: "dsu_enable_gyro") != nil

@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #import "EmulationCoordinator.h"
-#import "AudioVolumeRuntime.h"
 #include "AdaptiveClockFrameGuard.h"
+#import "AudioVolumeRuntime.h"
 
 NSString* const DOLEmulationWillStartNotification = @"DOLEmulationWillStartNotification";
 NSString* const DOLEmulationDidStartNotification = @"DOLEmulationDidStartNotification";
 NSString* const DOLEmulationDidEndNotification = @"DOLEmulationDidEndNotification";
-NSString* const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDidChangeNotification";
+NSString* const DOLExternalDisplayDidChangeNotification =
+    @"DOLExternalDisplayDidChangeNotification";
 
 #include <cmath>
 #include <fmt/format.h>
@@ -21,45 +22,44 @@ NSString* const DOLExternalDisplayDidChangeNotification = @"DOLExternalDisplayDi
 #include "Common/ScopeGuard.h"
 
 #import <Metal/Metal.h>
-#import <UIKit/UIKit.h>
 #import <QuartzCore/QuartzCore.h>
+#import <UIKit/UIKit.h>
 
 #import "Common/Logging/Log.h"
 #import "Common/MemoryUtil.h"
 #import "Common/WindowSystemInfo.h"
 
+#include "Common/Version.h"
 #import "Core/Boot/Boot.h"
 #import "Core/BootManager.h"
+#import "Core/Config/GraphicsSettings.h"
+#import "Core/Config/MainSettings.h"
+#include "Core/ConfigManager.h"
+#import "Core/Core.h"
 #import "Core/HW/EXI/EXI_DeviceIPL.h"
+#import "Core/System.h"
 #import "DiscIO/Enums.h"
 #import "DiscIO/Volume.h"
-#import "Core/Config/GraphicsSettings.h"
-#import "Core/Core.h"
-#import "Core/System.h"
-#include "Common/Version.h"
-#include "Core/ConfigManager.h"
-#import "Core/Config/MainSettings.h"
 
-#import "VideoCommon/VideoConfig.h"
 #import "VideoCommon/PerformanceMetrics.h"
 #import "VideoCommon/StallMetrics.h"
+#import "VideoCommon/VideoConfig.h"
 
-#import "VideoCommon/Present.h"
-#import "VideoCommon/Present.h"
-#include "UICommon/UICommon.h"
-#include "Core/HW/SI/SI_Device.h"
+#include "Common/FileUtil.h"
+#include "Common/IniFile.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/HW/GCPad.h"
-#include "InputCommon/ControllerInterface/ControllerInterface.h"
-#include "InputCommon/InputConfig.h"
-#include "InputCommon/ControllerEmu/ControllerEmu.h"
-#include "InputCommon/ControllerInterface/CoreDevice.h"
-#import "Core/PowerPC/PowerPC.h"
+#include "Core/HW/SI/SI_Device.h"
 #include "Core/HW/VideoInterface.h"
-#include "Common/IniFile.h"
-#include "Common/FileUtil.h"
 #include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
+#import "Core/PowerPC/PowerPC.h"
+#include "InputCommon/ControllerEmu/ControllerEmu.h"
+#include "InputCommon/ControllerInterface/ControllerInterface.h"
+#include "InputCommon/ControllerInterface/CoreDevice.h"
+#include "InputCommon/InputConfig.h"
+#include "UICommon/UICommon.h"
+#import "VideoCommon/Present.h"
 
 // iCube: CIR hot-block profiler report (defined in CachedInterpreter.cpp). Declared locally instead
 // of including CachedInterpreter.h, which pulls rangeset/* not on this target's include path.
@@ -86,31 +86,54 @@ void Reset();
 
 // Dump the perf-relevant settings as one readable key=value block, once at game START and once at
 // game EXIT. Goes to both NSLog (device console) and INFO_LOG_FMT(CORE, ...) (Dolphin log file) so
-// Joe can copy-paste it straight into a bug report. Values are formatted human-readably (true/false,
-// enum names) rather than raw ints.
-// Build the perf-relevant settings as one readable key=value block. Shared by the START/EXIT logger
+// Joe can copy-paste it straight into a bug report. Values are formatted human-readably
+// (true/false, enum names) rather than raw ints. Build the perf-relevant settings as one readable
+// key=value block. Shared by the START/EXIT logger
 // (_ICubeDumpPerfSettings) and the "Copy State" clipboard button (+copyStateToClipboard) so both
 // emit the exact same SETTINGS content.
 static std::string _ICubeBuildPerfSettingsString(const char* phase)
 {
   auto boolStr = [](bool v) { return v ? "true" : "false"; };
   auto triStr = [](TriState v) {
-    switch (v) { case TriState::Off: return "Off"; case TriState::On: return "On"; default: return "Auto"; }
+    switch (v)
+    {
+    case TriState::Off:
+      return "Off";
+    case TriState::On:
+      return "On";
+    default:
+      return "Auto";
+    }
   };
 
   const std::string gid = SConfig::GetInstance().GetGameID();
   const std::string title = SConfig::GetInstance().GetTitleName();
-  const bool adaptiveClock = [[NSUserDefaults standardUserDefaults] boolForKey:@"adaptive_clock_enable"];
+  const bool adaptiveClock =
+      [[NSUserDefaults standardUserDefaults] boolForKey:@"adaptive_clock_enable"];
   const bool fastmemCfg = Config::Get(Config::MAIN_FASTMEM);
   const bool fastmemAvail = [FastmemManager shared].fastmemAvailable;
 
   std::string b;
   b.reserve(2800);
-  auto line = [&](const char* k, const std::string& v) { b += "  "; b += k; b += "="; b += v; b += "\n"; };
+  auto line = [&](const char* k, const std::string& v) {
+    b += "  ";
+    b += k;
+    b += "=";
+    b += v;
+    b += "\n";
+  };
   auto lineB = [&](const char* k, bool v) { line(k, boolStr(v)); };
   auto lineI = [&](const char* k, long v) { line(k, std::to_string(v)); };
-  auto lineF = [&](const char* k, float v) { char buf[32]; snprintf(buf, sizeof(buf), "%.3f", v); line(k, buf); };
-  auto section = [&](const char* title) { b += "  --- "; b += title; b += " ---\n"; };
+  auto lineF = [&](const char* k, float v) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.3f", v);
+    line(k, buf);
+  };
+  auto section = [&](const char* title) {
+    b += "  --- ";
+    b += title;
+    b += " ---\n";
+  };
 
   b += "=== iCube settings @ ";
   b += phase;
@@ -148,7 +171,8 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
   line("MAIN_GFX_BACKEND", Config::Get(Config::MAIN_GFX_BACKEND));
   lineB("GFX_FAST_DEPTH_CALC", Config::Get(Config::GFX_FAST_DEPTH_CALC));
   lineB("GFX_ENABLE_GPU_TEXTURE_DECODING", Config::Get(Config::GFX_ENABLE_GPU_TEXTURE_DECODING));
-  lineI("GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES", Config::Get(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES));
+  lineI("GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES",
+        Config::Get(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES));
   // GameSpecific/PerfQueriesEnable — no global UI; set per-game INI or NetPlay sync.
   lineB("GFX_PERF_QUERIES_ENABLE(game-ini/netplay)", Config::Get(Config::GFX_PERF_QUERIES_ENABLE));
 
@@ -181,10 +205,10 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
     else
       lineI("icube_vertex_loader_mode", [ud integerForKey:@"icube_vertex_loader_mode"]);
     const VertexLoaderType vlt = Config::Get(Config::GFX_VERTEX_LOADER_TYPE);
-    line("GFX_VERTEX_LOADER_TYPE(runtime)", vlt == VertexLoaderType::Software ? "Software"
-                                         : vlt == VertexLoaderType::NEON    ? "NEON"
-                                         : vlt == VertexLoaderType::Compare ? "Compare"
-                                                                            : "Native");
+    line("GFX_VERTEX_LOADER_TYPE(runtime)", vlt == VertexLoaderType::Software ? "Software" :
+                                            vlt == VertexLoaderType::NEON     ? "NEON" :
+                                            vlt == VertexLoaderType::Compare  ? "Compare" :
+                                                                                "Native");
   }
 
   b += "=== end ===";
@@ -192,7 +216,8 @@ static std::string _ICubeBuildPerfSettingsString(const char* phase)
 }
 
 // Dump the perf-relevant settings once at game START and once at game EXIT, to both NSLog (device
-// console) and INFO_LOG_FMT(CORE, ...) (Dolphin log file) so Joe can copy-paste it into a bug report.
+// console) and INFO_LOG_FMT(CORE, ...) (Dolphin log file) so Joe can copy-paste it into a bug
+// report.
 static void _ICubeDumpPerfSettings(const char* phase)
 {
   const std::string b = _ICubeBuildPerfSettingsString(phase);
@@ -207,9 +232,11 @@ static void _ICubeDumpPerfSettings(const char* phase)
 @end
 
 @implementation RenderHostView
-- (void)layoutSubviews {
+- (void)layoutSubviews
+{
   [super layoutSubviews];
-  if (self.onLayout) self.onLayout();
+  if (self.onLayout)
+    self.onLayout();
 }
 @end
 
@@ -217,12 +244,88 @@ static void _ICubeDumpPerfSettings(const char* phase)
 @end
 
 @implementation SafeMainThreadMetalLayer
-- (void)setContentsScale:(CGFloat)contentsScale { if ([NSThread isMainThread]) { [super setContentsScale:contentsScale]; } else { dispatch_async(dispatch_get_main_queue(), ^{ [super setContentsScale:contentsScale]; }); } }
-- (void)setFramebufferOnly:(BOOL)framebufferOnly { if ([NSThread isMainThread]) { [super setFramebufferOnly:framebufferOnly]; } else { dispatch_async(dispatch_get_main_queue(), ^{ [super setFramebufferOnly:framebufferOnly]; }); } }
-- (void)setMaximumDrawableCount:(NSUInteger)maximumDrawableCount { if ([NSThread isMainThread]) { if ([self respondsToSelector:@selector(setMaximumDrawableCount:)]) [super setMaximumDrawableCount:maximumDrawableCount]; } else { dispatch_async(dispatch_get_main_queue(), ^{ if ([self respondsToSelector:@selector(setMaximumDrawableCount:)]) [super setMaximumDrawableCount:maximumDrawableCount]; }); } }
-- (void)setAllowsNextDrawableTimeout:(BOOL)allowsNextDrawableTimeout { if ([NSThread isMainThread]) { if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) [super setAllowsNextDrawableTimeout:allowsNextDrawableTimeout]; } else { dispatch_async(dispatch_get_main_queue(), ^{ if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) [super setAllowsNextDrawableTimeout:allowsNextDrawableTimeout]; }); } }
-- (void)setDrawableSize:(CGSize)drawableSize { if ([NSThread isMainThread]) { [super setDrawableSize:drawableSize]; } else { dispatch_async(dispatch_get_main_queue(), ^{ [super setDrawableSize:drawableSize]; }); } }
-- (void)setPixelFormat:(MTLPixelFormat)pixelFormat { if ([NSThread isMainThread]) { [super setPixelFormat:pixelFormat]; } else { dispatch_async(dispatch_get_main_queue(), ^{ [super setPixelFormat:pixelFormat]; }); } }
+- (void)setContentsScale:(CGFloat)contentsScale
+{
+  if ([NSThread isMainThread])
+  {
+    [super setContentsScale:contentsScale];
+  }
+  else
+  {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [super setContentsScale:contentsScale];
+    });
+  }
+}
+- (void)setFramebufferOnly:(BOOL)framebufferOnly
+{
+  if ([NSThread isMainThread])
+  {
+    [super setFramebufferOnly:framebufferOnly];
+  }
+  else
+  {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [super setFramebufferOnly:framebufferOnly];
+    });
+  }
+}
+- (void)setMaximumDrawableCount:(NSUInteger)maximumDrawableCount
+{
+  if ([NSThread isMainThread])
+  {
+    if ([self respondsToSelector:@selector(setMaximumDrawableCount:)])
+      [super setMaximumDrawableCount:maximumDrawableCount];
+  }
+  else
+  {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if ([self respondsToSelector:@selector(setMaximumDrawableCount:)])
+        [super setMaximumDrawableCount:maximumDrawableCount];
+    });
+  }
+}
+- (void)setAllowsNextDrawableTimeout:(BOOL)allowsNextDrawableTimeout
+{
+  if ([NSThread isMainThread])
+  {
+    if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)])
+      [super setAllowsNextDrawableTimeout:allowsNextDrawableTimeout];
+  }
+  else
+  {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if ([self respondsToSelector:@selector(setAllowsNextDrawableTimeout:)])
+        [super setAllowsNextDrawableTimeout:allowsNextDrawableTimeout];
+    });
+  }
+}
+- (void)setDrawableSize:(CGSize)drawableSize
+{
+  if ([NSThread isMainThread])
+  {
+    [super setDrawableSize:drawableSize];
+  }
+  else
+  {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [super setDrawableSize:drawableSize];
+    });
+  }
+}
+- (void)setPixelFormat:(MTLPixelFormat)pixelFormat
+{
+  if ([NSThread isMainThread])
+  {
+    [super setPixelFormat:pixelFormat];
+  }
+  else
+  {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [super setPixelFormat:pixelFormat];
+    });
+  }
+}
 @end
 
 // iCube: the jitless vertex loader is user-selectable from Settings via the NSUserDefaults
@@ -238,14 +341,18 @@ static VertexLoaderType ICubeJitlessVertexLoaderType()
     return VertexLoaderType::NEON;
   switch ([d integerForKey:@"icube_vertex_loader_mode"])
   {
-    case 0:  return VertexLoaderType::Software;
-    case 2:  return VertexLoaderType::Compare;
-    default: return VertexLoaderType::NEON;  // 1
+  case 0:
+    return VertexLoaderType::Software;
+  case 2:
+    return VertexLoaderType::Compare;
+  default:
+    return VertexLoaderType::NEON;  // 1
   }
 }
 
 // Adaptive clock v3 phases.
-enum {
+enum
+{
   ACPhase_Verify = 0,  // seeded from a per-game f* clock; confirm it still holds, then ±1 re-find
   ACPhase_Search,      // find the cliff: predictive jump (max_speed estimate) or coarse descent
   ACPhase_FineTune,    // refine onto the cliff via the max_speed predictor (post predictive-jump)
@@ -254,37 +361,44 @@ enum {
 };
 
 // Which lever an in-flight Hold-phase headroom up-probe raised (for revert/attribution).
-enum { AC_LEVER_NONE = 0, AC_LEVER_CPU, AC_LEVER_VI };
+enum
+{
+  AC_LEVER_NONE = 0,
+  AC_LEVER_CPU,
+  AC_LEVER_VI
+};
 
 // Tunables. The CONTROL LAW (cliff-find: stop descending at the first/highest clock that meets the
 // f* criterion) is the thing under test; these constants are reasoned starting points and still
 // need on-device tuning against real CPU-bound titles. (See research synthesis §#1: validate with a
 // manual underclock sweep + PerfSnapshot log first.)
-static const int   ACTickMs        = 500;    // timer cadence (ms)
-static const int   ACSearchStepTicks = 3;    // ~1.5s between sweep steps (3 * 500ms)
-static const int   ACSettleTicks   = 14;     // ~7s settle/observation window
-static const int   ACVerifyTicks   = 5;      // ~2.5s verify of a seeded per-game clock
-static const int   ACHoldTicks     = 6;      // ~3s between hold-phase health checks
-static const float ACSweepStep     = 0.10f;  // CPU-clock decrement per coarse search step
-static const float ACVIStep        = 0.10f;  // VI-clock decrement (secondary lever, CPU floored)
+static const int ACTickMs = 500;         // timer cadence (ms)
+static const int ACSearchStepTicks = 3;  // ~1.5s between sweep steps (3 * 500ms)
+static const int ACSettleTicks = 14;     // ~7s settle/observation window
+static const int ACVerifyTicks = 5;      // ~2.5s verify of a seeded per-game clock
+static const int ACHoldTicks = 6;        // ~3s between hold-phase health checks
+static const float ACSweepStep = 0.10f;  // CPU-clock decrement per coarse search step
+static const float ACVIStep = 0.10f;     // VI-clock decrement (secondary lever, CPU floored)
 // Predictive-seed convergence: max_speed (=emulated/work) estimates the cliff directly — at clock c
-// with measured max_speed m, the CPU-bound cliff f* ≈ c·m. So instead of stepping down 0.10 at a time
-// from 1.0 (~7.5s of degraded play, landing on a coarse grid that can't hit e.g. 0.47), JUMP to the
-// estimate (gated on bound==CpuBound; meaningless when GPU-bound/Unknown -> coarse fallback) and then
-// REFINE by re-estimating from the new clock (Newton-style; converges in ~2-3 windows and lands on
-// the fine grid). Idle loops make c·m UNDER-estimate (host work is sublinear in clock) — the safe
-// direction: land below, refine up. ACFineStep is the landing grid; ACFineTicks the per-refine window.
-static const float ACFineStep      = 0.025f; // fine grid the predictor rounds onto
-static const int   ACFineTicks     = 8;      // ~4s window per fine-refine evaluation
+// with measured max_speed m, the CPU-bound cliff f* ≈ c·m. So instead of stepping down 0.10 at a
+// time from 1.0 (~7.5s of degraded play, landing on a coarse grid that can't hit e.g. 0.47), JUMP
+// to the estimate (gated on bound==CpuBound; meaningless when GPU-bound/Unknown -> coarse fallback)
+// and then REFINE by re-estimating from the new clock (Newton-style; converges in ~2-3 windows and
+// lands on the fine grid). Idle loops make c·m UNDER-estimate (host work is sublinear in clock) —
+// the safe direction: land below, refine up. ACFineStep is the landing grid; ACFineTicks the
+// per-refine window.
+static const float ACFineStep = 0.025f;  // fine grid the predictor rounds onto
+static const int ACFineTicks = 8;        // ~4s window per fine-refine evaluation
 // GPU-bound guard. On single-core iOS (CPUThread forced off — dual-core deadlocks the lean CIR),
-// GPU work runs INLINE on the CPU timeline, so a GPU-bound title depresses max_speed and ClassifyBound
-// mislabels it CpuBound. The predictive jump would then ratchet the CPU clock to the floor for ZERO
-// fps gain (slow-motion). Guard the CPU clock probe: if lowering the
-// clock from the pre-jump baseline does NOT raise achieved speed by at least this much, the CPU lever
-// isn't the bottleneck (it's a GPU/video wall) — restore the baseline clock and PARK the lever.
-static const float ACProbeMinGain  = 0.05f;  // min speed gain from underclocking to call it CPU-bound
-static const float ACCpuFloor      = 0.30f;  // never sweep below this (game logic goes slow-mo)
-static const float ACViFloor       = 0.50f;  // VI underclock floor
+// GPU work runs INLINE on the CPU timeline, so a GPU-bound title depresses max_speed and
+// ClassifyBound mislabels it CpuBound. The predictive jump would then ratchet the CPU clock to the
+// floor for ZERO fps gain (slow-motion). Guard the CPU clock probe: if lowering the clock from the
+// pre-jump baseline does NOT raise achieved speed by at least this much, the CPU lever isn't the
+// bottleneck (it's a GPU/video wall) — restore the baseline clock and PARK the lever.
+static const float ACProbeMinGain =
+    0.05f;                              // min speed gain from underclocking to call it CPU-bound
+static const float ACCpuFloor = 0.30f;  // never sweep below this (game logic goes slow-mo)
+static const float ACViFloor = 0.50f;   // VI underclock floor
 // f* GO/NO-GO: the emulated speed (vs realtime) must hold at/above this to count as "keeps up".
 // At and above f* on a CPU-bound title the interpreter can't keep up -> speed drops below this ->
 // keep descending. This is the PRIMARY discriminator (it is the only sensor that moves AT f*).
@@ -292,8 +406,9 @@ static const float ACSpeedThreshold = 0.99f;
 // Hysteresis below ACSpeedThreshold for the settle decision: keeps a marginal windowed-speed dip
 // right at the cliff (e.g. 98.5%) from descending one step PAST f*. Speed is the ONLY GO/NO-GO
 // sensor. The former VPS≈FPS and dup-ratio guards were REMOVED: a 30fps-by-design title (common on
-// GC/Wii) presents ~50% duplicate fields at FULL speed, so those guards vetoed legit 30fps games and
-// walked the sweep to the floor (slow-motion). Audio underrun is the one remaining honesty guard.
+// GC/Wii) presents ~50% duplicate fields at FULL speed, so those guards vetoed legit 30fps games
+// and walked the sweep to the floor (slow-motion). Audio underrun is the one remaining honesty
+// guard.
 static const float ACSpeedHysteresis = 0.02f;
 // Audio-underrun honesty-guard tolerance: allowed underruns per elapsed tick before a window is
 // judged too-slow. The old guard vetoed the clock on the FIRST underrun in a window, which
@@ -313,15 +428,15 @@ static const double ACUnderrunPerTickBudget = 1.0;
 // clock sitting one step below f* (max_speed ≈ 1.10 with a 0.10 step) does NOT re-probe — that
 // dead-band is what keeps steady-state at the cliff from oscillating (the reason up-probing was
 // originally removed). Bias high: under-recovery is invisible, oscillation is visible stutter.
-// Up-probe gate is STEP-RELATIVE, not a fixed headroom number. One step below the cliff, max_speed =
-// f*/(f*-step), which ranges ~1.11 (f*->1.0) to >1.25 (low f*) — so a fixed 1.15 oscillates on
+// Up-probe gate is STEP-RELATIVE, not a fixed headroom number. One step below the cliff, max_speed
+// = f*/(f*-step), which ranges ~1.11 (f*->1.0) to >1.25 (low f*) — so a fixed 1.15 oscillates on
 // low-f* titles (e.g. F-Zero f*~0.47: settles 0.40, up-probes 0.50, fails, reverts, repeats) and
 // under-recovers on high-f* ones. Instead estimate the cliff f_hat = clock * max_speed (CPU-bound,
 // ~linear work-vs-clock) and only probe a lever UP if f_hat sits this margin ABOVE where the probe
-// would LAND. If the only upward neighbor is the clock Search already rejected, f_hat won't clear it
-// and we stay put (converged) instead of oscillating.
-static const float ACUpMargin           = 0.04f;  // estimated cliff must exceed the post-probe clock by this
-static const int   ACUpFailCooldownEvals = 4;     // Hold evals to wait after an up-probe overshoot
+// would LAND. If the only upward neighbor is the clock Search already rejected, f_hat won't clear
+// it and we stay put (converged) instead of oscillating.
+static const float ACUpMargin = 0.04f;  // estimated cliff must exceed the post-probe clock by this
+static const int ACUpFailCooldownEvals = 4;  // Hold evals to wait after an up-probe overshoot
 // --- Starvation guard: new game frames per wall second (AdaptiveClockFrameGuard.h). ---
 // The speed sensor is blind to a title whose own frame rate is what the clock buys: on a CPU-bound
 // 60fps title (Melee with 4 players, F-Zero GX) every underclock step raises VPS-speed toward 1.0
@@ -367,7 +482,8 @@ static std::pair<std::string, std::string> ACLastDecisionAndLearned()
   return {s_acDecision, s_acLearned};
 }
 
-@implementation EmulationCoordinator {
+@implementation EmulationCoordinator
+{
   UIView* _renderHost;
   SafeMainThreadMetalLayer* _metalLayer;
   id<MTLDevice> _device;
@@ -387,50 +503,51 @@ static std::pair<std::string, std::string> ACLastDecisionAndLearned()
   // can't tell f* from a lower clock (both read ≈100% because the throttle caps speed), which is
   // exactly why the prior loop (which kept descending while "stable") sailed past f* to the floor.
   // v3 stops at first match. v3.1 adds the missing recovery direction: max_speed (throttle-sleep
-  // removed) DOES distinguish them — ≈1.0 at f*, >1 below it — so Hold uses it to climb back up when
-  // the scene lightens (the prior strict one-way descent could never recover; see ACUpMargin).
-  float _acCPU;            // current applied CPU overclock (the lever we sweep). [floor .. 1.0]
-  float _acVI;             // current applied VI overclock (the second lever, used only when CPU is
-                           // already floored and still short). Adapted since v2 (v1 never touched it).
+  // removed) DOES distinguish them — ≈1.0 at f*, >1 below it — so Hold uses it to climb back up
+  // when the scene lightens (the prior strict one-way descent could never recover; see ACUpMargin).
+  float _acCPU;  // current applied CPU overclock (the lever we sweep). [floor .. 1.0]
+  float _acVI;   // current applied VI overclock (the second lever, used only when CPU is
+                 // already floored and still short). Adapted since v2 (v1 never touched it).
   float _acLastApplied;    // last MAIN_OVERCLOCK we wrote; if it changes underneath us, user did it
   float _acLastAppliedVI;  // last MAIN_VI_OVERCLOCK we wrote; for per-knob manual-move detection
-  float _acStableCPU;      // f* — highest CPU clock confirmed at-full-speed this session (converged)
+  float _acStableCPU;  // f* — highest CPU clock confirmed at-full-speed this session (converged)
   float _acLastPersisted;  // last value written to NSUserDefaults, to avoid redundant writes
   // Per-knob, re-armable arbitration (step #2), replacing the global session-sticky _acYielded:
   // a manual move of ONE clock yields only THAT lever for the session; the auto controller keeps
-  // regulating the other. Re-arm = toggle the adaptive clock off then on (startAdaptiveClockIfEnabled
-  // re-inits both flags). A manual CPU touch must NOT freeze the VI lever and vice versa.
-  BOOL  _acCpuYielded;     // user took manual CPU-clock control -> stop auto-adjusting CPU-oc
-  BOOL  _acViYielded;      // user took manual VI-clock control  -> stop auto-adjusting VI-oc
-  BOOL  _acVerifyProbedUp; // in the seeded re-find: have we already tried the +1 step above f*?
+  // regulating the other. Re-arm = toggle the adaptive clock off then on
+  // (startAdaptiveClockIfEnabled re-inits both flags). A manual CPU touch must NOT freeze the VI
+  // lever and vice versa.
+  BOOL _acCpuYielded;      // user took manual CPU-clock control -> stop auto-adjusting CPU-oc
+  BOOL _acViYielded;       // user took manual VI-clock control  -> stop auto-adjusting VI-oc
+  BOOL _acVerifyProbedUp;  // in the seeded re-find: have we already tried the +1 step above f*?
   // Headroom up-recovery (Hold phase) — see ACUpMargin. Fixes the one-way ratchet.
-  int   _acUpProbeLever;       // lever raised by the in-flight up-probe (AC_LEVER_*), for revert
-  int   _acUpCooldown;         // Hold evals remaining before another up-probe is allowed
-  BOOL  _acViRecoveryStalled;  // a VI up-probe overshot -> stop retrying VI, let CPU climb instead
-  float _acPreProbeCPU;        // CPU clock before the in-flight up-probe (revert target)
-  float _acPreProbeVI;         // VI clock before the in-flight up-probe (revert target)
+  int _acUpProbeLever;        // lever raised by the in-flight up-probe (AC_LEVER_*), for revert
+  int _acUpCooldown;          // Hold evals remaining before another up-probe is allowed
+  BOOL _acViRecoveryStalled;  // a VI up-probe overshot -> stop retrying VI, let CPU climb instead
+  float _acPreProbeCPU;       // CPU clock before the in-flight up-probe (revert target)
+  float _acPreProbeVI;        // VI clock before the in-flight up-probe (revert target)
   // Predictive-seed (FineTune) state + GPU-bound guard.
-  BOOL  _acFineConfirmed;      // FineTune has confirmed at least one keeps-up clock this cycle
-  float _acProbeBaseCPU;       // clock just before the predictive jump (restore target if not CPU-bound)
-  double _acProbeBaseSpeed;    // achieved speed just before the jump (CPU-bound = lowering raised it)
-  BOOL  _acCpuLeverParked;     // GPU/video wall: CPU lever gives no gain -> stop fighting it with clock
+  BOOL _acFineConfirmed;  // FineTune has confirmed at least one keeps-up clock this cycle
+  float _acProbeBaseCPU;  // clock just before the predictive jump (restore target if not CPU-bound)
+  double _acProbeBaseSpeed;  // achieved speed just before the jump (CPU-bound = lowering raised it)
+  BOOL _acCpuLeverParked;  // GPU/video wall: CPU lever gives no gain -> stop fighting it with clock
   // Frame-rate starvation guard (AdaptiveClockFrameGuard.h).
   AdaptiveClockFrameGuard::Reference _acRef;  // highest point measured this run and its frame rate
-  BOOL _acStarveConfirming;    // tripped: re-measuring at the reference point before parking
-  double _acStarveTripRate;    // frame rate of the window that tripped the guard
-  float _acStarveTripCPU;      // clocks that tripped it (resumed if the trip is not confirmed)
+  BOOL _acStarveConfirming;  // tripped: re-measuring at the reference point before parking
+  double _acStarveTripRate;  // frame rate of the window that tripped the guard
+  float _acStarveTripCPU;    // clocks that tripped it (resumed if the trip is not confirmed)
   float _acStarveTripVI;
-  int _acStarveResumePhase;    // phase to resume if the trip is not confirmed
-  BOOL _acPointVetted;         // a window at the current point passed the guard (gates persisting)
+  int _acStarveResumePhase;  // phase to resume if the trip is not confirmed
+  BOOL _acPointVetted;       // a window at the current point passed the guard (gates persisting)
   CFTimeInterval _acWindowStart;  // wall time the observation window began
   CFTimeInterval _acLastTick;     // wall time of the previous tick (gap = stale window)
 
-  int   _acPhase;          // ACPhase_* below
-  int   _acPhaseTicks;     // ticks elapsed in the current phase (timer fires every ACTickMs)
+  int _acPhase;       // ACPhase_* below
+  int _acPhaseTicks;  // ticks elapsed in the current phase (timer fires every ACTickMs)
   // Underrun baseline captured at the start of an observation window, to detect NEW underruns.
   unsigned long long _acUnderrunBase;
-  unsigned long long _acDupBase;     // duplicate-present count at window start
-  unsigned long long _acTotalBase;   // total-present count at window start
+  unsigned long long _acDupBase;    // duplicate-present count at window start
+  unsigned long long _acTotalBase;  // total-present count at window start
 
   NSString* _adaptiveGameID;  // current game id, for persisting learned clocks per game
   CGSize _lastDrawableSize;
@@ -440,7 +557,8 @@ static std::pair<std::string, std::string> ACLastDecisionAndLearned()
 
 static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
 
-+ (EmulationCoordinator*)shared {
++ (EmulationCoordinator*)shared
+{
   static EmulationCoordinator* sharedInstance = nil;
   static dispatch_once_t onceToken;
 
@@ -451,18 +569,22 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   return sharedInstance;
 }
 
-- (UIScreen*)activeRenderScreen {
-  if (![NSThread isMainThread]) {
+- (UIScreen*)activeRenderScreen
+{
+  if (![NSThread isMainThread])
+  {
     return UIScreen.mainScreen;
   }
   UIWindow* window = _renderHost.window;
-  if (window.windowScene.screen) {
+  if (window.windowScene.screen)
+  {
     return window.windowScene.screen;
   }
   return UIScreen.mainScreen;
 }
 
-- (BOOL)isOverscanCompensationApplicable {
+- (BOOL)isOverscanCompensationApplicable
+{
 #if TARGET_OS_TV
   return YES;
 #else
@@ -470,33 +592,43 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
 #endif
 }
 
-- (BOOL)overscanFullscreenEnabled {
+- (BOOL)overscanFullscreenEnabled
+{
   return [NSUserDefaults.standardUserDefaults boolForKey:kGfxOverscanFullscreenKey];
 }
 
-- (void)setOverscanFullscreenEnabled:(BOOL)enabled {
+- (void)setOverscanFullscreenEnabled:(BOOL)enabled
+{
   [NSUserDefaults.standardUserDefaults setBool:enabled forKey:kGfxOverscanFullscreenKey];
   [self applyOverscanCompensationPreference];
 }
 
-- (void)applyOverscanCompensationPreference {
-  if (![NSThread isMainThread]) {
-    dispatch_async(dispatch_get_main_queue(), ^{ [self applyOverscanCompensationPreference]; });
+- (void)applyOverscanCompensationPreference
+{
+  if (![NSThread isMainThread])
+  {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self applyOverscanCompensationPreference];
+    });
     return;
   }
-  if (![self isOverscanCompensationApplicable]) {
+  if (![self isOverscanCompensationApplicable])
+  {
     return;
   }
   UIScreen* screen = [self activeRenderScreen];
-  screen.overscanCompensation =
-      [self overscanFullscreenEnabled] ? UIScreenOverscanCompensationNone : UIScreenOverscanCompensationScale;
+  screen.overscanCompensation = [self overscanFullscreenEnabled] ?
+                                    UIScreenOverscanCompensationNone :
+                                    UIScreenOverscanCompensationScale;
   [self updateMetalLayerFrame];
-  if (g_presenter) {
+  if (g_presenter)
+  {
     g_presenter->ResizeSurface();
   }
 }
 
-- (void)applyMetalLayerPreferences {
+- (void)applyMetalLayerPreferences
+{
   NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
   // On unless turned off, as Graphics → General shows it: two drawables made the GPU thread wait
   // for a free one whenever a frame ran long.
@@ -506,17 +638,21 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   BOOL forceScaleOneOnNonProMotion = [defaults boolForKey:@"gfx_force_scale_one_non_promo"];
   BOOL edrEnabled = [defaults boolForKey:@"gfx_edr_enabled"];
 
-  if (_metalLayer) {
+  if (_metalLayer)
+  {
     _metalLayer.framebufferOnly = YES;
-    if ([_metalLayer respondsToSelector:@selector(setAllowsNextDrawableTimeout:)]) {
+    if ([_metalLayer respondsToSelector:@selector(setAllowsNextDrawableTimeout:)])
+    {
       _metalLayer.allowsNextDrawableTimeout = NO;
     }
-    if ([_metalLayer respondsToSelector:@selector(setMaximumDrawableCount:)]) {
+    if ([_metalLayer respondsToSelector:@selector(setMaximumDrawableCount:)])
+    {
       _metalLayer.maximumDrawableCount = tripleBuffering ? 3 : 2;
     }
     UIScreen* screen = [self activeRenderScreen];
     CGFloat surfaceScale = screen.scale;
-    if (forceScaleOneOnNonProMotion && screen.maximumFramesPerSecond <= 60) {
+    if (forceScaleOneOnNonProMotion && screen.maximumFramesPerSecond <= 60)
+    {
       surfaceScale = 1.0;
     }
     _metalLayer.contentsScale = surfaceScale;
@@ -524,40 +660,50 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   }
 }
 
-- (CGFloat)currentRenderSurfaceScale {
+- (CGFloat)currentRenderSurfaceScale
+{
   NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
   BOOL forceScaleOneOnNonProMotion = [defaults boolForKey:@"gfx_force_scale_one_non_promo"];
-  if (![NSThread isMainThread]) {
-    if (_cachedRenderSurfaceScale > 0.0) {
+  if (![NSThread isMainThread])
+  {
+    if (_cachedRenderSurfaceScale > 0.0)
+    {
       return _cachedRenderSurfaceScale;
     }
     UIScreen* screen = UIScreen.mainScreen;
     CGFloat surfaceScale = screen.scale;
-    if (forceScaleOneOnNonProMotion && screen.maximumFramesPerSecond <= 60) {
+    if (forceScaleOneOnNonProMotion && screen.maximumFramesPerSecond <= 60)
+    {
       surfaceScale = 1.0;
     }
     return surfaceScale;
   }
   UIScreen* screen = [self activeRenderScreen];
   CGFloat surfaceScale = screen.scale;
-  if (forceScaleOneOnNonProMotion && screen.maximumFramesPerSecond <= 60) {
+  if (forceScaleOneOnNonProMotion && screen.maximumFramesPerSecond <= 60)
+  {
     surfaceScale = 1.0;
   }
   _cachedRenderSurfaceScale = surfaceScale;
   return surfaceScale;
 }
 
-- (id)init {
-  if (self = [super init]) {
+- (id)init
+{
+  if (self = [super init])
+  {
     _renderHost = [RenderHostView new];
-    _renderHost.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _renderHost.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     _renderHost.backgroundColor = [UIColor blackColor];
 
     _device = MTLCreateSystemDefaultDevice();
     _metalLayer = [SafeMainThreadMetalLayer layer];
     _metalLayer.device = _device;
     [self applyMetalLayerPreferences];
-    ((RenderHostView*)_renderHost).onLayout = ^{ [self updateMetalLayerFrame]; };
+    ((RenderHostView*)_renderHost).onLayout = ^{
+      [self updateMetalLayerFrame];
+    };
 
     self.isExternalDisplayConnected = false;
     _lastDrawableSize = CGSizeZero;
@@ -567,65 +713,85 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   return self;
 }
 
-- (void)setIsExternalDisplayConnected:(bool)connected {
+- (void)setIsExternalDisplayConnected:(bool)connected
+{
   self->_isExternalDisplayConnected = connected;
 
-  if (!_isExternalDisplayConnected) {
+  if (!_isExternalDisplayConnected)
+  {
     [self requestDisplayOnSuperview:_mainDisplayView];
   }
 
-  [[NSNotificationCenter defaultCenter] postNotificationName:DOLExternalDisplayDidChangeNotification object:nil];
+  [[NSNotificationCenter defaultCenter] postNotificationName:DOLExternalDisplayDidChangeNotification
+                                                      object:nil];
 
-  if (connected) {
-    dispatch_async(dispatch_get_main_queue(), ^{ [self applyOverscanCompensationPreference]; });
+  if (connected)
+  {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self applyOverscanCompensationPreference];
+    });
   }
 }
 
-- (void)registerMainDisplayView:(UIView*)mainView {
+- (void)registerMainDisplayView:(UIView*)mainView
+{
   _mainDisplayView = mainView;
 
-  if (!self.isExternalDisplayConnected) {
+  if (!self.isExternalDisplayConnected)
+  {
     [self requestDisplayOnSuperview:mainView];
   }
 }
 
-- (UIView*)mainDisplayView {
+- (UIView*)mainDisplayView
+{
   return _mainDisplayView;
 }
 
-- (void)registerExternalDisplayView:(UIView*)externalView {
+- (void)registerExternalDisplayView:(UIView*)externalView
+{
   [self requestDisplayOnSuperview:externalView];
 }
 
-- (void)requestDisplayOnSuperview:(UIView*)superview {
+- (void)requestDisplayOnSuperview:(UIView*)superview
+{
   [_renderHost removeFromSuperview];
   [superview addSubview:_renderHost];
   _renderHost.frame = superview.bounds;
   [self applyMetalLayerPreferences];
 
-  if (_metalLayer.superlayer != _renderHost.layer) {
+  if (_metalLayer.superlayer != _renderHost.layer)
+  {
     [_metalLayer removeFromSuperlayer];
     _metalLayer.frame = _renderHost.layer.bounds;
     [_renderHost.layer addSublayer:_metalLayer];
-  } else {
+  }
+  else
+  {
     _metalLayer.frame = _renderHost.layer.bounds;
   }
 
   [self updateMetalLayerFrame];
   [self applyOverscanCompensationPreference];
 
-  if (g_presenter) {
+  if (g_presenter)
+  {
     g_presenter->ResizeSurface();
   }
 }
 
-- (void)updateMetalLayerFrame {
-  if (![NSThread isMainThread]) {
-    dispatch_async(dispatch_get_main_queue(), ^{ [self updateMetalLayerFrame]; });
+- (void)updateMetalLayerFrame
+{
+  if (![NSThread isMainThread])
+  {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [self updateMetalLayerFrame];
+    });
     return;
   }
   const CGSize size = _renderHost.bounds.size;
-  if (size.width <= 0.0 || size.height <= 0.0) {
+  if (size.width <= 0.0 || size.height <= 0.0)
+  {
     return;
   }
   _metalLayer.frame = _renderHost.layer.bounds;
@@ -644,40 +810,52 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   }
 }
 
-- (void)runEmulationWithBootParameter:(EmulationBootParameter*)bootParameter {
+- (void)runEmulationWithBootParameter:(EmulationBootParameter*)bootParameter
+{
   // iCube: pre-detect the "boot to GameCube menu but no BIOS/IPL installed" dead launch.
   // A GameCube disc boot is silently re-routed through the GC IPL by BootManager::BootCore exactly
   // when (!Wii && !MAIN_SKIP_IPL && Disc); if no IPL dump is present that boot fails with a generic
-  // "Cannot find the GC IPL" panic and the game just never starts. Catch it here at the single launch
-  // chokepoint (covers iOS EmulationViewController AND the tvOS TVLibrary/TVEmulation bridges) and
-  // offer a one-tap "Boot Game Directly" (enable skip-IPL) + a Learn More link instead.
+  // "Cannot find the GC IPL" panic and the game just never starts. Catch it here at the single
+  // launch chokepoint (covers iOS EmulationViewController AND the tvOS TVLibrary/TVEmulation
+  // bridges) and offer a one-tap "Boot Game Directly" (enable skip-IPL) + a Learn More link
+  // instead.
   //
-  // Cheap guards first so a normal launch pays nothing: only when skip-IPL is OFF and there is no IPL
-  // dump do we generate the (disc-reading) boot parameters to confirm this is actually a GC disc boot.
-  if (!Config::Get(Config::MAIN_SKIP_IPL) && !ExpansionInterface::CEXIIPL::HasIPLDump()) {
+  // Cheap guards first so a normal launch pays nothing: only when skip-IPL is OFF and there is no
+  // IPL dump do we generate the (disc-reading) boot parameters to confirm this is actually a GC
+  // disc boot.
+  if (!Config::Get(Config::MAIN_SKIP_IPL) && !ExpansionInterface::CEXIIPL::HasIPLDump())
+  {
     std::unique_ptr<BootParameters> boot = [bootParameter generateDolphinBootParameter];
     bool wouldBootGCIPL = false;
-    if (boot) {
-      if (std::holds_alternative<BootParameters::Disc>(boot->parameters)) {
-        // Only GameCube discs route through the GC IPL; Wii discs ignore it. Mirror the IsWii() guard
-        // in BootManager::BootCore using the volume platform (the system isn't booted yet).
+    if (boot)
+    {
+      if (std::holds_alternative<BootParameters::Disc>(boot->parameters))
+      {
+        // Only GameCube discs route through the GC IPL; Wii discs ignore it. Mirror the IsWii()
+        // guard in BootManager::BootCore using the volume platform (the system isn't booted yet).
         const auto& disc = std::get<BootParameters::Disc>(boot->parameters);
-        if (disc.volume && disc.volume->GetVolumeType() == DiscIO::Platform::GameCubeDisc) {
+        if (disc.volume && disc.volume->GetVolumeType() == DiscIO::Platform::GameCubeDisc)
+        {
           wouldBootGCIPL = true;
         }
-      } else if (std::holds_alternative<BootParameters::IPL>(boot->parameters)) {
+      }
+      else if (std::holds_alternative<BootParameters::IPL>(boot->parameters))
+      {
         // Direct "Load GameCube Menu" action (EmulationBootTypeGCIPL) — always an IPL boot.
         wouldBootGCIPL = true;
       }
     }
-    if (wouldBootGCIPL) {
+    if (wouldBootGCIPL)
+    {
       [self presentMissingGCIPLAlertForBootParameter:bootParameter];
       return;
     }
   }
 
-  NSDictionary* willStartInfo = bootParameter.path ? @{ @"path": bootParameter.path } : nil;
-  [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationWillStartNotification object:self userInfo:willStartInfo];
+  NSDictionary* willStartInfo = bootParameter.path ? @{@"path" : bootParameter.path} : nil;
+  [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationWillStartNotification
+                                                      object:self
+                                                    userInfo:willStartInfo];
 
   const uint64_t syncGeneration = [ICubeCloudSyncBootGate currentGeneration];
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -686,13 +864,16 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
 }
 
 // iCube: alert shown when a launch would boot through the GameCube menu/IPL but no IPL/BIOS dump is
-// installed. "Boot Game Directly" flips skip-IPL on and retries the launch (so the game boots without
-// the menu); "Learn More" opens the GameCube BIOS help page; "Cancel" abandons the launch. Presented
-// via the MainSceneCoordinator scene so it works on both iOS and tvOS (same pattern as MsgAlertManager).
-- (void)presentMissingGCIPLAlertForBootParameter:(EmulationBootParameter*)bootParameter {
+// installed. "Boot Game Directly" flips skip-IPL on and retries the launch (so the game boots
+// without the menu); "Learn More" opens the GameCube BIOS help page; "Cancel" abandons the launch.
+// Presented via the MainSceneCoordinator scene so it works on both iOS and tvOS (same pattern as
+// MsgAlertManager).
+- (void)presentMissingGCIPLAlertForBootParameter:(EmulationBootParameter*)bootParameter
+{
   dispatch_async(dispatch_get_main_queue(), ^{
     UIWindowScene* mainScene = [MainSceneCoordinator shared].mainScene;
-    if (mainScene == nil) {
+    if (mainScene == nil)
+    {
       // No scene to present on: fall back to booting directly so the user isn't left with a dead
       // launch (skip-IPL on, retry). This mirrors the "Boot Game Directly" action.
       [DOLConfigBridge setMainSkipIPL:YES];
@@ -709,42 +890,56 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
 
     UIAlertController* alert = [UIAlertController
         alertControllerWithTitle:DOLCoreLocalizedString(@"GameCube BIOS not found")
-                         message:DOLCoreLocalizedString(@"This game is set to boot to the GameCube menu, but the GameCube BIOS (IPL) isn't installed, so it can't start. You can boot the game directly without the menu, or install a GameCube BIOS dump. Learn More explains how.")
+                         message:DOLCoreLocalizedString(
+                                     @"This game is set to boot to the GameCube menu, but the "
+                                     @"GameCube BIOS (IPL) isn't installed, so it can't start. You "
+                                     @"can boot the game directly without the menu, or install a "
+                                     @"GameCube BIOS dump. Learn More explains how.")
                   preferredStyle:UIAlertControllerStyleAlert];
 
-    void (^finish)(void) = ^{ [window setHidden:YES]; };
+    void (^finish)(void) = ^{
+      [window setHidden:YES];
+    };
 
     [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Boot Game Directly")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction* action) {
-      // Enable skip-IPL (boot straight into the game, no menu) and retry the launch.
-      [DOLConfigBridge setMainSkipIPL:YES];
-      finish();
-      // Re-enter the common launch route so will-start closes sync admission before boot.
-      [self runEmulationWithBootParameter:bootParameter];
-    }]];
+                                              // Enable skip-IPL (boot straight into the game, no
+                                              // menu) and retry the launch.
+                                              [DOLConfigBridge setMainSkipIPL:YES];
+                                              finish();
+                                              // Re-enter the common launch route so will-start
+                                              // closes sync admission before boot.
+                                              [self runEmulationWithBootParameter:bootParameter];
+                                            }]];
 
-    [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Learn More")
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction* action) {
-      finish();
-      NSURL* url = [NSURL URLWithString:@"https://icube-emu.com/help/gamecube-bios"];
-      [UIApplication.sharedApplication openURL:url options:@{} completionHandler:nil];
-    }]];
+    [alert addAction:[UIAlertAction
+                         actionWithTitle:DOLCoreLocalizedString(@"Learn More")
+                                   style:UIAlertActionStyleDefault
+                                 handler:^(UIAlertAction* action) {
+                                   finish();
+                                   NSURL* url = [NSURL
+                                       URLWithString:@"https://icube-emu.com/help/gamecube-bios"];
+                                   [UIApplication.sharedApplication openURL:url
+                                                                    options:@{}
+                                                          completionHandler:nil];
+                                 }]];
 
     [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Cancel")
                                               style:UIAlertActionStyleCancel
                                             handler:^(UIAlertAction* action) {
-      finish();
-    }]];
+                                              finish();
+                                            }]];
 
     [window makeKeyAndVisible];
     [window.rootViewController presentViewController:alert animated:YES completion:nil];
   });
 }
 
-- (void)startAdaptiveClockIfEnabled {
-  if (_adaptiveClockTimer) return;
+- (void)startAdaptiveClockIfEnabled
+{
+  if (_adaptiveClockTimer)
+    return;
   NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
 
   // One-time cleanup of damage from older loops. Runs regardless of whether adaptive clock is
@@ -772,7 +967,8 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   const NSInteger schema = [defaults integerForKey:@"adaptive_clock_schema_v"];
   if (schema < 7)
   {
-    for (NSString* key in [[defaults dictionaryRepresentation] allKeys]) {
+    for (NSString* key in [[defaults dictionaryRepresentation] allKeys])
+    {
       if ([key hasPrefix:@"adaptive_clock_cpu_"] || [key hasPrefix:@"adaptive_clock_vi_"])
         [defaults removeObjectForKey:key];
     }
@@ -784,17 +980,20 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   {
     // Reset artifact underclocks (< 1.0) to default; a deliberate overclock (> 1.0) is untouched.
     bool repaired = false;
-    if (Config::Get(Config::MAIN_OVERCLOCK) < 1.0f) {
+    if (Config::Get(Config::MAIN_OVERCLOCK) < 1.0f)
+    {
       Config::SetBase(Config::MAIN_OVERCLOCK, 1.0f);
       Config::SetBase(Config::MAIN_OVERCLOCK_ENABLE, false);
       repaired = true;
     }
-    if (Config::Get(Config::MAIN_VI_OVERCLOCK) < 1.0f) {
+    if (Config::Get(Config::MAIN_VI_OVERCLOCK) < 1.0f)
+    {
       Config::SetBase(Config::MAIN_VI_OVERCLOCK, 1.0f);
       Config::SetBase(Config::MAIN_VI_OVERCLOCK_ENABLE, false);
       repaired = true;
     }
-    if (repaired) Config::Save();
+    if (repaired)
+      Config::Save();
   }
 
   // Learned clocks are kept across core revisions. Every app update changes the revision, so
@@ -805,21 +1004,24 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   [defaults removeObjectForKey:@"adaptive_clock_engine_rev"];
 
   // The adaptive loop itself only runs when the user has enabled it (existing toggle — no new one).
-  if (![defaults boolForKey:@"adaptive_clock_enable"]) return;
+  if (![defaults boolForKey:@"adaptive_clock_enable"])
+    return;
 
   // Optional NSUserDefaults override tunables (no Config/bridge entries; read here only). Any of
   // these absent -> the compiled defaults above are used.
-  const float speedThreshold = [defaults objectForKey:@"adaptive_clock_speed_threshold"]
-                         ? [defaults floatForKey:@"adaptive_clock_speed_threshold"] : ACSpeedThreshold;
-  const float sweepStep = [defaults objectForKey:@"adaptive_clock_sweep_step"]
-                         ? [defaults floatForKey:@"adaptive_clock_sweep_step"] : ACSweepStep;
+  const float speedThreshold = [defaults objectForKey:@"adaptive_clock_speed_threshold"] ?
+                                   [defaults floatForKey:@"adaptive_clock_speed_threshold"] :
+                                   ACSpeedThreshold;
+  const float sweepStep = [defaults objectForKey:@"adaptive_clock_sweep_step"] ?
+                              [defaults floatForKey:@"adaptive_clock_sweep_step"] :
+                              ACSweepStep;
 
   // Start BOTH levers at native (1.0), NOT the current Config value. Two reasons: (1) a fresh sweep
-  // finds f* by descending from the top, so it must begin at 1.0; (2) when Auto engages it must take
-  // OWNERSHIP of CPU *and* VI, not inherit wherever the manual sliders were left — otherwise a stale
-  // manual VI overclock bleeds through (Auto looked like it only moved the CPU). VI used to init from
-  // Config::Get here while CPU started at 1.0; that asymmetry was the bug. The per-game seed below
-  // overrides these if we've already converged for this title.
+  // finds f* by descending from the top, so it must begin at 1.0; (2) when Auto engages it must
+  // take OWNERSHIP of CPU *and* VI, not inherit wherever the manual sliders were left — otherwise a
+  // stale manual VI overclock bleeds through (Auto looked like it only moved the CPU). VI used to
+  // init from Config::Get here while CPU started at 1.0; that asymmetry was the bug. The per-game
+  // seed below overrides these if we've already converged for this title.
   _acCPU = 1.0f;
   _acVI = 1.0f;
   _acStableCPU = 1.0f;
@@ -854,9 +1056,11 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   // SHORT verify + bounded ±1-step re-find (thermal drift), instead of a full sweep.
   const std::string gid = SConfig::GetInstance().GetGameID();
   _adaptiveGameID = gid.empty() ? nil : [NSString stringWithUTF8String:gid.c_str()];
-  if (_adaptiveGameID) {
+  if (_adaptiveGameID)
+  {
     NSString* cpuKey = [@"adaptive_clock_cpu_" stringByAppendingString:_adaptiveGameID];
-    if ([defaults objectForKey:cpuKey]) {
+    if ([defaults objectForKey:cpuKey])
+    {
       _acCPU = MIN(1.0f, MAX(ACCpuFloor, [defaults floatForKey:cpuKey]));
       _acStableCPU = _acCPU;
       _acLastPersisted = _acCPU;
@@ -876,523 +1080,653 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   Config::SetCurrent(Config::MAIN_VI_OVERCLOCK, _acVI);
   _acLastAppliedVI = _acVI;
 
-  _adaptiveClockTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
+  _adaptiveClockTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0,
+                                               dispatch_get_global_queue(QOS_CLASS_UTILITY, 0));
   dispatch_source_set_timer(_adaptiveClockTimer, dispatch_time(DISPATCH_TIME_NOW, 0),
                             (uint64_t)NSEC_PER_MSEC * ACTickMs, NSEC_PER_MSEC * 50);
   dispatch_source_set_event_handler(_adaptiveClockTimer, ^{
     auto& sys = Core::System::GetInstance();
-    if (Core::GetState(sys) != Core::State::Running) return;
+    if (Core::GetState(sys) != Core::State::Running)
+      return;
     const NSProcessInfoThermalState thermal = NSProcessInfo.processInfo.thermalState;
     // Capture by value (self, thermal, tunables): the host job can run after this handler returns.
-    Core::QueueHostJob([self, thermal, speedThreshold, sweepStep](Core::System& s) {
-      if (Core::GetState(s) != Core::State::Running) return;
+    Core::QueueHostJob(
+        [self, thermal, speedThreshold, sweepStep](Core::System& s) {
+          if (Core::GetState(s) != Core::State::Running)
+            return;
 
-      // --- Per-knob manual-override detection (step #2). ---
-      // Manual control wins, but PER KNOB: a user CPU-clock slider yields only the CPU lever; a
-      // user VI-clock slider yields only the VI lever. The other lever keeps auto-regulating, and
-      // both re-arm when the adaptive clock is toggled off/on (full re-init in start...IfEnabled).
-      const float curOC = (float)Config::Get(Config::MAIN_OVERCLOCK);
-      if (!self->_acCpuYielded && self->_acLastApplied >= 0.f &&
-          fabsf(curOC - self->_acLastApplied) > 0.005f) {
-        self->_acCpuYielded = YES;
-      }
-      const float curVI = (float)Config::Get(Config::MAIN_VI_OVERCLOCK);
-      if (!self->_acViYielded && self->_acLastAppliedVI >= 0.f &&
-          fabsf(curVI - self->_acLastAppliedVI) > 0.005f) {
-        // EXCLUDE the RA-hardcore VI stomp (VideoInterface.cpp:321 forces VI->1.0 on CurrentRun when
-        // hardcore mode is active): a move TO ~1.0 is either that stomp or a user no-op (1.0 is the
-        // default), so resync our tracking instead of yielding the lever. A genuine user VI move to
-        // any value other than 1.0 still yields VI.
-        if (fabsf(curVI - 1.0f) <= 0.005f) {
-          self->_acLastAppliedVI = curVI;
-        } else {
-          self->_acViYielded = YES;
-        }
-      }
-      // Both levers under manual control: nothing left to auto-adjust (matches the old global yield).
-      if (self->_acCpuYielded && self->_acViYielded) return;
-
-      // --- Sample the sensors. ---
-      const double vps = Core::System::GetInstance().GetPerfMetrics().GetVPS();   // emulated field rate
-      if (vps <= 0.0) return;  // metrics not warmed up (warmup guard only)
-      const double speed = Core::System::GetInstance().GetPerfMetrics().GetSpeed();  // achieved emulation speed vs realtime
-      const double maxSpeed = Core::System::GetInstance().GetPerfMetrics().GetMaxSpeed();  // speed with throttle sleep removed
-      const unsigned long long underruns = PerformanceMetrics::GetAudioUnderrunCount();
-      const unsigned long long dups = PerformanceMetrics::GetDuplicatePresentCount();
-      const unsigned long long total = PerformanceMetrics::GetTotalPresentCount();
-
-      // Target = the title's native field rate (NOT a fixed 60: a 30/50Hz title is fine below 60).
-
-      // Thermal caps the APPLIED clock; we only PERSIST a baseline while cool.
-      const bool cool = (thermal <= NSProcessInfoThermalStateFair);
-      float ceiling = 1.0f;
-      if (thermal == NSProcessInfoThermalStateCritical) ceiling = 0.65f;
-      else if (thermal == NSProcessInfoThermalStateSerious) ceiling = 0.80f;
-
-      // Health of the window since it began. Tolerate occasional edge-of-cliff underruns
-      // (budget scales with elapsed ticks); only a sustained rate counts as genuinely too-slow.
-      const unsigned long long windowUnderruns =
-          (underruns > self->_acUnderrunBase) ? (underruns - self->_acUnderrunBase) : 0ULL;
-      const double underrunBudget = ACUnderrunPerTickBudget * (double)MAX(1, self->_acPhaseTicks);
-      const bool newUnderrun = ((double)windowUnderruns > underrunBudget);
-
-      // --- The f* GO/NO-GO criterion: SPEED ONLY (+ underrun honesty guard). ---
-      // f* = the HIGHEST clock at which the host keeps up. The throttle caps emulated speed at 100%,
-      // so speed >= threshold is true for EVERY clock <= f* and false above it; descending top-down,
-      // the FIRST clock that meets it is f* by construction. No second term is needed to FIND the
-      // cliff — and any extra gate that can be false AT f* can only push the settle point one step
-      // LOW. That is why the VPS≈FPS and dup-ratio guards were REMOVED: a 30fps-by-design title
-      // (common on GC/Wii) presents ~50% duplicate fields at FULL speed, so those guards vetoed
-      // legit 30fps games and walked the sweep to the floor (slow-motion) — the exact inversion this
-      // controller exists to kill. Audio underrun stays as the one honesty guard (a starved buffer
-      // is genuinely too-slow regardless of the speed% average). The small hysteresis keeps a
-      // marginal windowed-speed dip right at the cliff from descending one step past f*.
-      const bool meetsFStar = (speed >= speedThreshold - ACSpeedHysteresis) && !newUnderrun;
-
-      // Resolution no longer adapts to performance. This CPU/VI clock loop owns bottleneck
-      // classification, independent of legacy adaptive-resolution preferences.
-      PerformanceMetrics::SetBound(
-          PerformanceMetrics::ClassifyBound(speed, maxSpeed, speedThreshold));
-      const PerformanceMetrics::Bound bound = PerformanceMetrics::GetBound();
-
-      const CFTimeInterval now = CACurrentMediaTime();
-      const auto resetWindow = ^{
-        self->_acUnderrunBase = underruns;
-        self->_acDupBase = dups;
-        self->_acTotalBase = total;
-        self->_acPhaseTicks = 0;
-        self->_acWindowStart = now;
-      };
-      const auto applyCPU = ^(float v) {
-        // CPU lever yielded to manual control: don't fight the user's slider (step #2).
-        if (self->_acCpuYielded) return;
-        self->_acCPU = MIN(1.0f, MAX(ACCpuFloor, v));
-        const float applied = MIN(self->_acCPU, ceiling);
-        if (fabsf(applied - self->_acLastApplied) > AdaptiveClockFrameGuard::kClockEpsilon)
-          self->_acPointVetted = NO;
-        Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, applied < 1.0f);
-        Config::SetCurrent(Config::MAIN_OVERCLOCK, applied);
-        self->_acLastApplied = applied;
-      };
-      const auto applyVI = ^(float v) {
-        // VI lever yielded to manual control: leave it to the user (step #2).
-        if (self->_acViYielded) return;
-        self->_acVI = MAX(ACViFloor, MIN(1.0f, v));
-        if (fabsf(self->_acVI - self->_acLastAppliedVI) > AdaptiveClockFrameGuard::kClockEpsilon)
-          self->_acPointVetted = NO;
-        Config::SetCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, self->_acVI < 1.0f);
-        Config::SetCurrent(Config::MAIN_VI_OVERCLOCK, self->_acVI);
-        self->_acLastAppliedVI = self->_acVI;
-      };
-      const auto persistConverged = ^{
-        if (!cool || !self->_adaptiveGameID) return;
-        // Only a point the frame guard passed this run is learned (1.0/1.0 needs no vetting): an
-        // unchecked underclock saved here is where every later boot of the title would start.
-        const bool atNative = self->_acCPU >= 1.0f - AdaptiveClockFrameGuard::kClockEpsilon &&
-                              self->_acVI >= 1.0f - AdaptiveClockFrameGuard::kClockEpsilon;
-        if (!atNative && !self->_acPointVetted) return;
-        if (self->_acCPU != self->_acLastPersisted) {
-          ACRecordLearned(fmt::format("learned cpu {:.3f} vi {:.3f}", self->_acCPU, self->_acVI));
-          [NSUserDefaults.standardUserDefaults
-              setFloat:self->_acCPU
-                forKey:[@"adaptive_clock_cpu_" stringByAppendingString:self->_adaptiveGameID]];
-          self->_acLastPersisted = self->_acCPU;
-        }
-        [NSUserDefaults.standardUserDefaults
-            setFloat:self->_acVI
-              forKey:[@"adaptive_clock_vi_" stringByAppendingString:self->_adaptiveGameID]];
-      };
-
-      // A window that spans a pause or a stalled host thread does not measure the current point.
-      if (now - self->_acLastTick > ACWindowGapSeconds) {
-        self->_acLastTick = now;
-        resetWindow();
-        return;
-      }
-      self->_acLastTick = now;
-
-      self->_acPhaseTicks++;
-
-      // Starvation guard (AdaptiveClockFrameGuard.h): evaluated once per completed window (same tick
-      // thresholds the phases use). A window below the reference point that delivers clearly fewer
-      // new game frames per second is re-measured at the reference; if the reference delivers more,
-      // it is restored and the CPU lever parked. Windows at the reference point refresh it, so the
-      // comparison tracks the current scene. With no reference yet (a seeded boot starts below
-      // native) the top point is measured before any lower point is trusted.
-      {
-        namespace FG = AdaptiveClockFrameGuard;
-        int needTicks = ACHoldTicks;
-        switch (self->_acPhase) {
-          case ACPhase_Verify:   needTicks = ACVerifyTicks;     break;
-          case ACPhase_Search:   needTicks = ACSearchStepTicks; break;
-          case ACPhase_FineTune: needTicks = ACFineTicks;       break;
-          case ACPhase_Settle:   needTicks = ACSettleTicks;     break;
-          default: break;
-        }
-        // While confirming a trip, the phases wait: the window runs at the reference point.
-        if (self->_acStarveConfirming && self->_acPhaseTicks < needTicks)
-          return;
-        if (self->_acPhaseTicks >= needTicks) {
-          const unsigned long long wTotal = (total > self->_acTotalBase) ? (total - self->_acTotalBase) : 0ULL;
-          const unsigned long long wDups = (dups > self->_acDupBase) ? (dups - self->_acDupBase) : 0ULL;
-          const FG::FrameWindow window{wTotal > wDups ? wTotal - wDups : 0ULL, now - self->_acWindowStart};
-          // A lever under manual control is the user's, not a point the guard judges.
-          const FG::OperatingPoint top{self->_acCpuYielded ? curOC : ceiling,
-                                       self->_acViYielded ? curVI : 1.0f};
-          const FG::OperatingPoint bar = self->_acRef.valid ? self->_acRef.point : top;
-          const FG::OperatingPoint point{self->_acCpuYielded ? bar.cpu : MIN(self->_acCPU, ceiling),
-                                         self->_acViYielded ? bar.vi : self->_acVI};
-          const double rate = FG::Rate(window);
-          if (self->_acStarveConfirming)
+          // --- Per-knob manual-override detection (step #2). ---
+          // Manual control wins, but PER KNOB: a user CPU-clock slider yields only the CPU lever; a
+          // user VI-clock slider yields only the VI lever. The other lever keeps auto-regulating,
+          // and both re-arm when the adaptive clock is toggled off/on (full re-init in
+          // start...IfEnabled).
+          const float curOC = (float)Config::Get(Config::MAIN_OVERCLOCK);
+          if (!self->_acCpuYielded && self->_acLastApplied >= 0.f &&
+              fabsf(curOC - self->_acLastApplied) > 0.005f)
           {
-            if (!FG::CanConfirm(window))
+            self->_acCpuYielded = YES;
+          }
+          const float curVI = (float)Config::Get(Config::MAIN_VI_OVERCLOCK);
+          if (!self->_acViYielded && self->_acLastAppliedVI >= 0.f &&
+              fabsf(curVI - self->_acLastAppliedVI) > 0.005f)
+          {
+            // EXCLUDE the RA-hardcore VI stomp (VideoInterface.cpp:321 forces VI->1.0 on CurrentRun
+            // when hardcore mode is active): a move TO ~1.0 is either that stomp or a user no-op
+            // (1.0 is the default), so resync our tracking instead of yielding the lever. A genuine
+            // user VI move to any value other than 1.0 still yields VI.
+            if (fabsf(curVI - 1.0f) <= 0.005f)
             {
-              // Loading or a black screen: measure the confirmation again.
-              resetWindow();
-              return;
+              self->_acLastAppliedVI = curVI;
             }
-            self->_acStarveConfirming = NO;
-            self->_acRef = FG::Reference{true, point, rate};
-            if (FG::ConfirmsStarvation(self->_acStarveTripRate, window))
+            else
             {
-              ACRecordDecision(fmt::format(
-                  "starvation at cpu {:.2f} vi {:.2f} confirmed ({:.1f} vs {:.1f} fps), keeping "
-                  "cpu {:.2f} vi {:.2f}, CPU lever parked",
-                  self->_acStarveTripCPU, self->_acStarveTripVI, self->_acStarveTripRate, rate,
-                  point.cpu, point.vi));
-              self->_acPointVetted = YES;
-              self->_acStableCPU = self->_acCPU;
-              self->_acCpuLeverParked = YES;
-              self->_acUpProbeLever = AC_LEVER_NONE;
-              self->_acPhase = ACPhase_Hold;
-              persistConverged();
-              resetWindow();
-              return;
+              self->_acViYielded = YES;
             }
-            // The reference delivers no more new frames than the tripped point: the scene changed,
-            // not the clock's effect. The reference is re-based on this scene; resume.
-            ACRecordDecision(fmt::format(
-                "starvation not confirmed ({:.1f} vs {:.1f} fps), resuming cpu {:.2f} vi {:.2f}",
-                self->_acStarveTripRate, rate, self->_acStarveTripCPU, self->_acStarveTripVI));
-            applyCPU(self->_acStarveTripCPU);
-            applyVI(self->_acStarveTripVI);
-            self->_acPhase = self->_acStarveResumePhase;
+          }
+          // Both levers under manual control: nothing left to auto-adjust (matches the old global
+          // yield).
+          if (self->_acCpuYielded && self->_acViYielded)
+            return;
+
+          // --- Sample the sensors. ---
+          const double vps =
+              Core::System::GetInstance().GetPerfMetrics().GetVPS();  // emulated field rate
+          if (vps <= 0.0)
+            return;  // metrics not warmed up (warmup guard only)
+          const double speed = Core::System::GetInstance()
+                                   .GetPerfMetrics()
+                                   .GetSpeed();  // achieved emulation speed vs realtime
+          const double maxSpeed = Core::System::GetInstance()
+                                      .GetPerfMetrics()
+                                      .GetMaxSpeed();  // speed with throttle sleep removed
+          const unsigned long long underruns = PerformanceMetrics::GetAudioUnderrunCount();
+          const unsigned long long dups = PerformanceMetrics::GetDuplicatePresentCount();
+          const unsigned long long total = PerformanceMetrics::GetTotalPresentCount();
+
+          // Target = the title's native field rate (NOT a fixed 60: a 30/50Hz title is fine below
+          // 60).
+
+          // Thermal caps the APPLIED clock; we only PERSIST a baseline while cool.
+          const bool cool = (thermal <= NSProcessInfoThermalStateFair);
+          float ceiling = 1.0f;
+          if (thermal == NSProcessInfoThermalStateCritical)
+            ceiling = 0.65f;
+          else if (thermal == NSProcessInfoThermalStateSerious)
+            ceiling = 0.80f;
+
+          // Health of the window since it began. Tolerate occasional edge-of-cliff underruns
+          // (budget scales with elapsed ticks); only a sustained rate counts as genuinely too-slow.
+          const unsigned long long windowUnderruns =
+              (underruns > self->_acUnderrunBase) ? (underruns - self->_acUnderrunBase) : 0ULL;
+          const double underrunBudget =
+              ACUnderrunPerTickBudget * (double)MAX(1, self->_acPhaseTicks);
+          const bool newUnderrun = ((double)windowUnderruns > underrunBudget);
+
+          // --- The f* GO/NO-GO criterion: SPEED ONLY (+ underrun honesty guard). ---
+          // f* = the HIGHEST clock at which the host keeps up. The throttle caps emulated speed at
+          // 100%, so speed >= threshold is true for EVERY clock <= f* and false above it;
+          // descending top-down, the FIRST clock that meets it is f* by construction. No second
+          // term is needed to FIND the cliff — and any extra gate that can be false AT f* can only
+          // push the settle point one step LOW. That is why the VPS≈FPS and dup-ratio guards were
+          // REMOVED: a 30fps-by-design title (common on GC/Wii) presents ~50% duplicate fields at
+          // FULL speed, so those guards vetoed legit 30fps games and walked the sweep to the floor
+          // (slow-motion) — the exact inversion this controller exists to kill. Audio underrun
+          // stays as the one honesty guard (a starved buffer is genuinely too-slow regardless of
+          // the speed% average). The small hysteresis keeps a marginal windowed-speed dip right at
+          // the cliff from descending one step past f*.
+          const bool meetsFStar = (speed >= speedThreshold - ACSpeedHysteresis) && !newUnderrun;
+
+          // Resolution no longer adapts to performance. This CPU/VI clock loop owns bottleneck
+          // classification, independent of legacy adaptive-resolution preferences.
+          PerformanceMetrics::SetBound(
+              PerformanceMetrics::ClassifyBound(speed, maxSpeed, speedThreshold));
+          const PerformanceMetrics::Bound bound = PerformanceMetrics::GetBound();
+
+          const CFTimeInterval now = CACurrentMediaTime();
+          const auto resetWindow = ^{
+            self->_acUnderrunBase = underruns;
+            self->_acDupBase = dups;
+            self->_acTotalBase = total;
+            self->_acPhaseTicks = 0;
+            self->_acWindowStart = now;
+          };
+          const auto applyCPU = ^(float v) {
+            // CPU lever yielded to manual control: don't fight the user's slider (step #2).
+            if (self->_acCpuYielded)
+              return;
+            self->_acCPU = MIN(1.0f, MAX(ACCpuFloor, v));
+            const float applied = MIN(self->_acCPU, ceiling);
+            if (fabsf(applied - self->_acLastApplied) > AdaptiveClockFrameGuard::kClockEpsilon)
+              self->_acPointVetted = NO;
+            Config::SetCurrent(Config::MAIN_OVERCLOCK_ENABLE, applied < 1.0f);
+            Config::SetCurrent(Config::MAIN_OVERCLOCK, applied);
+            self->_acLastApplied = applied;
+          };
+          const auto applyVI = ^(float v) {
+            // VI lever yielded to manual control: leave it to the user (step #2).
+            if (self->_acViYielded)
+              return;
+            self->_acVI = MAX(ACViFloor, MIN(1.0f, v));
+            if (fabsf(self->_acVI - self->_acLastAppliedVI) >
+                AdaptiveClockFrameGuard::kClockEpsilon)
+              self->_acPointVetted = NO;
+            Config::SetCurrent(Config::MAIN_VI_OVERCLOCK_ENABLE, self->_acVI < 1.0f);
+            Config::SetCurrent(Config::MAIN_VI_OVERCLOCK, self->_acVI);
+            self->_acLastAppliedVI = self->_acVI;
+          };
+          const auto persistConverged = ^{
+            if (!cool || !self->_adaptiveGameID)
+              return;
+            // Only a point the frame guard passed this run is learned (1.0/1.0 needs no vetting):
+            // an unchecked underclock saved here is where every later boot of the title would
+            // start.
+            const bool atNative = self->_acCPU >= 1.0f - AdaptiveClockFrameGuard::kClockEpsilon &&
+                                  self->_acVI >= 1.0f - AdaptiveClockFrameGuard::kClockEpsilon;
+            if (!atNative && !self->_acPointVetted)
+              return;
+            if (self->_acCPU != self->_acLastPersisted)
+            {
+              ACRecordLearned(
+                  fmt::format("learned cpu {:.3f} vi {:.3f}", self->_acCPU, self->_acVI));
+              [NSUserDefaults.standardUserDefaults
+                  setFloat:self->_acCPU
+                    forKey:[@"adaptive_clock_cpu_" stringByAppendingString:self->_adaptiveGameID]];
+              self->_acLastPersisted = self->_acCPU;
+            }
+            [NSUserDefaults.standardUserDefaults
+                setFloat:self->_acVI
+                  forKey:[@"adaptive_clock_vi_" stringByAppendingString:self->_adaptiveGameID]];
+          };
+
+          // A window that spans a pause or a stalled host thread does not measure the current
+          // point.
+          if (now - self->_acLastTick > ACWindowGapSeconds)
+          {
+            self->_acLastTick = now;
             resetWindow();
             return;
           }
-          const FG::Verdict verdict = FG::Judge(point, window, self->_acRef, top);
-          switch (verdict) {
-            case FG::Verdict::Suspect:
-            case FG::Verdict::NeedsReference: {
-              const FG::OperatingPoint target = (verdict == FG::Verdict::Suspect) ? self->_acRef.point : top;
-              ACRecordDecision(fmt::format(
-                  "{} at cpu {:.2f} vi {:.2f} ({:.1f} fps), measuring cpu {:.2f} vi {:.2f}",
-                  verdict == FG::Verdict::Suspect ? "starvation suspected" : "no reference",
-                  point.cpu, point.vi, rate, target.cpu, target.vi));
-              self->_acStarveConfirming = YES;
-              self->_acStarveTripRate = rate;
-              self->_acStarveTripCPU = self->_acCPU;
-              self->_acStarveTripVI = self->_acVI;
-              self->_acStarveResumePhase = self->_acPhase;
-              applyCPU(target.cpu);
-              applyVI(target.vi);
-              resetWindow();
+          self->_acLastTick = now;
+
+          self->_acPhaseTicks++;
+
+          // Starvation guard (AdaptiveClockFrameGuard.h): evaluated once per completed window (same
+          // tick thresholds the phases use). A window below the reference point that delivers
+          // clearly fewer new game frames per second is re-measured at the reference; if the
+          // reference delivers more, it is restored and the CPU lever parked. Windows at the
+          // reference point refresh it, so the comparison tracks the current scene. With no
+          // reference yet (a seeded boot starts below native) the top point is measured before any
+          // lower point is trusted.
+          {
+            namespace FG = AdaptiveClockFrameGuard;
+            int needTicks = ACHoldTicks;
+            switch (self->_acPhase)
+            {
+            case ACPhase_Verify:
+              needTicks = ACVerifyTicks;
+              break;
+            case ACPhase_Search:
+              needTicks = ACSearchStepTicks;
+              break;
+            case ACPhase_FineTune:
+              needTicks = ACFineTicks;
+              break;
+            case ACPhase_Settle:
+              needTicks = ACSettleTicks;
+              break;
+            default:
+              break;
+            }
+            // While confirming a trip, the phases wait: the window runs at the reference point.
+            if (self->_acStarveConfirming && self->_acPhaseTicks < needTicks)
               return;
-            }
-            case FG::Verdict::Reference:
-              if (!self->_acRef.valid || FG::IsBelow(self->_acRef.point, point) ||
-                  fabs(rate - self->_acRef.rate) > 0.10 * self->_acRef.rate) {
-                INFO_LOG_FMT(CORE, "AdaptiveClock: reference cpu {:.2f} vi {:.2f} at {:.1f} fps "
-                             "({} frames)", point.cpu, point.vi, rate, window.uniqueFrames);
+            if (self->_acPhaseTicks >= needTicks)
+            {
+              const unsigned long long wTotal =
+                  (total > self->_acTotalBase) ? (total - self->_acTotalBase) : 0ULL;
+              const unsigned long long wDups =
+                  (dups > self->_acDupBase) ? (dups - self->_acDupBase) : 0ULL;
+              const FG::FrameWindow window{wTotal > wDups ? wTotal - wDups : 0ULL,
+                                           now - self->_acWindowStart};
+              // A lever under manual control is the user's, not a point the guard judges.
+              const FG::OperatingPoint top{self->_acCpuYielded ? curOC : ceiling,
+                                           self->_acViYielded ? curVI : 1.0f};
+              const FG::OperatingPoint bar = self->_acRef.valid ? self->_acRef.point : top;
+              const FG::OperatingPoint point{self->_acCpuYielded ? bar.cpu :
+                                                                   MIN(self->_acCPU, ceiling),
+                                             self->_acViYielded ? bar.vi : self->_acVI};
+              const double rate = FG::Rate(window);
+              if (self->_acStarveConfirming)
+              {
+                if (!FG::CanConfirm(window))
+                {
+                  // Loading or a black screen: measure the confirmation again.
+                  resetWindow();
+                  return;
+                }
+                self->_acStarveConfirming = NO;
+                self->_acRef = FG::Reference{true, point, rate};
+                if (FG::ConfirmsStarvation(self->_acStarveTripRate, window))
+                {
+                  ACRecordDecision(fmt::format("starvation at cpu {:.2f} vi {:.2f} confirmed "
+                                               "({:.1f} vs {:.1f} fps), keeping "
+                                               "cpu {:.2f} vi {:.2f}, CPU lever parked",
+                                               self->_acStarveTripCPU, self->_acStarveTripVI,
+                                               self->_acStarveTripRate, rate, point.cpu, point.vi));
+                  self->_acPointVetted = YES;
+                  self->_acStableCPU = self->_acCPU;
+                  self->_acCpuLeverParked = YES;
+                  self->_acUpProbeLever = AC_LEVER_NONE;
+                  self->_acPhase = ACPhase_Hold;
+                  persistConverged();
+                  resetWindow();
+                  return;
+                }
+                // The reference delivers no more new frames than the tripped point: the scene
+                // changed, not the clock's effect. The reference is re-based on this scene; resume.
+                ACRecordDecision(fmt::format("starvation not confirmed ({:.1f} vs {:.1f} fps), "
+                                             "resuming cpu {:.2f} vi {:.2f}",
+                                             self->_acStarveTripRate, rate, self->_acStarveTripCPU,
+                                             self->_acStarveTripVI));
+                applyCPU(self->_acStarveTripCPU);
+                applyVI(self->_acStarveTripVI);
+                self->_acPhase = self->_acStarveResumePhase;
+                resetWindow();
+                return;
               }
-              self->_acRef = FG::Reference{true, point, rate};
-              self->_acPointVetted = YES;
-              break;
-            case FG::Verdict::Keep:
-              self->_acPointVetted = YES;
-              break;
-            case FG::Verdict::Ignore:
-              break;
+              const FG::Verdict verdict = FG::Judge(point, window, self->_acRef, top);
+              switch (verdict)
+              {
+              case FG::Verdict::Suspect:
+              case FG::Verdict::NeedsReference:
+              {
+                const FG::OperatingPoint target =
+                    (verdict == FG::Verdict::Suspect) ? self->_acRef.point : top;
+                ACRecordDecision(fmt::format(
+                    "{} at cpu {:.2f} vi {:.2f} ({:.1f} fps), measuring cpu {:.2f} vi {:.2f}",
+                    verdict == FG::Verdict::Suspect ? "starvation suspected" : "no reference",
+                    point.cpu, point.vi, rate, target.cpu, target.vi));
+                self->_acStarveConfirming = YES;
+                self->_acStarveTripRate = rate;
+                self->_acStarveTripCPU = self->_acCPU;
+                self->_acStarveTripVI = self->_acVI;
+                self->_acStarveResumePhase = self->_acPhase;
+                applyCPU(target.cpu);
+                applyVI(target.vi);
+                resetWindow();
+                return;
+              }
+              case FG::Verdict::Reference:
+                if (!self->_acRef.valid || FG::IsBelow(self->_acRef.point, point) ||
+                    fabs(rate - self->_acRef.rate) > 0.10 * self->_acRef.rate)
+                {
+                  INFO_LOG_FMT(CORE,
+                               "AdaptiveClock: reference cpu {:.2f} vi {:.2f} at {:.1f} fps "
+                               "({} frames)",
+                               point.cpu, point.vi, rate, window.uniqueFrames);
+                }
+                self->_acRef = FG::Reference{true, point, rate};
+                self->_acPointVetted = YES;
+                break;
+              case FG::Verdict::Keep:
+                self->_acPointVetted = YES;
+                break;
+              case FG::Verdict::Ignore:
+                break;
+              }
+            }
           }
-        }
-      }
 
-      switch (self->_acPhase) {
-        case ACPhase_Verify: {
-          // Seeded from a per-game f*. Confirm it still holds, then do a BOUNDED ±1-step re-find to
-          // track thermal drift — NOT a full sweep.
-          if (self->_acPhaseTicks < ACVerifyTicks) break;
-          const float applied_now = MIN(self->_acCPU, ceiling);
-          if (!meetsFStar) {
-            if (!self->_acVerifyProbedUp) {
-              // The seed no longer meets f* (the host got slower — thermal/scene). f* dropped:
-              // descend one step and settle (still bounded, not a full re-sweep).
-              if (applied_now - sweepStep >= ACCpuFloor) {
+          switch (self->_acPhase)
+          {
+          case ACPhase_Verify:
+          {
+            // Seeded from a per-game f*. Confirm it still holds, then do a BOUNDED ±1-step re-find
+            // to track thermal drift — NOT a full sweep.
+            if (self->_acPhaseTicks < ACVerifyTicks)
+              break;
+            const float applied_now = MIN(self->_acCPU, ceiling);
+            if (!meetsFStar)
+            {
+              if (!self->_acVerifyProbedUp)
+              {
+                // The seed no longer meets f* (the host got slower — thermal/scene). f* dropped:
+                // descend one step and settle (still bounded, not a full re-sweep).
+                if (applied_now - sweepStep >= ACCpuFloor)
+                {
+                  applyCPU(self->_acCPU - sweepStep);
+                }
+                self->_acStableCPU = self->_acCPU;
+                self->_acPhase = ACPhase_Settle;
+              }
+              else
+              {
+                // We had probed UP and it failed — the seed itself was f*. Step back to the seed.
                 applyCPU(self->_acCPU - sweepStep);
+                self->_acStableCPU = self->_acCPU;
+                self->_acPhase = ACPhase_Settle;
               }
-              self->_acStableCPU = self->_acCPU;
-              self->_acPhase = ACPhase_Settle;
-            } else {
-              // We had probed UP and it failed — the seed itself was f*. Step back to the seed.
-              applyCPU(self->_acCPU - sweepStep);
-              self->_acStableCPU = self->_acCPU;
-              self->_acPhase = ACPhase_Settle;
+              resetWindow();
+              break;
             }
-            resetWindow();
-            break;
-          }
-          // Seed still meets f*. Probe ONE step up to see if f* rose (cooler than when learned).
-          if (!self->_acVerifyProbedUp && applied_now + sweepStep <= 1.0f + 0.001f) {
-            self->_acVerifyProbedUp = YES;
-            applyCPU(self->_acCPU + sweepStep);
-            resetWindow();
-            break;  // re-enter Verify at the higher clock; if it also meets f*, we keep it.
-          }
-          // Either we just confirmed a successful +1 probe (f* rose), or there's no room to probe up.
-          // This clock is f*. Settle.
-          self->_acStableCPU = self->_acCPU;
-          self->_acPhase = ACPhase_Settle;
-          resetWindow();
-          break;
-        }
-
-        case ACPhase_Search: {
-          // CLIFF-FIND. If 1.0 already keeps up, settle there (easy/GPU-bound case). Otherwise, when
-          // we have a valid CPU-bound classification, PREDICTIVELY JUMP to the max_speed cliff estimate
-          // (f* ≈ clock·max_speed) and hand off to FineTune — far faster and finer than the coarse
-          // descent. Fall back to one-coarse-step descent when the estimate isn't usable (GPU-bound /
-          // Unknown / no headroom signal). The coarse descent still STOPS at the first match (that
-          // first match is the highest = f*); we never keep descending while meeting (the MINIMIZE bug).
-          if (self->_acPhaseTicks < ACSearchStepTicks) break;
-
-          const float applied_now = MIN(self->_acCPU, ceiling);
-          if (meetsFStar) {
-            // First (=highest) clock that keeps up with honest delivery. This is f*. Settle here.
+            // Seed still meets f*. Probe ONE step up to see if f* rose (cooler than when learned).
+            if (!self->_acVerifyProbedUp && applied_now + sweepStep <= 1.0f + 0.001f)
+            {
+              self->_acVerifyProbedUp = YES;
+              applyCPU(self->_acCPU + sweepStep);
+              resetWindow();
+              break;  // re-enter Verify at the higher clock; if it also meets f*, we keep it.
+            }
+            // Either we just confirmed a successful +1 probe (f* rose), or there's no room to probe
+            // up. This clock is f*. Settle.
             self->_acStableCPU = self->_acCPU;
             self->_acPhase = ACPhase_Settle;
             resetWindow();
             break;
           }
 
-          // Doesn't keep up here. Prefer a predictive jump (one window vs many coarse steps, lands on
-          // the fine grid). Only when positively CpuBound: c·max_speed is meaningful only then.
-          if (bound == PerformanceMetrics::Bound::CpuBound && !self->_acCpuYielded &&
-              maxSpeed > 0.05 && maxSpeed < 0.999) {
-            const float fhat = applied_now * (float)maxSpeed;            // estimated cliff
-            float target = floorf(fhat / ACFineStep) * ACFineStep;       // fine grid, biased down
-            target = MAX(ACCpuFloor, MIN(1.0f, target));
-            if (target < applied_now - 0.001f) {
-              // Record the pre-jump baseline so FineTune can tell CPU-bound (lowering raised speed)
-              // from a GPU wall misclassified as CpuBound on single-core (lowering changed nothing).
-              self->_acProbeBaseCPU = applied_now;
-              self->_acProbeBaseSpeed = speed;
-              self->_acFineConfirmed = NO;
-              applyCPU(target);
-              self->_acStableCPU = self->_acCPU;  // best estimate so far (refined in FineTune)
-              self->_acPhase = ACPhase_FineTune;
+          case ACPhase_Search:
+          {
+            // CLIFF-FIND. If 1.0 already keeps up, settle there (easy/GPU-bound case). Otherwise,
+            // when we have a valid CPU-bound classification, PREDICTIVELY JUMP to the max_speed
+            // cliff estimate (f* ≈ clock·max_speed) and hand off to FineTune — far faster and finer
+            // than the coarse descent. Fall back to one-coarse-step descent when the estimate isn't
+            // usable (GPU-bound / Unknown / no headroom signal). The coarse descent still STOPS at
+            // the first match (that first match is the highest = f*); we never keep descending
+            // while meeting (the MINIMIZE bug).
+            if (self->_acPhaseTicks < ACSearchStepTicks)
+              break;
+
+            const float applied_now = MIN(self->_acCPU, ceiling);
+            if (meetsFStar)
+            {
+              // First (=highest) clock that keeps up with honest delivery. This is f*. Settle here.
+              self->_acStableCPU = self->_acCPU;
+              self->_acPhase = ACPhase_Settle;
               resetWindow();
               break;
             }
+
+            // Doesn't keep up here. Prefer a predictive jump (one window vs many coarse steps,
+            // lands on the fine grid). Only when positively CpuBound: c·max_speed is meaningful
+            // only then.
+            if (bound == PerformanceMetrics::Bound::CpuBound && !self->_acCpuYielded &&
+                maxSpeed > 0.05 && maxSpeed < 0.999)
+            {
+              const float fhat = applied_now * (float)maxSpeed;       // estimated cliff
+              float target = floorf(fhat / ACFineStep) * ACFineStep;  // fine grid, biased down
+              target = MAX(ACCpuFloor, MIN(1.0f, target));
+              if (target < applied_now - 0.001f)
+              {
+                // Record the pre-jump baseline so FineTune can tell CPU-bound (lowering raised
+                // speed) from a GPU wall misclassified as CpuBound on single-core (lowering changed
+                // nothing).
+                self->_acProbeBaseCPU = applied_now;
+                self->_acProbeBaseSpeed = speed;
+                self->_acFineConfirmed = NO;
+                applyCPU(target);
+                self->_acStableCPU = self->_acCPU;  // best estimate so far (refined in FineTune)
+                self->_acPhase = ACPhase_FineTune;
+                resetWindow();
+                break;
+              }
+            }
+
+            // Coarse fallback: descend one step toward the feasible region (or floor +
+            // best-effort).
+            if (applied_now - sweepStep >= ACCpuFloor - 0.001f)
+            {
+              applyCPU(self->_acCPU - sweepStep);
+              resetWindow();
+            }
+            else
+            {
+              applyCPU(ACCpuFloor);
+              self->_acStableCPU = self->_acCPU;
+              self->_acPhase = ACPhase_Settle;
+              resetWindow();
+            }
+            break;
           }
 
-          // Coarse fallback: descend one step toward the feasible region (or floor + best-effort).
-          if (applied_now - sweepStep >= ACCpuFloor - 0.001f) {
-            applyCPU(self->_acCPU - sweepStep);
-            resetWindow();
-          } else {
+          case ACPhase_FineTune:
+          {
+            // We jumped to the max_speed cliff estimate. Refine onto the cliff by RE-estimating
+            // from the new clock (Newton-style): keep up here -> confirmed-good, re-predict and
+            // jump UP if there's room, else settle. Climbing-up-stop-at-first-failure finds the
+            // ceiling correctly (unlike descending, where every lower clock also "meets" — the
+            // MINIMIZE trap). Converges in ~2-3 windows. Two guards: a GPU wall (lowering didn't
+            // help -> not CPU-bound) and overshoot recovery by RE-PREDICTING from the overshot
+            // clock (there max_speed≈speed, so c·m≈cliff).
+            const float applied_ft = MIN(self->_acCPU, ceiling);  // capped, consistent with Search
+            if (self->_acPhaseTicks < ACFineTicks)
+              break;
+            if (meetsFStar)
+            {
+              self->_acFineConfirmed = YES;
+              self->_acStableCPU = self->_acCPU;  // confirmed good
+              const float fhat = applied_ft * (float)maxSpeed;
+              float target = floorf(fhat / ACFineStep) * ACFineStep;
+              target = MAX(ACCpuFloor, MIN(1.0f, target));
+              if (target > self->_acCPU + 0.001f && !self->_acCpuYielded)
+              {
+                applyCPU(target);  // estimate says room above: jump up and re-verify
+                resetWindow();
+                break;
+              }
+              // Estimate puts the cliff at (or below) the current clock: we're on it. Settle.
+              self->_acStableCPU = self->_acCPU;
+              self->_acPhase = ACPhase_Hold;
+              persistConverged();
+              resetWindow();
+              break;
+            }
+            // Not keeping up at this clock.
+            if (self->_acFineConfirmed && self->_acStableCPU < self->_acCPU - 0.001f)
+            {
+              // We had climbed up and just overshot the cliff: settle at the last confirmed-good.
+              applyCPU(self->_acStableCPU);
+              self->_acPhase = ACPhase_Hold;
+              persistConverged();
+              resetWindow();
+              break;
+            }
+            // Never confirmed a keeps-up clock. GPU GUARD: if dropping from the baseline didn't
+            // raise achieved speed, the CPU lever isn't the bottleneck (GPU/video wall misread as
+            // CpuBound on single-core) — restore the baseline clock and PARK the lever so we don't
+            // ratchet to slow-mo.
+            if ((speed - self->_acProbeBaseSpeed) < ACProbeMinGain)
+            {
+              ACRecordDecision(
+                  fmt::format("no speed gain below cpu {:.2f} ({:.2f} vs {:.2f}), CPU lever parked",
+                              self->_acProbeBaseCPU, speed, self->_acProbeBaseSpeed));
+              applyCPU(self->_acProbeBaseCPU);
+              self->_acCpuLeverParked = YES;
+              self->_acPhase = ACPhase_Hold;
+              persistConverged();
+              resetWindow();
+              break;
+            }
+            // CPU-bound but the seed was still a touch high: RE-PREDICT downward from here (fast —
+            // one window — vs slow fine-stepping). At an overshoot max_speed≈speed, so
+            // c·max_speed≈cliff.
+            float target = floorf(applied_ft * (float)maxSpeed / ACFineStep) * ACFineStep;
+            target = MAX(ACCpuFloor, MIN(1.0f, target));
+            if (target < applied_ft - 0.001f)
+            {
+              applyCPU(target);
+              resetWindow();
+              break;
+            }
+            // Can't predict lower (estimate not below current): floor it and settle, best-effort.
             applyCPU(ACCpuFloor);
             self->_acStableCPU = self->_acCPU;
-            self->_acPhase = ACPhase_Settle;
+            self->_acPhase = ACPhase_Hold;
+            persistConverged();
             resetWindow();
+            break;
           }
-          break;
-        }
 
-        case ACPhase_FineTune: {
-          // We jumped to the max_speed cliff estimate. Refine onto the cliff by RE-estimating from the
-          // new clock (Newton-style): keep up here -> confirmed-good, re-predict and jump UP if there's
-          // room, else settle. Climbing-up-stop-at-first-failure finds the ceiling correctly (unlike
-          // descending, where every lower clock also "meets" — the MINIMIZE trap). Converges in ~2-3
-          // windows. Two guards: a GPU wall (lowering didn't help -> not CPU-bound) and overshoot
-          // recovery by RE-PREDICTING from the overshot clock (there max_speed≈speed, so c·m≈cliff).
-          const float applied_ft = MIN(self->_acCPU, ceiling);  // capped, consistent with Search
-          if (self->_acPhaseTicks < ACFineTicks) break;
-          if (meetsFStar) {
-            self->_acFineConfirmed = YES;
-            self->_acStableCPU = self->_acCPU;  // confirmed good
-            const float fhat = applied_ft * (float)maxSpeed;
-            float target = floorf(fhat / ACFineStep) * ACFineStep;
-            target = MAX(ACCpuFloor, MIN(1.0f, target));
-            if (target > self->_acCPU + 0.001f && !self->_acCpuYielded) {
-              applyCPU(target);                 // estimate says room above: jump up and re-verify
-              resetWindow();
+          case ACPhase_Settle:
+          {
+            // Observe f* over a longer window before committing to HOLD.
+            if (self->_acPhaseTicks < ACSettleTicks)
               break;
-            }
-            // Estimate puts the cliff at (or below) the current clock: we're on it. Settle.
-            self->_acStableCPU = self->_acCPU;
-            self->_acPhase = ACPhase_Hold;
-            persistConverged();
-            resetWindow();
-            break;
-          }
-          // Not keeping up at this clock.
-          if (self->_acFineConfirmed && self->_acStableCPU < self->_acCPU - 0.001f) {
-            // We had climbed up and just overshot the cliff: settle at the last confirmed-good.
-            applyCPU(self->_acStableCPU);
-            self->_acPhase = ACPhase_Hold;
-            persistConverged();
-            resetWindow();
-            break;
-          }
-          // Never confirmed a keeps-up clock. GPU GUARD: if dropping from the baseline didn't raise
-          // achieved speed, the CPU lever isn't the bottleneck (GPU/video wall misread as CpuBound on
-          // single-core) — restore the baseline clock and PARK the lever so we don't ratchet to slow-mo.
-          if ((speed - self->_acProbeBaseSpeed) < ACProbeMinGain) {
-            ACRecordDecision(
-                fmt::format("no speed gain below cpu {:.2f} ({:.2f} vs {:.2f}), CPU lever parked",
-                            self->_acProbeBaseCPU, speed, self->_acProbeBaseSpeed));
-            applyCPU(self->_acProbeBaseCPU);
-            self->_acCpuLeverParked = YES;
-            self->_acPhase = ACPhase_Hold;
-            persistConverged();
-            resetWindow();
-            break;
-          }
-          // CPU-bound but the seed was still a touch high: RE-PREDICT downward from here (fast — one
-          // window — vs slow fine-stepping). At an overshoot max_speed≈speed, so c·max_speed≈cliff.
-          float target = floorf(applied_ft * (float)maxSpeed / ACFineStep) * ACFineStep;
-          target = MAX(ACCpuFloor, MIN(1.0f, target));
-          if (target < applied_ft - 0.001f) {
-            applyCPU(target);
-            resetWindow();
-            break;
-          }
-          // Can't predict lower (estimate not below current): floor it and settle, best-effort.
-          applyCPU(ACCpuFloor);
-          self->_acStableCPU = self->_acCPU;
-          self->_acPhase = ACPhase_Hold;
-          persistConverged();
-          resetWindow();
-          break;
-        }
-
-        case ACPhase_Settle: {
-          // Observe f* over a longer window before committing to HOLD.
-          if (self->_acPhaseTicks < ACSettleTicks) break;
-          if (meetsFStar) {
-            self->_acStableCPU = self->_acCPU;
-            self->_acPhase = ACPhase_Hold;
-            persistConverged();
-          } else if (self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
-                     self->_acVI - ACVIStep >= ACViFloor &&
-                     bound == PerformanceMetrics::Bound::CpuBound) {
-            // CPU clock already at/near the floor AND positively CPU-bound (step #5): dropping CPU
-            // more won't help (game logic is the limit). Shed VI overclock for its DISTINCT
-            // refresh-rate effect (lowering the emulated field rate cuts CPU work per real second),
-            // not to chase the throttle — that double-counts with the CPU lever. Require CpuBound
-            // (not merely "not GpuBound"): on Unknown we must not act, or auto-VI fires on
-            // unclassified data. Depends on #1's now-live classification.
-            applyVI(self->_acVI - ACVIStep);
-          } else if (self->_acCPU - sweepStep >= ACCpuFloor - 0.001f) {
-            // f* fell (the scene got heavier than when we picked it). Direction is DOWN, not up:
-            // descend one step and re-settle. (Nudging UP here would be MINIMIZE-era recovery and
-            // would chase the can't-keep-up cliff — the exact inversion we removed.)
-            applyCPU(self->_acCPU - sweepStep);
-            self->_acStableCPU = self->_acCPU;
-          }
-          resetWindow();
-          break;
-        }
-
-        case ACPhase_Hold:
-        default: {
-          // Converged at f*. Light monitoring in BOTH directions.
-          //  - Lost f* (scene heavier / thermal): the cliff moved DOWN -> descend to re-find it.
-          //  - Still at f* but max_speed shows real headroom: the cliff moved UP (scene lightened /
-          //    cooled) -> climb back. This recovery direction is the fix for the one-way ratchet;
-          //    without it a transient walked the clock down for good (see ACUpMargin).
-          if (self->_acPhaseTicks < ACHoldTicks) break;
-          if (!meetsFStar) {
-            if (self->_acUpProbeLever != AC_LEVER_NONE) {
-              // Our headroom up-probe overshot f* (host can't keep up at the raised clock). Revert
-              // the probed lever and back off with a cooldown before retrying — a transient could
-              // also cause this. Stay in HOLD: this was our own probe, not a real scene change.
-              if (self->_acUpProbeLever == AC_LEVER_VI) {
-                applyVI(self->_acPreProbeVI);
-                self->_acViRecoveryStalled = YES;  // stop retrying VI; let CPU climb instead.
-              } else {
-                applyCPU(self->_acPreProbeCPU);
-              }
-              self->_acUpProbeLever = AC_LEVER_NONE;
-              self->_acUpCooldown = ACUpFailCooldownEvals;
-            } else if (self->_acCpuLeverParked) {
-              // GPU/video wall (FineTune's guard parked the CPU lever): underclocking won't help, so
-              // do NOT re-descend / re-Search — that would just ratchet to slow-mo. Hold at the
-              // baseline clock and keep monitoring; the meetsFStar branch re-arms if the scene lifts.
-              persistConverged();
-            } else if (self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
-                       self->_acVI - ACVIStep >= ACViFloor &&
-                       bound == PerformanceMetrics::Bound::CpuBound) {
-              // CPU already floored AND positively CPU-bound: shed VI for its distinct refresh-rate
-              // effect (step #5). Require CpuBound, not "!= GpuBound", so Unknown never triggers it.
-              applyVI(self->_acVI - ACVIStep);
-              self->_acVerifyProbedUp = NO;
-              self->_acPhase = ACPhase_Search;
-            } else if (self->_acCPU - sweepStep >= ACCpuFloor - 0.001f) {
-              // f* dropped: descend one step and re-find by sweeping down from here.
-              applyCPU(self->_acCPU - sweepStep);
-              self->_acViRecoveryStalled = NO;   // fresh conditions: re-arm VI recovery.
-              self->_acVerifyProbedUp = NO;
-              self->_acPhase = ACPhase_Search;
-            }
-          } else {
-            // At full speed. First: if a prior up-probe is in flight, it HELD -> keep the climb.
-            if (self->_acUpProbeLever != AC_LEVER_NONE) {
+            if (meetsFStar)
+            {
               self->_acStableCPU = self->_acCPU;
-              self->_acUpProbeLever = AC_LEVER_NONE;
-            }
-            // Scene is keeping up again: re-arm the CPU lever if a GPU wall had parked it.
-            self->_acCpuLeverParked = NO;
-            if (self->_acUpCooldown > 0) {
-              self->_acUpCooldown--;
-              // NOTE: do NOT clear _acViRecoveryStalled here. Clearing it the instant the cooldown
-              // expired (one eval before the probe branch below could ever observe it) made the
-              // "VI overshot -> stop retrying VI, let CPU climb instead" hand-off dead code — VI would
-              // jitter forever instead of yielding to CPU. The stall is re-armed only on a genuine
-              // re-search (the descend path), which is the correct LIFO behavior.
-              persistConverged();
-            } else if (cool && !newUnderrun) {
-              // Headroom recovery toward f*, gated by the step-relative cliff estimate (see ACUpMargin)
-              // so we never probe into the clock Search already rejected. Restore LIFO: the VI lever is
-              // shed last (only at CPU floor) and its underclock is the visible slow-motion, so raise
-              // it first; once VI is back at native (or stalled) climb CPU. One lever per step.
-              const double fhatCPU = (double)self->_acCPU * maxSpeed;  // estimated CPU cliff (VI fixed)
-              const double fhatVI  = (double)self->_acVI * maxSpeed;   // proportional headroom for VI work
-              self->_acPreProbeCPU = self->_acCPU;
-              self->_acPreProbeVI = self->_acVI;
-              if (self->_acVI < 1.0f - 0.001f && !self->_acViYielded && !self->_acViRecoveryStalled &&
-                  fhatVI >= (double)(self->_acVI + ACVIStep) * (1.0 + ACUpMargin)) {
-                applyVI(self->_acVI + ACVIStep);
-                self->_acUpProbeLever = AC_LEVER_VI;
-                self->_acUpCooldown = 1;  // observe one eval before the next climb
-              } else if (self->_acCPU < 1.0f - 0.001f && !self->_acCpuYielded &&
-                         fhatCPU >= (double)(self->_acCPU + sweepStep) * (1.0 + ACUpMargin)) {
-                applyCPU(self->_acCPU + sweepStep);
-                self->_acUpProbeLever = AC_LEVER_CPU;
-                self->_acUpCooldown = 1;
-              } else {
-                persistConverged();  // at the cliff (no estimated room beyond a step) or yielded.
-              }
-            } else {
-              // At/just below f* with no spare headroom (dead-band): the converged steady state.
+              self->_acPhase = ACPhase_Hold;
               persistConverged();
             }
+            else if (self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
+                     self->_acVI - ACVIStep >= ACViFloor &&
+                     bound == PerformanceMetrics::Bound::CpuBound)
+            {
+              // CPU clock already at/near the floor AND positively CPU-bound (step #5): dropping
+              // CPU more won't help (game logic is the limit). Shed VI overclock for its DISTINCT
+              // refresh-rate effect (lowering the emulated field rate cuts CPU work per real
+              // second), not to chase the throttle — that double-counts with the CPU lever. Require
+              // CpuBound (not merely "not GpuBound"): on Unknown we must not act, or auto-VI fires
+              // on unclassified data. Depends on #1's now-live classification.
+              applyVI(self->_acVI - ACVIStep);
+            }
+            else if (self->_acCPU - sweepStep >= ACCpuFloor - 0.001f)
+            {
+              // f* fell (the scene got heavier than when we picked it). Direction is DOWN, not up:
+              // descend one step and re-settle. (Nudging UP here would be MINIMIZE-era recovery and
+              // would chase the can't-keep-up cliff — the exact inversion we removed.)
+              applyCPU(self->_acCPU - sweepStep);
+              self->_acStableCPU = self->_acCPU;
+            }
+            resetWindow();
+            break;
           }
-          resetWindow();
-          break;
-        }
-      }
-    }, false);
+
+          case ACPhase_Hold:
+          default:
+          {
+            // Converged at f*. Light monitoring in BOTH directions.
+            //  - Lost f* (scene heavier / thermal): the cliff moved DOWN -> descend to re-find it.
+            //  - Still at f* but max_speed shows real headroom: the cliff moved UP (scene lightened
+            //  /
+            //    cooled) -> climb back. This recovery direction is the fix for the one-way ratchet;
+            //    without it a transient walked the clock down for good (see ACUpMargin).
+            if (self->_acPhaseTicks < ACHoldTicks)
+              break;
+            if (!meetsFStar)
+            {
+              if (self->_acUpProbeLever != AC_LEVER_NONE)
+              {
+                // Our headroom up-probe overshot f* (host can't keep up at the raised clock).
+                // Revert the probed lever and back off with a cooldown before retrying — a
+                // transient could also cause this. Stay in HOLD: this was our own probe, not a real
+                // scene change.
+                if (self->_acUpProbeLever == AC_LEVER_VI)
+                {
+                  applyVI(self->_acPreProbeVI);
+                  self->_acViRecoveryStalled = YES;  // stop retrying VI; let CPU climb instead.
+                }
+                else
+                {
+                  applyCPU(self->_acPreProbeCPU);
+                }
+                self->_acUpProbeLever = AC_LEVER_NONE;
+                self->_acUpCooldown = ACUpFailCooldownEvals;
+              }
+              else if (self->_acCpuLeverParked)
+              {
+                // GPU/video wall (FineTune's guard parked the CPU lever): underclocking won't help,
+                // so do NOT re-descend / re-Search — that would just ratchet to slow-mo. Hold at
+                // the baseline clock and keep monitoring; the meetsFStar branch re-arms if the
+                // scene lifts.
+                persistConverged();
+              }
+              else if (self->_acCPU - sweepStep < ACCpuFloor + 0.001f &&
+                       self->_acVI - ACVIStep >= ACViFloor &&
+                       bound == PerformanceMetrics::Bound::CpuBound)
+              {
+                // CPU already floored AND positively CPU-bound: shed VI for its distinct
+                // refresh-rate effect (step #5). Require CpuBound, not "!= GpuBound", so Unknown
+                // never triggers it.
+                applyVI(self->_acVI - ACVIStep);
+                self->_acVerifyProbedUp = NO;
+                self->_acPhase = ACPhase_Search;
+              }
+              else if (self->_acCPU - sweepStep >= ACCpuFloor - 0.001f)
+              {
+                // f* dropped: descend one step and re-find by sweeping down from here.
+                applyCPU(self->_acCPU - sweepStep);
+                self->_acViRecoveryStalled = NO;  // fresh conditions: re-arm VI recovery.
+                self->_acVerifyProbedUp = NO;
+                self->_acPhase = ACPhase_Search;
+              }
+            }
+            else
+            {
+              // At full speed. First: if a prior up-probe is in flight, it HELD -> keep the climb.
+              if (self->_acUpProbeLever != AC_LEVER_NONE)
+              {
+                self->_acStableCPU = self->_acCPU;
+                self->_acUpProbeLever = AC_LEVER_NONE;
+              }
+              // Scene is keeping up again: re-arm the CPU lever if a GPU wall had parked it.
+              self->_acCpuLeverParked = NO;
+              if (self->_acUpCooldown > 0)
+              {
+                self->_acUpCooldown--;
+                // NOTE: do NOT clear _acViRecoveryStalled here. Clearing it the instant the
+                // cooldown expired (one eval before the probe branch below could ever observe it)
+                // made the "VI overshot -> stop retrying VI, let CPU climb instead" hand-off dead
+                // code — VI would jitter forever instead of yielding to CPU. The stall is re-armed
+                // only on a genuine re-search (the descend path), which is the correct LIFO
+                // behavior.
+                persistConverged();
+              }
+              else if (cool && !newUnderrun)
+              {
+                // Headroom recovery toward f*, gated by the step-relative cliff estimate (see
+                // ACUpMargin) so we never probe into the clock Search already rejected. Restore
+                // LIFO: the VI lever is shed last (only at CPU floor) and its underclock is the
+                // visible slow-motion, so raise it first; once VI is back at native (or stalled)
+                // climb CPU. One lever per step.
+                const double fhatCPU =
+                    (double)self->_acCPU * maxSpeed;  // estimated CPU cliff (VI fixed)
+                const double fhatVI =
+                    (double)self->_acVI * maxSpeed;  // proportional headroom for VI work
+                self->_acPreProbeCPU = self->_acCPU;
+                self->_acPreProbeVI = self->_acVI;
+                if (self->_acVI < 1.0f - 0.001f && !self->_acViYielded &&
+                    !self->_acViRecoveryStalled &&
+                    fhatVI >= (double)(self->_acVI + ACVIStep) * (1.0 + ACUpMargin))
+                {
+                  applyVI(self->_acVI + ACVIStep);
+                  self->_acUpProbeLever = AC_LEVER_VI;
+                  self->_acUpCooldown = 1;  // observe one eval before the next climb
+                }
+                else if (self->_acCPU < 1.0f - 0.001f && !self->_acCpuYielded &&
+                         fhatCPU >= (double)(self->_acCPU + sweepStep) * (1.0 + ACUpMargin))
+                {
+                  applyCPU(self->_acCPU + sweepStep);
+                  self->_acUpProbeLever = AC_LEVER_CPU;
+                  self->_acUpCooldown = 1;
+                }
+                else
+                {
+                  persistConverged();  // at the cliff (no estimated room beyond a step) or yielded.
+                }
+              }
+              else
+              {
+                // At/just below f* with no spare headroom (dead-band): the converged steady state.
+                persistConverged();
+              }
+            }
+            resetWindow();
+            break;
+          }
+          }
+        },
+        false);
   });
   // Mark the adaptive clock active so CoreTiming::GetVISkip forces VI-skip Off while it runs
   // (step #4): the two catch-up mechanisms must not overlap or VI-skip's dropped IRQs corrupt the
@@ -1403,16 +1737,21 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
 
 // Live adaptive-clock toggle. ON: persist the default, then start the controller now (the start
 // method early-returns unless the default is true, so order matters). OFF: cancel + nil the timer
-// (mirror the inputPump stop pattern; start() guards on a non-nil source, so a cancelled-but-not-nil
-// source would block re-enable) and clear the CurrentRun overclock overrides the controller wrote so
-// the manual/Base values underneath are revealed again.
-- (void)setAdaptiveClockEnabled:(BOOL)on {
+// (mirror the inputPump stop pattern; start() guards on a non-nil source, so a
+// cancelled-but-not-nil source would block re-enable) and clear the CurrentRun overclock overrides
+// the controller wrote so the manual/Base values underneath are revealed again.
+- (void)setAdaptiveClockEnabled:(BOOL)on
+{
   NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
   [defaults setBool:on forKey:@"adaptive_clock_enable"];
-  if (on) {
+  if (on)
+  {
     [self startAdaptiveClockIfEnabled];
-  } else {
-    if (_adaptiveClockTimer) {
+  }
+  else
+  {
+    if (_adaptiveClockTimer)
+    {
       dispatch_source_cancel(_adaptiveClockTimer);
       _adaptiveClockTimer = nil;
     }
@@ -1422,20 +1761,24 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
     // Clear the four CurrentRun keys the controller sets (CPU + VI clock + their enables). The
     // controller writes only the CurrentRun layer (never Base/Dolphin.ini), so deleting these keys
     // restores whatever the user set manually (Base) or the 1.0 default — no override left stuck.
-    Core::QueueHostJob([](Core::System&) {
-      if (Config::GetLayer(Config::LayerType::CurrentRun)) {
-        Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_OVERCLOCK);
-        Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_OVERCLOCK_ENABLE);
-        Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_VI_OVERCLOCK);
-        Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_VI_OVERCLOCK_ENABLE);
-      }
-    }, false);
+    Core::QueueHostJob(
+        [](Core::System&) {
+          if (Config::GetLayer(Config::LayerType::CurrentRun))
+          {
+            Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_OVERCLOCK);
+            Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_OVERCLOCK_ENABLE);
+            Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_VI_OVERCLOCK);
+            Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_VI_OVERCLOCK_ENABLE);
+          }
+        },
+        false);
   }
 }
 
 // Build a chat-ready plaintext state block and place it on the general pasteboard. Sections:
 // GAME / HARDWARE / LIVE PERF / SETTINGS (SETTINGS reuses _ICubeBuildPerfSettingsString).
-+ (void)copyStateToClipboard {
++ (void)copyStateToClipboard
+{
   std::string b;
   b.reserve(2048);
 
@@ -1451,7 +1794,8 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   {
     char machine[256] = {0};
     size_t len = sizeof(machine);
-    if (sysctlbyname("hw.machine", machine, &len, NULL, 0) != 0) {
+    if (sysctlbyname("hw.machine", machine, &len, NULL, 0) != 0)
+    {
       len = sizeof(machine);
       sysctlbyname("hw.model", machine, &len, NULL, 0);
     }
@@ -1471,14 +1815,25 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
   b += "=== LIVE PERF ===\n";
   {
     char buf[96];
-    snprintf(buf, sizeof(buf), "%.2f", Core::System::GetInstance().GetPerfMetrics().GetFPS());        b += "  fps=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.2f", Core::System::GetInstance().GetPerfMetrics().GetVPS());        b += "  vps=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.1f%%", Core::System::GetInstance().GetPerfMetrics().GetSpeed() * 100.0);     b += "  speed=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.1f%%", Core::System::GetInstance().GetPerfMetrics().GetMaxSpeed() * 100.0);  b += "  max_speed=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.3f", Core::System::GetInstance().GetPerfMetrics().GetFrameDtAvgSeconds() * 1000.0); b += "  frame_dt_avg_ms=" + std::string(buf) + "\n";
-    snprintf(buf, sizeof(buf), "%.3f", Core::System::GetInstance().GetPerfMetrics().GetFrameDtStdSeconds() * 1000.0); b += "  frame_dt_std_ms=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.2f", Core::System::GetInstance().GetPerfMetrics().GetFPS());
+    b += "  fps=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.2f", Core::System::GetInstance().GetPerfMetrics().GetVPS());
+    b += "  vps=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.1f%%",
+             Core::System::GetInstance().GetPerfMetrics().GetSpeed() * 100.0);
+    b += "  speed=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.1f%%",
+             Core::System::GetInstance().GetPerfMetrics().GetMaxSpeed() * 100.0);
+    b += "  max_speed=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.3f",
+             Core::System::GetInstance().GetPerfMetrics().GetFrameDtAvgSeconds() * 1000.0);
+    b += "  frame_dt_avg_ms=" + std::string(buf) + "\n";
+    snprintf(buf, sizeof(buf), "%.3f",
+             Core::System::GetInstance().GetPerfMetrics().GetFrameDtStdSeconds() * 1000.0);
+    b += "  frame_dt_std_ms=" + std::string(buf) + "\n";
 
-    // Present decimation: duplicate VI presents vs total (explains FPS << VPS when hacks skip dup XFBs).
+    // Present decimation: duplicate VI presents vs total (explains FPS << VPS when hacks skip dup
+    // XFBs).
     {
       const u64 total_presents = PerformanceMetrics::GetTotalPresentCount();
       const u64 dup_presents = PerformanceMetrics::GetDuplicatePresentCount();
@@ -1486,9 +1841,10 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
       b += "  present_total=" + std::to_string(total_presents) + "\n";
       b += "  present_duplicate=" + std::to_string(dup_presents) + "\n";
       b += "  present_unique=" + std::to_string(unique_presents) + "\n";
-      if (total_presents > 0) {
-        snprintf(buf, sizeof(buf), "%.1f%%", 100.0 * static_cast<double>(dup_presents) /
-                                                  static_cast<double>(total_presents));
+      if (total_presents > 0)
+      {
+        snprintf(buf, sizeof(buf), "%.1f%%",
+                 100.0 * static_cast<double>(dup_presents) / static_cast<double>(total_presents));
         b += "  present_dup_ratio=" + std::string(buf) + "\n";
       }
     }
@@ -1496,10 +1852,16 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
     // Bound classification (same sensor the adaptive clock uses).
     {
       const char* bound_str = "unknown";
-      switch (PerformanceMetrics::GetBound()) {
-        case PerformanceMetrics::Bound::CpuBound: bound_str = "cpu"; break;
-        case PerformanceMetrics::Bound::GpuBound: bound_str = "gpu"; break;
-        default: break;
+      switch (PerformanceMetrics::GetBound())
+      {
+      case PerformanceMetrics::Bound::CpuBound:
+        bound_str = "cpu";
+        break;
+      case PerformanceMetrics::Bound::GpuBound:
+        bound_str = "gpu";
+        break;
+      default:
+        break;
       }
       b += "  bound=" + std::string(bound_str) + "\n";
     }
@@ -1507,7 +1869,8 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
     // App resident memory: phys_footprint from TASK_VM_INFO.
     task_vm_info_data_t vmInfo = {};
     mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
-    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vmInfo, &count) == KERN_SUCCESS) {
+    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vmInfo, &count) == KERN_SUCCESS)
+    {
       const double footMB = (double)vmInfo.phys_footprint / (1024.0 * 1024.0);
       snprintf(buf, sizeof(buf), "%.1f MB", footMB);
       b += "  app_resident_mem=" + std::string(buf) + "\n";
@@ -1524,17 +1887,20 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
     NSUserDefaults* ud = [NSUserDefaults standardUserDefaults];
     const bool acOn = [ud boolForKey:@"adaptive_clock_enable"];
     b += std::string("  adaptive_clock_enable=") + (acOn ? "true" : "false") + "\n";
-    if (!gid.empty()) {
-      NSString* cpuKey = [@"adaptive_clock_cpu_" stringByAppendingString:
-                          [NSString stringWithUTF8String:gid.c_str()]];
-      NSString* viKey = [@"adaptive_clock_vi_" stringByAppendingString:
-                         [NSString stringWithUTF8String:gid.c_str()]];
-      if ([ud objectForKey:cpuKey]) {
+    if (!gid.empty())
+    {
+      NSString* cpuKey = [@"adaptive_clock_cpu_"
+          stringByAppendingString:[NSString stringWithUTF8String:gid.c_str()]];
+      NSString* viKey = [@"adaptive_clock_vi_"
+          stringByAppendingString:[NSString stringWithUTF8String:gid.c_str()]];
+      if ([ud objectForKey:cpuKey])
+      {
         char buf[32];
         snprintf(buf, sizeof(buf), "%.3f", [ud floatForKey:cpuKey]);
         b += "  adaptive_clock_cpu_seed=" + std::string(buf) + "\n";
       }
-      if ([ud objectForKey:viKey]) {
+      if ([ud objectForKey:viKey])
+      {
         char buf[32];
         snprintf(buf, sizeof(buf), "%.3f", [ud floatForKey:viKey]);
         b += "  adaptive_clock_vi_seed=" + std::string(buf) + "\n";
@@ -1544,7 +1910,8 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
     const std::string none = "(none this launch)";
     b += "  adaptive_clock_last=" + (acLast.empty() ? none : acLast) + "\n";
     b += "  adaptive_clock_learned=" + (acLearned.empty() ? none : acLearned) + "\n";
-    b += "  ab_hint=Compare fps/speed/max_speed with adaptive OFF and MAIN_OVERCLOCK=1.0 vs this capture\n";
+    b += "  ab_hint=Compare fps/speed/max_speed with adaptive OFF and MAIN_OVERCLOCK=1.0 vs this "
+         "capture\n";
   }
 
   // --- SETTINGS ---
@@ -1557,7 +1924,8 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
     b += "=== CIR HOT BLOCKS ===\n";
     b += cir;
     // Also emit the hot-block report to the log on BOTH platforms (Copy State on iOS only puts the
-    // full dump on the clipboard; this guarantees the profiler output is grep-able in the device log).
+    // full dump on the clipboard; this guarantees the profiler output is grep-able in the device
+    // log).
     NSLog(@"[iCube CIR hotblocks]\n%s", cir.c_str());
   }
 
@@ -1572,22 +1940,30 @@ static NSString* const kGfxOverscanFullscreenKey = @"gfx_overscan_fullscreen";
 #endif
 }
 
-- (void)startInputPump {
-  if (_inputPumpTimer) return;
-  _inputPumpTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0));
+- (void)startInputPump
+{
+  if (_inputPumpTimer)
+    return;
+  _inputPumpTimer = dispatch_source_create(
+      DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0));
   // Pump at ~120 Hz
-  dispatch_source_set_timer(_inputPumpTimer, dispatch_time(DISPATCH_TIME_NOW, 0), NSEC_PER_MSEC * 8, NSEC_PER_MSEC * 1);
+  dispatch_source_set_timer(_inputPumpTimer, dispatch_time(DISPATCH_TIME_NOW, 0), NSEC_PER_MSEC * 8,
+                            NSEC_PER_MSEC * 1);
   dispatch_source_set_event_handler(_inputPumpTimer, ^{
-    Core::QueueHostJob(^ (Core::System& s){
-      g_controller_interface.SetCurrentInputChannel(ciface::InputChannel::Host);
-      g_controller_interface.UpdateInput();
-    }, false);
+    Core::QueueHostJob(
+        ^(Core::System& s) {
+          g_controller_interface.SetCurrentInputChannel(ciface::InputChannel::Host);
+          g_controller_interface.UpdateInput();
+        },
+        false);
   });
   dispatch_resume(_inputPumpTimer);
 }
 
-- (void)stopInputPump {
-  if (_inputPumpTimer) {
+- (void)stopInputPump
+{
+  if (_inputPumpTimer)
+  {
     dispatch_source_cancel(_inputPumpTimer);
     _inputPumpTimer = nil;
   }
@@ -1657,12 +2033,14 @@ static bool HasAnyBoundControl(const ControllerEmu::EmulatedController* controll
 // path preferred "Wii Remote with MotionPlus Pointing.ini", a profile for a real Bluetooth
 // remote (`Device = Bluetooth/0/Wii Remote`, inputs named `A`, `Gyro Pitch Up`, ...): loaded into
 // a touchscreen slot it rebinds the slot to that Bluetooth device and leaves every control dead.
-static std::string LoadTouchscreenProfile(ControllerEmu::EmulatedController* controller, InputConfig* config)
+static std::string LoadTouchscreenProfile(ControllerEmu::EmulatedController* controller,
+                                          InputConfig* config)
 {
   const auto join = [](const std::string& dir, const char* file) {
     return dir + (dir.empty() || dir.back() == '/' ? "" : "/") + std::string(file);
   };
-  for (const std::string& dir : {config->GetUserProfileDirectoryPath(), config->GetSysProfileDirectoryPath()})
+  for (const std::string& dir :
+       {config->GetUserProfileDirectoryPath(), config->GetSysProfileDirectoryPath()})
   {
     const std::string path = join(dir, "Touchscreen.ini");
     Common::IniFile ini;
@@ -1688,7 +2066,8 @@ static std::string LoadTouchscreenProfile(ControllerEmu::EmulatedController* con
 // "Has a mapping" is not "has a pointer": a Wii slot that kept a mapping with blank or dead IR rows
 // gets only its IR block repaired afterwards (TVControllerMappingBridge), not a full reload that
 // would discard the user's other bindings.
-static void BindTouchscreen(InputConfig* config, int index, const ciface::Core::DeviceQualifier& dq_touch)
+static void BindTouchscreen(InputConfig* config, int index,
+                            const ciface::Core::DeviceQualifier& dq_touch)
 {
   auto* controller = config->GetController(index);
   if (!controller)
@@ -1792,13 +2171,17 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   return Core::IsUninitialized(system);
 }
 
-- (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter syncGeneration:(uint64_t)syncGeneration {
+- (void)emulationLoopWithBootParameter:(EmulationBootParameter*)bootParameter
+                        syncGeneration:(uint64_t)syncGeneration
+{
   // UI DidEnd remains early. Every worker exit, including pre-Starting failures, separately
   // waits for actual card/NAND/config teardown before admitting sync file mutations again.
   Common::ScopeGuard syncDrain([syncGeneration] {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-      while ([ICubeCloudSyncBootGate currentGeneration] == syncGeneration) {
-        if (DOLWaitForCoreUninitialized(5.0)) {
+      while ([ICubeCloudSyncBootGate currentGeneration] == syncGeneration)
+      {
+        if (DOLWaitForCoreUninitialized(5.0))
+        {
           [ICubeCloudSyncBootGate finishCoreDrain:syncGeneration];
           break;
         }
@@ -1843,13 +2226,17 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
     return;
   NSString* extension = bootParameter.path.pathExtension.lowercaseString;
   const BOOL needsDefaultISO = bootParameter.bootType == EmulationBootTypeSystemMenu ||
-      (bootParameter.bootType == EmulationBootTypeFile &&
-       [@[@"dol", @"elf", @"wad"] containsObject:extension]);
+                               (bootParameter.bootType == EmulationBootTypeFile &&
+                                [@[ @"dol", @"elf", @"wad" ] containsObject:extension]);
   if (!defaultISOReady && needsDefaultISO)
   {
-    PanicAlertFmt("{}", [DOLCoreLocalizedString(@"The selected Default ISO is missing or unreadable. Select its new location in the library or clear it in General settings.") UTF8String]);
+    PanicAlertFmt("{}",
+                  [DOLCoreLocalizedString(
+                      @"The selected Default ISO is missing or unreadable. Select its new location "
+                      @"in the library or clear it in General settings.") UTF8String]);
     [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification
-                                                        object:self userInfo:nil];
+                                                        object:self
+                                                      userInfo:nil];
     _mainDisplayView = nil;
     return;
   }
@@ -1863,7 +2250,8 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
 
   __block BOOL supersededBoot = NO;
   DOLHostQueueRunSync(^{
-    if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration]) {
+    if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
+    {
       supersededBoot = YES;
       return;
     }
@@ -1917,8 +2305,11 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
             if (!regionAlreadyAuthorized)
             {
               [jitManager beginTXMHandshake];
-              [DOLSentryTelemetryBridge recordJitStep:@"TXM handshake begin"
-                                                 data:@{ @"debugger_attached" : @(jitManager.debuggerAttached) }];
+              [DOLSentryTelemetryBridge
+                  recordJitStep:@"TXM handshake begin"
+                           data:@{
+                             @"debugger_attached" : @(jitManager.debuggerAttached)
+                           }];
             }
 
             Common::SetJitType(Common::JitType::LuckTXM);
@@ -1938,12 +2329,17 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
 
           [jitManager noteTXMHandshakeResult:!txmInterpreterFallback];
           jitMode = txmInterpreterFallback ? @"txm-interpreter-fallback" : @"txm";
-          [DOLSentryTelemetryBridge recordJitStep:@"TXM boot decided"
-                                             data:@{ @"authorized" : @(jitManager.txmAuthorized),
-                                                     @"region_reused" : @(regionAlreadyAuthorized),
-                                                     @"fallback" : @(txmInterpreterFallback),
-                                                     @"region_address" : [NSString stringWithFormat:@"0x%lx",
-                                                         (unsigned long)Common::GetTXMRegionMappedAddress_LuckTXM()] }];
+          [DOLSentryTelemetryBridge
+              recordJitStep:@"TXM boot decided"
+                       data:@{
+                         @"authorized" : @(jitManager.txmAuthorized),
+                         @"region_reused" : @(regionAlreadyAuthorized),
+                         @"fallback" : @(txmInterpreterFallback),
+                         @"region_address" : [NSString
+                             stringWithFormat:@"0x%lx",
+                                              (unsigned long)
+                                                  Common::GetTXMRegionMappedAddress_LuckTXM()]
+                       }];
           NSLog(@"[JitManager] TXM boot: attached=%d authorized=%d fallback=%d",
                 (int)jitManager.debuggerAttached, (int)jitManager.txmAuthorized,
                 (int)txmInterpreterFallback);
@@ -1952,14 +2348,14 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
         {
           // Non-TXM iOS 26 device: dual-mapping works fine.
           Common::SetJitType(Common::JitType::LuckNoTXM);
-          Common::AllocateExecutableMemoryRegion(); // no-op for LuckNoTXM
+          Common::AllocateExecutableMemoryRegion();  // no-op for LuckNoTXM
           jitMode = @"luck-no-txm";
         }
       }
       else
       {
         Common::SetJitType(Common::JitType::Legacy);
-        Common::AllocateExecutableMemoryRegion(); // no-op for Legacy
+        Common::AllocateExecutableMemoryRegion();  // no-op for Legacy
         // iCube#46: an unhandled fault inside a Legacy JIT region reports the write-protect
         // tracker's state (region, nest count, recent toggles) from the Mach exception thread.
         // addBreadcrumb does not block, so the crash report that follows carries it.
@@ -1972,9 +2368,9 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
         jitMode = @"legacy";
       }
 
-      Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE,
-                      txmInterpreterFallback ? ICubeJitlessVertexLoaderType()
-                                             : VertexLoaderType::Native);
+      Config::SetBase(Config::GFX_VERTEX_LOADER_TYPE, txmInterpreterFallback ?
+                                                          ICubeJitlessVertexLoaderType() :
+                                                          VertexLoaderType::Native);
     }
     else
     {
@@ -1982,7 +2378,8 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
     }
 
     // Clear any lingering per-run CPU core override so we honor current availability/config
-    if (Config::GetLayer(Config::LayerType::CurrentRun)) {
+    if (Config::GetLayer(Config::LayerType::CurrentRun))
+    {
       Config::DeleteKey(Config::LayerType::CurrentRun, Config::MAIN_CPU_CORE);
     }
 
@@ -1990,7 +2387,9 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
     // Covers: (a) no debugger attached, (b) iOS 26 TXM device under Xcode.
     {
       const PowerPC::CPUCore current_core = Config::Get(Config::MAIN_CPU_CORE);
-      const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter || current_core == PowerPC::CPUCore::CachedInterpreter || current_core == PowerPC::CPUCore::CachedInterpreterIR;
+      const bool is_interpreter_core = current_core == PowerPC::CPUCore::Interpreter ||
+                                       current_core == PowerPC::CPUCore::CachedInterpreter ||
+                                       current_core == PowerPC::CPUCore::CachedInterpreterIR;
       if ((!jitManager.acquiredJit || txmInterpreterFallback) && !is_interpreter_core)
       {
         Config::SetCurrent(Config::MAIN_CPU_CORE, PowerPC::CPUCore::CachedInterpreter);
@@ -2007,22 +2406,28 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
     // Important: Renderer initialization may mutate CAMetalLayer properties.
     // UIKit requires layer mutations on the main thread. Run BootCore on main.
     dispatch_sync(dispatch_get_main_queue(), ^{
-      if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration]) {
+      if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
+      {
         supersededBoot = YES;
         return;
       }
       // Ensure we have a valid drawable size before booting to avoid CAMetalLayer warnings
       [self updateMetalLayerFrame];
       [self->_renderHost layoutIfNeeded];
-      const CFTimeInterval deadline = CACurrentMediaTime() + 2.0; // up to 2s
-      while ((self->_metalLayer.drawableSize.width <= 0.0 || self->_metalLayer.drawableSize.height <= 0.0) && CACurrentMediaTime() < deadline) {
+      const CFTimeInterval deadline = CACurrentMediaTime() + 2.0;  // up to 2s
+      while ((self->_metalLayer.drawableSize.width <= 0.0 ||
+              self->_metalLayer.drawableSize.height <= 0.0) &&
+             CACurrentMediaTime() < deadline)
+      {
         // Pump runloop briefly to let layout complete
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
         if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
           break;
         [self updateMetalLayerFrame];
       }
-      if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration]) {
+      if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
+      {
         supersededBoot = YES;
         return;
       }
@@ -2039,18 +2444,20 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
       EnforceTouchscreenPointerOnWiimotes();
       // iCube: bridge the hot-block profiler toggle from an NSUserDefault into the Dolphin config
       // BEFORE boot, so CachedInterpreter::Init() reads MAIN_CIR_PROFILE for this run. Default OFF
-      // (absent key => false). Set `defaults write <bundleid> icube.cirProfile -bool YES` (or via the
-      // debug API) and reboot the game to profile; grab the report from Copy State.
+      // (absent key => false). Set `defaults write <bundleid> icube.cirProfile -bool YES` (or via
+      // the debug API) and reboot the game to profile; grab the report from Copy State.
       {
         const bool cirProfile =
             [[NSUserDefaults standardUserDefaults] boolForKey:@"icube.cirProfile"];
         Config::SetCurrent(Config::MAIN_CIR_PROFILE, cirProfile);
       }
-      if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration]) {
+      if (![ICubeCloudSyncBootGate isCurrentEmulation:syncGeneration])
+      {
         supersededBoot = YES;
         return;
       }
-      if (!BootManager::BootCore(system, std::move(local_boot), wsi)) {
+      if (!BootManager::BootCore(system, std::move(local_boot), wsi))
+      {
         PanicAlertFmt("Failed to init core!");
       }
     });
@@ -2062,13 +2469,17 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   // Wait for state changes instead of polling
   dispatch_semaphore_t stateSemaphore = dispatch_semaphore_create(0);
   // 2512: AddOnStateChangedCallback returns a Common::EventHook; dropping it unregisters.
-  Common::EventHook callbackHandle = Core::AddOnStateChangedCallback([stateSemaphore](Core::State state) {
-    if (state == Core::State::Running || state == Core::State::Paused || state == Core::State::Uninitialized)
-      dispatch_semaphore_signal(stateSemaphore);
-  });
+  Common::EventHook callbackHandle =
+      Core::AddOnStateChangedCallback([stateSemaphore](Core::State state) {
+        if (state == Core::State::Running || state == Core::State::Paused ||
+            state == Core::State::Uninitialized)
+          dispatch_semaphore_signal(stateSemaphore);
+      });
 
-  while (Core::GetState(Core::System::GetInstance()) == Core::State::Starting) {
-    dispatch_semaphore_wait(stateSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)));
+  while (Core::GetState(Core::System::GetInstance()) == Core::State::Starting)
+  {
+    dispatch_semaphore_wait(stateSemaphore,
+                            dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)));
   }
 
   // A volume edit after PostInitSoundStream's initial gain read was deferred
@@ -2076,7 +2487,9 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   // the live stream on the host queue and safely ignores shutdown/null streams.
   ICubeUpdateAudioVolumeAsync();
 
-  [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidStartNotification object:self userInfo:nil];
+  [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidStartNotification
+                                                      object:self
+                                                    userInfo:nil];
 
   // Perf test-bench: start the loopback HTTP/JSON server once emulation is live
   // (System::GetPerfMetrics() meaningful). DebugServerManager self-gates — it always starts
@@ -2096,7 +2509,8 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
 
   _ICubeDumpPerfSettings("START");
 
-  while (Core::IsRunning(Core::System::GetInstance())) {
+  while (Core::IsRunning(Core::System::GetInstance()))
+  {
     dispatch_semaphore_wait(stateSemaphore, DISPATCH_TIME_FOREVER);
   }
 
@@ -2112,21 +2526,26 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   // Tear down the adaptive clock timer + flag on game exit so it doesn't leak into the next launch
   // (the timer's state guard would otherwise keep a stale source around, and the VISkip rule must
   // not stay forced Off once emulation stops). Mirrors the OFF branch of setAdaptiveClockEnabled.
-  if (_adaptiveClockTimer) {
+  if (_adaptiveClockTimer)
+  {
     dispatch_source_cancel(_adaptiveClockTimer);
     _adaptiveClockTimer = nil;
   }
   PerformanceMetrics::SetAdaptiveClockActive(false);
   [DOLModdedBoot endBoot];
-  [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification object:self userInfo:nil];
+  [[NSNotificationCenter defaultCenter] postNotificationName:DOLEmulationDidEndNotification
+                                                      object:self
+                                                    userInfo:nil];
 
   _mainDisplayView = nil;
 }
 
-- (void)clearMetalLayer {
+- (void)clearMetalLayer
+{
   id<CAMetalDrawable> drawable = [_metalLayer nextDrawable];
 
-  if (drawable == nil) {
+  if (drawable == nil)
+  {
     return;
   }
 
@@ -2139,7 +2558,8 @@ static bool DOLWaitForCoreUninitialized(NSTimeInterval timeoutSeconds)
   id<MTLCommandQueue> commandQueue = [_device newCommandQueue];
   id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
 
-  id<MTLRenderCommandEncoder> commandEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPass];
+  id<MTLRenderCommandEncoder> commandEncoder =
+      [commandBuffer renderCommandEncoderWithDescriptor:renderPass];
   commandEncoder.label = @"Clear";
   [commandEncoder endEncoding];
 

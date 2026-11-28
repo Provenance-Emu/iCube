@@ -43,7 +43,7 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
   }
 
   func test_twelveHistoryEntriesReturnOnlyTwoOldestWithNewestFirstOrder() {
-    XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: (1...12).map { history($0) }), [history(2).path, history(1).path])
+    XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: (1 ... 12).map { history($0) }), [history(2).path, history(1).path])
   }
 
   func test_retentionLimitAppliesSeparatelyToEachGame() {
@@ -57,7 +57,7 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
                     state("foreign.s01", quick: true), state("GALE01.quick-not-a-uuid.s01", quick: true),
                     state("RSBE01.quick-00000000-0000-0000-0000-000000000001.s01", quick: true)]
     XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: excluded, limit: 0), [])
-    XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: (1...12).map { history($0) } + excluded), [history(2).path, history(1).path])
+    XCTAssertEqual(QuickSaveHistoryPolicy.pruningCandidates(states: (1 ... 12).map { history($0) } + excluded), [history(2).path, history(1).path])
   }
 
   func test_equalDatesUseAscendingPathDeterministicallyAndMissingDateUsesCreationTime() {
@@ -67,8 +67,8 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
       XCTAssertEqual(QuickSaveHistoryPolicy.loadTarget(states: states, modded: false), .manual(first.path))
     }
     let created = SaveStateInfo(gameID: "GALE01", displayName: "legacy", slot: 3,
-      createdAt: Date(timeIntervalSince1970: 10), modifiedAt: nil, sizeBytes: nil,
-      versionHash: nil, isCompatible: true, path: URL(fileURLWithPath: "/states/GALE01.s03"), thumbnailURL: nil, isAuto: false)
+                                createdAt: Date(timeIntervalSince1970: 10), modifiedAt: nil, sizeBytes: nil,
+                                versionHash: nil, isCompatible: true, path: URL(fileURLWithPath: "/states/GALE01.s03"), thumbnailURL: nil, isAuto: false)
     XCTAssertEqual(QuickSaveHistoryPolicy.loadTarget(states: [first, created], modded: false), .manual(created.path))
     let a = state("GALE01.quick-00000000-0000-0000-0000-000000000001.s01", quick: true)
     let b = state("GALE01.quick-00000000-0000-0000-0000-000000000002.s01", quick: true)
@@ -109,11 +109,11 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
     for gameID in ["ID-Slot-3", "ID-StateSlot1"] {
-      for index in 1...11 {
+      for index in 1 ... 11 {
         let url = root.appendingPathComponent("\(gameID).quick-00000000-0000-0000-0000-\(String(format: "%012d", index)).s01")
         try Data([0]).write(to: url)
         XCTAssertTrue(SaveStateMetadataStore.write(SaveStateMetadata(title: "Test", gameID: gameID,
-          savedAt: Date(timeIntervalSince1970: Double(index)), isQuickSave: true), forStateFile: url))
+                                                                     savedAt: Date(timeIntervalSince1970: Double(index)), isQuickSave: true), forStateFile: url))
       }
       // A legacy export without identifying history metadata keeps its old slot heuristic.
       let legacy = root.appendingPathComponent("\(gameID).sav")
@@ -187,10 +187,10 @@ final class QuickSaveHistoryPolicyTests: XCTestCase {
       try Data([0]).write(to: root.appendingPathComponent(name))
     }
     for (name, gameID, isAuto, quick) in [(valid, "GALE01", false, true), (mismatch, "RSBE01", false, true),
-      (automatic, "GALE01", true, true), (unmarked, "GALE01", false, false),
-      (malformed, "GALE01", false, true), (classic, "GALE01", false, true)] {
+                                          (automatic, "GALE01", true, true), (unmarked, "GALE01", false, false),
+                                          (malformed, "GALE01", false, true), (classic, "GALE01", false, true)] {
       XCTAssertTrue(SaveStateMetadataStore.write(SaveStateMetadata(title: "Test", gameID: gameID,
-        savedAt: Date(timeIntervalSince1970: 123), isAuto: isAuto, isQuickSave: quick, isKept: true), forStateFile: root.appendingPathComponent(name)))
+                                                                   savedAt: Date(timeIntervalSince1970: 123), isAuto: isAuto, isQuickSave: quick, isKept: true), forStateFile: root.appendingPathComponent(name)))
     }
     let states = await FilesystemSaveStateProvider(root: root).statesGroupedByGame().values.flatMap { $0 }
     XCTAssertEqual(states.count, 7)

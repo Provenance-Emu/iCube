@@ -7,7 +7,12 @@ class GameFileCacheService: UIResponder, UIApplicationDelegate {
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     // Initiate a rescan of the Software directory, preserving remote URLs from cache
     GameFileCacheManager.shared().rescanLocalAndFetchMetadata {
-      DispatchQueue.main.async { LibrarySnapshotService.requestWrite(after: 0) }
+      DispatchQueue.main.async {
+        LibrarySnapshotService.requestWrite(after: 0)
+        // GameTDB has been asked by now; look elsewhere for the covers it did not have.
+        LookupCoverFallback.shared.start()
+        LookupCoverFallback.shared.sweepLibrary()
+      }
     }
 
     return true

@@ -88,47 +88,49 @@ final class RemoteDownloadSpaceTests: XCTestCase {
 
   // MARK: - The decision
 
-  func testAGameFitsWhenThereIsRoomForItAndTheMargin() {
-    let disc = [Space.File(bytes: 4 * gigabyte, isArchive: false)]
-    XCTAssertNil(Space.shortfall(files: disc, storedBytes: 0, availableBytes: 40 * gigabyte))
-    XCTAssertNil(Space.shortfall(files: disc, storedBytes: 0, availableBytes: 4 * gigabyte + Space.margin))
-    XCTAssertEqual(Space.shortfall(files: disc, storedBytes: 0, availableBytes: 4 * gigabyte),
-                   Space.Shortfall(needed: 4 * gigabyte + Space.margin, available: 4 * gigabyte))
+  private typealias Library = EmulationServerLibrary
+  /// What `checkDownloadSpace` keeps free beyond the game.
+  private let reserve: Int64 = 256 * 1024 * 1024
+
+  func testAGameFitsWhenThereIsRoomForItAndTheReserve() {
+    let needed = Space.neededBytes(files: [Space.File(bytes: 4 * gigabyte, isArchive: false)], storedBytes: 0)
+    XCTAssertEqual(needed, 4 * gigabyte)
+    XCTAssertNoThrow(try Library.checkDownloadSpace(bytes: needed, available: 40 * gigabyte))
+    XCTAssertNoThrow(try Library.checkDownloadSpace(bytes: needed, available: 4 * gigabyte + reserve))
+    XCTAssertThrowsError(try Library.checkDownloadSpace(bytes: needed, available: 4 * gigabyte))
   }
 
   func testFreeSpaceThatCannotBeMeasuredNeverRefusesAGame() {
-    XCTAssertNil(Space.shortfall(files: [Space.File(bytes: 8 * gigabyte, isArchive: false)], storedBytes: 0, availableBytes: nil))
+    XCTAssertNoThrow(try Library.checkDownloadSpace(bytes: 8 * gigabyte, available: nil))
   }
 
   /// A relaunch finishing a game whose files already arrived: they are on disk, so what is free
   /// has already paid for them.
   func testBytesAlreadyOnDiskAreNotCountedAgain() {
     let discs = [Space.File(bytes: 4 * gigabyte, isArchive: false), Space.File(bytes: 4 * gigabyte, isArchive: false)]
-    XCTAssertNil(Space.shortfall(files: discs, storedBytes: 8 * gigabyte, availableBytes: gigabyte))
-    XCTAssertEqual(Space.neededBytes(files: discs, storedBytes: 4 * gigabyte), 4 * gigabyte + Space.margin)
-    XCTAssertEqual(Space.neededBytes(files: discs, storedBytes: 100 * gigabyte), Space.margin, "Never negative")
+    XCTAssertEqual(Space.neededBytes(files: discs, storedBytes: 8 * gigabyte), 0)
+    XCTAssertNoThrow(try Library.checkDownloadSpace(bytes: 0, available: gigabyte))
+    XCTAssertEqual(Space.neededBytes(files: discs, storedBytes: 4 * gigabyte), 4 * gigabyte)
+    XCTAssertEqual(Space.neededBytes(files: discs, storedBytes: 100 * gigabyte), 0, "Never negative")
   }
 
   func testAnArchiveNeedsRoomForWhatItUnpacksTo() {
     let archive = [Space.File(bytes: gigabyte, isArchive: true)]
-    XCTAssertEqual(Space.neededBytes(files: archive, storedBytes: 0), 2 * gigabyte + Space.margin)
-    XCTAssertEqual(Space.neededBytes(files: archive, storedBytes: gigabyte), gigabyte + Space.margin,
-                   "An arrived archive still has to be unpacked")
+    XCTAssertEqual(Space.neededBytes(files: archive, storedBytes: 0), 2 * gigabyte)
+    XCTAssertEqual(Space.neededBytes(files: archive, storedBytes: gigabyte), gigabyte, "An arrived archive still has to be unpacked")
   }
 
   func testSizesAreBytesAndHugeOnesDoNotOverflow() {
-    let huge = [Space.File(bytes: .max, isArchive: true)]
-    XCTAssertEqual(Space.neededBytes(files: huge, storedBytes: 0), .max)
+    XCTAssertEqual(Space.neededBytes(files: [Space.File(bytes: .max, isArchive: true)], storedBytes: 0), .max)
     XCTAssertEqual(Space.neededBytes(files: [Space.File(bytes: 1_459_978_240, isArchive: false)], storedBytes: 0),
-                   1_459_978_240 + Space.margin, "A GameCube disc is 1.36 GiB, not 1.36 MiB or TiB")
+                   1_459_978_240, "A GameCube disc is 1.36 GiB, not 1.36 MiB or TiB")
   }
 
   func testTheMessageStatesWhatIsNeededAndWhatIsFree() throws {
-    let shortfall = Space.Shortfall(needed: 5 * gigabyte, available: 2 * gigabyte)
-    let message = try XCTUnwrap(shortfall.errorDescription)
+    let error = Library.ServerError.insufficientSpace(bytes: 5 * gigabyte, available: 2 * gigabyte)
+    let message = try XCTUnwrap(error.errorDescription)
     XCTAssertTrue(message.contains(ByteCountFormatter.string(fromByteCount: 5 * gigabyte, countStyle: .file)), message)
     XCTAssertTrue(message.contains(ByteCountFormatter.string(fromByteCount: 2 * gigabyte, countStyle: .file)), message)
-    XCTAssertEqual(shortfall.localizedDescription, message)
   }
 
   // MARK: - Measuring
