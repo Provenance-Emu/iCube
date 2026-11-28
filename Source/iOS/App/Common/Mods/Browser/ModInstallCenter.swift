@@ -17,6 +17,8 @@ final class ModInstallCenter: ObservableObject {
   private let ledger: ModInstallLedger
   private var models: [Int: ModInstallModel] = [:]
   private var subscriptions: [Int: AnyCancellable] = [:]
+  /// How many screens show each file. A model is only cleaned up and dropped at zero.
+  private var viewers: [Int: Int] = [:]
   private var ledgerObserver: NSObjectProtocol?
 
   init(ledger: ModInstallLedger = .shared) {
@@ -54,7 +56,7 @@ final class ModInstallCenter: ObservableObject {
                              ownedGame: entry.flatMap(ownedGame), handler: handler, restores: false)
       Task {
         await model.restoreIfNeeded()
-        if !model.isWorthKeeping { self.release(model) }
+        self.dropIfUnused(model)
       }
     }
   }
@@ -70,8 +72,21 @@ final class ModInstallCenter: ObservableObject {
     }
   }
 
-  /// A screen stopped showing `model`. It is dropped unless it still has work or a kept download.
+  /// A screen began showing `model`.
+  func attach(_ model: ModInstallModel) {
+    viewers[model.file.id, default: 0] += 1
+  }
+
+  /// A screen stopped showing `model`. Once no screen shows it, it is dropped unless it still has
+  /// work or a kept download.
   func release(_ model: ModInstallModel) {
+    let remaining = max(0, (viewers[model.file.id] ?? 0) - 1)
+    viewers[model.file.id] = remaining == 0 ? nil : remaining
+    dropIfUnused(model)
+  }
+
+  private func dropIfUnused(_ model: ModInstallModel) {
+    guard viewers[model.file.id] == nil else { return }
     model.cleanUp()
     guard !model.isWorthKeeping, models[model.file.id] === model else { return }
     models[model.file.id] = nil
@@ -81,14 +96,19 @@ final class ModInstallCenter: ObservableObject {
   /// Forgets a file altogether: its download is deleted and it leaves "Your Downloads".
   /// What it installed stays installed.
   func forget(fileID: Int) {
+    var keepsFolder = false
     if let model = models[fileID] {
       guard !model.isInstalling else { return }
+      // The disc-patch flow may still be reading the unpacked files: leave them for the weekly sweep.
+      keepsFolder = model.holdsFilesForAnotherFlow
+      // A running transfer deletes its own folder when the cancellation lands.
       model.cancel()
       model.discardDownload()
       models[fileID] = nil
       subscriptions[fileID] = nil
+      viewers[fileID] = nil
     }
-    if let folder = ledger.record(forFileID: fileID)?.workFolder {
+    if !keepsFolder, let folder = ledger.record(forFileID: fileID)?.workFolder {
       try? FileManager.default.removeItem(at: ModDownloadManager.downloadsDirectory.appendingPathComponent(folder, isDirectory: true))
     }
     ledger.remove(fileID: fileID)

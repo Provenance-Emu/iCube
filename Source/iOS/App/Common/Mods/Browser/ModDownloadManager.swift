@@ -184,9 +184,18 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
     }
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let destination = directory.appendingPathComponent(name)
-    try? FileManager.default.removeItem(at: destination)
 
     await reconciled()
+    if backgroundIdentifier != nil {
+      // A kept transfer that ended a moment ago was filed at the destination by the delegate. Only
+      // whole downloads are ever moved there, so the file is the result.
+      let isUnderWay = lock.withLock { adoptable[key] != nil }
+      if !isUnderWay, FileManager.default.fileExists(atPath: destination.path) {
+        return HomebrewDownload(file: destination, etag: nil)
+      }
+    } else {
+      try? FileManager.default.removeItem(at: destination)
+    }
     let job = Job(key: key, destination: destination, expectedBytes: expectedBytes, progress: progress)
     let task = startTask(for: job, source: source)
     return try await withTaskCancellationHandler {
@@ -247,6 +256,10 @@ final class ModDownloadManager: NSObject, @unchecked Sendable {
       result = .failure((failure as? URLError)?.code == .cancelled ? CancellationError() : failure)
     } else if let file = job.finishedFile {
       result = .success(HomebrewDownload(file: file, etag: job.etag))
+    } else if backgroundIdentifier != nil, FileManager.default.fileExists(atPath: job.destination.path) {
+      // The job took over a kept transfer between its two delegate calls: the download was
+      // already filed at the destination as one nobody was waiting for.
+      result = .success(HomebrewDownload(file: job.destination, etag: nil))
     } else {
       result = .failure(URLError(.unknown))
     }
@@ -306,8 +319,9 @@ extension ModDownloadManager: URLSessionDownloadDelegate {
   }
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    // A transfer the system ended while the app was gone has no job; its key is in its label.
     if let data = (error as NSError?)?.userInfo[NSURLSessionDownloadTaskResumeData] as? Data,
-       let key = lock.withLock({ jobs[task.taskIdentifier]?.key }) {
+       let key = lock.withLock({ jobs[task.taskIdentifier]?.key }) ?? Self.label(of: task)?.key {
       lock.withLock { resumeData[key] = data }
     }
     finish(task: task, error: error)

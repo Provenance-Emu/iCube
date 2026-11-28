@@ -285,11 +285,6 @@ enum ModPackageClassifier {
     var kinds: [ModPackageKind] = []
     var remaining = items
 
-    if let save = remaining.first(where: { saveExtensions.contains($0.ext) || saveFileNames.contains($0.name.lowercased()) }) {
-      let reason = String(format: L("This is a save file (%@), not a mod. iCube cannot import saves from the Mod Browser yet."), save.name)
-      return [.unsupported(reason: reason)]
-    }
-
     func container(of item: Item) -> String? {
       item.parent.first { containerExtensions.contains(($0 as NSString).pathExtension.lowercased()) }
     }
@@ -316,6 +311,13 @@ enum ModPackageClassifier {
         groups.append(.init(name: root.dropLast().joined(separator: "/"), directory: rootURL(extractedRoot, root), files: files, mapping: .discTree))
       }
       remaining.removeAll { $0.components.starts(with: root) }
+    }
+
+    // Checked after the disc trees are taken out: a game's own tree may hold a `data.bin`.
+    if let save = remaining.first(where: { saveExtensions.contains($0.ext) || saveFileNames.contains($0.name.lowercased()) }) {
+      kinds.append(.unsupported(reason: String(
+        format: L("This is a save file (%@), not a mod. iCube cannot import saves from the Mod Browser yet."), save.name)))
+      remaining = []
     }
 
     let loose = Dictionary(grouping: remaining.filter { gameFileExtensions.contains($0.ext) }, by: \.parent)

@@ -240,6 +240,7 @@ struct ModFileView: View {
       TVStorageNoteSection()
     }
     .navigationTitle(file.fileName)
+    .onAppear { ModInstallCenter.shared.attach(model) }
     .onDisappear { ModInstallCenter.shared.release(model) }
     .alert(L("Large Download"), isPresented: Binding(get: { model.largeDownloadBytes != nil }, set: { if !$0 { model.largeDownloadBytes = nil } })) {
       Button(L("Download")) { model.start() }

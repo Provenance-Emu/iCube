@@ -353,4 +353,12 @@ final class ModPackageClassifierTests: XCTestCase {
     XCTAssertEqual(kinds.count, 1)
     XCTAssertNotNil(gameFiles(kinds))
   }
+
+  func testADiscTreeThatHoldsASaveNamedFileIsStillAPack() throws {
+    try write("files/res/data.bin")
+    try write("files/res/Object/Link.arc")
+    let pack = try XCTUnwrap(gameFiles(classify().kinds))
+    XCTAssertEqual(pack.groups.map(\.mapping), [.discTree])
+    XCTAssertEqual(pack.groups[0].files, ["res/Object/Link.arc", "res/data.bin"])
+  }
 }

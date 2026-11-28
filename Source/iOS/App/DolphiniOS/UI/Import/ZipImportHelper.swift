@@ -558,7 +558,9 @@ final class ZipImportHelper: NSObject {
   private static func extractRar(sourceURL: URL, to tempDir: URL) throws {
     #if canImport(RarArchive)
     do {
-      try RarArchive.extract(archiveAt: sourceURL, to: tempDir)
+      // The sizes an archive claims are not trusted: unpacking stops at what the volume can hold.
+      let free = (try? tempDir.resourceValues(forKeys: [.volumeAvailableCapacityKey]))?.volumeAvailableCapacity.map(Int64.init)
+      try RarArchive.extract(archiveAt: sourceURL, to: tempDir, maximumBytes: free)
     } catch RarArchive.Failure.unsafePath(let path) {
       throw ZipEntryScannerError.unsafeEntry(path)
     } catch RarArchive.Failure.encrypted {

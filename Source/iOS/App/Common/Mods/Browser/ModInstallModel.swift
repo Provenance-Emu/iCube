@@ -64,11 +64,15 @@ final class ModInstallModel: ObservableObject {
   private var downloadTask: Task<Void, Never>?
   private var keepsExtractedFiles = false
   private var didRestore = false
+  /// True while `restoreIfNeeded` is looking at a kept download, which nothing may delete meanwhile.
+  private var isRestoring = false
+  /// Set by `downloadAgain`: the next `start()` replaces the unpacked download.
+  private var replacesDownload = false
 
-  private static let extractedFolderName = "extracted"
+  nonisolated private static let extractedFolderName = "extracted"
   private static let titleCodeLength = 3
-  private static let maxNestedArchives = 8
-  private static let maxNestedArchiveBytes: Int64 = 512 * 1024 * 1024
+  nonisolated private static let maxNestedArchives = 8
+  nonisolated private static let maxNestedArchiveBytes: Int64 = 512 * 1024 * 1024
 
   init(file: GameBananaFile, modName: String = "", bananaGameID: Int? = nil, titleCode: String? = nil,
        ownedGame: ModLibraryGame?, handler: any ModInstallHandling,
@@ -103,9 +107,12 @@ final class ModInstallModel: ObservableObject {
   var isWorthKeeping: Bool {
     switch phase {
     case .downloading, .verifying, .extracting, .ready: return true
-    case .idle, .failed: return isInstalling
+    case .idle, .failed: return isInstalling || isRestoring
     }
   }
+
+  /// True once the unpacked files were handed to the disc-patch flow, which reads them later.
+  var holdsFilesForAnotherFlow: Bool { keepsExtractedFiles }
 
   private var downloadKey: String { String(file.id) }
 
@@ -123,6 +130,8 @@ final class ModInstallModel: ObservableObject {
   func restoreIfNeeded() async {
     guard !didRestore else { return }
     didRestore = true
+    isRestoring = true
+    defer { isRestoring = false }
     guard case .idle = phase, let record = ledger.record(forFileID: file.id) else { return }
     log = record.installed
     guard let folder = record.workFolder else { return }
@@ -170,16 +179,29 @@ final class ModInstallModel: ObservableObject {
     case .confirmLargeDownload(let bytes):
       largeDownloadBytes = bytes
     case .insufficientSpace(let needed, let available):
-      phase = .failed(String(format: L("Not enough free space: this needs about %@ and %@ is available."),
-                             Self.formatted(needed), Self.formatted(available)))
+      let message = String(format: L("Not enough free space: this needs about %@ and %@ is available."),
+                           Self.formatted(needed), Self.formatted(available))
+      // An unpacked download stays as it is when its replacement cannot start.
+      if case .ready = phase {
+        replacesDownload = false
+        ModBrowserPresenter.shared.notice = message
+      } else {
+        phase = .failed(message)
+      }
     }
   }
 
   func start() {
     switch phase {
     case .idle, .failed: break
-    case .downloading, .verifying, .extracting, .ready: return
+    case .ready:
+      guard replacesDownload, !isInstalling, !keepsExtractedFiles else { return }
+      removeWorkFolder()
+      workDirectory = ModDownloadManager.makeWorkDirectory(forFileID: file.id)
+      geckoCodeNames = [:]
+    case .downloading, .verifying, .extracting: return
     }
+    replacesDownload = false
     didRestore = true
     begin(finishedArchive: nil)
   }
@@ -187,11 +209,9 @@ final class ModInstallModel: ObservableObject {
   /// Downloads the file again over an unpacked copy, e.g. after the mod was updated.
   func downloadAgain() {
     guard case .ready = phase, !isInstalling, !keepsExtractedFiles else { return }
-    removeWorkFolder()
-    workDirectory = ModDownloadManager.makeWorkDirectory(forFileID: file.id)
-    installedKinds = []
-    geckoCodeNames = [:]
-    phase = .idle
+    // The copy at hand is deleted only once the new download really starts: after the space
+    // check, and after the user agreed to a large one.
+    replacesDownload = true
     requestStart()
   }
 
@@ -496,7 +516,7 @@ final class ModInstallModel: ObservableObject {
   /// download the user has not installed from is kept for their return; a download that is done
   /// with, or never got anywhere, is deleted.
   func cleanUp() {
-    guard downloadTask == nil, !isInstalling else { return }
+    guard downloadTask == nil, !isInstalling, !isRestoring else { return }
     switch phase {
     case .ready(let classification):
       let isSpent = !log.isEmpty && installableKinds(in: classification).isEmpty
@@ -510,7 +530,7 @@ final class ModInstallModel: ObservableObject {
 
   /// Deletes the unpacked download and returns to "not downloaded". What was installed stays listed.
   func discardDownload() {
-    guard downloadTask == nil, !isInstalling, !keepsExtractedFiles else { return }
+    guard downloadTask == nil, !isInstalling, !isRestoring, !keepsExtractedFiles else { return }
     removeWorkFolder()
     forgetDownload()
     installedKinds = []

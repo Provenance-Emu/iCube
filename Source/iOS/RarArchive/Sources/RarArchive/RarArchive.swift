@@ -128,14 +128,15 @@ public enum RarArchive {
   private static func describe(_ header: OpaquePointer) throws -> Entry {
     let raw = (archive_entry_pathname_utf8(header) ?? archive_entry_pathname(header)).map { String(cString: $0) } ?? ""
     let path = raw.replacingOccurrences(of: "\\", with: "/")
-    let components = path.split(separator: "/", omittingEmptySubsequences: true)
+    // "." alone names the destination itself, which an entry must never replace.
+    let components = path.split(separator: "/", omittingEmptySubsequences: true).filter { $0 != "." }
     guard !components.isEmpty, !path.hasPrefix("/"), !components.contains(".."), !path.contains("\0") else {
       throw Failure.unsafePath(raw)
     }
     let type = archive_entry_filetype(header)
     let isLink = archive_entry_symlink(header) != nil || archive_entry_hardlink(header) != nil
     return Entry(
-      path: components.filter { $0 != "." }.joined(separator: "/"),
+      path: components.joined(separator: "/"),
       size: archive_entry_size(header),
       isDirectory: type == mode_t(S_IFDIR),
       isRegularFile: type == mode_t(S_IFREG) && !isLink
