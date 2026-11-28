@@ -77,6 +77,12 @@ typedef void (^DOLDiscConversionProgress)(double fraction);
                 progress:(DOLDiscConversionProgress)progress
                    error:(NSError* _Nullable* _Nullable)error NS_SWIFT_NAME(convertToRVZ(from:to:token:progress:));
 
+/// The name of every file in the image's game partition, lower-cased: what a Riivolution patch can
+/// replace by name. nil when DiscIO cannot read the image or it has no file system (a WAD, a DOL).
+/// Reads the disc's file table: call off the main thread.
++ (nullable NSSet<NSString*>*)fileNamesInImageAtPath:(NSString*)path
+    NS_SWIFT_NAME(fileNames(inImageAtPath:));
+
 /// A library item for a disc file that is not in the library (a cached patched copy), so the
 /// emulation screen can boot it. nil when the file is not a valid game.
 + (nullable TVGameItem*)gameItemForPath:(NSString*)path NS_SWIFT_NAME(gameItem(forPath:));

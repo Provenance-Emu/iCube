@@ -11,6 +11,7 @@
 #import "DiscIO/Blob.h"
 #import "DiscIO/DiscUtils.h"
 #import "DiscIO/Enums.h"
+#import "DiscIO/Filesystem.h"
 #import "DiscIO/Volume.h"
 #import "UICommon/GameFile.h"
 
@@ -139,6 +140,34 @@ static DOLDiscPlatform PlatformForVolumeType(DiscIO::Platform platform) {
               plainSize:volume->GetDataSize()
        plainSizeIsExact:volume->GetDataSizeType() == DiscIO::DataSizeType::Accurate
                fileSize:fileSize];
+}
+
+static void CollectFileNames(const DiscIO::FileInfo& directory, NSMutableSet<NSString*>* names)
+{
+  for (const DiscIO::FileInfo& entry : directory)
+  {
+    if (entry.IsDirectory())
+    {
+      CollectFileNames(entry, names);
+    }
+    else if (NSString* name = [NSString stringWithUTF8String:entry.GetName().c_str()])
+    {
+      [names addObject:name.lowercaseString];
+    }
+  }
+}
+
++ (nullable NSSet<NSString*>*)fileNamesInImageAtPath:(NSString*)path
+{
+  std::unique_ptr<DiscIO::Volume> volume = DiscIO::CreateVolume(std::string(path.UTF8String));
+  if (!volume)
+    return nil;
+  const DiscIO::FileSystem* fileSystem = volume->GetFileSystem(volume->GetGamePartition());
+  if (!fileSystem || !fileSystem->IsValid())
+    return nil;
+  NSMutableSet<NSString*>* names = [NSMutableSet set];
+  CollectFileNames(fileSystem->GetRoot(), names);
+  return names;
 }
 
 + (nullable DOLDiscImageInfo*)infoForGameItem:(TVGameItem*)item {

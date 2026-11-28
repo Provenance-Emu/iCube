@@ -214,4 +214,143 @@ final class ModPackageClassifierTests: XCTestCase {
     try FileManager.default.createSymbolicLink(at: root.appendingPathComponent("evil.xdelta"), withDestinationURL: outside)
     guard case .unsupported = classify().kinds[0] else { return XCTFail() }
   }
+
+  // MARK: - Game files
+
+  private func gameFiles(_ kinds: [ModPackageKind]) -> ModGameFilePack? {
+    for case .gameFiles(let pack) in kinds { return pack }
+    return nil
+  }
+
+  /// The layout of GameBanana's "Wario & Waluigi over Yellow/Blue Toad": disc archives and a note, no XML.
+  func testLooseDiscFilesBecomeOneGroupPerFolder() throws {
+    try write("Cinematic Model/KBB.arc")
+    try write("Cinematic Model/KYB.arc")
+    try write("Middle Flag/middle_flag.arc")
+    try write("Credits.txt", "Thanks")
+    try write("K_rcha.arc")
+    try write("Kinopio.arc")
+    let kinds = classify(gameID: "SMNE01").kinds
+    XCTAssertEqual(kinds.count, 1)
+    let pack = try XCTUnwrap(gameFiles(kinds))
+    XCTAssertEqual(pack.groups.map(\.name), ["", "Cinematic Model", "Middle Flag"])
+    XCTAssertEqual(pack.groups.map(\.files), [["K_rcha.arc", "Kinopio.arc"], ["KBB.arc", "KYB.arc"], ["middle_flag.arc"]])
+    XCTAssertEqual(pack.groups.map(\.mapping), [.byName, .byName, .byName])
+    XCTAssertEqual(path(pack.groups[1].directory), "/Cinematic Model")
+    XCTAssertEqual(pack.fileCount, 5)
+  }
+
+  func testAFilesFolderMirrorsTheDisc() throws {
+    try write("Linkle_v2-1/files/res/Object/Link.arc")
+    let pack = try XCTUnwrap(gameFiles(classify().kinds))
+    XCTAssertEqual(pack.groups.count, 1)
+    XCTAssertEqual(pack.groups[0].mapping, .discTree)
+    XCTAssertEqual(pack.groups[0].name, "Linkle_v2-1")
+    XCTAssertEqual(pack.groups[0].files, ["res/Object/Link.arc"])
+    XCTAssertEqual(path(pack.groups[0].directory), "/Linkle_v2-1/files")
+  }
+
+  /// Mario Kart: Double Dash!! patcher mods put files for inside `MRAM.arc` in a folder of that name.
+  func testFilesForInsideADiscArchiveAreRefusedWithTheArchiveNamed() throws {
+    try write("files/MRAM.arc/mram/driver/mario/driver.bmd")
+    try write("files/race2d.arc/mram_race2d/timg/teresa.bti")
+    try write("modinfo.ini", "name = x")
+    let kinds = classify().kinds
+    XCTAssertNil(gameFiles(kinds))
+    guard case .unsupported(let reason) = kinds[0] else { return XCTFail("\(kinds)") }
+    XCTAssertTrue(reason.contains("MRAM.arc"), reason)
+  }
+
+  func testALooseProgramReplacesTheMainExecutable() throws {
+    try write("widescreen_USA.dol")
+    let pack = try XCTUnwrap(gameFiles(classify().kinds))
+    XCTAssertEqual(pack.groups.map(\.mapping), [.mainExecutable])
+    XCTAssertEqual(pack.groups[0].files, ["widescreen_USA.dol"])
+  }
+
+  func testSaveFilesAreNamedAsSavesNotGameFiles() throws {
+    try write("Unpacked/banner.bin")
+    try write("Unpacked/rksys.dat")
+    guard case .unsupported(let reason) = classify().kinds[0] else { return XCTFail("expected a refusal") }
+    XCTAssertTrue(reason.contains("banner.bin"), reason)
+    try FileManager.default.removeItem(at: root.appendingPathComponent("Unpacked"))
+    try write("01-GM4E-MarioKart Double Dash!!.gci")
+    XCTAssertEqual(classify().kinds.count, 1)
+    guard case .unsupported(let gciReason) = classify().kinds[0] else { return XCTFail("expected a refusal") }
+    XCTAssertTrue(gciReason.contains(".gci"), gciReason)
+  }
+
+  func testGameFilesSitBesideTexturesAndCodes() throws {
+    try write("Object/mario.arc")
+    try write("Textures/SMNE01/tex1_64x64_aa_bb_9.png")
+    try write("codes.ini", "[Gecko]\n$A\n04000000 00000000\n")
+    let kinds = classify().kinds
+    XCTAssertEqual(kinds.count, 3)
+    XCTAssertEqual(gameFiles(kinds)?.groups.map(\.files), [["mario.arc"]])
+  }
+
+  func testImagesNotesAndSourceFilesAreNotGameFiles() throws {
+    try write("Maya/SM64_MKDD.mb")
+    try write("Model/SM64_MKDD.dae")
+    try write("Model/textures/mario_all.png")
+    guard case .unsupported(let reason) = classify().kinds[0] else { return XCTFail("expected a refusal") }
+    XCTAssertTrue(reason.contains(".mb") && reason.contains(".dae") && reason.contains(".png"), reason)
+  }
+
+  func testADownloadThatIsOnlyANoteSaysSo() throws {
+    try write("OPEN ME.txt", "Download at example.org")
+    guard case .unsupported(let reason) = classify().kinds[0] else { return XCTFail("expected a refusal") }
+    XCTAssertTrue(reason.contains("OPEN ME.txt"), reason)
+  }
+
+  /// "XBOX, Switch & PlayStation UI for NSMBWii" ships `SMNP01/Load/Textures/SMN/…`.
+  func testTheFolderUnderTexturesWinsOverAGameIDFolderAboveIt() throws {
+    try write("SMNP01/Load/Textures/SMN/tex1_256x256_7b53229a3b86fede_5.png")
+    let kinds = classify().kinds
+    XCTAssertEqual(kinds.count, 1)
+    guard case .textures(let id, let packRoot) = kinds[0] else { return XCTFail("\(kinds)") }
+    XCTAssertEqual(id, "SMN")
+    XCTAssertEqual(path(packRoot), "/SMNP01/Load/Textures/SMN")
+  }
+
+  func testKeepingOnlyWhatTheDiscHasDropsEmptyGroups() throws {
+    try write("Sans (Shoes)/FitNess00.pac")
+    try write("Sans (Shoes)/FitNessXX(Shoes).pcs")
+    try write("Raw data/advsv0.bin")
+    try write("files/sound/extra.brstm")
+    let pack = try XCTUnwrap(gameFiles(classify().kinds))
+    let (kept, leftOut) = pack.keeping(discFileNames: ["fitness00.pac", "common.pac"])
+    // A `files` tree is placed at its own paths, so it needs no namesake on the disc.
+    XCTAssertEqual(kept.groups.map(\.name), ["", "Sans (Shoes)"])
+    XCTAssertEqual(kept.groups.map(\.files), [["sound/extra.brstm"], ["FitNess00.pac"]])
+    XCTAssertEqual(leftOut.sorted(), ["FitNessXX(Shoes).pcs", "advsv0.bin"])
+    XCTAssertTrue(pack.keeping(discFileNames: []).pack.groups.allSatisfy { $0.mapping == .discTree })
+  }
+
+  // MARK: - Riivolution XML beside its folder
+
+  /// "SMG: No Gravity Edition" ships `Pack.xml` next to the `Pack/` folder, with no `riivolution/`.
+  func testARiivolutionXMLOutsideItsFolderIsStillAPack() throws {
+    try write("No Gravity v1.0/SMG1 No Gravity.xml", #"<wiidisc version="1" root=""><id game="RMG" /></wiidisc>"#)
+    try write("No Gravity v1.0/SMG1 No Gravity/StageData/a.arc")
+    let kinds = classify().kinds
+    XCTAssertEqual(kinds.count, 1)
+    guard case .riivolution(let packRoot) = kinds[0] else { return XCTFail("\(kinds)") }
+    XCTAssertEqual(path(packRoot), "/No Gravity v1.0")
+
+    try ModPackageClassifier.gatherLooseRiivolutionXMLs(in: packRoot)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: packRoot.appendingPathComponent("riivolution/SMG1 No Gravity.xml").path))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: packRoot.appendingPathComponent("SMG1 No Gravity.xml").path))
+    // A second call, or a pack that was laid out properly, changes nothing.
+    try ModPackageClassifier.gatherLooseRiivolutionXMLs(in: packRoot)
+    XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: packRoot.appendingPathComponent("riivolution").path), ["SMG1 No Gravity.xml"])
+  }
+
+  func testAnXMLThatIsNotRiivolutionIsNotAPack() throws {
+    try write("layout.xml", "<layout><pane /></layout>")
+    try write("Object/mario.arc")
+    let kinds = classify().kinds
+    XCTAssertEqual(kinds.count, 1)
+    XCTAssertNotNil(gameFiles(kinds))
+  }
 }

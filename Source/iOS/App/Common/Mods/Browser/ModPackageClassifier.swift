@@ -13,7 +13,49 @@ enum ModPackageKind: Equatable {
   case textures(gameID: String, root: URL)
   /// A Dolphin-format Gecko codes file.
   case gecko(file: URL)
+  /// Replacement game files with no Riivolution XML of their own. iCube writes the XML.
+  case gameFiles(ModGameFilePack)
   case unsupported(reason: String)
+}
+
+/// Loose replacement files for a game disc, grouped the way they become Riivolution options.
+struct ModGameFilePack: Equatable {
+  enum Mapping: Equatable {
+    /// Each file replaces the disc file of the same name, wherever that is on the disc.
+    case byName
+    /// `directory` mirrors the disc's file tree (an extracted disc's `files` folder).
+    case discTree
+    /// One `.dol` that replaces the game's main program.
+    case mainExecutable
+  }
+
+  struct Group: Equatable {
+    /// The folder's path inside the download; empty for files at the top.
+    var name: String
+    var directory: URL
+    /// Paths below `directory`: plain names except for `.discTree`.
+    var files: [String]
+    var mapping: Mapping
+  }
+
+  var groups: [Group]
+
+  var fileCount: Int { groups.reduce(0) { $0 + $1.files.count } }
+
+  /// The pack without the files that replace nothing: a file matched by name needs a disc file
+  /// of that name. `discFileNames` are lower-cased. Returns the names left out as well.
+  func keeping(discFileNames: Set<String>) -> (pack: ModGameFilePack, leftOut: [String]) {
+    var kept: [Group] = []
+    var leftOut: [String] = []
+    for var group in groups {
+      if group.mapping == .byName {
+        leftOut += group.files.filter { !discFileNames.contains($0.lowercased()) }
+        group.files.removeAll { !discFileNames.contains($0.lowercased()) }
+      }
+      if !group.files.isEmpty { kept.append(group) }
+    }
+    return (ModGameFilePack(groups: kept), leftOut)
+  }
 }
 
 struct ModPackageClassification: Equatable {
@@ -33,12 +75,35 @@ enum ModPackageClassifier {
   ]
   static let patchExtensions: Set<String> = ["xdelta", "xdelta3", "vcdiff", "bps", "ips", "ups", "ppf"]
   static let archiveExtensions: Set<String> = ["zip", "7z", "rar", "tar", "gz", "bz2", "xz", "tgz"]
+  /// Formats a GameCube or Wii game keeps on its disc. A file with one of these and no Riivolution
+  /// XML is taken for a replacement of the disc file of the same name.
+  static let gameFileExtensions: Set<String> = [
+    "arc", "szs", "carc", "rarc", "u8", "szp", "cmp", "lz", "bin", "dat", "usd", "rel", "str", "rso", "sel",
+    "brres", "brsar", "brstm", "brwsd", "brbnk", "brseq", "breff", "breft", "brlyt", "brlan", "brctr", "brfnt", "brfna",
+    "tpl", "bti", "bmd", "bdl", "bck", "bca", "btk", "btp", "brk", "bpk", "bmg", "blo", "bls", "bcsv", "jmp",
+    "thp", "ast", "adp", "hps", "dsp", "aw", "baa", "bsft", "bstn", "bms", "aaf", "afc", "h4m", "mth", "sfd",
+    "pac", "pcs", "kmp", "kcl", "krm", "col", "ymp", "ral", "prm", "mot", "sawnd",
+  ]
+  /// Disc files that are themselves archives. A folder named like one (`MRAM.arc/…`) holds files
+  /// for inside that archive, which only a PC tool can put there.
+  private static let containerExtensions: Set<String> = ["arc", "szs", "carc", "rarc", "u8"]
+  private static let saveExtensions: Set<String> = ["gci", "gcs", "sav"]
+  /// A Wii save as exported by the console or Dolphin, and the files inside an unpacked one.
+  private static let saveFileNames: Set<String> = ["data.bin", "banner.bin", "gamedata.bin"]
+  private static let noteExtensions: Set<String> = ["txt", "md", "rtf", "pdf", "url", "html", "htm", "nfo", "doc", "docx", ""]
+  private static let executableExtension = "dol"
+  private static let discTreeFolderName = "files"
+  private static let maxDiscTreeDepth = 2
+  private static let maxListedExtensions = 4
   private static let textureExtensions: Set<String> = ["png", "dds"]
   private static let geckoExtensions: Set<String> = ["ini", "txt"]
   private static let ignoredNames: Set<String> = [".DS_Store", "__MACOSX", "Thumbs.db", "desktop.ini"]
   private static let maxGeckoFileBytes = 2 * 1024 * 1024
   private static let maxRiivolutionDepth = 2
+  private static let riivolutionFolderName = "riivolution"
+  private static let riivolutionProbeBytes = 4096
   private static let looseTexturePrefix = "tex1_"
+  private static let texturesFolderName = "textures"
 
   private struct Item {
     let url: URL
@@ -77,9 +142,12 @@ enum ModPackageClassifier {
     kinds += textureKinds
     remaining.removeAll { item in textureItems.contains { item.components.starts(with: $0) } }
 
-    kinds += remaining.filter { geckoExtensions.contains($0.ext) && isGeckoFile($0.url) }
+    let geckoFiles = remaining.filter { geckoExtensions.contains($0.ext) && isGeckoFile($0.url) }
       .sorted { $0.url.path < $1.url.path }
-      .map { .gecko(file: $0.url) }
+    kinds += geckoFiles.map { .gecko(file: $0.url) }
+    remaining.removeAll { item in geckoFiles.contains { $0.components == item.components } }
+
+    kinds += findGameFiles(remaining, extractedRoot: extractedRoot)
 
     if kinds.isEmpty {
       kinds = [.unsupported(reason: unsupportedReason(items: items, programs: programs))]
@@ -89,14 +157,44 @@ enum ModPackageClassifier {
 
   // MARK: - Riivolution
 
-  /// A Riivolution pack is a `riivolution/*.xml` folder, at the top or a level or two down.
+  /// A Riivolution pack is a `riivolution/*.xml` folder, at the top or a level or two down. Some
+  /// authors leave the XML beside the pack's folder instead; `gatherLooseRiivolutionXMLs` files
+  /// those where Dolphin looks before the pack is installed.
   private static func findRiivolutionRoots(_ items: [Item]) -> [[String]] {
     var roots: [[String]] = []
-    for item in items where item.ext == "xml" && item.parent.last?.lowercased() == "riivolution" {
+    for item in items where item.ext == "xml" && item.parent.last?.lowercased() == riivolutionFolderName {
       let root = Array(item.parent.dropLast())
       if root.count <= maxRiivolutionDepth, !roots.contains(root) { roots.append(root) }
     }
+    for item in items where item.ext == "xml" && item.parent.count <= maxRiivolutionDepth && isRiivolutionXML(item.url) {
+      let coveredByAPack = roots.contains { item.components.starts(with: $0) }
+      if !coveredByAPack, !roots.contains(item.parent) { roots.append(item.parent) }
+    }
     return roots.sorted { $0.joined(separator: "/") < $1.joined(separator: "/") }
+  }
+
+  private static func isRiivolutionXML(_ url: URL) -> Bool {
+    guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+    defer { try? handle.close() }
+    let head = (try? handle.read(upToCount: riivolutionProbeBytes)) ?? Data()
+    // Latin-1 reads any bytes, so an XML in an odd encoding is still searched.
+    return (String(data: head, encoding: .isoLatin1) ?? "").lowercased().contains("<wiidisc")
+  }
+
+  /// Moves Riivolution XMLs that sit directly in `root` into `root/riivolution/`, the one place
+  /// Dolphin and the pack installer look. Does nothing when `root` already has that folder.
+  static func gatherLooseRiivolutionXMLs(in root: URL) throws {
+    let fm = FileManager.default
+    let entries = try fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isRegularFileKey])
+    if entries.contains(where: { $0.lastPathComponent.lowercased() == riivolutionFolderName }) { return }
+    let xmls = entries.filter { url in
+      url.pathExtension.lowercased() == "xml" && !url.lastPathComponent.hasPrefix("._")
+        && (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true && isRiivolutionXML(url)
+    }
+    guard !xmls.isEmpty else { return }
+    let folder = root.appendingPathComponent(riivolutionFolderName, isDirectory: true)
+    try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+    for xml in xmls { try fm.moveItem(at: xml, to: folder.appendingPathComponent(xml.lastPathComponent)) }
   }
 
   // MARK: - Textures
@@ -120,9 +218,14 @@ enum ModPackageClassifier {
     for directory in directories {
       if let id = gameFolderID(directory, markers: markers) { folders[directory] = id }
     }
-    // The outermost game folder wins over one nested in it.
-    let roots = folders.keys.filter { candidate in
-      !folders.keys.contains { $0.count < candidate.count && candidate.starts(with: $0) }
+    // A folder right under `Textures` is the pack, whatever the folders above it are called
+    // (`SMNP01/Load/Textures/SMN/`). Otherwise the outermost game folder wins over one nested in it.
+    let anchored = folders.keys.filter { $0.dropLast().last?.lowercased() == texturesFolderName }
+    let candidates = folders.keys.filter { candidate in
+      !anchored.contains { $0.count > candidate.count && $0.starts(with: candidate) }
+    }
+    let roots = candidates.filter { candidate in
+      !candidates.contains { $0.count < candidate.count && candidate.starts(with: $0) }
     }.sorted { $0.joined(separator: "/") < $1.joined(separator: "/") }
 
     var kinds: [ModPackageKind] = roots.compactMap { root in
@@ -150,7 +253,7 @@ enum ModPackageClassifier {
   /// it, which Dolphin also honours.
   private static func gameFolderID(_ directory: [String], markers: [[String]: String]) -> String? {
     guard let name = directory.last else { return nil }
-    let underTextures = directory.dropLast().last?.lowercased() == "textures"
+    let underTextures = directory.dropLast().last?.lowercased() == texturesFolderName
     if isGameID(name) || (underTextures && isTitleCode(name)) { return name }
     return markers[directory]
   }
@@ -172,6 +275,60 @@ enum ModPackageClassifier {
       common = shared
     }
     return common
+  }
+
+  // MARK: - Game files
+
+  /// Loose disc files, a `files` tree and replacement programs, plus the reasons for what looks
+  /// like game data and still cannot be installed (saves, files for inside a disc archive).
+  private static func findGameFiles(_ items: [Item], extractedRoot: URL) -> [ModPackageKind] {
+    var kinds: [ModPackageKind] = []
+    var remaining = items
+
+    if let save = remaining.first(where: { saveExtensions.contains($0.ext) || saveFileNames.contains($0.name.lowercased()) }) {
+      let reason = String(format: L("This is a save file (%@), not a mod. iCube cannot import saves from the Mod Browser yet."), save.name)
+      return [.unsupported(reason: reason)]
+    }
+
+    func container(of item: Item) -> String? {
+      item.parent.first { containerExtensions.contains(($0 as NSString).pathExtension.lowercased()) }
+    }
+    let nested = remaining.filter { container(of: $0) != nil }
+    if !nested.isEmpty {
+      let containers = Set(nested.compactMap(container(of:))).sorted().prefix(maxListedExtensions).joined(separator: ", ")
+      kinds.append(.unsupported(reason: String(
+        format: L("%d files here go inside the game's own archives (%@). That needs a PC tool to rebuild them; iCube can only replace whole disc files."),
+        nested.count, containers)))
+      remaining.removeAll { container(of: $0) != nil }
+    }
+
+    var groups: [ModGameFilePack.Group] = []
+    var treeRoots: [[String]] = []
+    for item in remaining {
+      guard let index = item.parent.firstIndex(where: { $0.lowercased() == discTreeFolderName }), index <= maxDiscTreeDepth else { continue }
+      let root = Array(item.components.prefix(index + 1))
+      if !treeRoots.contains(root) { treeRoots.append(root) }
+    }
+    for root in treeRoots.sorted(by: { $0.joined(separator: "/") < $1.joined(separator: "/") }) {
+      let files = remaining.filter { $0.components.starts(with: root) }
+        .map { $0.components.dropFirst(root.count).joined(separator: "/") }.sorted()
+      if !files.isEmpty {
+        groups.append(.init(name: root.dropLast().joined(separator: "/"), directory: rootURL(extractedRoot, root), files: files, mapping: .discTree))
+      }
+      remaining.removeAll { $0.components.starts(with: root) }
+    }
+
+    let loose = Dictionary(grouping: remaining.filter { gameFileExtensions.contains($0.ext) }, by: \.parent)
+    for parent in loose.keys.sorted(by: { $0.joined(separator: "/") < $1.joined(separator: "/") }) {
+      groups.append(.init(name: parent.joined(separator: "/"), directory: rootURL(extractedRoot, parent),
+                          files: (loose[parent] ?? []).map(\.name).sorted(), mapping: .byName))
+    }
+    for program in remaining.filter({ $0.ext == executableExtension }).sorted(by: { $0.url.path < $1.url.path }) {
+      groups.append(.init(name: program.parent.joined(separator: "/"), directory: rootURL(extractedRoot, program.parent),
+                          files: [program.name], mapping: .mainExecutable))
+    }
+    if !groups.isEmpty { kinds.insert(.gameFiles(ModGameFilePack(groups: groups)), at: 0) }
+    return kinds
   }
 
   // MARK: - Gecko
@@ -196,7 +353,17 @@ enum ModPackageClassifier {
     if !programs.isEmpty {
       return String(format: L("This mod is a program for another operating system (%@), which iCube never runs."), programs[0])
     }
-    return L("Nothing in this download is a texture pack, Gecko code, Riivolution pack or patch that iCube can install.")
+    if !items.isEmpty, items.allSatisfy({ noteExtensions.contains($0.ext) }) {
+      return String(format: L("This download only holds a note (%@). The mod itself is hosted somewhere else: see its page on GameBanana."),
+                    items[0].name)
+    }
+    if items.isEmpty { return L("The download is empty.") }
+    // Say what is there, so "can't install" is never a dead end.
+    let counts = Dictionary(grouping: items, by: { $0.ext.isEmpty ? L("no extension") : "." + $0.ext }).mapValues(\.count)
+    let listed = counts.sorted { ($0.value, $1.key) > ($1.value, $0.key) }.prefix(maxListedExtensions)
+      .map { "\($0.value) × \($0.key)" }.joined(separator: ", ")
+    return String(format: L("Nothing here is a texture pack, Gecko code, Riivolution pack, patch or game file that iCube can install. The download holds: %@."),
+                  listed)
   }
 
   // MARK: - File walking
