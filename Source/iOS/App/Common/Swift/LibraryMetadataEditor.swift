@@ -247,8 +247,11 @@ struct LibraryMetadataEditor: View {
         try LibraryMetadataService.store().draft(for: id)
       }.value
       guard token == presentation, !Task.isCancelled else { return }
-      identity = id; baseline = draft; title = draft.title ?? ""
-      tags = draft.tags.joined(separator: ", "); cover = draft.coverData
+      identity = id
+      baseline = draft
+      title = draft.title ?? ""
+      tags = draft.tags.joined(separator: ", ")
+      cover = draft.coverData
     } catch {
       guard token == presentation else { return }
       self.error = error.localizedDescription
@@ -260,9 +263,11 @@ struct LibraryMetadataEditor: View {
   private func save() {
     guard let identity, !busy else { return }
     let draft = LibraryMetadataStore.Draft(title: title, coverData: cover,
-      tags: tags.components(separatedBy: CharacterSet(charactersIn: ",\n")))
+                                           tags: tags.components(separatedBy: CharacterSet(charactersIn: ",\n")))
     let baseline = baseline
-    saving = true; busy = true; error = nil
+    saving = true
+    busy = true
+    error = nil
     Task {
       do {
         _ = try await Task.detached(priority: .utility) {
@@ -279,7 +284,8 @@ struct LibraryMetadataEditor: View {
         dismiss()
       } catch {
         self.error = error.localizedDescription
-        saving = false; busy = false
+        saving = false
+        busy = false
       }
     }
   }
@@ -293,7 +299,7 @@ struct LibraryMetadataEditor: View {
     }
     beginCoverLoad {
       let (stream, response) = try await URLSession.shared.bytes(from: url)
-      guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
+      guard let response = response as? HTTPURLResponse, (200 ..< 300).contains(response.statusCode) else {
         throw URLError(.badServerResponse)
       }
       let maximum = 12 * 1024 * 1024
@@ -322,7 +328,8 @@ struct LibraryMetadataEditor: View {
     coverTask?.cancel()
     let token = UUID()
     presentation = token
-    busy = true; error = nil
+    busy = true
+    error = nil
     coverTask = Task {
       do {
         let bytes = try await operation()
@@ -337,7 +344,7 @@ struct LibraryMetadataEditor: View {
     }
   }
 
-  nonisolated private static func readCover(_ url: URL) throws -> Data {
+  private nonisolated static func readCover(_ url: URL) throws -> Data {
     let values = try url.resourceValues(forKeys: [.fileSizeKey])
     guard let size = values.fileSize, size <= 12 * 1024 * 1024 else { throw CocoaError(.fileReadTooLarge) }
     let file = try FileHandle(forReadingFrom: url)
@@ -348,6 +355,8 @@ struct LibraryMetadataEditor: View {
   }
 
   private func cancelAndDismiss() {
-    presentation = UUID(); coverTask?.cancel(); dismiss()
+    presentation = UUID()
+    coverTask?.cancel()
+    dismiss()
   }
 }

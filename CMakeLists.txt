@@ -326,7 +326,11 @@ else()
     check_and_add_flag(VISIBILITY_HIDDEN -fvisibility=hidden)
   endif()
 
-  check_and_add_flag(FOMIT_FRAME_POINTER -fomit-frame-pointer NO_DEBINFO_ONLY)
+  # Apple arm64 keeps the frame-pointer chain: with this flag clang still saves x29 but never
+  # updates it, so hang and crash reports lose every core frame above the first.
+  if (NOT APPLE)
+    check_and_add_flag(FOMIT_FRAME_POINTER -fomit-frame-pointer NO_DEBINFO_ONLY)
+  endif()
 
   dolphin_compile_definitions(_DEBUG DEBUG_ONLY)
   check_and_add_flag(GGDB -ggdb DEBUG_ONLY)

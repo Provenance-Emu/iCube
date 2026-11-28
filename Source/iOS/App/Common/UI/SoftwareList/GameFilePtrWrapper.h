@@ -5,7 +5,8 @@
 
 #import <memory>
 
-namespace UICommon {
+namespace UICommon
+{
 class GameFile;
 }
 
@@ -13,7 +14,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface GameFilePtrWrapper : NSObject
 
-@property (nonatomic, assign) std::shared_ptr<const UICommon::GameFile> gameFile;
+@property(nonatomic, assign) std::shared_ptr<const UICommon::GameFile> gameFile;
 
 @end
 

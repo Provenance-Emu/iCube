@@ -64,7 +64,7 @@ final class NearbyLibraryMirrorTests: XCTestCase {
   }
 
   private func settle(_ condition: @MainActor () -> Bool) async {
-    for _ in 0..<1000 {
+    for _ in 0 ..< 1000 {
       if condition() { return }
       await Task.yield()
     }
@@ -72,7 +72,8 @@ final class NearbyLibraryMirrorTests: XCTestCase {
   }
 
   func testOptInRequiresTrustAndNeverPairsUnknownPeers() async {
-    let b = Boundary(); let mirror = b.make()
+    let b = Boundary()
+    let mirror = b.make()
     mirror.environmentChanged()
     mirror.setEnabled(true, for: "stranger")
     await Task.yield()
@@ -83,8 +84,10 @@ final class NearbyLibraryMirrorTests: XCTestCase {
   }
 
   func testInitialAndSubsequentPassesDeduplicateAndCheckActualLocalPresence() async {
-    let b = Boundary(); b.entries.append(.init(id: "disc1"))
-    let mirror = b.make(); mirror.setEnabled(true, for: "paired")
+    let b = Boundary()
+    b.entries.append(.init(id: "disc1"))
+    let mirror = b.make()
+    mirror.setEnabled(true, for: "paired")
     await settle { mirror.state == .upToDate }
     XCTAssertEqual(b.copies, ["disc1", "disc2"])
     XCTAssertEqual(b.scheduled.last?.0, 60)
@@ -101,80 +104,106 @@ final class NearbyLibraryMirrorTests: XCTestCase {
   }
 
   func testRepeatedDiscoveryEventsDoNotStartConcurrentCopies() async {
-    let b = Boundary(); b.holdCopy = true
-    let mirror = b.make(); mirror.setEnabled(true, for: "paired")
+    let b = Boundary()
+    b.holdCopy = true
+    let mirror = b.make()
+    mirror.setEnabled(true, for: "paired")
     await settle { b.pendingCopy != nil }
-    for _ in 0..<10 { mirror.environmentChanged() }
+    for _ in 0 ..< 10 { mirror.environmentChanged() }
     await Task.yield()
     XCTAssertEqual(b.copies, ["disc1"])
-    b.holdCopy = false; b.releaseCopy()
+    b.holdCopy = false
+    b.releaseCopy()
     await settle { mirror.state == .upToDate }
     XCTAssertEqual(b.copies, ["disc1", "disc2"])
     mirror.stop()
   }
 
   func testDisableRejectsLateCompletionAndCancelsImmediately() async {
-    let b = Boundary(); b.holdCopy = true
-    let mirror = b.make(); mirror.setEnabled(true, for: "paired")
+    let b = Boundary()
+    b.holdCopy = true
+    let mirror = b.make()
+    mirror.setEnabled(true, for: "paired")
     await settle { b.pendingCopy != nil }
     mirror.setEnabled(false, for: "paired")
     XCTAssertEqual(b.cancels, 1)
     XCTAssertEqual(mirror.state, .disabled)
     b.releaseCopy()
-    await Task.yield(); await Task.yield()
+    await Task.yield()
+    await Task.yield()
     XCTAssertEqual(mirror.state, .disabled)
     XCTAssertEqual(b.copies, ["disc1"])
     XCTAssertTrue(b.scheduled.isEmpty)
   }
 
   func testBackgroundEmulationAndMissingPeerWaitThenResume() async {
-    let b = Boundary(); b.active = false
-    let mirror = b.make(); mirror.setEnabled(true, for: "paired")
+    let b = Boundary()
+    b.active = false
+    let mirror = b.make()
+    mirror.setEnabled(true, for: "paired")
     XCTAssertEqual(mirror.state, .waiting)
-    b.active = true; b.emulating = true; mirror.environmentChanged()
+    b.active = true
+    b.emulating = true
+    mirror.environmentChanged()
     XCTAssertEqual(mirror.state, .waiting)
-    b.emulating = false; b.discovered = []; mirror.environmentChanged()
+    b.emulating = false
+    b.discovered = []
+    mirror.environmentChanged()
     XCTAssertEqual(mirror.state, .waiting)
     XCTAssertTrue(b.copies.isEmpty)
-    b.discovered = ["paired"]; mirror.environmentChanged()
+    b.discovered = ["paired"]
+    mirror.environmentChanged()
     await settle { mirror.state == .upToDate }
     mirror.stop()
   }
 
   func testTrustRevocationDisablesSubscriptionAndRejectsLateCompletion() async {
-    let b = Boundary(); b.holdCopy = true
-    let mirror = b.make(); mirror.setEnabled(true, for: "paired")
+    let b = Boundary()
+    b.holdCopy = true
+    let mirror = b.make()
+    mirror.setEnabled(true, for: "paired")
     await settle { b.pendingCopy != nil }
-    b.trusted = []; mirror.environmentChanged()
+    b.trusted = []
+    mirror.environmentChanged()
     XCTAssertTrue(mirror.enabledPeerIDs.isEmpty)
     XCTAssertEqual(b.cancels, 1)
     XCTAssertEqual(mirror.state, .disabled)
-    b.releaseCopy(); await Task.yield()
+    b.releaseCopy()
+    await Task.yield()
     XCTAssertEqual(mirror.state, .disabled)
     XCTAssertEqual(b.copies, ["disc1"])
   }
 
   func testCopyFailureIsActionableAndExplicitRetryResumes() async {
-    let b = Boundary(); b.failCopy = true
-    let mirror = b.make(); mirror.setEnabled(true, for: "paired")
-    await settle { if case .failed = mirror.state { return true }; return false }
-    mirror.environmentChanged(); await Task.yield()
+    let b = Boundary()
+    b.failCopy = true
+    let mirror = b.make()
+    mirror.setEnabled(true, for: "paired")
+    await settle { if case .failed = mirror.state { return true }
+      return false
+    }
+    mirror.environmentChanged()
+    await Task.yield()
     XCTAssertEqual(b.copies, ["disc1"])
-    b.failCopy = false; mirror.retry()
+    b.failCopy = false
+    mirror.retry()
     await settle { mirror.state == .upToDate }
     XCTAssertEqual(b.copies, ["disc1", "disc1", "disc2"])
     mirror.stop()
   }
 
   func testRapidDisableReenableWaitsForPreviousPhysicalCopyToFinish() async {
-    let b = Boundary(); b.holdCopy = true
-    let mirror = b.make(); mirror.setEnabled(true, for: "paired")
+    let b = Boundary()
+    b.holdCopy = true
+    let mirror = b.make()
+    mirror.setEnabled(true, for: "paired")
     await settle { b.pendingCopy != nil }
     mirror.setEnabled(false, for: "paired")
     mirror.setEnabled(true, for: "paired")
     await Task.yield()
     XCTAssertEqual(b.copies, ["disc1"])
-    b.holdCopy = false; b.releaseCopy()
+    b.holdCopy = false
+    b.releaseCopy()
     await settle { mirror.state == .upToDate }
     XCTAssertEqual(b.copies, ["disc1", "disc2"])
     mirror.stop()
@@ -182,14 +211,19 @@ final class NearbyLibraryMirrorTests: XCTestCase {
 
   func testBackgroundAndEmulationCancelAnActiveCopy() async {
     for emulation in [false, true] {
-      let b = Boundary(); b.holdCopy = true
-      let mirror = b.make(); mirror.setEnabled(true, for: "paired")
+      let b = Boundary()
+      b.holdCopy = true
+      let mirror = b.make()
+      mirror.setEnabled(true, for: "paired")
       await settle { b.pendingCopy != nil }
-      b.active = emulation; b.emulating = emulation
+      b.active = emulation
+      b.emulating = emulation
       mirror.environmentChanged()
       XCTAssertEqual(b.cancels, 1)
       XCTAssertEqual(mirror.state, .waiting)
-      b.releaseCopy(); await Task.yield(); await Task.yield()
+      b.releaseCopy()
+      await Task.yield()
+      await Task.yield()
       XCTAssertEqual(b.copies, ["disc1"])
       XCTAssertEqual(mirror.state, .waiting)
       mirror.stop()
@@ -197,49 +231,59 @@ final class NearbyLibraryMirrorTests: XCTestCase {
   }
 
   func testCancelledPollCallbackCannotRestartDisabledSubscription() async {
-    let b = Boundary(); let mirror = b.make()
+    let b = Boundary()
+    let mirror = b.make()
     mirror.setEnabled(true, for: "paired")
     await settle { mirror.state == .upToDate }
     let callback = b.scheduled.last!.1
     mirror.setEnabled(false, for: "paired")
     XCTAssertTrue(b.cancelledTimers.contains(0))
-    callback(); await Task.yield()
+    callback()
+    await Task.yield()
     XCTAssertEqual(b.requestedPeers, ["paired"])
     XCTAssertEqual(mirror.state, .disabled)
   }
 
   func testUnavailableLaterPeerDoesNotLeaveFinishedPassShowingCopying() async {
-    let b = Boundary(); b.holdCopy = true
-    b.trusted.insert("second"); b.discovered.insert("second")
+    let b = Boundary()
+    b.holdCopy = true
+    b.trusted.insert("second")
+    b.discovered.insert("second")
     let mirror = b.make()
     mirror.setEnabled(true, for: "paired")
     mirror.setEnabled(true, for: "second")
     await settle { b.pendingCopy != nil }
     // First pass captured only paired; the following poll captures both peers.
-    b.holdCopy = false; b.releaseCopy()
+    b.holdCopy = false
+    b.releaseCopy()
     await settle { mirror.state == .upToDate }
-    b.present = []; b.holdCopy = true
+    b.present = []
+    b.holdCopy = true
     b.scheduled.last?.1()
     await settle { b.pendingCopy != nil }
-    b.discovered.remove("second"); mirror.environmentChanged()
-    b.holdCopy = false; b.releaseCopy()
+    b.discovered.remove("second")
+    mirror.environmentChanged()
+    b.holdCopy = false
+    b.releaseCopy()
     await settle { mirror.state == .upToDate }
     XCTAssertEqual(b.requestedPeers, ["paired", "paired"])
     mirror.stop()
   }
 
-
   func testDisabledCatalogCompletionCannotBeginAnImport() async {
-    let b = Boundary(); b.holdCatalog = true
-    let mirror = b.make(); mirror.setEnabled(true, for: "paired")
+    let b = Boundary()
+    b.holdCatalog = true
+    let mirror = b.make()
+    mirror.setEnabled(true, for: "paired")
     await settle { b.pendingCatalog != nil }
     mirror.setEnabled(false, for: "paired")
-    let pending = b.pendingCatalog; b.pendingCatalog = nil
+    let pending = b.pendingCatalog
+    b.pendingCatalog = nil
     pending?.resume(returning: b.entries)
-    await Task.yield(); await Task.yield()
+    await Task.yield()
+    await Task.yield()
     XCTAssertTrue(b.copies.isEmpty)
     XCTAssertEqual(mirror.state, .disabled)
     XCTAssertTrue(b.scheduled.isEmpty)
   }
-
 }

@@ -103,6 +103,7 @@ final class PauseArbiter {
     !core.isPaused() || resumeMayBeQueued
       || ((inactivePauseOwned || ownsPause) && tokens.allSatisfy { $0.reason == Reason.appInactive })
   }
+
   var holders: [String] { tokens.map(\.reason) }
 
   /// Exact ownership comparison: callers can fence input without clearing a presentation's claim.
@@ -243,7 +244,9 @@ final class PauseArbiter {
 
   /// `DOLEmulationDidStartNotification`: apply a deferred claim.
   func emulationDidStart() {
-    guard deferred, isHeld else { deferred = false; return }
+    guard deferred, isHeld else { deferred = false
+      return
+    }
     deferred = false
     if resumeMayBeQueued || !core.isPaused() {
       asyncResumeIssued = false

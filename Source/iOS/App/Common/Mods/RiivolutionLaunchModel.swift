@@ -76,7 +76,7 @@ final class RiivolutionLaunchModel: ObservableObject {
   func select(choice: Int, option optionIndex: Int, inPack packIndex: Int) {
     guard packs.indices.contains(packIndex), packs[packIndex].options.indices.contains(optionIndex) else { return }
     let option = packs[packIndex].options[optionIndex]
-    guard (0...option.choices.count).contains(choice) else { return }
+    guard (0 ... option.choices.count).contains(choice) else { return }
     packs[packIndex].options[optionIndex].selectedChoice = choice
   }
 

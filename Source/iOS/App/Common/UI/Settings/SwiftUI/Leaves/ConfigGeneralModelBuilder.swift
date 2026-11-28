@@ -8,7 +8,7 @@ import SwiftUI
 enum ConfigGeneralModelBuilder {
   static func make(state: ConfigGeneralState, apply: @escaping (ConfigGeneralChange) -> Void) -> MenuModel {
     var defaultISO = SettingsRow.destination("default-iso", L("Default ISO"),
-      DefaultISOSelectionState.instructions, icon: "opticaldisc", view: AnyView(DefaultISOSettingsView()))
+                                             DefaultISOSelectionState.instructions, icon: "opticaldisc", view: AnyView(DefaultISOSettingsView()))
     defaultISO.subtitle = state.defaultISO.name
     if !state.defaultISO.path.isEmpty && !state.defaultISO.available { defaultISO.badge = L("Unavailable") }
     let basic = MenuSection(id: "basic-settings", header: L("Basic Settings"), items: [

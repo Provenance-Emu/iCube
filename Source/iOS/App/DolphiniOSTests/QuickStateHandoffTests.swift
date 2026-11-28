@@ -6,7 +6,7 @@ final class QuickStateHandoffTests: XCTestCase {
   func testCompletionWaitsForNeutralThenFreshInputAndPreservesOtherHolders() {
     var paused = false
     let arbiter = PauseArbiter(core: .init(isRunning: { true }, isPaused: { paused },
-      pause: { paused = true }, resume: { paused = false }), schedule: { $0() })
+                                           pause: { paused = true }, resume: { paused = false }), schedule: { $0() })
     let handoff = QuickStateHandoff(arbiter: arbiter, isCurrent: { _ in true })
     let session = QuickSaveSurfaceSession(gameID: "GALE01", identifier: 7)
     let overlay = arbiter.claim("overlay")

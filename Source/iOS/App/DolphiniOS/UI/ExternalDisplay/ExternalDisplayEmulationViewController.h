@@ -7,8 +7,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface ExternalDisplayEmulationViewController : UIViewController
 
-@property (weak, nonatomic) IBOutlet UIView* rendererView;
-@property (weak, nonatomic) IBOutlet UIView* waitView;
+@property(weak, nonatomic) IBOutlet UIView* rendererView;
+@property(weak, nonatomic) IBOutlet UIView* waitView;
 
 @end
 

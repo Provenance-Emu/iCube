@@ -412,7 +412,7 @@ private struct TVLibraryIndexButtonChrome<Label: View>: View {
     let wash = isFocused ? TVLibraryRailStyle.indexFocusedWash : (isCurrent ? TVLibraryRailStyle.indexCurrentWash : 0)
     label
       .foregroundStyle(isFocused ? ICubeDesign.color(.textPrimary)
-                       : (isCurrent ? accent : ICubeDesign.color(.textSecondary)))
+        : (isCurrent ? accent : ICubeDesign.color(.textSecondary)))
       .background {
         Capsule()
           .fill(accent.opacity(wash))

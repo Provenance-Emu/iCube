@@ -1,9 +1,9 @@
 // Copyright 2026 iCube Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import simd
 import UIKit
 import XCTest
-import simd
 
 @testable import iCube
 

@@ -67,7 +67,7 @@ final class DiscPatchPlannerTests: XCTestCase {
   // MARK: - Output planning
 
   private func makePlan(_ mode: DiscPatchMode, format: DiscPatchCopyFormat = .rvz, container: DiscContainer = .plain,
-                    source: String = "/data/Software/Game.iso", taken: Set<String> = []) -> DiscPatchOutputPlan {
+                        source: String = "/data/Software/Game.iso", taken: Set<String> = []) -> DiscPatchOutputPlan {
     DiscPatchPlanner.outputPlan(mode: mode, copyFormat: format, source: URL(fileURLWithPath: source),
                                 sourceContainer: container, cacheKey: "k1", copyName: "Game (Hack)",
                                 workID: "w1", directories: directories, exists: { taken.contains($0.path) })

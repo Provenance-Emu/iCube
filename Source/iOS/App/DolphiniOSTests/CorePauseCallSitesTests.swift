@@ -34,7 +34,7 @@ final class CorePauseCallSitesTests: XCTestCase {
       seen.insert(url.lastPathComponent)
       guard !Self.setStateAllowed.contains(url.lastPathComponent) else { continue }
       for (number, stripped, line) in try code(of: url)
-      where Self.setState.firstMatch(in: stripped, range: NSRange(stripped.startIndex..., in: stripped)) != nil {
+        where Self.setState.firstMatch(in: stripped, range: NSRange(stripped.startIndex..., in: stripped)) != nil {
         offenders.append("\(url.lastPathComponent):\(number): \(line.trimmingCharacters(in: .whitespaces))")
       }
     }
@@ -51,7 +51,7 @@ final class CorePauseCallSitesTests: XCTestCase {
     var offenders: [String] = []
     for url in files where ["mm", "m", "swift"].contains(url.pathExtension) {
       for (number, stripped, line) in try code(of: url)
-      where Self.bridgePause.firstMatch(in: stripped, range: NSRange(stripped.startIndex..., in: stripped)) != nil {
+        where Self.bridgePause.firstMatch(in: stripped, range: NSRange(stripped.startIndex..., in: stripped)) != nil {
         offenders.append("\(url.lastPathComponent):\(number): \(line.trimmingCharacters(in: .whitespaces))")
       }
     }

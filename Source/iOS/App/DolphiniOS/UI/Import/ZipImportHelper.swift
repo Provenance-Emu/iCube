@@ -598,7 +598,7 @@ final class ZipImportHelper: NSObject {
     let items = try decoder.items()
     guard items.count == (try decoder.count()) else { throw ZipEntryScannerError.inconsistentDirectory }
     var paths: [String] = []
-    for index in 0..<items.count {
+    for index in 0 ..< items.count {
       let item = try items.item(at: index)
       // An item PLzmaSDK could not read the path of is null, and asking it for its path dereferences it.
       guard hasObject(item) else { throw ZipEntryScannerError.inconsistentDirectory }

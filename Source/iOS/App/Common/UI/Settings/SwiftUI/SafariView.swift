@@ -1,29 +1,29 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import CoreHaptics
+import Foundation
+import PVHelp
+import PVWebServer
+import QuartzCore
 import SwiftUI
 import UIKit
-import CoreHaptics
-import QuartzCore
-import PVWebServer
-import PVHelp
 #if os(iOS)
-import SafariServices
 import AudioToolbox
+import SafariServices
 #endif
 #if canImport(GameController)
 import GameController
 #endif
 #if os(iOS)
 #endif
-import Foundation
 
 #if os(iOS)
 /// Wrapper for presenting SFSafariViewController in SwiftUI
 struct SafariView: UIViewControllerRepresentable {
   let url: URL
   func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
-  func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) { }
+  func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
 extension View {

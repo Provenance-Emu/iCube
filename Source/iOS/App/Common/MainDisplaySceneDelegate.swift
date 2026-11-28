@@ -22,6 +22,9 @@ class MainDisplaySceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
     #endif
     MainSceneCoordinator.shared().mainScene = scene as? UIWindowScene
+    #if os(iOS) && !targetEnvironment(macCatalyst)
+    ClamshellScreenCover.shared.start()
+    #endif
     // iCube: bring the perf test-bench server up at scene connect (not only at the first game boot)
     // so a Mac-side script can drive POST /api/debug/boot on a freshly launched app. Self-gated on
     // the "Perf Test Bench (HTTP)" toggle and idempotent, so this is a no-op for everyone else.

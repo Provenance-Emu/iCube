@@ -3,7 +3,8 @@
 
 #import <UIKit/UIKit.h>
 
-namespace Gecko {
+namespace Gecko
+{
 class GeckoCode;
 }
 
@@ -13,14 +14,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface GeckoCodeEditViewController : UITableViewController
 
-@property (weak, nonatomic, nullable) id<GeckoCodeEditViewControllerDelegate> delegate;
+@property(weak, nonatomic, nullable) id<GeckoCodeEditViewControllerDelegate> delegate;
 
-@property (nonatomic) Gecko::GeckoCode* code;
+@property(nonatomic) Gecko::GeckoCode* code;
 
-@property (weak, nonatomic) IBOutlet UITextField* nameField;
-@property (weak, nonatomic) IBOutlet UITextField* creatorField;
-@property (weak, nonatomic) IBOutlet UITextView* codeView;
-@property (weak, nonatomic) IBOutlet UITextView* notesView;
+@property(weak, nonatomic) IBOutlet UITextField* nameField;
+@property(weak, nonatomic) IBOutlet UITextField* creatorField;
+@property(weak, nonatomic) IBOutlet UITextView* codeView;
+@property(weak, nonatomic) IBOutlet UITextView* notesView;
 
 @end
 

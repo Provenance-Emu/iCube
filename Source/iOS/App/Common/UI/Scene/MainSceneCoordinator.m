@@ -5,7 +5,8 @@
 
 @implementation MainSceneCoordinator
 
-+ (MainSceneCoordinator*)shared {
++ (MainSceneCoordinator*)shared
+{
   static MainSceneCoordinator* sharedInstance = nil;
   static dispatch_once_t onceToken;
 

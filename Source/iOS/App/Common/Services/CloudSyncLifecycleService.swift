@@ -18,21 +18,20 @@ import UIKit
 /// after Core is truly Uninitialized; the earlier UI DidEnd event does not release it.
 /// This keeps memory cards, save states and NAND untouched throughout core teardown.
 final class CloudSyncLifecycleService: NSObject, UIApplicationDelegate {
+  private var observers: [NSObjectProtocol] = []
 
-    private var observers: [NSObjectProtocol] = []
-
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
-    ) -> Bool {
-        installObserversIfNeeded()
-        // Silent pushes need no permission prompt; a build without `aps-environment` just fails to register.
-        CloudSyncPushService.shared.register(application)
-        Task { @MainActor in
-            await CloudSyncCoordinator.shared.start()
-        }
-        return true
+  func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    installObserversIfNeeded()
+    // Silent pushes need no permission prompt; a build without `aps-environment` just fails to register.
+    CloudSyncPushService.shared.register(application)
+    Task { @MainActor in
+      await CloudSyncCoordinator.shared.start()
     }
+    return true
+  }
 
   /// Pull remote changes down when we come back to the foreground.
   func applicationDidBecomeActive(_ application: UIApplication) {
@@ -48,67 +47,67 @@ final class CloudSyncLifecycleService: NSObject, UIApplicationDelegate {
     EmulationServerBackups.shared.requestBackup()
   }
 
-    private func installObserversIfNeeded() {
-        guard observers.isEmpty else { return }
-        let center = NotificationCenter.default
-        observers = [
-            center.addObserver(
-                forName: Notification.Name("DOLEmulationWillStartNotification"),
-                object: nil, queue: .main
-            ) { _ in
-                // Close admission before EmulationCoordinator dispatches the boot worker.
-                let generation = SyncLocalIOGate.shared.beginEmulation()
-                Task { @MainActor in
-                    await CloudSyncCoordinator.shared.handleEmulationWillStart(generation: generation)
-                }
-            },
-            // A merged document was rewritten on disk: the store that owns it
-            // reloads so the UI reflects the other device's changes.
-            center.addObserver(
-                forName: CloudSyncCoordinator.documentDidChangeNotification,
-                object: nil, queue: .main
-            ) { note in
-                guard let raw = note.userInfo?[CloudSyncCoordinator.fileTypeKey] as? String,
-                      let type = SyncableFileType(rawValue: raw) else { return }
-                switch type {
-                case .libraryState: LibraryStateStore.shared.reloadAfterSync()
-                case .gameProfile:
-                    if let path = note.userInfo?[CloudSyncCoordinator.relativePathKey] as? String,
-                       SyncClassifier.isLibraryMetadataShard(relativePath: path) {
-                        LibraryMetadataService.reloadAfterSync()
-                    } else { GameProfiles.shared.reloadAfterSync() }
-                default: break
-                }
-            }
-        ]
-    }
-
-    private func send(_ event: SyncLifecycleEvent) {
+  private func installObserversIfNeeded() {
+    guard observers.isEmpty else { return }
+    let center = NotificationCenter.default
+    observers = [
+      center.addObserver(
+        forName: Notification.Name("DOLEmulationWillStartNotification"),
+        object: nil, queue: .main
+      ) { _ in
+        // Close admission before EmulationCoordinator dispatches the boot worker.
+        let generation = SyncLocalIOGate.shared.beginEmulation()
         Task { @MainActor in
-            await CloudSyncCoordinator.shared.handle(event)
+          await CloudSyncCoordinator.shared.handleEmulationWillStart(generation: generation)
         }
+      },
+      // A merged document was rewritten on disk: the store that owns it
+      // reloads so the UI reflects the other device's changes.
+      center.addObserver(
+        forName: CloudSyncCoordinator.documentDidChangeNotification,
+        object: nil, queue: .main
+      ) { note in
+        guard let raw = note.userInfo?[CloudSyncCoordinator.fileTypeKey] as? String,
+              let type = SyncableFileType(rawValue: raw) else { return }
+        switch type {
+        case .libraryState: LibraryStateStore.shared.reloadAfterSync()
+        case .gameProfile:
+          if let path = note.userInfo?[CloudSyncCoordinator.relativePathKey] as? String,
+             SyncClassifier.isLibraryMetadataShard(relativePath: path) {
+            LibraryMetadataService.reloadAfterSync()
+          } else { GameProfiles.shared.reloadAfterSync() }
+        default: break
+        }
+      }
+    ]
+  }
+
+  private func send(_ event: SyncLifecycleEvent) {
+    Task { @MainActor in
+      await CloudSyncCoordinator.shared.handle(event)
     }
+  }
 }
 
 /// Called only by the emulation worker. Independent of sync opt-in/startup: zero leases
 /// returns immediately, and an in-flight actor file write drains before the core opens it.
 @objc(ICubeCloudSyncBootGate)
 final class ICubeCloudSyncBootGate: NSObject {
-    @objc static func waitForLocalIO() {
-        SyncLocalIOGate.shared.waitForLocalIO()
-    }
+  @objc static func waitForLocalIO() {
+    SyncLocalIOGate.shared.waitForLocalIO()
+  }
 
-    @objc static func currentGeneration() -> UInt64 { SyncLocalIOGate.shared.currentGeneration }
+  @objc static func currentGeneration() -> UInt64 { SyncLocalIOGate.shared.currentGeneration }
 
-    @objc static func ensureEmulationForWorker(_ generation: UInt64) -> Bool {
-        SyncLocalIOGate.shared.ensureEmulation(generation: generation)
-    }
+  @objc static func ensureEmulationForWorker(_ generation: UInt64) -> Bool {
+    SyncLocalIOGate.shared.ensureEmulation(generation: generation)
+  }
 
-    @objc static func isCurrentEmulation(_ generation: UInt64) -> Bool {
-        SyncLocalIOGate.shared.isCurrentEmulation(generation)
-    }
+  @objc static func isCurrentEmulation(_ generation: UInt64) -> Bool {
+    SyncLocalIOGate.shared.isCurrentEmulation(generation)
+  }
 
-    @objc static func finishCoreDrain(_ generation: UInt64) {
+  @objc static func finishCoreDrain(_ generation: UInt64) {
     guard SyncLocalIOGate.shared.finishCoreDrain(generation: generation) else { return }
     Task { @MainActor in
       await CloudSyncCoordinator.shared.handleCoreDidDrain(generation: generation)
@@ -118,5 +117,4 @@ final class ICubeCloudSyncBootGate: NSObject {
       LibraryMetadataService.resumeContentIdentityWarming()
     }
   }
-
 }

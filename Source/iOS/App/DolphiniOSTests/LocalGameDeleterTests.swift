@@ -9,62 +9,61 @@ import XCTest
 /// ICUBE-2F: the Library's delete alert removed game files on the main thread, and removing a
 /// multi-GB image or a Wii folder title hung the app for 3-4 s (once per game in a batch delete).
 final class LocalGameDeleterTests: XCTestCase {
+  private var folder: URL!
 
-    private var folder: URL!
+  override func setUpWithError() throws {
+    folder = FileManager.default.temporaryDirectory.appendingPathComponent("LocalGameDeleterTests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+  }
 
-    override func setUpWithError() throws {
-        folder = FileManager.default.temporaryDirectory.appendingPathComponent("LocalGameDeleterTests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(at: folder)
+  }
+
+  private func makeGame(_ name: String) throws -> String {
+    let url = folder.appendingPathComponent(name)
+    try Data(repeating: 0, count: 16).write(to: url)
+    return url.path
+  }
+
+  @MainActor
+  func test_delete_removesFilesOffTheMainThread() async throws {
+    let paths = [try makeGame("a.iso"), try makeGame("b.iso")]
+    let removedOnMain = OSAllocatedUnfairLock(initialState: [Bool]())
+
+    let outcome = await LocalGameDeleter.delete(paths: paths) { path in
+      removedOnMain.withLock { $0.append(Thread.isMainThread) }
+      try FileManager.default.removeItem(atPath: path)
     }
 
-    override func tearDownWithError() throws {
-        try? FileManager.default.removeItem(at: folder)
-    }
+    XCTAssertEqual(removedOnMain.withLock { $0 }, [false, false])
+    XCTAssertEqual(outcome.deleted, paths)
+    XCTAssertTrue(outcome.failures.isEmpty)
+    XCTAssertFalse(paths.contains { FileManager.default.fileExists(atPath: $0) })
+  }
 
-    private func makeGame(_ name: String) throws -> String {
-        let url = folder.appendingPathComponent(name)
-        try Data(repeating: 0, count: 16).write(to: url)
-        return url.path
-    }
+  @MainActor
+  func test_delete_duplicateLibraryEntriesRemoveEachFileOnce() async throws {
+    let first = try makeGame("disc1.iso")
+    let second = try makeGame("disc2.iso")
 
-    @MainActor
-    func test_delete_removesFilesOffTheMainThread() async throws {
-        let paths = [try makeGame("a.iso"), try makeGame("b.iso")]
-        let removedOnMain = OSAllocatedUnfairLock(initialState: [Bool]())
+    let outcome = await LocalGameDeleter.delete(paths: [first, second, first])
 
-        let outcome = await LocalGameDeleter.delete(paths: paths) { path in
-            removedOnMain.withLock { $0.append(Thread.isMainThread) }
-            try FileManager.default.removeItem(atPath: path)
-        }
+    XCTAssertEqual(outcome.deleted, [first, second])
+    XCTAssertTrue(outcome.failures.isEmpty, "A repeated library path must not become a false failure")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: first))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: second))
+  }
 
-        XCTAssertEqual(removedOnMain.withLock { $0 }, [false, false])
-        XCTAssertEqual(outcome.deleted, paths)
-        XCTAssertTrue(outcome.failures.isEmpty)
-        XCTAssertFalse(paths.contains { FileManager.default.fileExists(atPath: $0) })
-    }
+  @MainActor
+  func test_delete_reportsAFailureAndKeepsGoing() async throws {
+    let missing = folder.appendingPathComponent("missing.iso").path
+    let present = try makeGame("present.iso")
 
-    @MainActor
-    func test_delete_duplicateLibraryEntriesRemoveEachFileOnce() async throws {
-        let first = try makeGame("disc1.iso")
-        let second = try makeGame("disc2.iso")
+    let outcome = await LocalGameDeleter.delete(paths: [missing, present])
 
-        let outcome = await LocalGameDeleter.delete(paths: [first, second, first])
-
-        XCTAssertEqual(outcome.deleted, [first, second])
-        XCTAssertTrue(outcome.failures.isEmpty, "A repeated library path must not become a false failure")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: first))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: second))
-    }
-
-    @MainActor
-    func test_delete_reportsAFailureAndKeepsGoing() async throws {
-        let missing = folder.appendingPathComponent("missing.iso").path
-        let present = try makeGame("present.iso")
-
-        let outcome = await LocalGameDeleter.delete(paths: [missing, present])
-
-        XCTAssertEqual(outcome.deleted, [present])
-        XCTAssertEqual(outcome.failures.map(\.path), [missing])
-        XCTAssertFalse(FileManager.default.fileExists(atPath: present))
-    }
+    XCTAssertEqual(outcome.deleted, [present])
+    XCTAssertEqual(outcome.failures.map(\.path), [missing])
+    XCTAssertFalse(FileManager.default.fileExists(atPath: present))
+  }
 }

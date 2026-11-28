@@ -124,7 +124,8 @@ Reference ReferenceAt(OperatingPoint point, double fps)
 - (void)testSeededBootBelowNativeNeedsTheTopMeasuredFirst
 {
   XCTAssertEqual(Judge({0.30f, 1.0f}, Window(20.0), Reference{}, kNative), Verdict::NeedsReference);
-  XCTAssertEqual(Judge({0.30f, 0.80f}, Window(20.0), Reference{}, kNative), Verdict::NeedsReference);
+  XCTAssertEqual(Judge({0.30f, 0.80f}, Window(20.0), Reference{}, kNative),
+                 Verdict::NeedsReference);
 }
 
 // The thermal ceiling lowers the top: a point at the ceiling is the top, not an underclock.

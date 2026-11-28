@@ -215,7 +215,7 @@ enum ZipEntryScanner {
       let variableLength = nameLength + Int(directory.le16(cursor + CentralEntry.extraLength)) + Int(directory.le16(cursor + CentralEntry.commentLength))
       guard cursor + centralEntryHeaderSize + variableLength <= directory.count else { throw ZipEntryScannerError.truncated }
       let nameStart = directory.startIndex + cursor + centralEntryHeaderSize
-      let rawName = directory[nameStart..<(nameStart + nameLength)].prefix { $0 != nulByte }
+      let rawName = directory[nameStart ..< (nameStart + nameLength)].prefix { $0 != nulByte }
       // Lossy decoding on purpose: a failable decode would turn a name with one bad byte into "" and skip the checks.
       // swiftlint:disable:next optional_data_string_conversion
       let entry = ZipEntry(name: String(decoding: rawName, as: UTF8.self), externalAttributes: directory.le32(cursor + CentralEntry.externalAttributes))
@@ -241,7 +241,7 @@ enum ZipEntryScanner {
         guard position != 0 else { throw ZipEntryScannerError.notAZip }
         guard candidate + endRecordSize <= windowSize else { throw ZipEntryScannerError.truncated }
         let recordStart = window.startIndex + candidate
-        return (position, window.subdata(in: recordStart..<(recordStart + endRecordSize)))
+        return (position, window.subdata(in: recordStart ..< (recordStart + endRecordSize)))
       }
       candidate -= 1
     }
@@ -266,7 +266,7 @@ enum ZipEntryScanner {
   }
 
   private static func isASCIILetter(_ byte: UInt8) -> Bool {
-    (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte) || (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(byte)
+    (UInt8(ascii: "A") ... UInt8(ascii: "Z")).contains(byte) || (UInt8(ascii: "a") ... UInt8(ascii: "z")).contains(byte)
   }
 }
 

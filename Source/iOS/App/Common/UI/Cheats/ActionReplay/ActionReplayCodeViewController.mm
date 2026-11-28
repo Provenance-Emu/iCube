@@ -19,14 +19,16 @@
 
 @end
 
-@implementation ActionReplayCodeViewController {
+@implementation ActionReplayCodeViewController
+{
   std::vector<ActionReplay::ARCode> _codes;
   ActionReplay::ARCode _newCode;
   ActionReplay::ARCode* _editTargetCode;
   bool _editTargetIsNew;
 }
 
-- (void)viewDidLoad {
+- (void)viewDidLoad
+{
   [super viewDidLoad];
 
   self.navigationItem.rightBarButtonItem = self.editButtonItem;
@@ -39,8 +41,10 @@
   self->_codes = ActionReplay::LoadCodes(gameIniDefault, gameIniLocal);
 }
 
-- (void)saveCodes {
-  const auto iniPath = std::string(File::GetUserPath(D_GAMESETTINGS_IDX)).append(self.gameId).append(".ini");
+- (void)saveCodes
+{
+  const auto iniPath =
+      std::string(File::GetUserPath(D_GAMESETTINGS_IDX)).append(self.gameId).append(".ini");
 
   Common::IniFile gameIniLocal;
   gameIniLocal.Load(iniPath);
@@ -48,21 +52,28 @@
   gameIniLocal.Save(iniPath);
 }
 
-- (NSInteger)numberOfSectionsInTableView:(UITableView*)tableView {
+- (NSInteger)numberOfSectionsInTableView:(UITableView*)tableView
+{
   return 2;
 }
 
-- (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section {
+- (NSInteger)tableView:(UITableView*)tableView numberOfRowsInSection:(NSInteger)section
+{
   return section == 0 ? 1 : self->_codes.size();
 }
 
-- (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath {
-  if (indexPath.section == 0) {
+- (UITableViewCell*)tableView:(UITableView*)tableView cellForRowAtIndexPath:(NSIndexPath*)indexPath
+{
+  if (indexPath.section == 0)
+  {
     return [tableView dequeueReusableCellWithIdentifier:@"addCell" forIndexPath:indexPath];
-  } else {
+  }
+  else
+  {
     const auto& code = self->_codes[indexPath.row];
 
-    CheatCell* cell = [tableView dequeueReusableCellWithIdentifier:@"cheatCell" forIndexPath:indexPath];
+    CheatCell* cell = [tableView dequeueReusableCellWithIdentifier:@"cheatCell"
+                                                      forIndexPath:indexPath];
 
     [cell.nameLabel setText:CppToFoundationString(code.name)];
 
@@ -73,19 +84,26 @@
   }
 }
 
-- (void)tableView:(UITableView*)tableView didSelectRowAtIndexPath:(NSIndexPath*)indexPath {
-  if (indexPath.section == 0) {
+- (void)tableView:(UITableView*)tableView didSelectRowAtIndexPath:(NSIndexPath*)indexPath
+{
+  if (indexPath.section == 0)
+  {
     self->_newCode = ActionReplay::ARCode();
     self->_editTargetCode = &self->_newCode;
     self->_editTargetIsNew = true;
-  } else {
+  }
+  else
+  {
     self->_editTargetCode = &self->_codes[indexPath.row];
 
-    if (!self->_editTargetCode->user_defined) {
+    if (!self->_editTargetCode->user_defined)
+    {
       self->_newCode = *_editTargetCode;
       self->_editTargetCode = &self->_newCode;
       self->_editTargetIsNew = true;
-    } else {
+    }
+    else
+    {
       self->_editTargetIsNew = false;
     }
   }
@@ -95,40 +113,52 @@
   [self.tableView deselectRowAtIndexPath:indexPath animated:true];
 }
 
-- (BOOL)tableView:(UITableView*)tableView canEditRowAtIndexPath:(NSIndexPath*)indexPath {
-  if (indexPath.section == 0) {
+- (BOOL)tableView:(UITableView*)tableView canEditRowAtIndexPath:(NSIndexPath*)indexPath
+{
+  if (indexPath.section == 0)
+  {
     return false;
   }
 
   return self->_codes[indexPath.row].user_defined;
 }
 
-- (void)tableView:(UITableView*)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath*)indexPath {
-  if (editingStyle == UITableViewCellEditingStyleDelete) {
+- (void)tableView:(UITableView*)tableView
+    commitEditingStyle:(UITableViewCellEditingStyle)editingStyle
+     forRowAtIndexPath:(NSIndexPath*)indexPath
+{
+  if (editingStyle == UITableViewCellEditingStyleDelete)
+  {
     self->_codes.erase(self->_codes.begin() + indexPath.row);
 
-    [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
+    [self.tableView deleteRowsAtIndexPaths:@[ indexPath ]
+                          withRowAnimation:UITableViewRowAnimationFade];
 
     [self saveCodes];
   }
 }
 
-- (IBAction)codeEnabledChanged:(DOLSwitch*)sender {
+- (IBAction)codeEnabledChanged:(DOLSwitch*)sender
+{
   self->_codes[sender.tag].enabled = sender.on;
 
   [self saveCodes];
 }
 
-- (void)prepareForSegue:(UIStoryboardSegue*)segue sender:(id)sender {
-  if ([segue.identifier isEqualToString:@"edit"]) {
+- (void)prepareForSegue:(UIStoryboardSegue*)segue sender:(id)sender
+{
+  if ([segue.identifier isEqualToString:@"edit"])
+  {
     ActionReplayCodeEditViewController* editController = segue.destinationViewController;
     editController.delegate = self;
     editController.code = self->_editTargetCode;
   }
 }
 
-- (void)userDidSaveCode:(ActionReplayCodeEditViewController*)viewController {
-  if (self->_editTargetIsNew) {
+- (void)userDidSaveCode:(ActionReplayCodeEditViewController*)viewController
+{
+  if (self->_editTargetIsNew)
+  {
     self->_codes.push_back(std::move(self->_newCode));
   }
 
@@ -137,7 +167,13 @@
   [self.tableView reloadData];
 }
 
-- (void)setGameIdString:(NSString*)value { self.gameId = FoundationToCppString(value ?: @""); }
-- (void)setRevisionNumber:(NSNumber*)value { self.revision = (u16)(value ? value.unsignedShortValue : 0); }
+- (void)setGameIdString:(NSString*)value
+{
+  self.gameId = FoundationToCppString(value ?: @"");
+}
+- (void)setRevisionNumber:(NSNumber*)value
+{
+  self.revision = (u16)(value ? value.unsignedShortValue : 0);
+}
 
 @end

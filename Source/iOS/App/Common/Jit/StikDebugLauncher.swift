@@ -86,7 +86,6 @@ enum StikDebugLauncher {
     let safeBundleID = bundleID.addingPercentEncoding(withAllowedCharacters: allowed) ?? bundleID
     return URL(string:
       "\(scheme)://enable-jit?bundle-id=\(safeBundleID)&pid=\(getpid())"
-      + "&script-name=\(brokerScript)")
+        + "&script-name=\(brokerScript)")
   }
-
 }

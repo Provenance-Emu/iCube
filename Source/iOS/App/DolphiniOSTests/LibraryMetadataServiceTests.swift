@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
 import XCTest
+@testable import iCube
 #if canImport(UIKit)
 import UIKit
 #endif
-@testable import iCube
 
 final class LibraryMetadataServiceTests: XCTestCase {
   func testSyntheticHomebrewIDsCannotClaimDiscIdentity() {
@@ -20,7 +20,7 @@ final class LibraryMetadataServiceTests: XCTestCase {
   /// whose designated C++ wrapper initializer is unavailable to Swift.
   @MainActor private func game(path: URL, gameID: String = "<unknown>", platform: Int = 4) -> TVGameItem {
     let item = TVGameItem(demoTitle: "Unit Test Homebrew", gameID: gameID, platform: platform,
-                         maker: "Unit Test", countryName: "USA", fileSize: 3, accentHue: 0.1)
+                          maker: "Unit Test", countryName: "USA", fileSize: 3, accentHue: 0.1)
     item.setValue(path.path, forKey: "filePath")
     XCTAssertEqual(item.filePath, path.path)
     return item
@@ -50,7 +50,8 @@ final class LibraryMetadataServiceTests: XCTestCase {
       XCTAssertEqual(initial, LibraryMetadataStore.Identity.contentHash("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"))
       let modified = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date)
       let handle = try FileHandle(forWritingTo: file)
-      try handle.write(contentsOf: Data("xyz".utf8)); try handle.close()
+      try handle.write(contentsOf: Data("xyz".utf8))
+      try handle.close()
       try FileManager.default.setAttributes([.modificationDate: modified], ofItemAtPath: file.path)
       XCTAssertNil(LibraryMetadataService.identity(for: item), "A replacement must not inherit another ROM's edits")
       let replacement = try await LibraryMetadataService.resolveIdentity(for: item)
@@ -88,15 +89,70 @@ final class LibraryMetadataServiceTests: XCTestCase {
       let item = game(path: file, gameID: "")
       let task = Task { try await LibraryMetadataService.resolveIdentity(for: item) }
       task.cancel()
-      do { _ = try await task.value; XCTFail("Cancelled hashing must fail") }
-      catch { XCTAssertTrue(error is CancellationError) }
+      do { _ = try await task.value
+        XCTFail("Cancelled hashing must fail")
+      } catch { XCTAssertTrue(error is CancellationError) }
       XCTAssertNil(LibraryMetadataService.identity(for: item))
+    }
+  }
+
+  /// Counts defaults posts and notes a post during which another thread could
+  /// not take the service lock.
+  private final class PostProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var posts = 0
+    private var blocked = false
+    func record(blocked wasBlocked: Bool) {
+      lock.lock()
+      posts += 1
+      if wasBlocked { blocked = true }
+      lock.unlock()
+    }
+
+    var result: (posts: Int, blocked: Bool) {
+      lock.lock()
+      defer { lock.unlock() }
+      return (posts, blocked)
+    }
+  }
+
+  /// Watchdog kill of 2026-11-25 (0x8BADF00D): the receipt was written to
+  /// `UserDefaults` under the service lock. The write posts `didChangeNotification`
+  /// before it returns, SwiftUI's `@AppStorage` observer waits for the main
+  /// thread's view update, and that update was waiting for the same lock in
+  /// `store()`. The observer below stands in for SwiftUI: while the post is in
+  /// flight, another thread must still be able to take the lock.
+  @MainActor
+  func testReceiptIsSavedToDefaultsWithoutHoldingTheServiceLock() async throws {
+    try await withFolder { folder in
+      let file = folder.appendingPathComponent("lock.dol")
+      try Data("abc".utf8).write(to: file)
+      let item = game(path: file)
+      let probeItem = game(path: folder.appendingPathComponent("probe.dol"))
+      let probe = PostProbe()
+      let observer = NotificationCenter.default.addObserver(
+        forName: UserDefaults.didChangeNotification, object: UserDefaults.standard, queue: nil
+      ) { _ in
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+          _ = LibraryMetadataService.identity(for: probeItem)
+          finished.signal()
+        }
+        probe.record(blocked: finished.wait(timeout: .now() + 2) == .timedOut)
+      }
+      defer { NotificationCenter.default.removeObserver(observer) }
+      _ = try await LibraryMetadataService.resolveIdentity(for: item)
+      LibraryMetadataService.waitForPersistedContentIdentities()
+      let result = probe.result
+      XCTAssertGreaterThan(result.posts, 0, "The receipt must still be saved")
+      XCTAssertFalse(result.blocked, "A defaults write must never happen under the service lock")
     }
   }
 
   private func largeImageData() throws -> Data {
     let format = UIGraphicsImageRendererFormat()
-    format.scale = 1; format.opaque = true
+    format.scale = 1
+    format.opaque = true
     let renderer = UIGraphicsImageRenderer(size: CGSize(width: 2048, height: 1536), format: format)
     let image = renderer.image { context in
       UIColor.orange.setFill()

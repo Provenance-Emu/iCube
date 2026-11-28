@@ -184,7 +184,7 @@ enum MarkdownBlock: Equatable {
 
       if trimmed.hasPrefix("#") {
         let hashes = trimmed.prefix(while: { $0 == "#" })
-        if (1...6).contains(hashes.count) {
+        if (1 ... 6).contains(hashes.count) {
           flushParagraph()
           let text = trimmed.dropFirst(hashes.count).trimmingCharacters(in: .whitespaces)
           blocks.append(.heading(level: hashes.count, text: text))
@@ -205,7 +205,7 @@ enum MarkdownBlock: Equatable {
       }
 
       if let dotIndex = trimmed.firstIndex(of: "."),
-         let number = Int(trimmed[trimmed.startIndex..<dotIndex]),
+         let number = Int(trimmed[trimmed.startIndex ..< dotIndex]),
          trimmed[trimmed.index(after: dotIndex)...].hasPrefix(" ") {
         flushParagraph()
         let text = String(trimmed[trimmed.index(dotIndex, offsetBy: 2)...])

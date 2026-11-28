@@ -16,9 +16,8 @@ import UIKit
 /// the whole session. Flushing on backgrounding bounds the loss to the time
 /// since the last flush; the session resumes counting on `applicationDidBecomeActive`.
 final class PlayStatsRecorderService: NSObject, UIApplicationDelegate {
-
   /// A session longer than a day is a clock jump or a stuck state, not play time.
-  private static let maxSessionSeconds: TimeInterval = 86_400
+  private static let maxSessionSeconds: TimeInterval = 86400
 
   private var observers: [NSObjectProtocol] = []
   private var gameID: String?

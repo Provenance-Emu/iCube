@@ -27,7 +27,10 @@ struct ModDetailView: View {
     List {
       switch load {
       case .loading:
-        Section { HStack { Spacer(); ProgressView(); Spacer() } }
+        Section { HStack { Spacer()
+          ProgressView()
+          Spacer()
+        } }
       case .failed(let message):
         Section {
           Text(message).foregroundColor(.secondary)
@@ -306,9 +309,13 @@ struct ModFileView: View {
         ProgressView(value: fraction) { Text(String(format: L("Downloading… %d%%"), Int(fraction * 100))) }
         Button(L("Cancel"), role: .cancel) { model.cancel() }
       case .verifying:
-        HStack { ProgressView(); Text(L("Checking the download…")) }
+        HStack { ProgressView()
+          Text(L("Checking the download…"))
+        }
       case .extracting:
-        HStack { ProgressView(); Text(L("Unpacking…")) }
+        HStack { ProgressView()
+          Text(L("Unpacking…"))
+        }
       case .ready:
         EmptyView()
       case .failed(let message):

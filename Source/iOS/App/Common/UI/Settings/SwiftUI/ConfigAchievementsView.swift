@@ -1,22 +1,22 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import CoreHaptics
+import Foundation
+import PVHelp
+import PVWebServer
+import QuartzCore
 import SwiftUI
 import UIKit
-import CoreHaptics
-import QuartzCore
-import PVWebServer
-import PVHelp
 #if os(iOS)
-import SafariServices
 import AudioToolbox
+import SafariServices
 #endif
 #if canImport(GameController)
 import GameController
 #endif
 #if os(iOS)
 #endif
-import Foundation
 
 #if USE_RETRO_ACHIEVEMENTS
 struct ConfigAchievementsView: View {
@@ -105,11 +105,16 @@ struct ConfigAchievementsView: View {
 
   private func apply(_ change: AchievementsChange) {
     switch change {
-    case .enabled(let v): enabled = v; DOLConfigBridge.setRaEnabled(v)
-    case .hardcore(let v): hardcore = v; DOLConfigBridge.setRaHardcoreEnabled(v)
-    case .spectator(let v): spectator = v; DOLConfigBridge.setRaSpectatorEnabled(v)
-    case .discordPresence(let v): discordPresence = v; DOLConfigBridge.setRaDiscordPresenceEnabled(v)
-    case .progress(let v): progress = v; DOLConfigBridge.setRaProgressEnabled(v)
+    case .enabled(let v): enabled = v
+      DOLConfigBridge.setRaEnabled(v)
+    case .hardcore(let v): hardcore = v
+      DOLConfigBridge.setRaHardcoreEnabled(v)
+    case .spectator(let v): spectator = v
+      DOLConfigBridge.setRaSpectatorEnabled(v)
+    case .discordPresence(let v): discordPresence = v
+      DOLConfigBridge.setRaDiscordPresenceEnabled(v)
+    case .progress(let v): progress = v
+      DOLConfigBridge.setRaProgressEnabled(v)
     }
   }
   #endif

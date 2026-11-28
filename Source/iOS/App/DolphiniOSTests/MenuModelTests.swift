@@ -7,7 +7,6 @@ import XCTest
 @testable import iCube
 
 final class MenuModelTests: XCTestCase {
-
   private func item(_ id: String, enabled: Bool = true) -> MenuItem {
     MenuItem(id: id, title: id, role: .action({}), isEnabled: enabled)
   }
@@ -302,11 +301,14 @@ final class MenuModelTests: XCTestCase {
     XCTAssertEqual(value, AnyHashable(1))
     XCTAssertTrue(closed)
   }
+
   func test_optionsPickerOpeningAndFocusNavigationDoNotWriteSelection() {
     var value = AnyHashable(2)
     var writes = 0
     var closes = 0
-    let selection = Binding(get: { value }, set: { value = $0; writes += 1 })
+    let selection = Binding(get: { value }, set: { value = $0
+      writes += 1
+    })
     let model = MenuModel.optionsPicker(itemID: "language", options: [("One", 1), ("Two", 2)],
                                         selection: selection, onPick: { closes += 1 })
     XCTAssertEqual(model.focusRequest, "language#2")
@@ -318,5 +320,4 @@ final class MenuModelTests: XCTestCase {
     XCTAssertEqual(closes, 1)
     XCTAssertEqual(value, AnyHashable(1))
   }
-
 }

@@ -20,10 +20,10 @@ enum ContinuityBrowseModelBuilder {
     let peerRows: [MenuItem] = peers.isEmpty
       ? [SettingsRow.caption("looking", L("Looking for other devices running iCube on this network…"))]
       : peers.map { p in
-          var item = SettingsRow.destination("peer-\(p.id)", p.name, L("Continue this device's game here, or browse its games."), icon: p.glyph, view: peerDetail(p.id))
-          item.subtitle = p.subtitle
-          return item
-        }
+        var item = SettingsRow.destination("peer-\(p.id)", p.name, L("Continue this device's game here, or browse its games."), icon: p.glyph, view: peerDetail(p.id))
+        item.subtitle = p.subtitle
+        return item
+      }
     sections.append(MenuSection(id: "peers", header: L("Nearby Devices"), footer: ContinuityManager.transportSecurityNotice, items: peerRows))
     var shareRow = SettingsRow.destination("share-library", L("Share My Library"), L("Let paired devices browse and copy this device's games."),
                                            icon: "square.stack.3d.up", view: sharing)
@@ -34,7 +34,7 @@ enum ContinuityBrowseModelBuilder {
     var deviceRows = [nameRow, shareRow]
     if let automaticCopy {
       deviceRows.append(SettingsRow.destination("automatic-copy", L("Automatic Game Copying"),
-        L("Automatically copy new games from paired nearby devices."), icon: "arrow.down.circle", view: automaticCopy))
+                                                L("Automatically copy new games from paired nearby devices."), icon: "arrow.down.circle", view: automaticCopy))
     }
     sections.append(MenuSection(id: "this-device", header: L("This Device"), items: deviceRows))
     if !trusted.isEmpty {

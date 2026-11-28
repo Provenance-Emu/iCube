@@ -1,53 +1,65 @@
 #import "DOLWiimoteBridge.h"
 
 #import "Core/Core.h"
-#import "Core/System.h"
 #include "Core/HW/Wiimote.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
-#include "InputCommon/InputConfig.h"
+#import "Core/System.h"
 #include "InputCommon/ControllerEmu/ControlGroup/Attachments.h"
 #include "InputCommon/ControllerEmu/Setting/NumericSetting.h"
+#include "InputCommon/InputConfig.h"
 
-NSString * const DOLWiiOverlayLayoutChangedNotification = @"DOLWiiOverlayLayoutChangedNotification";
+NSString* const DOLWiiOverlayLayoutChangedNotification = @"DOLWiiOverlayLayoutChangedNotification";
 
 @implementation DOLWiimoteBridge
 + (BOOL)isClassicActiveForWiimote:(NSInteger)index
 {
-  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index) return NO;
+  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index)
+    return NO;
   auto* wm_base = Wiimote::GetConfig()->GetController((int)index);
-  if (!wm_base) return NO;
+  if (!wm_base)
+    return NO;
   auto* wm = static_cast<WiimoteEmu::Wiimote*>(wm_base);
   return wm->GetActiveExtensionNumber() == WiimoteEmu::ExtensionNumber::CLASSIC;
 }
 
 + (BOOL)isSidewaysForWiimote:(NSInteger)index
 {
-  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index) return NO;
+  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index)
+    return NO;
   auto* wm_base = Wiimote::GetConfig()->GetController((int)index);
-  if (!wm_base) return NO;
+  if (!wm_base)
+    return NO;
   auto* wm = static_cast<WiimoteEmu::Wiimote*>(wm_base);
   return wm->IsSideways();
 }
 
 + (NSInteger)selectedExtensionForWiimote:(NSInteger)index
 {
-  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index) return 0;
+  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index)
+    return 0;
   auto* wm_base = Wiimote::GetConfig()->GetController((int)index);
-  if (!wm_base) return 0;
+  if (!wm_base)
+    return 0;
   auto* wm = static_cast<WiimoteEmu::Wiimote*>(wm_base);
-  auto* attachments = static_cast<ControllerEmu::Attachments*>(wm->GetWiimoteGroup(WiimoteEmu::WiimoteGroup::Attachments));
-  if (!attachments) return 0;
+  auto* attachments = static_cast<ControllerEmu::Attachments*>(
+      wm->GetWiimoteGroup(WiimoteEmu::WiimoteGroup::Attachments));
+  if (!attachments)
+    return 0;
   return (NSInteger)attachments->GetSelectionSetting().GetValue();
 }
 
 + (void)setExtensionForWiimote:(NSInteger)index extension:(NSInteger)extRaw
 {
-  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index) return;
+  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index)
+    return;
   auto* wm_base = Wiimote::GetConfig()->GetController((int)index);
-  if (!wm_base) return;
+  if (!wm_base)
+    return;
   auto* wm = static_cast<WiimoteEmu::Wiimote*>(wm_base);
-  auto* attachments = static_cast<ControllerEmu::Attachments*>(wm->GetWiimoteGroup(WiimoteEmu::WiimoteGroup::Attachments));
-  if (!attachments) return;
+  auto* attachments = static_cast<ControllerEmu::Attachments*>(
+      wm->GetWiimoteGroup(WiimoteEmu::WiimoteGroup::Attachments));
+  if (!attachments)
+    return;
   int maxVal = (int)WiimoteEmu::ExtensionNumber::MAX - 1;
   int val = std::max(0, std::min((int)extRaw, maxVal));
   {
@@ -56,19 +68,29 @@ NSString * const DOLWiiOverlayLayoutChangedNotification = @"DOLWiiOverlayLayoutC
   }
   // Saved now, not whenever something else writes WiimoteNew.ini: it was lost on relaunch.
   Wiimote::GetConfig()->SaveConfig();
-  dispatch_async(dispatch_get_main_queue(), ^{ [[NSNotificationCenter defaultCenter] postNotificationName:DOLWiiOverlayLayoutChangedNotification object:nil]; });
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName:DOLWiiOverlayLayoutChangedNotification
+                      object:nil];
+  });
 }
 
 + (void)setSidewaysForWiimote:(NSInteger)index enabled:(BOOL)enabled
 {
-  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index) return;
+  if (!Wiimote::GetConfig() || Wiimote::GetConfig()->GetControllerCount() <= index)
+    return;
   auto* wm_base = Wiimote::GetConfig()->GetController((int)index);
-  if (!wm_base) return;
+  if (!wm_base)
+    return;
   auto* wm = static_cast<WiimoteEmu::Wiimote*>(wm_base);
   auto* options = wm->GetWiimoteGroup(WiimoteEmu::WiimoteGroup::Options);
-  if (!options) return;
-  for (auto& setting : options->numeric_settings) {
-    if (setting->GetType() == ControllerEmu::SettingType::Bool && std::string(setting->GetININame()) == WiimoteEmu::Wiimote::SIDEWAYS_OPTION) {
+  if (!options)
+    return;
+  for (auto& setting : options->numeric_settings)
+  {
+    if (setting->GetType() == ControllerEmu::SettingType::Bool &&
+        std::string(setting->GetININame()) == WiimoteEmu::Wiimote::SIDEWAYS_OPTION)
+    {
       // Cast to bool numeric setting and set
       auto* boolSetting = static_cast<ControllerEmu::NumericSetting<bool>*>(setting.get());
       const auto lock = ControllerEmu::EmulatedController::GetStateLock();
@@ -77,6 +99,10 @@ NSString * const DOLWiiOverlayLayoutChangedNotification = @"DOLWiiOverlayLayoutC
     }
   }
   Wiimote::GetConfig()->SaveConfig();
-  dispatch_async(dispatch_get_main_queue(), ^{ [[NSNotificationCenter defaultCenter] postNotificationName:DOLWiiOverlayLayoutChangedNotification object:nil]; });
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName:DOLWiiOverlayLayoutChangedNotification
+                      object:nil];
+  });
 }
 @end

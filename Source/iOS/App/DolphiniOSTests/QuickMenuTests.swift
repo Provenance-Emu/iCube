@@ -39,7 +39,7 @@ final class QuickMenuTests: XCTestCase {
       XCTAssertFalse(PauseGestureTracker.routesToLivePerformance(reason: reason, preference: .livePerformance, hasGameplayController: true, isPaused: true))
     }
     XCTAssertFalse(PauseGestureTracker.routesToLivePerformance(reason: PauseGestureTracker.optionsReason,
-      preference: .livePerformance, hasGameplayController: true, isPaused: false))
+                                                               preference: .livePerformance, hasGameplayController: true, isPaused: false))
   }
 
   func test_optionsHold_timing() {

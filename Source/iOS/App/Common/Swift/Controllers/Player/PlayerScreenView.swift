@@ -26,7 +26,7 @@ struct PlayerScreenView: View {
     MenuScreen(
       // `displayState`, not `state`: the first render (and tvOS's default focus) must not see the
       // empty snapshot that `start()` has not replaced yet.
-      model: PlayerScreenModelBuilder.make(state: viewModel.displayState, actions: viewModel.actions, platform: .current),
+      model: viewModel.menuModel(platform: .current),
       style: .list,
       onBack: {
         // While a capture is armed, B / Menu must reach the capture (so `Button B` stays bindable);
@@ -34,7 +34,7 @@ struct PlayerScreenView: View {
         // must not pop the screen either. The `isCapturing` half is live only on tvOS: on iOS the
         // capture's `modal` intercepts a pad's B before it reaches here, but tvOS has no modal (Menu
         // arrives as an exit command), so this is the only guard there. Not dead code.
-        if !viewModel.displayState.isCapturing && !viewModel.isCaptureSettling { dismiss() }
+        if !viewModel.displayState.isCapturing, !viewModel.isCaptureSettling { dismiss() }
       },
       modal: modal)
       .navigationTitle(viewModel.slot.title)

@@ -80,11 +80,14 @@ public:
 
   [DOLConfigBridge resetGameplayConfigKeys];
 
-  XCTAssertFalse(Config::GetLayer(Config::LayerType::Base)->Exists(Config::MAIN_EMULATION_SPEED.GetLocation()),
-                 @"Reset must still clear the global value");
-  XCTAssertTrue(Config::GetLayer(Config::LayerType::LocalGame)->Exists(Config::MAIN_EMULATION_SPEED.GetLocation()),
+  XCTAssertFalse(
+      Config::GetLayer(Config::LayerType::Base)->Exists(Config::MAIN_EMULATION_SPEED.GetLocation()),
+      @"Reset must still clear the global value");
+  XCTAssertTrue(Config::GetLayer(Config::LayerType::LocalGame)
+                    ->Exists(Config::MAIN_EMULATION_SPEED.GetLocation()),
                 @"Reset must not delete the game's saved override");
-  XCTAssertTrue(Config::GetLayer(Config::LayerType::GlobalGame)->Exists(Config::MAIN_FAST_DISC_SPEED.GetLocation()),
+  XCTAssertTrue(Config::GetLayer(Config::LayerType::GlobalGame)
+                    ->Exists(Config::MAIN_FAST_DISC_SPEED.GetLocation()),
                 @"Reset must not delete the game's shipped fix");
 }
 @end

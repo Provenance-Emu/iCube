@@ -50,9 +50,11 @@ final class LibraryMetadataStoreTests: XCTestCase {
     let a = try LibraryMetadataStore(directoryURL: folder)
     let b = try LibraryMetadataStore(directoryURL: folder)
     let baseline = try a.draft(for: identity)
-    var first = baseline; first.tags = ["Remote tag"]
+    var first = baseline
+    first.tags = ["Remote tag"]
     _ = try b.commit(first, baseline: baseline, for: identity)
-    var second = baseline; second.title = "Local title"
+    var second = baseline
+    second.title = "Local title"
     let merged = try a.commit(second, baseline: baseline, for: identity)
     XCTAssertEqual(merged.title, "Local title")
     XCTAssertEqual(merged.tags, ["Remote tag"])
@@ -80,7 +82,7 @@ final class LibraryMetadataStoreTests: XCTestCase {
     for invalid in [
       LibraryMetadataStore.Draft(title: String(repeating: "x", count: 201)),
       .init(coverData: Data(repeating: 0, count: 256 * 1024 + 1)),
-      .init(tags: (0..<33).map { "Tag\($0)" }),
+      .init(tags: (0 ..< 33).map { "Tag\($0)" }),
       .init(tags: [String(repeating: "x", count: 41)])
     ] {
       XCTAssertThrowsError(try store.commit(invalid, baseline: saved, for: identity))
@@ -102,7 +104,8 @@ final class LibraryMetadataStoreTests: XCTestCase {
   func testCorruptReloadAndCommitPreserveMemoryAndCorruptBytes() throws {
     let store = try LibraryMetadataStore(directoryURL: folder)
     let saved = try store.commit(.init(title: "Keep"), baseline: .init(), for: identity)
-    let corrupt = Data("not json".utf8); try corrupt.write(to: file)
+    let corrupt = Data("not json".utf8)
+    try corrupt.write(to: file)
     try store.reload()
     XCTAssertThrowsError(try store.draft(for: identity))
     XCTAssertEqual(try store.draft(for: identity), saved)
@@ -126,10 +129,10 @@ final class LibraryMetadataStoreTests: XCTestCase {
     XCTAssertNil(LibraryMetadataStore.Identity.game(gameID: "G", discNumber: -1, revision: 0))
     XCTAssertNil(LibraryMetadataStore.Identity.contentHash("same-filename.iso"))
     let ids = [identity,
-      LibraryMetadataStore.Identity.game(gameID: "GSRE01", discNumber: 1, revision: 0)!,
-      LibraryMetadataStore.Identity.game(gameID: "GSRE01", discNumber: 0, revision: 1)!,
-      LibraryMetadataStore.Identity.contentHash(String(repeating: "a", count: 64))!,
-      LibraryMetadataStore.Identity.contentHash(String(repeating: "b", count: 64))!]
+               LibraryMetadataStore.Identity.game(gameID: "GSRE01", discNumber: 1, revision: 0)!,
+               LibraryMetadataStore.Identity.game(gameID: "GSRE01", discNumber: 0, revision: 1)!,
+               LibraryMetadataStore.Identity.contentHash(String(repeating: "a", count: 64))!,
+               LibraryMetadataStore.Identity.contentHash(String(repeating: "b", count: 64))!]
     XCTAssertEqual(Set(ids).count, 5)
     let store = try LibraryMetadataStore(directoryURL: folder)
     _ = try store.commit(.init(title: "First only"), baseline: .init(), for: identity)
@@ -152,22 +155,22 @@ final class LibraryMetadataStoreTests: XCTestCase {
     let store = try LibraryMetadataStore(directoryURL: folder)
     let saved = try store.commit(.init(title: "Keep", tags: ["Puzzle"]), baseline: .init(), for: identity)
     let bytes = try Data(contentsOf: file)
-    _ = try store.commit(saved, baseline: saved, for: identity, at: Date(timeIntervalSinceReferenceDate: 999999999))
+    _ = try store.commit(saved, baseline: saved, for: identity, at: Date(timeIntervalSinceReferenceDate: 999_999_999))
     XCTAssertEqual(try Data(contentsOf: file), bytes)
   }
 
   func testAllMaximumFieldValuesRoundTripAndBlankTitleClearsOnlyTitle() throws {
     let store = try LibraryMetadataStore(directoryURL: folder)
-    let maximum = LibraryMetadataStore.Draft(title: String(repeating: "x", count: 200), coverData: Data(repeating: 7, count: 256 * 1024), tags: (0..<32).map { String(repeating: "x", count: 38) + String(format: "%02d", $0) })
+    let maximum = LibraryMetadataStore.Draft(title: String(repeating: "x", count: 200), coverData: Data(repeating: 7, count: 256 * 1024), tags: (0 ..< 32).map { String(repeating: "x", count: 38) + String(format: "%02d", $0) })
     let saved = try store.commit(maximum, baseline: .init(), for: identity)
     XCTAssertEqual(saved, maximum)
-    var clearTitle = saved; clearTitle.title = "  \n "
+    var clearTitle = saved
+    clearTitle.title = "  \n "
     let cleared = try store.commit(clearTitle, baseline: saved, for: identity)
     XCTAssertNil(cleared.title)
     XCTAssertEqual(cleared.tags, maximum.tags)
     XCTAssertEqual(cleared.coverData, maximum.coverData)
   }
-
 
   func testEachGameWritesOnlyItsOwnShard() throws {
     let store = try LibraryMetadataStore(directoryURL: folder)
@@ -179,7 +182,6 @@ final class LibraryMetadataStoreTests: XCTestCase {
     let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
     XCTAssertEqual(files.filter { $0.pathExtension == "json" }.count, 2)
   }
-
 
   func testCloudValidationChecksBoundsTypesAndShardIdentity() throws {
     let valid = try JSONSerialization.data(withJSONObject: [recordKey("title"): ["updatedAt": 42.5, "value": "Cloud title"]])
@@ -202,20 +204,19 @@ final class LibraryMetadataStoreTests: XCTestCase {
     let store = try LibraryMetadataStore(directoryURL: folder)
     let saved = try store.commit(.init(title: "Keep", coverData: Data([1, 2, 3])), baseline: .init(), for: identity)
     try FileManager.default.removeItem(at: file)
-    var changed = saved; changed.tags = ["New"]
+    var changed = saved
+    changed.tags = ["New"]
     let result = try store.commit(changed, baseline: saved, for: identity)
     XCTAssertEqual(result.title, "Keep")
     XCTAssertEqual(result.coverData, Data([1, 2, 3]))
     XCTAssertEqual(result.tags, ["New"])
   }
 
-
   func testDiscSerialCaseAndWhitespaceDoNotSplitTheSameGame() {
     let normalized = LibraryMetadataStore.Identity.game(gameID: " gsre01 ", discNumber: 0, revision: 0)
     XCTAssertEqual(normalized, identity)
     XCTAssertEqual(normalized?.fileName, identity.fileName)
   }
-
 
   func testRepeatedDraftReadsShareTheImmutableCoverBufferUntilMetadataChanges() throws {
     let store = try LibraryMetadataStore(directoryURL: folder)
@@ -231,7 +232,6 @@ final class LibraryMetadataStoreTests: XCTestCase {
     }
     XCTAssertEqual(first.count, 256 * 1024)
   }
-
 
   func testReloadInvalidatesCachedProjectionAfterAnotherStoreCommits() throws {
     let first = try LibraryMetadataStore(directoryURL: folder)
@@ -251,7 +251,7 @@ final class LibraryMetadataStoreTests: XCTestCase {
   func testFullRecordRetentionIsBoundedAfterManyMaximumCovers() throws {
     let budget = 2 * 1024 * 1024
     let store = try LibraryMetadataStore(directoryURL: folder, cacheByteLimit: budget, cacheCountLimit: 3)
-    for index in 0..<40 {
+    for index in 0 ..< 40 {
       _ = try store.commit(.init(title: "Game \(index)", coverData: Data(repeating: UInt8(index), count: 256 * 1024)), baseline: .init(), for: otherIdentity(index))
       let stats = try store.cacheStatistics()
       XCTAssertLessThanOrEqual(stats.recordCount, 3)
@@ -262,11 +262,11 @@ final class LibraryMetadataStoreTests: XCTestCase {
 
   func testSummaryLookupsRetainNoDecodedCovers() throws {
     let writer = try LibraryMetadataStore(directoryURL: folder)
-    for index in 0..<20 {
+    for index in 0 ..< 20 {
       _ = try writer.commit(.init(title: "Game \(index)", coverData: Data(repeating: 7, count: 256 * 1024), tags: ["Puzzle"]), baseline: .init(), for: otherIdentity(index))
     }
     let reader = try LibraryMetadataStore(directoryURL: folder, cacheByteLimit: 1024 * 1024, cacheCountLimit: 2)
-    for index in 0..<20 {
+    for index in 0 ..< 20 {
       let summary = try reader.summary(for: otherIdentity(index))
       XCTAssertEqual(summary.title, "Game \(index)")
       XCTAssertEqual(summary.tags, ["Puzzle"])
@@ -284,7 +284,8 @@ final class LibraryMetadataStoreTests: XCTestCase {
     let saved = try store.draft(for: identity)
     _ = try store.draft(for: otherIdentity(1)) // Evicts and snapshots full validated bytes.
     try FileManager.default.removeItem(at: file)
-    var changed = saved; changed.tags = ["New"]
+    var changed = saved
+    changed.tags = ["New"]
     let result = try store.commit(changed, baseline: saved, for: identity)
     XCTAssertEqual(result.coverData, Data([1, 2, 3]))
     XCTAssertEqual(result.title, "Keep")
@@ -296,7 +297,8 @@ final class LibraryMetadataStoreTests: XCTestCase {
     let store = try LibraryMetadataStore(directoryURL: folder, cacheCountLimit: 1)
     let saved = try store.commit(.init(title: "Keep", coverData: Data([4])), baseline: .init(), for: identity)
     _ = try store.draft(for: otherIdentity(1))
-    let corrupt = Data("broken".utf8); try corrupt.write(to: file)
+    let corrupt = Data("broken".utf8)
+    try corrupt.write(to: file)
     XCTAssertThrowsError(try store.draft(for: identity))
     XCTAssertEqual(try store.draft(for: identity), saved)
     XCTAssertThrowsError(try store.commit(.init(title: "New"), baseline: saved, for: identity))
@@ -345,7 +347,9 @@ final class LibraryMetadataStoreTests: XCTestCase {
   func testRecoverySurvivesNewStoreAndCanceledDraftDoesNotLeakIntoSnapshot() throws {
     let store = try LibraryMetadataStore(directoryURL: folder, cacheCountLimit: 1)
     let saved = try store.commit(.init(title: "Keep", coverData: Data([3])), baseline: .init(), for: identity)
-    var canceled = try store.draft(for: identity); canceled.title = "Canceled"; canceled.coverData = Data([9])
+    var canceled = try store.draft(for: identity)
+    canceled.title = "Canceled"
+    canceled.coverData = Data([9])
     _ = try store.draft(for: otherIdentity(1))
     try FileManager.default.removeItem(at: file)
     let reopened = try LibraryMetadataStore(directoryURL: folder)
@@ -366,7 +370,10 @@ final class LibraryMetadataStoreTests: XCTestCase {
 
   func testOlderStoreEvictionCannotRollBackNewerPrimaryOrRecoveryTombstone() throws {
     let lock = NSRecursiveLock()
-    let gate: LibraryMetadataStore.FileAccess = { body in lock.lock(); defer { lock.unlock() }; try body() }
+    let gate: LibraryMetadataStore.FileAccess = { body in lock.lock()
+      defer { lock.unlock() }
+      try body()
+    }
     let old = try LibraryMetadataStore(directoryURL: folder, withFileAccess: gate, cacheCountLimit: 1)
     let before = try old.commit(.init(title: "Old", coverData: Data([1])), baseline: .init(), for: identity, at: Date(timeIntervalSinceReferenceDate: 1))
     let fresh = try LibraryMetadataStore(directoryURL: folder, withFileAccess: gate, cacheCountLimit: 1)
@@ -413,7 +420,7 @@ final class LibraryMetadataStoreTests: XCTestCase {
     try FileManager.default.removeItem(at: file)
     try FileManager.default.removeItem(at: recovery.appendingPathComponent(identity.fileName))
     failSnapshot = true
-    for _ in 0..<100 {
+    for _ in 0 ..< 100 {
       let summary = try store.summary(for: identity)
       XCTAssertEqual(summary.title, "Cached title")
       XCTAssertEqual(summary.tags, ["Cached tag"])
@@ -449,7 +456,7 @@ final class LibraryMetadataStoreTests: XCTestCase {
 
   func testSummaryByteAndCountBudgetsBoundLightweightProjectionRetention() throws {
     let store = try LibraryMetadataStore(directoryURL: folder, cacheCountLimit: 1, summaryByteLimit: 2048, summaryCountLimit: 2)
-    for index in 0..<20 {
+    for index in 0 ..< 20 {
       _ = try store.commit(.init(title: String(repeating: "x", count: 200), tags: ["Tag"]), baseline: .init(), for: otherIdentity(index))
       let stats = try store.cacheStatistics()
       XCTAssertLessThanOrEqual(stats.summaryCount, 2)
@@ -457,5 +464,4 @@ final class LibraryMetadataStoreTests: XCTestCase {
       XCTAssertLessThanOrEqual(stats.recordCount, 1)
     }
   }
-
 }

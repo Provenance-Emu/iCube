@@ -25,7 +25,7 @@ struct SkinLayout {
     let isPortrait = canvas.height > canvas.width
 
     // Calculate skin origin
-    let skinX = (canvas.width - scaledSize.width) / 2  // Always centered horizontally
+    let skinX = (canvas.width - scaledSize.width) / 2 // Always centered horizontally
     let skinY: CGFloat
     if isPortrait {
       // Bottom-anchored in portrait

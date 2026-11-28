@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import GameController
+import GamepadKit
 
 @objcMembers
 final class ControllerManager: NSObject, ObservableObject {

@@ -11,14 +11,14 @@ import WidgetKit
 /// (`ICubeWidgetDataSource`); the app calls `WidgetCenter.shared.reloadTimelines(ofKind:)` after
 /// every snapshot write (`EcosystemSurfaceRefresher`).
 struct RecentGamesWidget: Widget {
-    var body: some WidgetConfiguration {
-        FeedWidgetDefinition(
-            // Unchanged from the hand-drawn widget, so widgets already on a Home Screen stay.
-            kind: RecentGamesWidgetKind.identifier,
-            displayName: "Games",
-            description: "Your recently played games, games to continue, favorites or new additions. Edit the widget to choose the list.",
-            defaultFeed: ICubeWidgetDataSource.recentlyPlayed,
-            families: [.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge]
-        ).configuration
-    }
+  var body: some WidgetConfiguration {
+    FeedWidgetDefinition(
+      // Unchanged from the hand-drawn widget, so widgets already on a Home Screen stay.
+      kind: RecentGamesWidgetKind.identifier,
+      displayName: "Games",
+      description: "Your recently played games, games to continue, favorites or new additions. Edit the widget to choose the list.",
+      defaultFeed: ICubeWidgetDataSource.recentlyPlayed,
+      families: [.systemSmall, .systemMedium, .systemLarge, .systemExtraLarge]
+    ).configuration
+  }
 }

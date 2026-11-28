@@ -80,10 +80,14 @@ struct PerformanceTuningView: View {
     case .flag(let flag, let value):
       state[keyPath: flag.keyPath] = value
       write(flag, value)
-    case .cpuEngine(let v): state.engine = v; DOLConfigBridge.setMainCpuCore(v.rawValue)
-    case .vertexLoaderMode(let v): state.vertexLoaderMode = v; UserDefaults.standard.set(v, forKey: PerformanceTuningDefaultsKey.vertexLoaderMode)
-    case .cpuClockPercent(let v): state.cpuClockPercent = v; DOLConfigBridge.setMainOverclockPercent(v)
-    case .vbiPercent(let v): state.vbiPercent = v; DOLConfigBridge.setMainViOverclockPercent(v)
+    case .cpuEngine(let v): state.engine = v
+      DOLConfigBridge.setMainCpuCore(v.rawValue)
+    case .vertexLoaderMode(let v): state.vertexLoaderMode = v
+      UserDefaults.standard.set(v, forKey: PerformanceTuningDefaultsKey.vertexLoaderMode)
+    case .cpuClockPercent(let v): state.cpuClockPercent = v
+      DOLConfigBridge.setMainOverclockPercent(v)
+    case .vbiPercent(let v): state.vbiPercent = v
+      DOLConfigBridge.setMainViOverclockPercent(v)
     case .showValidation(let v): showValidation = v
     case .resetOptimizationsToRecommended:
       // Deletes the optimization keys so each follows the compiled default (MainSettings.cpp).

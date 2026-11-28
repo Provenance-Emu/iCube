@@ -402,7 +402,9 @@ final class RiivolutionModsTests: XCTestCase {
 
   func testPlayNeedsAChoiceAndSavesSelectionsBeforeWritingARunDescriptor() async throws {
     var savedForGame: String?
-    let subject = model(packs: [pack(selected: 0)]) { _, gameID in savedForGame = gameID; return true }
+    let subject = model(packs: [pack(selected: 0)]) { _, gameID in savedForGame = gameID
+      return true
+    }
     await subject.load()
     XCTAssertFalse(subject.canLaunch)
     XCTAssertNil(subject.writeRunDescriptor())

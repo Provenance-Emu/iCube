@@ -46,7 +46,6 @@ struct GraphicsHacksState: Equatable {
   var useComputeEfbXfb = false
   var useComputeVertexDecode = false
   var noMipmapping = false
-  var gpuEfbPeekResolve = false
   var viDecimateInterlace = false
 
   /// The Safe/Default/Fast ladder: any stored value other than 512 or 0 shows as Default (128), never a dash.
@@ -80,6 +79,5 @@ enum GraphicsHacksChange: Equatable {
   case useComputeEfbXfb(Bool)
   case useComputeVertexDecode(Bool)
   case noMipmapping(Bool)
-  case gpuEfbPeekResolve(Bool)
   case viDecimateInterlace(Bool)
 }

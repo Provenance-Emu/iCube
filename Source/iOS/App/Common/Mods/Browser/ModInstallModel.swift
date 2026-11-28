@@ -281,7 +281,7 @@ final class ModInstallModel: ObservableObject {
   }
 
   /// Extracts an archive next to itself (or files a bare download under the same folder) and deletes the archive.
-  nonisolated private static func unpack(_ archive: URL, in directory: URL) throws -> URL {
+  private nonisolated static func unpack(_ archive: URL, in directory: URL) throws -> URL {
     let fm = FileManager.default
     let extracted = directory.appendingPathComponent(extractedFolderName, isDirectory: true)
     try? fm.removeItem(at: extracted)

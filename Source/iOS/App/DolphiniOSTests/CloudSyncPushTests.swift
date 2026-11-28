@@ -232,9 +232,9 @@ final class CloudSyncPushCoalescerTests: XCTestCase {
   func testEveryTokenIsAnsweredExactlyOnce() {
     var coalescer = CloudSyncPushCoalescer()
     var answered: [Int] = []
-    for token in 0..<5 { _ = coalescer.arrive(token) }
+    for token in 0 ..< 5 { _ = coalescer.arrive(token) }
     _ = coalescer.beginRun()
-    for token in 5..<8 { _ = coalescer.arrive(token) }
+    for token in 5 ..< 8 { _ = coalescer.arrive(token) }
     if coalescer.expire(6) { answered.append(6) }
     var finish = coalescer.finishRun()
     answered += finish.answered
@@ -243,7 +243,7 @@ final class CloudSyncPushCoalescerTests: XCTestCase {
       finish = coalescer.finishRun()
       answered += finish.answered
     }
-    XCTAssertEqual(answered.sorted(), Array(0..<8))
+    XCTAssertEqual(answered.sorted(), Array(0 ..< 8))
     XCTAssertEqual(coalescer.phase, .idle)
   }
 }

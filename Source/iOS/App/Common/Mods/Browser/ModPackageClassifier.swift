@@ -212,7 +212,7 @@ enum ModPackageClassifier {
     }
     var directories: Set<[String]> = []
     for texture in textures where !texture.parent.isEmpty {
-      for length in 1...texture.parent.count { directories.insert(Array(texture.parent.prefix(length))) }
+      for length in 1 ... texture.parent.count { directories.insert(Array(texture.parent.prefix(length))) }
     }
     var folders: [[String]: String] = [:]
     for directory in directories {

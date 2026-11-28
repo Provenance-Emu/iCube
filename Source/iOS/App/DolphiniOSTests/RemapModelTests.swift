@@ -6,7 +6,6 @@ import XCTest
 @testable import iCube
 
 final class RemapModelTests: XCTestCase {
-
   // MARK: Groups
 
   /// Pins the raw values to the C++ enums (`PadGroup` in GCPadEmu.h,
@@ -144,7 +143,7 @@ final class RemapModelTests: XCTestCase {
   /// the rest value the machine settled on, so an analog input resting above zero never reads held.
   func test_isHeld_isTheRiseAboveTheRestBaseline() {
     var m = machine(baseline: [0.12, 0])
-    XCTAssertNil(m.poll([0.12, 0]))  // listening, rest re-baselined to 0.12
+    XCTAssertNil(m.poll([0.12, 0])) // listening, rest re-baselined to 0.12
     XCTAssertFalse(m.isHeld(0, in: [0.12, 0]), "resting")
     XCTAssertFalse(m.isHeld(0, in: [0.12 + cfg.restEpsilon - 0.01, 0]), "under the epsilon")
     XCTAssertTrue(m.isHeld(0, in: [0.9, 0]), "pressed")

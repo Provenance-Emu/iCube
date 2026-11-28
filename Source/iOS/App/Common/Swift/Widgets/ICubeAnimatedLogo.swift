@@ -27,8 +27,8 @@ struct ICubeAnimatedLogo: View {
           .offset(x: cos(angle) * height * logo.sparkleRingRadius, y: sin(angle) * height * logo.sparkleRingRadius)
           .opacity(sparkleOpacity)
           .animation(reduceMotion ? nil : .easeInOut(duration: logo.sparkleDuration)
-                       .delay(Double(index) * logo.sparkleStagger).repeatForever(autoreverses: true),
-                     value: sparkleOpacity)
+            .delay(Double(index) * logo.sparkleStagger).repeatForever(autoreverses: true),
+            value: sparkleOpacity)
       }
 
       Image("iCube-Logo-Square-NoText")

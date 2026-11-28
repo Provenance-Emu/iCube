@@ -65,6 +65,7 @@ enum MotionSettings {
   static func setEnhancedShakeDetection(_ value: Bool, in store: UserDefaults = .standard) {
     store.set(value, forKey: Key.enhancedShakeDetection)
   }
+
   static func setIRPointerGain(_ value: Double, in store: UserDefaults = .standard) { store.set(value, forKey: Key.irPointerGain) }
   static func setGyroPointerSensitivity(_ value: Double, in store: UserDefaults = .standard) {
     store.set(value, forKey: Key.gyroPointerSensitivity)

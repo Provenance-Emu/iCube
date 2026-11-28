@@ -20,7 +20,9 @@ final class PauseMenuModelBuilderTests: XCTestCase {
     XCTAssertEqual(count, 1)
   }
 
-  private final class Box { var value: AnyHashable; init(_ v: AnyHashable) { value = v } }
+  private final class Box { var value: AnyHashable
+    init(_ v: AnyHashable) { value = v }
+  }
 
   private func bindings(ff: Box = Box(PauseMenuModelBuilder.fastForwardOff), slot: Box = Box(3), muted: Box = Box(false), shader: Box = Box(ShaderQuickApply.noneValue), resolution: Box = Box(1), volume: Box = Box(100), recording: Box = Box(false), perfHUD: Box = Box(false), engine: Box = Box(CpuEngine.cachedInterpreter.rawValue)) -> PauseMenuBindings {
     PauseMenuBindings(

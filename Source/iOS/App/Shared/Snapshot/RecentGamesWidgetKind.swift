@@ -5,5 +5,5 @@ import Foundation
 /// boundary: the app calls `WidgetCenter.shared.reloadTimelines(ofKind:)` with it, the appex's
 /// widget declares itself with it, and both already depend on this package.
 public enum RecentGamesWidgetKind {
-    public static let identifier = "com.joemattiello.icube.RecentGamesWidget"
+  public static let identifier = "com.joemattiello.icube.RecentGamesWidget"
 }

@@ -4693,6 +4693,10 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "D-Pad ↑" = "D-Pad ↑";
 "D-Pad →" = "D-Pad →";
 "D-Pad ↓" = "D-Pad ↓";
+"D-Pad ← (as stick)" = "D-Pad ← (as stick)";
+"D-Pad ↑ (as stick)" = "D-Pad ↑ (as stick)";
+"D-Pad → (as stick)" = "D-Pad → (as stick)";
+"D-Pad ↓ (as stick)" = "D-Pad ↓ (as stick)";
 "Home" = "Home";
 "Left Stick Click" = "Left Stick Click";
 "On-screen %@" = "On-screen %@";
@@ -6052,6 +6056,14 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "One download brings all of these." = "One download brings all of these.";
 "%lld VARIANTS" = "%lld VARIANTS";
 "%lld variants" = "%lld variants";
+"This library copies games straight into your library." = "This library copies games straight into your library.";
+"The cover could not be loaded." = "The cover could not be loaded.";
+"Publisher" = "Publisher";
+"Genre" = "Genre";
+"Physical Cases" = "Physical Cases";
+"Controller Covers Screen" = "Controller Covers Screen";
+
+"Not enough free space to download this game (%@ required, %@ available)." = "Not enough free space to download this game (%@ required, %@ available).";
 "%@: %@ and %d more" = "%@: %@ and %d more";
 "%d files here go inside the game's own archives (%@). That needs a PC tool to rebuild them; iCube can only replace whole disc files." = "%d files here go inside the game's own archives (%@). That needs a PC tool to rebuild them; iCube can only replace whole disc files.";
 "%d replacement game file." = "%d replacement game file.";

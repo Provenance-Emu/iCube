@@ -1,23 +1,23 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import CoreHaptics
+import Foundation
+import os
+import PVHelp
+import PVWebServer
+import QuartzCore
 import SwiftUI
 import UIKit
-import CoreHaptics
-import QuartzCore
-import PVWebServer
-import PVHelp
 #if os(iOS)
-import SafariServices
 import AudioToolbox
+import SafariServices
 #endif
 #if canImport(GameController)
 import GameController
 #endif
 #if os(iOS)
 #endif
-import Foundation
-import os
 
 // MARK: - DSU Bonjour Discovery
 
@@ -82,18 +82,18 @@ final class DSUDiscoveryBrowser: NSObject, ObservableObject {
   /// A service's TXT record changed (a phone starting or leaving its controller session): its row
   /// takes the new advert. Nil when the service has no row yet or its advert is unchanged.
   nonisolated static func updatingAdvert(_ advert: DSUAdvert?, ofServiceNamed name: String,
-                             in servers: [DSUDiscoveredServer]) -> [DSUDiscoveredServer]? {
+                                         in servers: [DSUDiscoveredServer]) -> [DSUDiscoveredServer]? {
     guard let index = servers.firstIndex(where: { $0.name == name }), servers[index].advert != advert else { return nil }
     var updated = servers
     updated[index].advert = advert
     return updated
   }
 
-  nonisolated fileprivate static func rowName(_ service: NetService) -> String {
+  fileprivate nonisolated static func rowName(_ service: NetService) -> String {
     service.name.isEmpty ? "DSU" : service.name
   }
 
-  nonisolated fileprivate static func advert(of service: NetService) -> DSUAdvert? {
+  fileprivate nonisolated static func advert(of service: NetService) -> DSUAdvert? {
     service.txtRecordData().flatMap { DSUAdvert.parse(BonjourTXTRecord.dictionary(from: $0)) }
   }
 }

@@ -38,24 +38,39 @@ struct GraphicsEnhancementsView: View {
     // Decided against the snapshot as it was before this change.
     let effects = GraphicsEnhancementsState.sideEffects(of: change, in: state)
     switch change {
-    case .efbScale(let v): state.efbScale = v; DOLConfigBridge.setGfxEfbScale(v)
-    case .metalFXSpatialUpscale(let v): state.metalFXSpatialUpscale = v; DOLConfigBridge.setGfxMetalFXSpatialUpscale(v)
-    case .anisotropy(let v): state.anisotropy = v; DOLConfigBridge.setGfxEnhanceAnisotropySamples(v)
-    case .msaa(let v): state.msaa = v; DOLConfigBridge.setGfxMsaa(v)
-    case .ssaa(let v): state.ssaa = v; DOLConfigBridge.setGfxSsaa(v)
-    case .outputResampling(let v): state.outputResampling = v; DOLConfigBridge.setGfxEnhanceOutputResampling(v)
-    case .trueColor(let v): state.trueColor = v; DOLConfigBridge.setGfxEnhanceForceTrueColor(v)
-    case .disableCopyFilter(let v): state.disableCopyFilter = v; DOLConfigBridge.setGfxEnhanceDisableCopyFilter(v)
-    case .widescreenHack(let v): state.widescreenHack = v; DOLConfigBridge.setGfxWidescreenHack(v)
-    case .hdrOutput(let v): state.hdrOutput = v; DOLConfigBridge.setGfxEnhanceHDROutput(v)
-    case .gpuTextureDecoding(let v): state.gpuTextureDecoding = v; DOLConfigBridge.setGfxEnableGPUTextureDecoding(v)
-    case .disableFog(let v): state.disableFog = v; DOLConfigBridge.setGfxDisableFog(v)
-    case .arbitraryMipmapDetection(let v): state.arbitraryMipmapDetection = v; DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetection(v)
-    case .arbitraryMipmapThreshold(let v): state.arbitraryMipmapThreshold = v; DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float(v))
+    case .efbScale(let v): state.efbScale = v
+      DOLConfigBridge.setGfxEfbScale(v)
+    case .metalFXSpatialUpscale(let v): state.metalFXSpatialUpscale = v
+      DOLConfigBridge.setGfxMetalFXSpatialUpscale(v)
+    case .anisotropy(let v): state.anisotropy = v
+      DOLConfigBridge.setGfxEnhanceAnisotropySamples(v)
+    case .msaa(let v): state.msaa = v
+      DOLConfigBridge.setGfxMsaa(v)
+    case .ssaa(let v): state.ssaa = v
+      DOLConfigBridge.setGfxSsaa(v)
+    case .outputResampling(let v): state.outputResampling = v
+      DOLConfigBridge.setGfxEnhanceOutputResampling(v)
+    case .trueColor(let v): state.trueColor = v
+      DOLConfigBridge.setGfxEnhanceForceTrueColor(v)
+    case .disableCopyFilter(let v): state.disableCopyFilter = v
+      DOLConfigBridge.setGfxEnhanceDisableCopyFilter(v)
+    case .widescreenHack(let v): state.widescreenHack = v
+      DOLConfigBridge.setGfxWidescreenHack(v)
+    case .hdrOutput(let v): state.hdrOutput = v
+      DOLConfigBridge.setGfxEnhanceHDROutput(v)
+    case .gpuTextureDecoding(let v): state.gpuTextureDecoding = v
+      DOLConfigBridge.setGfxEnableGPUTextureDecoding(v)
+    case .disableFog(let v): state.disableFog = v
+      DOLConfigBridge.setGfxDisableFog(v)
+    case .arbitraryMipmapDetection(let v): state.arbitraryMipmapDetection = v
+      DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetection(v)
+    case .arbitraryMipmapThreshold(let v): state.arbitraryMipmapThreshold = v
+      DOLConfigBridge.setGfxEnhanceArbitraryMipmapDetectionThreshold(Float(v))
     }
     for effect in effects {
       switch effect {
-      case .clearSSAA: state.ssaa = false; DOLConfigBridge.setGfxSsaa(false)
+      case .clearSSAA: state.ssaa = false
+        DOLConfigBridge.setGfxSsaa(false)
       }
     }
   }

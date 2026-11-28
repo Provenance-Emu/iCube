@@ -10,6 +10,7 @@ final class DebugEventBusTests: XCTestCase {
     XCTAssertEqual(d[0].new as? Int, 2)
     XCTAssertNil(d[1].old)
   }
+
   func testEventEncodingHasTimestampAndKind() throws {
     let json = DebugEventBus.encode(kind: "core.state", fields: ["state": "paused"])
     let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])

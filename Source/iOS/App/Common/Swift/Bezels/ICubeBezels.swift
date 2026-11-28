@@ -3,6 +3,7 @@
 
 import CoreGraphics
 import Foundation
+import PVSystems
 import SkinKitBezels
 
 /// iCube's side of the shared TV bezels (SkinKit `docs/bezels.md`): a TV drawn around the game picture in
@@ -10,12 +11,11 @@ import SkinKitBezels
 ///
 /// SkinKit owns the rules, the bundled TVs, the player's own bezels and the views. What is here is what only
 /// iCube knows: where things are stored, which system is running, and how the emulation screen's state maps
-/// onto the package's placement rule. iCube shows a TV the plain way, as an image with the picture in its
-/// screen; nothing extra is drawn on the GPU.
+/// onto the package's placement rule.
 enum ICubeBezels {
   /// `SystemIdentifier` raw values (PVSystems): the bundled TVs and The Bezel Project's table are keyed by them.
-  static let gameCubeSystemID = "com.provenance.gamecube"
-  static let wiiSystemID = "com.provenance.wii"
+  static let gameCubeSystemID = SystemIdentifier.GameCube.rawValue
+  static let wiiSystemID = SystemIdentifier.Wii.rawValue
 
   /// Before every stored choice's key, in the app's `snake_case` defaults style (`bezel_chosenBezel`, ...).
   static let settingsKeyPrefix = "bezel_"
@@ -40,9 +40,11 @@ enum ICubeBezels {
 
   /// `bezel` laid out as a plain image over `container`. A built-in TV's room is drawn for the container's shape
   /// from `seat`, so it covers the screen on a phone and a tablet alike; draw its artwork on `TVBezelLayout.canvas`.
+  /// `safeAreaTop` is the screen's top inset: in portrait the TV hangs from the top and is placed below a notch
+  /// or Dynamic Island.
   static func layout(bezel: TVBezel, container: CGSize, pictureAspect: CGSize,
-                     seat: TVBezelSeat = ICubeBezels.seat()) -> TVBezelLayout? {
-    TVBezelLayout(bezel: bezel, container: container, pictureAspect: pictureAspect, seat: seat)
+                     seat: TVBezelSeat = ICubeBezels.seat(), safeAreaTop: CGFloat = 0) -> TVBezelLayout? {
+    TVBezelLayout(bezel: bezel, container: container, pictureAspect: pictureAspect, seat: seat, safeAreaTop: safeAreaTop)
   }
 
   private static let log = ICubeLog.logger("Bezels")
@@ -68,7 +70,8 @@ enum ICubeBezels {
       systems: {
         [BezelEnvironment.System(id: gameCubeSystemID, name: "GameCube"),
          BezelEnvironment.System(id: wiiSystemID, name: "Wii")]
-      })
+      },
+      hasShaderPreset: { GameplayBezelRenderer.presetURL($0) != nil })
     BezelLog.handler = { level, message in
       switch level {
       case .info: log.info("\(message)")
@@ -120,7 +123,9 @@ enum ICubeBezels {
       controls: controls(state),
       layoutSupportsTV: !state.onExternalDisplay,
       choiceIsAutomatic: choiceIsAutomatic,
-      editingLayout: state.editingLayout)
+      editingLayout: state.editingLayout,
+      // The TV is a plain image laid out over the whole screen (`layout`), which draws a portrait room.
+      supportsPortrait: true)
   }
 
   static func showsTV(_ state: ScreenState, choiceIsAutomatic: Bool) -> Bool {

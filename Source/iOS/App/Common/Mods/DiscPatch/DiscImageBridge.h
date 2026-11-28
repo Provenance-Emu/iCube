@@ -7,7 +7,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// The container a disc image is stored in (`DiscIO::BlobType`, reduced to what the patch flow tells apart).
+/// The container a disc image is stored in (`DiscIO::BlobType`, reduced to what the patch flow
+/// tells apart).
 typedef NS_ENUM(NSInteger, DOLDiscContainer) {
   DOLDiscContainerPlain,  ///< ISO / GCM, byte-patchable as is.
   DOLDiscContainerRVZ,
@@ -56,7 +57,8 @@ typedef void (^DOLDiscConversionProgress)(double fraction);
 @interface DiscImageBridge : NSObject
 
 /// Opens the image at `path` and reads its identity. nil when DiscIO cannot read it.
-+ (nullable DOLDiscImageInfo*)inspectImageAtPath:(NSString*)path NS_SWIFT_NAME(inspectImage(atPath:));
++ (nullable DOLDiscImageInfo*)inspectImageAtPath:(NSString*)path
+    NS_SWIFT_NAME(inspectImage(atPath:));
 
 /// The same facts for a library entry, taken from its cached `GameFile` (no disc IO).
 + (nullable DOLDiscImageInfo*)infoForGameItem:(TVGameItem*)item NS_SWIFT_NAME(info(forGameItem:));
@@ -67,7 +69,8 @@ typedef void (^DOLDiscConversionProgress)(double fraction);
                         to:(NSString*)destinationPath
                      token:(DOLDiscConversionToken*)token
                   progress:(DOLDiscConversionProgress)progress
-                     error:(NSError* _Nullable* _Nullable)error NS_SWIFT_NAME(convertToPlain(from:to:token:progress:));
+                     error:(NSError* _Nullable* _Nullable)error
+    NS_SWIFT_NAME(convertToPlain(from:to:token:progress:));
 
 /// Writes `sourcePath` as RVZ (`DiscIO::ConvertToWIAOrRVZ`): zstd level 5, 128 KiB blocks, the
 /// defaults of Dolphin's own convert dialog. Failure and cancellation behave as for plain.
@@ -75,7 +78,8 @@ typedef void (^DOLDiscConversionProgress)(double fraction);
                       to:(NSString*)destinationPath
                    token:(DOLDiscConversionToken*)token
                 progress:(DOLDiscConversionProgress)progress
-                   error:(NSError* _Nullable* _Nullable)error NS_SWIFT_NAME(convertToRVZ(from:to:token:progress:));
+                   error:(NSError* _Nullable* _Nullable)error
+    NS_SWIFT_NAME(convertToRVZ(from:to:token:progress:));
 
 /// The name of every file in the image's game partition, lower-cased: what a Riivolution patch can
 /// replace by name. nil when DiscIO cannot read the image or it has no file system (a WAD, a DOL).

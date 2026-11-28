@@ -3,8 +3,8 @@
 
 #import "MsgAlertManager.h"
 
-#import <mutex>
 #import <UIKit/UIKit.h>
+#import <mutex>
 
 #import "Common/Event.h"
 #import "Common/MsgHandler.h"
@@ -17,39 +17,60 @@
 @interface MsgAlertManager ()
 
 // We need to declare this early so the static function below can see it.
-- (bool)handleAlertWithCaption:(const char*)caption text:(const char*)text question:(bool)question style:(Common::MsgType)style;
+- (bool)handleAlertWithCaption:(const char*)caption
+                          text:(const char*)text
+                      question:(bool)question
+                         style:(Common::MsgType)style;
 
 @end
 
-// iCube: "Could not launch IOS/the Wii Menu/title ... because it is missing from the NAND." (ES.cpp). The text
-// reaches this handler already translated, so it is matched against the localized templates rather than the
-// English words: every fixed fragment of the first line (the text around its {0:016x}) must be present.
-static bool IsMissingFromNANDAlert(NSString* text) {
-  if (text == nil) { return false; }
+// iCube: "Could not launch IOS/the Wii Menu/title ... because it is missing from the NAND."
+// (ES.cpp). The text reaches this handler already translated, so it is matched against the
+// localized templates rather than the English words: every fixed fragment of the first line (the
+// text around its {0:016x}) must be present.
+static bool IsMissingFromNANDAlert(NSString* text)
+{
+  if (text == nil)
+  {
+    return false;
+  }
 
   NSArray<NSString*>* templates = @[
-    DOLCoreLocalizedString(@"Could not launch IOS {0:016x} because it is missing from the NAND.\nThe emulated software will likely hang now."),
-    DOLCoreLocalizedString(@"Could not launch the Wii Menu because it is missing from the NAND.\nThe emulated software will likely hang now."),
-    DOLCoreLocalizedString(@"Could not launch title {0:016x} because it is missing from the NAND.\nThe emulated software will likely hang now."),
+    DOLCoreLocalizedString(@"Could not launch IOS {0:016x} because it is missing from the "
+                           @"NAND.\nThe emulated software will likely hang now."),
+    DOLCoreLocalizedString(@"Could not launch the Wii Menu because it is missing from the "
+                           @"NAND.\nThe emulated software will likely hang now."),
+    DOLCoreLocalizedString(@"Could not launch title {0:016x} because it is missing from the "
+                           @"NAND.\nThe emulated software will likely hang now."),
   ];
 
-  for (NSString* messageTemplate in templates) {
+  for (NSString* messageTemplate in templates)
+  {
     NSString* firstLine = [messageTemplate componentsSeparatedByString:@"\n"].firstObject;
     BOOL matches = firstLine.length > 0;
-    for (NSString* fragment in [firstLine componentsSeparatedByString:@"{0:016x}"]) {
-      if (fragment.length > 0 && [text rangeOfString:fragment].location == NSNotFound) {
+    for (NSString* fragment in [firstLine componentsSeparatedByString:@"{0:016x}"])
+    {
+      if (fragment.length > 0 && [text rangeOfString:fragment].location == NSNotFound)
+      {
         matches = NO;
         break;
       }
     }
-    if (matches) { return true; }
+    if (matches)
+    {
+      return true;
+    }
   }
 
   return false;
 }
 
-static bool MsgAlert(const char* caption, const char* text, bool question, Common::MsgType style) {
-  return [[MsgAlertManager shared] handleAlertWithCaption:caption text:text question:question style:style];
+static bool MsgAlert(const char* caption, const char* text, bool question, Common::MsgType style)
+{
+  return [[MsgAlertManager shared] handleAlertWithCaption:caption
+                                                     text:text
+                                                 question:question
+                                                    style:style];
 }
 
 // Non-interactive core notes (Common::RecordBreadcrumb), e.g. an undecoded PowerPC opcode
@@ -64,12 +85,14 @@ static void CoreBreadcrumb(const char* category, const char* message)
   }
 }
 
-@implementation MsgAlertManager {
+@implementation MsgAlertManager
+{
   std::mutex _alertLock;
   Common::Event _waitEvent;
 }
 
-+ (MsgAlertManager*)shared {
++ (MsgAlertManager*)shared
+{
   static MsgAlertManager* sharedInstance = nil;
   static dispatch_once_t onceToken;
 
@@ -80,14 +103,19 @@ static void CoreBreadcrumb(const char* category, const char* message)
   return sharedInstance;
 }
 
-- (void)registerHandler {
+- (void)registerHandler
+{
   Common::RegisterMsgAlertHandler(MsgAlert);
   Common::RegisterBreadcrumbHandler(CoreBreadcrumb);
 }
 
-- (bool)handleAlertWithCaption:(const char*)caption text:(const char*)text question:(bool)question style:(Common::MsgType)style {
+- (bool)handleAlertWithCaption:(const char*)caption
+                          text:(const char*)text
+                      question:(bool)question
+                         style:(Common::MsgType)style
+{
   std::lock_guard<std::mutex> guard(_alertLock);
-  
+
   NSString* foundationCaption = CToFoundationString(caption);
   NSString* foundationText = CToFoundationString(text);
 
@@ -97,34 +125,41 @@ static void CoreBreadcrumb(const char* category, const char* message)
                                                  text:foundationText ?: @""
                                              question:question];
 
-  // iCube: the GameCube BIOS/IPL "could not be found" panic is confusing on its own — the user has no
-  // idea what an IPL is or where to get one. Detect it and (a) replace the generic message with a
-  // clear explanation, (b) add a "Learn More" button to the help page. Boot behaviour is unchanged;
-  // this is messaging only. The pre-boot check in EmulationCoordinator handles the disc-launch case
-  // before this fires; this remains the safety net for the direct "Load GameCube Menu" boot.
+  // iCube: the GameCube BIOS/IPL "could not be found" panic is confusing on its own — the user has
+  // no idea what an IPL is or where to get one. Detect it and (a) replace the generic message with
+  // a clear explanation, (b) add a "Learn More" button to the help page. Boot behaviour is
+  // unchanged; this is messaging only. The pre-boot check in EmulationCoordinator handles the
+  // disc-launch case before this fires; this remains the safety net for the direct "Load GameCube
+  // Menu" boot.
   //
-  // Match "GC IPL" (NOT just "IPL"): only the two MISSING-dump panics (Boot.cpp 620/622) contain it,
-  // and both keep "GC IPL" as a Latin token in every shipped locale (Core.strings en/ja). The other
-  // IPL panics — "The IPL file is not a known good dump" (412) and "PAL/NTSC IPL found in …" (419) —
-  // mean the dump EXISTS but is bad/wrong-region, where "isn't installed" would be flatly wrong, so a
-  // bare "IPL" match would misfire on exactly those.
+  // Match "GC IPL" (NOT just "IPL"): only the two MISSING-dump panics (Boot.cpp 620/622) contain
+  // it, and both keep "GC IPL" as a Latin token in every shipped locale (Core.strings en/ja). The
+  // other IPL panics — "The IPL file is not a known good dump" (412) and "PAL/NTSC IPL found in …"
+  // (419) — mean the dump EXISTS but is bad/wrong-region, where "isn't installed" would be flatly
+  // wrong, so a bare "IPL" match would misfire on exactly those.
   const bool isGCIPLAlert = !question && foundationText != nil &&
-      [foundationText rangeOfString:@"GC IPL"].location != NSNotFound;
-  if (isGCIPLAlert) {
-    foundationText = DOLCoreLocalizedString(@"The GameCube BIOS (IPL) isn't installed. It's required to boot the GameCube menu. You can play games without it by turning off \"Load GameCube Main Menu\" in Settings → Config → GameCube. Learn More explains how to install a GameCube BIOS dump.");
+                            [foundationText rangeOfString:@"GC IPL"].location != NSNotFound;
+  if (isGCIPLAlert)
+  {
+    foundationText = DOLCoreLocalizedString(
+        @"The GameCube BIOS (IPL) isn't installed. It's required to boot the GameCube menu. You "
+        @"can play games without it by turning off \"Load GameCube Main Menu\" in Settings → "
+        @"Config → GameCube. Learn More explains how to install a GameCube BIOS dump.");
   }
-  
-  // iCube: the same for the "missing from the NAND" panic, which otherwise leaves the user at a dead end:
-  // add a button to the bundled guide for installing their own Wii system files. The message is untouched.
+
+  // iCube: the same for the "missing from the NAND" panic, which otherwise leaves the user at a
+  // dead end: add a button to the bundled guide for installing their own Wii system files. The
+  // message is untouched.
   const bool isMissingNANDAlert = !question && IsMissingFromNANDAlert(foundationText);
 
   UIWindowScene* mainScene = [MainSceneCoordinator shared].mainScene;
 
-  if (mainScene == nil) {
+  if (mainScene == nil)
+  {
     // Dunno what we can do here - the main scene is somehow disconnected?
     return false;
   }
-  
+
   __block bool confirmed = false;
   __block bool alertFinished = false;
 
@@ -135,32 +170,38 @@ static void CoreBreadcrumb(const char* category, const char* message)
     window.frame = [UIScreen mainScreen].bounds;
     window.rootViewController = [[UIViewController alloc] init];
     window.windowLevel = UIWindowLevelAlert;
-    
+
     UIWindow* topWindow = mainScene.windows.lastObject;
     window.windowLevel = topWindow.windowLevel + 1;
-    
-    UIAlertController* alert = [UIAlertController alertControllerWithTitle:foundationCaption message:foundationText preferredStyle:UIAlertControllerStyleAlert];
-    
+
+    UIAlertController* alert =
+        [UIAlertController alertControllerWithTitle:foundationCaption
+                                            message:foundationText
+                                     preferredStyle:UIAlertControllerStyleAlert];
+
     void (^finish)(void) = ^void() {
       [window setHidden:true];
       alertFinished = true;
       self->_waitEvent.Set();
     };
 
-    if (question) {
-      [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"No") style:UIAlertActionStyleDefault
-        handler:^(UIAlertAction* action) {
-        confirmed = false;
+    if (question)
+    {
+      [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"No")
+                                                style:UIAlertActionStyleDefault
+                                              handler:^(UIAlertAction* action) {
+                                                confirmed = false;
 
-        finish();
-      }]];
+                                                finish();
+                                              }]];
 
-      [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Yes") style:UIAlertActionStyleDefault
-        handler:^(UIAlertAction * action) {
-        confirmed = true;
+      [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Yes")
+                                                style:UIAlertActionStyleDefault
+                                              handler:^(UIAlertAction* action) {
+                                                confirmed = true;
 
-        finish();
-      }]];
+                                                finish();
+                                              }]];
     }
     else
     {
@@ -168,30 +209,36 @@ static void CoreBreadcrumb(const char* category, const char* message)
       // Routed through the in-app wiki (DOLHelpBridge) rather than Safari: this alert fires on
       // tvOS too (no browser to open), and the guide is bundled offline, so this action is
       // always actionable instead of silently failing without network/on tvOS.
-      if (isGCIPLAlert) {
-        [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Learn More") style:UIAlertActionStyleDefault
-          handler:^(UIAlertAction* action) {
-          confirmed = true;
-          finish();
-          [DOLHelpBridge presentBIOSGuide];
-        }]];
+      if (isGCIPLAlert)
+      {
+        [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"Learn More")
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction* action) {
+                                                  confirmed = true;
+                                                  finish();
+                                                  [DOLHelpBridge presentBIOSGuide];
+                                                }]];
       }
 
-      if (isMissingNANDAlert) {
-        [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"How to Install Wii System Files") style:UIAlertActionStyleDefault
-          handler:^(UIAlertAction* action) {
-          confirmed = true;
-          finish();
-          [DOLHelpBridge presentWiiSystemFilesGuide];
-        }]];
+      if (isMissingNANDAlert)
+      {
+        [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(
+                                                            @"How to Install Wii System Files")
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction* action) {
+                                                  confirmed = true;
+                                                  finish();
+                                                  [DOLHelpBridge presentWiiSystemFilesGuide];
+                                                }]];
       }
 
-      [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK") style:UIAlertActionStyleDefault
-        handler:^(UIAlertAction* action) {
-        confirmed = true;
+      [alert addAction:[UIAlertAction actionWithTitle:DOLCoreLocalizedString(@"OK")
+                                                style:UIAlertActionStyleDefault
+                                              handler:^(UIAlertAction* action) {
+                                                confirmed = true;
 
-        finish();
-      }]];
+                                                finish();
+                                              }]];
     }
 
     [window makeKeyAndVisible];
@@ -199,20 +246,25 @@ static void CoreBreadcrumb(const char* category, const char* message)
     [window.rootViewController presentViewController:alert animated:true completion:nil];
   };
 
-  if ([NSThread isMainThread]) {
+  if ([NSThread isMainThread])
+  {
     // Present inline and pump the run loop so button handlers can fire while we wait.
     // dispatch_async + condition_variable::wait would deadlock the main thread.
     presentAlert();
-    while (!alertFinished) {
+    while (!alertFinished)
+    {
       [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
                                beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
     }
-  } else {
+  }
+  else
+  {
     dispatch_async(dispatch_get_main_queue(), presentAlert);
     _waitEvent.Wait();
   }
 
-  if (question) {
+  if (question)
+  {
     [DOLSentryTelemetryBridge recordMsgAlertAnswer:confirmed];
   }
 

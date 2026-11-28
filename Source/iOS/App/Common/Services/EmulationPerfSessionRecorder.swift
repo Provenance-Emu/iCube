@@ -34,7 +34,7 @@ final class EmulationPerfSessionRecorder {
     #if DEBUG
     shouldReport = SentrySDK.isEnabled
     #else
-    shouldReport = SentrySDK.isEnabled && Double.random(in: 0..<1) < SentryTelemetryService.releaseSessionSampleRate
+    shouldReport = SentrySDK.isEnabled && Double.random(in: 0 ..< 1) < SentryTelemetryService.releaseSessionSampleRate
     #endif
 
     startedAt = Date()

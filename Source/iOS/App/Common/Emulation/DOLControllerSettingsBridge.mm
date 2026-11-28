@@ -20,27 +20,29 @@
 #include "InputCommon/ControllerEmu/ControlGroup/ControlGroup.h"
 #include "InputCommon/ControllerEmu/ControllerEmu.h"
 #include "InputCommon/ControllerEmu/Setting/NumericSetting.h"
+#include "InputCommon/ControllerInterface/ControllerInterface.h"
 #include "InputCommon/InputConfig.h"
 #include "LocalizationUtil.h"
+#include "ProfileLoading.h"
 
 @interface DOLExpressionParseResult ()
-@property (nonatomic, readwrite) DOLExpressionStatus status;
-@property (nonatomic, readwrite, copy, nullable) NSString* message;
+@property(nonatomic, readwrite) DOLExpressionStatus status;
+@property(nonatomic, readwrite, copy, nullable) NSString* message;
 @end
 
 @implementation DOLExpressionParseResult
 @end
 
 @interface DOLNumericSettingInfo ()
-@property (nonatomic, readwrite) NSInteger index;
-@property (nonatomic, readwrite, copy) NSString* name;
-@property (nonatomic, readwrite, copy) NSString* suffix;
-@property (nonatomic, readwrite) DOLNumericSettingType type;
-@property (nonatomic, readwrite) double value;
-@property (nonatomic, readwrite) double minimum;
-@property (nonatomic, readwrite) double maximum;
-@property (nonatomic, readwrite) double defaultValue;
-@property (nonatomic, readwrite) BOOL isExpression;
+@property(nonatomic, readwrite) NSInteger index;
+@property(nonatomic, readwrite, copy) NSString* name;
+@property(nonatomic, readwrite, copy) NSString* suffix;
+@property(nonatomic, readwrite) DOLNumericSettingType type;
+@property(nonatomic, readwrite) double value;
+@property(nonatomic, readwrite) double minimum;
+@property(nonatomic, readwrite) double maximum;
+@property(nonatomic, readwrite) double defaultValue;
+@property(nonatomic, readwrite) BOOL isExpression;
 @property(nonatomic, readwrite, copy) NSString* explanation;
 @property(nonatomic, readwrite, copy) NSString* coreName;
 @end
@@ -51,14 +53,16 @@
 // The owner's input config, or nullptr before it is loaded or for a port it does not have.
 static InputConfig* ConfigFor(DOLControlGroupOwner owner, int index)
 {
-  InputConfig* config = owner == DOLControlGroupOwnerGCPad ? Pad::GetConfig() : Wiimote::GetConfig();
+  InputConfig* config =
+      owner == DOLControlGroupOwnerGCPad ? Pad::GetConfig() : Wiimote::GetConfig();
   if (!config || index < 0 || index >= config->GetControllerCount())
     return nullptr;
   return config;
 }
 
 // Same dispatch as TVControllerMappingBridge's group lookups, for all four owners.
-static ControllerEmu::ControlGroup* GroupFor(DOLControlGroupOwner owner, NSInteger portOneBased, NSInteger groupId)
+static ControllerEmu::ControlGroup* GroupFor(DOLControlGroupOwner owner, NSInteger portOneBased,
+                                             NSInteger groupId)
 {
   const int index = static_cast<int>(portOneBased - 1);
   if (!ConfigFor(owner, index))
@@ -96,7 +100,8 @@ static std::string ProfileKeyPrefix(DOLControlGroupOwner owner)
 
 static void SaveConfigFor(DOLControlGroupOwner owner)
 {
-  InputConfig* config = owner == DOLControlGroupOwnerGCPad ? Pad::GetConfig() : Wiimote::GetConfig();
+  InputConfig* config =
+      owner == DOLControlGroupOwnerGCPad ? Pad::GetConfig() : Wiimote::GetConfig();
   if (config)
     config->SaveConfig();
 }
@@ -195,7 +200,8 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
   if (!std::isfinite(value))
     return;
   auto* group = GroupFor(owner, portOneBased, groupId);
-  if (!group || settingIndex < 0 || static_cast<size_t>(settingIndex) >= group->numeric_settings.size())
+  if (!group || settingIndex < 0 ||
+      static_cast<size_t>(settingIndex) >= group->numeric_settings.size())
     return;
   {
     // The CPU thread reads these settings; Dolphin's own UI holds the state lock to change them.
@@ -206,7 +212,8 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
     case ControllerEmu::SettingType::Int:
     {
       auto* typed = static_cast<ControllerEmu::NumericSetting<int>*>(setting);
-      typed->SetValue(std::clamp(static_cast<int>(std::lround(value)), typed->GetMinValue(), typed->GetMaxValue()));
+      typed->SetValue(std::clamp(static_cast<int>(std::lround(value)), typed->GetMinValue(),
+                                 typed->GetMaxValue()));
       break;
     }
     case ControllerEmu::SettingType::Double:
@@ -223,7 +230,9 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
   SaveConfigFor(owner);
 }
 
-+ (BOOL)isGroupEnabledForOwner:(DOLControlGroupOwner)owner port:(NSInteger)portOneBased group:(NSInteger)groupId
++ (BOOL)isGroupEnabledForOwner:(DOLControlGroupOwner)owner
+                          port:(NSInteger)portOneBased
+                         group:(NSInteger)groupId
 {
   auto* group = GroupFor(owner, portOneBased, groupId);
   if (!group || !group->enabled_setting)
@@ -232,7 +241,10 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
   return group->enabled.GetValue() ? YES : NO;
 }
 
-+ (void)setGroupEnabled:(BOOL)enabled owner:(DOLControlGroupOwner)owner port:(NSInteger)portOneBased group:(NSInteger)groupId
++ (void)setGroupEnabled:(BOOL)enabled
+                  owner:(DOLControlGroupOwner)owner
+                   port:(NSInteger)portOneBased
+                  group:(NSInteger)groupId
 {
   auto* group = GroupFor(owner, portOneBased, groupId);
   if (!group || !group->enabled_setting)
@@ -279,9 +291,18 @@ static void SaveConfigFor(DOLControlGroupOwner owner)
   Common::IniFile ini;
   if (!ini.Load(path))
     return nil;
-  const auto* section = ini.GetSection("Profile");
+  auto* section = ini.GetSection("Profile");
   if (!section)
     return nil;
+  // What `loadProfile:forGCPort:` would load on this port's device (ProfileLoading.h).
+  if (owner == DOLControlGroupOwnerGCPad)
+  {
+    if (auto* pad = config->GetController(static_cast<int>(portOneBased - 1)))
+    {
+      const auto device = g_controller_interface.FindDevice(pad->GetDefaultDevice());
+      ApplyMainStickFromDPadFallback(section, device.get());
+    }
+  }
 
   // The key ControlGroup::LoadConfig reads: `<base><group>/<control>`, with ini names.
   std::string key;

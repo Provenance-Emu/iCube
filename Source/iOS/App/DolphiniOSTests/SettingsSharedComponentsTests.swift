@@ -2,9 +2,9 @@
 // Copyright 2026 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-import XCTest
 import SwiftUI
 import UIKit
+import XCTest
 
 @testable import iCube
 
@@ -24,7 +24,7 @@ final class SettingsSharedComponentsTests: XCTestCase {
       let size = host.sizeThatFits(in: CGSize(width: width, height: 1000))
       XCTAssertTrue(size.height.isFinite)
       XCTAssertGreaterThanOrEqual(size.height, 3 * 44,
-        "A confirmation must allocate height for all three touch actions")
+                                  "A confirmation must allocate height for all three touch actions")
       XCTAssertLessThanOrEqual(size.width, width)
     }
     XCTAssertEqual(activations, 0)

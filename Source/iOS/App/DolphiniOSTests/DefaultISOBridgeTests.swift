@@ -34,9 +34,9 @@ final class DefaultISOBridgeTests: XCTestCase {
   private func disc(_ name: String = "base.iso", wii: Bool = false) throws -> URL {
     let path = folder.appendingPathComponent(name)
     var bytes = Data(repeating: 0, count: 0x8000)
-    bytes.replaceSubrange(0..<6, with: Data("TEST01".utf8))
-    bytes.replaceSubrange((wii ? 0x18 : 0x1c)..<(wii ? 0x1c : 0x20),
-                          with: wii ? [0x5d, 0x1c, 0x9e, 0xa3] : [0xc2, 0x33, 0x9f, 0x3d])
+    bytes.replaceSubrange(0 ..< 6, with: Data("TEST01".utf8))
+    bytes.replaceSubrange((wii ? 0x18 : 0x1C) ..< (wii ? 0x1C : 0x20),
+                          with: wii ? [0x5D, 0x1C, 0x9E, 0xA3] : [0xC2, 0x33, 0x9F, 0x3D])
     try bytes.write(to: path)
     return path
   }

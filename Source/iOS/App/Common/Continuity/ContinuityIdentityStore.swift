@@ -17,69 +17,68 @@ import PVContinuity
 /// encrypted-backup restore onto a second device: two devices sharing one
 /// pairing identity would each be able to claim the other's sessions.
 enum ContinuityIdentityStore {
+  private static let service = "com.joemattiello.icube.continuity"
+  private static let account = "peer-identity"
+  /// The stable id lives in `UserDefaults` because it is not secret; only the
+  /// key material needs the Keychain.
+  private static let idDefaultsKey = "continuity_peer_id"
 
-    private static let service = "com.joemattiello.icube.continuity"
-    private static let account = "peer-identity"
-    /// The stable id lives in `UserDefaults` because it is not secret; only the
-    /// key material needs the Keychain.
-    private static let idDefaultsKey = "continuity_peer_id"
-
-    /// Loads the persisted identity, or mints and persists a new one.
-    ///
-    /// If the Keychain is unreadable (first unlock not yet reached, say) this
-    /// returns a **fresh, unpersisted** identity rather than crashing. The
-    /// consequence is honest and visible: the device appears as a new peer and
-    /// has to pair again. Silently reusing a random key each launch would look
-    /// like pairing that simply never sticks.
-    static func loadOrCreate(displayName: String) -> ContinuityPeerIdentity {
-        let defaults = UserDefaults.standard
-        if let id = defaults.string(forKey: idDefaultsKey),
-           let keyData = readKey(),
-           let restored = try? ContinuityPeerIdentity(id: id, name: displayName, privateKeyData: keyData) {
-            return restored
-        }
-
-        let fresh = ContinuityPeerIdentity(name: displayName)
-        defaults.set(fresh.id, forKey: idDefaultsKey)
-        if !writeKey(fresh.privateKeyData) {
-            NSLog("[Continuity] could not persist the pairing key; this device will have to pair again next launch")
-        }
-        return fresh
+  /// Loads the persisted identity, or mints and persists a new one.
+  ///
+  /// If the Keychain is unreadable (first unlock not yet reached, say) this
+  /// returns a **fresh, unpersisted** identity rather than crashing. The
+  /// consequence is honest and visible: the device appears as a new peer and
+  /// has to pair again. Silently reusing a random key each launch would look
+  /// like pairing that simply never sticks.
+  static func loadOrCreate(displayName: String) -> ContinuityPeerIdentity {
+    let defaults = UserDefaults.standard
+    if let id = defaults.string(forKey: idDefaultsKey),
+       let keyData = readKey(),
+       let restored = try? ContinuityPeerIdentity(id: id, name: displayName, privateKeyData: keyData) {
+      return restored
     }
 
-    /// Forgets this device's identity. Every peer that trusted it will have to
-    /// pair again — which is the point: this is the "reset my identity" escape
-    /// hatch for a user who believes their key is compromised.
-    static func reset() {
-        UserDefaults.standard.removeObject(forKey: idDefaultsKey)
-        SecItemDelete(baseQuery() as CFDictionary)
+    let fresh = ContinuityPeerIdentity(name: displayName)
+    defaults.set(fresh.id, forKey: idDefaultsKey)
+    if !writeKey(fresh.privateKeyData) {
+      NSLog("[Continuity] could not persist the pairing key; this device will have to pair again next launch")
     }
+    return fresh
+  }
 
-    // MARK: - Keychain
+  /// Forgets this device's identity. Every peer that trusted it will have to
+  /// pair again — which is the point: this is the "reset my identity" escape
+  /// hatch for a user who believes their key is compromised.
+  static func reset() {
+    UserDefaults.standard.removeObject(forKey: idDefaultsKey)
+    SecItemDelete(baseQuery() as CFDictionary)
+  }
 
-    private static func baseQuery() -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-    }
+  // MARK: - Keychain
 
-    private static func readKey() -> Data? {
-        var query = baseQuery()
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
+  private static func baseQuery() -> [String: Any] {
+    [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: service,
+      kSecAttrAccount as String: account
+    ]
+  }
 
-        var result: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
-        return result as? Data
-    }
+  private static func readKey() -> Data? {
+    var query = baseQuery()
+    query[kSecReturnData as String] = true
+    query[kSecMatchLimit as String] = kSecMatchLimitOne
 
-    private static func writeKey(_ data: Data) -> Bool {
-        SecItemDelete(baseQuery() as CFDictionary)
-        var attributes = baseQuery()
-        attributes[kSecValueData as String] = data
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
-    }
+    var result: CFTypeRef?
+    guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
+    return result as? Data
+  }
+
+  private static func writeKey(_ data: Data) -> Bool {
+    SecItemDelete(baseQuery() as CFDictionary)
+    var attributes = baseQuery()
+    attributes[kSecValueData as String] = data
+    attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
+  }
 }

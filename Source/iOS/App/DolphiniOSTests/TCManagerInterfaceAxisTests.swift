@@ -41,7 +41,7 @@ final class TCManagerInterfaceAxisTests: XCTestCase {
 
   func testWiimoteAccelerometerPassesGravityThroughUnclamped() {
     let gravity: Float = 9.80665
-    XCTAssertEqual(roundTrip(625, gravity), gravity, accuracy: 0.0001)   // WIIMOTE_ACCEL_LEFT
+    XCTAssertEqual(roundTrip(625, gravity), gravity, accuracy: 0.0001) // WIIMOTE_ACCEL_LEFT
     XCTAssertEqual(roundTrip(630, -gravity), -gravity, accuracy: 0.0001) // WIIMOTE_ACCEL_DOWN
   }
 
@@ -56,7 +56,7 @@ final class TCManagerInterfaceAxisTests: XCTestCase {
 
   func testNunchukAccelerometerIsRaw() {
     XCTAssertEqual(roundTrip(900, 9.80665), 9.80665, accuracy: 0.0001) // NUNCHUK_ACCEL_LEFT
-    XCTAssertEqual(roundTrip(905, 4.2), 4.2, accuracy: 0.0001)         // NUNCHUK_ACCEL_DOWN
+    XCTAssertEqual(roundTrip(905, 4.2), 4.2, accuracy: 0.0001) // NUNCHUK_ACCEL_DOWN
   }
 
   func testAnalogStickStillGetsDeadzoneGainAndClamp() {

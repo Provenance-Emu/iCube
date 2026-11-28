@@ -1,24 +1,25 @@
 // Copyright 2025 DolphiniOS Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+import CoreHaptics
+import Foundation
+import PVHelp
+import PVWebServer
+import QuartzCore
 import SwiftUI
 import UIKit
-import CoreHaptics
-import QuartzCore
-import PVWebServer
-import PVHelp
 #if os(iOS)
-import SafariServices
 import AudioToolbox
+import SafariServices
 #endif
 #if canImport(GameController)
 import GameController
 #endif
 #if os(iOS)
 #endif
-import Foundation
 
 // MARK: - Performance A/B harness
+
 //
 // Why this exists: the adaptive clock auto-tunes the emulated CPU/VI clock to hold a fixed "speed%",
 // which means it ABSORBS interpreter optimizations (a faster core just lets it raise the clock) — so
@@ -42,7 +43,11 @@ struct PerfSnapshot: Codable, Identifiable {
 enum PerfAB {
   // The optimization flags captured by a snapshot. Each entry knows how to read/write its bridge value,
   // so capture/apply iterate one table instead of repeating 25 getters/setters.
-  struct Flag { let key: String; let get: () -> Bool; let set: (Bool) -> Void }
+  struct Flag { let key: String
+    let get: () -> Bool
+    let set: (Bool) -> Void
+  }
+
   static let flags: [Flag] = [
     Flag(key: "blockLinking", get: { DOLConfigBridge.cirBlockLinking() }, set: { DOLConfigBridge.setCirBlockLinking($0) }),
     Flag(key: "dynLinking", get: { DOLConfigBridge.cirDynLinking() }, set: { DOLConfigBridge.setCirDynLinking($0) }),
@@ -117,6 +122,7 @@ enum PerfAB {
   static func applyAllOptimizationsOn() {
     DOLConfigBridge.resetCirOptimizationsToDefaults()
   }
+
   static func applyAllOptimizationsOff() {
     for f in flags { f.set(false) }
     DOLConfigBridge.flushSettingsToDisk()
@@ -127,6 +133,7 @@ enum PerfAB {
           let list = try? JSONDecoder().decode([PerfSnapshot].self, from: data) else { return [] }
     return list
   }
+
   static func save(_ list: [PerfSnapshot]) {
     if let data = try? JSONEncoder().encode(list) { UserDefaults.standard.set(data, forKey: storeKey) }
   }
@@ -142,13 +149,16 @@ struct PerformanceABView: View {
       Section(header: Text(L("Honest Benchmarking")),
               footer: Text(L("The adaptive clock auto-tunes the emulated clock to hold a fixed speed%, which hides (and absorbs) CPU optimizations. Apply the benchmark base first so speed% in the perf HUD reflects raw interpreter throughput, then flip ONE optimization and relaunch the game to compare. Changes take effect on the next game launch."))) {
         Button(L("Apply Benchmark Base (adaptive OFF, 100% clocks)")) {
-          PerfAB.applyBenchmarkBase(); lastAction = L("Benchmark base applied — relaunch the game.")
+          PerfAB.applyBenchmarkBase()
+          lastAction = L("Benchmark base applied — relaunch the game.")
         }
         Button(L("All Optimizations ON (recommended)")) {
-          PerfAB.applyAllOptimizationsOn(); lastAction = L("Recommended optimizations on — relaunch the game.")
+          PerfAB.applyAllOptimizationsOn()
+          lastAction = L("Recommended optimizations on — relaunch the game.")
         }
         Button(L("All Optimizations OFF (bare baseline)")) {
-          PerfAB.applyAllOptimizationsOff(); lastAction = L("All optimizations off — relaunch the game.")
+          PerfAB.applyAllOptimizationsOff()
+          lastAction = L("All optimizations off — relaunch the game.")
         }
         if !lastAction.isEmpty {
           Text(lastAction).font(.caption).foregroundStyle(.secondary)
@@ -163,7 +173,9 @@ struct PerformanceABView: View {
             guard !name.isEmpty else { return }
             snapshots.removeAll { $0.name == name }
             snapshots.append(PerfAB.capture(name: name))
-            PerfAB.save(snapshots); newName = ""; lastAction = L("Saved snapshot: ") + name
+            PerfAB.save(snapshots)
+            newName = ""
+            lastAction = L("Saved snapshot: ") + name
           }
           .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
         }
@@ -178,11 +190,15 @@ struct PerformanceABView: View {
               Text(snapshotSummary(snap)).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button(L("Apply")) { PerfAB.apply(snap); lastAction = L("Applied: ") + snap.name + L(" — relaunch the game.") }
-              .buttonStyle(.borderless)
+            Button(L("Apply")) { PerfAB.apply(snap)
+              lastAction = L("Applied: ") + snap.name + L(" — relaunch the game.")
+            }
+            .buttonStyle(.borderless)
           }
         }
-        .onDelete { idx in snapshots.remove(atOffsets: idx); PerfAB.save(snapshots) }
+        .onDelete { idx in snapshots.remove(atOffsets: idx)
+          PerfAB.save(snapshots)
+        }
       }
     }
     .navigationTitle(L("Performance A/B"))

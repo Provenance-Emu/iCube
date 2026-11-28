@@ -222,6 +222,7 @@ extension MenuModel {
     guard let focusID, let item = item(id: focusID) else { return false }
     return item.adjustsWithLeftRight
   }
+
   /// Applies a controller left/right step to the item `id`, resolved from THIS model: a held stepper
   /// repeats up to ~12 times a second, and every step must read the value as it is now, not as it was
   /// when the hold began. A stepper moves on its grid; a picker or cycle row wraps through its options.

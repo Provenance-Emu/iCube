@@ -50,6 +50,7 @@ Rules that follow from this:
 
 | Issues | Cause, as verified | Fix | Fixed in |
 |---|---|---|---|
+| ICUBE-NV `Painter.drawSingle` (MXCPUException) | SkinKit re-rendered the full skin on the main thread during touch changes and press animations. | SkinKit 0.9.0 caches the resting skin and repaints affected regions ([SkinKit #169](https://github.com/Provenance-Emu/SkinKit/pull/169), adopted in [iCube #148](https://github.com/Provenance-Emu/iCube/pull/148)). | sideload 631. For TestFlight, verify the build contains `dc1063726d` before treating recurrence as a regression. |
 | ICUBE-Q4, Q5, Q0 | Launch watchdog kill (`0x8BADF00D`, scene-create). Symbolicated with `atos`: `PVWebServer.init(configuration:)` called `ProcessInfo.hostName` on the main thread, which can block on DNS for the whole launch allowance. It is **not** the background resume save of `c6ea204a59`. | PVWebServer 1.3.3 (PVWebServer PR 10), pinned by `6645414db8` | sideload 549, TestFlight 1795417420 |
 | ICUBE-BF, 2Y, PT, B1, GV, N7, P1, CZ, D7, 9W, NH, MK, MP | The 2026-11-19 crash sweep: FIFO and shader asserts on guest data, shader and DSU races, Wii Remote null, Apple TV HD launch, Skylander "Clear All". | `471f5ae425` | sideload 539, TestFlight 1795149298 |
 | ICUBE-AW | `Interpreter::unknown_instruction` trapped the app when a game ran an invalid opcode. It now raises a guest program exception. | `3f6040f888` | sideload 452, TestFlight 1793831631 |
@@ -81,7 +82,6 @@ TestFlight "fixed in" is the commit's Unix time: any TestFlight build numbered a
 | Issues | Tracker | Standing facts |
 |---|---|---|
 | ICUBE-3 WatchdogTermination | #56 | A Sentry heuristic (the app ended in the foreground with no crash and no clean exit), not a measured memory kill. It has no stack. An earlier pass found most events were JIT or debugger kills on sideload installs, with real memory kills on devices with 4 GB or less. Do not repeat Seer's Fastmem and texture-cache hypothesis. The `MetricKit app exits` events are the measured counts: quote those. |
-| ICUBE-NV `Painter.drawSingle` (MXCPUException) | SkinKit issue 162 | Verified in the SkinKit source: `Skin2SkinView` redraws the whole skin in a `Canvas` with Core Graphics on the main thread for every touch change and every frame of the 80 ms press ease. A held thumbstick therefore re-rasterises every layer, shadow and blur continuously. The fix is a cached static layer in SkinKit, not in this repository. |
 | ICUBE-2D, 6H and other main-thread hangs | #45 | See below for single-sample hangs. |
 | ICUBE-AA, 60 legacy-JIT write fault | #46 | Sideload legacy JIT only. Recent ICUBE-60 events are build 13. |
 

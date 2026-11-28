@@ -11,6 +11,7 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
   private func model(_ state: GraphicsGeneralState = GraphicsGeneralState()) -> MenuModel {
     GraphicsGeneralModelBuilder.make(state: state) { self.changes.append($0) }
   }
+
   private func state(_ edit: (inout GraphicsGeneralState) -> Void) -> GraphicsGeneralState {
     var s = GraphicsGeneralState()
     edit(&s)
@@ -134,7 +135,9 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, change) in expected {
-      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle"); continue }
+      guard case .toggle(let binding)? = m.item(id: id)?.role else { XCTFail("\(id) is not a toggle")
+        continue
+      }
       for value in [true, false] {
         changes = []
         binding.wrappedValue = value
@@ -153,7 +156,9 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
     ]
     let m = model()
     for (id, value, change) in expected {
-      guard case .cycle(_, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle"); continue }
+      guard case .cycle(_, let selection)? = m.item(id: id)?.role else { XCTFail("\(id) is not a cycle")
+        continue
+      }
       changes = []
       selection.wrappedValue = value
       XCTAssertEqual(changes, [change], id)
@@ -161,7 +166,12 @@ final class GraphicsGeneralModelBuilderTests: XCTestCase {
   }
 
   func test_cycleRows_showTheStateValue() {
-    let m = model(state { $0.backend = .vulkan; $0.aspect = ._4_3; $0.shaderType = .hybridUber; $0.frameCap = 120; $0.clipSeconds = 30 })
+    let m = model(state { $0.backend = .vulkan
+      $0.aspect = ._4_3
+      $0.shaderType = .hybridUber
+      $0.frameCap = 120
+      $0.clipSeconds = 30
+    })
     XCTAssertEqual(m.item(id: "backend")?.currentValueTitle, "Vulkan")
     XCTAssertEqual(m.item(id: "aspect-ratio")?.currentValueTitle, "4:3")
     XCTAssertEqual(m.item(id: "shader-compile-type")?.currentValueTitle, "Hybrid Ubershaders")

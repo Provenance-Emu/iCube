@@ -17,6 +17,7 @@ private final class FakeDSUConfigWriter: DSUConfigWriting {
     rows.remove(at: index)
     rows.append(entry)
   }
+
   func remove(at index: Int) { rows.remove(at: index) }
   func setEnabled(_ enabled: Bool) { self.enabled = enabled }
 }
@@ -238,7 +239,7 @@ final class PhoneControllerServiceTests: XCTestCase {
     service.connect(pid: "A")
     service.refresh(servers: [phone(pid: "A")])
     clock += 600
-    service.refresh(servers: [phone(pid: "A")])  // a tick while it is still there
+    service.refresh(servers: [phone(pid: "A")]) // a tick while it is still there
     service.refresh(servers: [])
     clock += PhoneControllerConnector.departureGrace - 1
     service.refresh(servers: [])

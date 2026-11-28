@@ -230,6 +230,25 @@ final class PlayerScreenViewModel {
   /// state, so this is safe inside `body`.
   var displayState: PlayerScreenState { isLoaded ? state : makeSnapshot() }
 
+  // MARK: Menu
+
+  /// The last menu built, with what it was built from.
+  @ObservationIgnored private var builtMenu: (state: PlayerScreenState, platform: PlatformKind, model: MenuModel)?
+  /// How many times the menu was built, for the tests.
+  @ObservationIgnored private(set) var menuBuildCount = 0
+
+  /// The menu for `displayState`. `body` runs for every observed change (the prompt, each keystroke
+  /// in Save Profile As…), and the one hang sample from this screen (ICUBE-R9) was inside the
+  /// capture rows' build, so the menu is rebuilt only when the state it shows has changed.
+  func menuModel(platform: PlatformKind) -> MenuModel {
+    let shown = displayState
+    if let builtMenu, builtMenu.platform == platform, builtMenu.state == shown { return builtMenu.model }
+    let model = PlayerScreenModelBuilder.make(state: shown, actions: actions, platform: platform)
+    builtMenu = (shown, platform, model)
+    menuBuildCount += 1
+    return model
+  }
+
   func reload() {
     var snapshot = makeSnapshot()
     // Spec edge case: the pad left mid-capture, or the port changed device. The capture cancels;
@@ -239,8 +258,8 @@ final class PlayerScreenViewModel {
     // enabled.
     if let capture,
        capture.qualifier != snapshot.player.deviceQualifier
-        || PlayerScreenState.isMissing(capture.qualifier, pads: snapshot.pads)
-        || !snapshot.controls.contains(where: { $0.id == capture.row.id }) {
+       || PlayerScreenState.isMissing(capture.qualifier, pads: snapshot.pads)
+       || !snapshot.controls.contains(where: { $0.id == capture.row.id }) {
       endCapture()
       snapshot.armedControlID = nil
     }

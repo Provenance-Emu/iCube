@@ -72,7 +72,8 @@ enum CloudSyncModelBuilder {
       if !s.recentEvents.isEmpty {
         sections.append(MenuSection(id: "activity", header: L("Recent Activity"),
                                     items: s.recentEvents.prefix(20).enumerated().map { i, e in
-                                      SettingsRow.caption("event-\(i)", e.file.map { "\(e.message) — \($0)" } ?? e.message) }))
+                                      SettingsRow.caption("event-\(i)", e.file.map { "\(e.message) — \($0)" } ?? e.message)
+                                    }))
       }
     }
     sections.append(MenuSection(id: "scope", header: L("What Is Synced"), items: [
@@ -89,5 +90,8 @@ enum CloudSyncModelBuilder {
 }
 
 private extension MenuItem {
-  func with(_ edit: (inout MenuItem) -> Void) -> MenuItem { var c = self; edit(&c); return c }
+  func with(_ edit: (inout MenuItem) -> Void) -> MenuItem { var c = self
+    edit(&c)
+    return c
+  }
 }

@@ -8,6 +8,7 @@ struct RemotePerformanceNavigation: Equatable {
     let id: String
     var enabled = true
   }
+
   private var rows: [Row] = []
   private(set) var selectedID: String?
   private(set) var choiceIndex: Int?
@@ -29,14 +30,18 @@ struct RemotePerformanceNavigation: Equatable {
       return
     }
     let enabled = rows.filter(\.enabled)
-    guard !enabled.isEmpty else { selectedID = nil; return }
+    guard !enabled.isEmpty else { selectedID = nil
+      return
+    }
     let index = enabled.firstIndex(where: { $0.id == selectedID }) ?? 0
     selectedID = enabled[min(enabled.count - 1, max(0, index + direction))].id
   }
 
   mutating func openChoices(for id: String, count: Int, selected: Int) {
     guard selectedID == id, count > 0,
-          rows.contains(where: { $0.id == id && $0.enabled }) else { cancelChoices(); return }
+          rows.contains(where: { $0.id == id && $0.enabled }) else { cancelChoices()
+      return
+    }
     choiceCount = count
     choiceIndex = min(count - 1, max(0, selected))
   }

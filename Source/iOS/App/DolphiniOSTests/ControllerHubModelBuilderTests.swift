@@ -10,7 +10,6 @@ import XCTest
 /// "Show All Ports" collapsing, platform differences. Pure: every action is a recorded closure,
 /// every destination an `EmptyView`, as in `PauseMenuModelBuilderTests`.
 final class ControllerHubModelBuilderTests: XCTestCase {
-
   private static let xbox = "MFi/0/Xbox Wireless Controller"
   private static let touch = "iOS/4/Touchscreen"
 

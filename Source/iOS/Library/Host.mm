@@ -88,7 +88,9 @@ void Host_UpdateMainFrame()
 
 void Host_RequestRenderWindowSize(int, int)
 {
-  [[NSNotificationCenter defaultCenter] postNotificationName:DOLHostRequestRenderWindowSizeNotification object:nil];
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:DOLHostRequestRenderWindowSizeNotification
+                    object:nil];
 }
 
 bool Host_UIBlocksControllerState()
@@ -122,7 +124,8 @@ void Host_YieldToUI()
 
 void Host_TitleChanged()
 {
-  [[NSNotificationCenter defaultCenter] postNotificationName:DOLHostTitleChangedNotification object:nil];
+  [[NSNotificationCenter defaultCenter] postNotificationName:DOLHostTitleChangedNotification
+                                                      object:nil];
 }
 
 std::unique_ptr<GBAHostInterface> Host_CreateGBAHost(std::weak_ptr<HW::GBA::Core> core)

@@ -39,6 +39,7 @@ enum PerfHUDToggle {
     DOLConfigBridge.setGfxOverlayStats(wanted.overlayStats)
     DOLConfigBridge.setGfxShowVTimes(wanted.vblank)
   }
+
   enum Stat: String, CaseIterable {
     case fps, vps, speed, vblank, graphs, overlayStats
 
@@ -75,5 +76,4 @@ enum PerfHUDToggle {
       }
     }
   }
-
 }
