@@ -625,8 +625,11 @@ struct LibrarySearchFilterBar: View {
 
 // MARK: - Multi-select action bar
 
+/// The batch bar under the library while games are being selected. On tvOS it is a row of focusable chips the
+/// remote reaches with Down from the grid; it stays up for the whole of selection mode, as iFly's does, so
+/// Select All and Done are there before anything is picked.
 struct LibrarySelectionActionBar: View {
-  let selectedCount: Int
+  let state: LibrarySelectionBarState
   let onDelete: () -> Void
   let onFavorite: () -> Void
   let onUnfavorite: () -> Void
@@ -636,10 +639,46 @@ struct LibrarySelectionActionBar: View {
   var onProperties: (() -> Void)?
   let onDone: () -> Void
 
+  private var countText: String { "\(state.selectedCount) \(L("selected"))" }
+
   var body: some View {
+    #if os(tvOS)
+    tvBody
+    #else
+    touchBody
+    #endif
+  }
+
+  #if os(tvOS)
+  private var tvBody: some View {
+    HStack(spacing: ICubeDesign.Spacing.m.rawValue) {
+      Text(countText)
+        .icubeText(.nav)
+        .monospacedDigit()
+        .foregroundStyle(ICubeDesign.color(.textPrimary))
+        .fixedSize()
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+          actions
+        }
+        // Room for a focused chip's ring and lift inside the scroll view.
+        .padding(ICubeDesign.Spacing.s.rawValue)
+      }
+      .scrollClipDisabled()
+      actionButton(L("Done"), systemImage: "checkmark", action: onDone)
+        .accessibilityIdentifier("library.selection.done")
+    }
+    .buttonStyle(LibrarySelectionChipStyle())
+    .padding(.horizontal, ICubeDesign.Spacing.l.rawValue)
+    .padding(.vertical, ICubeDesign.Spacing.xs.rawValue)
+    .icubePanel()
+    .focusSection()
+  }
+  #else
+  private var touchBody: some View {
     VStack(spacing: 8) {
       HStack {
-        Text("\(selectedCount) \(L("selected"))")
+        Text(countText)
           .font(.caption.weight(.semibold))
           .monospacedDigit()
         Spacer()
@@ -650,15 +689,7 @@ struct LibrarySelectionActionBar: View {
 
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 10) {
-          actionButton(L("Delete"), systemImage: "trash", role: .destructive, action: onDelete)
-          actionButton(L("Favorite"), systemImage: "star", action: onFavorite)
-          actionButton(L("Unfavorite"), systemImage: "star.slash", action: onUnfavorite)
-          if selectedCount == 1, let onProperties {
-            actionButton(L("Properties"), systemImage: "info.circle", action: onProperties)
-          }
-          platformMenu
-          actionButton(L("Select All"), systemImage: "checkmark.circle", action: onSelectAll)
-          actionButton(L("Deselect All"), systemImage: "circle", action: onDeselectAll)
+          actions
         }
         .padding(.horizontal, 4)
       }
@@ -672,7 +703,7 @@ struct LibrarySelectionActionBar: View {
 
   @ViewBuilder
   private var selectionBarBackground: some View {
-    if #available(iOS 26.1, tvOS 26.1, *) {
+    if #available(iOS 26.1, *) {
       RoundedRectangle(cornerRadius: 20, style: .continuous)
         .fill(.clear)
         .glassEffect()
@@ -684,6 +715,48 @@ struct LibrarySelectionActionBar: View {
             .stroke(.white.opacity(0.12), lineWidth: 1)
         )
     }
+  }
+  #endif
+
+  /// On a TV Select All leads (the one action an empty selection can take) and Delete sits last, away from
+  /// where focus lands. Touch keeps its order.
+  @ViewBuilder
+  private var actions: some View {
+    #if os(tvOS)
+    selectAllButtons
+    selectionButtons
+    deleteButton
+    #else
+    deleteButton
+    selectionButtons
+    selectAllButtons
+    #endif
+  }
+
+  private var deleteButton: some View {
+    actionButton(L("Delete"), systemImage: "trash", role: .destructive, action: onDelete)
+      .disabled(!state.canActOnSelection)
+  }
+
+  @ViewBuilder
+  private var selectionButtons: some View {
+    actionButton(L("Favorite"), systemImage: "star", action: onFavorite)
+      .disabled(!state.canActOnSelection)
+    actionButton(L("Unfavorite"), systemImage: "star.slash", action: onUnfavorite)
+      .disabled(!state.canActOnSelection)
+    if state.canShowProperties, let onProperties {
+      actionButton(L("Properties"), systemImage: "info.circle", action: onProperties)
+    }
+    platformMenu
+      .disabled(!state.canActOnSelection)
+  }
+
+  @ViewBuilder
+  private var selectAllButtons: some View {
+    actionButton(L("Select All"), systemImage: "checkmark.circle", action: onSelectAll)
+      .disabled(!state.canSelectAll)
+    actionButton(L("Deselect All"), systemImage: "circle", action: onDeselectAll)
+      .disabled(!state.canDeselectAll)
   }
 
   private var platformMenu: some View {
@@ -702,16 +775,56 @@ struct LibrarySelectionActionBar: View {
     Button(role: role, action: action) {
       actionLabel(title, systemImage: systemImage)
     }
-    #if os(tvOS)
-    .buttonStyle(.bordered)
-    #endif
   }
 
   private func actionLabel(_ title: String, systemImage: String) -> some View {
+    #if os(tvOS)
+    Label(title, systemImage: systemImage)
+      .icubeText(.tag)
+      .labelStyle(.titleAndIcon)
+      .lineLimit(1)
+      .fixedSize()
+    #else
     Label(title, systemImage: systemImage)
       .font(.caption2.weight(.medium)) // design-lint: allow same type as the platform chips beside it (in the baseline)
       .labelStyle(.titleAndIcon)
       .padding(.horizontal, 8)
       .padding(.vertical, 6)
+    #endif
   }
 }
+
+#if os(tvOS)
+/// One chip of the tvOS batch bar: a quiet capsule that fills with the accent and lifts under focus.
+private struct LibrarySelectionChipStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    LibrarySelectionChip(label: configuration.label, isPressed: configuration.isPressed)
+  }
+}
+
+/// Focus is read here: a `ButtonStyle` property's `@Environment(\.isFocused)` does not update on tvOS.
+private struct LibrarySelectionChip<Label: View>: View {
+  let label: Label
+  let isPressed: Bool
+  @Environment(\.isFocused) private var isFocused
+  @Environment(\.isEnabled) private var isEnabled
+
+  private static var disabledOpacity: Double { 0.4 }
+  private static var pressedScale: CGFloat { 0.97 }
+
+  var body: some View {
+    let accent = ICubeDesign.color(.accent)
+    label
+      .foregroundStyle(ICubeDesign.color(.textPrimary))
+      .padding(.horizontal, ICubeDesign.Spacing.m.rawValue)
+      .padding(.vertical, ICubeDesign.Spacing.s.rawValue)
+      .background(Capsule().fill(isFocused ? ICubeDesign.color(.selectedFill) : ICubeDesign.color(.rowSurface)))
+      .overlay(Capsule().strokeBorder(isFocused ? accent : ICubeDesign.color(.hairline),
+                                      lineWidth: isFocused ? ICubeDesign.Line.hairline.rawValue * 2 : ICubeDesign.Line.hairline.rawValue))
+      .opacity(isEnabled ? 1 : Self.disabledOpacity)
+      .scaleEffect(isPressed ? Self.pressedScale : (isFocused ? ICubeDesign.Motion.rowFocusScale : 1))
+      .animation(ICubeDesign.Motion.focusSpring, value: isFocused)
+      .focusEffectDisabled()
+  }
+}
+#endif

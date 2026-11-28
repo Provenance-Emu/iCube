@@ -6009,3 +6009,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Genre" = "ジャンル";
 
 "Not enough free space to download this game (%@ required, %@ available)." = "ゲームをダウンロードするための空き容量が不足しています（必要: %@、空き: %@）。";
+"Compact" = "コンパクト";
+"Comfortable" = "標準";
+"Large" = "大";

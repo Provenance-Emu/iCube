@@ -257,6 +257,9 @@ struct SettingsSidebarShell: View {
       }
       .padding(ICubeDesign.Spacing.l.rawValue)
     }
+    // tvOS scroll views draw past their bounds, so rows scrolled out of the panel showed above and below
+    // it. The rows' own padding keeps a focused row's ring and lift inside the clip.
+    .clipShape(RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue, style: .continuous))
     .icubePanel()
   }
   #endif
