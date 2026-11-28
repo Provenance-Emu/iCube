@@ -335,6 +335,10 @@ struct TVLibraryView: View {
 
   @AppStorage("library_platform_filter") private var platformFilter: LibraryPlatformCategory = .all
   @AppStorage("library_grid_column_offset") private var gridColumnOffset: Int = 0
+#if os(tvOS)
+  /// Cover size on a TV, chosen in the View menu. The columns follow from it (`LibraryGridSize.tvMetrics`).
+  @AppStorage(LibraryGridSize.storageKey) private var libraryGridSize: LibraryGridSize = .comfortable
+#endif
   @State private var gridAutoColumnCount = 2
 #if os(tvOS)
   /// Home, all games, or one platform. The left rail writes this; the grid reads it.
@@ -426,14 +430,12 @@ struct TVLibraryView: View {
     LibraryPlatformMapper.availableCategories(in: model.games, overrides: platformOverrides).count > 1
   }
 
-  /// Clamps auto-fit column count plus user offset for the current platform.
+#if !os(tvOS)
+  /// Clamps the auto-fit column count plus the user's offset. A TV takes its columns from `libraryGridSize`.
   private func effectiveColumnCount(autoFit: Int) -> Int {
-#if os(tvOS)
-    return min(7, max(3, autoFit + gridColumnOffset))
-#else
-    return min(8, max(2, autoFit + gridColumnOffset))
-#endif
+    min(8, max(2, autoFit + gridColumnOffset))
   }
+#endif
 
   /// Full library pipeline: platform filter → search → sort.
   private func filteredGames(from games: [TVGameItem]) -> [TVGameItem] {
@@ -1085,6 +1087,8 @@ struct TVLibraryView: View {
     static let leadingInset = railLane + contentInset
     /// Room under the last row: the fade plus the bottom of the TV's safe area.
     static let bottomInset = ICubeDesign.Spacing.xxl.rawValue + ICubeDesign.Spacing.xl.rawValue
+    /// Room under the selection bar: the bottom of the TV's safe area.
+    static let selectionBarBottomInset = ICubeDesign.Spacing.xl.rawValue + ICubeDesign.Spacing.m.rawValue
     /// Gap between the fast-scroll index and the screen edge.
     static let indexTrailing = ICubeDesign.Spacing.xl.rawValue
     /// The index shows once the grid runs past this many rows.
@@ -1162,13 +1166,12 @@ struct TVLibraryView: View {
   }
 
   /// Columns that fit beside the rail, and the gap that spreads them edge to edge of the inset column.
-  private func tvGridMetrics(columnWidth: CGFloat) -> (count: Int, spacing: CGFloat) {
-    let cardW = LibraryLayout.cardSize.width
-    let minSpacing = Constants.gridHorizontalSpacing
-    let available = max(cardW, columnWidth - TVLayout.leadingInset - TVLayout.contentInset)
-    let count = effectiveColumnCount(autoFit: max(1, Int((available + minSpacing) / (cardW + minSpacing))))
-    let spread = count > 1 ? (available - CGFloat(count) * cardW) / CGFloat(count - 1) : minSpacing
-    return (count, max(ICubeDesign.Spacing.l.rawValue, spread))
+  private func tvGridMetrics(columnWidth: CGFloat) -> LibraryGridSize.Metrics {
+    libraryGridSize.tvMetrics(
+      availableWidth: columnWidth - TVLayout.leadingInset - TVLayout.contentInset,
+      minSpacing: Constants.gridHorizontalSpacing,
+      floorSpacing: ICubeDesign.Spacing.l.rawValue
+    )
   }
 
   /// A focused library card. Home shows a game on a shelf and in the grid, so the two are told apart.
@@ -1247,7 +1250,12 @@ struct TVLibraryView: View {
             .animation(ICubeDesign.Motion.selection, value: tvLibraryDestination)
             .animation(ICubeDesign.Motion.selection, value: displayGames.count)
             tvLibraryScroller(displayGames, columnWidth: proxy.size.width, scroller: scroller)
+            // Under the scroller, not over it: the grid ends above the bar, so no row sits behind it. The
+            // column runs to the screen's edges, so the bar takes the same insets as the cards.
             libraryBottomChrome
+              .padding(.leading, TVLayout.leadingInset)
+              .padding(.trailing, TVLayout.contentInset)
+              .padding(.bottom, isSelectionMode ? TVLayout.selectionBarBottomInset : 0)
           }
           .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
           .focusSection()
@@ -1352,7 +1360,7 @@ struct TVLibraryView: View {
             tvNearbyColumn(peerID, scroller: scroller)
           } else {
             if tvShowsHomeShelves {
-              libraryHomeShelves(tvHomeShelves(), spacing: gridMetrics.spacing, platform: platform)
+              libraryHomeShelves(tvHomeShelves(), metrics: gridMetrics, platform: platform)
             }
             tvLibraryGrid(displayGames, metrics: gridMetrics, platform: platform)
           }
@@ -1415,7 +1423,7 @@ struct TVLibraryView: View {
   /// Home: Recently Played and Favorites as shelves above the full library grid.
   private func libraryHomeShelves(
     _ shelves: [(spec: LibraryShelfSpec, items: [TVGameItem])],
-    spacing: CGFloat,
+    metrics: LibraryGridSize.Metrics,
     platform: @escaping (TVGameItem) -> LibraryPlatformCategory
   ) -> some View {
     VStack(alignment: .leading, spacing: ICubeDesign.Spacing.xl.rawValue) {
@@ -1426,9 +1434,9 @@ struct TVLibraryView: View {
             .padding(.leading, TVLayout.leadingInset)
             .padding(.trailing, TVLayout.contentInset)
           ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: spacing) {
+            HStack(spacing: metrics.spacing) {
               ForEach(items, id: \.filePath) { item in
-                gameGridItem(for: item, platform: platform(item))
+                gameGridItem(for: item, platform: platform(item), cardSize: metrics.cardSize)
                   .focused($tvCardFocus, equals: .shelf(id: shelf.spec.id, filePath: item.filePath))
               }
             }
@@ -1499,11 +1507,11 @@ struct TVLibraryView: View {
   @ViewBuilder
   private func tvLibraryGrid(
     _ displayGames: [TVGameItem],
-    metrics: (count: Int, spacing: CGFloat),
+    metrics: LibraryGridSize.Metrics,
     platform: @escaping (TVGameItem) -> LibraryPlatformCategory
   ) -> some View {
     let columns = Array(
-      repeating: GridItem(.fixed(LibraryLayout.cardSize.width), spacing: metrics.spacing, alignment: .top),
+      repeating: GridItem(.fixed(metrics.cardSize.width), spacing: metrics.spacing, alignment: .top),
       count: metrics.count
     )
     // A focused card lifts and glows into the gap, so the header gets the larger one.
@@ -1511,7 +1519,7 @@ struct TVLibraryView: View {
       TVLibrarySectionHeader(title: libraryGridSectionTitle(), accent: libraryGridSectionAccent())
       LazyVGrid(columns: columns, alignment: .leading, spacing: Constants.gridVerticalSpacing) {
         ForEach(displayGames, id: \.filePath) { item in
-          gameGridItem(for: item, platform: platform(item))
+          gameGridItem(for: item, platform: platform(item), cardSize: metrics.cardSize)
             .focused($tvCardFocus, equals: .grid(filePath: item.filePath))
             .id(Self.tvGridScrollID(item.filePath))
         }
@@ -2236,13 +2244,15 @@ struct TVLibraryView: View {
       }
 #endif
 
+#if os(tvOS)
+      // Select, Search and Sort are their own rail rows. Cover size is this menu's choice, as in iFly.
+      gridSizeMenuItems
+#else
       Button(action: {
-        libraryMenuAction {
-          if isSelectionMode {
-            exitSelectionMode()
-          } else {
-            isSelectionMode = true
-          }
+        if isSelectionMode {
+          exitSelectionMode()
+        } else {
+          isSelectionMode = true
         }
       }) {
         Label(
@@ -2250,11 +2260,6 @@ struct TVLibraryView: View {
           systemImage: isSelectionMode ? "checkmark.circle.fill" : "checkmark.circle"
         )
       }
-#if os(tvOS)
-      // Search and Sort are their own rail rows. Grid size stays in this menu as buttons,
-      // because a NavigationLink only pushes inside the old toolbar sheet.
-      gridZoomMenuItems
-#else
       Menu {
         sortMenuItems
       } label: {
@@ -2418,6 +2423,31 @@ struct TVLibraryView: View {
     }
   }
 
+#if os(tvOS)
+  /// The three cover sizes, the current one ticked. Choosing one closes the menu, so the grid behind it is
+  /// seen at its new size at once.
+  @ViewBuilder
+  private var gridSizeMenuItems: some View {
+    ForEach(LibraryGridSize.allCases) { size in
+      Button {
+        libraryMenuAction {
+          withAnimation(ICubeDesign.Motion.selection) { libraryGridSize = size }
+        }
+      } label: {
+        HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+          Label(L(size.titleKey), systemImage: size.systemImage)
+          Spacer(minLength: ICubeDesign.Spacing.m.rawValue)
+          if libraryGridSize == size {
+            Image(systemName: "checkmark")
+              .foregroundStyle(ICubeDesign.color(.accent))
+              .accessibilityLabel(L("Selected"))
+          }
+        }
+      }
+      .accessibilityIdentifier("library.view.size.\(size.rawValue)")
+    }
+  }
+#else
   @ViewBuilder
   private var gridZoomMenuItems: some View {
     Button(action: { adjustGridZoom(delta: -1) }) {
@@ -2432,13 +2462,27 @@ struct TVLibraryView: View {
       Label(L("Reset Grid Size"), systemImage: "arrow.counterclockwise")
     }
   }
+#endif
+
+  /// A TV keeps the bar up for all of selection mode: it holds Select All and Done, and the remote has no
+  /// other way to them from the grid. Touch shows it once something is selected, as before.
+  private var showsSelectionBar: Bool {
+#if os(tvOS)
+    isSelectionMode
+#else
+    isSelectionMode && !selectedFilePaths.isEmpty
+#endif
+  }
 
   @ViewBuilder
   private var libraryBottomChrome: some View {
     VStack(spacing: 6) {
-      if isSelectionMode && !selectedFilePaths.isEmpty {
+      if showsSelectionBar {
         LibrarySelectionActionBar(
-          selectedCount: selectedFilePaths.count,
+          state: LibrarySelectionBarState(
+            selectedCount: selectedFilePaths.count,
+            visibleCount: filteredGames(from: model.games).count
+          ),
           onDelete: { pendingBatchDeletePaths = selectedFilePaths; showBatchDeleteConfirm = true },
           onFavorite: { batchSetFavorite(true) },
           onUnfavorite: { batchSetFavorite(false) },
@@ -2516,24 +2560,18 @@ struct TVLibraryView: View {
     return pad
   }
 
+#if !os(tvOS)
   private func canAdjustGridZoom(delta: Int) -> Bool {
-#if os(tvOS)
-    return (-3...4).contains(gridColumnOffset + delta)
-#else
     let nextOffset = LibraryLayout.adjustedColumnOffset(
       autoFit: gridAutoColumnCount, offset: gridColumnOffset, delta: delta)
     return effectiveColumnCount(autoFit: gridAutoColumnCount) != min(8, max(2, gridAutoColumnCount + nextOffset))
-#endif
   }
 
   private func adjustGridZoom(delta: Int) {
-#if os(tvOS)
-    gridColumnOffset = min(4, max(-3, gridColumnOffset + delta))
-#else
     gridColumnOffset = LibraryLayout.adjustedColumnOffset(
       autoFit: gridAutoColumnCount, offset: gridColumnOffset, delta: delta)
-#endif
   }
+#endif
 
   var body: some View {
     NavigationStack {

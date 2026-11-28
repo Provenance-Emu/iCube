@@ -6048,3 +6048,6 @@ Further errors will be sent to the Video Backend log and Dolphin will now likely
 "Physical Cases" = "Physical Cases";
 "Controller Covers Screen" = "Controller Covers Screen";
 "Not enough free space to download this game (%@ required, %@ available)." = "Not enough free space to download this game (%@ required, %@ available).";
+"Compact" = "Compact";
+"Comfortable" = "Comfortable";
+"Large" = "Large";
