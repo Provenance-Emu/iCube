@@ -209,16 +209,24 @@ final class HomebrewSDCard: NSObject {
     // program folder's files twice, and only one of the two copies may have changed.
     var direct: [String: URL] = [:]
     var mirrored: [String: URL] = [:]
+    var newFolders: [URL] = []
     for case let source as URL in walker {
-      guard (try? source.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { continue }
       let relative = Array(source.pathComponents.suffix(walker.level))
       guard relative.allSatisfy(HomebrewName.isSafe) else { continue }
       let destination = relative.reduce(folder) { $0.appendingPathComponent($1) }
-      if fm.contentsEqual(atPath: source.path, andPath: destination.path) { continue }
       // Under the folder's name at the root, or straight at the root.
-      let underName = programDirectory.count > 1 && relative.count > 1 && relative.first == programDirectory.last
+      let isNamedFolder = programDirectory.count > 1 && relative.first == programDirectory.last
+      let underName = isNamedFolder && relative.count > 1
       let inProgramFolder = programDirectory + (underName ? Array(relative.dropFirst()) : relative)
       let original = inProgramFolder.reduce(folder) { $0.appendingPathComponent($1) }
+      guard (try? source.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
+        // A folder the program made (Snes9x GX makes `snes9xgx/roms` for the user to fill) is
+        // kept even while it is empty. One the card only shows a second time is not.
+        let shownTwice = fm.fileExists(atPath: original.path) || (isNamedFolder && relative.count == 1)
+        if !fm.fileExists(atPath: destination.path), !shownTwice { newFolders.append(destination) }
+        continue
+      }
+      if fm.contentsEqual(atPath: source.path, andPath: destination.path) { continue }
       if programDirectory.isEmpty || fm.fileExists(atPath: destination.path) || !fm.fileExists(atPath: original.path) {
         direct[relative.joined(separator: "/")] = source
       } else if !fm.contentsEqual(atPath: source.path, andPath: original.path) {
@@ -227,6 +235,9 @@ final class HomebrewSDCard: NSObject {
     }
     // A file changed in its own place wins over the copy of it at the root.
     let plan = mirrored.merging(direct) { _, own in own }
+    for created in newFolders {
+      try? fm.createDirectory(at: created, withIntermediateDirectories: true)
+    }
     var changed: [String] = []
     for (path, source) in plan {
       let destination = path.split(separator: "/").reduce(folder) { $0.appendingPathComponent(String($1)) }

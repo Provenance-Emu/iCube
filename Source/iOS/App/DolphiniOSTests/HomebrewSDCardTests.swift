@@ -265,6 +265,25 @@ final class HomebrewSDCardTests: XCTestCase {
     XCTAssertFalse(scratch.exists("title/scores.dat"))
   }
 
+  /// Snes9x GX makes `snes9xgx/roms` on first run and waits for the user to put games in it.
+  func testEmptyFolderTheProgramMadeIsKept() throws {
+    let cardFolder = scratch.root.appendingPathComponent("card", isDirectory: true)
+    let folder = scratch.root.appendingPathComponent("title", isDirectory: true)
+    try scratch.file("apps/quest/data/levels.bin", "levels", in: folder)
+    try scratch.file("apps/quest/data/levels.bin", "levels", in: cardFolder)
+    // The card's second and third showing of the program folder.
+    try scratch.file("data/levels.bin", "levels", in: cardFolder)
+    try scratch.file("quest/data/levels.bin", "levels", in: cardFolder)
+    try FileManager.default.createDirectory(at: cardFolder.appendingPathComponent("questgx/roms"), withIntermediateDirectories: true)
+
+    XCTAssertEqual(HomebrewSDCard.copyChanges(from: cardFolder, into: folder, programDirectory: ["apps", "quest"]), [])
+    var isDirectory: ObjCBool = false
+    XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("questgx/roms").path, isDirectory: &isDirectory))
+    XCTAssertTrue(isDirectory.boolValue)
+    XCTAssertFalse(scratch.exists("title/data"))
+    XCTAssertFalse(scratch.exists("title/quest"))
+  }
+
   func testCopyChangesReplacesNewAndDifferentFilesOnly() throws {
     let cardFolder = scratch.root.appendingPathComponent("card", isDirectory: true)
     let folder = scratch.root.appendingPathComponent("title", isDirectory: true)
