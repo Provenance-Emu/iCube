@@ -4,7 +4,7 @@ import UIKit
 import XCTest
 
 /// Standalone iOS UI test against the real library context-menu route. Uses the existing DEBUG
-/// screenshot catalogue for its games.
+/// screenshot catalogue only for artwork: its entries have no file, so the games list leaves them out.
 final class NetworkPlayContextAuditTests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
@@ -24,7 +24,7 @@ final class NetworkPlayContextAuditTests: XCTestCase {
     XCTAssertEqual(XCTWaiter.wait(for: [landscape], timeout: 10), .completed)
     XCTAssertTrue(app.buttons["networkPlay.tab.rooms"].isHittable)
     XCTAssertTrue(app.textFields["networkPlay.search"].isHittable)
-    XCTAssertTrue(app.buttons["networkPlay.game"].firstMatch.isHittable)
+    XCTAssertTrue(app.staticTexts["No games in your library yet"].isHittable)
     capture(app, name: "network-play-ipad-landscape")
     app.buttons["networkPlay.tab.settings"].tap()
     XCTAssertTrue(app.staticTexts["Connection settings unavailable"].isHittable)
@@ -50,7 +50,7 @@ final class NetworkPlayContextAuditTests: XCTestCase {
     capture.lifetime = .keepAlways
     add(capture)
     app.buttons["networkPlay.back"].tap()
-    XCTAssertTrue(app.buttons["networkPlay.game"].firstMatch.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.staticTexts["No games in your library yet"].waitForExistence(timeout: 5))
   }
 
   private func capture(_ app: XCUIApplication, name: String) {

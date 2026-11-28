@@ -5,8 +5,9 @@ import XCTest
 
 final class NetworkPlayLibraryTests: XCTestCase {
   private func game(_ id: String, title: String = "Game", system: String = "GameCube", favorite: Bool = false,
-                    played: Double? = nil, hint: NetworkPlayLibrary.Hint = .unknown) -> NetworkPlayLibrary.Game {
-    .init(id: id, title: title, system: system, favorite: favorite,
+                    played: Double? = nil, playable: Bool = true,
+                    hint: NetworkPlayLibrary.Hint = .unknown) -> NetworkPlayLibrary.Game {
+    .init(id: id, title: title, system: system, playable: playable, favorite: favorite,
           lastPlayed: played.map { Date(timeIntervalSince1970: $0) }, hint: hint)
   }
 
@@ -21,6 +22,14 @@ final class NetworkPlayLibraryTests: XCTestCase {
     for filter in NetworkPlayLibrary.Filter.allCases {
       XCTAssertEqual(NetworkPlayLibrary.games([broken], filter: filter, search: "").map(\.id), ["broken"])
     }
+  }
+
+  func testAGameWithNoLocalFileOrAnUnsupportedSystemIsLeftOut() {
+    let values = [game("here"), game("missing", favorite: true, played: 5, playable: false)]
+    for filter in NetworkPlayLibrary.Filter.allCases {
+      XCTAssertFalse(NetworkPlayLibrary.games(values, filter: filter, search: "").map(\.id).contains("missing"))
+    }
+    XCTAssertEqual(NetworkPlayLibrary.games(values, filter: .all, search: "").map(\.id), ["here"])
   }
 
   func testNoHintIsKnownUntilASourceFeedsTheSeam() {

@@ -22,7 +22,7 @@
   },
   {
     "op": "assert",
-    "identifier": "networkPlay.game"
+    "label": "No games in your library yet"
   },
   {
     "op": "capture",

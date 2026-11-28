@@ -107,42 +107,6 @@
   },
   {
     "op": "remote",
-    "button": "down"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.game",
-    "focused": true
-  },
-  {
-    "op": "capture",
-    "name": "network-play-tv-game-focused",
-    "ax": true
-  },
-  {
-    "op": "remote",
-    "button": "select"
-  },
-  {
-    "op": "assert",
-    "label": "Host unavailable"
-  },
-  {
-    "op": "capture",
-    "name": "network-play-tv-game-details",
-    "ax": true
-  },
-  {
-    "op": "remote",
-    "button": "menu"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.tab.games",
-    "focused": true
-  },
-  {
-    "op": "remote",
     "button": "menu"
   },
   {

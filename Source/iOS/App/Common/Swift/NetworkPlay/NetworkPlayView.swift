@@ -29,6 +29,7 @@ struct NetworkPlayView: View {
       }
     }
   }
+
   private enum FocusTarget: Hashable { case tab(Tab), search, filter(NetworkPlayLibrary.Filter) }
   @FocusState private var focus: FocusTarget?
 
@@ -109,7 +110,7 @@ struct NetworkPlayView: View {
   }
 
   private var tabStrip: some View {
-    HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+    chipRow {
       ForEach(Tab.allCases, id: \.self) { value in
         chip(value.title, selected: tab == value) { tab = value }
           .focused($focus, equals: .tab(value))
@@ -131,7 +132,7 @@ struct NetworkPlayView: View {
              icon: "network.slash")
       NetworkPlaySearchField(text: $search)
         .focused($focus, equals: .search)
-      HStack(spacing: ICubeDesign.Spacing.s.rawValue) {
+      chipRow {
         ForEach(NetworkPlayLibrary.Filter.allCases, id: \.self) { value in
           chip(value.title, selected: filter == value) { filter = value }
             .focused($focus, equals: .filter(value))
@@ -144,8 +145,9 @@ struct NetworkPlayView: View {
       .focusSection()
       #endif
       if games.isEmpty {
-        notice(libraryGames.isEmpty ? L("No games in your library yet") : L("No matching games"),
-               detail: libraryGames.isEmpty ? L("Add games to your library to see them here.")
+        let none = !libraryGames.contains(where: \.playable)
+        notice(none ? L("No games in your library yet") : L("No matching games"),
+               detail: none ? L("Add games to your library to see them here.")
                  : L("Try another search, or choose All Games."),
                icon: "gamecontroller")
       } else {
@@ -248,6 +250,17 @@ struct NetworkPlayView: View {
     .background(ICubeDesign.Card.surface, in: RoundedRectangle(cornerRadius: ICubeDesign.Radius.large.rawValue))
   }
 
+  /// A row of chips that scrolls sideways when it is wider than the screen (three tabs on a small iPhone).
+  /// The padding leaves room for the focus ring and scale, which draw outside a chip's bounds.
+  private func chipRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    ScrollView(.horizontal, showsIndicators: false) {
+      HStack(spacing: ICubeDesign.Spacing.s.rawValue, content: content)
+        .padding(ICubeDesign.Spacing.xs.rawValue)
+    }
+    .scrollClipDisabled()
+    .padding(-ICubeDesign.Spacing.xs.rawValue)
+  }
+
   /// A tab or filter choice: the standard row, as wide as its label.
   private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
     Button(action: action) {
@@ -338,6 +351,10 @@ extension NetworkPlayLibrary.Game {
     case 2, 3: system = "Wii"
     default: system = L("Unknown")
     }
+    var isDirectory: ObjCBool = false
+    let exists = FileManager.default.fileExists(atPath: item.filePath, isDirectory: &isDirectory)
+    // GameCube, Wii and WiiWare are what Dolphin runs; a demo entry or a missing file has nothing to host.
+    playable = !item.isDemoItem && exists && !isDirectory.boolValue && [0, 2, 3].contains(item.platform)
     favorite = item.isFavorite
     lastPlayed = LastPlayedStore.lastPlayed(gameID: item.gameID)
     hint = NetworkPlayLibrary.hint(forGameID: item.gameID)

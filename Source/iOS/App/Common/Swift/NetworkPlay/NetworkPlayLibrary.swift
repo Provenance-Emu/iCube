@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
 
-/// The games Network Play offers: every game in the library. Nothing here decides whether a game "supports"
-/// network play; a game carries at most a hint, and a hint never hides it.
+/// The games Network Play offers: every game in the library that this device can run. Nothing here decides
+/// whether a game "supports" network play; a game carries at most a hint, and a hint never hides it.
 enum NetworkPlayLibrary {
   enum Filter: String, CaseIterable { case all, recent, favorites }
 
@@ -18,6 +18,8 @@ enum NetworkPlayLibrary {
     let id: String // Library path, for ordering only; never a room-join identity.
     let title: String
     let system: String
+    /// A file on this device, for a system Dolphin runs. The only thing that keeps a game off the list.
+    var playable: Bool = true
     let favorite: Bool
     let lastPlayed: Date?
     var hint: Hint = .unknown
@@ -33,6 +35,7 @@ enum NetworkPlayLibrary {
   static func games(_ games: [Game], filter: Filter, search: String, limit: Int? = nil) -> [Game] {
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
     let filtered = games.filter { game in
+      guard game.playable else { return false }
       if filter == .favorites, !game.favorite { return false }
       if filter == .recent, game.lastPlayed == nil { return false }
       return query.isEmpty || game.title.localizedStandardContains(query) || game.system.localizedStandardContains(query)
