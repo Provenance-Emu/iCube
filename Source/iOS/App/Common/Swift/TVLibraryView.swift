@@ -1269,6 +1269,7 @@ struct TVLibraryView: View {
               isSelectionMode = true
             }
           },
+          onNetworkPlay: { networkPlayRequest = NetworkPlayRequest(game: nil) },
           onSettings: { showSettings = true },
           // The content is disabled while the rail holds focus, so every right press out of the rail lands
           // here: on the card focused last, or the first one.
@@ -2226,11 +2227,14 @@ struct TVLibraryView: View {
   @ViewBuilder
   private var libraryViewMenuSection: some View {
     Section(L("View")) {
+#if !os(tvOS)
+      // On Apple TV Network Play is its own rail row.
       Button {
         libraryMenuAction { networkPlayRequest = NetworkPlayRequest(game: nil) }
       } label: {
         Label(L("Network Play"), systemImage: "network")
       }
+#endif
 
       Button(action: {
         libraryMenuAction {

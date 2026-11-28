@@ -18,7 +18,7 @@
   },
   {
     "op": "assert",
-    "identifier": "networkPlay.back",
+    "identifier": "networkPlay.tab.games",
     "focused": true
   },
   {
@@ -32,7 +32,7 @@
   },
   {
     "op": "assert",
-    "identifier": "networkPlay.settings",
+    "identifier": "networkPlay.tab.rooms",
     "focused": true
   },
   {
@@ -41,8 +41,29 @@
   },
   {
     "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "value": "Off"
+    "label": "Room discovery unavailable"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-tv-rooms",
+    "ax": true
+  },
+  {
+    "op": "remote",
+    "button": "right"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.tab.settings",
+    "focused": true
+  },
+  {
+    "op": "remote",
+    "button": "select"
+  },
+  {
+    "op": "assert",
+    "label": "Connection settings unavailable"
   },
   {
     "op": "capture",
@@ -51,80 +72,15 @@
   },
   {
     "op": "remote",
-    "button": "down"
+    "button": "left"
   },
   {
-    "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "focused": true
+    "op": "remote",
+    "button": "left"
   },
   {
     "op": "remote",
     "button": "select"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "value": "On"
-  },
-  {
-    "op": "capture",
-    "name": "network-play-tv-toggle-focused",
-    "ax": true
-  },
-  {
-    "op": "remote",
-    "button": "menu"
-  },
-  {
-    "op": "assert",
-    "label": "Network Play is not available in this iCube build."
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.game",
-    "exists": false
-  },
-  {
-    "op": "capture",
-    "name": "network-play-tv-returned",
-    "ax": true
-  },
-  {
-    "op": "remote",
-    "button": "right"
-  },
-  {
-    "op": "remote",
-    "button": "select"
-  },
-  {
-    "op": "remote",
-    "button": "down"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "focused": true
-  },
-  {
-    "op": "remote",
-    "button": "select"
-  },
-  {
-    "op": "assert",
-    "identifier": "networkPlay.unverifiedToggle",
-    "value": "Off"
-  },
-  {
-    "op": "remote",
-    "button": "menu"
-  },
-  {
-    "op": "assert",
-    "label": "Unverified",
-    "type": "button",
-    "exists": false
   },
   {
     "op": "remote",
@@ -142,16 +98,39 @@
   },
   {
     "op": "remote",
-    "button": "menu"
+    "button": "down"
   },
   {
     "op": "assert",
-    "identifier": "networkPlay.back",
+    "identifier": "networkPlay.filter.all",
     "focused": true
   },
   {
+    "op": "remote",
+    "button": "down"
+  },
+  {
     "op": "assert",
-    "identifier": "networkPlay.settings"
+    "identifier": "networkPlay.game",
+    "focused": true
+  },
+  {
+    "op": "capture",
+    "name": "network-play-tv-game-focused",
+    "ax": true
+  },
+  {
+    "op": "remote",
+    "button": "select"
+  },
+  {
+    "op": "assert",
+    "label": "Host unavailable"
+  },
+  {
+    "op": "capture",
+    "name": "network-play-tv-game-details",
+    "ax": true
   },
   {
     "op": "remote",
@@ -159,7 +138,16 @@
   },
   {
     "op": "assert",
-    "identifier": "networkPlay.settings",
+    "identifier": "networkPlay.tab.games",
+    "focused": true
+  },
+  {
+    "op": "remote",
+    "button": "menu"
+  },
+  {
+    "op": "assert",
+    "identifier": "networkPlay.tab.games",
     "exists": false
   }
 ]

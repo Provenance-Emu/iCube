@@ -2,70 +2,42 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 import Foundation
 
-/// Multiplayer documentation, app integration and played-session evidence are independent facts.
-/// This adapter never treats Dolphin's compiled protocol as an installed iCube session integration.
+/// The games Network Play offers: every game in the library. Nothing here decides whether a game "supports"
+/// network play; a game carries at most a hint, and a hint never hides it.
 enum NetworkPlayLibrary {
-  enum Filter: String, CaseIterable { case suggested, supported, recent, favorites, unverified }
-  enum Mode: String, Hashable { case sharedConsole, alternating, linked, nativeNetwork }
-  struct Documentation: Equatable {
-    let modes: Set<Mode>
-    let source: String
-    let singlePlayerOnly: Bool
+  enum Filter: String, CaseIterable { case all, recent, favorites }
+
+  /// What is known about a game in network play. A label only: it never hides a game or blocks hosting.
+  enum Hint: String, Equatable {
+    case unknown
+    case works
+    case reportedBroken
   }
 
   struct Game: Equatable, Identifiable {
-    let id: String // Library path for ordering only, never a ROM digest or a room-join identity.
+    let id: String // Library path, for ordering only; never a room-join identity.
     let title: String
     let system: String
-    let local: Bool
     let favorite: Bool
     let lastPlayed: Date?
-    let documentation: Documentation?
+    var hint: Hint = .unknown
   }
 
-  struct Backend {
-    let available: Bool
-    let modes: Set<Mode>
-    let joinableGameIDs: Set<String>
-
-    /// Source audit: there is no app session, discovery or NetPlay launch adapter in iCube yet.
-    static let installed = Backend(available: false, modes: [], joinableGameIDs: [])
+  /// The one place hints come from. Nothing feeds it yet, so every game is `.unknown`; a community
+  /// database of "works" and "reported broken" reports would answer here, by disc or title ID.
+  static func hint(forGameID gameID: String) -> Hint {
+    .unknown
   }
 
-  enum Eligibility: Equatable { case eligible, unverified, excluded }
-
-  static func eligibility(_ game: Game, backend: Backend) -> Eligibility {
-    guard game.local else { return .excluded }
-    guard let facts = game.documentation, !facts.source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      return .unverified
-    }
-    if facts.singlePlayerOnly { return .excluded }
-    guard !facts.modes.isEmpty else { return .unverified }
-    guard backend.available, !facts.modes.isDisjoint(with: backend.modes) else { return .excluded }
-    return .eligible
-  }
-
-  /// Eligibility/search precede sorting and pagination. Unknowns never enter ordinary recommendations.
-  static func games(_ games: [Game], filter: Filter, showUnverified: Bool, search: String,
-                    backend: Backend = .installed, limit: Int? = nil) -> [Game] {
+  /// Search first, then the filter's own order, then the limit.
+  static func games(_ games: [Game], filter: Filter, search: String, limit: Int? = nil) -> [Game] {
     let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
     let filtered = games.filter { game in
-      let status = eligibility(game, backend: backend)
-      if filter == .unverified {
-        guard showUnverified, status == .unverified else { return false }
-      } else {
-        guard status == .eligible else { return false }
-      }
       if filter == .favorites, !game.favorite { return false }
       if filter == .recent, game.lastPlayed == nil { return false }
       return query.isEmpty || game.title.localizedStandardContains(query) || game.system.localizedStandardContains(query)
     }.sorted { lhs, rhs in
-      if filter == .suggested {
-        let leftRoom = backend.joinableGameIDs.contains(lhs.id), rightRoom = backend.joinableGameIDs.contains(rhs.id)
-        if leftRoom != rightRoom { return leftRoom }
-        if lhs.favorite != rhs.favorite { return lhs.favorite }
-      }
-      if filter == .suggested || filter == .recent {
+      if filter == .recent {
         let leftDate = lhs.lastPlayed ?? .distantPast, rightDate = rhs.lastPlayed ?? .distantPast
         if leftDate != rightDate { return leftDate > rightDate }
       }

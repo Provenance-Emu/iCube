@@ -1,5 +1,7 @@
 # Network Play UI port — draft scope
 
+> Superseded on 2026-11-28 by [Network Play: every game offered](2026-11-28-network-play-all-games.md): the Suggested, All Supported and Unverified lists and the eligibility policy described below were removed. The backend audit below still holds.
+
 Owner-authorized port of Provenance's approved library-first Network Play design. Tracking: [#74](https://github.com/Provenance-Emu/iCube/issues/74). Base: `1101f524c2e0dc3a224c62d9771eb9c13e9df230`; branch: `codex/network-play-ui`.
 
 ## Delivered behavior
