@@ -1087,6 +1087,8 @@ struct TVLibraryView: View {
     static let leadingInset = railLane + contentInset
     /// Room under the last row: the fade plus the bottom of the TV's safe area.
     static let bottomInset = ICubeDesign.Spacing.xxl.rawValue + ICubeDesign.Spacing.xl.rawValue
+    /// Room under the selection bar: the bottom of the TV's safe area.
+    static let selectionBarBottomInset = ICubeDesign.Spacing.xl.rawValue + ICubeDesign.Spacing.m.rawValue
     /// Gap between the fast-scroll index and the screen edge.
     static let indexTrailing = ICubeDesign.Spacing.xl.rawValue
     /// The index shows once the grid runs past this many rows.
@@ -1248,7 +1250,12 @@ struct TVLibraryView: View {
             .animation(ICubeDesign.Motion.selection, value: tvLibraryDestination)
             .animation(ICubeDesign.Motion.selection, value: displayGames.count)
             tvLibraryScroller(displayGames, columnWidth: proxy.size.width, scroller: scroller)
+            // Under the scroller, not over it: the grid ends above the bar, so no row sits behind it. The
+            // column runs to the screen's edges, so the bar takes the same insets as the cards.
             libraryBottomChrome
+              .padding(.leading, TVLayout.leadingInset)
+              .padding(.trailing, TVLayout.contentInset)
+              .padding(.bottom, isSelectionMode ? TVLayout.selectionBarBottomInset : 0)
           }
           .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
           .focusSection()
