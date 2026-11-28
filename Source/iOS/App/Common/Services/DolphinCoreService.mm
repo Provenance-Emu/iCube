@@ -145,6 +145,10 @@ static inline void SetBaseIfUnspecified(const Config::Info<T>& info, const T& va
   // internal resolution several steps on high-density screens; keep it opt-in.
   // SetBaseIfUnspecified preserves the user's explicit resolution selection.
   SetBaseIfUnspecified(Config::GFX_EFB_SCALE, 1);
+
+  // WiiConnect24 through WiiLink is on unless the user turned it off. The compiled default is
+  // off; a stored choice, either way, is already in the Base layer and is left alone.
+  SetBaseIfUnspecified(Config::MAIN_WII_WIILINK_ENABLE, true);
 }
 
 - (BOOL)application:(UIApplication*)application didFinishLaunchingWithOptions:(NSDictionary<UIApplicationLaunchOptionsKey,id>*)launchOptions {

@@ -158,6 +158,8 @@ actor EmulationServerLibrary {
   /// Game files: the shared background downloader, or the transport when one is given.
   private let fetcher: any GameFileFetching
   private let covers: RemoteCoverCache
+  /// Free space where games are kept; nil when it cannot be measured.
+  private let availableBytes: @Sendable () -> Int64?
   private var games: [String: Game] = [:]
   /// Server-relative cover path for each entry that has one.
   private var coverPaths: [String: String] = [:]
@@ -167,8 +169,10 @@ actor EmulationServerLibrary {
   private var pendingCursor: CatalogCursor?
 
   init(server: EmulationServer, token: String?, transport: (any ContinuityTransport)? = nil,
-       fetcher: (any GameFileFetching)? = nil, covers: RemoteCoverCache = .shared) {
+       fetcher: (any GameFileFetching)? = nil, covers: RemoteCoverCache = .shared,
+       availableBytes: @escaping @Sendable () -> Int64? = RemoteDownloadSpace.availableBytesForGames) {
     self.server = server
+    self.availableBytes = availableBytes
     self.token = token
     self.covers = covers
     if let transport {
@@ -401,6 +405,14 @@ actor EmulationServerLibrary {
       let (total, overflow) = bytes.addingReportingOverflow(file.size)
       guard !overflow else { throw ServerError.invalidContent }
       return total
+    }
+    // Before anything is fetched, while the sizes are known and nothing of this attempt is on disk.
+    let files = downloads.map {
+      RemoteDownloadSpace.File(bytes: $0.size, isArchive: ($0.path as NSString).pathExtension.lowercased() == "7z")
+    }
+    if let shortfall = RemoteDownloadSpace.shortfall(
+      files: files, storedBytes: await transferFetcher.storedBytes(for: job), availableBytes: availableBytes()) {
+      throw shortfall
     }
     let requests = try downloads.map { file in
       let route = try request(file.route)

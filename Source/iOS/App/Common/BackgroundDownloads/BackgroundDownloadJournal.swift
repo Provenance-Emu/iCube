@@ -32,8 +32,10 @@ enum BackgroundDownloadFailure: String, Codable, Error, Sendable, Equatable {
   case server
   /// The transfer ended on another host than the one it was sent to.
   case redirected
-  /// The arrived file could not be kept on disk.
+  /// The arrived file could not be kept on disk, for a reason other than a full disk.
   case storage
+  /// The disk filled up while the file was being written or kept.
+  case outOfSpace
   /// The connection failed. Resume data, when the server gave it, continues the transfer.
   case network
   case cancelled
@@ -56,7 +58,8 @@ struct BackgroundDownloadError: LocalizedError, Equatable {
     case .incomplete: return L("The download did not finish. Try again.")
     case .server: return L("The server could not send this game.")
     case .redirected: return L("The server sent the download somewhere else, so it was stopped.")
-    case .storage: return L("There is not enough space to keep this game.")
+    case .storage: return L("The downloaded game could not be saved on this device.")
+    case .outOfSpace: return L("This device ran out of space while saving this game.")
     case .network: return L("The connection to the server was lost. Try again to continue the download.")
     case .cancelled: return L("Cancelled.")
     }
@@ -121,11 +124,23 @@ enum BackgroundDownloadPolicy {
       case .cancelled: return .cancelled
       case .userAuthenticationRequired, .userCancelledAuthentication: return .accessDenied
       case .fileDoesNotExist: return .unavailable
-      case .cannotCreateFile, .cannotWriteToFile, .cannotMoveFile: return .storage
+      case .cannotCreateFile, .cannotWriteToFile, .cannotMoveFile: return judgeStoreError(error)
       default: return .network
       }
     }
     return .network
+  }
+
+  /// Judges a failure to keep a finished file. Only a full disk is reported as one: a folder that
+  /// cannot be written, or any other failed move, is not a shortage of space.
+  static func judgeStoreError(_ error: any Error) -> BackgroundDownloadFailure {
+    var next: NSError? = error as NSError
+    while let current = next {
+      if current.domain == NSCocoaErrorDomain, current.code == NSFileWriteOutOfSpaceError { return .outOfSpace }
+      if current.domain == NSPOSIXErrorDomain, [Int(ENOSPC), Int(EDQUOT)].contains(current.code) { return .outOfSpace }
+      next = current.userInfo[NSUnderlyingErrorKey] as? NSError
+    }
+    return .storage
   }
 
   static func sameOrigin(_ lhs: URL, _ rhs: URL) -> Bool {
@@ -229,10 +244,24 @@ enum BackgroundDownloadPolicy {
 final class BackgroundDownloadJournal: @unchecked Sendable {
   static let fileName = "journal.json"
 
-  static let shared: BackgroundDownloadJournal = {
-    let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-    return BackgroundDownloadJournal(folder: support.appendingPathComponent("BackgroundDownloads", isDirectory: true))
-  }()
+  static let shared = BackgroundDownloadJournal(folder: defaultFolder(cachesOnly: platformWritesOnlyCaches))
+
+  /// tvOS lets an app write only Caches and tmp: a folder in Application Support cannot be made
+  /// there, and every finished download then failed at the move into it.
+  static var platformWritesOnlyCaches: Bool {
+    #if os(tvOS)
+    return true
+    #else
+    return false
+    #endif
+  }
+
+  /// Where the journal lives. Application Support where the app can write it, so the system never
+  /// purges a download in flight; Caches on a platform that offers nothing else.
+  static func defaultFolder(cachesOnly: Bool, manager: FileManager = .default) -> URL {
+    let base = manager.urls(for: cachesOnly ? .cachesDirectory : .applicationSupportDirectory, in: .userDomainMask)[0]
+    return base.appendingPathComponent("BackgroundDownloads", isDirectory: true)
+  }
 
   private struct Contents: Codable {
     var records: [BackgroundDownloadRecord] = []
@@ -246,14 +275,27 @@ final class BackgroundDownloadJournal: @unchecked Sendable {
 
   init(folder: URL) {
     self.folder = folder
-    let manager = FileManager.default
-    try? manager.createDirectory(at: folder, withIntermediateDirectories: true)
+    let file = folder.appendingPathComponent(Self.fileName)
+    contents = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(Contents.self, from: $0) } ?? Contents()
+    try? prepareFolder()
+  }
+
+  /// Makes the folder finished files are moved into. Throws when it cannot be made, so a download
+  /// that could never be kept is refused before it starts instead of after it finishes.
+  func prepareFolder() throws {
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     var excluded = URLResourceValues()
     excluded.isExcludedFromBackup = true
     var marked = folder
     try? marked.setResourceValues(excluded)
-    let file = folder.appendingPathComponent(Self.fileName)
-    contents = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(Contents.self, from: $0) } ?? Contents()
+  }
+
+  /// Bytes of a job's files that have already arrived and are still in the folder.
+  func arrivedBytes(forJob key: String) -> Int64 {
+    records(forJob: key).filter { $0.state == .arrived }.reduce(Int64(0)) { total, record in
+      let size = (try? arrivedFile(id: record.id).resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+      return total + Int64(size)
+    }
   }
 
   var records: [BackgroundDownloadRecord] { lock.withLock { contents.records } }

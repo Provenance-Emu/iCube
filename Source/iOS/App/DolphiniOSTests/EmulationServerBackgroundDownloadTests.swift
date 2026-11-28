@@ -12,10 +12,41 @@ import XCTest
 /// The Emulation Server copy on a background fetcher: every file asked for at once, the plan kept
 /// so a relaunch can finish the game without browsing, and failures kept or dropped as they should.
 final class EmulationServerBackgroundDownloadTests: XCTestCase {
-  private func makeLibrary(fetcher: RecordingFetcher, transport: TwoDiscTransport = TwoDiscTransport())
+  private func makeLibrary(fetcher: RecordingFetcher, transport: TwoDiscTransport = TwoDiscTransport(),
+                           availableBytes: @escaping @Sendable () -> Int64? = { nil })
     throws -> (EmulationServerLibrary, EmulationServer) {
     let server = try EmulationServer(address: "http://bg-\(UUID().uuidString).invalid")
-    return (EmulationServerLibrary(server: server, token: "bg-token", transport: transport, fetcher: fetcher), server)
+    return (EmulationServerLibrary(server: server, token: "bg-token", transport: transport, fetcher: fetcher,
+                                   availableBytes: availableBytes), server)
+  }
+
+  func testAGameThatDoesNotFitIsRefusedBeforeAnythingIsFetched() async throws {
+    let fetcher = RecordingFetcher()
+    let (library, _) = try makeLibrary(fetcher: fetcher, availableBytes: { 1024 })
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
+
+    do {
+      _ = try await library.copy(entry) { _ in }
+      XCTFail("Two discs do not fit in a kilobyte")
+    } catch let shortfall as RemoteDownloadSpace.Shortfall {
+      XCTAssertEqual(shortfall.available, 1024)
+      XCTAssertEqual(shortfall.needed, 2 * 0x8000 + RemoteDownloadSpace.margin)
+    }
+    let calls = await fetcher.calls
+    XCTAssertTrue(calls.isEmpty, "The check runs before the download, not after it")
+  }
+
+  func testFilesThatAlreadyArrivedDoNotCountAgainstTheSpaceTheyUse() async throws {
+    // Both discs came in on an earlier launch; what is free is less than the game.
+    let fetcher = RecordingFetcher(storedBytes: 2 * 0x8000)
+    let (library, server) = try makeLibrary(fetcher: fetcher, availableBytes: { RemoteDownloadSpace.margin })
+    let page = try await library.catalog()
+    let entry = try XCTUnwrap(page.entries.first)
+    defer { if let folder = try? server.folder(for: entry) { try? FileManager.default.removeItem(at: folder) } }
+
+    let urls = try await library.copy(entry) { _ in }
+    XCTAssertEqual(urls.count, 2)
   }
 
   func testEveryFileIsAskedForAtOnceWithItsCredentialAndPlan() async throws {
@@ -203,7 +234,11 @@ private actor RecordingFetcher: GameFileFetching {
   private let failure: BackgroundDownloadFailure?
   private let progressSteps: [Int64]
 
-  init(savedPlan: Data? = nil, failure: BackgroundDownloadFailure? = nil, progressSteps: [Int64] = []) {
+  private let storedBytes: Int64
+
+  init(savedPlan: Data? = nil, failure: BackgroundDownloadFailure? = nil, progressSteps: [Int64] = [],
+       storedBytes: Int64 = 0) {
+    self.storedBytes = storedBytes
     self.savedPlan = savedPlan
     self.failure = failure
     self.progressSteps = progressSteps
@@ -225,6 +260,8 @@ private actor RecordingFetcher: GameFileFetching {
       return url
     }
   }
+
+  func storedBytes(for job: BackgroundDownloadJob) -> Int64 { storedBytes }
 
   func release(_ job: BackgroundDownloadJob) { released.append(job) }
 }

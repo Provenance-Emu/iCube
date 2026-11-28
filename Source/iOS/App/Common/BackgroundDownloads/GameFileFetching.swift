@@ -21,9 +21,15 @@ protocol GameFileFetching: Sendable {
   /// them in the order asked. `progress` gets the bytes received for the whole job.
   func fetch(_ files: [GameFileRequest], for job: BackgroundDownloadJob, plan: Data?,
              progress: @escaping @Sendable (Int64) -> Void) async throws -> [URL]
+  /// Bytes of the job's files that an earlier attempt already left on this device.
+  func storedBytes(for job: BackgroundDownloadJob) async -> Int64
   /// Forgets the job: running transfers stop, and its files and resume data are deleted.
   /// A caller that wants a failed job continued later does not call this.
   func release(_ job: BackgroundDownloadJob) async
+}
+
+extension GameFileFetching {
+  func storedBytes(for job: BackgroundDownloadJob) async -> Int64 { 0 }
 }
 
 /// Fetches through a `ContinuityTransport`, one file after another, in this process. This is what a
