@@ -83,6 +83,9 @@ final class ZipImportHelperTests: XCTestCase {
 
   private static let stagingPrefixes = ["dol_archive_source-", "dol_archive_import-"]
   /// `7z a` of `ok/game.iso` (contents "game\n"), headers stored uncompressed.
+  /// libarchive's `test_read_format_rar5_stored.rar`: one stored file, `helloworld.txt`.
+  private static let rarFixture = "UmFyIRoHAQAzkrXlCgEFBgAFAQGAgAA4MAZjLAIDC50ABJ0ApIMCtEOglYAAAQ5oZWxsb3dvcmxkLnR4dAoDE34Oq1tW6Q4aaGVsbG8gbGliYXJjaGl2ZSB0ZXN0IHN1aXRlIQodd1ZRAwUEAA=="
+
   private static let sevenZipFixture = "N3q8ryccAARqxdxxBQAAAAAAAABSAAAAAAAAAEcJw1RnYW1lCgEEBgABCQUABwsBAAEBAAwFAAgKAani+tYAAAUBERkAbwBrAC8AZwBhAG0AZQAuAGkAcwBvAAAAGQIAABQKAQAAmOf7FlLdARUGAQAggKSBAAA="
   /// The same archive with the stored name `AA/escape.txt` rewritten to `../escape.txt` (header CRCs recomputed).
   private static let hostileSevenZipFixture = "N3q8ryccAARJoG80CAAAAAAAAABSAAAAAAAAAF59QUdlc2NhcGVkCgEEBgABCQgABwsBAAEBAAwIAAgKAeN2/M4AAAUBER0ALgAuAC8AZQBzAGMAYQBwAGUALgB0AHgAdAAAABQKAQAAmOf7FlLdARUGAQAggKSBAAA="
@@ -251,6 +254,12 @@ final class ZipImportHelperTests: XCTestCase {
 
   func testRejectsA7zItemThatEscapesTheDestination() throws {
     assertRejectedAsUnsafe(try XCTUnwrap(Data(base64Encoded: Self.hostileSevenZipFixture)), as: "hostile.7z")
+  }
+
+  func testExtractsARar() throws {
+    try extract(try XCTUnwrap(Data(base64Encoded: Self.rarFixture)), as: "pack.rar")
+    XCTAssertEqual(contents(of: "helloworld.txt"), "hello libarchive test suite!\n")
+    XCTAssertTrue(ImportableFileTypes.isArchiveFile(URL(fileURLWithPath: "/tmp/Pack.RAR")))
   }
 
   func testExtractsAnXzFileUnderTheSourceName() throws {

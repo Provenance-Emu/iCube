@@ -235,6 +235,19 @@ struct GameBananaFile: Decodable, Hashable, Identifiable {
   /// Analysis findings keyed by kind (`contains_exe`), each with the offending paths.
   let analysisWarnings: [String: [String]]
 
+  /// A file the browser remembers from an earlier visit, without the catalogue's statistics.
+  init(id: Int, fileName: String, size: Int64, downloadURL: URL?, md5: String?) {
+    self.id = id
+    self.fileName = fileName
+    self.size = size
+    self.downloadURL = downloadURL
+    self.md5 = md5
+    downloadCount = 0
+    virusScanResult = nil
+    analysisSummary = nil
+    analysisWarnings = [:]
+  }
+
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: StringKey.self)
     guard let id = c.flexibleInt(StringKey("_idRow")) else {

@@ -432,6 +432,8 @@ let iCube = Target.target(
         .package(product: "SkinKitBezelsUI"),
         // PLzmaSDK, through a local package: see Source/iOS/PLzmaShim/Package.swift.
         .package(product: "PLzmaShim"),
+        // RAR and RAR5 extraction: the RAR-reading subset of libarchive, see Source/iOS/RarArchive/Package.swift.
+        .package(product: "RarArchive"),
         .package(product: "SWCompression"),
         .package(product: "UICollectionViewLeftAlignedLayout"),
         .package(product: "AltKit"),
@@ -915,6 +917,7 @@ let project = Project(
         // Keep this wrapper local: Xcode rejects PLzmaSDK unsafe build flags
         // across a remote package boundary (see PLzmaShim/Package.swift).
         .local(path: "../PLzmaShim"),
+        .local(path: "../RarArchive"),
         // PVSyncRules is declared once above and shared by PVContinuity (WS-4)
         // and PVCloudSync (WS-5); a duplicate .local(path:) fails tuist generate.
         .remote(url: "https://github.com/Provenance-Emu/PVCloudSync.git", requirement: .upToNextMajor(from: "1.1.2")),

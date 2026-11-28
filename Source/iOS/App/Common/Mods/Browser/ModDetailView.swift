@@ -21,6 +21,7 @@ struct ModDetailView: View {
 
   @State private var load = Load.loading
   @State private var descriptionExpanded = false
+  @ObservedObject private var center = ModInstallCenter.shared
 
   var body: some View {
     List {
@@ -69,9 +70,9 @@ struct ModDetailView: View {
       }
       ForEach(detail.files) { file in
         NavigationLink {
-          ModFileView(file: file, modName: detail.summary.name, ownedGame: ownedGame, handler: handler)
+          ModFileView(file: file, modName: detail.summary.name, entry: entry, ownedGame: ownedGame, handler: handler)
         } label: {
-          ModFileRow(file: file)
+          ModFileRow(file: file, status: center.status(forFileID: file.id))
         }
       }
     }
@@ -158,11 +159,15 @@ struct ModDetailView: View {
 
 struct ModFileRow: View {
   let file: GameBananaFile
+  var status: ModInstallModel.Status = .none
 
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(file.fileName).lineLimit(2)
       Text(subtitle).icubeText(.detail).foregroundColor(ICubeDesign.color(.textSecondary))
+      if let label = Self.statusText(status) {
+        Label(label, systemImage: Self.statusSymbol(status)).icubeText(.detail)
+      }
     }
   }
 
@@ -173,6 +178,24 @@ struct ModFileRow: View {
     if !file.analysisWarnings.isEmpty { parts.append(L("Has warnings")) }
     return parts.joined(separator: " · ")
   }
+
+  static func statusText(_ status: ModInstallModel.Status) -> String? {
+    switch status {
+    case .none: return nil
+    case .downloading(let fraction): return String(format: L("Downloading… %d%%"), Int(fraction * 100))
+    case .preparing: return L("Downloading…")
+    case .downloaded: return L("Downloaded, not installed yet")
+    case .installed: return L("Installed")
+    }
+  }
+
+  static func statusSymbol(_ status: ModInstallModel.Status) -> String {
+    switch status {
+    case .none, .downloaded: return "arrow.down.circle"
+    case .downloading, .preparing: return "arrow.down.circle.dotted"
+    case .installed: return "checkmark.circle.fill"
+    }
+  }
 }
 
 // MARK: - A file: download and install
@@ -181,13 +204,19 @@ struct ModFileView: View {
   let file: GameBananaFile
   let modName: String
   let ownedGame: ModLibraryGame?
+  /// The centre's model for the file, fetched when the screen first appears. It is the centre's to
+  /// keep: leaving this screen, or closing the browser, does not stop its download.
   @StateObject private var model: ModInstallModel
 
-  init(file: GameBananaFile, modName: String, ownedGame: ModLibraryGame?, handler: any ModInstallHandling) {
+  private static let maxListedCodes = 8
+  private static let maxListedOptions = 6
+
+  init(file: GameBananaFile, modName: String, entry: ModGameTable.Entry?, ownedGame: ModLibraryGame?, handler: any ModInstallHandling) {
     self.file = file
     self.modName = modName
     self.ownedGame = ownedGame
-    _model = StateObject(wrappedValue: ModInstallModel(file: file, ownedGame: ownedGame, handler: handler))
+    _model = StateObject(wrappedValue: ModInstallCenter.shared.model(for: file, modName: modName, entry: entry,
+                                                                     ownedGame: ownedGame, handler: handler))
   }
 
   var body: some View {
@@ -195,7 +224,8 @@ struct ModFileView: View {
       infoSection
       actionSection
       if case .ready(let classification) = model.phase {
-        ForEach(Array(classification.kinds.enumerated()), id: \.offset) { _, kind in kindSection(kind) }
+        installAllSection(classification)
+        ForEach(Array(classification.kinds.enumerated()), id: \.offset) { index, kind in kindSection(kind, at: index) }
         if !classification.skippedPrograms.isEmpty {
           Section {
             Text(String(format: L("Not installed, and never run: %@"), classification.skippedPrograms.joined(separator: ", ")))
@@ -204,15 +234,17 @@ struct ModFileView: View {
         }
       }
       if !model.log.isEmpty {
-        Section(L("Done")) {
+        Section(L("Installed")) {
           ForEach(Array(model.log.enumerated()), id: \.offset) { _, line in Text(line) }
         }
       }
+      if case .ready = model.phase { downloadSection }
       Section { ModBrowserAttribution() }
       TVStorageNoteSection()
     }
     .navigationTitle(file.fileName)
-    .onDisappear { model.cleanUp() }
+    .onAppear { ModInstallCenter.shared.attach(model) }
+    .onDisappear { ModInstallCenter.shared.release(model) }
     .alert(L("Large Download"), isPresented: Binding(get: { model.largeDownloadBytes != nil }, set: { if !$0 { model.largeDownloadBytes = nil } })) {
       Button(L("Download")) { model.start() }
       Button(L("Cancel"), role: .cancel) {}
@@ -245,7 +277,7 @@ struct ModFileView: View {
     Section(L("File")) {
       Text(modName)
       detail(L("Size"), ModInstallModel.formatted(file.size))
-      detail(L("Downloads"), "\(file.downloadCount)")
+      if file.downloadCount > 0 { detail(L("Downloads"), "\(file.downloadCount)") }
       if let scan = file.virusScanResult, !scan.isEmpty { detail(L("Virus scan"), scan) }
       ForEach(file.analysisWarnings.keys.sorted(), id: \.self) { key in
         Text(Self.warningText(kind: key, paths: file.analysisWarnings[key] ?? [])).icubeText(.detail)
@@ -269,7 +301,9 @@ struct ModFileView: View {
         if let reason = ModInstallModel.blockedReason(for: file) {
           Text(reason).foregroundColor(.secondary)
         } else {
-          Button { model.requestStart() } label: { Label(L("Download and Install"), systemImage: "arrow.down.circle") }
+          Button { model.requestStart() } label: {
+            Label(model.log.isEmpty ? L("Download and Install") : L("Download Again"), systemImage: "arrow.down.circle")
+          }
         }
       case .downloading(let fraction):
         ProgressView(value: fraction) { Text(String(format: L("Downloading… %d%%"), Int(fraction * 100))) }
@@ -289,38 +323,77 @@ struct ModFileView: View {
         Button(L("Try Again")) { model.requestStart() }
       }
     } footer: {
-      if case .idle = model.phase {
+      switch model.phase {
+      case .idle:
         Text(L("Mods are made by other people. iCube downloads the file you pick from GameBanana and never runs programs inside it."))
+      case .downloading:
+        Text(L("You can leave this screen or iCube: the download keeps going and is here when you come back."))
+      case .verifying, .extracting, .ready, .failed:
+        EmptyView()
       }
     }
   }
 
+  /// One button for everything in the download that needs no further choice.
   @ViewBuilder
-  private func kindSection(_ kind: ModPackageKind) -> some View {
+  private func installAllSection(_ classification: ModPackageClassification) -> some View {
+    let pending = model.installableKinds(in: classification)
+    if pending.count > 1 {
+      Section {
+        Button { model.installAll() } label: {
+          Label(String(format: L("Install All (%d)"), pending.count), systemImage: "square.and.arrow.down.on.square")
+        }
+        .disabled(model.isInstalling)
+      } footer: {
+        Text(L("Installs every item below in one go. Disc patches are left out: they ask which game to patch."))
+      }
+    }
+  }
+
+  /// The unpacked download itself: get a fresh copy, or free its space.
+  private var downloadSection: some View {
+    Section {
+      Button(L("Download Again")) { model.downloadAgain() }
+      Button(L("Remove Download"), role: .destructive) { model.discardDownload() }
+    } footer: {
+      Text(L("Removing the download frees its space. What you installed from it stays installed."))
+    }
+    .disabled(model.isInstalling)
+  }
+
+  @ViewBuilder
+  private func installButton(_ title: String, at index: Int) -> some View {
+    if model.installedKinds.contains(index) {
+      Label(L("Installed"), systemImage: "checkmark.circle.fill")
+    } else {
+      Button(title) { model.install(kindAt: index) }.disabled(model.isInstalling)
+    }
+  }
+
+  @ViewBuilder
+  private func kindSection(_ kind: ModPackageKind, at index: Int) -> some View {
     switch kind {
-    case .textures(let gameID, let root):
-      Section(L("Texture Pack")) {
+    case .textures(let gameID, _):
+      Section {
         Text(String(format: L("Textures for game %@."), gameID))
         if let warning = ModInstallModel.regionWarning(packID: gameID, ownedID: ownedGame?.gameID) { Text(warning).icubeText(.detail) }
-        Button(L("Install Textures")) { model.installTextures(gameID: gameID, root: root) }
-          .disabled(model.isInstalling)
+        installButton(L("Install Textures"), at: index)
+      } header: {
+        Text(L("Texture Pack"))
+      } footer: {
+        Text(L("Copies the images into the game's custom textures folder. They replace the game's own pictures while custom textures are on."))
       }
     case .gecko(let codesFile):
-      Section(L("Gecko Codes")) {
-        Text(codesFile.lastPathComponent)
-        if let game = ownedGame {
-          Button(String(format: L("Add Codes to %@"), game.title)) { model.installGecko(file: codesFile) }
-            .disabled(model.isInstalling)
-        } else {
-          Text(L("Add the game to your library first; Gecko codes are stored per game.")).icubeText(.detail)
-        }
-      }
-    case .riivolution(let root):
-      Section(L("Riivolution Pack")) {
+      geckoSection(codesFile, at: index)
+    case .riivolution:
+      Section {
         Text(L("Adds a pack you can switch on when you play a game."))
-        Button(L("Install Pack")) { model.installRiivolutionPack(root: root, named: modName) }
-          .disabled(model.isInstalling)
+        installButton(L("Install Pack"), at: index)
+      } header: {
+        Text(L("Riivolution Pack"))
       }
+    case .gameFiles(let pack):
+      gameFilesSection(pack, at: index)
     case .discPatch(let patches, let suggested):
       Section(L("Disc Patch")) {
         Text(patches.map(\.lastPathComponent).joined(separator: ", "))
@@ -330,6 +403,59 @@ struct ModFileView: View {
     case .unsupported(let reason):
       Section(L("Can't Install")) { Text(reason) }
     }
+  }
+
+  /// One codes file. Says what is in it and what adding it does, since "import" alone says neither.
+  private func geckoSection(_ codesFile: URL, at index: Int) -> some View {
+    let names = model.geckoCodeNames[codesFile] ?? []
+    return Section {
+      Text(codesFile.lastPathComponent)
+      ForEach(Array(names.prefix(Self.maxListedCodes).enumerated()), id: \.offset) { _, name in
+        Label(name, systemImage: "wand.and.stars").icubeText(.detail)
+      }
+      if names.count > Self.maxListedCodes {
+        Text(String(format: L("…and %d more"), names.count - Self.maxListedCodes)).icubeText(.detail)
+      }
+      if let game = ownedGame {
+        installButton(String(format: names.count == 1 ? L("Add %d Code to %@") : L("Add %d Codes to %@"), names.count, game.title), at: index)
+      }
+    } header: {
+      Text(L("Gecko Codes"))
+    } footer: {
+      if let game = ownedGame {
+        Text(String(format: L("Adds these cheat codes to %@ and turns them on. Codes the game already has are skipped. You can switch each one off under Cheats in the game's menu."),
+                    game.title))
+      } else {
+        Text(L("Add the game to your library first; Gecko codes are stored per game."))
+      }
+    }
+  }
+
+  private func gameFilesSection(_ pack: ModGameFilePack, at index: Int) -> some View {
+    Section {
+      Text(String(format: pack.fileCount == 1 ? L("%d replacement game file.") : L("%d replacement game files."), pack.fileCount))
+      ForEach(Array(pack.groups.prefix(Self.maxListedOptions).enumerated()), id: \.offset) { _, group in
+        Text(Self.groupLine(group, modName: modName)).icubeText(.detail)
+      }
+      if pack.groups.count > Self.maxListedOptions {
+        Text(String(format: L("…and %d more"), pack.groups.count - Self.maxListedOptions)).icubeText(.detail)
+      }
+      if pack.groups.contains(where: { $0.mapping == .mainExecutable }) {
+        Text(L("A replacement game program is for one region and revision of the game. It starts switched off: turn it on under Play with Mods only if it is for your copy."))
+          .icubeText(.detail)
+      }
+      installButton(L("Install as a Mod Pack"), at: index)
+    } header: {
+      Text(L("Game Files"))
+    } footer: {
+      Text(L("This mod has no installer of its own, so iCube makes a pack from its files. Each folder becomes an option under Play with Mods, and a file replaces the disc file of the same name while its option is on. Your game disc is not changed."))
+    }
+  }
+
+  private static func groupLine(_ group: ModGameFilePack.Group, modName: String) -> String {
+    let name = group.name.isEmpty ? modName : group.name
+    let files = group.files.prefix(3).map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")
+    return group.files.count > 3 ? String(format: L("%@: %@ and %d more"), name, files, group.files.count - 3) : "\(name): \(files)"
   }
 
   private static func warningText(kind: String, paths: [String]) -> String {

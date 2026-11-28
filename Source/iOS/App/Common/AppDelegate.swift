@@ -49,6 +49,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     TemporaryServerGame.removeAbandoned()
     // Reconnects remote-library game downloads that ran while iCube was suspended or ended.
     BackgroundGameDownloader.shared.activate()
+    // Files mod downloads that finished while the app was gone, before the Mod Browser looks for them.
+    ModDownloadManager.background.activate()
     RemoteGameDownloads.shared.start()
     #if os(iOS)
     // Seed local bundled skins after the user folder exists, without delaying launch or changing picks.
@@ -150,10 +152,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     //
   }
 
-  /// A remote-library game download finished while iCube was suspended or not running.
+  /// A remote-library game download, or a mod download, finished while iCube was suspended or not running.
   func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
                    completionHandler: @escaping () -> Void) {
-    if !BackgroundGameDownloader.shared.handleEvents(forSession: identifier, completion: completionHandler) {
+    if !BackgroundGameDownloader.shared.handleEvents(forSession: identifier, completion: completionHandler),
+       !ModDownloadManager.background.handleEvents(forSession: identifier, completion: completionHandler) {
       completionHandler()
     }
   }

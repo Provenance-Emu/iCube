@@ -8,17 +8,22 @@ struct ModLibraryGame: Hashable, Identifiable {
   let gameID: String
   let title: String
   let revision: Int
+  /// The disc image on this device, when the game is one. Lets an install check the files it is
+  /// about to replace against the disc.
+  let discPath: String?
 
   var id: String { gameID }
 
-  init(gameID: String, title: String, revision: Int) {
+  init(gameID: String, title: String, revision: Int, discPath: String? = nil) {
     self.gameID = gameID
     self.title = title
     self.revision = revision
+    self.discPath = discPath
   }
 
   init(item: TVGameItem) {
-    self.init(gameID: item.gameID, title: item.title, revision: item.revision)
+    let isLocalDisc = RiivolutionEligibility.isEligible(filePath: item.filePath, platform: item.platform)
+    self.init(gameID: item.gameID, title: item.title, revision: item.revision, discPath: isLocalDisc ? item.filePath : nil)
   }
 }
 

@@ -27,7 +27,7 @@ enum ImportableFileTypes {
 
   /// Archive formats handled by `ZipImportHelper`.
   static let archiveExtensions: Set<String> = [
-    "zip", "7z", "gz", "gzip", "tar", "tgz", "xz", "bz2", "tbz", "tbz2",
+    "zip", "7z", "rar", "gz", "gzip", "tar", "tgz", "xz", "bz2", "tbz", "tbz2",
   ]
 
   /// Cover-art extensions shown when browsing remote WebDAV libraries.
@@ -42,6 +42,7 @@ enum ImportableFileTypes {
   enum ArchiveKind {
     case zip
     case sevenZip
+    case rar
     case gzip
     case bzip2
     case tar
@@ -83,6 +84,7 @@ enum ImportableFileTypes {
     switch ext {
     case "zip": return .zip
     case "7z": return .sevenZip
+    case "rar": return .rar
     case "gz", "gzip": return .gzip
     case "bz2": return .bzip2
     case "tar": return .tar

@@ -81,10 +81,24 @@ final class ModInstallModelPackOfferTests: XCTestCase {
     return try JSONDecoder().decode(GameBananaFile.self, from: Data(json.utf8))
   }
 
+  private var scratch: URL!
+
+  override func setUpWithError() throws {
+    scratch = FileManager.default.temporaryDirectory.appendingPathComponent("ModPackOffer-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: scratch.appendingPathComponent("pack"), withIntermediateDirectories: true)
+  }
+
+  override func tearDown() {
+    try? FileManager.default.removeItem(at: scratch)
+  }
+
   private func install(ownedGame: ModLibraryGame?) async throws -> ModInstallModel {
-    let model = ModInstallModel(file: try file(), ownedGame: ownedGame, handler: RecordingHandler())
-    model.installRiivolutionPack(root: URL(fileURLWithPath: "/tmp/pack"), named: "Newer")
+    let ledger = ModInstallLedger(fileURL: scratch.appendingPathComponent("ModInstalls.json"))
+    let model = ModInstallModel(file: try file(), modName: "Newer", ownedGame: ownedGame, handler: RecordingHandler(), ledger: ledger)
+    model.installRiivolutionPack(root: scratch.appendingPathComponent("pack"))
     while model.isInstalling { await Task.yield() }
+    XCTAssertEqual(ledger.record(forFileID: 1)?.installed, ["Installed Newer"], "what was installed is remembered")
+    XCTAssertEqual(ledger.record(forFileID: 1)?.stage, .installed)
     return model
   }
 

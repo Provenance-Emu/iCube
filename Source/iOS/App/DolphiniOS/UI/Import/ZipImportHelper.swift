@@ -11,6 +11,9 @@ import PLzmaShim
 #if canImport(SWCompression)
 import SWCompression
 #endif
+#if canImport(RarArchive)
+import RarArchive
+#endif
 
 /// Result of attempting to extract an archive of disc images.
 ///
@@ -82,6 +85,7 @@ final class ZipImportHelper: NSObject {
   private enum ArchiveKind {
     case zip
     case sevenZip
+    case rar
     case gzip
     case bzip2
     case tar
@@ -94,6 +98,7 @@ final class ZipImportHelper: NSObject {
     switch kind {
     case .zip: return .zip
     case .sevenZip: return .sevenZip
+    case .rar: return .rar
     case .gzip: return .gzip
     case .bzip2: return .bzip2
     case .tar: return .tar
@@ -521,6 +526,8 @@ final class ZipImportHelper: NSObject {
       try extractZipArchive(sourceURL: sourceURL, to: tempDir)
     case .sevenZip:
       try extractSevenZip(sourceURL: sourceURL, to: tempDir)
+    case .rar:
+      try extractRar(sourceURL: sourceURL, to: tempDir)
     case .xz:
       try extractXz(sourceURL: sourceURL, to: tempDir)
     case .tar:
@@ -543,6 +550,25 @@ final class ZipImportHelper: NSObject {
     try Zip.unzipFile(sourceURL, destination: tempDir, overwrite: true, password: nil, progress: nil)
     #else
     throw archiveUnavailableError("Zip")
+    #endif
+  }
+
+  /// RAR and RAR5, through libarchive. `RarArchive` checks every entry's path before it writes, never writes links, and
+  /// refuses password-protected archives; an unsafe path is reported the way the other formats report it.
+  private static func extractRar(sourceURL: URL, to tempDir: URL) throws {
+    #if canImport(RarArchive)
+    do {
+      // The sizes an archive claims are not trusted: unpacking stops at what the volume can hold.
+      let free = (try? tempDir.resourceValues(forKeys: [.volumeAvailableCapacityKey]))?.volumeAvailableCapacity.map(Int64.init)
+      try RarArchive.extract(archiveAt: sourceURL, to: tempDir, maximumBytes: free)
+    } catch RarArchive.Failure.unsafePath(let path) {
+      throw ZipEntryScannerError.unsafeEntry(path)
+    } catch RarArchive.Failure.encrypted {
+      throw NSError(domain: "DOLArchiveImport", code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: L("This RAR archive is password-protected, so it cannot be opened.")])
+    }
+    #else
+    throw archiveUnavailableError("RAR")
     #endif
   }
 
